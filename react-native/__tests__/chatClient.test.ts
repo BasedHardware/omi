@@ -1,8 +1,13 @@
 import {
   ChatBackendError,
   cancelChatGeneration,
+  chatCancelErrorCopy,
   chatErrorCopy,
+  chatHistoryCanReload,
   chatHistoryErrorCopy,
+  chatHistoryHasOlder,
+  chatComposerIsResting,
+  chatWriteDoorUnavailable,
   loadChatHistory,
   loadNewestChatHistory,
   loadOlderChatHistory,
@@ -33,7 +38,7 @@ function wireMessage(message: ChatMessage) {
     rating: null,
     reported: false,
     revision: '1',
-    attachments: [],
+    attachments: message.attachments ?? [],
   };
 }
 
@@ -75,6 +80,166 @@ test('loads main Chat history through the native boundary', async () => {
 
   await expect(loadChatHistory(backend)).resolves.toEqual([]);
   expect(requests[0].path).toBe('/v1/chat-messages?limit=50');
+});
+
+test('keeps unknown chat senders instead of failing history', async () => {
+  const human = {
+    id: 'human-1',
+    text: 'saved prompt',
+    sender: 'human' as const,
+    createdAt: 100,
+    generationOutcome: null,
+  };
+  const unknown = {
+    id: 'unknown-1',
+    text: 'unlabeled',
+    sender: 'unknown' as const,
+    createdAt: 200,
+    generationOutcome: null,
+  };
+  const backendFor = (body: string): OmiBackend => ({
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 200,
+      body,
+    }),
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  });
+
+  await expect(
+    loadChatHistory(backendFor(historyBody([human, unknown]))),
+  ).resolves.toEqual([
+    expect.objectContaining({id: 'human-1', sender: 'human'}),
+    expect.objectContaining({
+      id: 'unknown-1',
+      sender: 'unknown',
+      text: 'unlabeled',
+    }),
+  ]);
+  await expect(
+    loadChatHistory(
+      backendFor(
+        JSON.stringify({
+          messages: [
+            wireMessage(human),
+            {
+              ...wireMessage(human),
+              id: 'empty-1',
+              text: 'kept',
+              sender: '',
+            },
+          ],
+          page: {olderCursor: null, hasOlder: false},
+          capabilities,
+        }),
+      ),
+    ),
+  ).resolves.toEqual([
+    expect.objectContaining({id: 'human-1', sender: 'human'}),
+    expect.objectContaining({id: 'empty-1', sender: 'unknown', text: 'kept'}),
+  ]);
+});
+
+test('keeps chat history attachments instead of dropping file names', async () => {
+  const human = {
+    id: 'human-att',
+    text: '',
+    sender: 'human' as const,
+    createdAt: 100,
+    generationOutcome: null,
+  };
+  const backendFor = (body: string): OmiBackend => ({
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 200,
+      body,
+    }),
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  });
+
+  await expect(
+    loadChatHistory(
+      backendFor(
+        JSON.stringify({
+          messages: [
+            {
+              ...wireMessage(human),
+              attachments: [
+                {
+                  id: 'att-1',
+                  displayName: 'notes.txt',
+                  mediaType: 'text/plain',
+                  sizeBytes: 12,
+                  contentReference: null,
+                },
+              ],
+            },
+          ],
+          page: {olderCursor: null, hasOlder: false},
+          capabilities,
+        }),
+      ),
+    ),
+  ).resolves.toEqual([
+    expect.objectContaining({
+      id: 'human-att',
+      text: '',
+      attachments: [
+        expect.objectContaining({
+          id: 'att-1',
+          displayName: 'notes.txt',
+          mediaType: 'text/plain',
+          sizeBytes: 12,
+        }),
+      ],
+    }),
+  ]);
+});
+
+test('loads named chat session history without mixing the main session', async () => {
+  const requests: NativeHttpRequest[] = [];
+  const backend = {
+    request: async (request: NativeHttpRequest) => {
+      requests.push(request);
+      return {
+        id: request.id,
+        status: 200,
+        body: historyBody([]),
+      };
+    },
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  } satisfies OmiBackend;
+
+  await loadNewestChatHistory(backend, 'session-alpha');
+  await loadOlderChatHistory(backend, 'opaque/+ cursor=', 'session-alpha');
+  expect(requests[0].path).toBe(
+    '/v1/chat-messages?limit=50&chatSessionId=session-alpha',
+  );
+  expect(requests[1].path).toBe(
+    `/v1/chat-messages?limit=50&olderCursor=${encodeURIComponent(
+      'opaque/+ cursor=',
+    )}&chatSessionId=session-alpha`,
+  );
+});
+
+test('does not send named chat sessions to the old chat history API', async () => {
+  const backend = {
+    getApiContract: async () => 'omi' as const,
+    request: async () => ({id: 'omi-chat-history', status: 200, body: '[]'}),
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  } satisfies OmiBackend;
+
+  await expect(
+    loadNewestChatHistory(backend, 'session-alpha'),
+  ).rejects.toMatchObject({
+    status: 404,
+    backendCode: 'not_found',
+    retryable: false,
+  });
 });
 
 test('admits one main-scope human message and accepts only a terminal SSE message', async () => {
@@ -386,6 +551,101 @@ test('maps ratified public recovery without automatically retrying', () => {
   ).toBe('Omi is temporarily unavailable. Try again.');
   expect(
     chatErrorCopy(new ChatBackendError(404, 'not_found', false, 'none', null)),
+  ).toBe('Sending messages is not available on this backend yet.');
+  expect(
+    chatWriteDoorUnavailable(
+      new ChatBackendError(404, 'not_found', false, 'none', null),
+    ),
+  ).toBe(true);
+  expect(
+    chatWriteDoorUnavailable(
+      new ChatBackendError(503, 'service_unavailable', true, 'retry', 2),
+    ),
+  ).toBe(false);
+  expect(chatWriteDoorUnavailable({code: 'OMI_DEV_BACKEND_UNSUPPORTED'})).toBe(
+    true,
+  );
+  expect(chatErrorCopy({code: 'OMI_DEV_BACKEND_UNSUPPORTED'})).toBe(
+    'Sending messages is not available on this backend yet.',
+  );
+  expect(chatErrorCopy({code: 'OMI_HTTP_TRANSPORT'})).toBe(
+    'Message not sent. Check your connection and try again.',
+  );
+  expect(chatCancelErrorCopy({code: 'OMI_DEV_BACKEND_UNSUPPORTED'})).toBe(
+    'Stopping the response is not available on this backend yet.',
+  );
+  expect(
+    chatCancelErrorCopy(
+      new ChatBackendError(404, 'not_found', false, 'none', null),
+    ),
+  ).toBe('Stopping the response is not available on this backend yet.');
+  expect(chatCancelErrorCopy({code: 'OMI_HTTP_TRANSPORT'})).toBe(
+    'Could not stop the response.',
+  );
+  expect(chatHistoryHasOlder(false, null)).toBe(false);
+  expect(chatHistoryHasOlder(true, null)).toBe(false);
+  expect(chatHistoryHasOlder(true, '')).toBe(false);
+  expect(chatHistoryHasOlder(false, 'older-1')).toBe(false);
+  expect(chatHistoryHasOlder(true, 'older-1')).toBe(true);
+  expect(chatComposerIsResting(0, false, false, null)).toBe(true);
+  expect(
+    chatComposerIsResting(
+      0,
+      false,
+      false,
+      'Chat history is not available on this backend yet.',
+    ),
+  ).toBe(false);
+  expect(chatComposerIsResting(0, false, true, null)).toBe(false);
+  expect(chatComposerIsResting(1, false, false, null)).toBe(false);
+  expect(chatComposerIsResting(0, true, false, null)).toBe(false);
+  expect(
+    chatHistoryErrorCopy(
+      new ChatBackendError(404, 'not_found', false, 'none', null),
+    ),
+  ).toBe('Chat history is not available on this backend yet.');
+  expect(
+    chatErrorCopy(
+      new ChatBackendError(
+        503,
+        'development_backend_unsupported',
+        false,
+        'none',
+        null,
+      ),
+    ),
+  ).toBe('Sending messages is not available on this backend yet.');
+  expect(
+    chatHistoryErrorCopy(
+      new ChatBackendError(
+        503,
+        'development_backend_unsupported',
+        false,
+        'none',
+        null,
+      ),
+    ),
+  ).toBe('Chat history is not available on this backend yet.');
+  expect(
+    chatHistoryCanReload(
+      new ChatBackendError(
+        503,
+        'development_backend_unsupported',
+        false,
+        'none',
+        null,
+      ),
+    ),
+  ).toBe(false);
+  expect(
+    chatHistoryCanReload(
+      new ChatBackendError(403, 'forbidden', false, 'none', null),
+    ),
+  ).toBe(true);
+  expect(
+    chatErrorCopy(
+      new ChatBackendError(503, 'service_unavailable', false, 'none', null),
+    ),
   ).toBe('This request cannot be completed.');
   expect(
     chatErrorCopy(new ChatBackendError(403, 'forbidden', false, 'none', null)),
@@ -406,6 +666,77 @@ test('maps ratified public recovery without automatically retrying', () => {
   expect(chatHistoryErrorCopy(new Error('socket hang up'))).toBe(
     'Chat history could not be loaded. Check your connection and try again.',
   );
+  expect(chatHistoryErrorCopy({code: 'OMI_DEV_BACKEND_UNSUPPORTED'})).toBe(
+    'Chat history is not available on this backend yet.',
+  );
+  expect(chatHistoryCanReload({code: 'OMI_DEV_BACKEND_UNSUPPORTED'})).toBe(
+    false,
+  );
+  expect(chatHistoryCanReload({code: 'OMI_HTTP_TRANSPORT'})).toBe(true);
+});
+
+test('classifies string and nested chat 404 without retrying send', async () => {
+  for (const body of [
+    '{"error":"not_found"}',
+    '{"error":{"code":"not_found","retryable":false,"action":"none"}}',
+  ]) {
+    const request = jest.fn(async (input: NativeHttpRequest) => ({
+      id: input.id,
+      status: 404,
+      body,
+    }));
+    const backend = {
+      request,
+      generationEvents: jest.fn(),
+      cancelGenerationEvents: async () => {},
+    } satisfies OmiBackend;
+    await expect(sendChatMessage(backend, 'Hello', 1)).rejects.toMatchObject({
+      status: 404,
+      backendCode: 'not_found',
+      retryable: false,
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(backend.generationEvents).not.toHaveBeenCalled();
+  }
+});
+
+test('honors nested non-retryable 503 without treating it as an outage', async () => {
+  const request = jest.fn(async (input: NativeHttpRequest) => ({
+    id: input.id,
+    status: 503,
+    body: '{"error":{"code":"development_backend_unsupported","retryable":false,"action":"none"}}',
+  }));
+  const backend = {
+    request,
+    generationEvents: jest.fn(),
+    cancelGenerationEvents: async () => {},
+  } satisfies OmiBackend;
+  await expect(sendChatMessage(backend, 'Hello', 1)).rejects.toMatchObject({
+    status: 503,
+    backendCode: 'development_backend_unsupported',
+    retryable: false,
+  });
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(backend.generationEvents).not.toHaveBeenCalled();
+});
+
+test('treats omitted 503 retryable as a retryable outage', async () => {
+  const request = jest.fn(async (input: NativeHttpRequest) => ({
+    id: input.id,
+    status: 503,
+    body: '{"error":"service_unavailable"}',
+  }));
+  const backend = {
+    request,
+    generationEvents: jest.fn(),
+    cancelGenerationEvents: async () => {},
+  } satisfies OmiBackend;
+  await expect(sendChatMessage(backend, 'Hello', 1)).rejects.toMatchObject({
+    status: 503,
+    backendCode: 'service_unavailable',
+    retryable: true,
+  });
+  expect(request).toHaveBeenCalledTimes(1);
 });
 
 test('loads opaque older cursors and preserves exact page metadata', async () => {
@@ -432,6 +763,35 @@ test('loads opaque older cursors and preserves exact page metadata', async () =>
   await loadOlderChatHistory(backend, olderCursor);
   expect(paths[1]).toBe(
     `/v1/chat-messages?limit=50&olderCursor=${encodeURIComponent(olderCursor)}`,
+  );
+});
+
+test('keeps chat history when olderCursor is empty instead of offering Load older', async () => {
+  const human = {
+    id: 'human-1',
+    text: 'saved prompt',
+    sender: 'human' as const,
+    createdAt: 100,
+    generationOutcome: null,
+  };
+  const backend = {
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 200,
+      body: historyBody([human], {olderCursor: '', hasOlder: true}),
+    }),
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  } satisfies OmiBackend;
+
+  await expect(loadNewestChatHistory(backend)).resolves.toEqual({
+    messages: [expect.objectContaining({id: 'human-1', text: 'saved prompt'})],
+    olderCursor: '',
+    hasOlder: true,
+  });
+  expect(chatHistoryHasOlder(true, '')).toBe(false);
+  await expect(loadOlderChatHistory(backend, '')).rejects.toThrow(
+    'Chat history cursor is empty',
   );
 });
 

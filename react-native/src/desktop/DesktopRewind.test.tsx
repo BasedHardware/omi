@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Image, NativeModules, Switch, Text} from 'react-native';
+import {clockLabel} from '../desktopReadClient';
 
 const mockRewind = {listFrames: jest.fn(), readFrame: jest.fn()};
 NativeModules.OmiRewind = mockRewind;
@@ -84,6 +85,7 @@ test('loads native history, advances its cursor and opens the chosen stored fram
   await act(async () =>
     first.resolve({frames: [frame('one')], nextCursor: 'page-two'}),
   );
+  expect(content(view)).toContain('Load more history');
   mockRewind.listFrames.mockResolvedValueOnce({
     frames: [frame('two')],
     nextCursor: null,
@@ -183,6 +185,207 @@ test('missing native bridge reports unavailable instead of empty success', async
   expect(content(view)).not.toContain('No captures saved yet.');
 });
 
+test('a complete empty history may claim nothing is saved', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [],
+    nextCursor: null,
+  });
+  const view = await render();
+  expect(content(view)).toContain('No captures saved yet.');
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more history',
+    ),
+  ).toHaveLength(0);
+});
+
+test('Rewind capture time uses the same clock as conversations and not 1970', async () => {
+  const older = new Date(2025, 7, 10, 12, 0);
+  const expected = clockLabel(older.getTime(), Date.now());
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [{...frame('one'), capturedAtMs: older.getTime()}],
+    nextCursor: null,
+  });
+  const view = await render();
+  expect(content(view)).toContain(expected);
+  expect(content(view)).not.toContain('1970');
+});
+
+test('a zero Rewind capture timestamp says Time unavailable instead of 1970', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [{...frame('one'), capturedAtMs: 0}],
+    nextCursor: null,
+  });
+  const view = await render();
+  expect(content(view)).toContain('Time unavailable');
+  expect(content(view)).not.toContain('1970');
+});
+
+test('empty Rewind app and window names stay visible without a blank row', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [
+      {
+        ...frame('one'),
+        appName: '',
+        windowTitle: '',
+      },
+      {
+        ...frame('two'),
+        appName: ' \t\n',
+        windowTitle: '\u00A0',
+      },
+      {
+        ...frame('nel'),
+        appName: 'Preview app',
+        windowTitle: '\u0085',
+      },
+      {
+        ...frame('three'),
+        appName: '  Preview app  ',
+        windowTitle: '  Window three  ',
+      },
+    ],
+    nextCursor: null,
+  });
+  const view = await render();
+  const output = content(view);
+  expect(output).toContain('Captured screen');
+  expect(output).toContain('Preview app');
+  expect(output).toContain('Window three');
+  expect(output).not.toContain(' \t\n');
+  expect(output).not.toContain('\u0085');
+  await press(view, 'View capture one');
+  expect(view.root.findByType(Image).props.accessibilityLabel).toBe(
+    'Captured screen from Captured screen',
+  );
+  await press(view, 'View capture three');
+  expect(view.root.findByType(Image).props.accessibilityLabel).toBe(
+    'Captured screen from Preview app',
+  );
+});
+
+test('later-page Rewind unavailability keeps frames and omits Load more', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [frame('one')],
+    nextCursor: 'page-two',
+  });
+  const view = await render();
+  expect(label(view, 'Load more history')).toBeDefined();
+  mockRewind.listFrames.mockRejectedValueOnce({code: 'OMI_REWIND_UNAVAILABLE'});
+  await press(view, 'Load more history');
+  expect(content(view)).toContain(
+    'No local Rewind history is available for this account on this Mac.',
+  );
+  expect(content(view)).not.toContain('Screen history could not be loaded.');
+  expect(label(view, 'View capture one')).toBeDefined();
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more history',
+    ),
+  ).toHaveLength(0);
+});
+
+test('later-page Rewind auth failures keep frames and omit Load more', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [frame('one')],
+    nextCursor: 'page-two',
+  });
+  const view = await render();
+  mockRewind.listFrames.mockRejectedValueOnce({code: 'OMI_REWIND_AUTH'});
+  await press(view, 'Load more history');
+  expect(content(view)).toContain('Sign in again to open your screen history.');
+  expect(label(view, 'View capture one')).toBeDefined();
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more history',
+    ),
+  ).toHaveLength(0);
+});
+
+test('generic later-page Rewind failures still offer Load more', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [frame('one')],
+    nextCursor: 'page-two',
+  });
+  const view = await render();
+  mockRewind.listFrames.mockRejectedValueOnce(
+    new Error('private filesystem path'),
+  );
+  await press(view, 'Load more history');
+  expect(content(view)).toContain(
+    'Screen history could not be loaded. Try again.',
+  );
+  expect(content(view)).not.toContain('private filesystem path');
+  expect(label(view, 'View capture one')).toBeDefined();
+  expect(label(view, 'Load more history')).toBeDefined();
+});
+
+test('later-page Rewind unavailability does not claim an empty history', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [],
+    nextCursor: 'page-two',
+  });
+  const view = await render();
+  mockRewind.listFrames.mockRejectedValueOnce({code: 'OMI_REWIND_UNAVAILABLE'});
+  await press(view, 'Load more history');
+  expect(content(view)).toContain(
+    'No local Rewind history is available for this account on this Mac.',
+  );
+  expect(content(view)).not.toContain('No captures saved yet.');
+  expect(content(view)).not.toContain('No captures match this search.');
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more history',
+    ),
+  ).toHaveLength(0);
+});
+
+test('an incomplete empty history does not claim nothing is saved', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [],
+    nextCursor: 'page-two',
+  });
+  const view = await render();
+  expect(content(view)).not.toContain('No captures saved yet.');
+  expect(content(view)).not.toContain('No captures match this search.');
+  expect(label(view, 'Load more history')).toBeDefined();
+});
+
+test('an incomplete empty search does not claim a complete miss', async () => {
+  mockRewind.listFrames
+    .mockResolvedValueOnce({
+      frames: [frame('one')],
+      nextCursor: null,
+    })
+    .mockResolvedValueOnce({
+      frames: [],
+      nextCursor: 'page-two',
+    });
+  const view = await render();
+  await act(async () =>
+    label(view, 'Search screen history').props.onChangeText('zzz'),
+  );
+  await press(view, 'Search history');
+  expect(content(view)).not.toContain('No captures match this search.');
+  expect(content(view)).not.toContain('No captures saved yet.');
+  expect(label(view, 'Load more history')).toBeDefined();
+});
+
+test('a NEXT LINE-only Rewind search does not claim a complete miss', async () => {
+  mockRewind.listFrames.mockResolvedValue({
+    frames: [frame('one')],
+    nextCursor: null,
+  });
+  const view = await render();
+  await act(async () =>
+    label(view, 'Search screen history').props.onChangeText('\u0085'),
+  );
+  await press(view, 'Search history');
+  expect(content(view)).toContain('Preview app');
+  expect(content(view)).not.toContain('No captures match this search.');
+  expect(content(view)).not.toContain('\u0085');
+});
+
 test.each(['rejected', 'wrong-id'])(
   'image %s cannot display unrelated bytes',
   async mode => {
@@ -276,6 +479,28 @@ test('switching history source retires a delayed old-source page', async () => {
       node => node.props.accessibilityLabel === 'View capture shipping-stale',
     ),
   ).toHaveLength(0);
+});
+
+test('unavailable capture omits Start instead of keeping a disabled Start control', async () => {
+  const capture = {
+    available: false,
+    capturing: false,
+    busy: false,
+    error: null,
+    start: jest.fn(async () => undefined),
+    stop: jest.fn(async () => undefined),
+  };
+  const view = await render({capture});
+  expect(content(view)).toContain(
+    'Capture is available in the native Mac app.',
+  );
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Start screen capture',
+    ),
+  ).toHaveLength(0);
+  expect(content(view)).not.toContain('Start capture');
+  expect(content(view)).not.toContain('Stop capture');
 });
 
 test('explicit capture controls switch source and new capture hints preserve the selected image until refresh', async () => {

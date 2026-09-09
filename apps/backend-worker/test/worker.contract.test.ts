@@ -12,6 +12,11 @@ import {
   CONVERSATIONS_READ_CONTRACT_VERSION,
   MAIN_CONVERSATION_ID,
 } from "../src/conversations";
+import {
+  coreContext,
+  handleConversations,
+  handleTasks,
+} from "../src/http-core";
 import { CHAT_CAPABILITIES, isChatCreate } from "../src/wire";
 import { createD1Mock } from "./d1-mock";
 
@@ -29,13 +34,15 @@ beforeAll(async () => {
 
 const accountCalls: string[] = [];
 const identity = { displayName: "Test Account", email: "test@example.invalid" };
+const unavailableIdentity = { displayName: "", email: "" };
+const stagingPlanLabel = "StagingPlanMustNotLeak";
 const initialEntitlement = {
-  planLabel: "Metered",
+  planLabel: "",
   limitKey: "chat",
   used: 0,
   limit: 1,
   limitReached: false,
-  upgradeAvailable: true,
+  upgradeAvailable: false,
 };
 const admissions = new Map<
   string,
@@ -155,7 +162,7 @@ const env = {
   AI: { run: async () => ({ response: "test response" }) },
   STAGING_DISPLAY_NAME: identity.displayName,
   STAGING_EMAIL: identity.email,
-  STAGING_PLAN_LABEL: initialEntitlement.planLabel,
+  STAGING_PLAN_LABEL: stagingPlanLabel,
   STAGING_CHAT_LIMIT: initialEntitlement.limit,
   OBSERVABILITY_SINK_MODE: "cloudflare_only",
   OPENROUTER_GATEWAY_ENABLED: "false",
@@ -163,6 +170,7 @@ const env = {
   get DB() {
     return d1Mock;
   },
+  ATTACHMENTS: {},
 };
 
 const executionContext = {
@@ -171,10 +179,14 @@ const executionContext = {
   props: {},
 };
 
-const fetchWorker = (path: string, init?: RequestInit) =>
+const fetchWorker = (
+  path: string,
+  init?: RequestInit,
+  bindings: Record<string, unknown> = env
+) =>
   handler.fetch(
     new Request(`https://worker.test${path}`, init),
-    env as never,
+    bindings as never,
     executionContext as never
   );
 
@@ -221,8 +233,8 @@ const emptyConversationPage = () => ({
 const projectionUnavailable = () => ({
   error: {
     code: "projection_unavailable",
-    retryable: true,
-    action: "retry",
+    retryable: false,
+    action: "none",
   },
 });
 
@@ -718,7 +730,7 @@ describe("worker request contract", () => {
     });
     expect(alphaSettings.status).toBe(200);
     expect((await alphaSettings.json()) as unknown).toMatchObject({
-      identity,
+      identity: unavailableIdentity,
       entitlement: { used: 0, planLabel: initialEntitlement.planLabel },
     });
   });
@@ -786,6 +798,111 @@ describe("worker request contract", () => {
       absence: { kind: "query_gap" },
     });
     expect(parseTaskPageJson(tasksBody)).not.toBeNull();
+  });
+
+  test("tasks GET does not omit a neighboring row when provenance JSON is unreadable", async () => {
+    await d1Mock
+      .prepare(
+        "INSERT INTO tasks (id, account_id, description, completed, completed_at, due_at, owner, source, provenance, sort_order, indent_level, created_at, updated_at, revision) VALUES (?, ?, ?, 0, NULL, NULL, NULL, 'assistant', '[]', 1, 0, 1, 1, NULL)"
+      )
+      .bind("task:readable", "test-account", "readable task")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO tasks (id, account_id, description, completed, completed_at, due_at, owner, source, provenance, sort_order, indent_level, created_at, updated_at, revision) VALUES (?, ?, ?, 0, NULL, NULL, NULL, 'assistant', ?, 2, 0, 2, 2, NULL)"
+      )
+      .bind(
+        "task:broken-provenance",
+        "test-account",
+        "broken provenance",
+        "{broken"
+      )
+      .run();
+
+    const response = await fetchWorker("/v1/tasks?limit=10", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(503);
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+  });
+
+  test("tasks GET does not advertise a page when provenance is JSON null", async () => {
+    await d1Mock
+      .prepare(
+        "INSERT INTO tasks (id, account_id, description, completed, completed_at, due_at, owner, source, provenance, sort_order, indent_level, created_at, updated_at, revision) VALUES (?, ?, ?, 0, NULL, NULL, NULL, 'assistant', 'null', 1, 0, 1, 1, NULL)"
+      )
+      .bind("task:null-provenance", "test-account", "null provenance")
+      .run();
+
+    const response = await fetchWorker("/v1/tasks?limit=10", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(503);
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+  });
+
+  test("conversation and task reads fail closed when D1 is unbound", async () => {
+    const missingDb = { ...env, DB: undefined };
+    const unavailable = {
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    };
+    const unbound = (url: string) =>
+      coreContext({
+        env: missingDb as never,
+        request: new Request(url),
+        routePath: new URL(url).pathname,
+        params: {},
+        values: { accountId: "test-account", requestId: "test-request" },
+      });
+    const conversations = await handleConversations(
+      unbound("https://worker.test/v1/conversations?limit=50")
+    );
+    const legacy = await handleConversations(
+      unbound("https://worker.test/v1/conversations?limit=50&offset=0")
+    );
+    const tasks = await handleTasks(
+      unbound("https://worker.test/v1/tasks?limit=10")
+    );
+    const ready = await handler.fetch(
+      new Request("https://worker.test/ready"),
+      missingDb as never,
+      executionContext as never
+    );
+    const refused = await handler.fetch(
+      new Request("https://worker.test/v1/conversations?limit=50", {
+        headers: authenticatedHeaders,
+      }),
+      missingDb as never,
+      executionContext as never
+    );
+
+    expect(conversations.status).toBe(503);
+    expect(legacy.status).toBe(503);
+    expect(tasks.status).toBe(503);
+    expect((await conversations.json()) as unknown).toEqual(unavailable);
+    expect((await legacy.json()) as unknown).toEqual(unavailable);
+    expect((await tasks.json()) as unknown).toEqual(unavailable);
+    expect(ready.status).toBe(503);
+    expect(refused.status).not.toBe(200);
+    expect((await refused.json()) as unknown).not.toEqual(
+      emptyConversationPage()
+    );
   });
 
   test("conversations project grouped D1 chat sessions, not a 503", async () => {
@@ -868,6 +985,36 @@ describe("worker request contract", () => {
     });
     expect(page.absence).toBeNull();
 
+    const mainHistory = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(mainHistory.status).toBe(200);
+    expect(
+      (
+        (await mainHistory.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["main-one", "main-two"]);
+
+    const sessionHistory = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+      { headers: authenticatedHeaders }
+    );
+    expect(sessionHistory.status).toBe(200);
+    expect(
+      (
+        (await sessionHistory.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["session-one"]);
+
+    const missingHistory = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=session-missing",
+      { headers: authenticatedHeaders }
+    );
+    expect(missingHistory.status).toBe(200);
+    expect(
+      ((await missingHistory.json()) as { messages: unknown[] }).messages
+    ).toEqual([]);
+
     const legacy = await fetchWorker("/v1/conversations?limit=50&offset=0", {
       headers: authenticatedHeaders,
     });
@@ -888,6 +1035,125 @@ describe("worker request contract", () => {
     });
     expect(records[1]?.id).toBe(MAIN_CONVERSATION_ID);
     expect(Number.isFinite(Date.parse(records[0]!.created_at))).toBe(true);
+  });
+
+  test("history GET of listed chat:chat-main includes stored chatSessionId chat-main", async () => {
+    await insertChatMessage({
+      id: "main-key",
+      accountId: "test-account",
+      text: "stored as chat-main",
+      createdAt: 1_000,
+      position: 1,
+      chatSessionId: "chat-main",
+    });
+    await insertChatMessage({
+      id: "null-main",
+      accountId: "test-account",
+      text: "omitted session",
+      createdAt: 2_000,
+      position: 2,
+      chatSessionId: null,
+    });
+    await insertChatMessage({
+      id: "named",
+      accountId: "test-account",
+      text: "other session",
+      createdAt: 3_000,
+      position: 3,
+      chatSessionId: "session-alpha",
+    });
+    await insertChatMessage({
+      id: "padded-main",
+      accountId: "test-account",
+      text: "space-padded chat-main",
+      createdAt: 2_500,
+      position: 4,
+      chatSessionId: " chat-main ",
+    });
+    await insertChatMessage({
+      id: "space-main",
+      accountId: "test-account",
+      text: "space-only chatSessionId",
+      createdAt: 2_600,
+      position: 5,
+      chatSessionId: "  ",
+    });
+    await insertChatMessage({
+      id: "padded-named",
+      accountId: "test-account",
+      text: "padded named stays named",
+      createdAt: 2_700,
+      position: 6,
+      chatSessionId: " session-alpha ",
+    });
+
+    const listed = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(listed.status).toBe(200);
+    expect(
+      (
+        (await listed.json()) as { items: Array<{ id: string; title: string }> }
+      ).items.map((item) => item.id)
+    ).toEqual([
+      "chat:session-alpha",
+      "chat: session-alpha ",
+      MAIN_CONVERSATION_ID,
+    ]);
+
+    const mainHistory = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(mainHistory.status).toBe(200);
+    expect(
+      (
+        (await mainHistory.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["main-key", "null-main", "padded-main", "space-main"]);
+
+    const aliased = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=chat-main",
+      { headers: authenticatedHeaders }
+    );
+    expect(aliased.status).toBe(200);
+    expect(
+      (
+        (await aliased.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["main-key", "null-main", "padded-main", "space-main"]);
+
+    const paddedAlias = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=%20chat-main%20",
+      { headers: authenticatedHeaders }
+    );
+    expect(paddedAlias.status).toBe(200);
+    expect(
+      (
+        (await paddedAlias.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual([]);
+
+    const named = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+      { headers: authenticatedHeaders }
+    );
+    expect(named.status).toBe(200);
+    expect(
+      (
+        (await named.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["named"]);
+
+    const paddedNamed = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=%20session-alpha%20",
+      { headers: authenticatedHeaders }
+    );
+    expect(paddedNamed.status).toBe(200);
+    expect(
+      (
+        (await paddedNamed.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["padded-named"]);
   });
 
   test("conversation pagination and query validation match neighboring list routes", async () => {
@@ -971,7 +1237,7 @@ describe("worker request contract", () => {
     expect(extra.status).toBe(400);
   });
 
-  test("memories stay retryably unavailable because no store exists", async () => {
+  test("memories stay non-retryably unavailable because no store exists", async () => {
     const response = await fetchWorker("/v1/memories?limit=50", {
       headers: authenticatedHeaders,
     });
@@ -1017,10 +1283,41 @@ describe("worker request contract", () => {
         headers: authenticatedHeaders,
       }
     );
+    const emptySession = await fetchWorker("/v1/chat-messages?chatSessionId=", {
+      headers: authenticatedHeaders,
+    });
 
     expect(invalidLimit.status).toBe(400);
     expect(unsupportedCursor.status).toBe(400);
+    expect(emptySession.status).toBe(400);
+    expect((await invalidLimit.json()) as unknown).toEqual({
+      error: { code: "bad_request", retryable: false, action: "edit_request" },
+    });
+    expect((await unsupportedCursor.json()) as unknown).toEqual({
+      error: { code: "bad_request", retryable: false, action: "edit_request" },
+    });
+    expect((await emptySession.json()) as unknown).toEqual({
+      error: { code: "bad_request", retryable: false, action: "edit_request" },
+    });
     expect(accountCalls).toEqual([]);
+  });
+
+  test("chat history GET maps an undecodable olderCursor to refresh_history", async () => {
+    const invalidCursor = await fetchWorker(
+      "/v1/chat-messages?olderCursor=not-a-cursor",
+      {
+        headers: authenticatedHeaders,
+      }
+    );
+
+    expect(invalidCursor.status).toBe(400);
+    expect((await invalidCursor.json()) as unknown).toEqual({
+      error: {
+        code: "bad_request",
+        retryable: false,
+        action: "refresh_history",
+      },
+    });
   });
 
   test("chat history reads persisted messages from D1 without resolving the DO", async () => {
@@ -1075,9 +1372,19 @@ describe("worker request contract", () => {
     const unknown = await fetchWorker("/v1/chat-messages?extra=1", {
       headers: authenticatedHeaders,
     });
+    const repeatedSession = await fetchWorker(
+      "/v1/chat-messages?chatSessionId=a&chatSessionId=b",
+      { headers: authenticatedHeaders }
+    );
+    const overlongSession = await fetchWorker(
+      `/v1/chat-messages?chatSessionId=${"s".repeat(129)}`,
+      { headers: authenticatedHeaders }
+    );
 
     expect(repeated.status).toBe(400);
     expect(unknown.status).toBe(400);
+    expect(repeatedSession.status).toBe(400);
+    expect(overlongSession.status).toBe(400);
   });
 
   test("pagination cursor survives a strict atob implementation (WHATWG/V8)", async () => {
@@ -1152,6 +1459,574 @@ describe("worker request contract", () => {
     }
   });
 
+  test("history GET does not complete assistant rows without a unique terminal event", async () => {
+    const id = "orphan-assistant";
+    const createdAt = 1;
+    const message = {
+      id,
+      text: "invented answer",
+      sender: "ai" as const,
+      type: "text",
+      createdAt,
+      updatedAt: createdAt,
+      chatSessionId: null,
+      appId: null,
+      journalRevision: 0,
+      payloadHash: "sha256:test",
+      messageSource: "assistant_generation",
+      rating: null,
+      reported: false,
+      generationOutcome: "completed" as const,
+      revision: "1",
+      attachments: [],
+    };
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'ai', ?, 'completed', 1, ?)"
+      )
+      .bind(
+        id,
+        "test-account",
+        message.text,
+        createdAt,
+        JSON.stringify(message)
+      )
+      .run();
+
+    const orphan = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(orphan.status).toBe(503);
+    expect((await orphan.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '2', 2, ?)"
+      )
+      .bind(
+        id,
+        "test-account",
+        JSON.stringify({ id: "2", kind: "done", message })
+      )
+      .run();
+
+    const completed = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(completed.status).toBe(200);
+    const body = (await completed.json()) as {
+      messages: Array<{ id: string; generationOutcome: string | null }>;
+    };
+    expect(body.messages).toEqual([
+      expect.objectContaining({ id, generationOutcome: "completed" }),
+    ]);
+
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'ai', ?, NULL, 2, NULL)"
+      )
+      .bind("null-outcome-assistant", "test-account", "also invented", 2)
+      .run();
+    const missingOutcome = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(missingOutcome.status).toBe(503);
+  });
+
+  test("history GET does not complete assistant rows with unreadable terminal events", async () => {
+    const id = "broken-event-assistant";
+    const createdAt = 1;
+    const message = {
+      id,
+      text: "invented answer",
+      sender: "ai" as const,
+      type: "text",
+      createdAt,
+      updatedAt: createdAt,
+      chatSessionId: null,
+      appId: null,
+      journalRevision: 0,
+      payloadHash: "sha256:test",
+      messageSource: "assistant_generation",
+      rating: null,
+      reported: false,
+      generationOutcome: "completed" as const,
+      revision: "1",
+      attachments: [],
+    };
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'ai', ?, 'completed', 1, ?)"
+      )
+      .bind(
+        id,
+        "test-account",
+        message.text,
+        createdAt,
+        JSON.stringify(message)
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '2', 2, ?)"
+      )
+      .bind(id, "test-account", "{broken")
+      .run();
+
+    const broken = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(broken.status).toBe(503);
+    expect((await broken.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+  });
+
+  test("history GET keeps unknown senders instead of labeling them human", async () => {
+    const unknownMessage = {
+      id: "unknown-sender",
+      text: "stored without a known sender",
+      sender: "unknown",
+      type: "text",
+      createdAt: 2,
+      updatedAt: 2,
+      chatSessionId: null,
+      appId: null,
+      journalRevision: 0,
+      payloadHash: "sha256:test",
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      generationOutcome: null,
+      revision: "2",
+      attachments: [],
+    };
+    await insertChatMessage({
+      id: "known-human",
+      accountId: "test-account",
+      text: "hello from you",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)"
+      )
+      .bind(
+        unknownMessage.id,
+        "test-account",
+        unknownMessage.text,
+        "unknown",
+        unknownMessage.createdAt,
+        2,
+        JSON.stringify(unknownMessage)
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, '', ?, NULL, 3, NULL)"
+      )
+      .bind("empty-sender", "test-account", "empty sender row", 3)
+      .run();
+
+    const response = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as unknown;
+    const envelope = wireToChatHistoryEnvelope(body);
+    expect(envelope).not.toBeNull();
+    expect(envelope!.messages.map((message) => message.sender)).toEqual([
+      "human",
+      "unknown",
+      "unknown",
+    ]);
+    expect(envelope!.messages.map((message) => message.text)).toEqual([
+      "hello from you",
+      "stored without a known sender",
+      "empty sender row",
+    ]);
+  });
+
+  test("history GET keeps neighboring rows when one payload is unreadable JSON", async () => {
+    await insertChatMessage({
+      id: "readable-human",
+      accountId: "test-account",
+      text: "hello from you",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+      )
+      .bind(
+        "broken-payload",
+        "test-account",
+        "stored beside unreadable json",
+        2,
+        2,
+        "{broken"
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'unknown', ?, NULL, ?, ?)"
+      )
+      .bind(
+        "null-payload-json",
+        "test-account",
+        "stored beside json null",
+        3,
+        3,
+        "null"
+      )
+      .run();
+
+    const response = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as unknown;
+    const envelope = wireToChatHistoryEnvelope(body);
+    expect(envelope).not.toBeNull();
+    expect(envelope!.messages.map((message) => message.sender)).toEqual([
+      "human",
+      "human",
+      "unknown",
+    ]);
+    expect(envelope!.messages.map((message) => message.text)).toEqual([
+      "hello from you",
+      "stored beside unreadable json",
+      "stored beside json null",
+    ]);
+  });
+
+  test("history GET keeps bound attachments when payload JSON is unreadable", async () => {
+    await insertChatMessage({
+      id: "readable-human",
+      accountId: "test-account",
+      text: "hello from you",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+      )
+      .bind(
+        "broken-payload",
+        "test-account",
+        "stored beside unreadable json",
+        2,
+        2,
+        "{broken"
+      )
+      .run();
+    await insertAttachment({
+      id: "att-notes",
+      accountId: "test-account",
+      state: "bound",
+      boundMessageId: "broken-payload",
+      displayName: "notes.pdf",
+      mimeType: "application/pdf",
+    });
+    await insertAttachment({
+      id: "att-staged",
+      accountId: "test-account",
+      state: "staged",
+      boundMessageId: "broken-payload",
+      displayName: "ignored.txt",
+      mimeType: "text/plain",
+    });
+
+    const response = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as unknown;
+    const envelope = wireToChatHistoryEnvelope(body);
+    expect(envelope).not.toBeNull();
+    expect(envelope!.messages.map((message) => message.text)).toEqual([
+      "hello from you",
+      "stored beside unreadable json",
+    ]);
+    expect(envelope!.messages[0]!.attachments).toEqual([]);
+    expect(envelope!.messages[1]!.attachments).toEqual([
+      {
+        id: "att-notes",
+        displayName: "notes.pdf",
+        mediaType: "application/pdf",
+        sizeBytes: 1024,
+        contentReference: "att-notes",
+      },
+    ]);
+  });
+
+  test("history GET keeps an unreadable named-session row out of main history", async () => {
+    await insertChatMessage({
+      id: "readable-human",
+      accountId: "test-account",
+      text: "hello from you",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+      )
+      .bind(
+        "broken-named",
+        "test-account",
+        "named session words",
+        2,
+        2,
+        "{broken"
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(
+        "broken-named",
+        "test-account",
+        "op-broken-named",
+        JSON.stringify({
+          op: "create",
+          opId: "op-broken-named",
+          id: "broken-named",
+          at: 2,
+          text: "named session words",
+          sender: "human",
+          journalRevision: 0,
+          attachmentIds: [],
+          chatSessionId: "session-alpha",
+        }),
+        "gen-broken-named"
+      )
+      .run();
+
+    const main = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(main.status).toBe(200);
+    const mainEnvelope = wireToChatHistoryEnvelope(await main.json());
+    expect(mainEnvelope).not.toBeNull();
+    expect(mainEnvelope!.messages.map((message) => message.text)).toEqual([
+      "hello from you",
+    ]);
+
+    const named = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+      { headers: authenticatedHeaders }
+    );
+    expect(named.status).toBe(200);
+    const namedEnvelope = wireToChatHistoryEnvelope(await named.json());
+    expect(namedEnvelope).not.toBeNull();
+    expect(namedEnvelope!.messages.map((message) => message.text)).toEqual([
+      "named session words",
+    ]);
+    expect(namedEnvelope!.messages[0]!.chatSessionId).toBe("session-alpha");
+
+    const conversations = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(conversations.status).toBe(200);
+    const page = (await conversations.json()) as {
+      items: Array<{ id: string }>;
+    };
+    expect(page.items.map((item) => item.id)).toEqual([
+      "chat:session-alpha",
+      MAIN_CONVERSATION_ID,
+    ]);
+  });
+
+  test("history GET keeps a JSON-null named-session row out of main history", async () => {
+    await insertChatMessage({
+      id: "readable-human",
+      accountId: "test-account",
+      text: "hello from you",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+      )
+      .bind("null-named", "test-account", "named session words", 2, 2, "null")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(
+        "null-named",
+        "test-account",
+        "op-null-named",
+        JSON.stringify({
+          op: "create",
+          opId: "op-null-named",
+          id: "null-named",
+          at: 2,
+          text: "named session words",
+          sender: "human",
+          journalRevision: 0,
+          attachmentIds: [],
+          chatSessionId: "session-alpha",
+        }),
+        "gen-null-named"
+      )
+      .run();
+
+    const main = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(main.status).toBe(200);
+    const mainEnvelope = wireToChatHistoryEnvelope(await main.json());
+    expect(mainEnvelope).not.toBeNull();
+    expect(mainEnvelope!.messages.map((message) => message.text)).toEqual([
+      "hello from you",
+    ]);
+
+    const named = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+      { headers: authenticatedHeaders }
+    );
+    expect(named.status).toBe(200);
+    const namedEnvelope = wireToChatHistoryEnvelope(await named.json());
+    expect(namedEnvelope).not.toBeNull();
+    expect(namedEnvelope!.messages.map((message) => message.text)).toEqual([
+      "named session words",
+    ]);
+    expect(namedEnvelope!.messages[0]!.chatSessionId).toBe("session-alpha");
+
+    const conversations = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(conversations.status).toBe(200);
+    const page = (await conversations.json()) as {
+      items: Array<{ id: string }>;
+    };
+    expect(page.items.map((item) => item.id)).toEqual([
+      "chat:session-alpha",
+      MAIN_CONVERSATION_ID,
+    ]);
+  });
+
+  test("history GET keeps an unreadable named-session assistant out of main history", async () => {
+    const generationId = "11111111-1111-4111-8111-111111111111";
+    const assistant = {
+      id: generationId,
+      text: "named session answer",
+      sender: "ai" as const,
+    };
+    await insertChatMessage({
+      id: "readable-human",
+      accountId: "test-account",
+      text: "hello from you",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await insertChatMessage({
+      id: "named-human",
+      accountId: "test-account",
+      text: "named session words",
+      createdAt: 2,
+      position: 2,
+      chatSessionId: "session-alpha",
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'ai', ?, 'completed', ?, ?)"
+      )
+      .bind(generationId, "test-account", assistant.text, 3, 3, "{broken")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '2', 2, ?)"
+      )
+      .bind(
+        generationId,
+        "test-account",
+        JSON.stringify({ id: "2", kind: "done", message: assistant })
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(
+        "named-human",
+        "test-account",
+        "op-named-human",
+        JSON.stringify({
+          op: "create",
+          opId: "op-named-human",
+          id: "named-human",
+          at: 2,
+          text: "named session words",
+          sender: "human",
+          journalRevision: 0,
+          attachmentIds: [],
+          chatSessionId: "session-alpha",
+        }),
+        generationId
+      )
+      .run();
+
+    const main = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(main.status).toBe(200);
+    const mainEnvelope = wireToChatHistoryEnvelope(await main.json());
+    expect(mainEnvelope).not.toBeNull();
+    expect(mainEnvelope!.messages.map((message) => message.text)).toEqual([
+      "hello from you",
+    ]);
+
+    const named = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+      { headers: authenticatedHeaders }
+    );
+    expect(named.status).toBe(200);
+    const namedEnvelope = wireToChatHistoryEnvelope(await named.json());
+    expect(namedEnvelope).not.toBeNull();
+    expect(namedEnvelope!.messages.map((message) => message.text)).toEqual([
+      "named session words",
+      "named session answer",
+    ]);
+    expect(namedEnvelope!.messages[1]!.chatSessionId).toBe("session-alpha");
+
+    const conversations = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(conversations.status).toBe(200);
+    const page = (await conversations.json()) as {
+      items: Array<{ id: string }>;
+    };
+    expect(page.items.map((item) => item.id)).toEqual([
+      "chat:session-alpha",
+      MAIN_CONVERSATION_ID,
+    ]);
+  });
+
   test("cancellation distinguishes accepted from already terminal", async () => {
     const accepted = await fetchWorker("/v1/chat-generations/generation-id", {
       method: "DELETE",
@@ -1187,15 +2062,19 @@ describe("settings entitlement admission contract", () => {
     });
 
     expect(before.status).toBe(200);
-    expect((await before.json()) as unknown).toEqual({
-      identity,
+    const beforeBody = (await before.json()) as unknown;
+    expect(beforeBody).toEqual({
+      identity: unavailableIdentity,
       entitlement: initialEntitlement,
     });
     expect(admitted.status).toBe(201);
     expect((await after.json()) as unknown).toEqual({
-      identity,
+      identity: unavailableIdentity,
       entitlement: { ...initialEntitlement, used: 1, limitReached: true },
     });
+    expect(JSON.stringify(beforeBody)).not.toContain(identity.displayName);
+    expect(JSON.stringify(beforeBody)).not.toContain(identity.email);
+    expect(JSON.stringify(beforeBody)).not.toContain(stagingPlanLabel);
   });
 
   test("an identical replay consumes quota exactly once", async () => {
@@ -1387,6 +2266,61 @@ describe("settings entitlement admission contract", () => {
       headers: { ...authenticatedHeaders, "content-type": "application/json" },
       body: JSON.stringify(chatCreate("attach-none")),
     });
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      message: { attachments: unknown[] };
+    };
+    expect(body.message.attachments).toEqual([]);
+  });
+
+  test("chat create with attachments without object storage is nested non-retryable", async () => {
+    await insertAttachment({
+      id: "att-no-r2",
+      accountId: "test-account",
+      state: "ingested",
+    });
+    const response = await fetchWorker(
+      "/v1/chat-messages",
+      {
+        method: "POST",
+        headers: {
+          ...authenticatedHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          ...chatCreate("attach-no-r2"),
+          attachmentIds: ["att-no-r2"],
+        }),
+      },
+      { ...env, ATTACHMENTS: undefined }
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBeNull();
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
+    expect(accountCalls).toEqual([]);
+  });
+
+  test("text-only chat create still admits without object storage", async () => {
+    const response = await fetchWorker(
+      "/v1/chat-messages",
+      {
+        method: "POST",
+        headers: {
+          ...authenticatedHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(chatCreate("attach-text-no-r2")),
+      },
+      { ...env, ATTACHMENTS: undefined }
+    );
 
     expect(response.status).toBe(201);
     const body = (await response.json()) as {

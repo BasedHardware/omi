@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
-import {Platform, TextInput} from 'react-native';
+import {Platform} from 'react-native';
 
 const mockDevice = {id: 'omi-1', name: 'Test Omi', rssi: -50, connected: false};
 const mockNative = {
@@ -62,48 +62,42 @@ afterEach(() => {
 
 test.each([
   ['Open settings', 'Settings stage'],
-  ['Expand', 'Memories stage'],
+  ['View All Mind Map', 'Memories stage'],
   ['Apps', 'Connectors stage'],
 ])(
   'mobile %s opens its real destination and can return home',
   async (label, stage) => {
     const renderer = await renderApp();
     await act(async () => {
-      if (label === 'Expand') {
-        const expand = renderer.root.findAll(
-          node => node.props.children === 'Expand',
-        )[0];
-        let button = expand.parent;
-        while (button && typeof button.props.onPress !== 'function') {
-          button = button.parent;
-        }
-        button!.props.onPress();
-      } else {
-        control(renderer, label).props.onPress();
-      }
+      control(renderer, label).props.onPress();
     });
     expect(control(renderer, stage)).toBeDefined();
     await act(async () =>
       control(
         renderer,
-        label === 'Expand' ? 'Back to Home' : 'Home',
+        label === 'View All Mind Map' ? 'Back to Home' : 'Home',
       ).props.onPress(),
     );
     expect(control(renderer, 'Ask Omi')).toBeDefined();
   },
 );
 
-test('mobile Ask Omi opens the actual chat and reports a missing backend', async () => {
+test('mobile Ask Omi stays unavailable without a backend', async () => {
   const renderer = await renderApp();
-  await act(async () => {
-    renderer.root
-      .findAllByType(TextInput)
-      .find(node => node.props.accessibilityLabel === 'Ask Omi')!
-      .props.onChangeText('Hello Omi');
-  });
-  await act(async () => control(renderer, 'Ask Omi').props.onSubmitEditing());
-  expect(control(renderer, 'Chat scroll region')).toBeDefined();
-  expect(JSON.stringify(renderer.toJSON())).toContain('Chat');
+  expect(control(renderer, 'Send to Omi unavailable')).toBeDefined();
+  const ask = control(renderer, 'Ask Omi');
+  expect(ask.props.editable).toBe(false);
+  expect(ask.props.placeholder).toBe(
+    'Sending messages is not available on this backend yet.',
+  );
+  expect(ask.props.onSubmitEditing).toBeUndefined();
+});
+
+test('compact Home does not claim Omi disconnected when nothing is connected', async () => {
+  const renderer = await renderApp();
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Omi not connected');
+  expect(tree).not.toContain('Omi disconnected');
 });
 
 test('mobile device panel exposes the existing scan and connection controls', async () => {

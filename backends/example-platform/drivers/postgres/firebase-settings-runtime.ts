@@ -19,7 +19,9 @@ const UNAVAILABLE_HEADERS = Object.freeze({
 const SIGNED_OUT_BODY = '{"identity":null,"entitlement":null}';
 const UNAUTHORIZED_BODY = '{"error":"unauthorized"}';
 const BAD_REQUEST_BODY = '{"error":"bad_request"}';
-const UNAVAILABLE_BODY = '{"error":"service_unavailable"}';
+const RETRYABLE_UNAVAILABLE_BODY = '{"error":"service_unavailable"}';
+const PRODUCER_UNAVAILABLE_BODY =
+  '{"error":{"code":"service_unavailable","retryable":false,"action":"none"}}';
 const NOT_FOUND_BODY = '{"error":"not_found"}';
 
 const response = (
@@ -79,11 +81,11 @@ export function createPostgresFirebaseSettingsRuntime(
           return response(UNAUTHORIZED_BODY, 401);
         }
         if (isFirebaseIdentityRefreshUnavailable(identity)) {
-          return response(UNAVAILABLE_BODY, 503, UNAVAILABLE_HEADERS);
+          return response(RETRYABLE_UNAVAILABLE_BODY, 503, UNAVAILABLE_HEADERS);
         }
-        return response(UNAVAILABLE_BODY, 503, UNAVAILABLE_HEADERS);
+        return response(PRODUCER_UNAVAILABLE_BODY, 503);
       } catch {
-        return response(UNAVAILABLE_BODY, 503, UNAVAILABLE_HEADERS);
+        return response(RETRYABLE_UNAVAILABLE_BODY, 503, UNAVAILABLE_HEADERS);
       }
     },
   });

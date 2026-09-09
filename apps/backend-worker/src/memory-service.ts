@@ -7,11 +7,14 @@ import {
 export type CanonicalMemoryResult =
   | { kind: "page"; response: Response }
   | { kind: "denied"; status: 400 | 401 | 403 }
-  | { kind: "unavailable" };
+  | { kind: "unavailable" }
+  | { kind: "unbound" }
+  | { kind: "unreadable" };
 
 export async function readCanonicalMemoryPage(
   input: Omit<CanonicalServiceRequest, "path" | "method" | "body">
 ): Promise<CanonicalMemoryResult> {
+  if (input.service === undefined) return { kind: "unbound" };
   const result = await requestCanonicalService({
     ...input,
     path: "/v1/memories",
@@ -25,7 +28,7 @@ export async function readCanonicalMemoryPage(
   }).decode(bytes);
   if (result.response.status === 200) {
     return parseSynthesizedPageJson(text) === null
-      ? { kind: "unavailable" }
+      ? { kind: "unreadable" }
       : { kind: "page", response: result.response };
   }
   const status = result.response.status;

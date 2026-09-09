@@ -1,8 +1,7 @@
-import { SYNTHESIZED_READ_CONTRACT_VERSION } from "@omi-core/ratified-contracts/projections/synthesized";
-
 import { readHistory, readSettings, type Admission } from "./chat";
 import {
   conversationPage,
+  MAIN_CONVERSATION_ID,
   paginateConversations,
   readConversations,
   toLegacyConversation,
@@ -250,41 +249,6 @@ async function readBoundedJsonStream(
   }
 }
 
-export function emptyPage(
-  completenessVersion: "recall-completeness-v1" | "tasks-completeness-v1"
-) {
-  return {
-    contractVersion: SYNTHESIZED_READ_CONTRACT_VERSION,
-    items: [],
-    window: {
-      status: "complete",
-      complete: true,
-      hasMore: false,
-      nextCursor: null,
-    },
-    completeness: {
-      version: completenessVersion,
-      status: "complete",
-      reasons: [],
-      frontiers:
-        completenessVersion === "tasks-completeness-v1"
-          ? {
-              declaredFrontier: "frontier-v1:tasks-declared",
-              newestAppliedFrontier: "frontier-v1:tasks-declared",
-              missingAppliedFrontierReason: null,
-            }
-          : {
-              declaredFrontier: "frontier-v1:declared",
-              newestSearchedAcceptedFrontier: null,
-              missingAcceptedFrontierReason: "no_accepted_work",
-              newestSearchedStmFrontier: null,
-              missingStmFrontierReason: "no_eligible_stm",
-            },
-    },
-    absence: { kind: "query_gap" },
-  };
-}
-
 async function firebaseAccountId(
   token: string,
   apiKey: string
@@ -441,11 +405,6 @@ export async function handleSettings(context: CoreContext): Promise<Response> {
     await readSettings(
       db,
       context.get("accountId"),
-      {
-        displayName: context.env.STAGING_DISPLAY_NAME,
-        email: context.env.STAGING_EMAIL,
-      },
-      context.env.STAGING_PLAN_LABEL,
       context.env.STAGING_CHAT_LIMIT
     )
   );
@@ -456,16 +415,30 @@ export async function handleChatHistory(
 ): Promise<Response> {
   const query = new URL(context.req.url).searchParams;
   if (
-    [...query.keys()].some((key) => key !== "limit" && key !== "olderCursor") ||
+    [...query.keys()].some(
+      (key) =>
+        key !== "limit" && key !== "olderCursor" && key !== "chatSessionId"
+    ) ||
     query.getAll("limit").length > 1 ||
-    query.getAll("olderCursor").length > 1
+    query.getAll("olderCursor").length > 1 ||
+    query.getAll("chatSessionId").length > 1
   ) {
     return backendError("bad_request", "edit_request", 400);
   }
   const limit = parseLimit(query.get("limit") ?? undefined);
   const olderCursor = query.get("olderCursor") ?? undefined;
-  if (limit === null || olderCursor === "")
+  const requestedSession = query.get("chatSessionId") ?? undefined;
+  if (
+    limit === null ||
+    olderCursor === "" ||
+    requestedSession === "" ||
+    (requestedSession !== undefined && requestedSession.length > 128)
+  )
     return backendError("bad_request", "edit_request", 400);
+  const chatSessionId =
+    requestedSession === MAIN_CONVERSATION_ID.slice("chat:".length)
+      ? undefined
+      : requestedSession;
   const db = context.env.DB;
   if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
@@ -473,11 +446,14 @@ export async function handleChatHistory(
     db,
     context.get("accountId"),
     limit,
-    olderCursor
+    olderCursor,
+    chatSessionId
   );
-  return history === "invalid_cursor"
-    ? backendError("bad_request", "edit_request", 400)
-    : json(history);
+  if (history === "invalid_cursor")
+    return backendError("bad_request", "refresh_history", 400);
+  if (history === "unavailable")
+    return backendError("service_unavailable", "retry", 503, true);
+  return json(history);
 }
 
 export async function handleChatCreate(
@@ -494,6 +470,8 @@ export async function handleChatCreate(
   const db = context.env.DB;
   if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  if (body.attachmentIds.length > 0 && context.env.ATTACHMENTS === undefined)
+    return backendError("service_unavailable", "none", 503);
   const resolved = await resolveAttachmentsForAdmit(
     db,
     context.get("accountId"),
@@ -566,8 +544,7 @@ export async function handleAttachmentStage(
   context: CoreContext
 ): Promise<Response> {
   const r2 = context.env.ATTACHMENTS;
-  if (r2 === undefined)
-    return backendError("service_unavailable", "retry", 503, true);
+  if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const parsed = await readBoundedJson(context.req.raw, 65_536);
   if (parsed.kind === "too_large")
     return backendError("attachment_too_large", "edit_request", 413);
@@ -581,7 +558,7 @@ export async function handleAttachmentStage(
     return backendError("service_unavailable", "retry", 503, true);
   const signedConfig = parseSignedUploadConfig(context.env);
   if (signedConfig === null)
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "none", 503);
   const signer = makeR2UploadUrlSigner(signedConfig);
   const result = await stageAttachment(
     db,
@@ -602,8 +579,10 @@ export async function handleAttachmentComplete(
   const r2 = context.env.ATTACHMENTS;
   const ingest = context.env.ATTACHMENT_INGEST;
   const db = context.env.DB;
-  if (r2 === undefined || ingest === undefined || db === undefined)
+  if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  if (r2 === undefined || ingest === undefined)
+    return backendError("service_unavailable", "none", 503);
   const attachmentId = context.req.param("id");
   if (
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
@@ -644,8 +623,9 @@ export async function handleDeviceSessionOpen(
 ): Promise<Response> {
   const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
-  if (r2 === undefined || db === undefined)
+  if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const parsed = await readBoundedJson(context.req.raw, 65_536);
   if (parsed.kind === "too_large")
     return backendError("attachment_too_large", "edit_request", 413);
@@ -669,8 +649,9 @@ export async function handleDeviceSessionAudio(
 ): Promise<Response> {
   const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
-  if (r2 === undefined || db === undefined)
+  if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const parsed = await readBoundedJson(context.req.raw, 2_097_152);
   if (parsed.kind === "too_large")
     return backendError("attachment_too_large", "edit_request", 413);
@@ -705,8 +686,9 @@ export async function handleDeviceSessionComplete(
 ): Promise<Response> {
   const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
-  if (r2 === undefined || db === undefined)
+  if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const outcome = await completeDeviceSession(
     db,
     context.get("accountId"),
@@ -725,8 +707,9 @@ export async function handleDeviceSessionList(
 ): Promise<Response> {
   const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
-  if (r2 === undefined || db === undefined)
+  if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   return json({
     sessions: await listDeviceSessions(db, context.get("accountId")),
   });
@@ -751,7 +734,8 @@ export async function handleConversations(
     if (limit === null || offset === null)
       return backendError("bad_request", "edit_request", 400);
     const db = context.env.DB;
-    if (db === undefined) return json([]);
+    if (db === undefined)
+      return backendError("service_unavailable", "retry", 503, true);
     const items = await readConversations(db, context.get("accountId"));
     return json(
       items
@@ -771,7 +755,8 @@ export async function handleConversations(
   if (limit === null || cursor === "")
     return backendError("bad_request", "edit_request", 400);
   const db = context.env.DB;
-  if (db === undefined) return json(conversationPage([], false, null));
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
   const page = paginateConversations(
     await readConversations(db, context.get("accountId")),
     limit,
@@ -825,6 +810,9 @@ export async function handleMemories(context: CoreContext): Promise<Response> {
         },
       }
     );
+  if (result.kind === "unbound" || result.kind === "unreadable") {
+    return backendError("projection_unavailable", "none", 503);
+  }
   return backendError("projection_unavailable", "retry", 503, true);
 }
 
@@ -852,13 +840,17 @@ export async function handleTasks(context: CoreContext): Promise<Response> {
     return backendError("bad_request", "edit_request", 400);
   }
   const db = context.env.DB;
-  if (db === undefined) return json(emptyPage("tasks-completeness-v1"));
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
   const limit = parseTaskLimit(query.get("limit"));
   const cursor = query.get("cursor") ?? undefined;
   // Match conversations/memories: empty cursor / invalid limit are bad requests.
   if (limit === null || cursor === "")
     return backendError("bad_request", "edit_request", 400);
-  return json(await readTasks(db, context.get("accountId"), limit, cursor));
+  const page = await readTasks(db, context.get("accountId"), limit, cursor);
+  if (page === "unavailable")
+    return backendError("service_unavailable", "retry", 503, true);
+  return json(page);
 }
 
 export async function handleTaskWrite(context: CoreContext): Promise<Response> {
@@ -892,7 +884,7 @@ export async function handleTranscription(
   if (row === null) return backendError("not_found", "refresh_history", 404);
   const transcription = projectDeviceTranscription(row);
   if (transcription === null)
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "none", 503);
   return json({ transcription });
 }
 
@@ -900,8 +892,10 @@ export async function handleTranscribe(
   context: CoreContext
 ): Promise<Response> {
   const { DB, ATTACHMENTS, AI } = context.env;
-  if (DB === undefined || ATTACHMENTS === undefined || AI === undefined)
+  if (DB === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  if (ATTACHMENTS === undefined || AI === undefined)
+    return backendError("service_unavailable", "none", 503);
   const accountId = context.get("accountId"),
     sessionId = context.req.param("id");
   const session = await DB.prepare(
@@ -943,8 +937,7 @@ export const v1Routes: readonly CoreRoute[] = [
   {
     method: "GET",
     path: "/v1/device-sessions/ownership",
-    handle: () =>
-      backendError("capture_ownership_unavailable", "retry", 503, true),
+    handle: () => backendError("capture_ownership_unavailable", "none", 503),
   },
   {
     method: "POST",

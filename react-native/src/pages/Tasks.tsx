@@ -10,7 +10,11 @@ import {
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
 import {
+  desktopBackendUnavailableCopy,
+  formatTaskDue,
+  taskDisplayTitle,
   taskGroup,
+  visibleDisplayText,
   type DesktopReadProjection,
   type DomainReadOutcome,
   type TaskGroup,
@@ -22,21 +26,10 @@ import {
   TaskMutationStatus,
   type TaskMutationProps,
 } from '../ui/TaskEditor';
-import {ReadStatus} from '../ui/ReadStatus';
+import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 
 const taskGroups: TaskGroup[] = ['Today', 'Tomorrow', 'Later'];
-
-function formatTaskDue(dueAt: number | null): string {
-  if (dueAt === null) {
-    return 'No due date';
-  }
-  return new Date(dueAt).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  });
-}
 
 export function TasksPage({
   outcome,
@@ -48,11 +41,15 @@ export function TasksPage({
   taskMutationError = null,
   onRetryTaskMutation,
   onDismissTaskMutation,
-  writesAvailable = false,
+  writesAvailable,
+  taskNotice = null,
+  onRefresh,
 }: TaskMutationProps & {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
   taskPagination?: React.ReactNode;
+  taskNotice?: string | null;
+  onRefresh?: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -67,11 +64,13 @@ export function TasksPage({
     [outcome],
   );
   const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
+    const normalized = visibleDisplayText(query).toLocaleLowerCase();
     return normalized === ''
       ? tasks
       : tasks.filter(task =>
-          task.title.toLocaleLowerCase().includes(normalized),
+          `${task.title}\n${taskDisplayTitle(task)}`
+            .toLocaleLowerCase()
+            .includes(normalized),
         );
   }, [query, tasks]);
   const grouped = useMemo(
@@ -83,7 +82,7 @@ export function TasksPage({
     [filtered, nowMs],
   );
   const error = outcome?.status === 'error' ? outcome.error : null;
-  const filtering = query.trim() !== '';
+  const filtering = visibleDisplayText(query) !== '';
   return (
     <View style={styles.tasksPage}>
       <Text
@@ -111,6 +110,18 @@ export function TasksPage({
         onDismissTaskMutation={onDismissTaskMutation}
         busyTaskId={busyTaskId}
       />
+      {onRefresh && error !== desktopBackendUnavailableCopy && (
+        <FocusPressable
+          accessibilityRole="button"
+          accessibilityLabel="Refresh tasks"
+          disabled={loading}
+          onPress={onRefresh}
+          style={{minHeight: 44, justifyContent: 'center'}}>
+          <Text style={styles.projectionEmptyCopy}>
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </Text>
+        </FocusPressable>
+      )}
       {loading && outcome === null ? (
         <View style={styles.projectionEmpty}>
           <ActivityIndicator color="#888888" />
@@ -124,7 +135,14 @@ export function TasksPage({
       ) : filtered.length === 0 ? (
         <View style={styles.projectionEmpty}>
           <Text style={styles.projectionEmptyTitle}>
-            {filtering ? 'No loaded tasks match.' : 'No tasks yet.'}
+            {emptyLibraryCopy(
+              'Tasks',
+              outcome?.status === 'success' ? outcome.value.page : null,
+              filtering,
+              'No loaded tasks match.',
+              'No tasks yet.',
+              taskNotice === desktopBackendUnavailableCopy,
+            )}
           </Text>
           {filtering && (
             <Text style={styles.projectionEmptyCopy}>
@@ -160,8 +178,8 @@ export function TasksPage({
                                 : 'Complete'
                               : task.completed
                               ? 'Completed'
-                              : 'Open'
-                          } ${task.title}`}
+                              : 'Task'
+                          } ${taskDisplayTitle(task)}`}
                           accessibilityRole={
                             writesAvailable && onTaskToggle
                               ? 'checkbox'
@@ -193,9 +211,13 @@ export function TasksPage({
                           </View>
                         </FocusPressable>
                         <FocusPressable
-                          accessibilityLabel={`${
-                            task.completed ? 'Completed' : 'Open'
-                          } task: ${task.title}`}
+                          accessibilityLabel={
+                            task.completed
+                              ? `Completed task: ${taskDisplayTitle(task)}`
+                              : writesAvailable && onTaskEdit
+                              ? `Open task: ${taskDisplayTitle(task)}`
+                              : `Task: ${taskDisplayTitle(task)}`
+                          }
                           accessibilityRole="button"
                           accessibilityState={{selected}}
                           onPress={() => setSelectedId(task.id)}
@@ -205,7 +227,7 @@ export function TasksPage({
                               styles.taskDescription,
                               task.completed && styles.taskDescriptionDone,
                             ]}>
-                            {task.title}
+                            {taskDisplayTitle(task)}
                           </Text>
                           <Text style={styles.taskDue}>
                             {task.completed
@@ -217,7 +239,7 @@ export function TasksPage({
                       {selected && writesAvailable && onTaskEdit && (
                         <TaskEditor
                           id={task.id}
-                          title={task.title}
+                          title={task.title.trim()}
                           busy={busyTaskId !== null}
                           failed={taskMutationError !== null}
                           onSave={onTaskEdit}
@@ -231,7 +253,11 @@ export function TasksPage({
             ),
           )}
           {outcome?.status === 'success' && (
-            <ReadStatus label="Tasks" page={outcome.value.page} />
+            <ReadStatus
+              continueUnavailable={taskNotice === desktopBackendUnavailableCopy}
+              label="Tasks"
+              page={outcome.value.page}
+            />
           )}
         </ScrollView>
       )}

@@ -19,8 +19,13 @@ import {
   cancelChatGeneration,
   ChatBackendError,
   chatErrorCopy,
+  chatHistoryCanReload,
   chatHistoryErrorCopy,
   chatSessionLost,
+  chatHistoryHasOlder,
+  chatComposerIsResting,
+  chatCancelErrorCopy,
+  chatWriteDoorUnavailable,
   createLocalChatMessage,
   loadNewestChatHistory,
   loadOlderChatHistory,
@@ -31,13 +36,26 @@ import {
 } from '../chatClient';
 import {omiBackend} from '../omiNative';
 import {
+  conversationDayLabel,
+  conversationDisplayTitle,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
+  desktopBackendUnavailableCopy,
+  desktopReadsCanRetry,
   desktopRecoveryCopy,
+  homeSearchItems,
+  visibleDisplayText,
 } from '../desktopReadClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
 import {styles} from '../ui/styles';
-import {OutcomeStatus} from '../ui/ReadStatus';
+import {
+  emptyLibraryCopy,
+  homeSearchBannerPhase,
+  homeSearchPhaseCopy,
+  readStatusCopy,
+  savedDataEmptyTitle,
+  OutcomeStatus,
+} from '../ui/ReadStatus';
 import {ProjectionList, ProjectionRow} from '../ui/ProjectionList';
 import {HomeSearchField} from '../ui/SearchField';
 import {Onboarding} from '../ui/Onboarding';
@@ -51,6 +69,7 @@ import {ConnectorsPage} from '../pages/Connectors';
 import {SettingsPage} from '../pages/Settings';
 import {resolveInitialRoute, type Route} from './routes';
 import {DeviceSession, homeConnectionStatus} from './DeviceSession';
+import {bluetoothSessionColor} from './bluetooth';
 import {useDesktopReads} from './useDesktopReads';
 import {useTaskMutations} from './useTaskMutations';
 import {useOnboarding} from './useOnboarding';
@@ -113,6 +132,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   );
   const omiRequestRef = useRef<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [chatWriteDoorClosed, setChatWriteDoorClosed] = useState(false);
   const [chatEpoch, setChatEpoch] = useState(0);
   const chatMutationSeqRef = useRef(0);
   // Monotonic chat session epoch. Each run of the chat-history effect (a gate
@@ -123,6 +143,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [route, setRoute] = useState<Route>(() =>
     resolveInitialRoute(initialRoute),
   );
+  const [requestedConversationId, setRequestedConversationId] = useState<
+    string | null
+  >(null);
+  const consumeRequestedConversation = useCallback(() => {
+    setRequestedConversationId(null);
+  }, []);
   const [homeChatOpen, setHomeChatOpen] = useState(false);
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
   // useOnboarding owns the desktop session gate and needs a reads refresh;
@@ -154,6 +180,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     tasksLoadingMore,
     taskNotice,
     loadMoreTasks,
+    tasksPageRetryable,
     readOutcomes,
     reads,
     readsPhase,
@@ -163,6 +190,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     conversationsLoadingMore,
     conversationNotice,
     loadMoreConversations,
+    conversationsPageRetryable,
+    memoriesLoadingMore,
+    memoryNotice,
+    loadMoreMemories,
+    memoriesPageRetryable,
   } = useDesktopReads({
     enabled: onboardingRequired === false,
   });
@@ -176,7 +208,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     <TaskPagination
       hasMore={
         readOutcomes?.tasks.status === 'success' &&
-        readOutcomes.tasks.value.page.hasMore
+        readOutcomes.tasks.value.page.hasMore &&
+        tasksPageRetryable
       }
       busy={
         tasksLoadingMore ||
@@ -191,6 +224,24 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   useEffect(() => {
     refreshReadsRef.current = refreshReads;
   }, [refreshReads]);
+  const reloadWorkspace = useCallback(() => {
+    chatSessionEpochRef.current += 1;
+    chatMutationSeqRef.current += 1;
+    setChatError(null);
+    setChatWriteDoorClosed(false);
+    setDraft('');
+    setMessages([]);
+    setOlderChatCursor(null);
+    setHasOlderChat(false);
+    setChatBusy(false);
+    setLoadingOlderChat(false);
+    setActiveGenerationId(null);
+    stableChatMessageIds.clear();
+    animatedChatMessageIds.clear();
+    resetReads();
+    refreshReads(true).catch(() => undefined);
+    setChatEpoch(current => current + 1);
+  }, [animatedChatMessageIds, refreshReads, resetReads, stableChatMessageIds]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchArmed, setSearchArmed] = useState(false);
@@ -224,6 +275,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       // start while chatBusy, so a send that never settled must not brick the
       // next session's composer.
       setChatError(null);
+      setChatWriteDoorClosed(false);
       setDraft('');
       setMessages([]);
       setOlderChatCursor(null);
@@ -269,6 +321,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           onboardingRequired === false
         ) {
           setChatError(chatHistoryErrorCopy(error));
+          if (chatWriteDoorUnavailable(error)) {
+            setChatWriteDoorClosed(true);
+          }
           // A 401/unconfigured history load can mean the cloud session died;
           // re-probe it instead of keeping a ready shell on dead credentials.
           if (nativeSessionRequired && chatSessionLost(error)) {
@@ -322,13 +377,32 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   }, [readOutcomes, route]);
 
   const homeResults = useMemo(() => {
-    const query = searchQuery.trim().toLocaleLowerCase();
-    return reads.filter(
-      item =>
-        query === '' || item.searchableText.toLocaleLowerCase().includes(query),
+    return homeSearchItems(
+      reads,
+      readOutcomes !== null && readOutcomes.tasks.status === 'success'
+        ? readOutcomes.tasks.value.items
+        : null,
+      searchQuery,
     );
-  }, [reads, searchQuery]);
-  const homeSearching = searchQuery.trim() !== '';
+  }, [readOutcomes, reads, searchQuery]);
+  const homeSearching = visibleDisplayText(searchQuery) !== '';
+  const homeSearchEmptyTitle = savedDataEmptyTitle(
+    readOutcomes !== null && readOutcomes.conversations.status === 'success'
+      ? readOutcomes.conversations.value.page
+      : null,
+    readOutcomes !== null && readOutcomes.memories.status === 'success'
+      ? readOutcomes.memories.value.page
+      : null,
+    readOutcomes !== null && readOutcomes.tasks.status === 'success'
+      ? readOutcomes.tasks.value.page
+      : null,
+    homeSearching,
+    {
+      conversations: conversationNotice === desktopBackendUnavailableCopy,
+      memories: memoryNotice === desktopBackendUnavailableCopy,
+      tasks: taskNotice === desktopBackendUnavailableCopy,
+    },
+  );
   // An unavailable Omi cloud read is a single truthful empty state, not a result row. Keeping the
   // results panel content-sized here preserves the upstream two-island hierarchy instead of
   // turning an error into a window-filling modal.
@@ -470,7 +544,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const send = async () => {
     const text = draft.trim();
     const backend = omiBackend;
-    if (backend === undefined || backend === null || text === '' || chatBusy) {
+    if (
+      backend === undefined ||
+      backend === null ||
+      visibleDisplayText(draft) === '' ||
+      chatBusy ||
+      chatWriteDoorClosed
+    ) {
       return;
     }
     const session = chatSessionEpochRef.current;
@@ -552,6 +632,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             ? 'Response interrupted. It may still complete.'
             : chatErrorCopy(error),
         );
+        if (!admitted && !requestStarted && chatWriteDoorUnavailable(error)) {
+          setChatWriteDoorClosed(true);
+        }
         if (nativeSessionRequired && chatSessionLost(error)) {
           revalidateSession().catch(() => undefined);
         }
@@ -576,6 +659,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       backend === undefined ||
       backend === null ||
       cursor === null ||
+      cursor.length === 0 ||
       loadingOlderChat
     ) {
       return;
@@ -643,7 +727,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }
       }
       if (chatSessionEpochRef.current === session) {
-        setChatError('Older messages could not be loaded.');
+        setChatError(chatHistoryErrorCopy(error));
+        if (chatWriteDoorUnavailable(error)) {
+          setChatWriteDoorClosed(true);
+        }
+        if (!chatHistoryCanReload(error)) {
+          setHasOlderChat(false);
+        }
         if (nativeSessionRequired && chatSessionLost(error)) {
           revalidateSession().catch(() => undefined);
         }
@@ -685,9 +775,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }
       } else if (generationId !== null)
         await cancelChatGeneration(backend, generationId);
-    } catch {
+    } catch (error) {
       if (chatSessionEpochRef.current === session) {
-        setChatError('Could not stop the response.');
+        setChatError(chatCancelErrorCopy(error));
       }
     }
   };
@@ -699,6 +789,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     animatedChatMessageIds.add(id);
     return true;
   };
+
+  const olderChatAvailable = chatHistoryHasOlder(hasOlderChat, olderChatCursor);
+  const chatResting = chatComposerIsResting(
+    messages.length,
+    chatBusy,
+    hasOlderChat,
+    chatError,
+  );
 
   const composer = (
     <Composer
@@ -717,6 +815,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       onStop={() => {
         stopGeneration().catch(() => undefined);
       }}
+      sendUnavailable={chatWriteDoorClosed}
     />
   );
 
@@ -725,12 +824,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     label: homeStatus,
     color: homeStatusColor,
   } = homeConnectionStatus(nativeSnapshot);
-  const bluetoothStatusColor =
-    nativeSnapshot === null
-      ? '#b4ad9f'
-      : nativeSnapshot.bluetooth === 'poweredOn'
-      ? '#45b79b'
-      : '#d9826f';
+  const bluetoothStatusColor = bluetoothSessionColor(nativeSnapshot);
   const currentItems = reads.slice(0, 2);
 
   const firstRunOnboarding = (
@@ -876,6 +970,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           authError={authError}
           chatBusy={chatBusy}
           chatError={chatError}
+          chatSendUnavailable={chatWriteDoorClosed}
           deviceContent={
             <DeviceSession
               rememberedDevice={rememberedDevice}
@@ -892,6 +987,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           }
           draft={draft}
           hasOlderChat={hasOlderChat}
+          olderChatAvailable={olderChatAvailable}
           loadingOlderChat={loadingOlderChat}
           messages={messages}
           onDraftChange={setDraft}
@@ -916,23 +1012,26 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           onSignOut={() => {
             return signOutAndRefresh();
           }}
-          onWorkspaceReload={() => {
-            chatSessionEpochRef.current += 1;
-            chatMutationSeqRef.current += 1;
-            setChatError(null);
-            setDraft('');
-            setMessages([]);
-            setOlderChatCursor(null);
-            setHasOlderChat(false);
-            setChatBusy(false);
-            setLoadingOlderChat(false);
-            setActiveGenerationId(null);
-            stableChatMessageIds.clear();
-            animatedChatMessageIds.clear();
-            resetReads();
-            refreshReads(true).catch(() => undefined);
-            setChatEpoch(current => current + 1);
-          }}
+          onWorkspaceReload={reloadWorkspace}
+          conversationNotice={conversationNotice}
+          conversationsLoadingMore={conversationsLoadingMore}
+          taskNotice={taskNotice}
+          onLoadMoreConversations={
+            conversationsPageRetryable
+              ? () => {
+                  void loadMoreConversations();
+                }
+              : undefined
+          }
+          memoryNotice={memoryNotice}
+          memoriesLoadingMore={memoriesLoadingMore}
+          onLoadMoreMemories={
+            memoriesPageRetryable
+              ? () => {
+                  void loadMoreMemories();
+                }
+              : undefined
+          }
           outcomes={readOutcomes}
           reads={reads}
           readsPhase={readsPhase}
@@ -968,14 +1067,17 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             title: task.title,
           }))
         : [];
+    const recapNow = Date.now();
     const recapItems =
       readOutcomes?.conversations.status === 'success'
         ? readOutcomes.conversations.value.items.map(item => ({
-            dateLabel: new Date(
-              item.startedAt ?? item.createdAt,
-            ).toLocaleDateString(undefined, {weekday: 'long'}),
+            dateLabel: conversationDayLabel(
+              item.startedAt,
+              item.createdAt,
+              recapNow,
+            ),
             id: item.id,
-            title: item.title,
+            title: conversationDisplayTitle(item),
           }))
         : [];
     const projectionStatus: MobileProjectionStatus =
@@ -1005,12 +1107,18 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             onRefresh={() => {
               void refreshReads(false);
             }}
-            onLoadMore={() => {
-              void loadMoreConversations();
-            }}
+            onLoadMore={
+              conversationsPageRetryable
+                ? () => {
+                    void loadMoreConversations();
+                  }
+                : undefined
+            }
             loadingMore={conversationsLoadingMore}
             notice={conversationNotice}
             outcome={readOutcomes?.conversations ?? null}
+            requestedConversationId={requestedConversationId}
+            onRequestedConversationConsumed={consumeRequestedConversation}
             loading={
               readsPhase === 'initial-loading' || readsPhase === 'refreshing'
             }
@@ -1021,6 +1129,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           <SettingsPage
             onSignIn={signInAndRefresh}
             onSignOut={nativeSessionRequired ? signOutAndRefresh : undefined}
+            onWorkspaceReload={reloadWorkspace}
             signingIn={signingIn}
           />
         }
@@ -1028,6 +1137,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           <ConnectorsPage onSignIn={signInAndRefresh} signingIn={signingIn} />
         }
         askValue={draft}
+        askUnavailable={
+          omiBackend === undefined || omiBackend === null || chatWriteDoorClosed
+        }
         capture={{
           active: nativeSnapshot?.capture === 'recording',
           waitingForAudio: nativeSnapshot?.audioStatus === 'waiting',
@@ -1054,14 +1166,29 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         mindMapStatus={
           readOutcomes?.memories.status === 'error' ? 'error' : projectionStatus
         }
+        mindMapHasItems={
+          readOutcomes?.memories.status === 'success' &&
+          readOutcomes.memories.value.items.length > 0
+        }
+        mindMapEmptyCopy={emptyLibraryCopy(
+          'Memories',
+          readOutcomes?.memories.status === 'success'
+            ? readOutcomes.memories.value.page
+            : null,
+          false,
+          '',
+          'No memories yet.',
+        )}
         onAskChange={setDraft}
         onAskSubmit={() => {
+          if (visibleDisplayText(draft) === '') {
+            return;
+          }
           setRoute('Home');
           setHomeChatOpen(true);
           send().catch(() => undefined);
         }}
         onExpandMindMap={() => setRoute('Memories')}
-        onOpenCalls={() => setRoute('Conversations')}
         onOpenDevice={() => setDevicePanelOpen(open => !open)}
         onOpenSettings={() => setRoute('Settings')}
         onRouteChange={destination => {
@@ -1078,7 +1205,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               : 'Home',
           );
         }}
-        onViewRecaps={() => setRoute('Conversations')}
+        onViewRecaps={() => {
+          setRequestedConversationId(null);
+          setRoute('Conversations');
+        }}
+        onOpenRecap={id => {
+          setRequestedConversationId(id);
+          setRoute('Conversations');
+        }}
         onViewTasks={() => setRoute('Tasks')}
         recapStatus={
           readOutcomes?.conversations.status === 'success'
@@ -1088,6 +1222,69 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             : projectionStatus
         }
         recaps={recapItems}
+        recapEmptyCopy={emptyLibraryCopy(
+          'Recaps',
+          readOutcomes?.conversations.status === 'success'
+            ? readOutcomes.conversations.value.page
+            : null,
+          false,
+          '',
+          'No recaps yet',
+        )}
+        recapCoverageCopy={
+          readOutcomes?.conversations.status === 'success'
+            ? readStatusCopy(
+                'Recaps',
+                readOutcomes.conversations.value.page,
+                conversationNotice === desktopBackendUnavailableCopy,
+              )
+            : null
+        }
+        recapErrorCopy={
+          readOutcomes?.conversations.status === 'error'
+            ? readOutcomes.conversations.error
+            : undefined
+        }
+        taskEmptyCopy={emptyLibraryCopy(
+          'Tasks',
+          readOutcomes?.tasks.status === 'success'
+            ? readOutcomes.tasks.value.page
+            : null,
+          false,
+          '',
+          "Nothing's waiting on you.",
+        )}
+        taskCoverageCopy={
+          readOutcomes?.tasks.status === 'success'
+            ? readStatusCopy(
+                'Tasks',
+                readOutcomes.tasks.value.page,
+                taskNotice === desktopBackendUnavailableCopy,
+              )
+            : null
+        }
+        taskErrorCopy={
+          readOutcomes?.tasks.status === 'error'
+            ? readOutcomes.tasks.error
+            : undefined
+        }
+        mindMapErrorCopy={
+          readOutcomes?.memories.status === 'error'
+            ? readOutcomes.memories.error
+            : undefined
+        }
+        mindMapCoverageCopy={
+          readOutcomes?.memories.status === 'success'
+            ? readStatusCopy(
+                'Memories',
+                readOutcomes.memories.value.page,
+                memoryNotice === desktopBackendUnavailableCopy,
+              )
+            : null
+        }
+        onRefresh={() => {
+          void refreshReads(false);
+        }}
         tasks={taskItems}
         taskStatus={
           readOutcomes?.tasks.status === 'success'
@@ -1208,9 +1405,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                               ? 'Clear the search to see saved items.'
                               : 'Start typing to search what is saved.'
                           }
-                          emptyTitle={
-                            homeSearching ? 'No results' : 'Nothing saved yet'
-                          }
+                          emptyTitle={homeSearchEmptyTitle}
                           error={null}
                           footer={
                             <View style={styles.readStatuses}>
@@ -1225,65 +1420,74 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                       styles.readStatusText,
                                       macDesktop && styles.macReadStatusText,
                                     ]}>
-                                    {readsPhase === 'initial-loading'
-                                      ? 'Loading saved data…'
-                                      : readsPhase === 'refreshing'
-                                      ? 'Refreshing saved data…'
-                                      : readsPhase ===
-                                        'saved-but-refresh-failed'
-                                      ? 'Showing saved data. Could not refresh.'
-                                      : 'Saved data is unavailable.'}
-                                  </Text>
-                                  {allHomeReadsUnavailable && (
-                                    <Text
-                                      style={[
-                                        styles.readStatusCopy,
-                                        macDesktop && styles.macReadStatusText,
-                                      ]}>
-                                      {readOutcomes === null
-                                        ? ''
-                                        : desktopRecoveryCopy(
+                                    {homeSearchPhaseCopy(
+                                      homeSearchBannerPhase(
+                                        readsPhase,
+                                        allHomeReadsUnavailable,
+                                      ),
+                                      allHomeReadsUnavailable &&
+                                        readOutcomes !== null
+                                        ? desktopRecoveryCopy(
                                             readOutcomes.conversations,
                                             readOutcomes.memories,
-                                          )}
-                                    </Text>
-                                  )}
+                                          )
+                                        : null,
+                                    )}
+                                  </Text>
                                   {(readsPhase === 'saved-but-refresh-failed' ||
-                                    readsPhase === 'unavailable') && (
-                                    <FocusPressable
-                                      accessibilityLabel="Retry saved data"
-                                      accessibilityRole="button"
-                                      onPress={() => refreshReads(false)}
-                                      style={({pressed}) => [
-                                        styles.retryButton,
-                                        macDesktop && styles.macRetryButton,
-                                        pressed && styles.pressed,
-                                      ]}>
-                                      <Text
-                                        style={[
-                                          styles.retryButtonText,
-                                          macDesktop &&
-                                            styles.macRetryButtonText,
+                                    readsPhase === 'unavailable') &&
+                                    desktopReadsCanRetry(readOutcomes) && (
+                                      <FocusPressable
+                                        accessibilityLabel="Retry saved data"
+                                        accessibilityRole="button"
+                                        onPress={() => refreshReads(false)}
+                                        style={({pressed}) => [
+                                          styles.retryButton,
+                                          macDesktop && styles.macRetryButton,
+                                          pressed && styles.pressed,
                                         ]}>
-                                        Retry
-                                      </Text>
-                                    </FocusPressable>
-                                  )}
+                                        <Text
+                                          style={[
+                                            styles.retryButtonText,
+                                            macDesktop &&
+                                              styles.macRetryButtonText,
+                                          ]}>
+                                          Retry
+                                        </Text>
+                                      </FocusPressable>
+                                    )}
                                 </View>
                               )}
                               {readOutcomes !== null &&
                                 !allHomeReadsUnavailable && (
                                   <View style={styles.readStatuses}>
                                     <OutcomeStatus
+                                      continueUnavailable={
+                                        conversationNotice ===
+                                        desktopBackendUnavailableCopy
+                                      }
                                       label="Conversations"
                                       outcome={readOutcomes.conversations}
                                     />
                                     <OutcomeStatus
+                                      continueUnavailable={
+                                        memoryNotice ===
+                                        desktopBackendUnavailableCopy
+                                      }
                                       label="Memories"
                                       outcome={readOutcomes.memories}
                                     />
                                   </View>
                                 )}
+                              {readOutcomes !== null && (
+                                <OutcomeStatus
+                                  continueUnavailable={
+                                    taskNotice === desktopBackendUnavailableCopy
+                                  }
+                                  label="Tasks"
+                                  outcome={readOutcomes.tasks}
+                                />
+                              )}
                             </View>
                           }
                           header={
@@ -1342,14 +1546,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                       style={
                         compact
                           ? [
-                              messages.length === 0 && !chatBusy
-                                ? styles.home
-                                : styles.chatHistory,
-                              messages.length === 0 && !chatBusy
+                              chatResting ? styles.home : styles.chatHistory,
+                              chatResting
                                 ? styles.homeCompact
                                 : styles.chatHistoryCompact,
                             ]
-                          : messages.length === 0 && !chatBusy
+                          : chatResting
                           ? styles.home
                           : styles.chatHistory
                       }>
@@ -1368,7 +1570,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                         />
                         <Text style={styles.backButtonText}>Home</Text>
                       </FocusPressable>
-                      {messages.length === 0 && !chatBusy ? (
+                      {chatResting ? (
                         <Animated.View
                           accessibilityLabel="Chat resting stage"
                           style={[
@@ -1423,7 +1625,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                         <View style={styles.currents}>
                           <Text style={styles.sectionLabel}>CURRENTS</Text>
                           <View style={styles.transcript}>
-                            {hasOlderChat && olderChatCursor !== null && (
+                            {olderChatAvailable && (
                               <FocusPressable
                                 accessibilityLabel="Load older messages"
                                 accessibilityRole="button"
@@ -1436,7 +1638,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                 <Text style={styles.loadOlderText}>
                                   {loadingOlderChat
                                     ? 'Loading older…'
-                                    : 'Load older'}
+                                    : 'Load older messages'}
                                 </Text>
                               </FocusPressable>
                             )}
@@ -1465,9 +1667,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     onRefresh={() => {
                       void refreshReads(false);
                     }}
-                    onLoadMore={() => {
-                      void loadMoreConversations();
-                    }}
+                    onLoadMore={
+                      conversationsPageRetryable
+                        ? () => {
+                            void loadMoreConversations();
+                          }
+                        : undefined
+                    }
                     loadingMore={conversationsLoadingMore}
                     notice={conversationNotice}
                     loading={readsPhase === 'initial-loading'}
@@ -1476,13 +1682,20 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                 ) : route === 'Memories' ? (
                   <MemoriesPage
                     loading={readsPhase === 'initial-loading'}
+                    onRefresh={() => {
+                      void refreshReads(false);
+                    }}
                     outcome={routeOutcome}
                   />
                 ) : route === 'Tasks' ? (
                   <TasksPage
                     taskPagination={taskPagination}
+                    taskNotice={taskNotice}
                     {...taskMutations}
                     loading={readsPhase === 'initial-loading'}
+                    onRefresh={() => {
+                      void refreshReads(false);
+                    }}
                     outcome={routeOutcome}
                   />
                 ) : route === 'Connectors' ? (
@@ -1494,6 +1707,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                   <SettingsPage
                     onSignIn={signInAndRefresh}
                     onSignOut={signOutAndRefresh}
+                    onWorkspaceReload={reloadWorkspace}
                     signingIn={signingIn}
                   />
                 )}

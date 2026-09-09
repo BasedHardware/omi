@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
+import java.util.regex.Pattern;
 
 public final class OmiBackendTransport {
   private OmiBackendTransport() {}
@@ -22,6 +23,8 @@ public final class OmiBackendTransport {
 
   public static final String SOFTWARE_PLANE_PREFERENCES = "omi-backend";
   public static final String SOFTWARE_PLANE_KEY = "softwarePlane";
+  private static final Pattern EXAMPLE_PLATFORM_TRANSCRIPT = Pattern.compile(
+    "^/v1/device-sessions/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/transcript$");
 
   public static String resolvedSoftwarePlane(String stored, boolean stampedValid) {
     if (stored != null && !stored.isEmpty()) {
@@ -53,6 +56,7 @@ public final class OmiBackendTransport {
       route.equals("/v1/memories") ||
       route.equals("/v1/tasks") || route.equals("/v1/tasks/ops");
   }
+
   public static boolean examplePlatformSupported(String method, String path) {
     final String route;
     try {
@@ -60,8 +64,13 @@ public final class OmiBackendTransport {
     } catch (IllegalArgumentException error) {
       return false;
     }
-    return (method.equals("GET") && ("/v1/conversations".equals(route) ||
-      "/v1/memories".equals(route) || "/v1/tasks".equals(route))) ||
+    if (route == null) return false;
+    return (method.equals("GET") && ("/v1/settings".equals(route) ||
+      "/v1/conversations".equals(route) ||
+      "/v1/memories".equals(route) ||
+      "/v1/tasks".equals(route) ||
+      "/v1/chat-messages".equals(route) ||
+      EXAMPLE_PLATFORM_TRANSCRIPT.matcher(route).matches())) ||
       (method.equals("POST") && "/v1/tasks/ops".equals(route));
   }
 

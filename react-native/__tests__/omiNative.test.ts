@@ -25,6 +25,8 @@ test('android scan keeps the connected device and serializes GATT writes', () =>
   expect(source).not.toContain(
     'if (codecChar != null) gatt.readCharacteristic(codecChar)',
   );
+  expect(source).not.toMatch(/failed: \$status/);
+  expect(source).not.toMatch(/failed: \$errorCode/);
 });
 
 test('android registers a credential-bearing OmiBackend transport', () => {

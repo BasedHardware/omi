@@ -101,7 +101,11 @@ export function isExamplePlatformRequestSupported(
       (backendUrl.pathname === '/v1/settings' ||
         backendUrl.pathname === '/v1/conversations' ||
         backendUrl.pathname === '/v1/memories' ||
-        backendUrl.pathname === '/v1/tasks')) ||
+        backendUrl.pathname === '/v1/tasks' ||
+        backendUrl.pathname === '/v1/chat-messages' ||
+        /^\/v1\/device-sessions\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/transcript$/.test(
+          backendUrl.pathname,
+        ))) ||
     (method === 'POST' && backendUrl.pathname === '/v1/tasks/ops')
   );
 }

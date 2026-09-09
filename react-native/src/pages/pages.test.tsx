@@ -65,10 +65,15 @@ afterEach(() => {
   mockBackend.stampedV5BackendOrigin.mockResolvedValue(null);
 });
 
-async function renderPage(Page: typeof ConnectorsPage) {
+async function renderPage(
+  Page: typeof ConnectorsPage | typeof SettingsPage,
+  extra: Record<string, unknown> = {},
+) {
   let renderer: ReactTestRenderer.ReactTestRenderer;
   await act(async () => {
-    renderer = ReactTestRenderer.create(<Page onSignIn={jest.fn()} />);
+    renderer = ReactTestRenderer.create(
+      <Page onSignIn={jest.fn()} {...extra} />,
+    );
   });
   renderers.push(renderer!);
   return renderer!;
@@ -120,7 +125,8 @@ test('Settings keeps Old backend and New backend on the native transport', async
   mockBackend.stampedV5BackendOrigin.mockResolvedValue(
     'https://omi-v5-backend-staging.example.workers.dev',
   );
-  const renderer = await renderPage(SettingsPage);
+  const onWorkspaceReload = jest.fn();
+  const renderer = await renderPage(SettingsPage, {onWorkspaceReload});
   expect(textOf(renderer)).toContain(
     'Old backend uses your existing Omi account',
   );
@@ -132,8 +138,27 @@ test('Settings keeps Old backend and New backend on the native transport', async
       .props.onPress();
   });
   expect(mockBackend.setSoftwarePlane).toHaveBeenCalledWith('new');
+  expect(onWorkspaceReload).toHaveBeenCalledTimes(1);
   expect(textOf(renderer)).toContain(
     'New sends v5 chat, capture, conversations, memories, tasks, and settings',
+  );
+});
+
+test('a failed backend plane switch does not reload the workspace', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  mockBackend.setSoftwarePlane.mockRejectedValueOnce(
+    new Error('plane write failed'),
+  );
+  const onWorkspaceReload = jest.fn();
+  const renderer = await renderPage(SettingsPage, {onWorkspaceReload});
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use New backend')
+      .props.onPress();
+  });
+  expect(onWorkspaceReload).not.toHaveBeenCalled();
+  expect(textOf(renderer)).toContain(
+    'Old backend uses your existing Omi account',
   );
 });
 
@@ -214,10 +239,13 @@ test('web Settings hides request details and offers a real retry after failure',
   try {
     const renderer = await renderPage(SettingsPage);
     expect(textOf(renderer)).toContain(
-      'Settings could not be loaded. Try again.',
+      'Account profile and usage are not available from this service yet.',
     );
     expect(textOf(renderer)).not.toContain('service-settings-read');
     expect(textOf(renderer)).not.toContain('503');
+    expect(textOf(renderer)).not.toContain(
+      'Settings could not be loaded. Try again.',
+    );
     await act(async () =>
       renderer.root
         .findAll(node => node.props.accessibilityLabel === 'Retry settings')[0]
@@ -234,7 +262,93 @@ test('web Settings hides request details and offers a real retry after failure',
 });
 
 test.each([
+  [
+    {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  ],
+  [
+    {
+      code: 'service_unavailable',
+      retryable: false,
+      action: 'none',
+    },
+  ],
+])(
+  'web Settings nested non-retryable 503s do not offer Retry (%j)',
+  async error => {
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+    mockBackend.request.mockResolvedValue({
+      id: 'service-settings-read',
+      status: 503,
+      body: JSON.stringify({error}),
+    });
+    try {
+      const renderer = await renderPage(SettingsPage);
+      expect(textOf(renderer)).toContain(
+        'Account profile and usage are not available from this service yet.',
+      );
+      expect(labelsOf(renderer)).not.toContain('Retry settings');
+    } finally {
+      Object.defineProperty(Platform, 'OS', {
+        configurable: true,
+        value: originalPlatform,
+      });
+    }
+  },
+);
+
+test('web Settings omitted 503 retryable still offers Retry', async () => {
+  const originalPlatform = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+  mockBackend.request.mockResolvedValue({
+    id: 'service-settings-read',
+    status: 503,
+    body: '{"error":"service_unavailable"}',
+  });
+  try {
+    const renderer = await renderPage(SettingsPage);
+    expect(textOf(renderer)).toContain(
+      'Account profile and usage are not available from this service yet.',
+    );
+    expect(labelsOf(renderer)).toContain('Retry settings');
+  } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatform,
+    });
+  }
+});
+
+test('web Settings maps unauthorized credentials without inventing a signed-in profile', async () => {
+  const originalPlatform = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+  mockBackend.request.mockResolvedValue({
+    id: 'service-settings-read',
+    status: 401,
+    body: JSON.stringify({error: 'unauthorized'}),
+  });
+  try {
+    const renderer = await renderPage(SettingsPage);
+    expect(textOf(renderer)).toContain('Omi cloud needs a signed-in session.');
+    expect(textOf(renderer)).not.toContain('Identity unavailable');
+    expect(textOf(renderer)).not.toContain('service-settings-read');
+    expect(labelsOf(renderer)).toContain('Retry settings');
+  } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatform,
+    });
+  }
+});
+
+test.each([
   [null, null, 'Usage allowance is unavailable'],
+  [{displayName: '', email: ''}, null, 'Identity unavailable'],
+  [{displayName: ' \t', email: ' \n'}, null, 'Identity unavailable'],
   [
     null,
     {limitKey: 'transcription_seconds', used: 1.5, limit: 3600.5},
@@ -254,6 +368,11 @@ test.each([
   [
     null,
     {limitKey: 'future_unit', used: 7, limit: 100},
+    'Usage allowance is unavailable',
+  ],
+  [
+    {displayName: 'Local identity', email: ''},
+    {limitKey: '', used: 7, limit: 100},
     'Usage allowance is unavailable',
   ],
 ])(
@@ -306,6 +425,421 @@ test.each([-1, 1.5])(
     }
   },
 );
+
+test.each([
+  [
+    {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  ],
+  [
+    {
+      code: 'not_found',
+      retryable: false,
+      action: 'none',
+    },
+  ],
+])(
+  'nested non-retryable Apps catalogue 503s do not offer Retry (%j)',
+  async error => {
+    mockAuth.hasCloudSession.mockResolvedValue(true);
+    mockBackend.request.mockResolvedValue({
+      id: 'desktop-apps-read',
+      status: 503,
+      body: JSON.stringify({error}),
+    });
+    const renderer = await renderPage(ConnectorsPage);
+    expect(textOf(renderer)).toContain(
+      'Apps are not available from the selected Omi service yet.',
+    );
+    expect(textOf(renderer)).not.toContain(
+      'This saved data could not be loaded. Retry without changing it.',
+    );
+    expect(labelsOf(renderer)).not.toContain('Retry apps');
+  },
+);
+
+test('omitted Apps 503 retryable still offers Retry', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockResolvedValue({
+    id: 'desktop-apps-read',
+    status: 503,
+    body: '{"error":"service_unavailable"}',
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(textOf(renderer)).toContain(
+    'This saved data could not be loaded. Retry without changing it.',
+  );
+  expect(labelsOf(renderer)).toContain('Retry apps');
+});
+
+test('nested non-retryable Apps profile reads do not claim owned apps are still loading', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([{id: 'catalog-app-1', name: 'Owned app'}]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 503,
+        body: JSON.stringify({
+          error: {
+            code: 'development_backend_unsupported',
+            retryable: false,
+            action: 'none',
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(textOf(renderer)).toContain(
+    'This account setting is not available from the selected Omi service yet.',
+  );
+  expect(textOf(renderer)).not.toContain(
+    'Owned apps are unavailable until the account profile loads.',
+  );
+});
+
+test('nested non-retryable Apps enabled reads do not claim catalogue apps are installed', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'catalog-app-1', name: 'Owned app', enabled: true},
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {
+        id: request.id,
+        status: 503,
+        body: JSON.stringify({
+          error: {
+            code: 'development_backend_unsupported',
+            retryable: false,
+            action: 'none',
+          },
+        }),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(textOf(renderer)).toContain(
+    'Apps are not available from the selected Omi service yet.',
+  );
+  expect(textOf(renderer)).not.toContain('No installed apps.');
+  expect(textOf(renderer)).toContain('Owned app');
+  expect(textOf(renderer)).not.toContain('Not installed');
+  expect(labelsOf(renderer)).not.toContain('Install Owned app');
+  expect(labelsOf(renderer)).not.toContain('Remove Owned app');
+});
+
+test('successful empty Apps enabled reads still report catalogue apps as not installed', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'catalog-app-1', name: 'Owned app', enabled: false},
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(textOf(renderer)).toContain('Owned app');
+  expect(textOf(renderer)).toContain('Not installed');
+  expect(textOf(renderer)).toContain('No installed apps.');
+  expect(labelsOf(renderer)).toContain('Install Owned app');
+});
+
+test('whitespace-only Apps description does not leave a blank catalogue subtitle', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-1',
+            name: 'Owned app',
+            description: ' \t\n',
+            enabled: false,
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(textOf(renderer)).toContain('Owned app');
+  expect(textOf(renderer)).toContain('Not installed');
+  const blankCopy = renderer.root.findAllByType(Text).filter(node => {
+    const child = node.props.children;
+    return typeof child === 'string' && child.length > 0 && child.trim() === '';
+  });
+  expect(blankCopy).toHaveLength(0);
+});
+
+test('NEXT LINE-only Apps description does not leave a blank catalogue subtitle', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-1',
+            name: 'Owned app',
+            description: '\u0085',
+            author: '\u0085',
+            enabled: false,
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(textOf(renderer)).toContain('Owned app');
+  expect(textOf(renderer)).toContain('Not installed');
+  expect(textOf(renderer)).not.toContain('\u0085');
+});
+
+test('whitespace-only Apps name stays visible instead of a blank catalogue title', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-1',
+            name: ' \t\n',
+            enabled: false,
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(textOf(renderer)).toContain('App name unavailable');
+  expect(textOf(renderer)).toContain('Not installed');
+  expect(labelsOf(renderer)).toContain('Install App name unavailable');
+});
+
+test('nested non-retryable Apps enable writes latch Install', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'catalog-app-1', name: 'Owned app', enabled: false},
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    if (
+      request.method === 'POST' &&
+      typeof request.path === 'string' &&
+      request.path.startsWith('/v1/apps/enable')
+    ) {
+      return {
+        id: request.id,
+        status: 503,
+        body: JSON.stringify({
+          error: {
+            code: 'development_backend_unsupported',
+            retryable: false,
+            action: 'none',
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(labelsOf(renderer)).toContain('Install Owned app');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Install Owned app')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(textOf(renderer)).toContain(
+    'Apps are not available from the selected Omi service yet.',
+  );
+  expect(labelsOf(renderer)).not.toContain('Install Owned app');
+  expect(textOf(renderer)).toContain('Owned app');
+  expect(textOf(renderer)).toContain('Not installed');
+});
+
+test('nested non-retryable training opt-in writes latch Opt in', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/training-data-opt-in') {
+      if (request.method === 'POST') {
+        return {
+          id: request.id,
+          status: 503,
+          body: JSON.stringify({
+            error: {
+              code: 'development_backend_unsupported',
+              retryable: false,
+              action: 'none',
+            },
+          }),
+        };
+      }
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({opted_in: false}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Privacy settings')
+      .props.onPress();
+  });
+  expect(labelsOf(renderer)).toContain('Opt in');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Opt in')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(textOf(renderer)).toContain(
+    'This account setting is not available from the selected Omi service yet.',
+  );
+  expect(labelsOf(renderer)).not.toContain('Opt in');
+  expect(textOf(renderer)).toContain(
+    'This account has not opted in to training data.',
+  );
+});
+
+test('omitted training opt-in 503 still keeps Opt in live', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/training-data-opt-in') {
+      if (request.method === 'POST') {
+        return {
+          id: request.id,
+          status: 503,
+          body: '{"error":"service_unavailable"}',
+        };
+      }
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({opted_in: false}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Privacy settings')
+      .props.onPress();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Opt in')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Opt in').props
+      .disabled,
+  ).toBe(false);
+});
 
 test('browser Apps does not offer an unusable native sign-in or installation retry', async () => {
   const previous = Platform.OS;
@@ -450,4 +984,133 @@ test('older browser Settings response cannot overwrite a newer response', async 
       value: originalPlatform,
     });
   }
+});
+
+test('Settings developer webhook titles are not raw API keys', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/developer/webhooks/status') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          memory_created: {
+            enabled: true,
+            url: 'https://example.test/conversation',
+          },
+          realtime_transcript: false,
+          audio_bytes: {enabled: true, url: 'https://example.test/audio'},
+          day_summary: {enabled: false, url: null},
+          button_event: {url: 'https://example.test/button'},
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Conversation Events');
+  expect(tree).toContain('Real-time Transcript');
+  expect(tree).toContain('Audio Bytes');
+  expect(tree).toContain('Day Summary');
+  expect(tree).not.toContain('memory_created');
+  expect(tree).not.toContain('realtime_transcript');
+  expect(tree).not.toContain('audio_bytes');
+  expect(tree).not.toContain('day_summary');
+  expect(tree).toContain('Status unavailable');
+  expect(tree).not.toContain('Status unknown');
+});
+
+test('Settings omits NEXT LINE-only company and job instead of blank rows', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          uid: 'user-1',
+          name: 'Ada',
+          email: 'ada@example.com',
+          company: '\u0085',
+          job: '\u0085',
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Ada');
+  expect(tree).not.toContain('Company');
+  expect(tree).not.toContain('Job');
+  expect(tree).not.toContain('\u0085');
+});
+
+test('Settings developer webhook URLs omit empty or whitespace values', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/developer/webhooks/status') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          memory_created: {enabled: true, url: ' \t\n'},
+          day_summary: {enabled: false, url: '  https://example.test/day  '},
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Enabled');
+  expect(tree).toContain('Disabled');
+  expect(tree).toContain('https://example.test/day');
+  expect(tree).not.toContain(' \t\n');
+});
+
+test('Apps category labels are not raw wire tokens', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-1',
+            name: 'Catalog fixture app',
+            category: 'productivity',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Catalog fixture app');
+  expect(tree).toContain('Productivity');
+  expect(tree).not.toContain('productivity');
 });

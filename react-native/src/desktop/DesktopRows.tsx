@@ -4,7 +4,12 @@ import CheckCircle2 from 'lucide-react-native/icons/circle-check';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
 import Sparkles from 'lucide-react-native/icons/sparkles';
 import {
-  projectionTimestamp,
+  conversationDisplaySummary,
+  conversationDisplayTitle,
+  memoryDisplayBody,
+  memoryDisplayTitle,
+  projectionClockLabel,
+  taskDisplayTitle,
   type ConversationProjection,
   type DesktopReadProjection,
   type MemoryProjection,
@@ -13,14 +18,7 @@ import {
 import {desktopTokens as token} from './tokens';
 
 function timeLabel(item: DesktopReadProjection): string {
-  const timestamp = projectionTimestamp(item);
-  if (timestamp === null || timestamp <= 0) {
-    return '';
-  }
-  return new Date(timestamp).toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return projectionClockLabel(item, Date.now());
 }
 
 function RowGlyph({kind}: {kind: DesktopReadProjection['kind']}) {
@@ -35,15 +33,6 @@ function RowGlyph({kind}: {kind: DesktopReadProjection['kind']}) {
       <Icon color={token.color.ink} size={16} />
     </View>
   );
-}
-
-function conversationTitle(item: ConversationProjection): string {
-  if (item.title !== '') {
-    return item.title;
-  }
-  return item.status === 'processing'
-    ? 'Processing conversation…'
-    : 'Conversation title unavailable';
 }
 
 export function SectionTitle({children}: {children: string}) {
@@ -61,7 +50,7 @@ export const ReadRow = memo(function ReadRow({
 }) {
   const meta =
     item.kind === 'conversation'
-      ? [timeLabel(item), item.summary]
+      ? [timeLabel(item), conversationDisplaySummary(item)]
       : item.kind === 'memory'
       ? [timeLabel(item), 'Memory']
       : [timeLabel(item)];
@@ -70,7 +59,11 @@ export const ReadRow = memo(function ReadRow({
       <RowGlyph kind={item.kind} />
       <View style={styles.rowCopy}>
         <Text numberOfLines={1} style={styles.rowTitle}>
-          {item.kind === 'conversation' ? conversationTitle(item) : item.title}
+          {item.kind === 'conversation'
+            ? conversationDisplayTitle(item)
+            : item.kind === 'memory'
+            ? memoryDisplayTitle(item)
+            : taskDisplayTitle(item)}
         </Text>
         <Text numberOfLines={1} style={styles.rowMeta}>
           {meta.filter(part => part !== '').join(' · ')}
@@ -90,10 +83,10 @@ export const ConversationRow = memo(function ConversationRow({
       <RowGlyph kind="conversation" />
       <View style={styles.rowCopy}>
         <Text numberOfLines={1} style={styles.rowTitle}>
-          {conversationTitle(item)}
+          {conversationDisplayTitle(item)}
         </Text>
         <Text numberOfLines={1} style={styles.rowMeta}>
-          {[timeLabel(item), item.summary]
+          {[timeLabel(item), conversationDisplaySummary(item)]
             .filter(part => part !== '')
             .join(' · ')}
         </Text>
@@ -110,7 +103,7 @@ export const MemoryRow = memo(function MemoryRow({
   return (
     <View style={styles.memoryCard}>
       <Text numberOfLines={3} style={styles.memoryText}>
-        {item.summary}
+        {memoryDisplayBody(item)}
       </Text>
       <Text style={styles.rowMeta}>
         {item.timestamp === null
@@ -128,7 +121,7 @@ export const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
         style={[styles.taskCircle, item.completed && styles.taskCircleDone]}
       />
       <Text style={[styles.taskText, item.completed && styles.taskTextDone]}>
-        {item.title}
+        {taskDisplayTitle(item)}
       </Text>
     </View>
   );

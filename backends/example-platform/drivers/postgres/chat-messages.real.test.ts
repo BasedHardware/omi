@@ -173,6 +173,53 @@ realTest("real chat reads require chat.read and never invent empty success", asy
       [humanId, "human", null],
       [aiId, "ai", "completed"],
     ]);
+    const namedId = "33333333-3333-4333-8333-333333333333";
+    await owner.unsafe(
+      `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'named prompt','human','text',3000,3000,'session-alpha',NULL,0,'sha256:named','desktop_chat',NULL,false,'rev-named','[]'::jsonb,'gen_named')`,
+      [account, namedId],
+    );
+    const defaultPage = await call();
+    expect(defaultPage.status).toBe(200);
+    expect(
+      ((await defaultPage.json()) as { messages: Array<{ id: string }> }).messages.map((row) => row.id),
+    ).toEqual([humanId, aiId]);
+    const named = await call("?limit=50&chatSessionId=session-alpha");
+    expect(named.status).toBe(200);
+    expect(
+      ((await named.json()) as { messages: Array<{ id: string }> }).messages.map((row) => row.id),
+    ).toEqual([namedId]);
+    const storedMainId = "55555555-5555-4555-8555-555555555555";
+    await owner.unsafe(
+      `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'stored as chat-main','human','text',2500,2500,'chat-main',NULL,0,'sha256:main','desktop_chat',NULL,false,'rev-main','[]'::jsonb,'gen_main')`,
+      [account, storedMainId],
+    );
+    const paddedMainId = "66666666-6666-4666-8666-666666666666";
+    await owner.unsafe(
+      `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'stored as space-padded chat-main','human','text',2550,2550,' chat-main ',NULL,0,'sha256:padded-main','desktop_chat',NULL,false,'rev-padded-main','[]'::jsonb,'gen_padded_main')`,
+      [account, paddedMainId],
+    );
+    const spaceMainId = "77777777-7777-4777-8777-777777777777";
+    await owner.unsafe(
+      `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'stored as space-only chatSessionId','human','text',2575,2575,'  ',NULL,0,'sha256:space-main','desktop_chat',NULL,false,'rev-space-main','[]'::jsonb,'gen_space_main')`,
+      [account, spaceMainId],
+    );
+    const storedMainDefault = await call();
+    expect(storedMainDefault.status).toBe(200);
+    expect(
+      ((await storedMainDefault.json()) as { messages: Array<{ id: string }> }).messages.map((row) => row.id),
+    ).toEqual([humanId, aiId, storedMainId, paddedMainId, spaceMainId]);
+    const aliasedMain = await call("?limit=50&chatSessionId=chat-main");
+    expect(aliasedMain.status).toBe(200);
+    expect(
+      ((await aliasedMain.json()) as { messages: Array<{ id: string }> }).messages.map((row) => row.id),
+    ).toEqual([humanId, aiId, storedMainId, paddedMainId, spaceMainId]);
+    const namedAfterStoredMain = await call("?limit=50&chatSessionId=session-alpha");
+    expect(namedAfterStoredMain.status).toBe(200);
+    expect(
+      ((await namedAfterStoredMain.json()) as { messages: Array<{ id: string }> }).messages.map((row) => row.id),
+    ).toEqual([namedId]);
+    expect((await call("?limit=50&appId=other")).status).toBe(400);
+    expect((await call("?limit=50&chatSessionId=")).status).toBe(400);
     expect((await call("", "other.payload.signature")).status).toBe(200);
     expect(await (await call("", "other.payload.signature")).json()).toEqual({
       messages: [],

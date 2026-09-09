@@ -171,6 +171,51 @@ test('does not connect until trusted ownership preflight settles', async () => {
   await ReactTestRenderer.act(async () => view.unmount());
 });
 
+test('native unavailable ownership preflight does not ask to reopen the app', async () => {
+  mockBackend.listRecordingJournals.mockRejectedValueOnce(
+    Object.assign(
+      new Error('Recording ownership is unavailable from this backend'),
+      {
+        code: 'OMI_CAPTURE_OWNERSHIP_UNAVAILABLE',
+      },
+    ),
+  );
+  const view = await render();
+  expect(state.deviceScanMessage).toBe(
+    'Recording ownership is not available from this backend yet.',
+  );
+  expect(state.deviceScanMessage).not.toContain('reopen the app');
+  await ReactTestRenderer.act(async () => view.unmount());
+});
+
+test('example-platform ownership refusals do not ask to reopen the app', async () => {
+  mockBackend.listRecordingJournals.mockRejectedValueOnce(
+    Object.assign(
+      new Error('Recording ownership is unavailable from this backend'),
+      {code: 'OMI_RECORDING_OWNERSHIP'},
+    ),
+  );
+  const view = await render();
+  expect(state.deviceScanMessage).toBe(
+    'Recording ownership is not available from this backend yet.',
+  );
+  expect(state.deviceScanMessage).not.toContain('reopen the app');
+  await ReactTestRenderer.act(async () => view.unmount());
+});
+
+test('retryable ownership preflight still asks to reopen the app', async () => {
+  mockBackend.listRecordingJournals.mockRejectedValueOnce(
+    Object.assign(new Error('Recording ownership could not be refreshed'), {
+      code: 'OMI_HTTP_TRANSPORT',
+    }),
+  );
+  const view = await render();
+  expect(state.deviceScanMessage).toBe(
+    'Recording ownership could not be verified. Connecting is unavailable until you reopen the app.',
+  );
+  await ReactTestRenderer.act(async () => view.unmount());
+});
+
 test('packet fsync precedes upload and stop waits for the durable packet', async () => {
   let release!: () => void;
   mockBackend.appendRecordingJournal.mockImplementationOnce(

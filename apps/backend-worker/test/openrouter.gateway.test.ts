@@ -185,6 +185,32 @@ describe("openrouter gateway request shape", () => {
       fetchMock.restore();
     }
   });
+
+  test("whitespace-only response text is a gateway shape error", async () => {
+    const { openrouter } = await import("../src/openrouter");
+    const fetchMock = captureFetch(
+      () =>
+        new Response(
+          JSON.stringify({ choices: [{ message: { content: " \t\n" } }] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    );
+    try {
+      const result = await openrouter.generateViaGateway(
+        {
+          url: "https://gateway.example.invalid/openrouter",
+          model: "test-model",
+          secret: "test-secret",
+        },
+        "prompt",
+        "corr-whitespace-1",
+        []
+      );
+      expect(result.kind).toBe("error");
+    } finally {
+      fetchMock.restore();
+    }
+  });
 });
 
 describe("openrouter gateway redaction", () => {

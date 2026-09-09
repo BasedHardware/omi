@@ -1,5 +1,6 @@
 import React from 'react';
 import {ActivityIndicator, Text, View} from 'react-native';
+import {visibleDisplayText} from '../desktopReadClient';
 import {useRecordingTranscript} from '../recordingTranscript';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
@@ -28,7 +29,9 @@ export function RecordingTranscript({
         <Text
           accessibilityRole="alert"
           style={styles.conversationDetailSummary}>
-          Transcript could not be loaded.
+          {result.retryable
+            ? 'Transcript could not be loaded.'
+            : 'Transcript is not available from this backend yet.'}
         </Text>
       ) : result.value.state === 'completed' ? (
         <>
@@ -39,7 +42,7 @@ export function RecordingTranscript({
             </Text>
           )}
           <Text selectable style={styles.conversationTranscriptText}>
-            {result.value.text === ''
+            {visibleDisplayText(result.value.text) === ''
               ? 'The transcript is empty.'
               : result.value.text}
           </Text>
@@ -59,7 +62,7 @@ export function RecordingTranscript({
             : 'Transcription is in progress.'}
         </Text>
       )}
-      {(result.status === 'error' ||
+      {((result.status === 'error' && result.retryable) ||
         (result.status === 'loaded' && result.value.state !== 'completed')) && (
         <FocusPressable
           accessibilityRole="button"

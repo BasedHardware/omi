@@ -1,7 +1,7 @@
 export const MAIN_CHAT_CONVERSATION_ID = "chat:chat-main";
 
 export type ChatConversationSessionItem = {
-  readonly id: typeof MAIN_CHAT_CONVERSATION_ID;
+  readonly id: string;
   readonly title: string;
   readonly overview: string;
   readonly createdAt: number;
@@ -44,6 +44,54 @@ const compareItems = (
   const leftId = typeof left.id === "string" ? left.id : "";
   const rightId = typeof right.id === "string" ? right.id : "";
   return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
+};
+
+export type ConversationUnionCursorAfter = {
+  readonly updatedAt: number;
+  readonly id: string;
+};
+
+export type ConversationUnionPage = {
+  readonly items: readonly Record<string, unknown>[];
+  readonly hasMore: boolean;
+};
+
+const afterKeyset = (
+  item: Record<string, unknown>,
+  after: ConversationUnionCursorAfter,
+): boolean => {
+  const updatedAt = item.updatedAt;
+  const id = item.id;
+  if (typeof updatedAt !== "number" || typeof id !== "string") return false;
+  return updatedAt < after.updatedAt
+    || (updatedAt === after.updatedAt && id > after.id);
+};
+
+export const composeConversationUnionPage = (
+  listenItems: readonly Record<string, unknown>[],
+  sessions: readonly ChatConversationSessionItem[],
+  limit: number,
+  after: ConversationUnionCursorAfter | null,
+): ConversationUnionPage | null => {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) return null;
+  const sessionIds = new Set<string>(sessions.map((session) => session.id));
+  const merged: Record<string, unknown>[] = [];
+  for (const item of listenItems) {
+    const row = record(item);
+    if (row === null || typeof row.id !== "string" || typeof row.updatedAt !== "number") {
+      return null;
+    }
+    if (!sessionIds.has(row.id)) merged.push(row);
+  }
+  merged.push(...sessions);
+  merged.sort(compareItems);
+  const remaining = after === null
+    ? merged
+    : merged.filter((item) => afterKeyset(item, after));
+  return Object.freeze({
+    items: Object.freeze(remaining.slice(0, limit)),
+    hasMore: remaining.length > limit,
+  });
 };
 
 export const composeChatSessionsIntoConversationPage = (

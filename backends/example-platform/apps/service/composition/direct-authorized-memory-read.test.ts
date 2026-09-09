@@ -137,6 +137,25 @@ describe("direct Firebase/PostgreSQL-authorized memory read", () => {
     )).rejects.toThrow("invalid cursor");
   });
 
+  test("unavailable accepted and STM coverage cannot claim a complete page", async () => {
+    const stable = load("a");
+    const result = await readDirectAuthorizedMemoryPage(
+      { limit: 100, cursor: null },
+      {
+        ...config([stable, stable, stable], [], []),
+        acceptedCoverageState: "unavailable",
+        stmCoverageState: "unavailable",
+      },
+    );
+    const page = parseSynthesizedPageJson(result.canonical_json);
+    expect(page).not.toBeNull();
+    expect(page!.completeness.status).toBe("degraded");
+    expect(page!.completeness.reasons.map(String)).toEqual(["projection_unavailable"]);
+    expect(page!.window.complete).toBe(false);
+    expect(page!.window.status).not.toBe("complete");
+    expect(page!.completeness.status).not.toBe("complete");
+  });
+
   test("a final authority change after core page construction discards buffered trace and bytes", async () => {
     const sequence: string[] = [];
     const traces: unknown[] = [];

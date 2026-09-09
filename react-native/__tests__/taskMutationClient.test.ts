@@ -264,6 +264,47 @@ test('native plane-switch rejection is permanent for both contracts', async () =
   }
 });
 
+test('nested non-retryable task write 503s are permanent without control-unavailable retry', async () => {
+  const backend = client();
+  const prepared = await prepareTaskPatch(backend, input);
+  backend.request.mockResolvedValue({
+    id: 'request',
+    status: 503,
+    body: '{"error":{"code":"development_backend_unsupported","retryable":false,"action":"none"}}',
+  });
+  expect(await sendTaskPatch(backend, prepared)).toMatchObject({
+    ok: false,
+    failure: {kind: 'permanent'},
+    controlUnavailable: false,
+  });
+});
+
+test('native unsupported task-write rejection is permanent for both contracts', async () => {
+  for (const old of [false, true]) {
+    const backend = omiClient();
+    backend.request.mockRejectedValue({code: 'OMI_DEV_BACKEND_UNSUPPORTED'});
+    const prepared = await prepareTaskPatch(backend, old ? omiInput : input);
+    expect(await sendTaskPatch(backend, prepared)).toMatchObject({
+      ok: false,
+      failure: {kind: 'permanent'},
+      controlUnavailable: false,
+    });
+  }
+});
+
+test('thrown nested non-retryable task writes are permanent', async () => {
+  const backend = client();
+  const prepared = await prepareTaskPatch(backend, input);
+  backend.request.mockRejectedValue(
+    Object.assign(new Error('unsupported'), {retryable: false}),
+  );
+  expect(await sendTaskPatch(backend, prepared)).toMatchObject({
+    ok: false,
+    failure: {kind: 'permanent'},
+    controlUnavailable: false,
+  });
+});
+
 test('old task rate limit retains Retry-After and subsequent check is read-only', async () => {
   const backend = omiClient();
   backend.request

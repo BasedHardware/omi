@@ -394,7 +394,7 @@ realTest(
 );
 
 realTest(
-  "real conversation reads compose granted chat sessions without inventing empty chat:chat-main",
+  "real conversation reads page granted chat sessions with listen by updatedAt without inventing empty chat:chat-main",
   async () => {
     const endpoint = new URL(url!);
     if (endpoint.hostname !== "127.0.0.1" || endpoint.protocol !== "postgres:")
@@ -452,16 +452,40 @@ realTest(
         "INSERT INTO omi_memory.postgres_restore_admission_heads(database_generation_digest,release_revision) VALUES($1,1)",
         [generation]
       );
+      const failures: string[] = [];
+      const describeError = (error: unknown): string => {
+        const code =
+          error !== null && typeof error === "object" && "code" in error
+            ? String(error.code)
+            : "";
+        const message = error instanceof Error ? error.message.slice(0, 80) : "";
+        return [code, message].filter((part) => part.length > 0).join(":");
+      };
       const appPool: PostgresTransactionPool = {
         withTransaction: (options, callback) =>
-          pool.withTransaction(options, async (connection) => {
-            await connection.query({
-              name: "conversation_chat_test.role",
-              text: "SET LOCAL ROLE omi_platform_application",
-              values: [],
-            });
-            return callback(connection);
-          }),
+          pool
+            .withTransaction(options, async (connection) => {
+              await connection.query({
+                name: "conversation_chat_test.role",
+                text: "SET LOCAL ROLE omi_platform_application",
+                values: [],
+              });
+              return callback({
+                ...connection,
+                async query(statement) {
+                  try {
+                    return await connection.query(statement);
+                  } catch (error) {
+                    failures.push(`${statement.name}:${describeError(error)}`);
+                    throw error;
+                  }
+                },
+              });
+            })
+            .catch((error) => {
+              failures.push(`tx:${describeError(error)}`);
+              throw error;
+            }),
       };
       const runtime = createPostgresFirebaseConversationReadRuntime({
         authorization: {
@@ -503,6 +527,18 @@ realTest(
         `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'saved prompt','human','text',1000,1000,NULL,NULL,0,'sha256:human','desktop_chat',NULL,false,'rev-human','[]'::jsonb,'gen_human')`,
         [account, "11111111-1111-4111-8111-111111111111"]
       );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'stored as chat-main','human','text',1100,1100,'chat-main',NULL,0,'sha256:main','desktop_chat',NULL,false,'rev-main','[]'::jsonb,'gen_main')`,
+        [account, "55555555-5555-4555-8555-555555555555"]
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'stored as space-padded chat-main','human','text',1050,1050,' chat-main ',NULL,0,'sha256:padded-main','desktop_chat',NULL,false,'rev-padded-main','[]'::jsonb,'gen_padded_main')`,
+        [account, "66666666-6666-4666-8666-666666666666"]
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'stored as space-only chatSessionId','human','text',1075,1075,'  ',NULL,0,'sha256:space-main','desktop_chat',NULL,false,'rev-space-main','[]'::jsonb,'gen_space_main')`,
+        [account, "77777777-7777-4777-8777-777777777777"]
+      );
       const withoutGrant = (await (await call()).json()) as { items: Array<{ id: string }> };
       expect(ids(withoutGrant)).not.toContain("chat:chat-main");
       await owner.unsafe(
@@ -523,7 +559,7 @@ realTest(
         expect.objectContaining({
           id: "chat:chat-main",
           title: "saved prompt",
-          overview: "saved prompt",
+          overview: "stored as chat-main",
           source: "chat",
           status: "in_progress",
         }),
@@ -551,26 +587,290 @@ realTest(
           ]
         );
       }
-      const firstPage = (await (await call("?limit=1")).json()) as {
+      const firstResponse = await call("?limit=1");
+      expect(firstResponse.status, failures.join(" | ")).toBe(200);
+      const firstPage = (await firstResponse.json()) as {
         items: Array<{ id: string }>;
         window: { nextCursor: string | null; hasMore: boolean };
       };
-      expect(ids(firstPage)).toContain("chat:chat-main");
-      expect(firstPage.items).toHaveLength(2);
+      expect(firstPage.items).toHaveLength(1);
+      expect(ids(firstPage)[0]).toMatch(/^recording:/);
+      expect(ids(firstPage)).not.toContain("chat:chat-main");
       expect(firstPage.window.hasMore).toBe(true);
       expect(firstPage.window.nextCursor).not.toBeNull();
       const secondPage = (await (
         await call(`?limit=1&cursor=${encodeURIComponent(firstPage.window.nextCursor!)}`)
-      ).json()) as { items: Array<{ id: string }> };
-      expect(ids(secondPage)).not.toContain("chat:chat-main");
+      ).json()) as {
+        items: Array<{ id: string }>;
+        window: { nextCursor: string | null; hasMore: boolean };
+      };
       expect(secondPage.items).toHaveLength(1);
+      expect(ids(secondPage)[0]).toMatch(/^recording:/);
+      expect(ids(secondPage)).not.toContain("chat:chat-main");
+      expect(ids(secondPage)[0]).not.toBe(ids(firstPage)[0]);
+      expect(secondPage.window.hasMore).toBe(true);
+      expect(secondPage.window.nextCursor).not.toBeNull();
+      const thirdPage = (await (
+        await call(`?limit=1&cursor=${encodeURIComponent(secondPage.window.nextCursor!)}`)
+      ).json()) as {
+        items: Array<{ id: string }>;
+        window: { nextCursor: string | null; hasMore: boolean };
+      };
+      expect(ids(thirdPage)).toEqual(["chat:chat-main"]);
+      expect(thirdPage.window.hasMore).toBe(false);
+      expect(thirdPage.window.nextCursor).toBeNull();
+      await owner.unsafe(
+        "DELETE FROM omi_memory.application_grant_heads WHERE account_id=$1 AND capability='chat.read'",
+        [account]
+      );
+      const listenOnly = (await (await call("?limit=1")).json()) as {
+        items: Array<{ id: string }>;
+        window: { nextCursor: string | null };
+      };
+      expect(ids(listenOnly)).not.toContain("chat:chat-main");
+      expect(listenOnly.window.nextCursor).not.toBeNull();
+      await owner.unsafe(
+        `INSERT INTO omi_memory.application_grant_heads(account_id,application_id,credential_id,credential_generation,capability,grant_id,grant_version) VALUES($1,$2,$3,1,$4,$5,1)`,
+        [account, app, credential, "chat.read", `chat.read-${suffix}`]
+      );
+      const rejected = await call(
+        `?limit=1&cursor=${encodeURIComponent(listenOnly.window.nextCursor!)}`
+      );
+      expect(rejected.status).toBe(400);
+      const namedAt = Date.now() + 60_000;
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'named prompt','human','text',$3,$3,'session-alpha',NULL,0,'sha256:named','desktop_chat',NULL,false,'rev-named','[]'::jsonb,'gen_named')`,
+        [account, "22222222-2222-4222-8222-222222222222", namedAt]
+      );
+      const namedPage = (await (await call("?limit=1")).json()) as { items: Array<{ id: string }> };
+      expect(ids(namedPage)).toEqual(["chat:session-alpha"]);
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,$3,'human','text',500,500,'session-blank',NULL,0,'sha256:blank','desktop_chat',NULL,false,'rev-blank','[]'::jsonb,'gen_blank')`,
+        [account, "33333333-3333-4333-8333-333333333333", " \t\n"]
+      );
+      const allNamed = (await (await call()).json()) as {
+        items: Array<{ id: string; title: string; overview: string }>;
+      };
+      expect(ids(allNamed)).toContain("chat:chat-main");
+      expect(ids(allNamed)).toContain("chat:session-alpha");
+      expect(ids(allNamed)).toContain("chat:session-blank");
+      expect(allNamed.items.find((item) => item.id === "chat:session-blank")).toEqual(
+        expect.objectContaining({
+          id: "chat:session-blank",
+          title: "",
+          overview: "",
+        })
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,$3,'human','text',400,400,'session-nbsp',NULL,0,'sha256:nbsp','desktop_chat',NULL,false,'rev-nbsp','[]'::jsonb,'gen_nbsp')`,
+        [account, "44444444-4444-4444-8444-444444444444", "\u00A0"]
+      );
+      const unicodeBlank = (await (await call()).json()) as {
+        items: Array<{ id: string; title: string; overview: string }>;
+      };
+      expect(ids(unicodeBlank)).toContain("chat:session-nbsp");
+      expect(unicodeBlank.items.find((item) => item.id === "chat:session-nbsp")).toEqual(
+        expect.objectContaining({
+          id: "chat:session-nbsp",
+          title: "",
+          overview: "",
+        })
+      );
       await owner.unsafe(
         "DELETE FROM omi_memory.application_grant_heads WHERE account_id=$1 AND capability='chat.read'",
         [account]
       );
       const revoked = (await (await call("?limit=1")).json()) as { items: Array<{ id: string }> };
       expect(ids(revoked)).not.toContain("chat:chat-main");
+      expect(ids(revoked)).not.toContain("chat:session-alpha");
+      expect(ids(revoked)).not.toContain("chat:session-blank");
+      expect(ids(revoked)).not.toContain("chat:session-nbsp");
       expect(revoked.items).toHaveLength(1);
+    } finally {
+      await pool.close();
+      await owner.end();
+    }
+  },
+  60000
+);
+
+realTest(
+  "real conversation reads visible-trim Listen excerpts before the title budget",
+  async () => {
+    const endpoint = new URL(url!);
+    if (endpoint.hostname !== "127.0.0.1" || endpoint.protocol !== "postgres:")
+      throw Error("postgres_test_not_loopback_only");
+    const owner = postgres(url!, { max: 1 });
+    const pool = createPostgresJsTransactionPool({
+      connectionString: url!,
+      maxConnections: 2,
+    });
+    const suffix = randomUUID(),
+      generation = createHash("sha256").update(suffix).digest("hex"),
+      now = () => Math.floor(Date.now() / 1000);
+    const project = "synthetic-listen-excerpt-project",
+      app = "synthetic-listen-excerpt-app",
+      uid = `uid-${suffix}`,
+      account = `account-${suffix}`,
+      principal = `principal-${suffix}`,
+      credential = `credential-${suffix}`;
+    try {
+      await owner.unsafe(`DO $roles$ BEGIN
+      IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='omi_platform_application') THEN CREATE ROLE omi_platform_application NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT; END IF;
+      IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='omi_platform_cleanup') THEN CREATE ROLE omi_platform_cleanup NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT; END IF;
+      IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='omi_platform_restore') THEN CREATE ROLE omi_platform_restore NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT; END IF;
+      IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='omi_platform_restore_operator') THEN CREATE ROLE omi_platform_restore_operator NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT; END IF;
+    END $roles$;`);
+      await runPostgresMigrations(owner);
+      for (const statement of seedProdLocalFirebaseAuthorizationSql(
+        {
+          firebase_project_id: project,
+          firebase_uid: uid,
+          application_id: app,
+          account_id: account,
+          principal_id: principal,
+          credential_id: credential,
+          grant_id: `memory-${suffix}`,
+        },
+        now()
+      ))
+        await owner.unsafe(statement.text, [...statement.values]);
+      await owner.unsafe(
+        `INSERT INTO omi_memory.application_grant_revisions(account_id,application_id,credential_id,credential_generation,capability,grant_id,grant_version,lifecycle,enabled,scopes,record_schema_version,record_json,content_hash) VALUES($1,$2,$3,1,$4,$5,1,'active',true,'[]','grant-v1','{}',$6)`,
+        [account, app, credential, "conversations.read", `conversations.read-${suffix}`, "3".repeat(64)]
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.application_grant_heads(account_id,application_id,credential_id,credential_generation,capability,grant_id,grant_version) VALUES($1,$2,$3,1,$4,$5,1)`,
+        [account, app, credential, "conversations.read", `conversations.read-${suffix}`]
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.postgres_restore_admission_revisions(database_generation_digest,release_revision,state,restore_id,restored_snapshot_digest,checkpoint_candidate_digest,checkpoint_evidence_digest,first_approval_subject_digest,first_approval_receipt_digest,second_approval_subject_digest,second_approval_receipt_digest,manual_release_receipt_digest,previous_release_revision,content_hash) VALUES($1,1,'released',$2,$3,$3,$3,$4,$5,$6,$7,$3,NULL,$3)`,
+        [generation, `synthetic-${suffix}`, "9".repeat(64), "4".repeat(64), "5".repeat(64), "6".repeat(64), "7".repeat(64)]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.postgres_restore_admission_heads(database_generation_digest,release_revision) VALUES($1,1)",
+        [generation]
+      );
+      const appPool: PostgresTransactionPool = {
+        withTransaction: (options, callback) =>
+          pool.withTransaction(options, async (connection) => {
+            await connection.query({
+              name: "listen_excerpt_test.role",
+              text: "SET LOCAL ROLE omi_platform_application",
+              values: [],
+            });
+            return callback(connection);
+          }),
+      };
+      const runtime = createPostgresFirebaseConversationReadRuntime({
+        authorization: {
+          pool: appPool,
+          project_id: project,
+          application_id: app,
+          runtime_mode: "deployed",
+          context_ttl_seconds: 60,
+          database_generation_digest: generation,
+          id_token_adapter: {
+            verification_source: "firebase_production",
+            async verifyIdToken() {
+              return {
+                aud: project,
+                iss: `https://securetoken.google.com/${project}`,
+                sub: uid,
+                uid,
+                iat: now() - 10,
+                auth_time: now() - 10,
+                exp: now() + 600,
+              };
+            },
+          },
+        },
+        codecRootSecret: new Uint8Array(32).fill(7),
+        cursorSigningKeyset: {
+          active_key_id: "test",
+          keys: [{ key_id: "test", secret: new Uint8Array(32).fill(8) }],
+        },
+      });
+      const call = () =>
+        runtime.executeRequest(
+          new Request("https://conversations.example/v1/conversations", {
+            headers: { authorization: "Bearer header.payload.signature" },
+          })
+        );
+      const recordingId = randomUUID();
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_capture_sessions(account_id,session_id,conversation_id,started_at,source,codec,sample_rate,channels,content_hash) VALUES($1,$2,$3,clock_timestamp()-interval '2 seconds','omi','21',16000,1,$4)",
+        [account, recordingId, `conversation:${recordingId}`, "1".repeat(64)]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_capture_audio_uploads(account_id,session_id,capture_id,device_id,codec_id,upload_completed_at) VALUES($1,$2::text,$2::uuid,'synthetic-device',21,clock_timestamp())",
+        [account, recordingId]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_audio_transcriptions(account_id,session_id,state,attempts,available_at,updated_at,provider_result) VALUES($1,$2,'completed',1,clock_timestamp(),clock_timestamp(),$3::text::jsonb)",
+        [
+          account,
+          recordingId,
+          JSON.stringify({
+            durationSeconds: 1,
+            segments: [
+              {
+                text: "\u0085".repeat(240) + "Recorded words",
+                start: 0,
+                end: 1,
+                speaker: 0,
+              },
+            ],
+          }),
+        ]
+      );
+      const listenId = `listen-nel-${suffix}`;
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_capture_sessions(account_id,session_id,conversation_id,started_at,source,codec,sample_rate,channels,content_hash) VALUES($1,$2,$2,clock_timestamp()-interval '3 seconds','microphone','pcm',16000,1,$3)",
+        [account, listenId, "1".repeat(64)]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_capture_segments(account_id,session_id,ordinal,segment_id,text_content,is_user,start_seconds,end_seconds,appended_at,content_hash) VALUES($1,$2,0,$2,$3,true,0,1,clock_timestamp(),$4)",
+        [account, listenId, "\u0085".repeat(240) + "Recorded words", "1".repeat(64)]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_formation_finalizations(account_id,finalization_id,formation_work_id,session_id,conversation_id,terminal_status,capture_completeness,started_at,ended_at,source,segment_count,transcript_digest,finalization_digest,content_hash) SELECT account_id,session_id,session_id,session_id,conversation_id,'completed','complete',started_at,clock_timestamp(),source,1,$3,$3,$3 FROM omi_memory.listen_capture_sessions WHERE account_id=$1 AND session_id=$2",
+        [account, listenId, "1".repeat(64)]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_conversation_finalization_intents(account_id,conversation_id,finalization_id,intent,locked,content_hash) VALUES($1,$2,$2,'process_memories',true,$3)",
+        [account, listenId, "1".repeat(64)]
+      );
+      const titled = {
+        title: "Recorded words",
+        overview: "Recorded words",
+      };
+      const listenOnly = (await (await call()).json()) as {
+        items: Array<{ id: string; title: string; overview: string }>;
+      };
+      expect(
+        listenOnly.items.find((item) => item.id === `recording:${recordingId}`)
+      ).toMatchObject(titled);
+      expect(listenOnly.items.find((item) => item.id === listenId)).toMatchObject(
+        titled
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.application_grant_revisions(account_id,application_id,credential_id,credential_generation,capability,grant_id,grant_version,lifecycle,enabled,scopes,record_schema_version,record_json,content_hash) VALUES($1,$2,$3,1,$4,$5,1,'active',true,'[]','grant-v1','{}',$6)`,
+        [account, app, credential, "chat.read", `chat.read-${suffix}`, "3".repeat(64)]
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.application_grant_heads(account_id,application_id,credential_id,credential_generation,capability,grant_id,grant_version) VALUES($1,$2,$3,1,$4,$5,1)`,
+        [account, app, credential, "chat.read", `chat.read-${suffix}`]
+      );
+      const unionPage = (await (await call()).json()) as {
+        items: Array<{ id: string; title: string; overview: string }>;
+      };
+      expect(
+        unionPage.items.find((item) => item.id === `recording:${recordingId}`)
+      ).toMatchObject(titled);
+      expect(unionPage.items.find((item) => item.id === listenId)).toMatchObject(
+        titled
+      );
     } finally {
       await pool.close();
       await owner.end();

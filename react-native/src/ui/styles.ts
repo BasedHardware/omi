@@ -437,6 +437,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 12,
     justifyContent: 'center',
   },
+  scanButtonUnavailable: {opacity: 0.35},
   scanButtonText: {color: '#ffffff', fontSize: 12, fontWeight: '700'},
   deviceRow: {
     alignItems: 'center',
@@ -966,6 +967,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 10,
   },
+  composerInputUnavailable: {opacity: 0.35},
   composerActions: {alignItems: 'center', flexDirection: 'row'},
   iconButton: {
     alignItems: 'center',

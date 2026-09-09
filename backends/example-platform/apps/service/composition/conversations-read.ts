@@ -65,6 +65,7 @@ export interface ConversationsReadCompositionConfig {
   readonly cursorTtlSeconds?: number;
   readonly readTimestampEpochSeconds: number;
   readonly appliedFrontierState: ConversationsAppliedFrontierState;
+  readonly cursorPolicyVersion?: "conversations-read-cursor-v1" | "conversations-read-union-cursor-v1";
   readonly onPortCall?: (call: ConversationsReadPortCall) => void;
 }
 
@@ -155,7 +156,7 @@ export const prepareConversationsRead = (
       filter_digest: digestOf("filter", { filters: [] }),
       query_digest: digestOf("query", { query: null }),
       cursor_policy_digest: digestOf("cursor-policy", {
-        policy_version: "conversations-read-cursor-v1",
+        policy_version: config.cursorPolicyVersion ?? "conversations-read-cursor-v1",
         ttl_seconds: cursorTtlSeconds,
       }),
       source_digest: digestOf("source", { sources: ["conversations-store"] }),

@@ -4,6 +4,7 @@ import {omiBackend, subscribeOmiBackendSessionInvalidated} from '../omiNative';
 import {
   prepareTaskPatch,
   sendTaskPatch,
+  TASK_WRITE_UNAVAILABLE_DETAIL,
   type PreparedTaskPatch,
 } from '../taskMutationClient';
 
@@ -26,14 +27,15 @@ export function useTaskMutations({
   const generation = useRef(0);
   const retryAfter = useRef(0);
   const acknowledged = useRef(false);
-  const writesAvailable =
-    enabled &&
-    omiBackend != null &&
-    outcome?.status === 'success' &&
-    (outcome.value.apiContract === 'omi' ||
-      (omiBackend.createWriteId !== undefined &&
-        Number.isSafeInteger(outcome.value.accountEpoch) &&
-        outcome.value.accountEpoch !== null));
+  const writesAvailable: boolean | null =
+    outcome?.status !== 'success'
+      ? null
+      : enabled &&
+        omiBackend != null &&
+        (outcome.value.apiContract === 'omi' ||
+          (omiBackend.createWriteId !== undefined &&
+            Number.isSafeInteger(outcome.value.accountEpoch) &&
+            outcome.value.accountEpoch !== null));
 
   const reset = useCallback(() => {
     ++generation.current;
@@ -78,6 +80,9 @@ export function useTaskMutations({
               setError(
                 failure.reason === 'conflict'
                   ? 'This task changed elsewhere. Review the latest task before editing again.'
+                  : failure.reason === 'gone' &&
+                    failure.detail === TASK_WRITE_UNAVAILABLE_DETAIL
+                  ? 'Task editing is not available from this backend yet.'
                   : 'This change was not accepted. Your edit remains here to copy or dismiss.',
               );
               if (

@@ -15,6 +15,7 @@ jest.mock('react-native', () => {
       renderItem,
       ListHeaderComponent,
       ListFooterComponent,
+      ListEmptyComponent,
       ...listProps
     }: any) =>
       ReactRuntime.createElement(
@@ -22,11 +23,13 @@ jest.mock('react-native', () => {
         listProps,
         ListHeaderComponent,
         ListFooterComponent,
-        data.map((item: any, index: number) =>
-          ReactRuntime.cloneElement(renderItem({item, index}), {
-            key: item.key ?? item.id,
-          }),
-        ),
+        data.length === 0
+          ? ListEmptyComponent
+          : data.map((item: any, index: number) =>
+              ReactRuntime.cloneElement(renderItem({item, index}), {
+                key: item.key ?? item.id,
+              }),
+            ),
       ),
     KeyboardAvoidingView: component('KeyboardAvoidingView'),
     Platform: {OS: 'ios'},
@@ -60,7 +63,6 @@ function buildProps(
     onAskChange: jest.fn(),
     onAskSubmit: jest.fn(),
     onExpandMindMap: jest.fn(),
-    onOpenCalls: jest.fn(),
     onOpenDevice: jest.fn(),
     onOpenSettings: jest.fn(),
     onRouteChange: jest.fn(),
@@ -101,6 +103,136 @@ function renderedText(renderer: ReactTestRenderer.ReactTestRenderer): string {
     )
     .join(' ');
 }
+
+test('an unavailable write door disables Ask instead of leaving it sendable', () => {
+  const onAskSubmit = jest.fn();
+  const renderer = render({askUnavailable: true, onAskSubmit});
+  const send = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Send to Omi unavailable',
+  );
+  expect(send.props.disabled).toBe(true);
+  const sendStyle =
+    typeof send.props.style === 'function'
+      ? send.props.style({pressed: false})
+      : send.props.style;
+  expect([sendStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
+  send.props.onPress();
+  expect(onAskSubmit).not.toHaveBeenCalled();
+  const ask = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Ask Omi',
+  );
+  expect(ask.props.editable).toBe(false);
+  expect(ask.props.onSubmitEditing).toBeUndefined();
+  const askStyle =
+    typeof ask.props.style === 'function'
+      ? ask.props.style({pressed: false})
+      : ask.props.style;
+  expect([askStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
+  const liveSubmit = jest.fn();
+  const live = render({
+    askValue: 'What did I capture?',
+    onAskSubmit: liveSubmit,
+  });
+  const liveSend = live.root.find(
+    node => node.props.accessibilityLabel === 'Send to Omi',
+  );
+  expect(liveSend.props.disabled).toBe(false);
+  const liveStyle =
+    typeof liveSend.props.style === 'function'
+      ? liveSend.props.style({pressed: false})
+      : liveSend.props.style;
+  expect(JSON.stringify([liveStyle].flat(Infinity))).not.toContain(
+    '"opacity":0.35',
+  );
+  liveSend.props.onPress();
+  expect(liveSubmit).toHaveBeenCalledTimes(1);
+  const liveAsk = live.root.find(
+    node => node.props.accessibilityLabel === 'Ask Omi',
+  );
+  expect(liveAsk.props.editable).toBe(true);
+  expect(liveAsk.props.onSubmitEditing).toBe(liveSubmit);
+  const liveAskStyle =
+    typeof liveAsk.props.style === 'function'
+      ? liveAsk.props.style({pressed: false})
+      : liveAsk.props.style;
+  expect(JSON.stringify([liveAskStyle].flat(Infinity))).not.toContain(
+    '"opacity":0.35',
+  );
+  act(() => {
+    renderer.unmount();
+    live.unmount();
+  });
+});
+
+test('compact Home empty Send is disabled without omitting Ask', () => {
+  const onAskSubmit = jest.fn();
+  const renderer = render({askValue: '   ', onAskSubmit});
+  const send = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Send to Omi',
+  );
+  expect(send.props.disabled).toBe(true);
+  const sendStyle =
+    typeof send.props.style === 'function'
+      ? send.props.style({pressed: false})
+      : send.props.style;
+  expect([sendStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
+  send.props.onPress();
+  expect(onAskSubmit).not.toHaveBeenCalled();
+  const ask = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Ask Omi',
+  );
+  expect(ask.props.editable).toBe(true);
+  expect(ask.props.onSubmitEditing).toBeUndefined();
+  const askStyle =
+    typeof ask.props.style === 'function'
+      ? ask.props.style({pressed: false})
+      : ask.props.style;
+  expect(JSON.stringify([askStyle].flat(Infinity))).not.toContain(
+    '"opacity":0.35',
+  );
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('compact Home NEXT LINE-only Send is disabled without omitting Ask', () => {
+  const onAskSubmit = jest.fn();
+  const renderer = render({askValue: '\u0085', onAskSubmit});
+  const send = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Send to Omi',
+  );
+  expect(send.props.disabled).toBe(true);
+  const sendStyle =
+    typeof send.props.style === 'function'
+      ? send.props.style({pressed: false})
+      : send.props.style;
+  expect([sendStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
+  send.props.onPress();
+  expect(onAskSubmit).not.toHaveBeenCalled();
+  const ask = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Ask Omi',
+  );
+  expect(ask.props.editable).toBe(true);
+  expect(ask.props.onSubmitEditing).toBeUndefined();
+  const askStyle =
+    typeof ask.props.style === 'function'
+      ? ask.props.style({pressed: false})
+      : ask.props.style;
+  expect(JSON.stringify([askStyle].flat(Infinity))).not.toContain(
+    '"opacity":0.35',
+  );
+  act(() => {
+    renderer.unmount();
+  });
+});
 
 describe('MobileAppSurface', () => {
   test.each(['home', 'tasks', 'chat', 'apps'] as const)(
@@ -156,7 +288,7 @@ describe('MobileAppSurface', () => {
   test.each([
     ['chat', 'Conversation content'],
     ['tasks', 'Prepare product demo'],
-    ['apps', 'No apps connected yet'],
+    ['apps', 'Couldn’t load apps'],
   ] as const)('renders the shipping %s destination', (route, copy) => {
     const tree = renderedText(
       render({
@@ -178,10 +310,15 @@ test('shows recording failures and keeps tasks read-only without a mutation hand
     'Recording upload failed. Reconnect your device.',
   );
   const task = renderer.root.find(
-    node => node.props.accessibilityLabel === 'Open Prepare product demo',
+    node => node.props.accessibilityLabel === 'Task Prepare product demo',
   );
   expect(task.props.disabled).toBe(true);
   expect(task.props.accessibilityRole).toBe('text');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Open Prepare product demo',
+    ),
+  ).toHaveLength(0);
 });
 
 test('missing conversation content reports unavailable instead of rendering noninteractive recap cards', () => {
@@ -189,6 +326,433 @@ test('missing conversation content reports unavailable instead of rendering noni
   expect(renderedText(renderer)).toContain('Couldn’t load conversations');
   expect(renderedText(renderer)).not.toContain('Omi gets simpler');
   expect(renderedText(renderer)).not.toContain('Your timeline is empty');
+});
+
+test('missing apps content reports unavailable instead of an empty catalogue', () => {
+  const renderer = render({activeRoute: 'apps'});
+  expect(renderedText(renderer)).toContain('Couldn’t load apps');
+  expect(renderedText(renderer)).not.toContain('No apps connected yet');
+});
+
+test('mounted apps content is not replaced by an empty catalogue', () => {
+  const renderer = render({
+    activeRoute: 'apps',
+    appsContent: <Text>Catalogue loaded</Text>,
+  });
+  expect(renderedText(renderer)).toContain('Catalogue loaded');
+  expect(renderedText(renderer)).not.toContain('Couldn’t load apps');
+  expect(renderedText(renderer)).not.toContain('No apps connected yet');
+});
+
+test('empty Daily Recaps keep the complete-library copy by default', () => {
+  const renderer = render({recaps: []});
+  expect(renderedText(renderer)).toContain('No recaps yet');
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'recaps empty state',
+    ),
+  ).toBeDefined();
+});
+
+test('empty Daily Recaps keep incomplete conversation coverage instead of claiming emptiness', () => {
+  const renderer = render({
+    recaps: [],
+    recapEmptyCopy: 'Recaps are incomplete.',
+  });
+  expect(renderedText(renderer)).toContain('Recaps are incomplete.');
+  expect(renderedText(renderer)).not.toContain('No recaps yet');
+});
+
+test('loaded Daily Recaps keep incomplete coverage instead of looking complete', () => {
+  const renderer = render({
+    recapCoverageCopy: 'Recaps are incomplete.',
+  });
+  expect(renderedText(renderer)).toContain('Omi gets simpler');
+  expect(renderedText(renderer)).toContain('Recaps are incomplete.');
+  expect(renderedText(renderer)).not.toContain('No recaps yet');
+});
+
+test('loaded Daily Recaps omit more-available after a closed later page', () => {
+  const renderer = render({
+    recapCoverageCopy: null,
+  });
+  expect(renderedText(renderer)).toContain('Omi gets simpler');
+  expect(renderedText(renderer)).not.toContain('More recaps are available.');
+});
+
+test('Daily Recaps open the matching conversation instead of remaining display-only', () => {
+  const onOpenRecap = jest.fn();
+  const renderer = render({onOpenRecap});
+  act(() => {
+    renderer.root
+      .find(
+        node => node.props.accessibilityLabel === 'Open recap Omi gets simpler',
+      )
+      .props.onPress();
+  });
+  expect(onOpenRecap).toHaveBeenCalledWith('recap-1');
+});
+
+test('Daily Recaps stay display-only without an open handler', () => {
+  const renderer = render();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Open recap Omi gets simpler',
+    ),
+  ).toHaveLength(0);
+  expect(renderedText(renderer)).toContain('Omi gets simpler');
+});
+
+test('compact Home omits Open calls without a calls producer', () => {
+  const renderer = render();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Open calls',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Conversations',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
+test('compact Home keeps Open calls when a calls handler is mounted', () => {
+  const onOpenCalls = jest.fn();
+  const renderer = render({onOpenCalls});
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open calls')
+      .props.onPress();
+  });
+  expect(onOpenCalls).toHaveBeenCalledTimes(1);
+});
+
+test('loaded Home tasks keep more-available coverage instead of looking complete', () => {
+  const renderer = render({
+    taskCoverageCopy: 'More tasks are available.',
+  });
+  expect(renderedText(renderer)).toContain('Prepare product demo');
+  expect(renderedText(renderer)).toContain('More tasks are available.');
+});
+
+test('loaded Home tasks omit more-available after a closed later page', () => {
+  const renderer = render({
+    taskCoverageCopy: null,
+  });
+  expect(renderedText(renderer)).toContain('Prepare product demo');
+  expect(renderedText(renderer)).not.toContain('More tasks are available.');
+});
+
+test('loaded Tasks tab omit more-available after a closed later page', () => {
+  const renderer = render({
+    activeRoute: 'tasks',
+    taskCoverageCopy: null,
+  });
+  expect(renderedText(renderer)).toContain('Prepare product demo');
+  expect(renderedText(renderer)).not.toContain('More tasks are available.');
+});
+
+test('loaded Tasks tab keep more-available coverage instead of looking complete', () => {
+  const renderer = render({
+    activeRoute: 'tasks',
+    taskCoverageCopy: 'More tasks are available.',
+  });
+  expect(renderedText(renderer)).toContain('Prepare product demo');
+  expect(renderedText(renderer)).toContain('More tasks are available.');
+});
+
+test('nested non-retryable recap errors use unavailable copy instead of a load blip', () => {
+  const renderer = render({
+    recaps: [],
+    recapStatus: 'error',
+    recapErrorCopy:
+      'This saved data is not available from the selected Omi service yet.',
+  });
+  expect(renderedText(renderer)).toContain(
+    'This saved data is not available from the selected Omi service yet.',
+  );
+  expect(renderedText(renderer)).not.toContain('Couldn’t load recaps');
+});
+
+test('nested non-retryable Home task errors use unavailable copy instead of a load blip', () => {
+  const renderer = render({
+    tasks: [],
+    taskStatus: 'error',
+    taskErrorCopy:
+      'This saved data is not available from the selected Omi service yet.',
+    onRefresh: jest.fn(),
+  });
+  expect(renderedText(renderer)).toContain(
+    'This saved data is not available from the selected Omi service yet.',
+  );
+  expect(renderedText(renderer)).not.toContain('Couldn’t load tasks');
+  expect(renderedText(renderer)).not.toContain(
+    'Task editing is unavailable for this connection.',
+  );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh tasks',
+    ),
+  ).toHaveLength(0);
+});
+
+test('retryable Home task errors still offer Refresh', () => {
+  const onRefresh = jest.fn();
+  const renderer = render({
+    tasks: [],
+    taskStatus: 'error',
+    taskErrorCopy:
+      'This saved data could not be loaded. Retry without changing it.',
+    onRefresh,
+  });
+  const refresh = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Refresh tasks',
+  );
+  act(() => refresh.props.onPress());
+  expect(onRefresh).toHaveBeenCalledTimes(1);
+});
+
+test('nested non-retryable Tasks tab errors omit Refresh', () => {
+  const renderer = render({
+    activeRoute: 'tasks',
+    tasks: [],
+    taskStatus: 'error',
+    taskErrorCopy:
+      'This saved data is not available from the selected Omi service yet.',
+    onRefresh: jest.fn(),
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh tasks',
+    ),
+  ).toHaveLength(0);
+});
+
+test('retryable Tasks tab errors still offer Refresh', () => {
+  const renderer = render({
+    activeRoute: 'tasks',
+    tasks: [],
+    taskStatus: 'error',
+    taskErrorCopy:
+      'This saved data could not be loaded. Retry without changing it.',
+    onRefresh: jest.fn(),
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh tasks',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
+test('nested non-retryable recap errors omit Refresh', () => {
+  const renderer = render({
+    recaps: [],
+    recapStatus: 'error',
+    recapErrorCopy:
+      'This saved data is not available from the selected Omi service yet.',
+    onRefresh: jest.fn(),
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh recaps',
+    ),
+  ).toHaveLength(0);
+});
+
+test('retryable recap errors still offer Refresh', () => {
+  const renderer = render({
+    recaps: [],
+    recapStatus: 'error',
+    recapErrorCopy:
+      'This saved data could not be loaded. Retry without changing it.',
+    onRefresh: jest.fn(),
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh recaps',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
+test('nested non-retryable mind map errors omit Refresh', () => {
+  const renderer = render({
+    mindMapStatus: 'error',
+    mindMapErrorCopy:
+      'This saved data is not available from the selected Omi service yet.',
+    onRefresh: jest.fn(),
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh mind map',
+    ),
+  ).toHaveLength(0);
+});
+
+test('retryable mind map errors still offer Refresh', () => {
+  const renderer = render({
+    mindMapStatus: 'error',
+    mindMapErrorCopy:
+      'This saved data could not be loaded. Retry without changing it.',
+    onRefresh: jest.fn(),
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh mind map',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
+test('empty mind map keeps the complete-library copy by default', () => {
+  const renderer = render();
+  expect(renderedText(renderer)).toContain('No memories yet.');
+  expect(renderedText(renderer)).toContain('View All');
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'mind map empty state',
+    ),
+  ).toBeDefined();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Mind map preview',
+    ),
+  ).toHaveLength(0);
+});
+
+test('empty mind map keeps incomplete coverage instead of claiming emptiness', () => {
+  const renderer = render({
+    mindMapEmptyCopy: 'Memories are incomplete.',
+  });
+  expect(renderedText(renderer)).toContain('Memories are incomplete.');
+  expect(renderedText(renderer)).not.toContain('No memories yet.');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Mind map preview',
+    ),
+  ).toHaveLength(0);
+});
+
+test('loaded mind map preview keeps incomplete coverage instead of looking complete', () => {
+  const renderer = render({
+    mindMapHasItems: true,
+    mindMapCoverageCopy: 'Memories are incomplete.',
+  });
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Mind map preview',
+    ),
+  ).toBeDefined();
+  expect(renderedText(renderer)).toContain('Memories are incomplete.');
+  expect(renderedText(renderer)).not.toContain('No memories yet.');
+});
+
+test('loaded mind map preview omits more-available after a closed later page', () => {
+  const renderer = render({
+    mindMapHasItems: true,
+    mindMapCoverageCopy: null,
+  });
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Mind map preview',
+    ),
+  ).toBeDefined();
+  expect(renderedText(renderer)).not.toContain('More memories are available.');
+});
+
+test('missing settings content does not offer Refresh', () => {
+  const renderer = render({
+    activeRoute: 'settings',
+    onRefresh: jest.fn(),
+  });
+  expect(renderedText(renderer)).toContain('Couldn’t load settings');
+  expect(
+    renderer.root.findAll(node =>
+      String(node.props.accessibilityLabel ?? '').startsWith('Refresh '),
+    ),
+  ).toHaveLength(0);
+});
+
+test('Home does not claim task editing unavailable while tasks are loading', () => {
+  const renderer = render({tasks: [], taskStatus: 'loading'});
+  expect(renderedText(renderer)).not.toContain(
+    'Task editing is unavailable for this connection.',
+  );
+});
+
+test('Home reports a closed task-write door after tasks load', () => {
+  const renderer = render({writesAvailable: false});
+  expect(renderedText(renderer)).toContain(
+    'Task editing is unavailable for this connection.',
+  );
+});
+
+test('nested non-retryable mind map errors use unavailable copy instead of a load blip', () => {
+  const renderer = render({
+    mindMapStatus: 'error',
+    mindMapErrorCopy:
+      'This saved data is not available from the selected Omi service yet.',
+  });
+  expect(renderedText(renderer)).toContain(
+    'This saved data is not available from the selected Omi service yet.',
+  );
+  expect(renderedText(renderer)).not.toContain('Couldn’t load mind map');
+});
+
+test('empty Home tasks keep the complete-library copy by default', () => {
+  const renderer = render({tasks: []});
+  expect(renderedText(renderer)).toContain("Nothing's waiting on you.");
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'tasks empty state',
+    ),
+  ).toBeDefined();
+});
+
+test('empty Home tasks keep incomplete coverage instead of claiming emptiness', () => {
+  const renderer = render({
+    tasks: [],
+    taskEmptyCopy: 'Tasks are incomplete.',
+  });
+  expect(renderedText(renderer)).toContain('Tasks are incomplete.');
+  expect(renderedText(renderer)).not.toContain("Nothing's waiting on you.");
+});
+
+test('empty Tasks tab keeps incomplete coverage instead of claiming emptiness', () => {
+  const renderer = render({
+    activeRoute: 'tasks',
+    tasks: [],
+    taskEmptyCopy: 'Tasks are incomplete.',
+  });
+  expect(renderedText(renderer)).toContain('Tasks are incomplete.');
+  expect(renderedText(renderer)).not.toContain("Nothing's waiting on you.");
+});
+
+test('untitled processing recaps stay visible instead of rendering a blank card', () => {
+  const renderer = render({
+    recaps: [
+      {
+        id: 'recap-processing',
+        title: 'Processing conversation…',
+        dateLabel: 'Monday',
+      },
+    ],
+  });
+  expect(renderedText(renderer)).toContain('Processing conversation…');
+  expect(renderedText(renderer)).not.toContain('No recaps yet');
+});
+
+test('missing settings content reports unavailable instead of a blank settings stage', () => {
+  const renderer = render({activeRoute: 'settings'});
+  expect(renderedText(renderer)).toContain('Couldn’t load settings');
+});
+
+test('mounted settings content is not replaced by a blank settings stage', () => {
+  const renderer = render({
+    activeRoute: 'settings',
+    settingsContent: <Text>Account settings loaded</Text>,
+  });
+  expect(renderedText(renderer)).toContain('Account settings loaded');
+  expect(renderedText(renderer)).not.toContain('Couldn’t load settings');
 });
 
 test('task edits wait for authoritative props and preserve a failed draft for retry', () => {
@@ -308,6 +872,81 @@ test('mobile waiting-for-audio state never claims Listening before the first pac
     ),
   );
   expect(renderedText(renderer)).toContain('Listening');
+  expect(renderedText(renderer)).toContain('Live transcript is not available.');
   expect(renderedText(renderer)).not.toContain('Waiting for audio');
+  act(() => renderer.unmount());
+});
+
+test('idle capture does not claim Paused when nothing is recording', () => {
+  const renderer = render({
+    capture: {active: false, waitingForAudio: false, transcript: ''},
+  });
+  expect(renderedText(renderer)).toContain('Not capturing');
+  expect(renderedText(renderer)).not.toContain('Paused');
+  expect(renderedText(renderer)).not.toContain('Capture is paused');
+  act(() => renderer.unmount());
+});
+
+test('live capture without a transcript does not claim speech text', () => {
+  const renderer = render({
+    capture: {active: true, waitingForAudio: false, transcript: ''},
+  });
+  expect(renderedText(renderer)).toContain('Listening');
+  expect(renderedText(renderer)).toContain('Live transcript is not available.');
+  expect(renderedText(renderer)).not.toContain('Listening for speech');
+  expect(renderedText(renderer)).not.toContain('Waiting for audio');
+  act(() => renderer.unmount());
+});
+
+test('compact Home mind map opens Memories with View All instead of claiming Expand', () => {
+  const onExpandMindMap = jest.fn();
+  const renderer = render({mindMapHasItems: true, onExpandMindMap});
+  expect(renderedText(renderer)).not.toContain('Expand');
+  expect(renderedText(renderer)).toContain('View All');
+  const viewAll = renderer.root.find(
+    node =>
+      node.props.accessibilityLabel === 'View All Mind Map' &&
+      typeof node.props.onPress === 'function',
+  );
+  act(() => {
+    viewAll.props.onPress();
+  });
+  expect(onExpandMindMap).toHaveBeenCalledTimes(1);
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Mind map preview',
+    ),
+  ).toBeDefined();
+  act(() => renderer.unmount());
+});
+
+test('compact Home omits a capture microphone without a start-capture producer', () => {
+  const renderer = render({
+    capture: {active: false, waitingForAudio: false, transcript: ''},
+  });
+  const captureCard = renderer.root.find(
+    node => node.props.style?.minHeight === 74,
+  );
+  expect(
+    captureCard.findAll(
+      node => node.props.size != null || node.props.onPress != null,
+    ),
+  ).toHaveLength(0);
+  expect(renderedText(renderer)).toContain('Not capturing');
+  act(() =>
+    renderer.update(
+      <MobileAppSurface
+        {...buildProps({
+          capture: {active: true, waitingForAudio: false, transcript: ''},
+        })}
+      />,
+    ),
+  );
+  expect(
+    renderer.root
+      .find(node => node.props.style?.minHeight === 74)
+      .findAll(node => node.props.size != null || node.props.onPress != null),
+  ).toHaveLength(0);
+  expect(renderedText(renderer)).toContain('Listening');
   act(() => renderer.unmount());
 });

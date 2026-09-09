@@ -44,7 +44,10 @@ async function render(value: Device) {
 test('requires reported feature bits and valid observed values before exposing writes', async () => {
   await render({...device, features: undefined});
   expect(renderer.root.findAllByType(FocusPressable)).toHaveLength(0);
-  expect(JSON.stringify(renderer.toJSON())).toContain('Unknown');
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    '"Charging:"," ","Unavailable"',
+  );
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('Unknown');
   await act(async () => {
     renderer.update(<DeviceControls device={device} busy={false} />);
   });

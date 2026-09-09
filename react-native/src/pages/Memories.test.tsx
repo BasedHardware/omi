@@ -9,11 +9,18 @@ import type {
 } from '../desktopReadClient';
 
 const mockLoad = jest.fn();
-jest.mock('../desktopReadClient', () => ({
-  loadMemories: (...args: unknown[]) => mockLoad(...args),
-}));
+jest.mock('../desktopReadClient', () => {
+  const actual = jest.requireActual(
+    '../desktopReadClient',
+  ) as typeof import('../desktopReadClient');
+  return {
+    ...actual,
+    loadMemories: (...args: unknown[]) => mockLoad(...args),
+  };
+});
 jest.mock('../omiNative', () => ({omiBackend: {}}));
 import {MemoriesPage} from './Memories';
+import {desktopBackendUnavailableCopy} from '../desktopReadClient';
 
 const page = (cursor: string | null): ReadPageState => ({
   windowStatus: cursor ? 'more' : 'complete',
@@ -62,6 +69,27 @@ const ids = (view: Renderer.ReactTestRenderer) =>
   (view.root.findByType(FlatList).props.data as MemoryProjection[]).map(
     item => item.id,
   );
+const incompletePage: ReadPageState = {
+  windowStatus: 'incomplete',
+  complete: false,
+  hasMore: false,
+  nextCursor: null,
+  completenessStatus: 'incomplete',
+  reasons: ['accepted_work_pending'],
+};
+const textOf = (view: Renderer.ReactTestRenderer) =>
+  view.root
+    .findAllByType(Text)
+    .flatMap(node =>
+      Array.isArray(node.props.children)
+        ? node.props.children
+        : [node.props.children],
+    )
+    .filter(
+      (value): value is string | number =>
+        typeof value === 'string' || typeof value === 'number',
+    )
+    .join(' ');
 beforeEach(() => mockLoad.mockReset());
 
 test.each(['resolve', 'reject'] as const)(
@@ -155,5 +183,322 @@ test('retiring the read outcome clears loaded memories and ignores its delayed p
     ).toHaveLength(0);
   } finally {
     await act(async () => view.unmount());
+  }
+});
+
+test('memory grant denial shows the typed error instead of an empty library', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'error',
+          error: 'This saved data is not available for this account.',
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(textOf(view)).toContain(
+    'This saved data is not available for this account.',
+  );
+  expect(textOf(view)).not.toContain('No memories yet.');
+});
+
+test('nested non-retryable memory reads omit Refresh', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'error',
+          error: desktopBackendUnavailableCopy,
+        }}
+        loading={false}
+        onRefresh={jest.fn()}
+      />,
+    );
+  });
+  expect(textOf(view)).toContain(desktopBackendUnavailableCopy);
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh memories',
+    ),
+  ).toHaveLength(0);
+});
+
+test('retryable memory reads still offer Refresh', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'error',
+          error:
+            'This saved data could not be loaded. Retry without changing it.',
+        }}
+        loading={false}
+        onRefresh={jest.fn()}
+      />,
+    );
+  });
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh memories',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
+test('incomplete empty memories do not claim a complete library', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {items: [], page: incompletePage},
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(textOf(view)).toContain('Memories are incomplete.');
+  expect(textOf(view)).not.toContain('No memories yet.');
+});
+
+test('degraded empty memories do not claim a complete library', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [],
+            page: {
+              ...incompletePage,
+              completenessStatus: 'degraded',
+              reasons: ['projection_unavailable'],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(textOf(view)).toContain('Memories may be temporarily incomplete.');
+  expect(textOf(view)).not.toContain('No memories yet.');
+});
+
+test('an incomplete empty memory search does not claim a complete miss', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {items: [], page: incompletePage},
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    act(() => {
+      view.root
+        .find(
+          node => node.props.accessibilityLabel === 'Search loaded memories',
+        )
+        .props.onChangeText('nomatch');
+    });
+    expect(textOf(view)).toContain('Memories are incomplete.');
+    expect(textOf(view)).not.toContain('No loaded memories match.');
+  } finally {
+    act(() => {
+      view.unmount();
+    });
+  }
+});
+
+test('generic later-page memory failures still offer Load more', async () => {
+  mockLoad.mockRejectedValueOnce(new Error('memory page failed'));
+  let view!: Renderer.ReactTestRenderer;
+  await act(async () => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={outcome('kept-first', 'next-cursor')}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    await act(async () => {
+      button(view).props.onPress();
+    });
+    expect(textOf(view)).toContain('More memories could not be loaded.');
+    expect(textOf(view)).toContain('Load more memories');
+    expect(textOf(view)).not.toContain(desktopBackendUnavailableCopy);
+    expect(ids(view)).toEqual(['kept-first']);
+    expect(button(view)).toBeDefined();
+  } finally {
+    await act(async () => view.unmount());
+  }
+});
+
+test('nested non-retryable later memory pages do not claim a load blip', async () => {
+  mockLoad.mockRejectedValueOnce(new Error(desktopBackendUnavailableCopy));
+  let view!: Renderer.ReactTestRenderer;
+  await act(async () => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={outcome('kept-first', 'next-cursor')}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    await act(async () => {
+      button(view).props.onPress();
+    });
+    expect(textOf(view)).toContain(desktopBackendUnavailableCopy);
+    expect(textOf(view)).not.toContain('More memories could not be loaded.');
+    expect(textOf(view)).not.toContain('More memories are available.');
+    expect(ids(view)).toEqual(['kept-first']);
+    expect(
+      view.root.findAll(
+        node => node.props.accessibilityLabel === 'Load more memories',
+      ),
+    ).toHaveLength(0);
+    act(() => {
+      view.root
+        .find(
+          node => node.props.accessibilityLabel === 'Search loaded memories',
+        )
+        .props.onChangeText('nomatch');
+    });
+    expect(textOf(view)).toContain('No loaded memories match.');
+    expect(textOf(view)).not.toContain('More memories are available.');
+  } finally {
+    await act(async () => view.unmount());
+  }
+});
+
+test('omitted memory lineage does not claim Synthesized memory', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...memory('omitted-lineage'),
+                provenance: {
+                  label: null,
+                  synthesisVersion: null,
+                  inputDigest: null,
+                  outputDigest: null,
+                },
+              },
+              {
+                ...memory('whitespace-lineage'),
+                provenance: {
+                  label: null,
+                  synthesisVersion: ' \t\n',
+                  inputDigest: 'a',
+                  outputDigest: 'b',
+                },
+              },
+              memory('present-lineage'),
+            ],
+            page: page(null),
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    const copy = textOf(view);
+    expect(copy).toContain('0 citations');
+    expect(copy).toContain('Synthesized memory');
+    expect(
+      view.root.findAll(
+        node =>
+          node.type === Text && node.props.children === 'Synthesized memory',
+      ),
+    ).toHaveLength(1);
+  } finally {
+    act(() => view.unmount());
+  }
+});
+
+test('empty memory bodies stay visible instead of a blank card', async () => {
+  let view!: Renderer.ReactTestRenderer;
+  await act(async () => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...memory('blank'),
+                title: '',
+                summary: '',
+                searchableText: '',
+              },
+            ],
+            page: page(null),
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    expect(textOf(view)).toContain('Memory text unavailable');
+    expect(
+      view.root.find(
+        node =>
+          node.props.accessibilityLabel === 'Memory: Memory text unavailable',
+      ),
+    ).toBeDefined();
+    act(() => {
+      view.root
+        .find(
+          node => node.props.accessibilityLabel === 'Search loaded memories',
+        )
+        .props.onChangeText('unavailable');
+    });
+    expect(textOf(view)).toContain('Memory text unavailable');
+    expect(textOf(view)).not.toContain('No loaded memories match.');
+  } finally {
+    await act(async () => view.unmount());
+  }
+});
+
+test('a zero memory timestamp says Date unavailable instead of 1970', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [{...memory('zero-date'), timestamp: 0}],
+            page: page(null),
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    expect(textOf(view)).toContain('Date unavailable');
+    expect(textOf(view)).not.toContain('1970');
+  } finally {
+    act(() => view.unmount());
   }
 });

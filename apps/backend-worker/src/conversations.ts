@@ -1,3 +1,9 @@
+import {
+  recoveredPayloadTextKeySql,
+  visibleGenerationTrim,
+  visibleStoredTextTrimSql,
+} from "./generation-prompt";
+
 type StoredConversation = {
   id: number[];
   title: number[];
@@ -80,8 +86,10 @@ export async function readConversations(
     .prepare(
       `WITH normalized AS (
          SELECT position, sender, created_at, generation_outcome, text,
-           (SELECT CASE WHEN type = 'text' THEN value END FROM json_each(CASE WHEN json_valid(payload) THEN payload ELSE '{}' END)
-            WHERE key = 'chatSessionId' ORDER BY id DESC LIMIT 1) AS session_key
+           ${recoveredPayloadTextKeySql(
+             "chat_messages",
+             "chatSessionId"
+           )} AS session_key
          FROM chat_messages WHERE account_id = ?
        ), sessions AS (
          SELECT position, sender, created_at, generation_outcome, text,
@@ -95,7 +103,7 @@ export async function readConversations(
            row_number() OVER (PARTITION BY session_id ORDER BY sender = 'human' DESC, position) AS title_rank
          FROM sessions
        ), selected AS (
-         SELECT *, trim(text, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279)) AS display_text
+         SELECT *, ${visibleStoredTextTrimSql("text")} AS display_text
          FROM ranked WHERE first_rank = 1 OR last_rank = 1 OR title_rank = 1
        )
        SELECT CAST(session_id AS BLOB) AS id,
@@ -112,7 +120,9 @@ export async function readConversations(
   const conversations = result.results.map(projectConversation);
   const recordings = await db
     .prepare(
-      "SELECT s.id, s.started_at, s.ended_at, s.captured_at_ms, t.state, substr(trim(t.text), 1, 241) AS text, t.updated_at FROM device_transcriptions t JOIN device_sessions s ON s.id = t.session_id AND s.account_id = t.account_id WHERE t.account_id = ? ORDER BY s.started_at DESC"
+      `SELECT s.id, s.started_at, s.ended_at, s.captured_at_ms, t.state, substr(${visibleStoredTextTrimSql(
+        "t.text"
+      )}, 1, 241) AS text, t.updated_at FROM device_transcriptions t JOIN device_sessions s ON s.id = t.session_id AND s.account_id = t.account_id WHERE t.account_id = ? ORDER BY s.started_at DESC`
     )
     .bind(accountId)
     .all<{
@@ -127,10 +137,8 @@ export async function readConversations(
   for (const recording of recordings.results) {
     conversations.push({
       id: `recording:${recording.id}`,
-      title: recording.text?.trim()
-        ? displayText(recording.text).slice(0, 80)
-        : "Recording",
-      overview: recording.text === null ? "" : displayText(recording.text),
+      title: displayText(recording.text ?? "").slice(0, 80),
+      overview: displayText(recording.text ?? ""),
       createdAt: recording.started_at,
       updatedAt: recording.updated_at,
       startedAt: recording.started_at,
@@ -283,13 +291,11 @@ function boundedDisplayText(bytes: number[]): string {
   const text = new TextDecoder().decode(new Uint8Array(bytes), {
     stream: true,
   });
-  if (text.length === 0) return "Chat";
   return text.length > 240 ? `${text.slice(0, 237)}...` : text;
 }
 
 function displayText(text: string): string {
-  const trimmed = text.trim();
-  if (trimmed.length === 0) return "Chat";
+  const trimmed = visibleGenerationTrim(text);
   return trimmed.length > 240 ? `${trimmed.slice(0, 237)}...` : trimmed;
 }
 

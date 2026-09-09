@@ -8,6 +8,7 @@ import {
   readConversations,
   paginateConversations,
 } from "../src/conversations";
+import { terminalEvent } from "../src/chat";
 import handler from "../src/index";
 
 const chatSchema = [
@@ -195,6 +196,43 @@ describe("D1-authoritative chat persistence", () => {
     expect(body.messages[0]!.sender).toBe("human");
   });
 
+  test("history GET stays on the main session unless chatSessionId is requested", async () => {
+    await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(chatCreate("d1-main-session", "main prompt")),
+    });
+    await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("d1-named-session", "named prompt"),
+        chatSessionId: "session-alpha",
+      }),
+    });
+
+    const main = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(main.status).toBe(200);
+    expect(
+      ((await main.json()) as { messages: Array<{ id: string }> }).messages.map(
+        (message) => message.id
+      )
+    ).toEqual(["d1-main-session"]);
+
+    const named = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+      { headers: authenticatedHeaders }
+    );
+    expect(named.status).toBe(200);
+    expect(
+      (
+        (await named.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["d1-named-session"]);
+  });
+
   test("idempotent replay returns the same message without duplicating D1 rows", async () => {
     const init = {
       method: "POST",
@@ -281,9 +319,18 @@ describe("D1-authoritative chat persistence", () => {
     });
     expect(before.status).toBe(200);
     const beforeBody = (await before.json()) as {
-      entitlement: { used: number; limit: number };
+      entitlement: {
+        planLabel: string;
+        used: number;
+        limit: number;
+        upgradeAvailable: boolean;
+      };
     };
     expect(beforeBody.entitlement.used).toBe(0);
+    expect(beforeBody.entitlement.limit).toBe(env.STAGING_CHAT_LIMIT);
+    expect(beforeBody.entitlement.planLabel).toBe("");
+    expect(beforeBody.entitlement.planLabel).not.toBe(env.STAGING_PLAN_LABEL);
+    expect(beforeBody.entitlement.upgradeAvailable).toBe(false);
 
     await fetchWorker("/v1/chat-messages", {
       method: "POST",
@@ -298,6 +345,7 @@ describe("D1-authoritative chat persistence", () => {
       entitlement: { used: number; limit: number };
     };
     expect(afterBody.entitlement.used).toBe(1);
+    expect(afterBody.entitlement.limit).toBe(env.STAGING_CHAT_LIMIT);
   });
 
   test("alarm completes generation and writes AI message with done event to D1", async () => {
@@ -436,6 +484,78 @@ describe("D1 chat projects an honest conversation list", () => {
     ]);
   });
 
+  test("space-padded and space-only stored chat-main group onto chat:chat-main", async () => {
+    const bodies = [
+      { ...chatCreate("d1-exact-main", "stored as chat-main"), at: 1 },
+      {
+        ...chatCreate("d1-padded-main", "stored as space-padded chat-main"),
+        at: 2,
+        chatSessionId: " chat-main ",
+      },
+      {
+        ...chatCreate("d1-space-main", "stored as space-only chatSessionId"),
+        at: 3,
+        chatSessionId: "  ",
+      },
+      {
+        ...chatCreate("d1-named", "named session stays named"),
+        at: 5,
+        chatSessionId: "session-alpha",
+      },
+      {
+        ...chatCreate("d1-padded-named", "padded named stays named"),
+        at: 4,
+        chatSessionId: " session-alpha ",
+      },
+    ];
+    for (const body of bodies) {
+      const created = await fetchWorker("/v1/chat-messages", {
+        method: "POST",
+        headers: {
+          ...authenticatedHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      expect(created.status).toBe(201);
+    }
+
+    const listed = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(listed.status).toBe(200);
+    expect(
+      ((await listed.json()) as { items: Array<{ id: string }> }).items.map(
+        (item) => item.id
+      )
+    ).toEqual([
+      "chat:session-alpha",
+      "chat: session-alpha ",
+      MAIN_CONVERSATION_ID,
+    ]);
+
+    const mainHistory = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(mainHistory.status).toBe(200);
+    expect(
+      (
+        (await mainHistory.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["d1-exact-main", "d1-padded-main", "d1-space-main"]);
+
+    const paddedQuery = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=%20chat-main%20",
+      { headers: authenticatedHeaders }
+    );
+    expect(paddedQuery.status).toBe(200);
+    expect(
+      (
+        (await paddedQuery.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual([]);
+  });
+
   test("conversation metadata stays bounded and preserves projection semantics", async () => {
     const accountId = "bounded-conversation-metadata";
     const title = `\uFEFF\t${"😀".repeat(130)}${" ".repeat(1000)}tail\u00a0`;
@@ -543,11 +663,72 @@ describe("D1 chat projects an honest conversation list", () => {
     });
     expect(rows[1]).toMatchObject({
       id: MAIN_CONVERSATION_ID,
-      title: "Chat",
+      title: "",
       overview: "Fallback overview",
       createdAt: 400,
       updatedAt: 440,
       finishedAt: null,
+      status: "in_progress",
+    });
+  });
+
+  test("empty chat titles stay visible without inventing a Chat title", async () => {
+    const accountId = "empty-chat-title";
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind("empty-chat-title-1", accountId, " \t\n", 1, 1, "{broken")
+      .run();
+    const rows = await readConversations(env.DB, accountId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: MAIN_CONVERSATION_ID,
+      title: "",
+      overview: "",
+      source: "chat",
+      status: "in_progress",
+    });
+  });
+
+  test("NEXT LINE-only chat titles stay visible without inventing a Chat title", async () => {
+    const accountId = "nel-chat-title";
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind("nel-chat-title-1", accountId, "\u0085", 1, 1, "{broken")
+      .run();
+    const rows = await readConversations(env.DB, accountId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: MAIN_CONVERSATION_ID,
+      title: "",
+      overview: "",
+      source: "chat",
+      status: "in_progress",
+    });
+  });
+
+  test("chat titles omit leading and trailing NEXT LINE", async () => {
+    const accountId = "nel-padded-chat-title";
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind(
+        "nel-padded-chat-title-1",
+        accountId,
+        "\u0085Visible title\u0085",
+        1,
+        1,
+        "{broken"
+      )
+      .run();
+    const rows = await readConversations(env.DB, accountId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: MAIN_CONVERSATION_ID,
+      title: "Visible title",
+      overview: "Visible title",
+      source: "chat",
       status: "in_progress",
     });
   });
@@ -724,7 +905,7 @@ describe("D1 chat projects an honest conversation list", () => {
     expect(walked).toEqual(rows.map((row) => row.id));
   });
 
-  test("memories remain retryably unavailable because D1 has no memories store", async () => {
+  test("memories remain non-retryably unavailable because D1 has no memories store", async () => {
     const response = await fetchWorker("/v1/memories", {
       headers: authenticatedHeaders,
     });
@@ -732,8 +913,8 @@ describe("D1 chat projects an honest conversation list", () => {
     expect(await response.json()).toEqual({
       error: {
         code: "projection_unavailable",
-        retryable: true,
-        action: "retry",
+        retryable: false,
+        action: "none",
       },
     });
   });
@@ -751,6 +932,44 @@ describe("D1 chat attachment admit bind", () => {
       message: { attachments: unknown[] };
     };
     expect(body.message.attachments).toEqual([]);
+  });
+
+  test("chat create with attachments without object storage is nested non-retryable", async () => {
+    await insertAttachment({
+      id: "d1-att-no-r2",
+      accountId: "test-account",
+      state: "ingested",
+    });
+    const response = await handler.fetch(
+      new Request("https://worker.test/v1/chat-messages", {
+        method: "POST",
+        headers: {
+          ...authenticatedHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          ...chatCreate("d1-attach-no-r2"),
+          attachmentIds: ["d1-att-no-r2"],
+        }),
+      }),
+      {
+        ...env,
+        API_TOKEN: "test-token",
+        AI: { run: async () => ({ response: "AI reply" }) },
+        ATTACHMENTS: undefined,
+      } as never,
+      createExecutionContext()
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBeNull();
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
   });
 
   test("foreign and incomplete attachments stay rejected", async () => {
@@ -924,7 +1143,7 @@ describe("generation reads bound attachment bytes", () => {
     expect(captured[0]).toContain("plain file contents");
   });
 
-  test("foreign-account and missing R2 text do not leak into the prompt", async () => {
+  test("missing bound text fails generation instead of dropping bytes or leaking foreign files", async () => {
     await insertAttachment({
       id: "d1-att-foreign-text",
       accountId: "other-account",
@@ -957,6 +1176,9 @@ describe("generation reads bound attachment bytes", () => {
       }),
     });
     expect(admitted.status).toBe(201);
+    const admittedBody = (await admitted.json()) as {
+      generation: { id: string };
+    };
 
     const captured: string[] = [];
     const stub = env.ACCOUNTS.getByName("test-account");
@@ -981,7 +1203,14 @@ describe("generation reads bound attachment bytes", () => {
       });
     });
     expect(await runDurableObjectAlarm(stub)).toBe(true);
-    expect(captured).toEqual(["hello without file"]);
-    expect(captured[0]).not.toContain("foreign-secret-bytes");
+    expect(captured).toEqual([]);
+    expect(captured.join("")).not.toContain("foreign-secret-bytes");
+    expect(
+      await terminalEvent(env.DB, "test-account", admittedBody.generation.id)
+    ).toEqual({
+      id: "2",
+      kind: "failed",
+      error: { code: "generation_failed", retryable: true },
+    });
   });
 });

@@ -2,6 +2,7 @@ import React from 'react';
 import {TextInput, View} from 'react-native';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import Square from 'lucide-react-native/icons/square';
+import {visibleDisplayText} from '../desktopReadClient';
 import {omiBackend} from '../omiNative';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
@@ -18,6 +19,7 @@ export function Composer({
   onFocusChange,
   onSend,
   onStop,
+  sendUnavailable,
 }: {
   activeGenerationId: string | null;
   chatBusy: boolean;
@@ -30,7 +32,10 @@ export function Composer({
   onFocusChange: (focused: boolean) => void;
   onSend: () => void;
   onStop: () => void;
+  sendUnavailable: boolean;
 }) {
+  const backendMissing = omiBackend === undefined || omiBackend === null;
+  const sendBlocked = backendMissing || sendUnavailable;
   return (
     <View style={[styles.composerWrap, compact && styles.composerWrapCompact]}>
       <View
@@ -41,14 +46,22 @@ export function Composer({
         ]}>
         <TextInput
           accessibilityLabel="Ask Omi"
+          editable={!sendBlocked}
           multiline
           onBlur={() => onFocusChange(false)}
           onChangeText={onDraftChange}
           onFocus={() => onFocusChange(true)}
-          placeholder="Ask anything..."
+          placeholder={
+            sendBlocked
+              ? 'Sending messages is not available on this backend yet.'
+              : 'Ask anything...'
+          }
           placeholderTextColor="#888888"
           ref={composerRef}
-          style={styles.composerInput}
+          style={[
+            styles.composerInput,
+            sendBlocked && styles.composerInputUnavailable,
+          ]}
           value={draft}
         />
         <View style={styles.composerActions}>
@@ -57,23 +70,22 @@ export function Composer({
             accessibilityLabel={
               activeGenerationId !== null
                 ? 'Stop response'
-                : omiBackend === undefined || omiBackend === null
+                : sendBlocked
                 ? 'Send message unavailable'
                 : 'Send message'
             }
             accessibilityRole="button"
             disabled={
-              omiBackend === undefined ||
-              omiBackend === null ||
-              (activeGenerationId === null && (draft.trim() === '' || chatBusy))
+              sendBlocked ||
+              (activeGenerationId === null &&
+                (visibleDisplayText(draft) === '' || chatBusy))
             }
             onPress={activeGenerationId === null ? onSend : onStop}
             style={({pressed}) => [
               styles.sendButton,
-              draft.trim() !== '' &&
+              visibleDisplayText(draft) !== '' &&
                 !chatBusy &&
-                omiBackend !== undefined &&
-                omiBackend !== null &&
+                !sendBlocked &&
                 styles.sendButtonEnabled,
               activeGenerationId !== null && styles.stopButton,
               pressed && styles.pressed,

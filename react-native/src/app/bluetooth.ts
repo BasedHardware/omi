@@ -1,3 +1,47 @@
+const bluetoothWireEventTokens = new Set([
+  'poweredOn',
+  'poweredOff',
+  'unauthorized',
+  'unknown',
+]);
+
+export function bluetoothAdapterUnchecked(
+  event: string | null | undefined,
+): boolean {
+  return event?.trim() === 'Bluetooth adapter not checked';
+}
+
+export function bluetoothSessionLabel(
+  snapshot: {bluetooth: string; lastEvent?: string | null} | null,
+): string {
+  if (
+    snapshot === null ||
+    (bluetoothAdapterUnchecked(snapshot.lastEvent) &&
+      snapshot.bluetooth === 'unknown')
+  ) {
+    return 'Checking Bluetooth…';
+  }
+  if (
+    snapshot.lastEvent?.trim() === 'Bluetooth is unavailable' &&
+    snapshot.bluetooth === 'unknown'
+  ) {
+    return 'Bluetooth unavailable';
+  }
+  return bluetoothStatusLabel(snapshot.bluetooth);
+}
+
+export function bluetoothSessionColor(
+  snapshot: {bluetooth: string; lastEvent?: string | null} | null,
+): string {
+  if (bluetoothSessionLabel(snapshot) === 'Checking Bluetooth…') {
+    return '#b4ad9f';
+  }
+  if (snapshot?.bluetooth === 'poweredOn') {
+    return '#45b79b';
+  }
+  return '#d9826f';
+}
+
 export function bluetoothStatusLabel(state: string): string {
   switch (state) {
     case 'poweredOn':
@@ -19,4 +63,51 @@ export function bluetoothStatusLabel(state: string): string {
     default:
       return 'Bluetooth status unknown';
   }
+}
+
+export function emptyDeviceListHint(
+  event: string | null | undefined,
+  bluetooth: string,
+  scanBusy = false,
+): string {
+  const trimmed = event?.trim() ?? '';
+  const match = /^Bluetooth is ([A-Za-z]+)$/.exec(trimmed);
+  const wireToken =
+    match !== null && bluetoothWireEventTokens.has(match[1]) ? match[1] : null;
+  if (
+    trimmed === 'Bluetooth is powered on' ||
+    wireToken === 'poweredOn' ||
+    (trimmed === '' && bluetooth === 'poweredOn')
+  ) {
+    return 'No Omi device was discovered.';
+  }
+  if (trimmed === 'Bluetooth is not powered on') {
+    return bluetoothStatusLabel('poweredOff');
+  }
+  if (trimmed === 'Bluetooth permission is required') {
+    return bluetoothStatusLabel('unauthorized');
+  }
+  if (trimmed === 'Bluetooth is unavailable') {
+    return bluetooth === 'unknown'
+      ? 'Bluetooth unavailable'
+      : emptyDeviceListHint('', bluetooth, scanBusy);
+  }
+  if (trimmed === 'Bluetooth adapter not checked') {
+    return bluetooth === 'unknown'
+      ? 'Checking Bluetooth…'
+      : emptyDeviceListHint('', bluetooth, scanBusy);
+  }
+  if (trimmed === '' || wireToken !== null) {
+    return bluetoothStatusLabel(wireToken ?? bluetooth);
+  }
+  const statusCode = /^(.+ failed): \d+$/.exec(trimmed);
+  if (statusCode !== null) {
+    return statusCode[1] === 'BLE scan failed'
+      ? 'Bluetooth scan failed.'
+      : `${statusCode[1]}.`;
+  }
+  if (trimmed === 'Scanning for Omi devices' && !scanBusy) {
+    return 'No Omi device was discovered.';
+  }
+  return trimmed;
 }

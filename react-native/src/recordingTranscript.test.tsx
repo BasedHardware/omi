@@ -87,6 +87,20 @@ test('loads full recording text through native transport without truncating to o
   expect(text?.props.selectable).toBe(true);
 });
 
+test('a completed whitespace-only transcript says empty instead of a blank body', async () => {
+  mockRequest.mockResolvedValue(response('session-one', 'completed', ' \t\n'));
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain('The transcript is empty.');
+  expect(textOf(renderer)).not.toMatch(/ \t\n/);
+});
+
+test('a completed NEXT LINE-only transcript says empty instead of a blank body', async () => {
+  mockRequest.mockResolvedValue(response('session-one', 'completed', '\u0085'));
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain('The transcript is empty.');
+  expect(textOf(renderer)).not.toContain('\u0085');
+});
+
 test.each(['queued', 'running'])(
   'shows %s state truthfully and resumes a completed result',
   async state => {
@@ -339,6 +353,8 @@ test('opens a recording row into the full transcript detail and retires it on ba
       );
     });
     expect(textOf(renderer)).toContain('Captured (device time)');
+    expect(textOf(renderer)).toContain('Time unavailable');
+    expect(textOf(renderer)).not.toContain('1970');
     expect(textOf(renderer)).toContain('Started ·');
     expect(textOf(renderer)).toContain('Finished ·');
     expect(textOf(renderer)).toContain('Locked');
@@ -409,6 +425,7 @@ test('conversation list exposes refresh and load more with truthful pending acti
   });
   expect(onRefresh).toHaveBeenCalledTimes(1);
   expect(onLoadMore).toHaveBeenCalledTimes(1);
+  expect(textOf(renderer)).toContain('Load more conversations');
   await act(async () => {
     renderer.update(
       <ConversationsPage
@@ -448,6 +465,57 @@ test('a failed historical transcript read retries GET without requiring capture 
     path: '/v1/device-sessions/historical-session/transcript',
   });
   expect(textOf(renderer)).toContain('Historical transcript');
+});
+
+test('nested non-retryable transcript 503s do not offer Check again', async () => {
+  mockRequest.mockResolvedValueOnce({
+    id: 'read',
+    status: 503,
+    body: JSON.stringify({
+      error: {
+        code: 'development_backend_unsupported',
+        retryable: false,
+        action: 'none',
+      },
+    }),
+  });
+  const renderer = await render('blocked-session');
+  expect(textOf(renderer)).toContain(
+    'Transcript is not available from this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain('Transcript could not be loaded.');
+  expect(textOf(renderer)).not.toContain('Check again');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Reload recording transcript',
+    ),
+  ).toHaveLength(0);
+});
+
+test('native unsupported transcript throws do not offer Check again', async () => {
+  mockRequest.mockRejectedValue({code: 'OMI_DEV_BACKEND_UNSUPPORTED'});
+  const renderer = await render('unsupported-session');
+  expect(textOf(renderer)).toContain(
+    'Transcript is not available from this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain('Transcript could not be loaded.');
+  expect(textOf(renderer)).not.toContain('Check again');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Reload recording transcript',
+    ),
+  ).toHaveLength(0);
+});
+
+test('thrown nested non-retryable transcript failures do not offer Check again', async () => {
+  mockRequest.mockRejectedValue(
+    Object.assign(new Error('unsupported'), {retryable: false}),
+  );
+  const renderer = await render('nested-throw-session');
+  expect(textOf(renderer)).toContain(
+    'Transcript is not available from this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain('Check again');
 });
 
 test.each([

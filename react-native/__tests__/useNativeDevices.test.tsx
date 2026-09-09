@@ -1422,6 +1422,87 @@ test('rejects an invalid native recording identity before opening', async () => 
   await hook.unmount();
 });
 
+test('native unsupported capture opens do not ask to reconnect', async () => {
+  mockBackend.request.mockRejectedValue({code: 'OMI_DEV_BACKEND_UNSUPPORTED'});
+  mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+  const hook = await renderHook();
+  await ReactTestRenderer.act(async () => {
+    emitNative({
+      type: 'audio',
+      connectionId: 'test-connection',
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'AQID',
+    });
+  });
+  expect(mockBackend.request).toHaveBeenCalledTimes(1);
+  expect(hook.latest().deviceScanMessage).toBe(
+    'Audio capture is not available from this backend yet.',
+  );
+  expect(hook.latest().deviceScanMessage).not.toContain('Reconnect');
+  await hook.unmount();
+});
+
+test('nested non-retryable capture opens do not ask to reconnect', async () => {
+  mockBackend.request.mockResolvedValue({
+    id: 'req',
+    status: 503,
+    body: JSON.stringify({
+      error: {
+        code: 'development_backend_unsupported',
+        retryable: false,
+        action: 'none',
+      },
+    }),
+  });
+  mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+  const hook = await renderHook();
+  await ReactTestRenderer.act(async () => {
+    emitNative({
+      type: 'audio',
+      connectionId: 'test-connection',
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'AQID',
+    });
+  });
+  expect(hook.latest().deviceScanMessage).toBe(
+    'Audio capture is not available from this backend yet.',
+  );
+  expect(hook.latest().deviceScanMessage).not.toContain('Reconnect');
+  await hook.unmount();
+});
+
+test('nested non-retryable capture store 503s do not ask to reconnect', async () => {
+  mockBackend.request.mockResolvedValue({
+    id: 'req',
+    status: 503,
+    body: JSON.stringify({
+      error: {
+        code: 'service_unavailable',
+        retryable: false,
+        action: 'none',
+      },
+    }),
+  });
+  mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
+  const hook = await renderHook();
+  await ReactTestRenderer.act(async () => {
+    emitNative({
+      type: 'audio',
+      connectionId: 'test-connection',
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'AQID',
+    });
+  });
+  expect(hook.latest().deviceScanMessage).toBe(
+    'Audio capture is not available from this backend yet.',
+  );
+  expect(hook.latest().deviceScanMessage).not.toContain('Reconnect');
+  await hook.unmount();
+});
+
 test('disabling authenticated devices stops scanning and disconnects the current device', async () => {
   mockNative.getSnapshot.mockResolvedValue(
     snapshot({connectedDeviceId: 'omi-1'}),

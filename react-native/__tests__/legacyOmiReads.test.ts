@@ -55,6 +55,70 @@ test('old bare conversation array preserves nullable metadata and offset paginat
   );
 });
 
+test('old memories strip namespaced entity prefixes without inventing provenance digests', async () => {
+  const {api} = backend([
+    {
+      id: 'fact',
+      content:
+        'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
+      created_at: '2026-09-07T00:00:00Z',
+      conversation_id: null,
+    },
+  ]);
+  const result = await loadMemories(api);
+  expect(result.items[0]).toMatchObject({
+    title: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
+    summary: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
+    searchableText: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
+    provenance: {
+      label: 'entity:qa:000008',
+      inputDigest: null,
+      outputDigest: null,
+      synthesisVersion: null,
+    },
+  });
+});
+
+test('old empty memory content stays searchable instead of a blank row', async () => {
+  const {api} = backend([
+    {
+      id: 'blank',
+      content: '',
+      created_at: '2026-09-07T00:00:00Z',
+      conversation_id: null,
+    },
+  ]);
+  const result = await loadMemories(api);
+  expect(result.items[0]).toMatchObject({
+    title: '',
+    summary: '',
+    searchableText: 'Memory text unavailable',
+  });
+});
+
+test('old empty task descriptions stay searchable instead of failing the page', async () => {
+  const {api} = backend({
+    action_items: [
+      {id: 'blank', description: '', completed: false},
+      {id: 'named', description: 'Call Sam', completed: false},
+    ],
+    has_more: false,
+  });
+  const result = await loadTasks(api);
+  expect(result.items).toEqual([
+    expect.objectContaining({
+      id: 'blank',
+      title: '',
+      searchableText: 'Task title unavailable',
+    }),
+    expect.objectContaining({
+      id: 'named',
+      title: 'Call Sam',
+      searchableText: 'Call Sam',
+    }),
+  ]);
+});
+
 test('old memories use v3 content without manufacturing canonical provenance', async () => {
   const {api, request} = backend([
     {

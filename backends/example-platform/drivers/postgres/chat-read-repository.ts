@@ -21,10 +21,7 @@ import {
   type ChatMessageRecord,
   type StoredChatMessage,
 } from "../../apps/service/stores/chat-messages-store";
-import {
-  MAIN_CHAT_CONVERSATION_ID,
-  type ChatConversationSessionItem,
-} from "../../apps/service/composition/chat-conversation-sessions";
+import type { ChatConversationSessionItem } from "../../apps/service/composition/chat-conversation-sessions";
 import type { PostgresTransactionPool } from "./connection";
 import {
   PostgresRepositoryError,
@@ -116,10 +113,13 @@ const parseConversationSession = (value: unknown): ChatConversationSessionItem =
   const updatedAt = integer(row?.updatedAt);
   const startedAt = integer(row?.startedAt);
   const finishedAt = row?.finishedAt === null ? null : integer(row?.finishedAt);
+  const sessionId = typeof row?.id === "string" ? row.id : "";
   if (row === null
-    || row.id !== MAIN_CHAT_CONVERSATION_ID
-    || typeof row.title !== "string" || row.title.length === 0 || row.title.length > 240
-    || typeof row.overview !== "string" || row.overview.length === 0 || row.overview.length > 240
+    || !sessionId.startsWith("chat:")
+    || sessionId.length <= "chat:".length
+    || sessionId.slice("chat:".length).length > 128
+    || typeof row.title !== "string" || row.title.length > 240
+    || typeof row.overview !== "string" || row.overview.length > 240
     || createdAt === null || updatedAt === null || startedAt === null
     || updatedAt < createdAt || startedAt !== createdAt
     || (finishedAt !== null && finishedAt < createdAt)
@@ -131,7 +131,7 @@ const parseConversationSession = (value: unknown): ChatConversationSessionItem =
     return fail();
   }
   return Object.freeze({
-    id: MAIN_CHAT_CONVERSATION_ID,
+    id: sessionId,
     title: row.title,
     overview: row.overview,
     createdAt,
@@ -150,7 +150,7 @@ const parseConversationSession = (value: unknown): ChatConversationSessionItem =
 };
 
 const parseConversationSessions = (value: unknown): readonly ChatConversationSessionItem[] => {
-  if (!Array.isArray(value) || value.length > 1) return fail();
+  if (!Array.isArray(value)) return fail();
   return Object.freeze(value.map(parseConversationSession));
 };
 
@@ -203,12 +203,13 @@ export async function withAuthorizedChatRead<Result>(
         async listHistory(query: ChatHistoryQuery) {
           const rows = await connection.query({
             name: "chat.read_history",
-            text: "SELECT omi_memory.read_chat_history($1,$2,$3,$4) AS page",
+            text: "SELECT omi_memory.read_chat_history($1,$2,$3,$4,$5) AS page",
             values: [
               query.limit,
               query.snapshotSequence,
               query.olderThan?.createdAt ?? null,
               query.olderThan?.id ?? null,
+              query.chatSessionId ?? null,
             ],
           });
           if (rows.length !== 1) return fail();

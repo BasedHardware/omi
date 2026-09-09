@@ -11,7 +11,13 @@ import {
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
 import {
-  conversationGroupLabel,
+  clockLabel,
+  conversationDisplaySummary,
+  conversationDisplayTitle,
+  conversationDayLabel,
+  conversationStatusCopy,
+  desktopBackendUnavailableCopy,
+  visibleDisplayText,
   type ConversationProjection,
   type DesktopReadProjection,
   type DomainReadOutcome,
@@ -19,20 +25,15 @@ import {
 import {FocusPressable} from '../ui/Pressable';
 import {RecordingTranscript} from '../ui/RecordingTranscript';
 import {ChatConversationHistory} from '../ui/ChatConversationHistory';
-import {MAIN_CHAT_CONVERSATION_ID} from '../chatConversationHistory';
-import {ReadStatus} from '../ui/ReadStatus';
+import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 
 function formatConversationDate(value: string | null): string {
   if (value === null) {
     return 'Time unavailable';
   }
-  return new Intl.DateTimeFormat(undefined, {
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    month: 'short',
-  }).format(new Date(value));
+  const label = clockLabel(Date.parse(value), Date.now());
+  return label === '' ? 'Time unavailable' : label;
 }
 
 function formatConversationDuration(
@@ -42,9 +43,22 @@ function formatConversationDuration(
   if (startedAt === null || finishedAt === null) {
     return 'Duration unavailable';
   }
-  const duration = Date.parse(finishedAt) - Date.parse(startedAt);
-  if (!Number.isFinite(duration) || duration < 0) {
+  const startedAtMs = Date.parse(startedAt);
+  const finishedAtMs = Date.parse(finishedAt);
+  if (
+    !Number.isFinite(startedAtMs) ||
+    startedAtMs <= 0 ||
+    !Number.isFinite(finishedAtMs) ||
+    finishedAtMs <= 0
+  ) {
     return 'Duration unavailable';
+  }
+  const duration = finishedAtMs - startedAtMs;
+  if (duration < 0) {
+    return 'Duration unavailable';
+  }
+  if (duration < 60_000) {
+    return '< 1 min';
   }
   const minutes = Math.round(duration / 60_000);
   if (minutes < 60) {
@@ -68,7 +82,7 @@ const ConversationRow = memo(function ConversationRow({
 }) {
   return (
     <FocusPressable
-      accessibilityLabel={`Open conversation ${item.title}`}
+      accessibilityLabel={`Open conversation ${conversationDisplayTitle(item)}`}
       accessibilityRole="button"
       accessibilityState={{selected}}
       onPress={onPress}
@@ -81,19 +95,19 @@ const ConversationRow = memo(function ConversationRow({
         <Text style={styles.conversationRowTime}>
           {formatConversationDate(item.startedAt ?? item.createdAt)}
         </Text>
-        <Text
-          accessibilityLabel={
-            item.starred ? 'Starred conversation' : 'Not starred'
-          }
-          style={styles.conversationRowStar}>
-          {item.starred ? '★' : '☆'}
-        </Text>
+        {item.starred ? (
+          <Text
+            accessibilityLabel="Starred conversation"
+            style={styles.conversationRowStar}>
+            ★
+          </Text>
+        ) : null}
       </View>
       <Text numberOfLines={1} style={styles.resultTitle}>
-        {item.title}
+        {conversationDisplayTitle(item)}
       </Text>
       <Text numberOfLines={2} style={styles.resultSummary}>
-        {item.summary}
+        {conversationDisplaySummary(item)}
       </Text>
       <Text style={styles.conversationRowDuration}>
         {formatConversationDuration(item.startedAt, item.finishedAt)}
@@ -110,6 +124,8 @@ export function ConversationsPage({
   onLoadMore,
   loadingMore = false,
   notice = null,
+  requestedConversationId = null,
+  onRequestedConversationConsumed,
 }: {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
@@ -118,6 +134,8 @@ export function ConversationsPage({
   onLoadMore?: () => void;
   loadingMore?: boolean;
   notice?: string | null;
+  requestedConversationId?: string | null;
+  onRequestedConversationConsumed?: () => void;
 }) {
   const compact = useWindowDimensions().width < 720;
   const conversations = useMemo(
@@ -135,14 +153,27 @@ export function ConversationsPage({
   const [starredOnly, setStarredOnly] = useState(false);
   const nowEpochMilliseconds = useRef(Date.now()).current;
   const selected = conversations.find(item => item.id === selectedId) ?? null;
+  useEffect(() => {
+    if (requestedConversationId === null) {
+      return;
+    }
+    setSelectedId(requestedConversationId);
+    onRequestedConversationConsumed?.();
+  }, [onRequestedConversationConsumed, requestedConversationId]);
   const error = outcome?.status === 'error' ? outcome.error : null;
   const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
+    const normalized = visibleDisplayText(query).toLocaleLowerCase();
     return conversations.filter(
       item =>
         (!starredOnly || item.starred) &&
         (normalized === '' ||
           item.title.toLocaleLowerCase().includes(normalized) ||
+          conversationDisplayTitle(item)
+            .toLocaleLowerCase()
+            .includes(normalized) ||
+          conversationDisplaySummary(item)
+            .toLocaleLowerCase()
+            .includes(normalized) ||
           item.summary.toLocaleLowerCase().includes(normalized)),
     );
   }, [conversations, query, starredOnly]);
@@ -155,8 +186,9 @@ export function ConversationsPage({
     () =>
       filtered.reduce<Array<{label: string; items: ConversationProjection[]}>>(
         (groups, item) => {
-          const label = conversationGroupLabel(
-            item.startedAt ?? item.createdAt,
+          const label = conversationDayLabel(
+            item.startedAt,
+            item.createdAt,
             nowEpochMilliseconds,
           );
           const current = groups.find(group => group.label === label);
@@ -171,7 +203,7 @@ export function ConversationsPage({
       ),
     [filtered, nowEpochMilliseconds],
   );
-  const filtering = query.trim() !== '' || starredOnly;
+  const filtering = visibleDisplayText(query) !== '' || starredOnly;
 
   return (
     <View
@@ -231,7 +263,7 @@ export function ConversationsPage({
           <ScrollView
             contentContainerStyle={styles.conversationList}
             style={styles.conversationListPane}>
-            {onRefresh && (
+            {onRefresh && error !== desktopBackendUnavailableCopy && (
               <FocusPressable
                 accessibilityRole="button"
                 accessibilityLabel="Refresh conversations"
@@ -267,9 +299,14 @@ export function ConversationsPage({
             ) : grouped.length === 0 ? (
               <View style={styles.projectionEmpty}>
                 <Text style={styles.projectionEmptyTitle}>
-                  {filtering
-                    ? 'No loaded conversations match.'
-                    : 'No conversations yet.'}
+                  {emptyLibraryCopy(
+                    'Conversations',
+                    outcome?.status === 'success' ? outcome.value.page : null,
+                    filtering,
+                    'No loaded conversations match.',
+                    'No conversations yet.',
+                    notice === desktopBackendUnavailableCopy,
+                  )}
                 </Text>
                 {filtering && (
                   <Text style={styles.projectionEmptyCopy}>
@@ -305,13 +342,18 @@ export function ConversationsPage({
                   onPress={onLoadMore}
                   style={mobileStyles.pageAction}>
                   <Text style={styles.projectionEmptyCopy}>
-                    {loadingMore ? 'Loading…' : 'Load more'}
+                    {loadingMore ? 'Loading…' : 'Load more conversations'}
                   </Text>
                 </FocusPressable>
               )}
-            {outcome?.status === 'success' && (
-              <ReadStatus label="Conversations" page={outcome.value.page} />
-            )}
+            {outcome?.status === 'success' &&
+              (grouped.length > 0 || filtering) && (
+                <ReadStatus
+                  continueUnavailable={notice === desktopBackendUnavailableCopy}
+                  label="Conversations"
+                  page={outcome.value.page}
+                />
+              )}
           </ScrollView>
         )}
         {(!compact || selected !== null) && (
@@ -342,16 +384,18 @@ export function ConversationsPage({
                   </FocusPressable>
                 )}
                 <Text style={styles.conversationDetailTitle}>
-                  {selected.title}
+                  {conversationDisplayTitle(selected)}
                 </Text>
                 <Text style={styles.conversationDetailSummary}>
-                  {selected.summary}
+                  {conversationDisplaySummary(selected)}
                 </Text>
                 <View style={styles.conversationDetailFields}>
                   {selected.capturedAtMs !== undefined && (
                     <Text style={styles.conversationDetailField}>
                       Captured (device time) ·{' '}
-                      {new Date(selected.capturedAtMs).toLocaleString()}
+                      {formatConversationDate(
+                        new Date(selected.capturedAtMs).toISOString(),
+                      )}
                     </Text>
                   )}
                   <Text style={styles.conversationDetailField}>
@@ -368,7 +412,7 @@ export function ConversationsPage({
                     )}
                   </Text>
                   <Text style={styles.conversationDetailField}>
-                    Status · {selected.status}
+                    Status · {conversationStatusCopy(selected.status)}
                   </Text>
                   {selected.locked && (
                     <Text style={styles.conversationDetailField}>Locked</Text>
@@ -389,13 +433,31 @@ export function ConversationsPage({
                     />
                   )}
                 {selected.source === 'chat' &&
-                  selected.id === MAIN_CHAT_CONVERSATION_ID && (
-                    <ChatConversationHistory key={selected.id} />
+                  selected.id.startsWith('chat:') &&
+                  selected.id.length > 'chat:'.length && (
+                    <ChatConversationHistory
+                      key={selected.id}
+                      conversationId={selected.id}
+                    />
                   )}
                 {selected.source === 'chat' &&
-                  selected.id !== MAIN_CHAT_CONVERSATION_ID && (
+                  !(
+                    selected.id.startsWith('chat:') &&
+                    selected.id.length > 'chat:'.length
+                  ) && (
                     <Text style={styles.conversationDetailSummary}>
                       Chat history for this conversation is not available here.
+                    </Text>
+                  )}
+                {selected.source !== 'chat' &&
+                  !(
+                    selected.source === 'omi' &&
+                    selected.id.startsWith('recording:') &&
+                    selected.id.length > 'recording:'.length
+                  ) && (
+                    <Text style={styles.conversationDetailSummary}>
+                      A full transcript is not available for this conversation
+                      yet.
                     </Text>
                   )}
               </>

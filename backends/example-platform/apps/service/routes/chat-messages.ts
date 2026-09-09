@@ -35,11 +35,12 @@ import {
   isAllowedChatAttachmentMimeType,
   MAIN_CHAT_ATTACHMENT_SCOPE,
 } from "../chat/attachment-policy";
-import type {
-  ChatMessageRecord,
-  ChatMessagesStore,
-  StoredChatMessage,
-  WritableChatMessageType,
+import {
+  MAIN_CHAT_SESSION_ID,
+  type ChatMessageRecord,
+  type ChatMessagesStore,
+  type StoredChatMessage,
+  type WritableChatMessageType,
 } from "../stores/chat-messages-store";
 import type {
   ChatGenerationEvent,
@@ -306,6 +307,7 @@ export const chatMessagePayloadHash = (create: ParsedCreate): string => {
 export const parseHistoryQuery = (request: Request): {
   readonly limit: number;
   readonly olderCursor: string | null;
+  readonly chatSessionId: string | null;
 } | null => {
   let url: URL;
   try {
@@ -315,14 +317,21 @@ export const parseHistoryQuery = (request: Request): {
   }
   const counts = new Map<string, number>();
   for (const [key] of url.searchParams) counts.set(key, (counts.get(key) ?? 0) + 1);
-  if ([...counts].some(([key, count]) => !["limit", "olderCursor"].includes(key) || count !== 1)) {
+  if ([...counts].some(([key, count]) =>
+    !["limit", "olderCursor", "chatSessionId"].includes(key) || count !== 1)) {
     return null;
   }
   const rawLimit = url.searchParams.get("limit");
   if (rawLimit !== null && !/^(?:[1-9]|[1-9][0-9]|100)$/.test(rawLimit)) return null;
   const olderCursor = url.searchParams.get("olderCursor");
   if (olderCursor === "") return null;
-  return { limit: rawLimit === null ? DEFAULT_LIMIT : Number(rawLimit), olderCursor };
+  const chatSessionId = url.searchParams.get("chatSessionId");
+  if (chatSessionId === "" || (chatSessionId !== null && chatSessionId.length > 128)) return null;
+  return {
+    limit: rawLimit === null ? DEFAULT_LIMIT : Number(rawLimit),
+    olderCursor,
+    chatSessionId: chatSessionId === MAIN_CHAT_SESSION_ID ? null : chatSessionId,
+  };
 };
 
 const TERMINAL_KINDS = new Set(["done", "failed", "cancelled"]);
@@ -593,12 +602,16 @@ export const registerChatMessagesRoutes = (
         accountEpoch,
         nowEpochSeconds: deps.nowEpochSeconds(),
       });
+      if (cursor !== null && cursor.chatSessionId !== query.chatSessionId) {
+        throw new InvalidChatHistoryCursorError();
+      }
       const snapshotSequence = cursor?.snapshotSequence
         ?? deps.messages.readSnapshotSequence(principal.uid);
       const page = deps.messages.listHistory(principal.uid, {
         limit: query.limit,
         snapshotSequence,
         olderThan: cursor?.olderThan ?? null,
+        chatSessionId: query.chatSessionId,
       });
       const nowEpochMilliseconds = deps.nowEpochMilliseconds();
       const messages = Object.freeze(page.messages.map((message): ChatWireMessage => {
@@ -628,6 +641,7 @@ export const registerChatMessagesRoutes = (
             olderThan: { createdAt: oldest.createdAt, id: oldest.id },
             issuedAtEpochSeconds: cursorIssuedAt,
             ttlSeconds: deps.cursorTtlSeconds,
+            chatSessionId: query.chatSessionId,
           })
         : null;
       deps.counter.recordDomainRead("served");

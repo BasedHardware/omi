@@ -2,9 +2,17 @@ import React, {useEffect, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import {loadConnectors, type CloudApp} from '../desktopCloudClient';
-import type {DesktopReadOutcomes} from '../desktopReadClient';
+import {
+  appDisplayName,
+  appDisplaySource,
+  desktopAppsUnavailableCopy,
+  desktopBackendUnavailableCopy,
+  desktopReadErrorCopy,
+  taskDisplayTitle,
+  type DesktopReadOutcomes,
+} from '../desktopReadClient';
 import {omiBackend} from '../omiNative';
-import {ReadStatus} from '../ui/ReadStatus';
+import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {FocusPressable} from '../ui/Pressable';
 import {
   TaskEditor,
@@ -17,8 +25,14 @@ import type {DesktopSession} from './desktopChrome';
 import {desktopTokens as token} from './tokens';
 
 export function LibraryPage({
+  conversationNotice = null,
+  conversationsLoadingMore = false,
+  onLoadMoreConversations,
   outcomes,
 }: {
+  conversationNotice?: string | null;
+  conversationsLoadingMore?: boolean;
+  onLoadMoreConversations?: () => void;
   outcomes: DesktopReadOutcomes | null;
 }) {
   const outcome = outcomes?.conversations ?? null;
@@ -31,7 +45,13 @@ export function LibraryPage({
       ? 'Loading conversations…'
       : outcome.status === 'error'
       ? outcome.error
-      : 'Nothing captured in this window yet.';
+      : emptyLibraryCopy(
+          'Conversations',
+          outcome.value.page,
+          false,
+          'Nothing captured in this window yet.',
+          'Nothing captured in this window yet.',
+        );
   return (
     <View style={styles.page}>
       <ScrollView
@@ -46,8 +66,36 @@ export function LibraryPage({
         ) : (
           <EmptyCopy>{emptyCopy}</EmptyCopy>
         )}
-        {outcome?.status === 'success' ? (
-          <ReadStatus label="Conversations" mac page={outcome.value.page} />
+        {conversationNotice !== null ? (
+          <Text accessibilityRole="alert" style={styles.rowMeta}>
+            {conversationNotice}
+          </Text>
+        ) : null}
+        {outcome?.status === 'success' &&
+        outcome.value.page.hasMore &&
+        onLoadMoreConversations ? (
+          <FocusPressable
+            accessibilityLabel="Load more conversations"
+            accessibilityRole="button"
+            disabled={conversationsLoadingMore}
+            onPress={onLoadMoreConversations}
+            style={styles.pageAction}>
+            <Text style={styles.rowMeta}>
+              {conversationsLoadingMore
+                ? 'Loading…'
+                : 'Load more conversations'}
+            </Text>
+          </FocusPressable>
+        ) : null}
+        {outcome?.status === 'success' && conversations.length > 0 ? (
+          <ReadStatus
+            continueUnavailable={
+              conversationNotice === desktopBackendUnavailableCopy
+            }
+            label="Conversations"
+            mac
+            page={outcome.value.page}
+          />
         ) : null}
       </ScrollView>
     </View>
@@ -57,16 +105,18 @@ export function LibraryPage({
 export function TasksPage({
   outcomes,
   taskPagination,
+  taskNotice = null,
   onTaskToggle,
   onTaskEdit,
   busyTaskId = null,
-  writesAvailable = false,
+  writesAvailable,
   taskMutationError = null,
   onRetryTaskMutation,
   onDismissTaskMutation,
 }: TaskMutationProps & {
   outcomes: DesktopReadOutcomes | null;
   taskPagination?: React.ReactNode;
+  taskNotice?: string | null;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const outcome = outcomes?.tasks ?? null;
@@ -76,7 +126,13 @@ export function TasksPage({
       ? 'Loading tasks…'
       : outcome.status === 'error'
       ? outcome.error
-      : 'No tasks yet';
+      : emptyLibraryCopy(
+          'Tasks',
+          outcome.value.page,
+          false,
+          'No tasks yet',
+          'No tasks yet',
+        );
   return (
     <View style={styles.page}>
       <TaskMutationStatus
@@ -96,9 +152,15 @@ export function TasksPage({
                   accessibilityRole={
                     writesAvailable && onTaskToggle ? 'checkbox' : 'text'
                   }
-                  accessibilityLabel={`${
-                    item.completed ? 'Reopen' : 'Complete'
-                  } task: ${item.title}`}
+                  accessibilityLabel={
+                    writesAvailable
+                      ? `${
+                          item.completed ? 'Reopen' : 'Complete'
+                        } task: ${taskDisplayTitle(item)}`
+                      : item.completed
+                      ? `Completed task: ${taskDisplayTitle(item)}`
+                      : `Task: ${taskDisplayTitle(item)}`
+                  }
                   accessibilityState={{
                     checked: item.completed,
                     disabled:
@@ -121,7 +183,7 @@ export function TasksPage({
                 {writesAvailable && onTaskEdit && item.revision !== null && (
                   <FocusPressable
                     accessibilityRole="button"
-                    accessibilityLabel={`Edit task: ${item.title}`}
+                    accessibilityLabel={`Edit task: ${taskDisplayTitle(item)}`}
                     disabled={busyTaskId !== null}
                     accessibilityState={{disabled: busyTaskId !== null}}
                     onPress={() => setEditingId(item.id)}
@@ -133,7 +195,7 @@ export function TasksPage({
               {editingId === item.id && writesAvailable && onTaskEdit && (
                 <TaskEditor
                   id={item.id}
-                  title={item.title}
+                  title={item.title.trim()}
                   busy={busyTaskId !== null}
                   failed={taskMutationError !== null}
                   onSave={onTaskEdit}
@@ -146,8 +208,13 @@ export function TasksPage({
           <EmptyCopy>{emptyCopy}</EmptyCopy>
         )}
         {taskPagination}
-        {outcome?.status === 'success' ? (
-          <ReadStatus label="Tasks" mac page={outcome.value.page} />
+        {outcome?.status === 'success' && tasks.length > 0 ? (
+          <ReadStatus
+            continueUnavailable={taskNotice === desktopBackendUnavailableCopy}
+            label="Tasks"
+            mac
+            page={outcome.value.page}
+          />
         ) : null}
       </ScrollView>
     </View>
@@ -162,9 +229,12 @@ type AppTileModel = {
   status: string;
 };
 
-function cloudAppStatus(app: CloudApp): string {
+function cloudAppStatus(app: CloudApp, installKnown: boolean): string {
   if (app.connectedAccounts.length > 0) {
     return 'Connected';
+  }
+  if (!installKnown) {
+    return '';
   }
   if (app.enabled) {
     return 'Installed';
@@ -172,23 +242,16 @@ function cloudAppStatus(app: CloudApp): string {
   return 'Not connected';
 }
 
-function cloudAppSource(app: CloudApp): string {
-  if (app.author.length > 0) {
-    return app.author;
-  }
-  if (app.category.length > 0) {
-    return app.category;
-  }
-  return app.description;
-}
-
-function tilesFromCatalog(apps: CloudApp[]): AppTileModel[] {
+function tilesFromCatalog(
+  apps: CloudApp[],
+  installKnown: boolean,
+): AppTileModel[] {
   return apps.map(app => ({
     Icon: Puzzle,
     id: app.id,
-    name: app.name,
-    source: cloudAppSource(app),
-    status: cloudAppStatus(app),
+    name: appDisplayName(app.name),
+    source: appDisplaySource(app),
+    status: cloudAppStatus(app, installKnown),
   }));
 }
 
@@ -202,7 +265,9 @@ function AppTile({item}: {item: AppTileModel}) {
         </View>
         <Text style={styles.rowTitle}>{item.name}</Text>
         <Text style={styles.rowMeta}>{item.source}</Text>
-        <Text style={styles.appStatus}>{item.status}</Text>
+        {item.status.length > 0 ? (
+          <Text style={styles.appStatus}>{item.status}</Text>
+        ) : null}
       </View>
     </View>
   );
@@ -210,28 +275,40 @@ function AppTile({item}: {item: AppTileModel}) {
 
 export function AppsPage({session}: {session: DesktopSession}) {
   const [tiles, setTiles] = useState<AppTileModel[] | null>();
+  const [enabledError, setEnabledError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (session !== 'ready') {
       setTiles(undefined);
+      setEnabledError(null);
+      setError(null);
       return;
     }
     const backend = omiBackend;
     if (backend === undefined || backend === null) {
       setTiles(null);
+      setEnabledError(null);
+      setError(null);
       return;
     }
     setTiles(undefined);
+    setEnabledError(null);
+    setError(null);
     let active = true;
     loadConnectors(backend)
       .then(snapshot => {
         if (!active) {
           return;
         }
-        setTiles(tilesFromCatalog(snapshot.apps));
+        setTiles(tilesFromCatalog(snapshot.apps, snapshot.enabledIds !== null));
+        setEnabledError(snapshot.enabledError);
+        setError(null);
       })
-      .catch(() => {
+      .catch(reason => {
         if (active) {
           setTiles(null);
+          setEnabledError(null);
+          setError(desktopReadErrorCopy(reason));
         }
       });
     return () => {
@@ -244,11 +321,24 @@ export function AppsPage({session}: {session: DesktopSession}) {
         {tiles === undefined ? (
           <EmptyCopy>Loading apps…</EmptyCopy>
         ) : tiles === null ? (
-          <EmptyCopy>Apps could not be loaded.</EmptyCopy>
-        ) : tiles.length === 0 ? (
-          <EmptyCopy>No apps are available.</EmptyCopy>
+          <EmptyCopy>
+            {error === desktopAppsUnavailableCopy
+              ? desktopAppsUnavailableCopy
+              : 'Apps could not be loaded.'}
+          </EmptyCopy>
         ) : (
-          tiles.map(item => <AppTile item={item} key={item.id} />)
+          <>
+            {enabledError !== null ? (
+              <EmptyCopy>{enabledError}</EmptyCopy>
+            ) : null}
+            {tiles.length === 0 ? (
+              enabledError === null ? (
+                <EmptyCopy>No apps are available.</EmptyCopy>
+              ) : null
+            ) : (
+              tiles.map(item => <AppTile item={item} key={item.id} />)
+            )}
+          </>
         )}
       </ScrollView>
     </View>
@@ -257,6 +347,7 @@ export function AppsPage({session}: {session: DesktopSession}) {
 
 const styles = StyleSheet.create({
   page: {flex: 1},
+  pageAction: {minHeight: 44, justifyContent: 'center'},
   taskActions: {flexDirection: 'row', alignItems: 'center', gap: 8},
   taskToggle: {flex: 1, minHeight: 44},
   taskEdit: {

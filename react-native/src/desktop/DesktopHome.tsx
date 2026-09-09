@@ -9,22 +9,37 @@ import {
   View,
 } from 'react-native';
 import type {ChatMessage} from '../chatClient';
-import type {
-  DesktopReadOutcomes,
-  DesktopReadProjection,
+import {
+  chatClockLabel,
+  chatMessageDisplayText,
+  chatSenderCopy,
+  desktopBackendUnavailableCopy,
+  desktopReadsCanRetry,
+  visibleDisplayText,
+  type DesktopReadOutcomes,
+  type DesktopReadProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
-import {ReadStatus} from '../ui/ReadStatus';
+import {
+  ReadStatus,
+  coverageStatusCopy,
+  emptyLibraryCopy,
+} from '../ui/ReadStatus';
 import {ShippingListInsert} from './ShippingStage';
 import {EmptyCopy, ReadRow, SectionTitle, TaskRow} from './DesktopRows';
 import {desktopTokens as token} from './tokens';
 
 type Props = {
   chatBusy: boolean;
+  conversationNotice?: string | null;
   draft: string;
   hasOlderChat: boolean;
+  olderChatAvailable?: boolean;
   loadingOlderChat: boolean;
+  memoryNotice?: string | null;
+  memoriesLoadingMore?: boolean;
+  onLoadMoreMemories?: () => void;
   messages: ChatMessage[];
   onLoadOlderChat: () => void;
   onRefresh: () => void;
@@ -32,12 +47,15 @@ type Props = {
   outcomes: DesktopReadOutcomes | null;
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
+  taskNotice?: string | null;
 };
 
 export function DesktopReadBanner({
+  canRetry = true,
   onRefresh,
   readsPhase,
 }: {
+  canRetry?: boolean;
   onRefresh: () => void;
   readsPhase: ReadsPhase;
 }) {
@@ -53,6 +71,13 @@ export function DesktopReadBanner({
     readsPhase === 'unavailable' ||
     readsPhase === 'saved-but-refresh-failed'
   ) {
+    if (!canRetry) {
+      return (
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>{desktopBackendUnavailableCopy}</Text>
+        </View>
+      );
+    }
     return (
       <FocusPressable
         accessibilityLabel="Try again"
@@ -71,20 +96,20 @@ export function DesktopReadBanner({
 
 function AskExchange({
   chatBusy,
-  hasOlderChat,
+  olderChatAvailable,
   loadingOlderChat,
   messages,
   onLoadOlderChat,
 }: {
   chatBusy: boolean;
-  hasOlderChat: boolean;
+  olderChatAvailable: boolean;
   loadingOlderChat: boolean;
   messages: ChatMessage[];
   onLoadOlderChat: () => void;
 }) {
   return (
     <View accessibilityLabel="Ask exchange" style={styles.exchange}>
-      {hasOlderChat ? (
+      {olderChatAvailable ? (
         <FocusPressable
           accessibilityLabel="Load earlier messages"
           accessibilityRole="button"
@@ -98,9 +123,7 @@ function AskExchange({
       ) : null}
       {messages.map(item => (
         <View key={item.id} style={styles.exchangeRow}>
-          <Text style={styles.rowMeta}>
-            {item.sender === 'human' ? 'You' : 'Omi'}
-          </Text>
+          <Text style={styles.rowMeta}>{chatSenderCopy(item.sender)}</Text>
           <Text
             accessibilityLabel={
               item.generationOutcome === 'failed'
@@ -108,13 +131,10 @@ function AskExchange({
                 : undefined
             }
             style={styles.rowTitle}>
-            {item.generationOutcome === 'failed'
-              ? item.generationRetryable === true
-                ? 'Response failed. Try again.'
-                : 'Response failed.'
-              : item.generationOutcome === 'cancelled' && item.text === ''
-              ? 'Response stopped.'
-              : item.text}
+            {chatMessageDisplayText(item, 'Response stopped.')}
+          </Text>
+          <Text style={styles.rowMeta}>
+            {chatClockLabel(item.createdAt, Date.now()) || 'Time unavailable'}
           </Text>
         </View>
       ))}
@@ -127,16 +147,22 @@ function AskExchange({
 
 export function DesktopHome({
   chatBusy,
+  conversationNotice = null,
   draft,
   hasOlderChat,
+  olderChatAvailable = hasOlderChat,
   loadingOlderChat,
+  memoryNotice = null,
+  memoriesLoadingMore = false,
   messages,
+  onLoadMoreMemories,
   onLoadOlderChat,
   onRefresh,
   onOpenRewind,
   outcomes,
   reads,
   readsPhase,
+  taskNotice = null,
 }: Props) {
   const chatScrollRef = useRef<ScrollView>(null);
   const shouldFollowChat = useRef(true);
@@ -145,7 +171,7 @@ export function DesktopHome({
       shouldFollowChat.current = true;
     }
   }, [chatBusy]);
-  const query = draft.trim();
+  const query = visibleDisplayText(draft);
   const normalized = query.toLocaleLowerCase();
   const currents = useMemo(() => {
     return reads.filter(item => {
@@ -173,7 +199,14 @@ export function DesktopHome({
       ? 'Tasks load with your day.'
       : tasksOutcome.status === 'error'
       ? tasksOutcome.error
-      : 'No tasks yet';
+      : emptyLibraryCopy(
+          'Tasks',
+          tasksOutcome.value.page,
+          query !== '',
+          'No tasks match this search.',
+          'No tasks yet',
+          taskNotice === desktopBackendUnavailableCopy,
+        );
   const conversationsOutcome = outcomes?.conversations ?? null;
   const memoriesOutcome = outcomes?.memories ?? null;
   const currentsError = [conversationsOutcome, memoriesOutcome].find(
@@ -184,12 +217,32 @@ export function DesktopHome({
       ? 'Conversations and memories will show here when your day is loaded.'
       : currentsError?.status === 'error'
       ? currentsError.error
-      : query !== ''
-      ? 'Nothing captured matches this search.'
-      : 'Nothing captured yet.';
+      : coverageStatusCopy(
+          conversationsOutcome.status === 'success'
+            ? conversationsOutcome.value.page
+            : null,
+          memoriesOutcome.status === 'success'
+            ? memoriesOutcome.value.page
+            : null,
+          null,
+          query !== ''
+            ? {
+                conversations:
+                  conversationNotice === desktopBackendUnavailableCopy,
+                memories: memoryNotice === desktopBackendUnavailableCopy,
+              }
+            : {},
+        ) ??
+        (query !== ''
+          ? 'Nothing captured matches this search.'
+          : 'Nothing captured yet.');
   return (
     <View style={styles.home}>
-      <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
+      <DesktopReadBanner
+        canRetry={desktopReadsCanRetry(outcomes)}
+        onRefresh={onRefresh}
+        readsPhase={readsPhase}
+      />
       {messages.length > 0 || chatBusy || hasOlderChat ? (
         <ScrollView
           contentContainerStyle={styles.chatContent}
@@ -210,7 +263,7 @@ export function DesktopHome({
           style={styles.chatList}>
           <AskExchange
             chatBusy={chatBusy}
-            hasOlderChat={hasOlderChat}
+            olderChatAvailable={olderChatAvailable}
             loadingOlderChat={loadingOlderChat}
             messages={messages}
             onLoadOlderChat={() => {
@@ -236,8 +289,18 @@ export function DesktopHome({
           ) : (
             <EmptyCopy>{tasksEmptyCopy}</EmptyCopy>
           )}
-          {tasksOutcome?.status === 'success' ? (
-            <ReadStatus label="Tasks" mac page={tasksOutcome.value.page} />
+          {tasksOutcome?.status === 'success' && visibleTasks.length > 0 ? (
+            <ReadStatus
+              continueUnavailable={taskNotice === desktopBackendUnavailableCopy}
+              label="Tasks"
+              mac
+              page={tasksOutcome.value.page}
+            />
+          ) : null}
+          {taskNotice === desktopBackendUnavailableCopy ? (
+            <Text accessibilityRole="alert" style={styles.rowMeta}>
+              {taskNotice}
+            </Text>
           ) : null}
         </View>
         <View
@@ -255,19 +318,49 @@ export function DesktopHome({
           ) : (
             <EmptyCopy>{currentsEmptyCopy}</EmptyCopy>
           )}
-          {conversationsOutcome?.status === 'success' ? (
+          {conversationsOutcome?.status === 'success' && currents.length > 0 ? (
             <ReadStatus
+              continueUnavailable={
+                conversationNotice === desktopBackendUnavailableCopy
+              }
               label="Conversations"
               mac
               page={conversationsOutcome.value.page}
             />
           ) : null}
-          {memoriesOutcome?.status === 'success' ? (
+          {memoriesOutcome?.status === 'success' && currents.length > 0 ? (
             <ReadStatus
+              continueUnavailable={
+                memoryNotice === desktopBackendUnavailableCopy
+              }
               label="Memories"
               mac
               page={memoriesOutcome.value.page}
             />
+          ) : null}
+          {conversationNotice === desktopBackendUnavailableCopy ? (
+            <Text accessibilityRole="alert" style={styles.rowMeta}>
+              {conversationNotice}
+            </Text>
+          ) : null}
+          {memoryNotice !== null ? (
+            <Text accessibilityRole="alert" style={styles.rowMeta}>
+              {memoryNotice}
+            </Text>
+          ) : null}
+          {memoriesOutcome?.status === 'success' &&
+          memoriesOutcome.value.page.hasMore &&
+          onLoadMoreMemories ? (
+            <FocusPressable
+              accessibilityLabel="Load more memories"
+              accessibilityRole="button"
+              disabled={memoriesLoadingMore}
+              onPress={onLoadMoreMemories}
+              style={styles.pageAction}>
+              <Text style={styles.bannerAction}>
+                {memoriesLoadingMore ? 'Loading…' : 'Load more memories'}
+              </Text>
+            </FocusPressable>
           ) : null}
         </View>
         <View accessibilityLabel="Home rewind" style={styles.section}>
@@ -333,4 +426,5 @@ const styles = StyleSheet.create({
     fontFamily: token.font,
     fontSize: token.type.title,
   },
+  pageAction: {minHeight: 44, justifyContent: 'center'},
 });

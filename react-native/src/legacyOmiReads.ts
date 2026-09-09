@@ -1,9 +1,12 @@
-import type {
-  ConversationProjection,
-  DomainRead,
-  MemoryProjection,
-  ReadPageState,
-  TaskRead,
+import {
+  conversationDisplaySummary,
+  conversationDisplayTitle,
+  taskDisplayTitle,
+  type ConversationProjection,
+  type DomainRead,
+  type MemoryProjection,
+  type ReadPageState,
+  type TaskRead,
 } from './desktopReadClient';
 
 type Read = (path: `/${string}`) => Promise<unknown>;
@@ -124,18 +127,22 @@ export async function loadOmiConversations(
     const visibility = text(row.visibility, 'private');
     if (!['private', 'public', 'shared'].includes(visibility))
       throw new Error('Omi visibility is malformed');
+    const status = text(row.status, 'completed');
     return {
       kind: 'conversation' as const,
       id: id(row.id),
       title,
       summary,
-      searchableText: `${title}\n${summary}`,
+      searchableText: `${conversationDisplayTitle({
+        title,
+        status,
+      })}\n${conversationDisplaySummary({summary, status})}`,
       createdAt,
       updatedAt: date(row.updated_at),
       startedAt: date(row.started_at),
       finishedAt: date(row.finished_at),
       starred: bool(row.starred),
-      status: text(row.status, 'completed'),
+      status,
       source: text(row.source, row.source === null ? 'unknown' : 'omi'),
       visibility: visibility as ConversationProjection['visibility'],
       folderId: row.folder_id == null ? null : text(row.folder_id),
@@ -200,7 +207,7 @@ export async function loadOmiTasks(
       id: id(row.id),
       title: description,
       summary: completed ? 'Completed' : 'Pending',
-      searchableText: description,
+      searchableText: taskDisplayTitle({title: description}),
       completed,
       completedAt: milliseconds(row.completed_at),
       dueAt: milliseconds(row.due_at),

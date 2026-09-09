@@ -14,6 +14,7 @@ import {
   loadConnectors,
   myApps,
   serviceApps,
+  cloudErrorCanRetry,
   cloudSessionUnavailableCopy,
   type CloudApp,
   type ConnectorsSnapshot,
@@ -23,10 +24,25 @@ import {
   desktopBackendServiceCopy,
   desktopBackendUnauthorizedCopy,
   desktopReadErrorCopy,
+  appCategoryCopy,
+  appDisplayName,
+  visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
+
+function appRowMeta(app: CloudApp, installKnown: boolean): string {
+  const category = appCategoryCopy(app.category);
+  const author = visibleDisplayText(app.author);
+  return [
+    category !== '' ? category : null,
+    author !== '' ? author : null,
+    installKnown ? (app.enabled ? 'Installed' : 'Not installed') : null,
+  ]
+    .filter(item => item !== null)
+    .join(' · ');
+}
 
 export function ConnectorsPage({
   onSignIn,
@@ -39,9 +55,11 @@ export function ConnectorsPage({
     'loading' | 'signed-out' | 'ready' | 'error'
   >('loading');
   const [error, setError] = useState<string | null>(null);
+  const [appsCanRetry, setAppsCanRetry] = useState(true);
   const [snapshot, setSnapshot] = useState<ConnectorsSnapshot | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [writesAvailable, setWritesAvailable] = useState(true);
 
   const reload = useCallback(async () => {
     if (Platform.OS === 'web') {
@@ -68,6 +86,7 @@ export function ConnectorsPage({
         // stay retryable instead of stranding the page on Loading forever.
         setSnapshot(null);
         setError(desktopBackendServiceCopy);
+        setAppsCanRetry(true);
         setPhase('error');
         return;
       }
@@ -83,10 +102,12 @@ export function ConnectorsPage({
       const next = await loadConnectors(backend);
       setSnapshot(next);
       setError(null);
+      setAppsCanRetry(true);
       setPhase('ready');
     } catch (reason) {
       setSnapshot(null);
       setError(desktopReadErrorCopy(reason));
+      setAppsCanRetry(cloudErrorCanRetry(reason));
       setPhase('error');
     }
   }, []);
@@ -118,7 +139,7 @@ export function ConnectorsPage({
       {
         empty:
           snapshot.ownerUid === null
-            ? 'Owned apps are unavailable until the account profile loads.'
+            ? snapshot.ownerError ?? 'Owned apps are unavailable.'
             : 'No apps owned by this account.',
         items: myApps(snapshot, snapshot.ownerUid),
         key: 'My Apps',
@@ -149,6 +170,9 @@ export function ConnectorsPage({
       await reload();
     } catch (reason) {
       setActionError(desktopReadErrorCopy(reason));
+      if (!cloudErrorCanRetry(reason)) {
+        setWritesAvailable(false);
+      }
     } finally {
       setPendingId(null);
     }
@@ -161,6 +185,8 @@ export function ConnectorsPage({
     await onSignIn();
     await reload();
   };
+
+  const installKnown = snapshot !== null && snapshot.enabledIds !== null;
 
   return (
     <ScrollView contentContainerStyle={styles.destinationPage}>
@@ -197,7 +223,8 @@ export function ConnectorsPage({
             )}
             {phase === 'error' &&
               Platform.OS !== 'web' &&
-              error !== desktopBackendConfigurationCopy && (
+              error !== desktopBackendConfigurationCopy &&
+              appsCanRetry && (
                 <FocusPressable
                   accessibilityLabel="Retry apps"
                   accessibilityRole="button"
@@ -221,54 +248,55 @@ export function ConnectorsPage({
               {section.items.length === 0 ? (
                 <Text style={styles.projectionEmptyCopy}>{section.empty}</Text>
               ) : (
-                section.items.map(app => (
-                  <View
-                    key={`${section.key}-${app.id}`}
-                    style={styles.cloudRow}>
-                    <View style={styles.cloudRowBody}>
-                      <Text style={styles.cloudRowTitle}>{app.name}</Text>
-                      {app.description.length > 0 && (
-                        <Text numberOfLines={2} style={styles.cloudRowMeta}>
-                          {app.description}
-                        </Text>
+                section.items.map(app => {
+                  const meta = appRowMeta(app, installKnown);
+                  const name = appDisplayName(app.name);
+                  const description = visibleDisplayText(app.description);
+                  return (
+                    <View
+                      key={`${section.key}-${app.id}`}
+                      style={styles.cloudRow}>
+                      <View style={styles.cloudRowBody}>
+                        <Text style={styles.cloudRowTitle}>{name}</Text>
+                        {description !== '' && (
+                          <Text numberOfLines={2} style={styles.cloudRowMeta}>
+                            {description}
+                          </Text>
+                        )}
+                        {meta.length > 0 && (
+                          <Text style={styles.cloudRowMeta}>{meta}</Text>
+                        )}
+                      </View>
+                      {writesAvailable && installKnown && (
+                        <FocusPressable
+                          accessibilityLabel={
+                            app.enabled ? `Remove ${name}` : `Install ${name}`
+                          }
+                          accessibilityRole="button"
+                          disabled={pendingId !== null}
+                          onPress={() => {
+                            setEnabled(app, !app.enabled).catch(
+                              () => undefined,
+                            );
+                          }}
+                          style={({pressed}) => [
+                            styles.cloudAction,
+                            pressed && styles.pressed,
+                          ]}>
+                          <Text style={styles.cloudActionText}>
+                            {pendingId === app.id
+                              ? app.enabled
+                                ? 'Removing…'
+                                : 'Installing…'
+                              : app.enabled
+                              ? 'Remove'
+                              : 'Install'}
+                          </Text>
+                        </FocusPressable>
                       )}
-                      <Text style={styles.cloudRowMeta}>
-                        {[
-                          app.category.length > 0 ? app.category : null,
-                          app.author.length > 0 ? app.author : null,
-                          app.enabled ? 'Installed' : 'Not installed',
-                        ]
-                          .filter(item => item !== null)
-                          .join(' · ')}
-                      </Text>
                     </View>
-                    <FocusPressable
-                      accessibilityLabel={
-                        app.enabled
-                          ? `Remove ${app.name}`
-                          : `Install ${app.name}`
-                      }
-                      accessibilityRole="button"
-                      disabled={pendingId !== null}
-                      onPress={() => {
-                        setEnabled(app, !app.enabled).catch(() => undefined);
-                      }}
-                      style={({pressed}) => [
-                        styles.cloudAction,
-                        pressed && styles.pressed,
-                      ]}>
-                      <Text style={styles.cloudActionText}>
-                        {pendingId === app.id
-                          ? app.enabled
-                            ? 'Removing…'
-                            : 'Installing…'
-                          : app.enabled
-                          ? 'Remove'
-                          : 'Install'}
-                      </Text>
-                    </FocusPressable>
-                  </View>
-                ))
+                  );
+                })
               )}
             </View>
           ))

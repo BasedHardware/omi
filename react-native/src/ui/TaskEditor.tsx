@@ -1,6 +1,7 @@
 import {FocusPressable as Pressable} from './Pressable';
 import React, {useEffect, useRef, useState} from 'react';
 import {Platform, StyleSheet, Text, TextInput, View} from 'react-native';
+import {visibleDisplayText} from '../desktopReadClient';
 
 export type TaskMutationProps = {
   onTaskToggle?: (id: string) => void;
@@ -9,18 +10,18 @@ export type TaskMutationProps = {
   taskMutationError?: string | null;
   onRetryTaskMutation?: () => void;
   onDismissTaskMutation?: () => void;
-  writesAvailable?: boolean;
+  writesAvailable?: boolean | null;
 };
 
 export function TaskMutationStatus({
-  writesAvailable = false,
+  writesAvailable,
   taskMutationError,
   onRetryTaskMutation,
   onDismissTaskMutation,
 }: TaskMutationProps) {
   return (
     <View>
-      {!writesAvailable && (
+      {writesAvailable === false && (
         <Text
           style={[styles.copy, Platform.OS === 'macos' && styles.lightText]}>
           Task editing is unavailable for this connection.
@@ -86,7 +87,9 @@ export function TaskEditor({
     );
   }, [id, title]);
   const disabled =
-    busy || description.trim().length === 0 || description === title;
+    busy ||
+    visibleDisplayText(description).length === 0 ||
+    description === title;
   return (
     <View style={styles.editor}>
       <TextInput

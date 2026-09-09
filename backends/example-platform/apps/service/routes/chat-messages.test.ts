@@ -28,6 +28,7 @@ import {
   createSqliteLocalServiceStores,
   SqliteChatMessagesStore,
 } from "../../../drivers/sqlite/service-stores";
+import { parseHistoryQuery } from "./chat-messages";
 
 const ACCOUNT = "chat-account";
 const AUTHORIZATION = (token: string): HeadersInit => ({ authorization: `Bearer ${token}` });
@@ -119,6 +120,234 @@ describe("ratified /v1/chat-messages route", () => {
       },
       generation: { id: expect.any(String) },
     });
+    db.close();
+  });
+
+  test("history GET filters one optional chatSessionId and keeps unknown keys at 400", async () => {
+    expect(parseHistoryQuery(new Request(
+      "https://service.example/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+    ))).toEqual({
+      limit: 50,
+      olderCursor: null,
+      chatSessionId: "session-alpha",
+    });
+    expect(parseHistoryQuery(new Request(
+      "https://service.example/v1/chat-messages?limit=50&chatSessionId=chat-main",
+    ))).toEqual({
+      limit: 50,
+      olderCursor: null,
+      chatSessionId: null,
+    });
+    expect(parseHistoryQuery(new Request(
+      "https://service.example/v1/chat-messages?limit=50&chatSessionId=%20chat-main%20",
+    ))).toEqual({
+      limit: 50,
+      olderCursor: null,
+      chatSessionId: " chat-main ",
+    });
+    expect(parseHistoryQuery(new Request(
+      "https://service.example/v1/chat-messages?limit=50&appId=other",
+    ))).toBeNull();
+    expect(parseHistoryQuery(new Request(
+      "https://service.example/v1/chat-messages?chatSessionId=",
+    ))).toBeNull();
+    expect(parseHistoryQuery(new Request(
+      `https://service.example/v1/chat-messages?chatSessionId=${"s".repeat(129)}`,
+    ))).toBeNull();
+    const { db, local, stores } = bootInMemory();
+    expect((await post(local, payload("main-only", 1))).status).toBe(201);
+    expect(stores.chatMessages.admitHuman(ACCOUNT, {
+      id: "named-human",
+      text: "named prompt",
+      sender: "human",
+      type: "text",
+      createdAt: 2,
+      updatedAt: 2,
+      chatSessionId: "session-alpha",
+      appId: null,
+      journalRevision: 1,
+      payloadHash: `sha256:${"a".repeat(64)}`,
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      revision: "revision-named",
+      attachments: [],
+    }, "gen-named").kind).toBe("created");
+    expect(stores.chatMessages.admitHuman(ACCOUNT, {
+      id: "named-older",
+      text: "older named",
+      sender: "human",
+      type: "text",
+      createdAt: 0,
+      updatedAt: 0,
+      chatSessionId: "session-alpha",
+      appId: null,
+      journalRevision: 1,
+      payloadHash: `sha256:${"b".repeat(64)}`,
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      revision: "revision-named-older",
+      attachments: [],
+    }, "gen-named-older").kind).toBe("created");
+    const unknown = await local.app.request(
+      "/v1/chat-messages?limit=50&appId=other",
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toEqual({
+      error: { code: "bad_request", retryable: false, action: "edit_request" },
+    });
+    const emptySession = await local.app.request(
+      "/v1/chat-messages?limit=50&chatSessionId=",
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    expect(emptySession.status).toBe(400);
+    const named = await local.app.request(
+      "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    expect(named.status).toBe(200);
+    expect(
+      ((await named.json()) as { messages: Array<{ id: string }> }).messages.map(
+        (message) => message.id,
+      ),
+    ).toEqual(["named-older", "named-human"]);
+    const main = await local.app.request("/v1/chat-messages?limit=50", {
+      headers: AUTHORIZATION(local.devToken),
+    });
+    expect(main.status).toBe(200);
+    expect(
+      ((await main.json()) as { messages: Array<{ id: string }> }).messages.map(
+        (message) => message.id,
+      ),
+    ).toEqual(["main-only"]);
+    expect(stores.chatMessages.admitHuman(ACCOUNT, {
+      id: "stored-main",
+      text: "stored as chat-main",
+      sender: "human",
+      type: "text",
+      createdAt: 3,
+      updatedAt: 3,
+      chatSessionId: "chat-main",
+      appId: null,
+      journalRevision: 1,
+      payloadHash: `sha256:${"c".repeat(64)}`,
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      revision: "revision-stored-main",
+      attachments: [],
+    }, "gen-stored-main").kind).toBe("created");
+    expect(stores.chatMessages.admitHuman(ACCOUNT, {
+      id: "padded-main",
+      text: "stored as space-padded chat-main",
+      sender: "human",
+      type: "text",
+      createdAt: 4,
+      updatedAt: 4,
+      chatSessionId: " chat-main ",
+      appId: null,
+      journalRevision: 1,
+      payloadHash: `sha256:${"d".repeat(64)}`,
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      revision: "revision-padded-main",
+      attachments: [],
+    }, "gen-padded-main").kind).toBe("created");
+    expect(stores.chatMessages.admitHuman(ACCOUNT, {
+      id: "space-main",
+      text: "stored as space-only chatSessionId",
+      sender: "human",
+      type: "text",
+      createdAt: 5,
+      updatedAt: 5,
+      chatSessionId: "  ",
+      appId: null,
+      journalRevision: 1,
+      payloadHash: `sha256:${"e".repeat(64)}`,
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      revision: "revision-space-main",
+      attachments: [],
+    }, "gen-space-main").kind).toBe("created");
+    const storedMain = await local.app.request("/v1/chat-messages?limit=50", {
+      headers: AUTHORIZATION(local.devToken),
+    });
+    expect(storedMain.status).toBe(200);
+    expect(
+      ((await storedMain.json()) as { messages: Array<{ id: string }> }).messages.map(
+        (message) => message.id,
+      ),
+    ).toEqual(["main-only", "stored-main", "padded-main", "space-main"]);
+    const aliasedMain = await local.app.request(
+      "/v1/chat-messages?limit=50&chatSessionId=chat-main",
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    expect(aliasedMain.status).toBe(200);
+    expect(
+      ((await aliasedMain.json()) as { messages: Array<{ id: string }> }).messages.map(
+        (message) => message.id,
+      ),
+    ).toEqual(["main-only", "stored-main", "padded-main", "space-main"]);
+    const mainNewest = await local.app.request("/v1/chat-messages?limit=1", {
+      headers: AUTHORIZATION(local.devToken),
+    });
+    const mainNewestBody = await mainNewest.json() as {
+      messages: Array<{ id: string }>;
+      page: { olderCursor: string | null; hasOlder: boolean };
+    };
+    expect(mainNewestBody.messages.map((message) => message.id)).toEqual(["space-main"]);
+    expect(mainNewestBody.page.hasOlder).toBe(true);
+    expect(mainNewestBody.page.olderCursor).not.toBeNull();
+    const aliasedContinue = await local.app.request(
+      `/v1/chat-messages?limit=1&chatSessionId=chat-main&olderCursor=${encodeURIComponent(mainNewestBody.page.olderCursor!)}`,
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    expect(aliasedContinue.status).toBe(200);
+    expect(
+      ((await aliasedContinue.json()) as { messages: Array<{ id: string }> }).messages.map(
+        (message) => message.id,
+      ),
+    ).toEqual(["padded-main"]);
+    const namedAfterStoredMain = await local.app.request(
+      "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    expect(namedAfterStoredMain.status).toBe(200);
+    expect(
+      ((await namedAfterStoredMain.json()) as { messages: Array<{ id: string }> }).messages.map(
+        (message) => message.id,
+      ),
+    ).toEqual(["named-older", "named-human"]);
+    const namedPage = await local.app.request(
+      "/v1/chat-messages?limit=1&chatSessionId=session-alpha",
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    const namedBody = await namedPage.json() as {
+      messages: Array<{ id: string }>;
+      page: { olderCursor: string | null; hasOlder: boolean };
+    };
+    expect(namedBody.messages.map((message) => message.id)).toEqual(["named-human"]);
+    expect(namedBody.page.hasOlder).toBe(true);
+    expect(namedBody.page.olderCursor).not.toBeNull();
+    const mismatched = await local.app.request(
+      `/v1/chat-messages?limit=1&olderCursor=${encodeURIComponent(namedBody.page.olderCursor!)}`,
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    expect(mismatched.status).toBe(400);
+    const continued = await local.app.request(
+      `/v1/chat-messages?limit=1&chatSessionId=session-alpha&olderCursor=${encodeURIComponent(namedBody.page.olderCursor!)}`,
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    expect(continued.status).toBe(200);
+    expect(
+      ((await continued.json()) as { messages: Array<{ id: string }> }).messages.map(
+        (message) => message.id,
+      ),
+    ).toEqual(["named-older"]);
     db.close();
   });
 

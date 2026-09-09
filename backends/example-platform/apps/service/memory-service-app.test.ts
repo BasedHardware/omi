@@ -149,5 +149,63 @@ test("device upload routes preserve original body and cancellation through the c
   expect(seenSignal?.aborted).toBe(true);
   expect((await app.request("/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/transcript")).status).toBe(403);
   expect((await app.request("/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/transcribe", { method: "POST" })).status).toBe(403);
+  expect((await app.request("/v1/device-sessions/ownership")).status).toBe(403);
   expect((await app.request("/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/download")).status).toBe(404);
+});
+
+test("device ownership GET forwards through the canonical shell", async () => {
+  const seen: string[] = [];
+  const app = createMemoryServiceApp(() => new Response(null, { status: 503 }), {
+    readPort: defineMemoryRouteReadPort(async () => false, async () => ({ kind: "unavailable" })),
+    nowEpochSeconds: () => 100, counter: createServedCounter(),
+  }, {}, undefined, {
+    async fetch(request) {
+      seen.push(`${request.method} ${new URL(request.url).pathname}`);
+      return Response.json({
+        error: { code: "capture_ownership_unavailable", retryable: false, action: "none" },
+      }, { status: 503 });
+    },
+  });
+  const response = await app.request("/v1/device-sessions/ownership");
+  expect(response.status).toBe(503);
+  expect(response.headers.get("retry-after")).toBeNull();
+  expect(await response.json()).toEqual({
+    error: { code: "capture_ownership_unavailable", retryable: false, action: "none" },
+  });
+  expect(seen).toEqual(["GET /v1/device-sessions/ownership"]);
+});
+
+test("unmounted device ownership stays a shell 404", async () => {
+  const app = createMemoryServiceApp(() => new Response(null, { status: 503 }), {
+    readPort: defineMemoryRouteReadPort(async () => false, async () => ({ kind: "unavailable" })),
+    nowEpochSeconds: () => 100, counter: createServedCounter(),
+  });
+  const response = await app.request("/v1/device-sessions/ownership");
+  expect(response.status).toBe(404);
+  expect(await response.text()).toBe('{"error":"not_found"}');
+});
+
+test("chat write doors forward to the chat runtime instead of a generic shell 404", async () => {
+  const seen: string[] = [];
+  const app = createMemoryServiceApp(() => new Response(null, { status: 503 }), {
+    readPort: defineMemoryRouteReadPort(async () => false, async () => ({ kind: "unavailable" })),
+    nowEpochSeconds: () => 100, counter: createServedCounter(),
+  }, {}, undefined, undefined, undefined, {
+    async executeRequest(request) {
+      seen.push(`${request.method} ${new URL(request.url).pathname}`);
+      return Response.json({ error: { code: "not_found", retryable: false, action: "none" } }, { status: 404 });
+    },
+  });
+  expect((await app.request("/v1/chat-messages", { method: "POST", body: "{}" })).status).toBe(404);
+  expect((await app.request("/v1/chat-generations/generation-1/events")).status).toBe(404);
+  expect((await app.request("/v1/chat-generations/generation-1", { method: "DELETE" })).status).toBe(404);
+  expect((await app.request("/v1/chat-attachments", { method: "POST", body: "{}" })).status).toBe(404);
+  expect((await app.request("/v1/chat-attachments/att-1/complete", { method: "POST", body: "{}" })).status).toBe(404);
+  expect(seen).toEqual([
+    "POST /v1/chat-messages",
+    "GET /v1/chat-generations/generation-1/events",
+    "DELETE /v1/chat-generations/generation-1",
+    "POST /v1/chat-attachments",
+    "POST /v1/chat-attachments/att-1/complete",
+  ]);
 });

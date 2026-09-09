@@ -9,8 +9,41 @@ import {
 type TranscriptRead =
   | {status: 'idle'; sessionId: null}
   | {status: 'loading'; sessionId: string}
-  | {status: 'error'; sessionId: string}
+  | {status: 'error'; sessionId: string; retryable: boolean}
   | {status: 'loaded'; sessionId: string; value: RecordingTranscript};
+
+function transcriptErrorRetryable(
+  status: number,
+  body: string | null,
+): boolean {
+  if (body !== null) {
+    try {
+      const parsed = JSON.parse(body) as {
+        error?: {retryable?: unknown} | string;
+      };
+      if (
+        parsed.error !== null &&
+        typeof parsed.error === 'object' &&
+        typeof parsed.error.retryable === 'boolean'
+      ) {
+        return parsed.error.retryable;
+      }
+    } catch {}
+  }
+  return [408, 429, 500, 502, 503, 504].includes(status);
+}
+
+function transcriptThrowRetryable(error: unknown): boolean {
+  if (error !== null && typeof error === 'object') {
+    if ('code' in error && error.code === 'OMI_DEV_BACKEND_UNSUPPORTED') {
+      return false;
+    }
+    if ('retryable' in error && error.retryable === false) {
+      return false;
+    }
+  }
+  return true;
+}
 
 export function useRecordingTranscript(
   sessionId: string | null,
@@ -30,7 +63,7 @@ export function useRecordingTranscript(
         setResult(previous =>
           previous.sessionId === null
             ? previous
-            : {status: 'error', sessionId: previous.sessionId},
+            : {status: 'error', sessionId: previous.sessionId, retryable: true},
         );
       }),
     [],
@@ -68,12 +101,23 @@ export function useRecordingTranscript(
         }
         setResult(
           value === null
-            ? {status: 'error', sessionId}
+            ? {
+                status: 'error',
+                sessionId,
+                retryable: transcriptErrorRetryable(
+                  response.status,
+                  response.body,
+                ),
+              }
             : {status: 'loaded', sessionId, value},
         );
-      } catch {
+      } catch (error) {
         if (active && epoch.current === current) {
-          setResult({status: 'error', sessionId});
+          setResult({
+            status: 'error',
+            sessionId,
+            retryable: transcriptThrowRetryable(error),
+          });
         }
       }
     };

@@ -4,9 +4,13 @@ The deployed service mounts `GET /v1/settings` through the same admission,
 readiness and drain boundary as the other REST routes. Absent credentials return
 the signed-out envelope `{identity:null,entitlement:null}`. Present invalid
 credentials are 401. A verified Firebase identity without an owner-backed profile
-and entitlement producer is 503 `{error:"service_unavailable"}` with
-`retry-after: 60`. Token claims are never projected as display names, emails, or
-plans. PostgreSQL account/grant rows are not a Settings producer.
+and entitlement producer is 503
+`{error:{code:"service_unavailable",retryable:false,action:"none"}}`.
+That door cannot succeed until a producer exists, so it does not advertise
+`retry-after`. Token claims are never projected as display names, emails, or
+plans. PostgreSQL account/grant rows are not a Settings producer. A Firebase
+verification outage stays 503 `{error:"service_unavailable"}` with
+`retry-after: 60`.
 
 Mutations stay unmounted. Unmounted writes stay 404 `{error:"not_found"}`. Do not
 invent identity, billing, or usage to satisfy the page.

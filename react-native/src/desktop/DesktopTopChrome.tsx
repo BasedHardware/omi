@@ -8,6 +8,7 @@ import Search from 'lucide-react-native/icons/search';
 import History from 'lucide-react-native/icons/rotate-ccw-clock';
 import Settings from 'lucide-react-native/icons/settings';
 import {FocusPressable} from '../ui/Pressable';
+import {visibleDisplayText} from '../desktopReadClient';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {
   desktopMotion,
@@ -45,6 +46,7 @@ type Props = {
   onStop: () => void;
   chatNotice: string | null;
   omnibarRef: React.RefObject<TextInput | null>;
+  sendUnavailable?: boolean;
 };
 
 export function DesktopChrome({
@@ -57,6 +59,7 @@ export function DesktopChrome({
   onSend,
   onStop,
   route,
+  sendUnavailable = false,
 }: Props) {
   const reduceMotion = useReduceMotion();
   const [frames, setFrames] = useState<
@@ -72,6 +75,9 @@ export function DesktopChrome({
   const activeFrame = activeNav === null ? undefined : frames[activeNav];
   const activeX = activeFrame?.x;
   const activeWidth = activeFrame?.width;
+  const sendDisabled =
+    activeGenerationId === null &&
+    (sendUnavailable || visibleDisplayText(draft) === '');
 
   useEffect(() => {
     if (activeNav === null) {
@@ -209,7 +215,7 @@ export function DesktopChrome({
           accessibilityLabel="Search what you have seen and heard"
           blurOnSubmit={false}
           onChangeText={onDraftChange}
-          onSubmitEditing={onSend}
+          onSubmitEditing={sendDisabled ? undefined : onSend}
           placeholder={desktopSearchPlaceholder}
           placeholderTextColor={token.color.inkMuted}
           ref={omnibarRef}
@@ -217,11 +223,32 @@ export function DesktopChrome({
           value={draft}
         />
         <FocusPressable
-          accessibilityLabel={activeGenerationId === null ? 'Send' : 'Stop'}
+          accessibilityLabel={
+            activeGenerationId === null
+              ? sendUnavailable
+                ? 'Send unavailable'
+                : 'Send'
+              : 'Stop'
+          }
           accessibilityRole="button"
-          onPress={activeGenerationId === null ? onSend : onStop}
-          style={({pressed}) => [styles.send, pressed && styles.pressed]}>
-          <Text style={styles.sendText}>
+          disabled={sendDisabled}
+          onPress={
+            activeGenerationId === null
+              ? sendDisabled
+                ? () => undefined
+                : onSend
+              : onStop
+          }
+          style={({pressed}) => [
+            styles.send,
+            sendDisabled && styles.sendUnavailable,
+            pressed && styles.pressed,
+          ]}>
+          <Text
+            style={[
+              styles.sendText,
+              sendDisabled && styles.sendTextUnavailable,
+            ]}>
             {activeGenerationId === null ? 'Ask' : 'Stop'}
           </Text>
         </FocusPressable>
@@ -332,12 +359,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 6,
   },
+  sendUnavailable: {opacity: 0.35},
   sendText: {
     color: token.color.ink,
     fontFamily: token.font,
     fontSize: token.type.caption,
     fontWeight: '600',
   },
+  sendTextUnavailable: {color: token.color.inkMuted},
   settingsButton: {
     alignItems: 'center',
     borderRadius: 17,

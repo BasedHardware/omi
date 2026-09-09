@@ -4,16 +4,30 @@ import {Animated, ScrollView, Switch, Text, View} from 'react-native';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {desktopEaseSmoothOut} from './desktopMotion';
 import {
+  cloudErrorCanRetry,
   loadAccountSettings,
+  optInTrainingData,
   setPrivateCloudSync,
   setStoreRecordingPermission,
   type AccountSettingsSnapshot,
 } from '../desktopCloudClient';
 import {
+  dataProtectionCopy,
+  desktopReadErrorCopy,
+  developerWebhookRowCopy,
+  developerWebhookTypeCopy,
+  accountFieldCopy,
+  subscriptionPlanCopy,
+  subscriptionStatusCopy,
+  visibleDisplayText,
+} from '../desktopReadClient';
+import {
+  audioRecordingModeCopy,
   defaultDesktopPreferences,
   loadDesktopPreferences,
   loadPermissionStatus,
   requestDesktopPermission,
+  rewindRetentionCopy,
   setDesktopPreference,
   type AudioRecordingMode,
   type DesktopPreferences,
@@ -42,20 +56,41 @@ type Props = {
   softwarePlaneLocked: boolean;
 };
 
+function failedAccountSettings(error: string): AccountSettingsSnapshot {
+  return {
+    profile: null,
+    profileError: error,
+    subscription: null,
+    subscriptionError: error,
+    storeRecordingPermission: null,
+    storeRecordingError: error,
+    trainingOptedIn: null,
+    trainingError: error,
+    privateCloudSync: null,
+    privateCloudSyncError: error,
+    webhooks: null,
+    webhooksError: error,
+  };
+}
+
 const PANE_ITEM_HEIGHT = 40;
 const PANE_ITEM_GAP = 12;
 const PANE_PILL_RADIUS = 14;
+
+type PrivacyWriteKind = 'recording' | 'training' | 'sync';
 
 function Row({
   action,
   actionLabel,
   copy,
+  disabled = false,
   title,
   trailing,
 }: {
   action?: () => void;
   actionLabel?: string;
   copy: string;
+  disabled?: boolean;
   title: string;
   trailing?: React.ReactNode;
 }) {
@@ -70,6 +105,8 @@ function Row({
         <FocusPressable
           accessibilityLabel={actionLabel}
           accessibilityRole="button"
+          accessibilityState={{disabled}}
+          disabled={disabled}
           onPress={action}
           style={({pressed}) => [styles.action, pressed && styles.pressed]}>
           <Text style={styles.actionText}>{actionLabel}</Text>
@@ -81,11 +118,13 @@ function Row({
 
 function Segmented<Value extends string>({
   disabled = false,
+  formatOption,
   onChange,
   options,
   value,
 }: {
   disabled?: boolean;
+  formatOption?: (value: Value) => string;
   onChange: (value: Value) => void;
   options: readonly Value[];
   value: Value;
@@ -109,7 +148,7 @@ function Segmented<Value extends string>({
               styles.segmentText,
               value === option && styles.segmentTextActive,
             ]}>
-            {option}
+            {formatOption ? formatOption(option) : option}
           </Text>
         </FocusPressable>
       ))}
@@ -189,6 +228,9 @@ export function DesktopSettings({
   >({microphone: 'unknown', notifications: 'unknown', screen: 'unknown'});
   const [account, setAccount] = useState<AccountSettingsSnapshot | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
+  const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
+    Record<PrivacyWriteKind, boolean>
+  >({recording: true, training: true, sync: true});
   const actionSeqRef = useRef(0);
   const reloadSeqRef = useRef(0);
   const backend = omiBackend;
@@ -211,8 +253,8 @@ export function DesktopSettings({
     if (backend !== undefined && backend !== null && session === 'ready') {
       try {
         nextAccount = await loadAccountSettings(backend);
-      } catch {
-        nextAccount = null;
+      } catch (reason) {
+        nextAccount = failedAccountSettings(desktopReadErrorCopy(reason));
       }
     }
     if (seq !== reloadSeqRef.current) {
@@ -247,6 +289,7 @@ export function DesktopSettings({
   const runAction = (
     action: () => Promise<void>,
     failure = 'Settings change could not be saved. Try again.',
+    writeKind?: PrivacyWriteKind,
   ) => {
     const seq = ++actionSeqRef.current;
     setActionStatus('Saving settings…');
@@ -256,9 +299,17 @@ export function DesktopSettings({
           setActionStatus(null);
         }
       },
-      () => {
+      (reason: unknown) => {
         if (seq === actionSeqRef.current) {
-          setActionStatus(failure);
+          setActionStatus(
+            cloudErrorCanRetry(reason) ? failure : desktopReadErrorCopy(reason),
+          );
+          if (writeKind !== undefined && !cloudErrorCanRetry(reason)) {
+            setPrivacyWritesAvailable(current => ({
+              ...current,
+              [writeKind]: false,
+            }));
+          }
         }
       },
     );
@@ -355,6 +406,7 @@ export function DesktopSettings({
         title="Audio Recording"
         trailing={
           <Segmented<AudioRecordingMode>
+            formatOption={audioRecordingModeCopy}
             onChange={value => {
               runAction(async () => {
                 if (
@@ -374,6 +426,8 @@ export function DesktopSettings({
         copy={
           permissions.notifications === 'granted'
             ? 'Banners are allowed in System Settings.'
+            : permissions.notifications === 'denied'
+            ? 'Notification access is denied in System Settings.'
             : 'Ask macOS for notification permission.'
         }
         title="Notifications"
@@ -402,9 +456,16 @@ export function DesktopSettings({
     <>
       <Row
         copy={
-          session === 'ready'
-            ? account?.profile?.email ?? 'Signed in to Omi'
-            : 'Sign in to load conversations and memories.'
+          session !== 'ready'
+            ? 'Sign in to load conversations and memories.'
+            : account === null
+            ? 'Loading account…'
+            : account.profile != null
+            ? accountFieldCopy(
+                account.profile.email,
+                'Email not set on this account.',
+              )
+            : account.profileError ?? 'Account profile is unavailable.'
         }
         title="Account"
         action={
@@ -425,12 +486,50 @@ export function DesktopSettings({
             : 'Sign in'
         }
       />
-      {account?.profile?.name != null ? (
-        <Row copy={account.profile.name} title="Name" />
+      {account?.profile != null ? (
+        <Row
+          copy={accountFieldCopy(
+            account.profile.name,
+            'Name not set on this account.',
+          )}
+          title="Name"
+        />
+      ) : null}
+      {account?.profile != null ? (
+        <Row
+          copy={accountFieldCopy(account.profile.uid, 'Account id unavailable')}
+          title="Account id"
+        />
+      ) : null}
+      {account?.profile != null &&
+      visibleDisplayText(account.profile.company ?? '') !== '' ? (
+        <Row
+          copy={visibleDisplayText(account.profile.company ?? '')}
+          title="Company"
+        />
+      ) : null}
+      {account?.profile != null &&
+      visibleDisplayText(account.profile.job ?? '') !== '' ? (
+        <Row copy={visibleDisplayText(account.profile.job ?? '')} title="Job" />
+      ) : null}
+      {account?.profile?.dataProtectionLevel != null ? (
+        <Row
+          copy={dataProtectionCopy(account.profile.dataProtectionLevel)}
+          title="Data protection"
+        />
       ) : null}
       {account?.subscription != null ? (
         <Row
-          copy={`${account.subscription.plan} · ${account.subscription.status}`}
+          copy={[
+            subscriptionPlanCopy(account.subscription.plan),
+            subscriptionStatusCopy(account.subscription.status),
+            account.subscription.transcriptionSecondsUsed !== null &&
+            account.subscription.transcriptionSecondsLimit !== null
+              ? `${account.subscription.transcriptionSecondsUsed} / ${account.subscription.transcriptionSecondsLimit} transcribed seconds`
+              : null,
+          ]
+            .filter(item => item !== null)
+            .join(' · ')}
           title="Current plan"
         />
       ) : (
@@ -482,6 +581,7 @@ export function DesktopSettings({
         title="Data Retention"
         trailing={
           <Segmented
+            formatOption={rewindRetentionCopy}
             onChange={value => {
               runAction(() => setPref('rewindRetentionDays', Number(value)));
             }}
@@ -509,8 +609,12 @@ export function DesktopSettings({
     <>
       <Row
         copy={
-          account?.storeRecordingPermission === null || account === null
-            ? account?.storeRecordingError ??
+          session !== 'ready'
+            ? 'Sign in to load this account setting.'
+            : account === null
+            ? 'Loading recording storage…'
+            : account.storeRecordingPermission === null
+            ? account.storeRecordingError ??
               'Cloud recording storage status is unavailable.'
             : account.storeRecordingPermission
             ? 'Cloud recording storage is on.'
@@ -520,15 +624,20 @@ export function DesktopSettings({
         action={
           session === 'ready' &&
           backend != null &&
-          typeof account?.storeRecordingPermission === 'boolean'
+          typeof account?.storeRecordingPermission === 'boolean' &&
+          privacyWritesAvailable.recording
             ? () => {
-                runAction(async () => {
-                  await setStoreRecordingPermission(
-                    backend,
-                    !(account?.storeRecordingPermission ?? false),
-                  );
-                  await reload();
-                });
+                runAction(
+                  async () => {
+                    await setStoreRecordingPermission(
+                      backend,
+                      !(account?.storeRecordingPermission ?? false),
+                    );
+                    await reload();
+                  },
+                  'Settings change could not be saved. Try again.',
+                  'recording',
+                );
               }
             : undefined
         }
@@ -536,8 +645,12 @@ export function DesktopSettings({
       />
       <Row
         copy={
-          account?.privateCloudSync === null || account === null
-            ? account?.privateCloudSyncError ??
+          session !== 'ready'
+            ? 'Sign in to load this account setting.'
+            : account === null
+            ? 'Loading private cloud sync…'
+            : account.privateCloudSync === null
+            ? account.privateCloudSyncError ??
               'Private cloud sync status is unavailable.'
             : account.privateCloudSync
             ? 'Private cloud sync is on.'
@@ -547,19 +660,56 @@ export function DesktopSettings({
         action={
           session === 'ready' &&
           backend != null &&
-          typeof account?.privateCloudSync === 'boolean'
+          typeof account?.privateCloudSync === 'boolean' &&
+          privacyWritesAvailable.sync
             ? () => {
-                runAction(async () => {
-                  await setPrivateCloudSync(
-                    backend,
-                    !(account?.privateCloudSync ?? false),
-                  );
-                  await reload();
-                });
+                runAction(
+                  async () => {
+                    await setPrivateCloudSync(
+                      backend,
+                      !(account?.privateCloudSync ?? false),
+                    );
+                    await reload();
+                  },
+                  'Settings change could not be saved. Try again.',
+                  'sync',
+                );
               }
             : undefined
         }
         actionLabel="Update"
+      />
+      <Row
+        copy={
+          session !== 'ready'
+            ? 'Sign in to load this account setting.'
+            : account === null
+            ? 'Loading training data…'
+            : account.trainingOptedIn === null
+            ? account.trainingError ?? 'Training opt-in is unavailable.'
+            : account.trainingOptedIn
+            ? 'This account has opted in to training data. The API does not expose an opt-out from here.'
+            : 'This account has not opted in to training data.'
+        }
+        title="Training Data"
+        action={
+          session === 'ready' &&
+          backend != null &&
+          account?.trainingOptedIn === false &&
+          privacyWritesAvailable.training
+            ? () => {
+                runAction(
+                  async () => {
+                    await optInTrainingData(backend);
+                    await reload();
+                  },
+                  'Settings change could not be saved. Try again.',
+                  'training',
+                );
+              }
+            : undefined
+        }
+        actionLabel="Opt in"
       />
     </>
   );
@@ -569,6 +719,40 @@ export function DesktopSettings({
       <Row copy="Omi v5 for Mac" title="Version" />
       <Row copy="https://omi.me" title="Website" />
       <Row copy="https://omi.me/privacy" title="Privacy Policy" />
+    </>
+  );
+
+  const automation = (
+    <>
+      {advanced}
+      {session !== 'ready' ? (
+        <Row
+          copy="Sign in to load this account setting."
+          title="Developer Webhooks"
+        />
+      ) : account === null ? (
+        <Row copy="Loading developer webhooks…" title="Developer Webhooks" />
+      ) : account.webhooks === null ? (
+        <Row
+          copy={
+            account.webhooksError ?? 'Developer webhook status is unavailable.'
+          }
+          title="Developer Webhooks"
+        />
+      ) : account.webhooks.length === 0 ? (
+        <Row
+          copy="No developer webhooks were returned."
+          title="Developer Webhooks"
+        />
+      ) : (
+        account.webhooks.map(webhook => (
+          <Row
+            copy={developerWebhookRowCopy(webhook)}
+            key={webhook.type}
+            title={developerWebhookTypeCopy(webhook.type)}
+          />
+        ))
+      )}
     </>
   );
 
@@ -584,7 +768,7 @@ export function DesktopSettings({
       : pane === 'Alerts & Privacy'
       ? alerts
       : pane === 'AI & Automation'
-      ? advanced
+      ? automation
       : about;
 
   return (

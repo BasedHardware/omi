@@ -230,6 +230,55 @@ describe("canonical task authority delegation", () => {
     expect(calls).toBe(0);
   });
 
+  test("unreadable GET pages are non-retryable projection_unavailable", async () => {
+    const response = await requestCanonicalTasks({
+      service: {
+        async fetch() {
+          return new Response('{"items":[]}', {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        },
+      },
+      caller: {
+        accountId: "firebase:alice",
+        authorization: `Bearer ${aliceToken}`,
+        stagingApiToken: "test-staging",
+      },
+      method: "GET",
+      query: new URLSearchParams(),
+    });
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBeNull();
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "projection_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
+  });
+
+  test("canonical GET transport failures stay retryable", async () => {
+    const response = await requestCanonicalTasks({
+      service: {
+        async fetch() {
+          throw new Error("Authority unavailable");
+        },
+      },
+      caller: {
+        accountId: "firebase:alice",
+        authorization: `Bearer ${aliceToken}`,
+        stagingApiToken: "test-staging",
+      },
+      method: "GET",
+      query: new URLSearchParams(),
+    });
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).not.toBeNull();
+    expect(await response.text()).toBe('{"error":"internal_server_error"}');
+  });
+
   test.each([
     { status: 200, body: '{"success":true}' },
     {

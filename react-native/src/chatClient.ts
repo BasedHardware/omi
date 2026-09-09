@@ -10,15 +10,23 @@ import {
   wireToChatHistoryEnvelope,
 } from '@omi-core/adapters-platform/dist/chat';
 
+export type ChatMessageAttachment = {
+  id: string;
+  displayName: string;
+  mediaType: string;
+  sizeBytes: number;
+};
+
 export type ChatMessage = {
   id: string;
   text: string;
-  sender: 'human' | 'ai';
+  sender: 'human' | 'ai' | 'unknown';
   createdAt: number;
   generationOutcome: 'completed' | 'cancelled' | 'failed' | null;
   generationId?: string;
   generationRetryable?: boolean;
   localOnly?: boolean;
+  attachments?: ChatMessageAttachment[];
 };
 
 export type ChatHistoryPage = {
@@ -50,7 +58,40 @@ export class ChatBackendError extends Error {
   }
 }
 
+export function chatWriteDoorUnavailable(error: unknown): boolean {
+  if (nativeErrorCode(error) === 'OMI_DEV_BACKEND_UNSUPPORTED') {
+    return true;
+  }
+  return (
+    error instanceof ChatBackendError &&
+    (error.status === 404 ||
+      error.backendCode === 'not_found' ||
+      error.backendCode === 'development_backend_unsupported')
+  );
+}
+
+export function chatHistoryHasOlder(
+  hasOlder: boolean,
+  olderCursor: string | null,
+): boolean {
+  return hasOlder && olderCursor !== null && olderCursor.length > 0;
+}
+
+export function chatComposerIsResting(
+  messageCount: number,
+  chatBusy: boolean,
+  olderAvailable: boolean,
+  chatError: string | null,
+): boolean {
+  return (
+    messageCount === 0 && !chatBusy && !olderAvailable && chatError === null
+  );
+}
+
 export function chatErrorCopy(error: unknown): string {
+  if (chatWriteDoorUnavailable(error)) {
+    return 'Sending messages is not available on this backend yet.';
+  }
   if (!(error instanceof ChatBackendError)) {
     return 'Message not sent. Check your connection and try again.';
   }
@@ -65,7 +106,7 @@ export function chatErrorCopy(error: unknown): string {
       ? 'Too many requests. Try again shortly.'
       : `Too many requests. Try again in ${error.retryAfterSeconds} seconds.`;
   }
-  if (error.retryable || error.status === 503) {
+  if (error.retryable) {
     return 'Omi is temporarily unavailable. Try again.';
   }
   return 'This request cannot be completed.';
@@ -100,6 +141,9 @@ export function chatSessionLost(error: unknown): boolean {
 }
 
 export function chatHistoryErrorCopy(error: unknown): string {
+  if (chatWriteDoorUnavailable(error)) {
+    return 'Chat history is not available on this backend yet.';
+  }
   if (error instanceof ChatBackendError) {
     return chatErrorCopy(error);
   }
@@ -120,6 +164,26 @@ export function chatHistoryErrorCopy(error: unknown): string {
     return 'Omi is temporarily unavailable. Try again.';
   }
   return 'Chat history could not be loaded. Check your connection and try again.';
+}
+
+export function chatHistoryCanReload(error: unknown): boolean {
+  if (chatWriteDoorUnavailable(error)) {
+    return false;
+  }
+  if (!(error instanceof ChatBackendError)) {
+    return true;
+  }
+  if (error.status === 403 || error.backendCode === 'forbidden') {
+    return true;
+  }
+  return error.retryable;
+}
+
+export function chatCancelErrorCopy(error: unknown): string {
+  if (chatWriteDoorUnavailable(error)) {
+    return 'Stopping the response is not available on this backend yet.';
+  }
+  return 'Could not stop the response.';
 }
 
 let messageSequence = 0;
@@ -147,7 +211,11 @@ function parseJson(body: string | null): unknown {
 }
 
 function desktopChatMessage(message: ParsedChatMessage): ChatMessage {
-  if (message.sender !== 'human' && message.sender !== 'ai') {
+  if (
+    message.sender !== 'human' &&
+    message.sender !== 'ai' &&
+    message.sender !== 'unknown'
+  ) {
     throw new Error('Chat message sender is unsupported');
   }
   return {
@@ -156,6 +224,16 @@ function desktopChatMessage(message: ParsedChatMessage): ChatMessage {
     sender: message.sender,
     createdAt: message.createdAt,
     generationOutcome: message.generationOutcome,
+    ...(message.attachments.length > 0
+      ? {
+          attachments: message.attachments.map(attachment => ({
+            id: attachment.id,
+            displayName: attachment.displayName,
+            mediaType: attachment.mediaType,
+            sizeBytes: attachment.sizeBytes,
+          })),
+        }
+      : {}),
   };
 }
 
@@ -167,18 +245,29 @@ export async function loadChatHistory(
 
 export async function loadNewestChatHistory(
   backend: OmiBackend,
+  chatSessionId?: string,
 ): Promise<ChatHistoryPage> {
   if ((await backend.getApiContract?.()) === 'omi') {
+    if (chatSessionId !== undefined) {
+      throw new ChatBackendError(404, 'not_found', false, 'none', null);
+    }
     return loadOmiHistory(backend, 0);
   }
-  return loadChatHistoryPage(backend, '/v1/chat-messages?limit=50');
+  return loadChatHistoryPage(
+    backend,
+    canonicalChatHistoryPath({chatSessionId}),
+  );
 }
 
 export async function loadOlderChatHistory(
   backend: OmiBackend,
   olderCursor: string,
+  chatSessionId?: string,
 ): Promise<ChatHistoryPage> {
   if ((await backend.getApiContract?.()) === 'omi') {
+    if (chatSessionId !== undefined) {
+      throw new ChatBackendError(404, 'not_found', false, 'none', null);
+    }
     return loadOmiHistory(backend, omiHistoryOffset(olderCursor));
   }
   if (olderCursor.length === 0) {
@@ -186,8 +275,22 @@ export async function loadOlderChatHistory(
   }
   return loadChatHistoryPage(
     backend,
-    `/v1/chat-messages?limit=50&olderCursor=${encodeURIComponent(olderCursor)}`,
+    canonicalChatHistoryPath({olderCursor, chatSessionId}),
   );
+}
+
+function canonicalChatHistoryPath(query: {
+  olderCursor?: string;
+  chatSessionId?: string;
+}): string {
+  let path = '/v1/chat-messages?limit=50';
+  if (query.olderCursor !== undefined) {
+    path += `&olderCursor=${encodeURIComponent(query.olderCursor)}`;
+  }
+  if (query.chatSessionId !== undefined) {
+    path += `&chatSessionId=${encodeURIComponent(query.chatSessionId)}`;
+  }
+  return path;
 }
 
 async function loadOmiHistory(
@@ -419,21 +522,27 @@ function readGeneration(response: NativeHttpResponse): string {
 
 function throwBackendError(response: NativeHttpResponse): never {
   let code = 'unknown';
-  let retryable = false;
+  let retryable = response.status === 503;
   let action = 'none';
   if (response.body !== null) {
     try {
       const parsed = JSON.parse(response.body) as {
-        error?: {code?: unknown; retryable?: unknown; action?: unknown};
+        error?:
+          | {code?: unknown; retryable?: unknown; action?: unknown}
+          | string;
       };
-      if (typeof parsed.error?.code === 'string') {
-        code = parsed.error.code;
-      }
-      if (typeof parsed.error?.retryable === 'boolean') {
-        retryable = parsed.error.retryable;
-      }
-      if (typeof parsed.error?.action === 'string') {
-        action = parsed.error.action;
+      if (typeof parsed.error === 'string') {
+        code = parsed.error;
+      } else if (parsed.error !== null && typeof parsed.error === 'object') {
+        if (typeof parsed.error.code === 'string') {
+          code = parsed.error.code;
+        }
+        if (typeof parsed.error.retryable === 'boolean') {
+          retryable = parsed.error.retryable;
+        }
+        if (typeof parsed.error.action === 'string') {
+          action = parsed.error.action;
+        }
       }
     } catch {}
   }

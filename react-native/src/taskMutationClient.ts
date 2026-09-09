@@ -138,6 +138,7 @@ export async function sendTaskPatch(
     });
   } catch (error) {
     if (backendChanged(error)) return taskConflict();
+    if (writeDoorClosed(error)) return taskUnavailable();
     return retryable('Task edit could not be confirmed by the transport');
   }
   let json: unknown = null;
@@ -149,6 +150,9 @@ export async function sendTaskPatch(
       return retryable('Task edit acknowledgement could not be verified');
     }
     return {ok: true, revision: json.applied.revision};
+  }
+  if (nestedNonRetryableBody(json)) {
+    return taskUnavailable();
   }
   const response = {
     status: nativeResponse.status,
@@ -175,6 +179,41 @@ function backendChanged(error: unknown): boolean {
     'code' in error &&
     error.code === 'OMI_HTTP_BACKEND_CHANGED'
   );
+}
+function writeDoorClosed(error: unknown): boolean {
+  if (error === null || typeof error !== 'object') {
+    return false;
+  }
+  if ('code' in error && error.code === 'OMI_DEV_BACKEND_UNSUPPORTED') {
+    return true;
+  }
+  return 'retryable' in error && error.retryable === false;
+}
+function nestedNonRetryableBody(json: unknown): boolean {
+  if (json === null || typeof json !== 'object' || Array.isArray(json)) {
+    return false;
+  }
+  const error = (json as {error?: unknown}).error;
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    !Array.isArray(error) &&
+    (error as {retryable?: unknown}).retryable === false
+  );
+}
+export const TASK_WRITE_UNAVAILABLE_DETAIL =
+  'Task edit is not available on this backend yet';
+
+function taskUnavailable(): TaskPatchResult {
+  return {
+    ok: false,
+    failure: {
+      kind: 'permanent',
+      reason: 'gone',
+      detail: TASK_WRITE_UNAVAILABLE_DETAIL,
+    },
+    controlUnavailable: false,
+  };
 }
 function taskConflict(): TaskPatchResult {
   return {
@@ -250,7 +289,15 @@ async function sendOmiTaskPatch(
         },
         controlUnavailable: false,
       };
-    if (response.status !== 200) return unknown();
+    if (response.status !== 200) {
+      let value: unknown;
+      try {
+        value = JSON.parse(response.body ?? 'null');
+      } catch {
+        value = null;
+      }
+      return nestedNonRetryableBody(value) ? taskUnavailable() : unknown();
+    }
     let value: unknown;
     try {
       value = JSON.parse(response.body ?? 'null');
@@ -271,6 +318,10 @@ async function sendOmiTaskPatch(
       return reconcile ? taskConflict() : unknown();
     return {ok: true, revision: null};
   } catch (error) {
-    return backendChanged(error) ? taskConflict() : unknown();
+    return backendChanged(error)
+      ? taskConflict()
+      : writeDoorClosed(error)
+      ? taskUnavailable()
+      : unknown();
   }
 }

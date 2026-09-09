@@ -1,7 +1,11 @@
 import type {OmiBackend} from './omiNative';
 import {
+  desktopAccountSettingUnavailableCopy,
+  desktopAppsUnavailableCopy,
   desktopBackendConfigurationCopy,
+  desktopBackendServiceCopy,
   desktopBackendUnauthorizedCopy,
+  desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
 } from './desktopReadClient';
 
@@ -25,6 +29,7 @@ export type ConnectorsSnapshot = {
   enabledIds: string[] | null;
   enabledError: string | null;
   ownerUid: string | null;
+  ownerError: string | null;
 };
 
 export type CloudProfile = {
@@ -96,6 +101,31 @@ function parseJson(body: string | null, label: string): unknown {
   }
 }
 
+function nestedErrorRetryable(body: string | null): boolean | null {
+  if (body === null) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: {retryable?: unknown} | string;
+    };
+    if (parsed.error !== null && typeof parsed.error === 'object') {
+      return typeof parsed.error.retryable === 'boolean'
+        ? parsed.error.retryable
+        : null;
+    }
+  } catch {}
+  return null;
+}
+
+export function cloudErrorCanRetry(error: unknown): boolean {
+  return !(
+    error instanceof Error &&
+    'retryable' in error &&
+    (error as {retryable?: unknown}).retryable === false
+  );
+}
+
 async function cloudRequest(
   backend: OmiBackend,
   id: string,
@@ -110,6 +140,20 @@ async function cloudRequest(
     unauthorized.code = 'unauthorized';
     throw unauthorized;
   }
+  if (
+    response.status !== 200 &&
+    nestedErrorRetryable(response.body) === false
+  ) {
+    const unavailable = new Error(
+      path.startsWith('/v1/apps')
+        ? desktopAppsUnavailableCopy
+        : path.startsWith('/v1/users/')
+        ? desktopAccountSettingUnavailableCopy
+        : desktopBackendUnavailableCopy,
+    ) as Error & {retryable: boolean};
+    unavailable.retryable = false;
+    throw unavailable;
+  }
   if (response.status !== 200) {
     throw new Error(`${id} failed (${response.status})`);
   }
@@ -119,8 +163,7 @@ async function cloudRequest(
 export function parseCloudApp(value: unknown, label: string): CloudApp {
   const record = object(value, label);
   const id = optionalString(record.id);
-  const name = optionalString(record.name);
-  if (id === null || name === null) {
+  if (id === null || typeof record.name !== 'string') {
     throw new Error(`${label} is malformed`);
   }
   if (record.deleted === true) {
@@ -135,7 +178,7 @@ export function parseCloudApp(value: unknown, label: string): CloudApp {
   }
   return {
     id,
-    name,
+    name: record.name,
     description:
       typeof record.description === 'string' ? record.description : '',
     category: typeof record.category === 'string' ? record.category : '',
@@ -205,14 +248,15 @@ export function parseCloudSubscription(
     record.subscription === undefined
       ? record
       : object(record.subscription, `${label} subscription`);
-  const plan = optionalString(subscription.plan);
-  const status = optionalString(subscription.status);
-  if (plan === null || status === null) {
+  if (
+    typeof subscription.plan !== 'string' ||
+    typeof subscription.status !== 'string'
+  ) {
     throw new Error(`${label} is malformed`);
   }
   return {
-    plan,
-    status,
+    plan: subscription.plan,
+    status: subscription.status,
     transcriptionSecondsUsed: optionalInteger(
       record.transcription_seconds_used,
     ),
@@ -303,10 +347,14 @@ export async function loadConnectors(
   );
   if (enabledResult.status === 'rejected') {
     return {
-      apps,
+      apps: apps.map(app => ({
+        ...app,
+        enabled: false,
+      })),
       enabledIds: null,
       enabledError: settledError(enabledResult.reason),
       ownerUid: owner.value?.uid ?? null,
+      ownerError: owner.error,
     };
   }
   const enabledIds = parseEnabledAppIds(
@@ -322,6 +370,7 @@ export async function loadConnectors(
     enabledIds,
     enabledError: null,
     ownerUid: owner.value?.uid ?? null,
+    ownerError: owner.error,
   };
 }
 
@@ -519,11 +568,41 @@ export function cloudSessionUnavailableCopy(
     : desktopBackendUnauthorizedCopy;
 }
 
+export const serviceSettingsUnavailableCopy =
+  'Account profile and usage are not available from this service yet.';
+const serviceSettingsLoadFailureCopy =
+  'Settings could not be loaded. Try again.';
+
+export function serviceSettingsCanRetry(error: unknown): boolean {
+  return cloudErrorCanRetry(error);
+}
+
+export function serviceSettingsErrorCopy(error: unknown): string {
+  if (
+    error instanceof Error &&
+    error.message === serviceSettingsUnavailableCopy
+  ) {
+    return serviceSettingsUnavailableCopy;
+  }
+  const mapped = desktopReadErrorCopy(error);
+  if (
+    mapped === desktopBackendUnauthorizedCopy ||
+    mapped === desktopBackendConfigurationCopy ||
+    mapped === desktopBackendServiceCopy
+  ) {
+    return mapped;
+  }
+  return serviceSettingsLoadFailureCopy;
+}
+
 export function exploreApps(snapshot: ConnectorsSnapshot): CloudApp[] {
   return snapshot.apps;
 }
 
 export function installedApps(snapshot: ConnectorsSnapshot): CloudApp[] {
+  if (snapshot.enabledIds === null) {
+    return [];
+  }
   return snapshot.apps.filter(app => app.enabled);
 }
 
@@ -551,13 +630,32 @@ export type ServiceSettingsSnapshot = {
 export async function loadServiceSettings(
   backend: OmiBackend,
 ): Promise<ServiceSettingsSnapshot> {
-  const response = await cloudRequest(
-    backend,
-    'service-settings-read',
-    'GET',
-    '/v1/settings',
+  const response = await backend.request({
+    id: 'service-settings-read',
+    method: 'GET',
+    path: '/v1/settings',
+  });
+  if (response.status === 401) {
+    const unauthorized = new Error(desktopBackendUnauthorizedCopy) as Error & {
+      code: string;
+    };
+    unauthorized.code = 'unauthorized';
+    throw unauthorized;
+  }
+  if (response.status === 503) {
+    const unavailable = new Error(serviceSettingsUnavailableCopy) as Error & {
+      retryable: boolean;
+    };
+    unavailable.retryable = nestedErrorRetryable(response.body) !== false;
+    throw unavailable;
+  }
+  if (response.status !== 200) {
+    throw new Error(serviceSettingsLoadFailureCopy);
+  }
+  const body = object(
+    parseJson(response.body, 'service-settings-read'),
+    'Settings response',
   );
-  const body = object(response.body, 'Settings response');
   let identity: ServiceSettingsSnapshot['identity'] = null;
   if (body.identity !== null) {
     const value = object(body.identity, 'Connection identity');
@@ -575,7 +673,6 @@ export async function loadServiceSettings(
   const entitlement = object(body.entitlement, 'Usage allowance');
   if (
     typeof entitlement.limitKey !== 'string' ||
-    entitlement.limitKey.length === 0 ||
     typeof entitlement.used !== 'number' ||
     !Number.isFinite(entitlement.used) ||
     (entitlement.limitKey === 'chat' &&

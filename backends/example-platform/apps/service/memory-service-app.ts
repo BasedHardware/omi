@@ -34,6 +34,7 @@ export const createMemoryServiceApp = (
     registerTasksOpsRoutes(app, tasks);
   }
   if (deviceSessions) {
+    app.get("/v1/device-sessions/ownership", context => deviceSessions.fetch(context.req.raw));
     app.post("/v1/device-sessions", context => deviceSessions.fetch(context.req.raw));
     app.get("/v1/device-sessions/:id", context => deviceSessions.fetch(context.req.raw));
     app.post("/v1/device-sessions/:id/audio", context => deviceSessions.fetch(context.req.raw));
@@ -42,7 +43,14 @@ export const createMemoryServiceApp = (
     app.get("/v1/device-sessions/:id/transcript", context => deviceSessions.fetch(context.req.raw));
   }
   if (conversations) app.get("/v1/conversations", context => conversations.executeRequest(context.req.raw));
-  if (chat) app.get("/v1/chat-messages", context => chat.executeRequest(context.req.raw));
+  if (chat) {
+    app.get("/v1/chat-messages", context => chat.executeRequest(context.req.raw));
+    app.post("/v1/chat-messages", context => chat.executeRequest(context.req.raw));
+    app.get("/v1/chat-generations/:generationId/events", context => chat.executeRequest(context.req.raw));
+    app.delete("/v1/chat-generations/:generationId", context => chat.executeRequest(context.req.raw));
+    app.post("/v1/chat-attachments", context => chat.executeRequest(context.req.raw));
+    app.post("/v1/chat-attachments/:id/complete", context => chat.executeRequest(context.req.raw));
+  }
   if (settings) app.get("/v1/settings", context => settings.executeRequest(context.req.raw));
   return app;
 };

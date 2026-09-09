@@ -455,12 +455,28 @@ static BOOL OmiApplyAuthorization(NSMutableURLRequest *request, OmiBackendPolicy
   return YES;
 }
 
+static BOOL OmiExamplePlatformTranscriptPath(NSString *route) {
+  static NSRegularExpression *pattern;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    pattern = [NSRegularExpression regularExpressionWithPattern:
+      @"^/v1/device-sessions/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/transcript$"
+      options:0
+      error:nil];
+  });
+  return pattern != nil &&
+      [pattern numberOfMatchesInString:route options:0 range:NSMakeRange(0, route.length)] == 1;
+}
+
 static BOOL OmiExamplePlatformRequestSupported(NSString *method, NSString *path) {
   NSString *route = OmiBackendRoute(path);
   return ([method isEqualToString:@"GET"] &&
-      ([route isEqualToString:@"/v1/conversations"] ||
+      ([route isEqualToString:@"/v1/settings"] ||
+       [route isEqualToString:@"/v1/conversations"] ||
        [route isEqualToString:@"/v1/memories"] ||
-       [route isEqualToString:@"/v1/tasks"])) ||
+       [route isEqualToString:@"/v1/tasks"] ||
+       [route isEqualToString:@"/v1/chat-messages"] ||
+       OmiExamplePlatformTranscriptPath(route))) ||
       ([method isEqualToString:@"POST"] && [route isEqualToString:@"/v1/tasks/ops"]);
 }
 
@@ -852,12 +868,13 @@ RCT_REMAP_METHOD(createWriteId,
   };
   [self performNativeRequest:@{@"id":@"recording-ownership", @"method":@"GET", @"path":@"/v1/device-sessions/ownership"} receipt:nil expectedOrigin:origin expectedLogin:login resolver:^(NSDictionary *response) {
     if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
-    if ([response[@"status"] integerValue] == 503 && [response[@"body"] isKindOfClass:NSString.class]) {
-      id envelope = [NSJSONSerialization JSONObjectWithData:[response[@"body"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+    NSString *ownershipBody = [response[@"body"] isKindOfClass:NSString.class] ? response[@"body"] : nil;
+    if ([response[@"status"] integerValue] == 503 && ownershipBody != nil) {
+      id envelope = [NSJSONSerialization JSONObjectWithData:[ownershipBody dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
       id failure = [envelope isKindOfClass:NSDictionary.class] ? envelope[@"error"] : nil;
       if ([failure isKindOfClass:NSDictionary.class] && [failure[@"code"] isEqual:@"capture_ownership_unavailable"]) { reject(@"OMI_CAPTURE_OWNERSHIP_UNAVAILABLE", @"Recording ownership is unavailable from this backend", nil); return; }
     }
-    if (OmiRecordingRetryableOwnershipStatus([response[@"status"] integerValue])) { reject(@"OMI_HTTP_TRANSPORT", @"Recording ownership could not be refreshed", nil); return; }
+    if (OmiRecordingRetryableOwnershipFailure([response[@"status"] integerValue], ownershipBody)) { reject(@"OMI_HTTP_TRANSPORT", @"Recording ownership could not be refreshed", nil); return; }
     if ([response[@"status"] integerValue] != 200 || ![login isEqual:OmiRecordingLogin()]) { reject(@"OMI_RECORDING_OWNERSHIP", @"Recording ownership is unavailable from this backend", nil); return; }
     NSString *body = [response[@"body"] isKindOfClass:NSString.class] ? response[@"body"] : nil;
     id parsed = body == nil ? nil : [NSJSONSerialization JSONObjectWithData:body == nil ? nil : [body dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
@@ -1298,7 +1315,16 @@ RCT_REMAP_METHOD(cancelGenerationEvents,
       if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
       if (OmiClearUnauthorizedCloudSession(policy, status)) [self emitSessionInvalidated];
     }
-    if (error != nil || (status != 202 && status != 204)) {
+    if (error != nil) {
+      reject(@"OMI_HTTP_TRANSPORT", @"Generation cancellation was not accepted", nil);
+      return;
+    }
+    if (status != 202 && status != 204) {
+      NSString *responseBody = data.length > 0 ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+      if (OmiNestedNonRetryableHttpFailure(status, responseBody)) {
+        reject(@"OMI_DEV_BACKEND_UNSUPPORTED", @"Generation cancellation is unsupported by the selected development backend", nil);
+        return;
+      }
       reject(@"OMI_HTTP_TRANSPORT", @"Generation cancellation was not accepted", nil);
       return;
     }

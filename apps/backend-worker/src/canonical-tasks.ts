@@ -10,6 +10,7 @@ import {
   type CanonicalCaller,
   type CanonicalService,
 } from "./canonical-service";
+import { backendError } from "./wire";
 
 export type CanonicalTasksRequest = {
   service: CanonicalService | undefined;
@@ -56,16 +57,19 @@ export async function requestCanonicalTasks(
   const body = await response.text();
   let valid = false;
   if (request.method === "GET") {
-    valid =
-      response.status === 200
-        ? parseTaskPageJson(body) !== null
-        : [
-            [400, '{"error":"bad_request"}'],
-            [401, '{"error":"unauthorized"}'],
-            [403, '{"error":"forbidden"}'],
-          ].some(
-            ([status, value]) => response.status === status && body === value
-          );
+    if (response.status === 200) {
+      return parseTaskPageJson(body) === null
+        ? backendError("projection_unavailable", "none", 503)
+        : new Response(body, {
+            status: response.status,
+            headers: response.headers,
+          });
+    }
+    valid = [
+      [400, '{"error":"bad_request"}'],
+      [401, '{"error":"unauthorized"}'],
+      [403, '{"error":"forbidden"}'],
+    ].some(([status, value]) => response.status === status && body === value);
   } else if (response.status === 200) {
     try {
       valid = isTrustedWriteAccepted(JSON.parse(body));

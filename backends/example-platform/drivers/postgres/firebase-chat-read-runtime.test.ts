@@ -67,13 +67,42 @@ test("chat GET denies missing tokens and missing grants instead of returning emp
     error: { code: "forbidden", retryable: false, action: "none" },
   });
   expect(queries).toBeGreaterThan(0);
-  expect((await runtime.executeRequest(new Request(
-    "https://service.example/v1/chat-messages",
-    { method: "POST", body: "{}" },
-  ))).status).toBe(404);
   expect(CHAT_CAPABILITIES.maxAttachmentsPerMessage).toBe(4);
   const cancelled = new AbortController();
   cancelled.abort();
   expect((await runtime.executeRequest(new Request(request(), { signal: cancelled.signal }))).status)
     .toBe(503);
+});
+
+test("chat writes stay nested 404 without consulting grants or inventing admission", async () => {
+  let queries = 0;
+  const pool: PostgresTransactionPool = {
+    withTransaction: async (_options, callback) => callback({
+      connectionIdentity: {},
+      query: async () => {
+        queries += 1;
+        return [];
+      },
+      execute: async () => ({ rowCount: 0 }),
+    }),
+  };
+  const runtime = runtimeFor(pool);
+  const nestedNotFound = {
+    error: { code: "not_found", retryable: false, action: "none" },
+  };
+  for (const request of [
+    new Request("https://service.example/v1/chat-messages", { method: "POST", body: "{}" }),
+    new Request("https://service.example/v1/chat-generations/generation-1/events"),
+    new Request("https://service.example/v1/chat-generations/generation-1", { method: "DELETE" }),
+    new Request("https://service.example/v1/chat-attachments", { method: "POST", body: "{}" }),
+    new Request("https://service.example/v1/chat-attachments/att-1/complete", {
+      method: "POST",
+      body: "{}",
+    }),
+  ]) {
+    const response = await runtime.executeRequest(request);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual(nestedNotFound);
+  }
+  expect(queries).toBe(0);
 });

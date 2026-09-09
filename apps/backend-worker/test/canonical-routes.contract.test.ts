@@ -232,6 +232,28 @@ describe("registered canonical routes", () => {
       },
     });
     expect(read.status).toBe(503);
+    expect(read.headers.get("retry-after")).not.toBeNull();
+    expect(await read.text()).toBe('{"error":"internal_server_error"}');
+    expect(d1Reads).toBe(0);
+  });
+
+  test("unreadable canonical task pages are non-retryable and never fall back to D1", async () => {
+    const response = await request("/v1/tasks", {
+      async fetch() {
+        return new Response('{"items":[]}', {
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBeNull();
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "projection_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
     expect(d1Reads).toBe(0);
   });
 });

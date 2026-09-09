@@ -24,6 +24,7 @@ export interface ChatHistoryCursorClaims {
   readonly snapshotSequence: number;
   readonly olderThan: ChatHistoryKey;
   readonly issuedAtEpochSeconds: number;
+  readonly chatSessionId: string | null;
 }
 
 interface CursorPayload {
@@ -31,7 +32,7 @@ interface CursorPayload {
   readonly accountDigest: string;
   readonly accountEpoch: number | null;
   readonly appId: null;
-  readonly chatSessionId: null;
+  readonly chatSessionId: string | null;
   readonly direction: "older";
   readonly snapshotSequence: number;
   readonly olderThan: ChatHistoryKey;
@@ -104,7 +105,11 @@ const exactPayload = (value: unknown): CursorPayload => {
     || !/^[a-f0-9]{64}$/.test(object.accountDigest)
     || !(object.accountEpoch === null
       || (Number.isSafeInteger(object.accountEpoch) && (object.accountEpoch as number) >= 0))
-    || object.appId !== null || object.chatSessionId !== null
+    || object.appId !== null
+    || !(object.chatSessionId === null
+      || (typeof object.chatSessionId === "string"
+        && object.chatSessionId.length > 0
+        && object.chatSessionId.length <= 128))
     || object.direction !== "older"
     || !Number.isSafeInteger(object.snapshotSequence) || (object.snapshotSequence as number) < 0
     || !Number.isSafeInteger(olderThan.createdAt) || (olderThan.createdAt as number) < 0
@@ -125,6 +130,7 @@ export const createChatHistoryCursorCodec = (keyset: ChatHistoryCursorKeyset) =>
       readonly olderThan: ChatHistoryKey;
       readonly issuedAtEpochSeconds: number;
       readonly ttlSeconds: number;
+      readonly chatSessionId?: string | null;
     }): string {
       if (!Number.isSafeInteger(input.snapshotSequence) || input.snapshotSequence < 0
         || !(input.accountEpoch === null
@@ -134,7 +140,9 @@ export const createChatHistoryCursorCodec = (keyset: ChatHistoryCursorKeyset) =>
         || !Number.isSafeInteger(input.issuedAtEpochSeconds) || input.issuedAtEpochSeconds < 0
         || !Number.isSafeInteger(input.ttlSeconds) || input.ttlSeconds < 1
         || input.ttlSeconds > MAX_TTL_SECONDS
-        || input.issuedAtEpochSeconds > Number.MAX_SAFE_INTEGER - input.ttlSeconds) {
+        || input.issuedAtEpochSeconds > Number.MAX_SAFE_INTEGER - input.ttlSeconds
+        || !(input.chatSessionId === undefined || input.chatSessionId === null
+          || (input.chatSessionId.length > 0 && input.chatSessionId.length <= 128))) {
         throw new TypeError("invalid chat history cursor issue request");
       }
       const payload: CursorPayload = {
@@ -142,7 +150,7 @@ export const createChatHistoryCursorCodec = (keyset: ChatHistoryCursorKeyset) =>
         accountDigest: accountDigest(input.accountId, keys.active.secret),
         accountEpoch: input.accountEpoch,
         appId: null,
-        chatSessionId: null,
+        chatSessionId: input.chatSessionId ?? null,
         direction: "older",
         snapshotSequence: input.snapshotSequence,
         olderThan: { createdAt: input.olderThan.createdAt, id: input.olderThan.id },
@@ -200,6 +208,7 @@ export const createChatHistoryCursorCodec = (keyset: ChatHistoryCursorKeyset) =>
         snapshotSequence: payload.snapshotSequence,
         olderThan: Object.freeze({ ...payload.olderThan }),
         issuedAtEpochSeconds: payload.issuedAt,
+        chatSessionId: payload.chatSessionId,
       });
     },
   });

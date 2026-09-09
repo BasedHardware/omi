@@ -3,6 +3,7 @@ import {
   loadDesktopReads,
   loadTasks,
   loadConversations,
+  loadMemories,
   ConversationCursorExpiredError,
   TaskCursorExpiredError,
   type TaskRead,
@@ -10,6 +11,7 @@ import {
   desktopBackendConfigurationCopy,
   desktopBackendServiceCopy,
   desktopLocalBackendServiceCopy,
+  desktopBackendUnavailableCopy,
   type DomainReadOutcome,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
@@ -52,10 +54,17 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
   const [conversationNotice, setConversationNotice] = useState<string | null>(
     null,
   );
+  const [conversationsPageRetryable, setConversationsPageRetryable] =
+    useState(true);
   const conversationPagePendingRef = useRef(false);
+  const memoryPagePendingRef = useRef(false);
+  const [memoriesLoadingMore, setMemoriesLoadingMore] = useState(false);
+  const [memoryNotice, setMemoryNotice] = useState<string | null>(null);
+  const [memoriesPageRetryable, setMemoriesPageRetryable] = useState(true);
   const taskPagePendingRef = useRef(false);
   const [tasksLoadingMore, setTasksLoadingMore] = useState(false);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
+  const [tasksPageRetryable, setTasksPageRetryable] = useState(true);
   const refreshPendingRef = useRef(false);
   const [readsPhase, setReadsPhase] = useState<ReadsPhase>('initial-loading');
   // Monotonic refresh sequence. Every gate transition and every new refresh
@@ -73,11 +82,17 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     refreshSeqRef.current += 1;
     refreshPendingRef.current = false;
     conversationPagePendingRef.current = false;
+    memoryPagePendingRef.current = false;
     taskPagePendingRef.current = false;
     setTasksLoadingMore(false);
     setTaskNotice(null);
+    setTasksPageRetryable(true);
     setConversationsLoadingMore(false);
     setConversationNotice(null);
+    setConversationsPageRetryable(true);
+    setMemoriesLoadingMore(false);
+    setMemoryNotice(null);
+    setMemoriesPageRetryable(true);
     readOutcomesRef.current = null;
     homeReadsLoadedRef.current = false;
     setReadOutcomes(null);
@@ -119,11 +134,17 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       }
       const seq = ++refreshSeqRef.current;
       conversationPagePendingRef.current = false;
+      memoryPagePendingRef.current = false;
       taskPagePendingRef.current = false;
       setTasksLoadingMore(false);
       setTaskNotice(null);
       setConversationsLoadingMore(false);
       setConversationNotice(null);
+      setConversationsPageRetryable(true);
+      setMemoriesLoadingMore(false);
+      setMemoryNotice(null);
+      setMemoriesPageRetryable(true);
+      setTasksPageRetryable(true);
       refreshPendingRef.current = true;
       setReadsPhase(
         initial && readOutcomesRef.current === null
@@ -270,16 +291,87 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
           'Conversations changed. The list has been refreshed.',
         );
       }
-    } catch {
+      setConversationsPageRetryable(true);
+    } catch (error) {
       if (sequence === refreshSeqRef.current) {
+        const unavailable =
+          error instanceof Error &&
+          error.message === desktopBackendUnavailableCopy;
+        setConversationsPageRetryable(!unavailable);
         setConversationNotice(
-          'More conversations could not be loaded. Try again.',
+          unavailable
+            ? desktopBackendUnavailableCopy
+            : 'More conversations could not be loaded. Try again.',
         );
       }
     } finally {
       if (sequence === refreshSeqRef.current) {
         conversationPagePendingRef.current = false;
         setConversationsLoadingMore(false);
+      }
+    }
+  }, [enabled]);
+
+  const loadMoreMemories = useCallback(async () => {
+    const previous = readOutcomesRef.current;
+    if (
+      !enabled ||
+      omiBackend == null ||
+      memoryPagePendingRef.current ||
+      refreshPendingRef.current ||
+      previous?.memories.status !== 'success' ||
+      !previous.memories.value.page.hasMore ||
+      previous.memories.value.page.nextCursor === null
+    ) {
+      return;
+    }
+    const cursor = previous.memories.value.page.nextCursor;
+    const sequence = refreshSeqRef.current;
+    memoryPagePendingRef.current = true;
+    setMemoriesLoadingMore(true);
+    setMemoryNotice(null);
+    try {
+      const next = await loadMemories(omiBackend, cursor);
+      if (sequence !== refreshSeqRef.current) {
+        return;
+      }
+      const current = readOutcomesRef.current;
+      if (current === null || current.memories.status !== 'success') {
+        return;
+      }
+      const items = [...current.memories.value.items, ...next.items];
+      if (items.length > 10000) {
+        throw new Error('Memory list is too large');
+      }
+      if (
+        new Set(items.map(item => item.id)).size !== items.length ||
+        (next.page.hasMore && next.page.nextCursor === cursor)
+      ) {
+        throw new Error('Memory page did not advance');
+      }
+      const merged = {
+        ...current,
+        memories: {status: 'success' as const, value: {...next, items}},
+      };
+      readOutcomesRef.current = merged;
+      setReadOutcomes(merged);
+      setMemoriesPageRetryable(true);
+    } catch (error) {
+      if (sequence === refreshSeqRef.current) {
+        const unavailable =
+          error instanceof Error &&
+          error.message === desktopBackendUnavailableCopy;
+        setMemoriesPageRetryable(!unavailable);
+        setMemoryNotice(
+          unavailable
+            ? desktopBackendUnavailableCopy
+            : 'More memories could not be loaded.',
+        );
+      }
+    } finally {
+      if (sequence === refreshSeqRef.current) {
+        memoryPagePendingRef.current = false;
+        setMemoriesLoadingMore(false);
       }
     }
   }, [enabled]);
@@ -347,9 +439,18 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       if (replace) {
         setTaskNotice('Tasks changed. The list has been refreshed.');
       }
-    } catch {
+      setTasksPageRetryable(true);
+    } catch (error) {
       if (sequence === refreshSeqRef.current) {
-        setTaskNotice('More tasks could not be loaded. Try again.');
+        const unavailable =
+          error instanceof Error &&
+          error.message === desktopBackendUnavailableCopy;
+        setTasksPageRetryable(!unavailable);
+        setTaskNotice(
+          unavailable
+            ? desktopBackendUnavailableCopy
+            : 'More tasks could not be loaded. Try again.',
+        );
       }
     } finally {
       if (sequence === refreshSeqRef.current) {
@@ -365,11 +466,14 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     }
     const sequence = ++refreshSeqRef.current;
     conversationPagePendingRef.current = false;
+    memoryPagePendingRef.current = false;
     taskPagePendingRef.current = false;
     setTasksLoadingMore(false);
     setTaskNotice(null);
+    setTasksPageRetryable(true);
     refreshPendingRef.current = true;
     setConversationsLoadingMore(false);
+    setMemoriesLoadingMore(false);
     try {
       const tasks = await loadTasks(omiBackend);
       const previous = readOutcomesRef.current;
@@ -455,9 +559,15 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     tasksLoadingMore,
     taskNotice,
     loadMoreTasks,
+    tasksPageRetryable,
     conversationsLoadingMore,
     conversationNotice,
     loadMoreConversations,
+    conversationsPageRetryable,
+    memoriesLoadingMore,
+    memoryNotice,
+    loadMoreMemories,
+    memoriesPageRetryable,
     allHomeReadsUnavailable,
     homeReadsLoadedRef,
     readOutcomes,

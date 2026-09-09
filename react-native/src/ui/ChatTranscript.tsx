@@ -1,17 +1,14 @@
 import React, {memo, useEffect, useRef} from 'react';
 import {Animated, Easing, Text, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
+import {
+  chatClockLabel,
+  chatMessageDisplayText,
+  chatSenderCopy,
+  visibleDisplayText,
+} from '../desktopReadClient';
 import {OmiAvatar} from './OmiAvatar';
 import {styles} from './styles';
-
-function formatChatTime(createdAt: number): string {
-  const milliseconds =
-    createdAt > 100_000_000_000 ? createdAt : createdAt * 1000;
-  return new Date(milliseconds).toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
 
 const ChatMessageRow = memo(function ChatMessageRow({
   animate,
@@ -58,7 +55,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
         human ? styles.chatMessageRowHuman : styles.chatMessageRowAi,
         {opacity, transform: [{translateY}]},
       ]}>
-      {!human && <OmiAvatar />}
+      {!human && message.sender === 'ai' && <OmiAvatar />}
       <View
         style={[
           styles.chatMessageColumn,
@@ -76,20 +73,26 @@ const ChatMessageRow = memo(function ChatMessageRow({
           ]}>
           {message.generationOutcome === 'failed' ? (
             <Text style={styles.failedLabel}>
-              {message.generationRetryable === true
-                ? 'Response failed. Try again.'
-                : 'Response failed.'}
+              {chatMessageDisplayText(message)}
             </Text>
           ) : (
-            <Text style={styles.message}>{message.text}</Text>
+            <Text style={styles.message}>
+              {chatMessageDisplayText(message)}
+            </Text>
           )}
         </View>
-        {message.generationOutcome === 'cancelled' && (
-          <Text style={styles.cancelledLabel}>Response stopped</Text>
+        {message.generationOutcome === 'cancelled' &&
+          visibleDisplayText(message.text) !== '' && (
+            <Text style={styles.cancelledLabel}>Response stopped</Text>
+          )}
+        {message.sender === 'unknown' && (
+          <Text style={styles.cancelledLabel}>
+            {chatSenderCopy(message.sender)}
+          </Text>
         )}
         <Text
           style={[styles.chatTimestamp, human && styles.chatTimestampHuman]}>
-          {formatChatTime(message.createdAt)}
+          {chatClockLabel(message.createdAt, Date.now()) || 'Time unavailable'}
         </Text>
       </View>
     </Animated.View>

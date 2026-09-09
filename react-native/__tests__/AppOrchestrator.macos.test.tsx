@@ -106,6 +106,40 @@ jest.mock('../src/app/useReduceMotion', () => ({
   useReduceMotion: () => true,
 }));
 
+jest.mock('../src/desktopSettingsClient', () => {
+  const actual = jest.requireActual(
+    '../src/desktopSettingsClient',
+  ) as typeof import('../src/desktopSettingsClient');
+  const prefs = {
+    audioMode: 'off',
+    floatingBar: true,
+    fontScale: 100,
+    interfaceSounds: true,
+    meetingNoteScreenshots: true,
+    notificationsEnabled: false,
+    openOmiShortcut: true,
+    pushToTalk: true,
+    rewindRetentionDays: 14,
+    screenCapture: false,
+    softwarePlane: 'old',
+    stampedV5Origin: null,
+    transcriptionAutoDetect: true,
+    vadGate: true,
+  };
+  return {
+    ...actual,
+    defaultDesktopPreferences: () => prefs,
+    loadDesktopPreferences: jest.fn(async () => prefs),
+    loadPermissionStatus: jest.fn(async () => ({
+      microphone: 'unknown',
+      notifications: 'unknown',
+      screen: 'unknown',
+    })),
+    requestDesktopPermission: jest.fn(async () => 'unknown'),
+    setDesktopPreference: jest.fn(async () => prefs),
+  };
+});
+
 // The macOS orchestrator branch keys off Platform.OS, so pin it before the
 // orchestrator module loads.
 const ReactNative = require('react-native');
@@ -147,6 +181,8 @@ beforeEach(() => {
   mockBackend.getApiContract.mockReset();
   mockBackend.sendOmiChat.mockReset();
   mockBackend.cancelOmiChat.mockClear();
+  mockBackend.cancelGenerationEvents.mockReset();
+  mockBackend.cancelGenerationEvents.mockImplementation(async () => undefined);
   mockNative.getSnapshot.mockClear();
   mockNative.startScan.mockClear();
   mockScanPermission.mockClear();
@@ -780,6 +816,77 @@ test('an admitted stream failure keeps its uncertain interruption visible', asyn
   );
 });
 
+test('nested non-retryable generation cancel is not a transient stop failure', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(
+    async (value: {id: string; body?: string}) => {
+      if (value.id === 'chat-history') {
+        return {id: value.id, status: 200, body: historyBody([])};
+      }
+      if (value.id.startsWith('admit-')) {
+        const body = JSON.parse(value.body ?? '{}') as {
+          id: string;
+          text: string;
+          at: number;
+        };
+        return {
+          id: value.id,
+          status: 201,
+          body: admissionBody(
+            {
+              id: body.id,
+              text: body.text,
+              sender: 'human',
+              createdAt: body.at,
+              generationOutcome: null,
+            },
+            'generation-unstoppable',
+          ),
+        };
+      }
+      return {id: value.id, status: 501, body: null};
+    },
+  );
+  mockBackend.generationEvents.mockReturnValue(new Promise(() => undefined));
+  mockBackend.cancelGenerationEvents.mockRejectedValue(
+    Object.assign(new Error('unsupported'), {
+      code: 'OMI_DEV_BACKEND_UNSUPPORTED',
+    }),
+  );
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('unstoppable question');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(labelsOf(renderer)).toContain('Stop');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Stop')
+      .props.onPress();
+    await flushAsyncQueue();
+  });
+  expect(mockBackend.cancelGenerationEvents).toHaveBeenCalledWith(
+    'generation-unstoppable',
+  );
+  expect(textOf(renderer)).toContain(
+    'Stopping the response is not available on this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain('Could not stop the response.');
+});
+
 test('a send during the initial history load still receives the transcript', async () => {
   // send() bumps chatMutationSeqRef so an in-flight setMessages(page) cannot
   // wipe the optimistic row. The same bump used to discard the history page
@@ -1063,6 +1170,216 @@ test('signed-in macOS Settings exposes device scanning only after an explicit ac
   expect(mockScanPermission).toHaveBeenCalledTimes(1);
   expect(mockNative.startScan).toHaveBeenCalledTimes(1);
   expect(mockNative.startScan).toHaveBeenCalledWith(8);
+});
+
+test('a nested chat write 404 disables Ask instead of leaving it sendable', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async (value: {id: string}) => {
+    if (value.id === 'chat-history') {
+      return {id: value.id, status: 200, body: historyBody([])};
+    }
+    if (value.id.startsWith('admit-')) {
+      return {
+        id: value.id,
+        status: 404,
+        body: JSON.stringify({
+          error: {code: 'not_found', retryable: false, action: 'none'},
+        }),
+      };
+    }
+    return {id: value.id, status: 501, body: null};
+  });
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('hello');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain(
+    'Sending messages is not available on this backend yet.',
+  );
+  expect(labelsOf(renderer)).toContain('Send unavailable');
+  const admitCalls = mockBackend.request.mock.calls.filter(
+    ([value]: [{id: string}]) => value.id.startsWith('admit-'),
+  ).length;
+  const omnibarAgain = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibarAgain.props.onChangeText('hello again');
+  });
+  await act(async () => {
+    omnibarAgain.props.onSubmitEditing?.();
+    await flushAsyncQueue();
+  });
+  expect(
+    mockBackend.request.mock.calls.filter(([value]: [{id: string}]) =>
+      value.id.startsWith('admit-'),
+    ),
+  ).toHaveLength(admitCalls);
+});
+
+test('native unsupported chat send uses unavailable copy and disables Ask', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async (value: {id: string}) => {
+    if (value.id === 'chat-history') {
+      return {id: value.id, status: 200, body: historyBody([])};
+    }
+    if (value.id.startsWith('admit-')) {
+      throw Object.assign(new Error('unsupported'), {
+        code: 'OMI_DEV_BACKEND_UNSUPPORTED',
+      });
+    }
+    return {id: value.id, status: 501, body: null};
+  });
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('hello');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain(
+    'Sending messages is not available on this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain(
+    'Message not sent. Check your connection and try again.',
+  );
+  expect(labelsOf(renderer)).toContain('Send unavailable');
+  const admitCalls = mockBackend.request.mock.calls.filter(
+    ([value]: [{id: string}]) => value.id.startsWith('admit-'),
+  ).length;
+  const omnibarAgain = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibarAgain.props.onChangeText('hello again');
+  });
+  await act(async () => {
+    omnibarAgain.props.onSubmitEditing?.();
+    await flushAsyncQueue();
+  });
+  expect(
+    mockBackend.request.mock.calls.filter(([value]: [{id: string}]) =>
+      value.id.startsWith('admit-'),
+    ),
+  ).toHaveLength(admitCalls);
+});
+
+test('a backend plane switch drops a stale chat-write latch', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async (value: {id: string}) => {
+    if (value.id === 'chat-history') {
+      return {id: value.id, status: 200, body: historyBody([])};
+    }
+    if (value.id.startsWith('admit-')) {
+      return {
+        id: value.id,
+        status: 404,
+        body: JSON.stringify({
+          error: {code: 'not_found', retryable: false, action: 'none'},
+        }),
+      };
+    }
+    return {id: value.id, status: 501, body: null};
+  });
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('hello');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(labelsOf(renderer)).toContain('Send unavailable');
+  const admitCalls = mockBackend.request.mock.calls.filter(
+    ([value]: [{id: string}]) => value.id.startsWith('admit-'),
+  ).length;
+
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  await act(async () => {
+    let node: ReactTestRenderer.ReactTestInstance | null =
+      renderer.root
+        .findAllByType(Text)
+        .find(candidate => candidate.props.children === 'New backend') ?? null;
+    while (node !== null && typeof node.props.onPress !== 'function') {
+      node = node.parent;
+    }
+    node!.props.onPress();
+    await flushAsyncQueue();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Home')
+      .props.onPress();
+    await flushAsyncQueue();
+  });
+  expect(labelsOf(renderer)).toContain('Send');
+  expect(labelsOf(renderer)).not.toContain('Send unavailable');
+
+  const omnibarAgain = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibarAgain.props.onChangeText('hello again');
+  });
+  await act(async () => {
+    omnibarAgain.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(
+    mockBackend.request.mock.calls.filter(([value]: [{id: string}]) =>
+      value.id.startsWith('admit-'),
+    ).length,
+  ).toBeGreaterThan(admitCalls);
 });
 
 test.each(['stop', 'unmount', 'signout'])(

@@ -172,6 +172,17 @@ test('pairs the macOS backend origin and credentials in one validated policy', (
   expect(source).toContain(
     'policy.kind == OmiBackendCredentialKindExamplePlatform && !OmiExamplePlatformRequestSupported(method, path)',
   );
+  const examplePlatformSelector = source.slice(
+    source.indexOf('static BOOL OmiExamplePlatformTranscriptPath'),
+    source.indexOf(
+      'static NSDictionary *OmiDevelopmentBackendUnsupportedResponse',
+    ),
+  );
+  expect(examplePlatformSelector).toContain('"/v1/settings"');
+  expect(examplePlatformSelector).toContain('"/v1/chat-messages"');
+  expect(examplePlatformSelector).toContain(
+    '/v1/device-sessions/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/transcript',
+  );
   expect(source).toContain('omi.backend.softwarePlane');
   expect(source).toContain('OmiSoftwarePlaneIsNew');
   expect(source).toContain(
@@ -719,6 +730,18 @@ test('does not construct CBCentralManager until an explicit scan or connect', ()
   expect(source).toMatch(
     /bluetoothState \{[^]*if \(self\.central == nil\) \{[^]*return @"unknown"/,
   );
+  expect(source).not.toContain('Bluetooth is %@');
+  expect(source).toContain('bluetoothLastEvent');
+  const iosSource = readFileSync(
+    resolve(__dirname, '../ios/RnRuntime/OmiNativeModule.mm'),
+    'utf8',
+  );
+  expect(iosSource).not.toContain('Bluetooth is %@');
+  expect(iosSource).toContain('bluetoothLastEvent');
+  expect(source).not.toContain('retireConnection:error.localizedDescription');
+  expect(iosSource).not.toContain(
+    'retireConnection:error.localizedDescription',
+  );
 });
 
 test('static tripwire: OmiNative wires CoreBluetooth and tested connection policy', () => {
@@ -762,6 +785,17 @@ test('static tripwire: OmiNative wires CoreBluetooth and tested connection polic
   expect(scanSource).toContain('[self.devices removeAllObjects]');
   expect(scanSource).toContain('self.connectedPeripheral');
   expect(scanSource).toContain('self.devices[keepId] = kept');
+  expect(scanSource).toContain('No Omi devices found');
+  const iosSource = readFileSync(
+    resolve(__dirname, '../ios/RnRuntime/OmiNativeModule.mm'),
+    'utf8',
+  );
+  const iosScanStart = iosSource.indexOf('RCT_REMAP_METHOD(startScan');
+  const iosScanSource = iosSource.slice(
+    iosScanStart,
+    iosSource.indexOf('RCT_REMAP_METHOD(stopScan', iosScanStart),
+  );
+  expect(iosScanSource).toContain('No Omi devices found');
   expect(source).not.toContain('.swift');
   expect(entitlements).toContain('com.apple.security.device.bluetooth');
   expect(entitlements).toContain('com.apple.security.app-sandbox');

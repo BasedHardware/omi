@@ -290,6 +290,26 @@ const browserBackend: OmiBackend = {
       'application/json',
     ).then(response => {
       if (response.status !== 202 && response.status !== 204) {
+        let retryable: boolean | null = null;
+        try {
+          const parsed = JSON.parse(response.body ?? '') as {
+            error?: {retryable?: unknown} | string;
+          };
+          if (parsed.error !== null && typeof parsed.error === 'object') {
+            retryable =
+              typeof parsed.error.retryable === 'boolean'
+                ? parsed.error.retryable
+                : null;
+          }
+        } catch {}
+        if (retryable === false || response.status === 404) {
+          throw Object.assign(
+            new Error(
+              'Generation cancellation is unsupported by the selected development backend',
+            ),
+            {code: 'OMI_DEV_BACKEND_UNSUPPORTED'},
+          );
+        }
         throw new Error(`Generation cancellation failed (${response.status})`);
       }
     });

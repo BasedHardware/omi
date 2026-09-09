@@ -9,10 +9,13 @@ import {
   View,
 } from 'react-native';
 import {
+  cloudErrorCanRetry,
   cloudSessionUnavailableCopy,
   loadAccountSettings,
   loadServiceSettings,
   optInTrainingData,
+  serviceSettingsCanRetry,
+  serviceSettingsErrorCopy,
   setPrivateCloudSync,
   setStoreRecordingPermission,
   type AccountSettingsSnapshot,
@@ -23,6 +26,14 @@ import {
   desktopBackendServiceCopy,
   desktopBackendUnauthorizedCopy,
   desktopReadErrorCopy,
+  dataProtectionCopy,
+  developerWebhookRowCopy,
+  developerWebhookTypeCopy,
+  accountFieldCopy,
+  connectionIdentityCopy,
+  subscriptionPlanCopy,
+  subscriptionStatusCopy,
+  visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
@@ -32,17 +43,25 @@ import {parseSoftwarePlane, type SoftwarePlane} from '../v5BackendOrigin';
 const sections = ['Account', 'Privacy', 'Developer'] as const;
 type SettingsSection = (typeof sections)[number];
 
+type PrivacyWriteKind = 'recording' | 'training' | 'sync';
+
+function isPrivacyWriteKind(id: string): id is PrivacyWriteKind {
+  return id === 'recording' || id === 'training' || id === 'sync';
+}
+
 function SettingRow({
   action,
   actionLabel,
   busy = false,
   copy,
+  disabled = false,
   title,
 }: {
   action?: () => void;
   actionLabel?: string;
   busy?: boolean;
   copy: string;
+  disabled?: boolean;
   title: string;
 }) {
   return (
@@ -55,7 +74,8 @@ function SettingRow({
         <FocusPressable
           accessibilityLabel={actionLabel}
           accessibilityRole="button"
-          disabled={busy}
+          accessibilityState={{disabled: busy || disabled}}
+          disabled={busy || disabled}
           onPress={action}
           style={({pressed}) => [
             styles.cloudAction,
@@ -123,10 +143,12 @@ function BackendPlaneRow({
 export function SettingsPage({
   onSignIn,
   onSignOut,
+  onWorkspaceReload,
   signingIn = false,
 }: {
   onSignIn?: () => Promise<void>;
   onSignOut?: () => Promise<void>;
+  onWorkspaceReload?: () => void;
   signingIn?: boolean;
 }) {
   const browser = Platform.OS === 'web';
@@ -137,11 +159,15 @@ export function SettingsPage({
     'loading' | 'signed-out' | 'ready' | 'error'
   >('loading');
   const [error, setError] = useState<string | null>(null);
+  const [settingsCanRetry, setSettingsCanRetry] = useState(true);
   const [snapshot, setSnapshot] = useState<AccountSettingsSnapshot | null>(
     null,
   );
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
+    Record<PrivacyWriteKind, boolean>
+  >({recording: true, training: true, sync: true});
   const [softwarePlane, setSoftwarePlane] = useState<SoftwarePlane | null>(
     null,
   );
@@ -197,12 +223,13 @@ export function SettingsPage({
         setServiceSettings(settings);
         setError(null);
         setPhase('ready');
-      } catch {
+      } catch (reason) {
         if (!current()) {
           return;
         }
         setServiceSettings(null);
-        setError('Settings could not be loaded. Try again.');
+        setError(serviceSettingsErrorCopy(reason));
+        setSettingsCanRetry(serviceSettingsCanRetry(reason));
         setPhase('error');
       }
       return;
@@ -222,6 +249,7 @@ export function SettingsPage({
         // stay retryable instead of stranding the page on Loading forever.
         setSnapshot(null);
         setError(desktopBackendServiceCopy);
+        setSettingsCanRetry(true);
         setPhase('error');
         return;
       }
@@ -246,6 +274,7 @@ export function SettingsPage({
       }
       setSnapshot(null);
       setError(desktopReadErrorCopy(reason));
+      setSettingsCanRetry(true);
       setPhase('error');
     }
   }, [browser]);
@@ -269,6 +298,7 @@ export function SettingsPage({
     try {
       const next = parseSoftwarePlane(await backend.setSoftwarePlane(plane));
       setSoftwarePlane(next);
+      onWorkspaceReload?.();
       await reload();
     } catch (reason) {
       setActionError(desktopReadErrorCopy(reason));
@@ -288,6 +318,9 @@ export function SettingsPage({
       await reload();
     } catch (reason) {
       setActionError(desktopReadErrorCopy(reason));
+      if (isPrivacyWriteKind(id) && !cloudErrorCanRetry(reason)) {
+        setPrivacyWritesAvailable(current => ({...current, [id]: false}));
+      }
     } finally {
       setPending(null);
     }
@@ -326,23 +359,41 @@ export function SettingsPage({
         ) : (
           <>
             <SettingRow
-              copy={snapshot.profile.name ?? 'Name not set on this account.'}
+              copy={accountFieldCopy(
+                snapshot.profile.name,
+                'Name not set on this account.',
+              )}
               title="Name"
             />
             <SettingRow
-              copy={snapshot.profile.email ?? 'Email not set on this account.'}
+              copy={accountFieldCopy(
+                snapshot.profile.email,
+                'Email not set on this account.',
+              )}
               title="Email"
             />
-            <SettingRow copy={snapshot.profile.uid} title="Account id" />
-            {snapshot.profile.company !== null && (
-              <SettingRow copy={snapshot.profile.company} title="Company" />
+            <SettingRow
+              copy={accountFieldCopy(
+                snapshot.profile.uid,
+                'Account id unavailable',
+              )}
+              title="Account id"
+            />
+            {visibleDisplayText(snapshot.profile.company ?? '') !== '' && (
+              <SettingRow
+                copy={visibleDisplayText(snapshot.profile.company ?? '')}
+                title="Company"
+              />
             )}
-            {snapshot.profile.job !== null && (
-              <SettingRow copy={snapshot.profile.job} title="Job" />
+            {visibleDisplayText(snapshot.profile.job ?? '') !== '' && (
+              <SettingRow
+                copy={visibleDisplayText(snapshot.profile.job ?? '')}
+                title="Job"
+              />
             )}
             {snapshot.profile.dataProtectionLevel !== null && (
               <SettingRow
-                copy={snapshot.profile.dataProtectionLevel}
+                copy={dataProtectionCopy(snapshot.profile.dataProtectionLevel)}
                 title="Data protection"
               />
             )}
@@ -355,8 +406,8 @@ export function SettingsPage({
         ) : (
           <SettingRow
             copy={[
-              snapshot.subscription.plan,
-              snapshot.subscription.status,
+              subscriptionPlanCopy(snapshot.subscription.plan),
+              subscriptionStatusCopy(snapshot.subscription.status),
               snapshot.subscription.transcriptionSecondsUsed !== null &&
               snapshot.subscription.transcriptionSecondsLimit !== null
                 ? `${snapshot.subscription.transcriptionSecondsUsed} / ${snapshot.subscription.transcriptionSecondsLimit} transcribed seconds`
@@ -392,22 +443,28 @@ export function SettingsPage({
           </Text>
         ) : (
           <SettingRow
-            action={() => {
-              const backend = omiBackend;
-              if (backend === undefined || backend === null) {
-                return;
-              }
-              runAction('recording', () =>
-                setStoreRecordingPermission(
-                  backend,
-                  !snapshot.storeRecordingPermission,
-                ),
-              ).catch(() => undefined);
-            }}
+            action={
+              privacyWritesAvailable.recording
+                ? () => {
+                    const backend = omiBackend;
+                    if (backend === undefined || backend === null) {
+                      return;
+                    }
+                    runAction('recording', () =>
+                      setStoreRecordingPermission(
+                        backend,
+                        !snapshot.storeRecordingPermission,
+                      ),
+                    ).catch(() => undefined);
+                  }
+                : undefined
+            }
             actionLabel={
-              snapshot.storeRecordingPermission
-                ? 'Turn off recording storage'
-                : 'Turn on recording storage'
+              privacyWritesAvailable.recording
+                ? snapshot.storeRecordingPermission
+                  ? 'Turn off recording storage'
+                  : 'Turn on recording storage'
+                : undefined
             }
             busy={pending === 'recording'}
             copy={
@@ -425,7 +482,7 @@ export function SettingsPage({
         ) : (
           <SettingRow
             action={
-              snapshot.trainingOptedIn
+              snapshot.trainingOptedIn || !privacyWritesAvailable.training
                 ? undefined
                 : () => {
                     const backend = omiBackend;
@@ -437,7 +494,11 @@ export function SettingsPage({
                     ).catch(() => undefined);
                   }
             }
-            actionLabel={snapshot.trainingOptedIn ? undefined : 'Opt in'}
+            actionLabel={
+              snapshot.trainingOptedIn || !privacyWritesAvailable.training
+                ? undefined
+                : 'Opt in'
+            }
             busy={pending === 'training'}
             copy={
               snapshot.trainingOptedIn
@@ -454,19 +515,25 @@ export function SettingsPage({
           </Text>
         ) : (
           <SettingRow
-            action={() => {
-              const backend = omiBackend;
-              if (backend === undefined || backend === null) {
-                return;
-              }
-              runAction('sync', () =>
-                setPrivateCloudSync(backend, !snapshot.privateCloudSync),
-              ).catch(() => undefined);
-            }}
+            action={
+              privacyWritesAvailable.sync
+                ? () => {
+                    const backend = omiBackend;
+                    if (backend === undefined || backend === null) {
+                      return;
+                    }
+                    runAction('sync', () =>
+                      setPrivateCloudSync(backend, !snapshot.privateCloudSync),
+                    ).catch(() => undefined);
+                  }
+                : undefined
+            }
             actionLabel={
-              snapshot.privateCloudSync
-                ? 'Turn off private cloud sync'
-                : 'Turn on private cloud sync'
+              privacyWritesAvailable.sync
+                ? snapshot.privateCloudSync
+                  ? 'Turn off private cloud sync'
+                  : 'Turn on private cloud sync'
+                : undefined
             }
             busy={pending === 'sync'}
             copy={
@@ -493,18 +560,9 @@ export function SettingsPage({
       <>
         {snapshot.webhooks.map(webhook => (
           <SettingRow
-            copy={[
-              webhook.enabled === null
-                ? 'Status unknown'
-                : webhook.enabled
-                ? 'Enabled'
-                : 'Disabled',
-              webhook.url,
-            ]
-              .filter(item => item !== null)
-              .join(' · ')}
+            copy={developerWebhookRowCopy(webhook)}
             key={webhook.type}
-            title={webhook.type}
+            title={developerWebhookTypeCopy(webhook.type)}
           />
         ))}
       </>
@@ -577,38 +635,30 @@ export function SettingsPage({
                 </Text>
               </FocusPressable>
             )}
-            {phase === 'error' && error !== desktopBackendConfigurationCopy && (
-              <FocusPressable
-                accessibilityLabel="Retry settings"
-                accessibilityRole="button"
-                onPress={() => {
-                  reload().catch(() => undefined);
-                }}
-                style={({pressed}) => [
-                  styles.cloudAction,
-                  settingsStyles.touchAction,
-                  pressed && styles.pressed,
-                ]}>
-                <Text style={styles.cloudActionText}>Retry</Text>
-              </FocusPressable>
-            )}
+            {phase === 'error' &&
+              error !== desktopBackendConfigurationCopy &&
+              settingsCanRetry && (
+                <FocusPressable
+                  accessibilityLabel="Retry settings"
+                  accessibilityRole="button"
+                  onPress={() => {
+                    reload().catch(() => undefined);
+                  }}
+                  style={({pressed}) => [
+                    styles.cloudAction,
+                    settingsStyles.touchAction,
+                    pressed && styles.pressed,
+                  ]}>
+                  <Text style={styles.cloudActionText}>Retry</Text>
+                </FocusPressable>
+              )}
           </>
         ) : browser ? (
           section === 'Account' && serviceSettings ? (
             <>
               <SettingRow
                 title="Connection identity"
-                copy={
-                  serviceSettings.identity === null
-                    ? 'Identity unavailable for this connection.'
-                    : [
-                        serviceSettings.identity.displayName,
-                        serviceSettings.identity.email,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ') ||
-                      'Identity unavailable for this connection.'
-                }
+                copy={connectionIdentityCopy(serviceSettings.identity)}
               />
               {serviceSettings.entitlement !== null &&
               ['chat', 'transcription_seconds'].includes(

@@ -155,6 +155,7 @@ const expectedTables = [
   "listen_capture_audio_uploads",
   "listen_conversation_read_revisions",
   "listen_conversation_cursor_positions",
+  "conversation_union_cursor_positions",
   "chat_generation_events",
   "chat_messages",
   "memory_render_responses",
@@ -1242,5 +1243,42 @@ describe("static PostgreSQL schema contract", () => {
       "REVOKE ALL ON omi_memory.memory_migration_item_tombstones FROM omi_platform_application",
     );
     expect(migrationRuntime).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE)[^;]*memory_(?:legacy_proposition|migration_item)/s);
+  });
+
+  test("POSIX regex repetition counts stay at or below 255", () => {
+    for (const match of allSql.matchAll(/\{(\d+)(?:,(\d+))?\}/g)) {
+      expect(Number(match[1]), match[0]).toBeLessThanOrEqual(255);
+      if (match[2] !== undefined) expect(Number(match[2]), match[0]).toBeLessThanOrEqual(255);
+    }
+    const unionSql = migrationSql.find((migration) => migration.version === 58)!.sql;
+    expect(unionSql).toContain("length(last_id) BETWEEN 1 AND 256 AND last_id ~ '^[!-~]+$'");
+    expect(unionSql).toContain("length(p_last_id) NOT BETWEEN 1 AND 256 OR p_last_id !~ '^[!-~]+$'");
+    const emptyChatTitleSql = migrationSql.find((migration) => migration.version === 59)!.sql;
+    expect(emptyChatTitleSql).not.toContain("THEN 'Chat'");
+    expect(emptyChatTitleSql).toContain("ELSE btrim(title_text, v_ws)");
+    expect(emptyChatTitleSql).toContain("ELSE btrim(last_text, v_ws)");
+    expect(emptyChatTitleSql).toContain("chr(160)");
+    expect(emptyChatTitleSql).toContain("chr(133)");
+    expect(emptyChatTitleSql).toContain("chr(65279)");
+    const chatMainSql = migrationSql.find((migration) => migration.version === 60)!.sql;
+    expect(chatMainSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.read_chat_history");
+    expect(chatMainSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.read_chat_conversation_sessions");
+    expect(chatMainSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.save_conversation_union_cursor");
+    expect(chatMainSql).toContain("p_chat_session_id IS NULL OR p_chat_session_id='chat-main'");
+    expect(chatMainSql).toContain("btrim(m.chat_session_id)='chat-main'");
+    expect(chatMainSql).not.toContain("THEN 'Chat'");
+    expect(chatMainSql).toContain("chr(133)");
+    expect(chatMainSql).toContain("chr(160)");
+    expect(chatMainSql).toContain("chr(65279)");
+    const listenExcerptSql = migrationSql.find((migration) => migration.version === 61)!.sql;
+    expect(listenExcerptSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.read_listen_conversation_page");
+    expect(listenExcerptSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.read_listen_conversation_union_page");
+    expect(listenExcerptSql).toContain("left(btrim(segment.text_content,v_ws),240)");
+    expect(listenExcerptSql).toContain("left(btrim(segment.value->>'text',v_ws),240)");
+    expect(listenExcerptSql).not.toContain("left(string_agg(left(segment.text_content,240)");
+    expect(listenExcerptSql).not.toContain("left(string_agg(left(segment.value->>'text',240)");
+    expect(listenExcerptSql).toContain("chr(133)");
+    expect(listenExcerptSql).toContain("chr(160)");
+    expect(listenExcerptSql).toContain("chr(65279)");
   });
 });

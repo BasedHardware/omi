@@ -5,6 +5,11 @@ import ReactTestRenderer, {act} from 'react-test-renderer';
 import {ScrollView, Text, TextInput} from 'react-native';
 import {DesktopApp} from './DesktopApp';
 import {TaskPagination} from '../ui/TaskPagination';
+import {
+  desktopAccountSettingUnavailableCopy,
+  desktopAppsUnavailableCopy,
+  desktopBackendUnavailableCopy,
+} from '../desktopReadClient';
 
 jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => true,
@@ -57,6 +62,9 @@ jest.mock('./ShippingStage', () => {
 });
 
 jest.mock('../desktopSettingsClient', () => {
+  const actual = jest.requireActual(
+    '../desktopSettingsClient',
+  ) as typeof import('../desktopSettingsClient');
   const prefs = {
     audioMode: 'off',
     floatingBar: true,
@@ -74,6 +82,7 @@ jest.mock('../desktopSettingsClient', () => {
     vadGate: true,
   };
   return {
+    ...actual,
     defaultDesktopPreferences: () => prefs,
     loadDesktopPreferences: jest.fn(async () => prefs),
     loadPermissionStatus: jest.fn(async () => ({
@@ -87,6 +96,12 @@ jest.mock('../desktopSettingsClient', () => {
 });
 
 jest.mock('../desktopCloudClient', () => ({
+  cloudErrorCanRetry: (error: unknown) =>
+    !(
+      error instanceof Error &&
+      'retryable' in error &&
+      (error as {retryable?: unknown}).retryable === false
+    ),
   loadAccountSettings: jest.fn(async () => {
     throw new Error('unused');
   }),
@@ -95,7 +110,9 @@ jest.mock('../desktopCloudClient', () => ({
     enabledError: null,
     enabledIds: [],
     ownerUid: null,
+    ownerError: null,
   })),
+  optInTrainingData: jest.fn(),
   setPrivateCloudSync: jest.fn(),
   setStoreRecordingPermission: jest.fn(),
 }));
@@ -197,6 +214,21 @@ function renderedText(renderer: ReactTestRenderer.ReactTestRenderer): string {
         typeof value === 'string' || typeof value === 'number',
     )
     .join(' ');
+}
+
+function visibleButtonCopy(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  accessibilityLabel: string,
+): string[] {
+  return renderer.root
+    .find(node => node.props.accessibilityLabel === accessibilityLabel)
+    .findAllByType(Text)
+    .flatMap(node =>
+      Array.isArray(node.props.children)
+        ? node.props.children
+        : [node.props.children],
+    )
+    .filter((value): value is string => typeof value === 'string');
 }
 
 function pressText(
@@ -317,7 +349,11 @@ test('omnibar send uses the existing chat send path', () => {
 test('sending from another page returns to Home and an active response can stop', async () => {
   const onSend = jest.fn();
   const onStop = jest.fn();
-  const renderer = renderDesktop({onSend, onStop});
+  const renderer = renderDesktop({
+    draft: 'What did we decide?',
+    onSend,
+    onStop,
+  });
   act(() => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Tasks')
@@ -374,7 +410,7 @@ test('desktop chat renders a truthful failed terminal state', () => {
         id: 'failed-1',
         text: '',
         sender: 'ai',
-        createdAt: 1,
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
         generationOutcome: 'failed',
         generationRetryable: true,
       },
@@ -388,15 +424,102 @@ test('desktop chat renders a truthful failed terminal state', () => {
   ).not.toHaveLength(0);
 });
 
+test('desktop chat treats a cancelled whitespace-only reply as Response stopped', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'cancelled-whitespace',
+        text: ' \t\n',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'cancelled',
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Response stopped.');
+  expect(copy).not.toContain(' \t\n');
+});
+
+test('desktop chat treats a whitespace-only reply as Message text unavailable', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'human-whitespace',
+        text: ' \t\n',
+        sender: 'human',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: null,
+      },
+      {
+        id: 'completed-whitespace',
+        text: ' \t\n',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Message text unavailable');
+  expect(copy).not.toContain('Response stopped.');
+  expect(copy).not.toContain(' \t\n');
+});
+
+test('a zero macOS Home chat timestamp says Time unavailable instead of omitting the clock', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'undated-1',
+        text: 'undated prompt',
+        sender: 'human',
+        createdAt: 0,
+        generationOutcome: null,
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('undated prompt');
+  expect(copy).toContain('Time unavailable');
+  expect(copy).not.toContain('1970');
+});
+
 test('desktop chat can load earlier messages', () => {
   const onLoadOlderChat = jest.fn();
   const renderer = renderDesktop({hasOlderChat: true, onLoadOlderChat});
+  expect(renderedText(renderer)).not.toContain("I'm ready.");
   act(() => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Load earlier messages')
       .props.onPress();
   });
   expect(onLoadOlderChat).toHaveBeenCalledTimes(1);
+});
+
+test('desktop chat omits Load earlier when the older cursor is empty', () => {
+  const onLoadOlderChat = jest.fn();
+  const renderer = renderDesktop({
+    hasOlderChat: true,
+    olderChatAvailable: false,
+    onLoadOlderChat,
+    messages: [
+      {
+        id: 'human-1',
+        text: 'saved prompt',
+        sender: 'human',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: null,
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('saved prompt');
+  expect(copy).not.toContain("I'm ready.");
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load earlier messages',
+    ),
+  ).toHaveLength(0);
 });
 
 test('signed-out Mac sees only the Welcome, never product chrome', () => {
@@ -505,6 +628,31 @@ test('keeps an unavailable read as an inline shell state', () => {
   expect(tree).not.toContain('Offline · showing what is available on this Mac');
 });
 
+test('nested non-retryable library 503s do not offer Try again', () => {
+  const unavailable = {
+    status: 'error' as const,
+    error: desktopBackendUnavailableCopy,
+  };
+  const renderer = renderDesktop({
+    outcomes: {
+      conversations: unavailable,
+      memories: unavailable,
+      tasks: unavailable,
+    },
+    reads: [],
+    readsPhase: 'unavailable',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(tree).not.toContain("Some of your history isn't loaded yet.");
+  expect(tree).not.toContain('Try again');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Try again',
+    ),
+  ).toHaveLength(0);
+});
+
 test('keeps degraded read state visible away from Home', () => {
   const renderer = renderDesktop({readsPhase: 'saved-but-refresh-failed'});
   act(() => {
@@ -593,6 +741,98 @@ test('ready chat transport error stays in the chrome and off the Home stage', ()
   }
 });
 
+test('an unavailable write door disables Ask instead of leaving it sendable', () => {
+  const onSend = jest.fn();
+  const renderer = renderDesktop({
+    chatError: 'Sending messages is not available on this backend yet.',
+    chatSendUnavailable: true,
+    onSend,
+  });
+  const send = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Send unavailable',
+  );
+  expect(send.props.disabled).toBe(true);
+  const sendStyle =
+    typeof send.props.style === 'function'
+      ? send.props.style({pressed: false})
+      : send.props.style;
+  expect([sendStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
+  send.props.onPress();
+  expect(onSend).not.toHaveBeenCalled();
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  expect(omnibar.props.onSubmitEditing).toBeUndefined();
+  const live = renderDesktop({draft: 'What did we decide?'});
+  const liveSend = live.root.find(
+    node => node.props.accessibilityLabel === 'Send',
+  );
+  expect(liveSend.props.disabled).toBe(false);
+  const liveStyle =
+    typeof liveSend.props.style === 'function'
+      ? liveSend.props.style({pressed: false})
+      : liveSend.props.style;
+  expect(JSON.stringify([liveStyle].flat(Infinity))).not.toContain(
+    '"opacity":0.35',
+  );
+});
+
+test('desktop empty Ask is disabled without omitting Search', () => {
+  const onSend = jest.fn();
+  const renderer = renderDesktop({draft: '   ', onSend});
+  const send = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Send',
+  );
+  expect(send.props.disabled).toBe(true);
+  expect(renderedText(renderer)).toContain('Ask');
+  const sendStyle =
+    typeof send.props.style === 'function'
+      ? send.props.style({pressed: false})
+      : send.props.style;
+  expect([sendStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
+  send.props.onPress();
+  expect(onSend).not.toHaveBeenCalled();
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  expect(omnibar.props.editable).not.toBe(false);
+  expect(omnibar.props.onSubmitEditing).toBeUndefined();
+});
+
+test('desktop NEXT LINE-only Ask is disabled without omitting Search', () => {
+  const onSend = jest.fn();
+  const renderer = renderDesktop({draft: '\u0085', onSend});
+  const send = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Send',
+  );
+  expect(send.props.disabled).toBe(true);
+  expect(renderedText(renderer)).toContain('Ask');
+  const sendStyle =
+    typeof send.props.style === 'function'
+      ? send.props.style({pressed: false})
+      : send.props.style;
+  expect([sendStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
+  send.props.onPress();
+  expect(onSend).not.toHaveBeenCalled();
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  expect(omnibar.props.editable).not.toBe(false);
+  expect(omnibar.props.onSubmitEditing).toBeUndefined();
+});
+
 test('Settings opens the shipping multi-pane IA including Advanced', async () => {
   const renderer = renderDesktop();
   await act(async () => {
@@ -614,6 +854,9 @@ test('Settings opens the shipping multi-pane IA including Advanced', async () =>
   expect(tree).toContain('New backend');
   expect(tree).toContain('Screen Capture');
   expect(tree).toContain('Audio Recording');
+  expect(tree).toContain('Off');
+  expect(tree).toContain('Always');
+  expect(tree).toContain('Meetings');
   expect(tree).toContain('Notifications');
   await act(async () => {
     renderer.root
@@ -636,9 +879,21 @@ test('searches real projections instead of a fake timeline', () => {
   const tree = renderedText(renderer);
   expect(tree).toContain('Product review');
   expect(tree).not.toContain('Ship the desktop chrome');
+  expect(tree).toContain('No tasks match this search.');
+  expect(tree).not.toContain('No tasks yet');
   expect(tree).not.toContain('0 screen moments');
   expect(tree).not.toContain('💬');
   expect(tree).not.toContain('🧠');
+});
+
+test('a NEXT LINE-only Home search does not claim a search miss', () => {
+  const renderer = renderDesktop({draft: '\u0085'});
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Product review');
+  expect(tree).toContain('Ship the desktop chrome');
+  expect(tree).not.toContain('Nothing captured matches this search.');
+  expect(tree).not.toContain('No tasks match this search.');
+  expect(tree).not.toContain('\u0085');
 });
 
 test('Home renders real memories alongside conversations', () => {
@@ -860,6 +1115,176 @@ test('a successful empty read is the only path to the empty claims', async () =>
   );
 });
 
+test('an incomplete empty read does not claim a complete library', async () => {
+  const incompletePage = {
+    windowStatus: 'incomplete' as const,
+    complete: false,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'incomplete' as const,
+    reasons: ['accepted_work_pending'],
+  };
+  const incompleteOutcomes = {
+    conversations: {
+      status: 'success' as const,
+      value: {items: [], page: incompletePage},
+    },
+    memories: {
+      status: 'success' as const,
+      value: {items: [], page: incompletePage},
+    },
+    tasks: {
+      status: 'success' as const,
+      value: {accountEpoch: null, items: [], page: incompletePage},
+    },
+  };
+  const renderer = renderDesktop({
+    outcomes: incompleteOutcomes,
+    reads: [],
+    readsPhase: 'ready',
+  });
+  let tree = renderedText(renderer);
+  expect(tree).toContain('Conversations are incomplete.');
+  expect(tree).toContain('Tasks are incomplete.');
+  expect(tree).not.toContain('Nothing captured yet.');
+  expect(tree).not.toContain('No tasks yet');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Conversations')
+      .props.onPress();
+  });
+  tree = renderedText(renderer);
+  expect(tree).toContain('Conversations are incomplete.');
+  expect(tree).not.toContain('Nothing captured in this window yet.');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress();
+  });
+  tree = renderedText(renderer);
+  expect(tree).toContain('Tasks are incomplete.');
+  expect(tree).not.toContain('No tasks yet');
+});
+
+test('an incomplete empty search does not claim a complete miss', async () => {
+  const incompletePage = {
+    windowStatus: 'incomplete' as const,
+    complete: false,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'incomplete' as const,
+    reasons: ['accepted_work_pending'],
+  };
+  const incompleteOutcomes = {
+    conversations: {
+      status: 'success' as const,
+      value: {items: [], page: incompletePage},
+    },
+    memories: {
+      status: 'success' as const,
+      value: {items: [], page: incompletePage},
+    },
+    tasks: {
+      status: 'success' as const,
+      value: {accountEpoch: null, items: [], page: incompletePage},
+    },
+  };
+  const renderer = renderDesktop({
+    draft: 'product',
+    outcomes: incompleteOutcomes,
+    reads: [],
+    readsPhase: 'ready',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Conversations are incomplete.');
+  expect(tree).toContain('Tasks are incomplete.');
+  expect(tree).not.toContain('Nothing captured matches this search.');
+  expect(tree).not.toContain('No tasks match this search.');
+  expect(tree).not.toContain('Nothing captured yet.');
+  expect(tree).not.toContain('No tasks yet');
+});
+
+test('a complete empty search may claim a search miss', async () => {
+  const completePage = {
+    windowStatus: 'complete' as const,
+    complete: true,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  const emptyOutcomes = {
+    conversations: {
+      status: 'success' as const,
+      value: {items: [], page: completePage},
+    },
+    memories: {
+      status: 'success' as const,
+      value: {items: [], page: completePage},
+    },
+    tasks: {
+      status: 'success' as const,
+      value: {accountEpoch: null, items: [], page: completePage},
+    },
+  };
+  const renderer = renderDesktop({
+    draft: 'product',
+    outcomes: emptyOutcomes,
+    reads: [],
+    readsPhase: 'ready',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Nothing captured matches this search.');
+  expect(tree).toContain('No tasks match this search.');
+  expect(tree).not.toContain('Conversations are incomplete.');
+  expect(tree).not.toContain('Tasks are incomplete.');
+  expect(tree).not.toContain('Nothing captured yet.');
+  expect(tree).not.toContain('No tasks yet');
+});
+
+test('unavailable memory coverage does not claim a complete empty home', async () => {
+  const completePage = {
+    windowStatus: 'complete' as const,
+    complete: true,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  const renderer = renderDesktop({
+    outcomes: {
+      conversations: {
+        status: 'success' as const,
+        value: {items: [], page: completePage},
+      },
+      memories: {
+        status: 'success' as const,
+        value: {
+          items: [],
+          page: {
+            windowStatus: 'incomplete' as const,
+            complete: false,
+            hasMore: false,
+            nextCursor: null,
+            completenessStatus: 'degraded' as const,
+            reasons: ['projection_unavailable'],
+          },
+        },
+      },
+      tasks: {
+        status: 'success' as const,
+        value: {accountEpoch: null, items: [], page: completePage},
+      },
+    },
+    reads: [],
+    readsPhase: 'ready',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Memories may be temporarily incomplete.');
+  expect(tree).toContain('No tasks yet');
+  expect(tree).not.toContain('Nothing captured yet.');
+});
+
 test('Apps is a wrapped gallery that does not invent catalog entries', async () => {
   const pages = kitSources['DesktopPages.tsx'];
   expect(pages).toMatch(/appGrid:\s*\{[^}]*flexWrap:\s*'wrap'/);
@@ -895,6 +1320,213 @@ test('Apps reports a catalog failure instead of showing invented data', async ()
   });
   expect(renderedText(renderer)).toContain('Apps could not be loaded.');
   expect(renderedText(renderer)).not.toContain('Google Calendar');
+});
+
+test('nested non-retryable Apps catalogue failures do not claim a load blip', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockRejectedValueOnce(
+    Object.assign(new Error(desktopAppsUnavailableCopy), {retryable: false}),
+  );
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(renderedText(renderer)).toContain(desktopAppsUnavailableCopy);
+  expect(renderedText(renderer)).not.toContain('Apps could not be loaded.');
+  expect(renderedText(renderer)).not.toContain('Google Calendar');
+});
+
+test('nested non-retryable Apps enabled failures do not claim an empty catalogue', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [],
+    enabledError: desktopAppsUnavailableCopy,
+    enabledIds: null,
+    ownerUid: null,
+    ownerError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(renderedText(renderer)).toContain(desktopAppsUnavailableCopy);
+  expect(renderedText(renderer)).not.toContain('No apps are available.');
+});
+
+test('nested non-retryable Apps enabled failures keep catalogue tiles without claiming install status', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [
+      {
+        id: 'catalog-app-1',
+        name: 'Owned app',
+        description: '',
+        category: '',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+    ],
+    enabledError: desktopAppsUnavailableCopy,
+    enabledIds: null,
+    ownerUid: null,
+    ownerError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain(desktopAppsUnavailableCopy);
+  expect(tree).toContain('Owned app');
+  expect(tree).toContain('App details unavailable');
+  expect(tree).not.toContain('Not connected');
+  expect(tree).not.toContain('Installed');
+});
+
+test('successful empty Apps enabled reads still report catalogue tiles as not connected', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [
+      {
+        id: 'catalog-app-1',
+        name: 'Owned app',
+        description: '',
+        category: '',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+    ],
+    enabledError: null,
+    enabledIds: [],
+    ownerUid: null,
+    ownerError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Owned app');
+  expect(tree).toContain('Not connected');
+  expect(tree).toContain('App details unavailable');
+  expect(tree).not.toContain(desktopAppsUnavailableCopy);
+});
+
+test('Apps gallery empty names stay visible instead of a blank title', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [
+      {
+        id: 'catalog-app-1',
+        name: ' \t\n',
+        description: '',
+        category: '',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+    ],
+    enabledError: null,
+    enabledIds: [],
+    ownerUid: null,
+    ownerError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('App name unavailable');
+  expect(tree).toContain('App details unavailable');
+  expect(tree).toContain('Not connected');
+  expect(tree).not.toContain(desktopAppsUnavailableCopy);
+});
+
+test('Apps gallery category labels are not raw wire tokens', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [
+      {
+        id: 'catalog-app-1',
+        name: 'Catalog fixture app',
+        description: '',
+        category: 'productivity',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+    ],
+    enabledError: null,
+    enabledIds: [],
+    ownerUid: null,
+    ownerError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Catalog fixture app');
+  expect(tree).toContain('Productivity');
+  expect(tree).not.toContain('productivity');
 });
 
 test('Settings persists a plane switch before reloading the workspace', async () => {
@@ -997,7 +1629,7 @@ test('Settings does not persist audio capture when microphone access is denied',
     await Promise.resolve();
   });
   await act(async () => {
-    pressText(renderer, 'always');
+    pressText(renderer, 'Always');
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -1008,6 +1640,95 @@ test('Settings does not persist audio capture when microphone access is denied',
   );
   expect(renderedText(renderer)).toContain(
     'Microphone access is denied in System Settings.',
+  );
+});
+
+test('Settings names denied notification access instead of asking macOS again', async () => {
+  const settings = jest.requireMock('../desktopSettingsClient') as {
+    loadPermissionStatus: jest.Mock;
+  };
+  settings.loadPermissionStatus.mockResolvedValueOnce({
+    microphone: 'unknown',
+    notifications: 'denied',
+    screen: 'unknown',
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Notification access is denied in System Settings.');
+  expect(tree).not.toContain('Ask macOS for notification permission.');
+});
+
+test('Settings audio recording labels are not raw mode tokens', async () => {
+  const settings = jest.requireMock('../desktopSettingsClient') as {
+    requestDesktopPermission: jest.Mock;
+    setDesktopPreference: jest.Mock;
+  };
+  settings.requestDesktopPermission.mockResolvedValueOnce('granted');
+  settings.setDesktopPreference.mockClear();
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Off');
+  expect(tree).toContain('Always');
+  expect(tree).toContain('Meetings');
+  await act(async () => {
+    pressText(renderer, 'Always');
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(settings.setDesktopPreference).toHaveBeenCalledWith(
+    'audioMode',
+    'always',
+  );
+});
+
+test('Settings Rewind retention does not show 0 as a keep-forever token', async () => {
+  const settings = jest.requireMock('../desktopSettingsClient') as {
+    setDesktopPreference: jest.Mock;
+  };
+  settings.setDesktopPreference.mockClear();
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Rewind' &&
+          node.props.accessibilityRole === 'tab',
+      )
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Data Retention');
+  expect(tree).toContain('Forever');
+  expect(tree).toContain('7');
+  expect(tree).toContain('14');
+  expect(tree).toContain('30');
+  await act(async () => {
+    pressText(renderer, 'Forever');
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(settings.setDesktopPreference).toHaveBeenCalledWith(
+    'rewindRetentionDays',
+    0,
   );
 });
 
@@ -1076,7 +1797,458 @@ test('Settings reports a subscription read failure as unavailable', async () => 
   );
 });
 
+test('Settings shows already-loaded transcription seconds on Current plan', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: 90,
+      transcriptionSecondsLimit: 3600,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'Plus · Active · 90 / 3600 transcribed seconds',
+  );
+  expect(renderedText(renderer)).not.toContain('Plan is unavailable.');
+  expect(renderedText(renderer)).not.toContain('Company');
+  expect(renderedText(renderer)).not.toContain('Job');
+  expect(renderedText(renderer)).not.toContain('Data protection');
+});
+
+test('Settings shows already-loaded company, job, and data protection', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: 'Based Hardware',
+      job: 'Engineer',
+      dataProtectionLevel: 'standard',
+    },
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Company');
+  expect(tree).toContain('Based Hardware');
+  expect(tree).toContain('Job');
+  expect(tree).toContain('Engineer');
+  expect(tree).toContain('Data protection');
+  expect(tree).toContain('Standard');
+  expect(tree).not.toContain('standard');
+});
+
+test('Settings reports a nested non-retryable profile read as unavailable', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: desktopAccountSettingUnavailableCopy,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    desktopAccountSettingUnavailableCopy,
+  );
+  expect(renderedText(renderer)).not.toContain('Signed in to Omi');
+});
+
+test('Settings does not claim Signed in to Omi when a loaded profile has no email', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: null,
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain('Email not set on this account.');
+  expect(renderedText(renderer)).toContain('Ada');
+  expect(renderedText(renderer)).not.toContain('Signed in to Omi');
+});
+
+test('Settings shows already-loaded Account id and Name not set', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-42',
+      name: null,
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Name not set on this account.');
+  expect(tree).toContain('Account id');
+  expect(tree).toContain('user-42');
+  expect(tree).not.toContain('Signed in to Omi');
+});
+
+test('Settings treats whitespace-only Account name and email as unset', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-42',
+      name: ' \t\n',
+      email: ' \t',
+      company: ' \t',
+      job: '\u00A0',
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Name not set on this account.');
+  expect(tree).toContain('Email not set on this account.');
+  expect(tree).not.toContain('Company');
+  expect(tree).not.toContain('Job');
+});
+
+test('Settings treats NEXT LINE-only company and job as unset', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-42',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: '\u0085',
+      job: '\u0085',
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Ada');
+  expect(tree).not.toContain('Company');
+  expect(tree).not.toContain('Job');
+  expect(tree).not.toContain('\u0085');
+});
+
+test('Settings treats whitespace-only Account id as unavailable', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: ' \t\n',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Account id unavailable');
+  expect(tree).toContain('Ada');
+  expect(tree).not.toContain('Signed in to Omi');
+});
+
+test('Settings Alerts does not claim privacy slices unavailable while account is loading', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockReturnValueOnce(new Promise(() => {}));
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Alerts & Privacy')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain('Loading recording storage…');
+  expect(renderedText(renderer)).toContain('Loading private cloud sync…');
+  expect(renderedText(renderer)).toContain('Loading training data…');
+  expect(renderedText(renderer)).not.toContain(
+    'Cloud recording storage status is unavailable.',
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Private cloud sync status is unavailable.',
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Training opt-in is unavailable.',
+  );
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Update'),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Opt in'),
+  ).toHaveLength(0);
+});
+
 test('Settings does not expose cloud mutations when account values failed to load', async () => {
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'This saved data could not be loaded. Retry without changing it.',
+  );
+  expect(renderedText(renderer)).not.toContain('Loading account…');
+  expect(renderedText(renderer)).not.toContain('Loading plan…');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Alerts & Privacy')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'This saved data could not be loaded. Retry without changing it.',
+  );
+  expect(renderedText(renderer)).not.toContain('Loading recording storage…');
+  expect(renderedText(renderer)).not.toContain('Loading private cloud sync…');
+  expect(renderedText(renderer)).not.toContain('Loading training data…');
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Update'),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Opt in'),
+  ).toHaveLength(0);
+});
+
+test('Settings reports a nested non-retryable recording-storage read as unavailable', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: desktopAccountSettingUnavailableCopy,
+    trainingOptedIn: null,
+    trainingError: desktopAccountSettingUnavailableCopy,
+    privateCloudSync: null,
+    privateCloudSyncError: desktopAccountSettingUnavailableCopy,
+    webhooks: null,
+    webhooksError: null,
+  });
   const renderer = renderDesktop();
   await act(async () => {
     renderer.root
@@ -1091,13 +2263,400 @@ test('Settings does not expose cloud mutations when account values failed to loa
       .props.onPress();
   });
   expect(renderedText(renderer)).toContain(
+    desktopAccountSettingUnavailableCopy,
+  );
+  expect(renderedText(renderer)).not.toContain(
     'Cloud recording storage status is unavailable.',
   );
-  expect(renderedText(renderer)).toContain(
+  expect(renderedText(renderer)).not.toContain(
     'Private cloud sync status is unavailable.',
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Training opt-in is unavailable.',
   );
   expect(
     renderer.root.findAll(node => node.props.accessibilityLabel === 'Update'),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Opt in'),
+  ).toHaveLength(0);
+});
+
+test('nested non-retryable account setting writes omit Try again', async () => {
+  const {loadAccountSettings, setStoreRecordingPermission} = jest.requireMock(
+    '../desktopCloudClient',
+  ) as {
+    loadAccountSettings: jest.Mock;
+    setStoreRecordingPermission: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValue({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: false,
+    storeRecordingError: null,
+    trainingOptedIn: false,
+    trainingError: null,
+    privateCloudSync: false,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  setStoreRecordingPermission.mockRejectedValueOnce(
+    Object.assign(new Error(desktopAccountSettingUnavailableCopy), {
+      retryable: false,
+    }),
+  );
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Alerts & Privacy')
+      .props.onPress();
+  });
+  await act(async () => {
+    renderer.root
+      .findAll(node => node.props.accessibilityLabel === 'Update')[0]!
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(renderedText(renderer)).toContain(
+    desktopAccountSettingUnavailableCopy,
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Settings change could not be saved. Try again.',
+  );
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Update' &&
+        node.props.disabled === true,
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Opt in').props
+      .disabled,
+  ).toBe(false);
+});
+
+test('nested non-retryable training opt-in writes omit Try again', async () => {
+  const {loadAccountSettings, optInTrainingData} = jest.requireMock(
+    '../desktopCloudClient',
+  ) as {
+    loadAccountSettings: jest.Mock;
+    optInTrainingData: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValue({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: false,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  optInTrainingData.mockRejectedValueOnce(
+    Object.assign(new Error(desktopAccountSettingUnavailableCopy), {
+      retryable: false,
+    }),
+  );
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Alerts & Privacy')
+      .props.onPress();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Opt in')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(renderedText(renderer)).toContain(
+    desktopAccountSettingUnavailableCopy,
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Settings change could not be saved. Try again.',
+  );
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Opt in' &&
+        node.props.accessibilityRole === 'button',
+    ),
+  ).toHaveLength(0);
+});
+
+test('Settings AI does not claim developer webhooks unavailable while account is loading', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockReturnValueOnce(new Promise(() => {}));
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain('Loading developer webhooks…');
+  expect(renderedText(renderer)).not.toContain(
+    'Developer webhook status is unavailable.',
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'No developer webhooks were returned.',
+  );
+});
+
+test('Settings reports a nested non-retryable webhook read as unavailable', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: desktopAccountSettingUnavailableCopy,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    desktopAccountSettingUnavailableCopy,
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Developer webhook status is unavailable.',
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'No developer webhooks were returned.',
+  );
+});
+
+test('Settings keeps an honest empty developer webhook catalogue', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: [],
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'No developer webhooks were returned.',
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Developer webhook status is unavailable.',
+  );
+});
+
+test('Settings developer webhook titles are not raw API keys', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: [
+      {
+        type: 'memory_created',
+        enabled: true,
+        url: 'https://example.test/conversation',
+      },
+      {
+        type: 'realtime_transcript',
+        enabled: false,
+        url: null,
+      },
+      {
+        type: 'button_event',
+        enabled: null,
+        url: 'https://example.test/button',
+      },
+    ],
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Conversation Events');
+  expect(tree).toContain('Real-time Transcript');
+  expect(tree).toContain('Enabled');
+  expect(tree).toContain('Disabled');
+  expect(tree).toContain('Status unavailable');
+  expect(tree).not.toContain('Status unknown');
+  expect(tree).not.toContain('memory_created');
+  expect(tree).not.toContain('realtime_transcript');
+});
+
+test('Settings developer webhook URLs omit empty or whitespace values', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: [
+      {type: 'memory_created', enabled: true, url: ' \t\n'},
+      {
+        type: 'day_summary',
+        enabled: false,
+        url: '  https://example.test/day  ',
+      },
+    ],
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Enabled');
+  expect(tree).toContain('Disabled');
+  expect(tree).toContain('https://example.test/day');
+  expect(tree).not.toContain(' \t\n');
+});
+
+test('desktop Tasks does not claim editing unavailable over a failed task read', () => {
+  const renderer = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      tasks: {status: 'error', error: desktopBackendUnavailableCopy},
+    },
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(desktopBackendUnavailableCopy);
+  expect(renderedText(renderer)).not.toContain(
+    'Task editing is unavailable for this connection.',
+  );
+});
+
+test('desktop Tasks reports a closed write door after tasks load', () => {
+  const renderer = renderDesktop({writesAvailable: false});
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'Task editing is unavailable for this connection.',
+  );
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Task: Ship the desktop chrome',
+    ).props.disabled,
+  ).toBe(true);
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel ===
+        'Complete task: Ship the desktop chrome',
+    ),
   ).toHaveLength(0);
 });
 
@@ -1232,6 +2791,393 @@ test('actual desktop task page exposes the shared pagination action', () => {
       .props.onPress(),
   );
   expect(onLoadMore).toHaveBeenCalledTimes(1);
+});
+
+function pagedTaskOutcomes() {
+  return {
+    ...outcomes,
+    tasks: {
+      ...outcomes.tasks,
+      value: {
+        ...outcomes.tasks.value,
+        page: {
+          ...outcomes.tasks.value.page,
+          hasMore: true,
+          nextCursor: 'tasks-next',
+          complete: false,
+          windowStatus: 'more' as const,
+        },
+      },
+    },
+  };
+}
+
+test('actual desktop task page exposes Load more when more pages exist', () => {
+  const onLoadMore = jest.fn();
+  const renderer = renderDesktop({
+    outcomes: pagedTaskOutcomes(),
+    taskPagination: (
+      <TaskPagination
+        hasMore
+        busy={false}
+        notice={null}
+        onLoadMore={onLoadMore}
+      />
+    ),
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('More tasks are available.');
+  expect(visibleButtonCopy(renderer, 'Load more tasks')).toEqual([
+    'Load more tasks',
+  ]);
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load more tasks')
+      .props.onPress(),
+  );
+  expect(onLoadMore).toHaveBeenCalledTimes(1);
+});
+
+test('nested non-retryable later task pages keep rows and omit Load more', () => {
+  const renderer = renderDesktop({
+    taskNotice: desktopBackendUnavailableCopy,
+    outcomes: pagedTaskOutcomes(),
+    taskPagination: (
+      <TaskPagination
+        hasMore={false}
+        busy={false}
+        notice={desktopBackendUnavailableCopy}
+        onLoadMore={jest.fn()}
+      />
+    ),
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress(),
+  );
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Ship the desktop chrome');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more tasks',
+    ),
+  ).toHaveLength(0);
+  expect(tree).not.toContain('More tasks are available.');
+});
+
+test('generic later-page task failures keep Load more', () => {
+  const onLoadMore = jest.fn();
+  const renderer = renderDesktop({
+    taskNotice: 'More tasks could not be loaded. Try again.',
+    outcomes: pagedTaskOutcomes(),
+    taskPagination: (
+      <TaskPagination
+        hasMore
+        busy={false}
+        notice="More tasks could not be loaded. Try again."
+        onLoadMore={onLoadMore}
+      />
+    ),
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain(
+    'More tasks could not be loaded. Try again.',
+  );
+  expect(renderedText(renderer)).toContain('More tasks are available.');
+  expect(visibleButtonCopy(renderer, 'Load more tasks')).toEqual([
+    'Load more tasks',
+  ]);
+});
+
+function pagedConversationOutcomes() {
+  return {
+    ...outcomes,
+    conversations: {
+      ...outcomes.conversations,
+      value: {
+        ...outcomes.conversations.value,
+        page: {
+          ...outcomes.conversations.value.page,
+          hasMore: true,
+          nextCursor: 'conversations-next',
+          complete: false,
+          windowStatus: 'more' as const,
+        },
+      },
+    },
+  };
+}
+
+test('actual desktop conversation page exposes Load more when more pages exist', () => {
+  const onLoadMoreConversations = jest.fn();
+  const renderer = renderDesktop({
+    onLoadMoreConversations,
+    outcomes: pagedConversationOutcomes(),
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Conversations')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('More conversations are available.');
+  expect(visibleButtonCopy(renderer, 'Load more conversations')).toEqual([
+    'Load more conversations',
+  ]);
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load more conversations')
+      .props.onPress(),
+  );
+  expect(onLoadMoreConversations).toHaveBeenCalledTimes(1);
+});
+
+test('nested non-retryable later conversation pages keep rows and omit Load more', () => {
+  const renderer = renderDesktop({
+    conversationNotice: desktopBackendUnavailableCopy,
+    outcomes: pagedConversationOutcomes(),
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Conversations')
+      .props.onPress(),
+  );
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Product review');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more conversations',
+    ),
+  ).toHaveLength(0);
+  expect(tree).not.toContain('More conversations are available.');
+});
+
+test('generic later-page conversation failures keep Load more', () => {
+  const onLoadMoreConversations = jest.fn();
+  const renderer = renderDesktop({
+    conversationNotice: 'More conversations could not be loaded. Try again.',
+    onLoadMoreConversations,
+    outcomes: pagedConversationOutcomes(),
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Conversations')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain(
+    'More conversations could not be loaded. Try again.',
+  );
+  expect(visibleButtonCopy(renderer, 'Load more conversations')).toEqual([
+    'Load more conversations',
+  ]);
+});
+
+const homeMemory = {
+  kind: 'memory' as const,
+  id: 'memory-page-1',
+  title: 'Prefers concise release notes',
+  summary: 'Release notes should lead with the outcome.',
+  searchableText: 'prefers concise release notes',
+  citations: [] as string[],
+  timestamp: 1788492408,
+  provenance: {
+    label: null,
+    synthesisVersion: 'v1',
+    inputDigest: 'input',
+    outputDigest: 'output',
+  },
+};
+
+function pagedMemoryOutcomes() {
+  return {
+    ...outcomes,
+    memories: {
+      status: 'success' as const,
+      value: {
+        items: [homeMemory],
+        page: {
+          ...outcomes.memories.value.page,
+          hasMore: true,
+          nextCursor: 'memories-next',
+          complete: false,
+          windowStatus: 'more' as const,
+        },
+      },
+    },
+  };
+}
+
+test('actual desktop Home exposes Load more memories when more memories exist', () => {
+  const onLoadMoreMemories = jest.fn();
+  const renderer = renderDesktop({
+    onLoadMoreMemories,
+    outcomes: pagedMemoryOutcomes(),
+    reads: [...outcomes.conversations.value.items, homeMemory],
+  });
+  expect(renderedText(renderer)).toContain('More memories are available.');
+  expect(visibleButtonCopy(renderer, 'Load more memories')).toEqual([
+    'Load more memories',
+  ]);
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load more memories')
+      .props.onPress(),
+  );
+  expect(onLoadMoreMemories).toHaveBeenCalledTimes(1);
+});
+
+test('actual desktop Home Load more memories stays memories-only when conversations also have more', () => {
+  const onLoadMoreMemories = jest.fn();
+  const renderer = renderDesktop({
+    onLoadMoreMemories,
+    outcomes: {
+      ...pagedConversationOutcomes(),
+      memories: pagedMemoryOutcomes().memories,
+    },
+    reads: [...outcomes.conversations.value.items, homeMemory],
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('More conversations are available.');
+  expect(tree).toContain('More memories are available.');
+  expect(visibleButtonCopy(renderer, 'Load more memories')).toEqual([
+    'Load more memories',
+  ]);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more conversations',
+    ),
+  ).toHaveLength(0);
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load more memories')
+      .props.onPress(),
+  );
+  expect(onLoadMoreMemories).toHaveBeenCalledTimes(1);
+});
+
+test('nested non-retryable later conversation pages omit more-available on Home', () => {
+  const renderer = renderDesktop({
+    conversationNotice: desktopBackendUnavailableCopy,
+    outcomes: pagedConversationOutcomes(),
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Product review');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(tree).not.toContain('More conversations are available.');
+});
+
+test('nested non-retryable later task pages omit more-available on Home', () => {
+  const renderer = renderDesktop({
+    taskNotice: desktopBackendUnavailableCopy,
+    outcomes: pagedTaskOutcomes(),
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Ship the desktop chrome');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(tree).not.toContain('More tasks are available.');
+});
+
+test('nested non-retryable later conversation pages do not claim more-available in a Home search miss', () => {
+  const renderer = renderDesktop({
+    conversationNotice: desktopBackendUnavailableCopy,
+    draft: 'nomatch',
+    outcomes: pagedConversationOutcomes(),
+    reads: outcomes.conversations.value.items,
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Nothing captured matches this search.');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(tree).not.toContain('More conversations are available.');
+});
+
+test('nested non-retryable later task pages do not claim more-available in a Home search miss', () => {
+  const renderer = renderDesktop({
+    draft: 'nomatch',
+    outcomes: pagedTaskOutcomes(),
+    taskNotice: desktopBackendUnavailableCopy,
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('No tasks match this search.');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(tree).not.toContain('More tasks are available.');
+});
+
+test('nested non-retryable later memory pages do not claim more-available in a Home search miss', () => {
+  const renderer = renderDesktop({
+    draft: 'nomatch',
+    memoryNotice: desktopBackendUnavailableCopy,
+    outcomes: pagedMemoryOutcomes(),
+    reads: [...outcomes.conversations.value.items, homeMemory],
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Nothing captured matches this search.');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(tree).not.toContain('More memories are available.');
+});
+
+test('an unfiltered empty Home with remaining conversations still reports more-available after a closed later page', () => {
+  const paged = pagedConversationOutcomes();
+  const renderer = renderDesktop({
+    conversationNotice: desktopBackendUnavailableCopy,
+    outcomes: {
+      ...paged,
+      conversations: {
+        ...paged.conversations,
+        value: {
+          ...paged.conversations.value,
+          items: [],
+        },
+      },
+    },
+    reads: [],
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('More conversations are available.');
+  expect(tree).not.toContain('Nothing captured yet.');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+});
+
+test('nested non-retryable later memory pages keep rows and omit Load more', () => {
+  const renderer = renderDesktop({
+    memoryNotice: desktopBackendUnavailableCopy,
+    outcomes: pagedMemoryOutcomes(),
+    reads: [...outcomes.conversations.value.items, homeMemory],
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Prefers concise release notes');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more memories',
+    ),
+  ).toHaveLength(0);
+  expect(tree).not.toContain('More memories are available.');
+});
+
+test('generic later-page memory failures keep Load more', () => {
+  const onLoadMoreMemories = jest.fn();
+  const renderer = renderDesktop({
+    memoryNotice: 'More memories could not be loaded.',
+    onLoadMoreMemories,
+    outcomes: pagedMemoryOutcomes(),
+    reads: [...outcomes.conversations.value.items, homeMemory],
+  });
+  expect(renderedText(renderer)).toContain(
+    'More memories could not be loaded.',
+  );
+  expect(visibleButtonCopy(renderer, 'Load more memories')).toEqual([
+    'Load more memories',
+  ]);
 });
 
 test('Settings does not inherit unrelated chat and history failures', async () => {

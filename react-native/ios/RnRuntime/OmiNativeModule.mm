@@ -195,6 +195,8 @@ RCT_REMAP_METHOD(startScan,
     }
     [self.central stopScan];
     self.scanning = NO;
+    self.lastEvent = self.devices.count == 0 ? @"No Omi devices found" : [NSString stringWithFormat:@"Found %lu Omi device%@", (unsigned long)self.devices.count, self.devices.count == 1 ? @"" : @"s"];
+    [self emitSnapshot];
     RCTPromiseResolveBlock pending = self.scanResolve;
     self.scanResolve = nil;
     pending([self deviceList]);
@@ -308,7 +310,7 @@ RCT_REMAP_METHOD(disconnectDevice,
     self.scanGeneration += 1;
     if (self.scanResolve != nil) { self.scanResolve([self deviceList]); self.scanResolve = nil; }
   }
-  self.lastEvent = [NSString stringWithFormat:@"Bluetooth is %@", [self bluetoothState]];
+  self.lastEvent = [self bluetoothLastEvent];
   [self emitSnapshot];
 }
 
@@ -348,7 +350,8 @@ didFailToConnectPeripheral:(CBPeripheral *)peripheral
   if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) {
     return;
   }
-  [self retireConnection:error.localizedDescription ?: @"Omi connection failed"];
+  (void)error;
+  [self retireConnection:@"Omi connection failed"];
   [self.retiringPeripherals removeObject:peripheral];
 }
 
@@ -359,7 +362,8 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
   if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) {
     return;
   }
-  [self retireConnection:error.localizedDescription ?: @"Disconnected from Omi"];
+  (void)error;
+  [self retireConnection:@"Disconnected from Omi"];
   [self.retiringPeripherals removeObject:peripheral];
 }
 
@@ -863,6 +867,15 @@ RCT_REMAP_METHOD(setDeviceSetting,
 - (void)cancelReconnect {
   OmiBleReconnectCancel(&_reconnectState);
   self.reconnectPeripheral = nil;
+}
+
+- (NSString *)bluetoothLastEvent {
+  switch (self.central.state) {
+    case CBManagerStatePoweredOn: return @"Bluetooth is powered on";
+    case CBManagerStatePoweredOff: return @"Bluetooth is not powered on";
+    case CBManagerStateUnauthorized: return @"Bluetooth permission is required";
+    default: return @"Bluetooth is unavailable";
+  }
 }
 
 - (NSString *)bluetoothState {

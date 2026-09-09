@@ -19,10 +19,14 @@ import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import House from 'lucide-react-native/icons/house';
 import ListFilter from 'lucide-react-native/icons/list-filter';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
-import Mic from 'lucide-react-native/icons/mic';
 import Phone from 'lucide-react-native/icons/phone';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import Settings from 'lucide-react-native/icons/settings';
+import {
+  desktopBackendUnavailableCopy,
+  taskDisplayTitle,
+  visibleDisplayText,
+} from '../desktopReadClient';
 import {
   mobileColor,
   mobileRadius,
@@ -76,16 +80,29 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   taskStatus: MobileProjectionStatus;
   recaps: readonly MobileRecap[];
   recapStatus: MobileProjectionStatus;
+  recapEmptyCopy?: string;
+  recapCoverageCopy?: string | null;
+  recapErrorCopy?: string;
+  taskEmptyCopy?: string;
+  taskCoverageCopy?: string | null;
+  taskErrorCopy?: string;
   mindMapStatus: MobileProjectionStatus;
+  mindMapHasItems?: boolean;
+  mindMapEmptyCopy?: string;
+  mindMapErrorCopy?: string;
+  mindMapCoverageCopy?: string | null;
+  onRefresh?: () => void;
   askValue: string;
+  askUnavailable?: boolean;
   onAskChange: (value: string) => void;
   onAskSubmit: () => void;
   onOpenSettings: () => void;
   onOpenDevice: () => void;
-  onOpenCalls: () => void;
+  onOpenCalls?: () => void;
   onRouteChange: (route: MobileRoute) => void;
   onViewTasks: () => void;
   onViewRecaps: () => void;
+  onOpenRecap?: (id: string) => void;
   onExpandMindMap: () => void;
 };
 
@@ -98,21 +115,39 @@ type DashboardRow =
 const StatePanel = memo(function StatePanel({
   status,
   noun,
+  errorCopy,
+  onRefresh,
 }: {
   status: Exclude<MobileProjectionStatus, 'ready'>;
   noun: string;
+  errorCopy?: string;
+  onRefresh?: () => void;
 }) {
   const copy = {
     loading: `Loading ${noun}…`,
     empty: noun === 'tasks' ? "Nothing's waiting on you." : `No ${noun} yet`,
-    offline: `Couldn’t refresh ${noun}`,
-    error: `Couldn’t load ${noun}`,
+    offline: errorCopy ?? `Couldn’t refresh ${noun}`,
+    error: errorCopy ?? `Couldn’t load ${noun}`,
   }[status];
   return (
     <View
       accessibilityLabel={`${noun} ${status} state`}
       style={styles.statePanel}>
       <Text style={styles.stateText}>{copy}</Text>
+      {onRefresh &&
+        (status === 'error' || status === 'offline') &&
+        errorCopy !== desktopBackendUnavailableCopy && (
+          <Pressable
+            accessibilityLabel={`Refresh ${noun}`}
+            accessibilityRole="button"
+            onPress={onRefresh}
+            style={[
+              styles.quietButton,
+              {minHeight: 44, justifyContent: 'center'},
+            ]}>
+            <Text style={styles.quietButtonText}>Refresh</Text>
+          </Pressable>
+        )}
     </View>
   );
 });
@@ -138,8 +173,8 @@ const TaskRow = memo(function TaskRow({
               : 'Complete'
             : task.completed
             ? 'Completed'
-            : 'Open'
-        } ${task.title}`}
+            : 'Task'
+        } ${taskDisplayTitle(task)}`}
         accessibilityRole={onToggle ? 'checkbox' : 'text'}
         accessibilityState={{
           checked: task.completed,
@@ -153,13 +188,13 @@ const TaskRow = memo(function TaskRow({
           style={[styles.checkbox, task.completed && styles.checkboxDone]}
         />
         <Text style={[styles.taskText, task.completed && styles.taskTextDone]}>
-          {task.title}
+          {taskDisplayTitle(task)}
         </Text>
       </Pressable>
       {onEdit && (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Edit ${task.title}`}
+          accessibilityLabel={`Edit ${taskDisplayTitle(task)}`}
           disabled={busy}
           onPress={() => onEdit(task.id)}
           style={styles.taskEdit}>
@@ -170,14 +205,31 @@ const TaskRow = memo(function TaskRow({
   );
 });
 
-const RecapCard = memo(function RecapCard({recap}: {recap: MobileRecap}) {
-  return (
+const RecapCard = memo(function RecapCard({
+  recap,
+  onPress,
+}: {
+  recap: MobileRecap;
+  onPress?: (id: string) => void;
+}) {
+  const card = (
     <View style={styles.recapCard}>
       <Text numberOfLines={3} style={styles.recapTitle}>
         {recap.title}
       </Text>
       <Text style={styles.recapDate}>{recap.dateLabel}</Text>
     </View>
+  );
+  if (onPress === undefined) {
+    return card;
+  }
+  return (
+    <Pressable
+      accessibilityLabel={`Open recap ${recap.title}`}
+      accessibilityRole="button"
+      onPress={() => onPress(recap.id)}>
+      {card}
+    </Pressable>
   );
 });
 
@@ -231,6 +283,7 @@ function SectionHeader({
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
       <Pressable
+        accessibilityLabel={`${actionLabel} ${title}`}
         accessibilityRole="button"
         onPress={action}
         style={styles.quietButton}>
@@ -244,6 +297,7 @@ export function MobileAppSurface({
   taskPagination,
   activeRoute,
   askValue,
+  askUnavailable = false,
   capture,
   device,
   deviceMessage,
@@ -252,6 +306,8 @@ export function MobileAppSurface({
   conversationContent,
   appsContent,
   mindMapStatus,
+  mindMapHasItems = false,
+  mindMapEmptyCopy,
   onAskChange,
   onAskSubmit,
   onExpandMindMap,
@@ -265,14 +321,25 @@ export function MobileAppSurface({
   taskMutationError = null,
   onRetryTaskMutation,
   onDismissTaskMutation,
-  writesAvailable = false,
+  writesAvailable,
   onViewRecaps,
+  onOpenRecap,
   onViewTasks,
   recaps,
   recapStatus,
+  recapEmptyCopy,
+  recapCoverageCopy,
+  recapErrorCopy,
+  taskEmptyCopy,
+  taskCoverageCopy,
+  taskErrorCopy,
   tasks,
   taskStatus,
+  mindMapErrorCopy,
+  mindMapCoverageCopy,
+  onRefresh,
 }: MobileAppSurfaceProps): React.JSX.Element {
+  const sendDisabled = askUnavailable || visibleDisplayText(askValue) === '';
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
   const taskFeedback = useMemo(
@@ -288,7 +355,7 @@ export function MobileAppSurface({
         {writesAvailable && onTaskEdit && selectedTask && (
           <TaskEditor
             id={selectedTask.id}
-            title={selectedTask.title}
+            title={selectedTask.title.trim()}
             busy={busyTaskId !== null}
             failed={taskMutationError !== null}
             onSave={onTaskEdit}
@@ -328,7 +395,7 @@ export function MobileAppSurface({
                   ? capture.waitingForAudio
                     ? 'Waiting for audio'
                     : 'Listening'
-                  : 'Paused'}
+                  : 'Not capturing'}
               </Text>
               <View
                 style={[
@@ -339,16 +406,14 @@ export function MobileAppSurface({
               />
             </View>
             <Text numberOfLines={1} style={styles.transcript}>
-              {capture.transcript ||
-                (capture.active
-                  ? capture.waitingForAudio
-                    ? 'Your Omi is connected. Waiting for audio…'
-                    : 'Listening for speech…'
-                  : 'Capture is paused')}
+              {capture.transcript !== ''
+                ? capture.transcript
+                : !capture.active
+                ? 'Not capturing'
+                : capture.waitingForAudio
+                ? 'Your Omi is connected. Waiting for audio…'
+                : 'Live transcript is not available.'}
             </Text>
-            <View style={styles.microphoneButton}>
-              <Mic color={mobileColor.text} size={18} />
-            </View>
           </View>
         );
       }
@@ -363,7 +428,13 @@ export function MobileAppSurface({
             {taskFeedback}
             {taskStatus === 'ready' ? (
               tasks.length === 0 ? (
-                <StatePanel noun="tasks" status="empty" />
+                <View
+                  accessibilityLabel="tasks empty state"
+                  style={styles.statePanel}>
+                  <Text style={styles.stateText}>
+                    {taskEmptyCopy ?? "Nothing's waiting on you."}
+                  </Text>
+                </View>
               ) : (
                 <View style={styles.taskCard}>
                   {tasks.slice(0, 3).map(task => (
@@ -379,10 +450,18 @@ export function MobileAppSurface({
                       task={task}
                     />
                   ))}
+                  {taskCoverageCopy ? (
+                    <Text style={styles.stateText}>{taskCoverageCopy}</Text>
+                  ) : null}
                 </View>
               )
             ) : (
-              <StatePanel noun="tasks" status={taskStatus} />
+              <StatePanel
+                errorCopy={taskErrorCopy}
+                noun="tasks"
+                onRefresh={onRefresh}
+                status={taskStatus}
+              />
             )}
           </View>
         );
@@ -397,18 +476,36 @@ export function MobileAppSurface({
             />
             {recapStatus === 'ready' ? (
               recaps.length === 0 ? (
-                <StatePanel noun="recaps" status="empty" />
+                <View
+                  accessibilityLabel="recaps empty state"
+                  style={styles.statePanel}>
+                  <Text style={styles.stateText}>
+                    {recapEmptyCopy ?? 'No recaps yet'}
+                  </Text>
+                </View>
               ) : (
-                <FlatList
-                  data={recaps}
-                  horizontal
-                  keyExtractor={recap => recap.id}
-                  renderItem={({item: recap}) => <RecapCard recap={recap} />}
-                  showsHorizontalScrollIndicator={false}
-                />
+                <>
+                  <FlatList
+                    data={recaps}
+                    horizontal
+                    keyExtractor={recap => recap.id}
+                    renderItem={({item: recap}) => (
+                      <RecapCard onPress={onOpenRecap} recap={recap} />
+                    )}
+                    showsHorizontalScrollIndicator={false}
+                  />
+                  {recapCoverageCopy ? (
+                    <Text style={styles.stateText}>{recapCoverageCopy}</Text>
+                  ) : null}
+                </>
               )
             ) : (
-              <StatePanel noun="recaps" status={recapStatus} />
+              <StatePanel
+                errorCopy={recapErrorCopy}
+                noun="recaps"
+                onRefresh={onRefresh}
+                status={recapStatus}
+              />
             )}
           </View>
         );
@@ -417,18 +514,40 @@ export function MobileAppSurface({
         <View style={styles.section}>
           <SectionHeader
             action={onExpandMindMap}
-            actionLabel="Expand"
+            actionLabel="View All"
             title="Mind Map"
           />
           {mindMapStatus === 'ready' ? (
-            <View accessibilityLabel="Mind map preview" style={styles.mapCard}>
-              <View style={styles.mapNodeLarge} />
-              <View style={[styles.mapNode, styles.mapNodeLeft]} />
-              <View style={[styles.mapNode, styles.mapNodeRight]} />
-              <View style={[styles.mapNode, styles.mapNodeBottom]} />
-            </View>
+            mindMapHasItems ? (
+              <>
+                <View
+                  accessibilityLabel="Mind map preview"
+                  style={styles.mapCard}>
+                  <View style={styles.mapNodeLarge} />
+                  <View style={[styles.mapNode, styles.mapNodeLeft]} />
+                  <View style={[styles.mapNode, styles.mapNodeRight]} />
+                  <View style={[styles.mapNode, styles.mapNodeBottom]} />
+                </View>
+                {mindMapCoverageCopy ? (
+                  <Text style={styles.stateText}>{mindMapCoverageCopy}</Text>
+                ) : null}
+              </>
+            ) : (
+              <View
+                accessibilityLabel="mind map empty state"
+                style={styles.statePanel}>
+                <Text style={styles.stateText}>
+                  {mindMapEmptyCopy ?? 'No memories yet.'}
+                </Text>
+              </View>
+            )
           ) : (
-            <StatePanel noun="mind map" status={mindMapStatus} />
+            <StatePanel
+              errorCopy={mindMapErrorCopy}
+              noun="mind map"
+              onRefresh={onRefresh}
+              status={mindMapStatus}
+            />
           )}
         </View>
       );
@@ -436,6 +555,8 @@ export function MobileAppSurface({
     [
       capture,
       mindMapStatus,
+      mindMapHasItems,
+      mindMapEmptyCopy,
       onExpandMindMap,
       onTaskToggle,
       onTaskEdit,
@@ -443,11 +564,21 @@ export function MobileAppSurface({
       busyTaskId,
       taskFeedback,
       onViewRecaps,
+      onOpenRecap,
       onViewTasks,
       recaps,
       recapStatus,
+      recapEmptyCopy,
+      recapCoverageCopy,
+      recapErrorCopy,
+      taskEmptyCopy,
+      taskCoverageCopy,
+      taskErrorCopy,
       tasks,
       taskStatus,
+      mindMapErrorCopy,
+      mindMapCoverageCopy,
+      onRefresh,
     ],
   );
 
@@ -478,13 +609,21 @@ export function MobileAppSurface({
             )}
           </View>
           {activeRoute === 'settings' ? (
-            <View accessibilityLabel="Settings stage" style={styles.flex}>
-              {settingsContent}
-            </View>
-          ) : activeRoute === 'apps' && appsContent ? (
-            <View accessibilityLabel="Connectors stage" style={styles.flex}>
-              {appsContent}
-            </View>
+            settingsContent ? (
+              <View accessibilityLabel="Settings stage" style={styles.flex}>
+                {settingsContent}
+              </View>
+            ) : (
+              <StatePanel noun="settings" status="error" />
+            )
+          ) : activeRoute === 'apps' ? (
+            appsContent ? (
+              <View accessibilityLabel="Connectors stage" style={styles.flex}>
+                {appsContent}
+              </View>
+            ) : (
+              <StatePanel noun="apps" status="error" />
+            )
           ) : activeRoute === 'tasks' ? (
             taskStatus === 'ready' ? (
               <FlatList
@@ -492,8 +631,23 @@ export function MobileAppSurface({
                 data={tasks}
                 keyExtractor={task => task.id}
                 ListFooterComponent={<>{taskPagination}</>}
-                ListHeaderComponent={taskFeedback}
-                ListEmptyComponent={<StatePanel noun="tasks" status="empty" />}
+                ListHeaderComponent={
+                  <>
+                    {taskFeedback}
+                    {tasks.length > 0 && taskCoverageCopy ? (
+                      <Text style={styles.stateText}>{taskCoverageCopy}</Text>
+                    ) : null}
+                  </>
+                }
+                ListEmptyComponent={
+                  <View
+                    accessibilityLabel="tasks empty state"
+                    style={styles.statePanel}>
+                    <Text style={styles.stateText}>
+                      {taskEmptyCopy ?? "Nothing's waiting on you."}
+                    </Text>
+                  </View>
+                }
                 renderItem={({item}) => (
                   <TaskRow
                     onToggle={writesAvailable ? onTaskToggle : undefined}
@@ -509,7 +663,12 @@ export function MobileAppSurface({
               />
             ) : (
               <View style={styles.secondaryList}>
-                <StatePanel noun="tasks" status={taskStatus} />
+                <StatePanel
+                  errorCopy={taskErrorCopy}
+                  noun="tasks"
+                  onRefresh={onRefresh}
+                  status={taskStatus}
+                />
                 {taskPagination}
               </View>
             )
@@ -517,11 +676,7 @@ export function MobileAppSurface({
             conversationContent ?? (
               <StatePanel noun="conversations" status="error" />
             )
-          ) : (
-            <View style={styles.secondaryEmpty}>
-              <Text style={styles.secondaryPrompt}>No apps connected yet</Text>
-            </View>
-          )}
+          ) : null}
           <MobileTabBar
             activeRoute={activeRoute}
             onRouteChange={onRouteChange}
@@ -555,13 +710,15 @@ export function MobileAppSurface({
                 {device.label}
               </Text>
             </Pressable>
-            <Pressable
-              accessibilityLabel="Open calls"
-              accessibilityRole="button"
-              onPress={onOpenCalls}
-              style={styles.roundButton}>
-              <Phone color={mobileColor.text} size={20} />
-            </Pressable>
+            {onOpenCalls ? (
+              <Pressable
+                accessibilityLabel="Open calls"
+                accessibilityRole="button"
+                onPress={onOpenCalls}
+                style={styles.roundButton}>
+                <Phone color={mobileColor.text} size={20} />
+              </Pressable>
+            ) : null}
           </View>
           <Pressable
             accessibilityLabel="Open settings"
@@ -587,19 +744,33 @@ export function MobileAppSurface({
         <View style={styles.askDock}>
           <TextInput
             accessibilityLabel="Ask Omi"
+            editable={!askUnavailable}
             onChangeText={onAskChange}
-            onSubmitEditing={onAskSubmit}
-            placeholder="Ask Omi anything about your life…"
+            onSubmitEditing={sendDisabled ? undefined : onAskSubmit}
+            placeholder={
+              askUnavailable
+                ? 'Sending messages is not available on this backend yet.'
+                : 'Ask Omi anything about your life…'
+            }
             placeholderTextColor={mobileColor.textSubtle}
             returnKeyType="send"
-            style={styles.askInput}
+            style={[
+              styles.askInput,
+              askUnavailable && styles.askInputUnavailable,
+            ]}
             value={askValue}
           />
           <Pressable
-            accessibilityLabel="Send to Omi"
+            accessibilityLabel={
+              askUnavailable ? 'Send to Omi unavailable' : 'Send to Omi'
+            }
             accessibilityRole="button"
-            onPress={onAskSubmit}
-            style={styles.askButton}>
+            disabled={sendDisabled}
+            onPress={sendDisabled ? () => undefined : onAskSubmit}
+            style={[
+              styles.askButton,
+              sendDisabled && styles.askButtonUnavailable,
+            ]}>
             <ArrowUp color={mobileColor.background} size={18} />
           </Pressable>
         </View>
@@ -739,15 +910,6 @@ const styles = StyleSheet.create({
   },
   captureDotPaused: {backgroundColor: mobileColor.textSubtle},
   transcript: {...mobileType.body, color: mobileColor.textMuted, flex: 1},
-  microphoneButton: {
-    alignItems: 'center',
-    backgroundColor: mobileColor.surfaceRaised,
-    borderRadius: mobileRadius.round,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  microphoneGlyph: {color: mobileColor.text, fontSize: 13},
   section: {gap: mobileSpace.md},
   sectionHeader: {
     alignItems: 'center',
@@ -881,6 +1043,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: mobileSpace.md,
   },
+  askInputUnavailable: {opacity: 0.35},
   askButton: {
     alignItems: 'center',
     backgroundColor: mobileColor.accent,
@@ -888,6 +1051,10 @@ const styles = StyleSheet.create({
     height: 46,
     justifyContent: 'center',
     width: 46,
+  },
+  askButtonUnavailable: {
+    backgroundColor: '#555555',
+    opacity: 0.35,
   },
   askGlyph: {color: mobileColor.background, fontSize: 14},
   tabBar: {

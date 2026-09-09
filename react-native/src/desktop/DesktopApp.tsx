@@ -2,9 +2,10 @@ import React, {useEffect, useRef, useState} from 'react';
 import {StyleSheet, TextInput, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
-import type {
-  DesktopReadOutcomes,
-  DesktopReadProjection,
+import {
+  desktopReadsCanRetry,
+  type DesktopReadOutcomes,
+  type DesktopReadProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {Onboarding} from '../ui/Onboarding';
@@ -42,6 +43,13 @@ type Props = TaskMutationProps & {
   deviceContent?: React.ReactNode;
   activeGenerationId: string | null;
   authError: string | null;
+  conversationNotice?: string | null;
+  conversationsLoadingMore?: boolean;
+  onLoadMoreConversations?: () => void;
+  taskNotice?: string | null;
+  memoryNotice?: string | null;
+  memoriesLoadingMore?: boolean;
+  onLoadMoreMemories?: () => void;
   outcomes: DesktopReadOutcomes | null;
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
@@ -50,9 +58,11 @@ type Props = TaskMutationProps & {
   draft: string;
   messages: ChatMessage[];
   hasOlderChat: boolean;
+  olderChatAvailable?: boolean;
   loadingOlderChat: boolean;
   chatBusy: boolean;
   chatError: string | null;
+  chatSendUnavailable?: boolean;
   onRefresh: () => void;
   onSignIn: () => void;
   onCancelSignIn?: () => void;
@@ -67,14 +77,23 @@ type Props = TaskMutationProps & {
 export function DesktopApp({
   activeGenerationId,
   authError,
+  conversationNotice = null,
+  conversationsLoadingMore = false,
   deviceContent,
   chatBusy,
   chatError,
+  chatSendUnavailable = false,
   draft,
   hasOlderChat,
+  olderChatAvailable = hasOlderChat,
   loadingOlderChat,
+  memoryNotice = null,
+  memoriesLoadingMore = false,
+  taskNotice = null,
   messages,
   onDraftChange,
+  onLoadMoreConversations,
+  onLoadMoreMemories,
   onLoadOlderChat,
   onRefresh,
   onSend,
@@ -149,9 +168,14 @@ export function DesktopApp({
         }}
         onStop={onStop}
         route={route}
+        sendUnavailable={chatSendUnavailable}
       />
       {route === 'Conversations' || route === 'Tasks' ? (
-        <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
+        <DesktopReadBanner
+          canRetry={desktopReadsCanRetry(outcomes)}
+          onRefresh={onRefresh}
+          readsPhase={readsPhase}
+        />
       ) : null}
       <ShippingStage stageKey={route} variant="page">
         {route === 'Home' ? (
@@ -159,9 +183,15 @@ export function DesktopApp({
             chatBusy={chatBusy}
             draft={draft}
             hasOlderChat={hasOlderChat}
+            olderChatAvailable={olderChatAvailable}
             loadingOlderChat={loadingOlderChat}
+            memoryNotice={memoryNotice}
+            conversationNotice={conversationNotice}
+            taskNotice={taskNotice}
+            memoriesLoadingMore={memoriesLoadingMore}
             messages={messages}
             onOpenRewind={() => setRoute('Rewind')}
+            onLoadMoreMemories={onLoadMoreMemories}
             onLoadOlderChat={onLoadOlderChat}
             onRefresh={onRefresh}
             outcomes={outcomes}
@@ -169,11 +199,20 @@ export function DesktopApp({
             readsPhase={readsPhase}
           />
         ) : route === 'Conversations' ? (
-          <LibraryPage outcomes={outcomes} />
+          <LibraryPage
+            conversationNotice={conversationNotice}
+            conversationsLoadingMore={conversationsLoadingMore}
+            onLoadMoreConversations={onLoadMoreConversations}
+            outcomes={outcomes}
+          />
         ) : route === 'Rewind' ? (
           <DesktopRewind capture={capture} captureRevision={captureRevision} />
         ) : route === 'Tasks' ? (
-          <TasksPage outcomes={outcomes} {...taskMutations} />
+          <TasksPage
+            outcomes={outcomes}
+            taskNotice={taskNotice}
+            {...taskMutations}
+          />
         ) : route === 'Apps' ? (
           <AppsPage session={session} />
         ) : (

@@ -7,8 +7,9 @@ import {
 import type {Device} from '../omiNativeTypes';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
-import {bluetoothStatusLabel} from './bluetooth';
+import {bluetoothSessionLabel, emptyDeviceListHint} from './bluetooth';
 import {DeviceControls} from './DeviceControls';
+import {accountFieldCopy, deviceDisplayName} from '../desktopReadClient';
 
 export type DeviceSessionVariant = 'affordance' | 'compact' | 'overview';
 
@@ -38,13 +39,14 @@ export function homeConnectionStatus(snapshot: PlatformNativeSnapshot | null): {
     };
   }
   if (connectedDevice === null) {
+    const label =
+      snapshot.bluetooth === 'poweredOn'
+        ? 'Omi not connected'
+        : bluetoothSessionLabel(snapshot);
     return {
       connectedDevice: null,
-      label:
-        snapshot.bluetooth === 'poweredOn'
-          ? 'Omi disconnected'
-          : bluetoothStatusLabel(snapshot.bluetooth),
-      color: '#d9826f',
+      label,
+      color: label === 'Checking Bluetooth…' ? '#b4ad9f' : '#d9826f',
     };
   }
   return {
@@ -88,12 +90,20 @@ export function DeviceSession({
   variant: DeviceSessionVariant;
 }): React.JSX.Element {
   const connectedLabel =
-    nativeSnapshot?.capture === 'recording' &&
-    nativeSnapshot.audioStatus === 'waiting'
-      ? 'Waiting for audio'
+    nativeSnapshot?.capture === 'recording'
+      ? nativeSnapshot.audioStatus === 'waiting'
+        ? 'Waiting for audio'
+        : 'Listening'
       : 'Connected';
-  const scanDisabled =
-    deviceBusy || !isBluetoothScanAvailable(nativeSnapshot?.bluetooth);
+  const scanUnavailable = !isBluetoothScanAvailable(nativeSnapshot?.bluetooth);
+  const scanDisabled = deviceBusy || scanUnavailable;
+  const reconnectUnavailable =
+    nativeSnapshot !== null &&
+    !isBluetoothScanAvailable(nativeSnapshot.bluetooth);
+  const connectUnavailable = (device: {
+    connected?: boolean;
+    connecting?: boolean;
+  }) => scanUnavailable && !device.connected && !device.connecting;
   const devices = (nativeSnapshot?.devices ?? []).map(device => ({
     ...device,
     connecting:
@@ -103,7 +113,11 @@ export function DeviceSession({
   const hint =
     deviceScanMessage ??
     (nativeSnapshot !== null && devices.length === 0
-      ? nativeSnapshot.lastEvent ?? 'No Omi device was discovered.'
+      ? emptyDeviceListHint(
+          nativeSnapshot.lastEvent,
+          nativeSnapshot.bluetooth,
+          deviceBusy,
+        )
       : null);
 
   const remembered =
@@ -111,22 +125,33 @@ export function DeviceSession({
       <View accessibilityLabel="Remembered Omi device" style={styles.deviceRow}>
         <View style={styles.homeDeviceRowLead}>
           <Text numberOfLines={1} style={[styles.deviceName, {flexShrink: 1}]}>
-            {rememberedDevice.name}
+            {deviceDisplayName(rememberedDevice.name)}
           </Text>
         </View>
         {!devices.some(device => device.connected || device.connecting) && (
           <FocusPressable
             accessibilityRole="button"
-            accessibilityLabel={`Reconnect ${rememberedDevice.name}`}
-            disabled={deviceBusy || rememberedBusy}
-            onPress={() => onToggle(rememberedDevice.id, false)}
-            style={styles.scanButton}>
+            accessibilityLabel={`Reconnect ${deviceDisplayName(
+              rememberedDevice.name,
+            )}`}
+            disabled={deviceBusy || rememberedBusy || reconnectUnavailable}
+            onPress={
+              reconnectUnavailable
+                ? () => undefined
+                : () => onToggle(rememberedDevice.id, false)
+            }
+            style={[
+              styles.scanButton,
+              reconnectUnavailable && styles.scanButtonUnavailable,
+            ]}>
             <Text style={styles.scanButtonText}>Reconnect</Text>
           </FocusPressable>
         )}
         <FocusPressable
           accessibilityRole="button"
-          accessibilityLabel={`Forget ${rememberedDevice.name}`}
+          accessibilityLabel={`Forget ${deviceDisplayName(
+            rememberedDevice.name,
+          )}`}
           disabled={deviceBusy || rememberedBusy}
           onPress={onForgetRemembered}
           style={styles.scanButton}>
@@ -158,19 +183,23 @@ export function DeviceSession({
                   : device.connected
                   ? 'Disconnect'
                   : 'Connect'
-              } ${device.name}`}
+              } ${deviceDisplayName(device.name)}`}
               accessibilityRole="button"
-              disabled={deviceBusy}
+              disabled={deviceBusy || connectUnavailable(device)}
               key={device.id}
-              onPress={() =>
-                onToggle(device.id, device.connected || device.connecting)
+              onPress={
+                connectUnavailable(device)
+                  ? () => undefined
+                  : () =>
+                      onToggle(device.id, device.connected || device.connecting)
               }
               style={({pressed}) => [
                 styles.macHomeDeviceChip,
+                connectUnavailable(device) && styles.scanButtonUnavailable,
                 pressed && styles.pressed,
               ]}>
               <Text style={styles.macHomeDeviceChipText}>
-                {device.name} ·{' '}
+                {deviceDisplayName(device.name)} ·{' '}
                 {device.connecting
                   ? 'Connecting…'
                   : device.connected
@@ -183,9 +212,10 @@ export function DeviceSession({
             accessibilityLabel="Scan for Omi devices"
             accessibilityRole="button"
             disabled={scanDisabled}
-            onPress={onScan}
+            onPress={scanUnavailable ? () => undefined : onScan}
             style={({pressed}) => [
               styles.macHomeDeviceChip,
+              scanUnavailable && styles.scanButtonUnavailable,
               pressed && styles.pressed,
             ]}>
             <Text style={styles.macHomeDeviceChipText}>
@@ -216,9 +246,7 @@ export function DeviceSession({
               Devices
             </Text>
             <Text style={[styles.deviceState, styles.homeDeviceState]}>
-              {nativeSnapshot === null
-                ? 'Checking Bluetooth…'
-                : bluetoothStatusLabel(nativeSnapshot.bluetooth)}
+              {bluetoothSessionLabel(nativeSnapshot)}
             </Text>
           </View>
         </View>
@@ -226,9 +254,7 @@ export function DeviceSession({
         <View>
           <Text style={styles.sectionLabel}>Devices</Text>
           <Text style={styles.deviceState}>
-            {nativeSnapshot === null
-              ? 'Checking Bluetooth…'
-              : bluetoothStatusLabel(nativeSnapshot.bluetooth)}
+            {bluetoothSessionLabel(nativeSnapshot)}
           </Text>
         </View>
       )}
@@ -236,10 +262,11 @@ export function DeviceSession({
         accessibilityLabel="Scan for Omi devices"
         accessibilityRole="button"
         disabled={scanDisabled}
-        onPress={onScan}
+        onPress={scanUnavailable ? () => undefined : onScan}
         style={({pressed}) => [
           styles.scanButton,
           variant === 'compact' && styles.homeScanButton,
+          scanUnavailable && styles.scanButtonUnavailable,
           pressed && styles.pressed,
         ]}>
         <Text
@@ -261,14 +288,19 @@ export function DeviceSession({
           : device.connected
           ? 'Disconnect'
           : 'Connect'
-      } ${device.name}`}
+      } ${deviceDisplayName(device.name)}`}
       accessibilityRole="button"
-      disabled={deviceBusy}
+      disabled={deviceBusy || connectUnavailable(device)}
       key={device.id}
-      onPress={() => onToggle(device.id, device.connected || device.connecting)}
+      onPress={
+        connectUnavailable(device)
+          ? () => undefined
+          : () => onToggle(device.id, device.connected || device.connecting)
+      }
       style={({pressed}) => [
         styles.deviceRow,
         variant === 'compact' && styles.homeDeviceRow,
+        connectUnavailable(device) && styles.scanButtonUnavailable,
         pressed && styles.pressed,
       ]}>
       {variant === 'compact' ? (
@@ -280,7 +312,9 @@ export function DeviceSession({
             ]}
           />
           <View>
-            <Text style={styles.deviceName}>{device.name}</Text>
+            <Text style={styles.deviceName}>
+              {deviceDisplayName(device.name)}
+            </Text>
             <Text style={styles.deviceMeta}>
               {device.connecting
                 ? 'Connecting…'
@@ -294,7 +328,9 @@ export function DeviceSession({
         </View>
       ) : (
         <View>
-          <Text style={styles.deviceName}>{device.name}</Text>
+          <Text style={styles.deviceName}>
+            {deviceDisplayName(device.name)}
+          </Text>
           <Text style={styles.deviceMeta}>
             {device.connecting
               ? 'Connecting…'
@@ -328,7 +364,9 @@ export function DeviceSession({
         ] as const
       ).map(([field, label]) => (
         <Text key={field} selectable style={styles.deviceMeta}>
-          {label}: {connected.information?.[field] ?? 'Unknown'}
+          {label}
+          {': '}
+          {accountFieldCopy(connected.information?.[field], 'Unavailable')}
         </Text>
       ))}
     </View>

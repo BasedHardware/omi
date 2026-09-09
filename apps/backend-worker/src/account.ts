@@ -19,7 +19,10 @@ import {
   terminalEvent,
   type Admission,
 } from "./chat";
-import { composeGenerationPrompt } from "./generation-prompt";
+import {
+  composeGenerationPrompt,
+  isVisibleGenerationText,
+} from "./generation-prompt";
 import type { ChatCreate, GenerationEvent } from "./wire";
 
 export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
@@ -61,6 +64,16 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
     const accountId = this.accountId;
     const pending = await readPendingGeneration(this.env.DB, accountId);
     if (pending === null) return;
+    if (pending.input === "unreadable") {
+      const event = await failGeneration(
+        this.env.DB,
+        accountId,
+        pending.generationId
+      );
+      this.notifyWaiters(pending.generationId, event);
+      await this.ensureGenerationAlarm(accountId);
+      return;
+    }
     await this.runGeneration(accountId, pending.generationId, pending.input);
     await this.ensureGenerationAlarm(accountId);
   }
@@ -79,6 +92,17 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
       accountId,
       generationId
     );
+    if (allEvents === "unreadable")
+      return Response.json(
+        {
+          error: {
+            code: "service_unavailable",
+            retryable: true,
+            action: "retry",
+          },
+        },
+        { status: 503, headers: { "cache-control": "no-store" } }
+      );
     const replay = this.selectReplay(allEvents, lastEventId);
     if (replay === "expired")
       return Response.json(
@@ -145,6 +169,11 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
     input: ChatCreate
   ): Promise<void> {
     const terminal = await terminalEvent(this.env.DB, accountId, generationId);
+    if (terminal === "unreadable") {
+      const event = await failGeneration(this.env.DB, accountId, generationId);
+      this.notifyWaiters(generationId, event);
+      return;
+    }
     if (terminal !== null) return;
 
     const composed = await composeGenerationPrompt(
@@ -154,6 +183,16 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
       input.id,
       input.text
     );
+    if (composed.kind === "unavailable") {
+      const event = await failGeneration(
+        this.env.DB,
+        accountId,
+        generationId,
+        false
+      );
+      this.notifyWaiters(generationId, event);
+      return;
+    }
     if (composed.kind === "fail") {
       const event = await failGeneration(this.env.DB, accountId, generationId);
       this.notifyWaiters(generationId, event);
@@ -188,7 +227,7 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
         generationId,
         composed.history
       );
-      if (result.kind === "error") {
+      if (result.kind === "error" || !isVisibleGenerationText(result.text)) {
         const event = await failGeneration(
           this.env.DB,
           accountId,
@@ -223,10 +262,7 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
         }
       );
       const response = result as { response?: unknown };
-      if (
-        typeof response.response !== "string" ||
-        response.response.length === 0
-      ) {
+      if (!isVisibleGenerationText(response.response)) {
         const event = await failGeneration(
           this.env.DB,
           accountId,

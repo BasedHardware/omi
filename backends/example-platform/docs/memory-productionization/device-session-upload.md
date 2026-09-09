@@ -37,12 +37,20 @@ part of capture idempotency: a lost initial acknowledgement still replays the or
 capture UUID and immutable device fields exactly once within its original ownership.
 
 The Worker currently has no canonical account-epoch authority and returns 503
-`capture_ownership_unavailable` for this endpoint. Its existing D1/R2 routes and data
-remain available, but receipt-backed native journaling cannot silently fall back to
-them. A paired canonical capture and conversation migration is still required there.
+nested `{error:{code:"capture_ownership_unavailable",retryable:false,action:"none"}}`
+for this endpoint. Its existing D1/R2 routes and data remain available, but
+receipt-backed native journaling cannot silently fall back to them. A paired canonical capture and conversation migration is still required there.
+Production without a configured ownership signing key uses that same nested
+non-retryable 503 and omits `retry-after`; it still does not invent a receipt.
+Authorize and identity-verification outages stay `{error:{code:"unavailable"}}`
+with `retry-after: 1`. Historical session and transcript GETs still do not require
+the signing key.
+The production memory shell mounts `GET /v1/device-sessions/ownership` as its own
+door so `ownership` is not treated as a UUID session id.
 
 | Request | Result |
 | --- | --- |
+| `GET /v1/device-sessions/ownership` | 200 `{ownership:{ownerKey,receipt}}` after `listen.capture.write`; 401/403 for missing admission; 503 nested `{error:{code:"capture_ownership_unavailable",retryable:false,action:"none"}}` without a signing key and without `retry-after`. Authorize or identity-verification 503s stay `{error:{code:"unavailable"}}` with `retry-after: 1`. |
 | `POST /v1/device-sessions` with `captureId`, `deviceId`, optional `deviceName` and `capturedAtMs`, and numeric `codec` | 201 `{session}`; UUID-v4 `captureId` is stable client retry identity, and the server chooses the session ID |
 | `POST /v1/device-sessions/:id/audio` with `{chunks:[{chunkIndex,bytesBase64},...]}` | 200 `{session}` after every indexed packet in the batch is durable; exact full or prefix replay does not increment counters twice |
 | `POST /v1/device-sessions/:id/complete` | 200 `{session}` after upload completion commits; exact replay retains the original completion timestamp |

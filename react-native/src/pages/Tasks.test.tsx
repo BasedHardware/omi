@@ -4,7 +4,10 @@ import {Text} from 'react-native';
 import {TasksPage} from './Tasks';
 import {TaskPagination} from '../ui/TaskPagination';
 import type {TaskMutationProps} from '../ui/TaskEditor';
-import type {TaskProjection} from '../desktopReadClient';
+import {
+  desktopBackendUnavailableCopy,
+  type TaskProjection,
+} from '../desktopReadClient';
 
 const task: TaskProjection = {
   kind: 'task',
@@ -55,10 +58,79 @@ function control(renderer: ReactTestRenderer.ReactTestRenderer, label: string) {
 }
 
 test('task page remains read-only without write authority', () => {
-  const renderer = render({onTaskToggle: jest.fn(), onTaskEdit: jest.fn()});
-  expect(control(renderer, 'Open Prepare demo').props.disabled).toBe(true);
-  act(() => control(renderer, 'Open task: Prepare demo').props.onPress());
+  const renderer = render({
+    writesAvailable: false,
+    onTaskToggle: jest.fn(),
+    onTaskEdit: jest.fn(),
+  });
+  expect(control(renderer, 'Task Prepare demo').props.disabled).toBe(true);
+  expect(control(renderer, 'Open Prepare demo')).toBeUndefined();
+  expect(control(renderer, 'Open task: Prepare demo')).toBeUndefined();
+  act(() => control(renderer, 'Task: Prepare demo').props.onPress());
   expect(control(renderer, 'Task description')).toBeUndefined();
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Task editing is unavailable for this connection.');
+});
+
+test('a whitespace-only task title stays visible instead of a blank row', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          ...outcome,
+          value: {
+            ...outcome.value,
+            items: [{...task, title: ' \t\n'}],
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Task title unavailable');
+  expect(copy).not.toContain(' \t\n');
+  act(() => renderer.unmount());
+});
+
+test('task search matches the visible title fallback for empty titles', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          ...outcome,
+          value: {
+            ...outcome.value,
+            items: [{...task, title: ''}],
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search loaded tasks')
+      .props.onChangeText('unavailable');
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Task title unavailable');
+  expect(copy).not.toContain('No loaded tasks match.');
+  act(() => renderer.unmount());
 });
 
 test('task page edits and toggles only through handlers with pending and error recovery', () => {
@@ -74,6 +146,8 @@ test('task page edits and toggles only through handlers with pending and error r
   ).toBe(false);
   act(() => control(renderer, 'Open task: Prepare demo').props.onPress());
   act(() => control(renderer, 'Task description').props.onChangeText(''));
+  expect(control(renderer, 'Save task description').props.disabled).toBe(true);
+  act(() => control(renderer, 'Task description').props.onChangeText('\u0085'));
   expect(control(renderer, 'Save task description').props.disabled).toBe(true);
   act(() =>
     control(renderer, 'Task description').props.onChangeText('Revised demo'),
@@ -118,11 +192,118 @@ test('task due dates use canonical epoch milliseconds', () => {
   const expected = new Date(dueAt).toLocaleDateString(undefined, {
     day: 'numeric',
     month: 'short',
+    year: 'numeric',
     timeZone: 'UTC',
   });
   expect(
     renderer.root.findAll(node => node.props.children === expected).length,
   ).toBeGreaterThan(0);
+});
+
+test('task due dates include the year so last-year dues do not look like this year', () => {
+  const dueAt = Date.UTC(2025, 11, 31);
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        loading={false}
+        outcome={{
+          ...outcome,
+          value: {...outcome.value, items: [{...task, dueAt}]},
+        }}
+      />,
+    );
+  });
+  const expected = new Date(dueAt).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+  expect(expected).toContain('2025');
+  expect(
+    renderer.root.findAll(node => node.props.children === expected).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.children ===
+        new Date(dueAt).toLocaleDateString(undefined, {
+          day: 'numeric',
+          month: 'short',
+          timeZone: 'UTC',
+        }),
+    ).length,
+  ).toBe(0);
+});
+
+test('task due dates use second-scale epochs as calendar days not 1970', () => {
+  const dueAt = 1786000000;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        loading={false}
+        outcome={{
+          ...outcome,
+          value: {...outcome.value, items: [{...task, dueAt}]},
+        }}
+      />,
+    );
+  });
+  const expected = new Date(dueAt * 1000).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+  expect(expected).toContain('2026');
+  expect(expected).not.toContain('1970');
+  expect(
+    renderer.root.findAll(node => node.props.children === expected).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.children ===
+        new Date(dueAt).toLocaleDateString(undefined, {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          timeZone: 'UTC',
+        }),
+    ).length,
+  ).toBe(0);
+});
+
+test('a zero task due timestamp says Date unavailable instead of 1970', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        loading={false}
+        outcome={{
+          ...outcome,
+          value: {...outcome.value, items: [{...task, dueAt: 0}]},
+        }}
+      />,
+    );
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .flatMap(node =>
+      Array.isArray(node.props.children)
+        ? node.props.children
+        : [node.props.children],
+    )
+    .filter(
+      (value): value is string | number =>
+        typeof value === 'string' || typeof value === 'number',
+    )
+    .join(' ');
+  expect(copy).toContain('Date unavailable');
+  expect(copy).not.toContain('1970');
+  expect(copy).not.toContain('No due date');
 });
 
 test('conflict refresh preserves dirty description while untouched descriptions follow server state', () => {
@@ -171,6 +352,15 @@ test('conflict refresh preserves dirty description while untouched descriptions 
   );
 });
 
+const incompletePage = {
+  windowStatus: 'incomplete' as const,
+  complete: false,
+  hasMore: false,
+  nextCursor: null,
+  completenessStatus: 'incomplete' as const,
+  reasons: ['accepted_work_pending'],
+};
+
 test('task grant denial shows the typed error instead of an empty library', () => {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
@@ -192,6 +382,112 @@ test('task grant denial shows the typed error instead of an empty library', () =
   expect(copy).toContain('This saved data is not available for this account.');
   expect(copy).not.toContain('No tasks yet.');
   expect(copy).not.toContain('Saved tasks could not be loaded.');
+  expect(copy).not.toContain(
+    'Task editing is unavailable for this connection.',
+  );
+});
+
+test('loading tasks do not claim editing is unavailable', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(<TasksPage outcome={null} loading />);
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Loading tasks…');
+  expect(copy).not.toContain(
+    'Task editing is unavailable for this connection.',
+  );
+});
+
+test('incomplete empty tasks do not claim a complete library', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [],
+            page: incompletePage,
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Tasks are incomplete.');
+  expect(copy).not.toContain('No tasks yet.');
+});
+
+test('an incomplete empty task search does not claim a complete miss', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [],
+            page: incompletePage,
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search loaded tasks')
+      .props.onChangeText('nomatch');
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Tasks are incomplete.');
+  expect(copy).not.toContain('No loaded tasks match.');
+});
+
+test('a NEXT LINE-only task search keeps rows instead of claiming a miss', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          ...outcome,
+          value: {
+            ...outcome.value,
+            items: [{...task, title: 'Prepare product demo'}],
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search loaded tasks')
+      .props.onChangeText('\u0085');
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Prepare product demo');
+  expect(copy).not.toContain('No loaded tasks match.');
+  expect(copy).not.toContain('\u0085');
+  act(() => renderer.unmount());
 });
 
 test('task pagination stays available when loaded task search has no matches', () => {
@@ -215,5 +511,165 @@ test('task pagination stays available when loaded task search has no matches', (
   });
   act(() => control(renderer, 'Load more tasks')!.props.onPress());
   expect(onLoadMore).toHaveBeenCalledTimes(1);
+  act(() => renderer.unmount());
+});
+
+const pagedOutcome = {
+  status: 'success' as const,
+  value: {
+    items: [task],
+    page: {
+      windowStatus: 'more' as const,
+      complete: false,
+      hasMore: true,
+      nextCursor: 'tasks-next',
+      completenessStatus: 'complete' as const,
+      reasons: [],
+    },
+  },
+};
+
+function taskPageText(renderer: ReactTestRenderer.ReactTestRenderer): string {
+  return renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+}
+
+test('nested non-retryable later task pages do not claim more are available', () => {
+  const onLoadMore = jest.fn();
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={pagedOutcome}
+        loading={false}
+        taskNotice={desktopBackendUnavailableCopy}
+        taskPagination={
+          <TaskPagination
+            hasMore={false}
+            busy={false}
+            notice={desktopBackendUnavailableCopy}
+            onLoadMore={onLoadMore}
+          />
+        }
+      />,
+    );
+  });
+  const copy = taskPageText(renderer);
+  expect(copy).toContain('Prepare demo');
+  expect(copy).toContain(desktopBackendUnavailableCopy);
+  expect(copy).not.toContain('More tasks are available.');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more tasks',
+    ),
+  ).toHaveLength(0);
+  act(() => renderer.unmount());
+});
+
+test('retryable later task pages still claim more are available', () => {
+  const onLoadMore = jest.fn();
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={pagedOutcome}
+        loading={false}
+        taskNotice="More tasks could not be loaded. Try again."
+        taskPagination={
+          <TaskPagination
+            hasMore
+            busy={false}
+            notice="More tasks could not be loaded. Try again."
+            onLoadMore={onLoadMore}
+          />
+        }
+      />,
+    );
+  });
+  const copy = taskPageText(renderer);
+  expect(copy).toContain('More tasks are available.');
+  expect(copy).toContain('More tasks could not be loaded. Try again.');
+  act(() => control(renderer, 'Load more tasks')!.props.onPress());
+  expect(onLoadMore).toHaveBeenCalledTimes(1);
+  act(() => renderer.unmount());
+});
+
+test('nested non-retryable later task pages do not claim more are available in an empty search', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={pagedOutcome}
+        loading={false}
+        taskNotice={desktopBackendUnavailableCopy}
+        taskPagination={
+          <TaskPagination
+            hasMore={false}
+            busy={false}
+            notice={desktopBackendUnavailableCopy}
+            onLoadMore={jest.fn()}
+          />
+        }
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search loaded tasks')
+      .props.onChangeText('nomatch');
+  });
+  const copy = taskPageText(renderer);
+  expect(copy).toContain('No loaded tasks match.');
+  expect(copy).toContain(desktopBackendUnavailableCopy);
+  expect(copy).not.toContain('More tasks are available.');
+  act(() => renderer.unmount());
+});
+
+test('nested non-retryable task reads omit Refresh', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          status: 'error',
+          error: desktopBackendUnavailableCopy,
+        }}
+        loading={false}
+        onRefresh={jest.fn()}
+      />,
+    );
+  });
+  expect(taskPageText(renderer)).toContain(desktopBackendUnavailableCopy);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh tasks',
+    ),
+  ).toHaveLength(0);
+  act(() => renderer.unmount());
+});
+
+test('retryable task reads still offer Refresh', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          status: 'error',
+          error:
+            'This saved data could not be loaded. Retry without changing it.',
+        }}
+        loading={false}
+        onRefresh={jest.fn()}
+      />,
+    );
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh tasks',
+    ).length,
+  ).toBeGreaterThan(0);
   act(() => renderer.unmount());
 });

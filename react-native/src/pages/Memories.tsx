@@ -9,7 +9,13 @@ import {
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
 import {
+  desktopBackendUnavailableCopy,
   loadMemories,
+  memoryDisplayBody,
+  memoryDisplayTitle,
+  memoryCitationCopy,
+  memorySynthesisCopy,
+  visibleDisplayText,
   type DesktopReadProjection,
   type DomainReadOutcome,
   type MemoryProjection,
@@ -17,11 +23,11 @@ import {
 } from '../desktopReadClient';
 import {omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
-import {ReadStatus} from '../ui/ReadStatus';
+import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 
 function formatMemoryDate(timestamp: number | null): string {
-  if (timestamp === null) {
+  if (timestamp === null || !Number.isFinite(timestamp) || timestamp <= 0) {
     return 'Date unavailable';
   }
   return new Date(timestamp * 1000).toLocaleDateString(undefined, {
@@ -34,9 +40,11 @@ function formatMemoryDate(timestamp: number | null): string {
 export function MemoriesPage({
   outcome,
   loading,
+  onRefresh,
 }: {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
+  onRefresh?: () => void;
 }) {
   const loaded = useMemo(
     () =>
@@ -53,7 +61,8 @@ export function MemoriesPage({
   );
   const [query, setQuery] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
-  const [loadMoreError, setLoadMoreError] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const [loadMoreRetryable, setLoadMoreRetryable] = useState(true);
   const generation = useRef(0);
   const activeRequest = useRef(false);
   useEffect(() => {
@@ -62,18 +71,23 @@ export function MemoriesPage({
     setItems(loaded);
     setPage(outcome?.status === 'success' ? outcome.value.page : null);
     setLoadingMore(false);
-    setLoadMoreError(false);
+    setLoadMoreError(null);
+    setLoadMoreRetryable(true);
     return () => {
       generation.current = currentGeneration + 1;
       activeRequest.current = false;
     };
   }, [loaded, outcome]);
   const results = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
+    const normalized = visibleDisplayText(query).toLocaleLowerCase();
     return normalized === ''
       ? items
       : items.filter(item =>
-          item.searchableText.toLocaleLowerCase().includes(normalized),
+          `${item.searchableText}\n${memoryDisplayTitle(
+            item,
+          )}\n${memoryDisplayBody(item)}`
+            .toLocaleLowerCase()
+            .includes(normalized),
         );
   }, [items, query]);
   const loadMore = async () => {
@@ -90,7 +104,8 @@ export function MemoriesPage({
     const attempt = generation.current;
     activeRequest.current = true;
     setLoadingMore(true);
-    setLoadMoreError(false);
+    setLoadMoreError(null);
+    setLoadMoreRetryable(true);
     try {
       const next = await loadMemories(omiBackend, page.nextCursor);
       if (attempt !== generation.current) {
@@ -101,9 +116,17 @@ export function MemoriesPage({
         return [...current, ...next.items.filter(item => !ids.has(item.id))];
       });
       setPage(next.page);
-    } catch {
+    } catch (reason) {
       if (attempt === generation.current) {
-        setLoadMoreError(true);
+        const unavailable =
+          reason instanceof Error &&
+          reason.message === desktopBackendUnavailableCopy;
+        setLoadMoreRetryable(!unavailable);
+        setLoadMoreError(
+          unavailable
+            ? desktopBackendUnavailableCopy
+            : 'More memories could not be loaded.',
+        );
       }
     } finally {
       if (attempt === generation.current) {
@@ -112,29 +135,29 @@ export function MemoriesPage({
       }
     }
   };
-  const renderItem = useCallback(
-    ({item}: {item: MemoryProjection}) => (
+  const renderItem = useCallback(({item}: {item: MemoryProjection}) => {
+    const synthesis = memorySynthesisCopy(item);
+    return (
       <View
-        accessibilityLabel={`Memory: ${item.title}`}
+        accessibilityLabel={`Memory: ${memoryDisplayBody(item)}`}
         style={styles.memoryCard}>
         <View style={styles.memoryMetaRow}>
           <Text style={styles.memoryTimestamp}>
             {formatMemoryDate(item.timestamp)}
           </Text>
           <Text style={styles.memoryCitationCount}>
-            {item.citations.length === 1
-              ? '1 citation'
-              : `${item.citations.length} citations`}
+            {memoryCitationCopy(item.citations)}
           </Text>
         </View>
-        <Text style={styles.memoryBody}>{item.summary}</Text>
-        <Text style={styles.memoryProvenance}>Synthesized memory</Text>
+        <Text style={styles.memoryBody}>{memoryDisplayBody(item)}</Text>
+        {synthesis !== null ? (
+          <Text style={styles.memoryProvenance}>{synthesis}</Text>
+        ) : null}
       </View>
-    ),
-    [],
-  );
+    );
+  }, []);
   const error = outcome?.status === 'error' ? outcome.error : null;
-  const filtering = query.trim() !== '';
+  const filtering = visibleDisplayText(query) !== '';
   return (
     <View style={styles.memoryPage}>
       <Text
@@ -155,6 +178,18 @@ export function MemoriesPage({
           value={query}
         />
       </View>
+      {onRefresh && error !== desktopBackendUnavailableCopy && (
+        <FocusPressable
+          accessibilityRole="button"
+          accessibilityLabel="Refresh memories"
+          disabled={loading || loadingMore}
+          onPress={onRefresh}
+          style={{minHeight: 44, justifyContent: 'center'}}>
+          <Text style={styles.projectionEmptyCopy}>
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </Text>
+        </FocusPressable>
+      )}
       {loading && outcome === null ? (
         <View style={styles.projectionEmpty}>
           <ActivityIndicator color="#888888" />
@@ -173,7 +208,14 @@ export function MemoriesPage({
           ListEmptyComponent={
             <View style={styles.projectionEmpty}>
               <Text style={styles.projectionEmptyTitle}>
-                {filtering ? 'No loaded memories match.' : 'No memories yet.'}
+                {emptyLibraryCopy(
+                  'Memories',
+                  page,
+                  filtering,
+                  'No loaded memories match.',
+                  'No memories yet.',
+                  loadMoreError === desktopBackendUnavailableCopy,
+                )}
               </Text>
               {filtering && (
                 <Text style={styles.projectionEmptyCopy}>
@@ -185,26 +227,34 @@ export function MemoriesPage({
           ListFooterComponent={
             page === null ? null : (
               <View style={styles.memoryFooter}>
-                <ReadStatus label="Memories" page={page} />
-                {page.hasMore && page.nextCursor !== null && (
-                  <FocusPressable
-                    accessibilityLabel="Load more memories"
-                    accessibilityRole="button"
-                    disabled={loadingMore}
-                    onPress={loadMore}
-                    style={({pressed}) => [
-                      styles.loadOlderButton,
-                      pressed && styles.pressed,
-                    ]}>
-                    <Text style={styles.loadOlderText}>
-                      {loadingMore ? 'Loading more…' : 'Load more'}
-                    </Text>
-                  </FocusPressable>
+                {(results.length > 0 || filtering) && (
+                  <ReadStatus
+                    continueUnavailable={
+                      loadMoreError === desktopBackendUnavailableCopy
+                    }
+                    label="Memories"
+                    page={page}
+                  />
                 )}
+                {page.hasMore &&
+                  page.nextCursor !== null &&
+                  loadMoreRetryable && (
+                    <FocusPressable
+                      accessibilityLabel="Load more memories"
+                      accessibilityRole="button"
+                      disabled={loadingMore}
+                      onPress={loadMore}
+                      style={({pressed}) => [
+                        styles.loadOlderButton,
+                        pressed && styles.pressed,
+                      ]}>
+                      <Text style={styles.loadOlderText}>
+                        {loadingMore ? 'Loading more…' : 'Load more memories'}
+                      </Text>
+                    </FocusPressable>
+                  )}
                 {loadMoreError && (
-                  <Text style={styles.error}>
-                    More memories could not be loaded.
-                  </Text>
+                  <Text style={styles.error}>{loadMoreError}</Text>
                 )}
               </View>
             )

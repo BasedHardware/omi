@@ -288,4 +288,9 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
   Object.freeze({version:54,name:"listen-capture-time",fileName:"0054-listen-capture-time.sql",sha256:"41ea68570b2de03e25e0cfa82cc6685e4e7ab14fb2a2111880a46e6f4567978e"}),
   Object.freeze({version:55,name:"chat-messages",fileName:"0055-chat-messages.sql",sha256:"c5b853f1bd658e6060a83024257badfad888a0a37eab7adb8367f427fe4626f5"}),
   Object.freeze({version:56,name:"chat-conversation-sessions",fileName:"0056-chat-conversation-sessions.sql",sha256:"c9b7fd96f98baf7ad6e9049dd89dd63cfbd9dcc2c87c77f6c1a5fdb894f4ba92"}),
+  Object.freeze({version:57,name:"chat-session-history",fileName:"0057-chat-session-history.sql",sha256:"93ff8c867e06f8a35a3d54b1d2a95ac774175dac55067c6f7eae4761b4ccc3e7"}),
+  Object.freeze({version:58,name:"conversation-union-pagination",fileName:"0058-conversation-union-pagination.sql",sha256:"3d5a8fa11553065f5cd91cce178c429e9c7c89b90b56d60bf6271193036775d3"}),
+  Object.freeze({version:59,name:"chat-session-empty-titles",fileName:"0059-chat-session-empty-titles.sql",sha256:"359a1ccc6469a2a08f2f8ca2beb31769f3ab53f5b03f78d39d2c29dcc986e6d0"}),
+  Object.freeze({version:60,name:"chat-main-session",fileName:"0060-chat-main-session.sql",sha256:"b21c84f3afd6dd0e16b2bd9e15587815c5037480e9436d9d0e515ac6d56b5b22"}),
+  Object.freeze({version:61,name:"listen-excerpt-visible-trim",fileName:"0061-listen-excerpt-visible-trim.sql",sha256:"b15a918f756a8b24d243a1a44ef40206d42896af7e7050b8181ad4003486b128"}),
 ]);

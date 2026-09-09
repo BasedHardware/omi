@@ -26,11 +26,302 @@ export type ConversationProjection = {
   discarded: boolean;
 };
 
+export function visibleDisplayText(value: string): string {
+  return value.replace(/^[\s\u0085]+|[\s\u0085]+$/gu, '');
+}
+
+export function conversationDisplayTitle(item: {
+  title: string;
+  status: string;
+}): string {
+  const title = visibleDisplayText(item.title);
+  if (title !== '') {
+    return title;
+  }
+  return item.status === 'processing'
+    ? 'Processing conversation…'
+    : 'Conversation title unavailable';
+}
+
+export function conversationDisplaySummary(item: {
+  summary: string;
+  status: string;
+}): string {
+  const summary = visibleDisplayText(item.summary);
+  if (summary !== '') {
+    return summary;
+  }
+  return item.status === 'processing'
+    ? 'Conversation summary is not ready yet.'
+    : 'Conversation summary unavailable';
+}
+
+export function conversationStatusCopy(status: string): string {
+  const trimmed = visibleDisplayText(status);
+  if (trimmed === 'in_progress') {
+    return 'In progress';
+  }
+  if (trimmed === 'processing') {
+    return 'Processing';
+  }
+  if (trimmed === 'merging') {
+    return 'Merging';
+  }
+  if (trimmed === 'completed') {
+    return 'Completed';
+  }
+  if (trimmed === 'failed') {
+    return 'Failed';
+  }
+  return trimmed === '' ? 'Status unavailable' : trimmed;
+}
+
+export function accountWireCopy(value: string, unavailable: string): string {
+  const trimmed = visibleDisplayText(value);
+  if (trimmed === '') {
+    return unavailable;
+  }
+  const words = trimmed.split(/[_-]+/).filter(part => part !== '');
+  if (words.length === 0) {
+    return unavailable;
+  }
+  return words
+    .map((word, index) => {
+      const lower = word.toLowerCase();
+      return index === 0
+        ? `${lower.charAt(0).toUpperCase()}${lower.slice(1)}`
+        : lower;
+    })
+    .join(' ');
+}
+
+export function accountFieldCopy(
+  value: string | null | undefined,
+  unset: string,
+): string {
+  const trimmed = visibleDisplayText(value ?? '');
+  return trimmed !== '' ? trimmed : unset;
+}
+
+export function connectionIdentityCopy(
+  identity: {displayName: string; email: string} | null,
+): string {
+  if (identity === null) {
+    return 'Identity unavailable for this connection.';
+  }
+  return (
+    [identity.displayName, identity.email]
+      .map(part => visibleDisplayText(part))
+      .filter(part => part !== '')
+      .join(' · ') || 'Identity unavailable for this connection.'
+  );
+}
+
+export function subscriptionPlanCopy(plan: string): string {
+  return accountWireCopy(plan, 'Plan unavailable');
+}
+
+export function subscriptionStatusCopy(status: string): string {
+  return accountWireCopy(status, 'Plan unavailable');
+}
+
+export function dataProtectionCopy(level: string): string {
+  return accountWireCopy(level, 'Data protection unavailable');
+}
+
+export function developerWebhookTypeCopy(type: string): string {
+  if (type === 'memory_created') {
+    return 'Conversation Events';
+  }
+  if (type === 'realtime_transcript') {
+    return 'Real-time Transcript';
+  }
+  if (type === 'audio_bytes') {
+    return 'Audio Bytes';
+  }
+  if (type === 'day_summary') {
+    return 'Day Summary';
+  }
+  return accountWireCopy(type, 'Webhook unavailable');
+}
+
+export function developerWebhookStatusCopy(enabled: boolean | null): string {
+  if (enabled === null) {
+    return 'Status unavailable';
+  }
+  return enabled ? 'Enabled' : 'Disabled';
+}
+
+export function developerWebhookRowCopy(webhook: {
+  enabled: boolean | null;
+  url: string | null;
+}): string {
+  const url = visibleDisplayText(webhook.url ?? '');
+  return [developerWebhookStatusCopy(webhook.enabled), url !== '' ? url : null]
+    .filter(item => item !== null)
+    .join(' · ');
+}
+
+export function appCategoryCopy(category: string): string {
+  return accountWireCopy(category, '');
+}
+
+export function appDisplayName(name: string): string {
+  return accountFieldCopy(name, 'App name unavailable');
+}
+
+export function deviceDisplayName(name: string): string {
+  return accountFieldCopy(name, 'Device name unavailable');
+}
+
+export function appDisplaySource(app: {
+  author: string;
+  category: string;
+  description: string;
+}): string {
+  const author = visibleDisplayText(app.author);
+  if (author !== '') {
+    return author;
+  }
+  const category = appCategoryCopy(app.category);
+  if (category !== '') {
+    return category;
+  }
+  const description = visibleDisplayText(app.description);
+  return description !== '' ? description : 'App details unavailable';
+}
+
+export function chatAttachmentDisplayName(name: string): string {
+  return accountFieldCopy(name, 'Attachment name unavailable');
+}
+
+export function chatMessageDisplayText(
+  message: {
+    text: string;
+    generationOutcome: 'completed' | 'cancelled' | 'failed' | null;
+    generationRetryable?: boolean;
+    attachments?: readonly {displayName: string}[];
+  },
+  cancelledEmptyCopy = 'Response stopped',
+): string {
+  if (message.generationOutcome === 'failed') {
+    return message.generationRetryable === true
+      ? 'Response failed. Try again.'
+      : 'Response failed.';
+  }
+  const text = visibleDisplayText(message.text);
+  const attachmentLines = (message.attachments ?? []).map(attachment =>
+    chatAttachmentDisplayName(attachment.displayName),
+  );
+  if (text !== '') {
+    return attachmentLines.length > 0
+      ? `${text}\n${attachmentLines.join('\n')}`
+      : text;
+  }
+  if (message.generationOutcome === 'cancelled') {
+    return cancelledEmptyCopy;
+  }
+  if (attachmentLines.length > 0) {
+    return attachmentLines.join('\n');
+  }
+  return 'Message text unavailable';
+}
+
+export function chatSenderCopy(sender: 'human' | 'ai' | 'unknown'): string {
+  if (sender === 'human') {
+    return 'You';
+  }
+  if (sender === 'ai') {
+    return 'Omi';
+  }
+  return 'Sender unavailable';
+}
+
+export function memoryDisplayTitle(item: {
+  title: string;
+  summary: string;
+}): string {
+  const title = visibleDisplayText(item.title);
+  const summary = visibleDisplayText(item.summary);
+  return visibleMemoryText(title !== '' ? title : summary);
+}
+
+export function memoryDisplayBody(item: {
+  title: string;
+  summary: string;
+}): string {
+  const title = visibleDisplayText(item.title);
+  const summary = visibleDisplayText(item.summary);
+  return visibleMemoryText(summary !== '' ? summary : title);
+}
+
+export function memoryCitationCopy(citations: readonly string[]): string {
+  const visible = citations.filter(id => visibleDisplayText(id) !== '');
+  return visible.length === 1 ? '1 citation' : `${visible.length} citations`;
+}
+
+export function memorySynthesisCopy(item: {
+  provenance: {synthesisVersion: string | null};
+}): string | null {
+  const version = visibleDisplayText(item.provenance.synthesisVersion ?? '');
+  return version !== '' ? 'Synthesized memory' : null;
+}
+
+export function epochMilliseconds(value: number): number {
+  return value > 100_000_000_000 ? value : value * 1000;
+}
+
+export function formatTaskDue(dueAt: number | null): string {
+  if (dueAt === null) {
+    return 'No due date';
+  }
+  if (!Number.isFinite(dueAt) || dueAt <= 0) {
+    return 'Date unavailable';
+  }
+  return new Date(epochMilliseconds(dueAt)).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+export function taskDisplaySummary(item: {
+  completed: boolean;
+  dueAt: number | null;
+}): string {
+  if (item.completed) {
+    return 'Completed';
+  }
+  if (item.dueAt === null) {
+    return 'Pending';
+  }
+  if (!Number.isFinite(item.dueAt) || item.dueAt <= 0) {
+    return 'Date unavailable';
+  }
+  return `Due ${formatTaskDue(item.dueAt)}`;
+}
+
+export function taskDisplayTitle(item: {title: string}): string {
+  const title = visibleDisplayText(item.title);
+  return title !== '' ? title : 'Task title unavailable';
+}
+
+function visibleMemoryText(text: string): string {
+  const parsed = parseMemoryText(text);
+  const body = visibleDisplayText(parsed.body);
+  return body !== '' ? body : 'Memory text unavailable';
+}
+
 export function conversationGroupLabel(
   value: string,
   nowEpochMilliseconds: number,
 ): string {
-  const date = new Date(value);
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return 'Date unavailable';
+  }
+  const date = new Date(timestamp);
   const now = new Date(nowEpochMilliseconds);
   const localDay = (item: Date) =>
     Date.UTC(item.getFullYear(), item.getMonth(), item.getDate()) / 86400000;
@@ -46,6 +337,14 @@ export function conversationGroupLabel(
     month: 'short',
     year: 'numeric',
   });
+}
+
+export function conversationDayLabel(
+  startedAt: string | null,
+  createdAt: string,
+  nowEpochMilliseconds: number,
+): string {
+  return conversationGroupLabel(startedAt ?? createdAt, nowEpochMilliseconds);
 }
 
 export type MemoryProjection = {
@@ -89,11 +388,11 @@ export function taskGroup(
   dueAt: number | null,
   nowMilliseconds: number,
 ): TaskGroup {
-  if (dueAt === null) {
+  if (dueAt === null || !Number.isFinite(dueAt) || dueAt <= 0) {
     return 'Later';
   }
   const today = Math.floor(nowMilliseconds / 86400000);
-  const dueDay = Math.floor(dueAt / 86400000);
+  const dueDay = Math.floor(epochMilliseconds(dueAt) / 86400000);
   if (dueDay <= today) {
     return 'Today';
   }
@@ -120,8 +419,67 @@ export function projectionTimestamp(
       ? item.timestamp === null
         ? null
         : item.timestamp * 1000
-      : item.createdAt;
+      : item.createdAt === null
+      ? null
+      : epochMilliseconds(item.createdAt);
   return timestamp === null || !Number.isFinite(timestamp) ? null : timestamp;
+}
+
+export function clockLabel(
+  timestampMs: number,
+  nowEpochMilliseconds: number,
+): string {
+  if (!Number.isFinite(timestampMs) || timestampMs <= 0) {
+    return '';
+  }
+  const day = conversationGroupLabel(
+    new Date(timestampMs).toISOString(),
+    nowEpochMilliseconds,
+  );
+  const time = new Date(timestampMs).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return day === 'Today' ? time : `${day} · ${time}`;
+}
+
+export function chatClockLabel(
+  createdAt: number,
+  nowEpochMilliseconds: number,
+): string {
+  return clockLabel(epochMilliseconds(createdAt), nowEpochMilliseconds);
+}
+
+export function projectionClockLabel(
+  item: DesktopReadProjection,
+  nowEpochMilliseconds: number,
+): string {
+  const timestamp = projectionTimestamp(item);
+  if (timestamp === null || timestamp <= 0) {
+    return 'Time unavailable';
+  }
+  return clockLabel(timestamp, nowEpochMilliseconds);
+}
+
+export function homeSearchItems(
+  reads: DesktopReadProjection[],
+  tasks: readonly TaskProjection[] | null,
+  query: string,
+): DesktopReadProjection[] {
+  const normalized = visibleDisplayText(query).toLocaleLowerCase();
+  const matches = (item: DesktopReadProjection): boolean =>
+    normalized === '' ||
+    item.searchableText.toLocaleLowerCase().includes(normalized);
+  return [...reads.filter(matches), ...(tasks ?? []).filter(matches)].sort(
+    (left, right) => {
+      const leftTs = projectionTimestamp(left);
+      const rightTs = projectionTimestamp(right);
+      return (
+        (rightTs ?? Number.NEGATIVE_INFINITY) -
+        (leftTs ?? Number.NEGATIVE_INFINITY)
+      );
+    },
+  );
 }
 
 export function timelineGroups(
@@ -197,12 +555,38 @@ export const desktopLocalBackendServiceCopy =
   'The configured local Omi service is unavailable. Check its connection, then retry.';
 export const desktopProjectionUnavailableCopy =
   'This saved data is not available from the selected Omi service yet. Retry after its persisted projection is connected.';
+export const desktopBackendUnavailableCopy =
+  'This saved data is not available from the selected Omi service yet.';
+export const desktopAppsUnavailableCopy =
+  'Apps are not available from the selected Omi service yet.';
+export const desktopAccountSettingUnavailableCopy =
+  'This account setting is not available from the selected Omi service yet.';
 export const desktopBackendForbiddenCopy =
   'This saved data is not available for this account.';
 const desktopReadFailureCopy =
   'This saved data could not be loaded. Retry without changing it.';
 const desktopRecoveryGenericCopy =
   'Omi could not load saved conversations or memories. Your saved data has not been changed.';
+
+export function desktopReadsCanRetry(
+  outcomes: DesktopReadOutcomes | null,
+): boolean {
+  if (outcomes === null) {
+    return true;
+  }
+  const errors = [
+    outcomes.conversations,
+    outcomes.memories,
+    outcomes.tasks,
+  ].filter(
+    (outcome): outcome is {status: 'error'; error: string} =>
+      outcome.status === 'error',
+  );
+  return (
+    errors.length === 0 ||
+    errors.some(outcome => outcome.error !== desktopBackendUnavailableCopy)
+  );
+}
 
 export function desktopRecoveryCopy(
   conversations: DomainReadOutcome<ConversationProjection>,
@@ -216,6 +600,7 @@ export function desktopRecoveryCopy(
         outcome.error === desktopBackendServiceCopy ||
         outcome.error === desktopLocalBackendServiceCopy ||
         outcome.error === desktopProjectionUnavailableCopy ||
+        outcome.error === desktopBackendUnavailableCopy ||
         outcome.error === desktopBackendForbiddenCopy)
     ) {
       return outcome.error;
@@ -225,6 +610,7 @@ export function desktopRecoveryCopy(
 }
 
 class DesktopProjectionUnavailableError extends Error {}
+class DesktopBackendUnavailableError extends Error {}
 export class ConversationCursorExpiredError extends Error {}
 export class TaskCursorExpiredError extends Error {}
 
@@ -262,6 +648,9 @@ export function desktopReadErrorCopy(error: unknown): string {
       desktopBackendServiceCopy,
       desktopLocalBackendServiceCopy,
       desktopProjectionUnavailableCopy,
+      desktopBackendUnavailableCopy,
+      desktopAppsUnavailableCopy,
+      desktopAccountSettingUnavailableCopy,
       desktopBackendForbiddenCopy,
       desktopReadFailureCopy,
     ].includes(message)
@@ -396,8 +785,16 @@ async function read(
             desktopProjectionUnavailableCopy,
           );
         }
+        if (error.retryable === false) {
+          throw new DesktopBackendUnavailableError(
+            desktopBackendUnavailableCopy,
+          );
+        }
       } catch (error) {
-        if (error instanceof DesktopProjectionUnavailableError) {
+        if (
+          error instanceof DesktopProjectionUnavailableError ||
+          error instanceof DesktopBackendUnavailableError
+        ) {
           throw error;
         }
       }
@@ -550,8 +947,8 @@ export async function loadConversations(
       record.finishedAt,
       `Conversation ${index} finishedAt`,
     );
-    const source = string(record.source, `Conversation ${index} source`);
-    const status = string(record.status, `Conversation ${index} status`);
+    const source = text(record.source, `Conversation ${index} source`);
+    const status = text(record.status, `Conversation ${index} status`);
     const discarded = boolean(
       record.discarded,
       `Conversation ${index} discarded`,
@@ -579,7 +976,10 @@ export async function loadConversations(
       id,
       title,
       summary,
-      searchableText: `${title}\n${summary}`,
+      searchableText: `${conversationDisplayTitle({
+        title,
+        status,
+      })}\n${conversationDisplaySummary({summary, status})}`,
       createdAt,
       updatedAt,
       startedAt,
@@ -613,10 +1013,31 @@ export async function loadMemories(
   cursor: string | null = null,
 ): Promise<DomainRead<MemoryProjection>> {
   if ((await backend.getApiContract?.()) === 'omi') {
-    return loadOmiMemories(
+    const result = await loadOmiMemories(
       path => read(backend, 'desktop-omi-read', path, 'omi'),
       cursor,
     );
+    return {
+      page: result.page,
+      items: result.items.map(item => {
+        const parsed = parseMemoryText(
+          item.summary !== '' ? item.summary : item.title,
+        );
+        return {
+          ...item,
+          title: parsed.body,
+          summary: parsed.body,
+          searchableText: memoryDisplayTitle({
+            title: parsed.body,
+            summary: parsed.body,
+          }),
+          provenance: {
+            ...item.provenance,
+            label: parsed.provenanceLabel ?? item.provenance.label,
+          },
+        };
+      }),
+    };
   }
   if (cursor !== null && cursor.length === 0) {
     throw new Error('Memory cursor is malformed');
@@ -634,26 +1055,37 @@ export async function loadMemories(
     const id = string(item.id, `Memory ${index} id`);
     const text = string(item.text, `Memory ${index} text`);
     const parsedText = parseMemoryText(text);
-    const citations = stringArray(item.citations, `Memory ${index} citations`);
-    const provenance = object(item.provenance, `Memory ${index} provenance`);
-    const synthesisVersion = string(
-      provenance.synthesisVersion,
-      `Memory ${index} synthesisVersion`,
-    );
-    const inputDigest = string(
-      provenance.inputDigest,
-      `Memory ${index} inputDigest`,
-    );
-    const outputDigest = string(
-      provenance.outputDigest,
-      `Memory ${index} outputDigest`,
-    );
+    const citations =
+      item.citations === undefined
+        ? []
+        : stringArray(item.citations, `Memory ${index} citations`);
+    let synthesisVersion: string | null = null;
+    let inputDigest: string | null = null;
+    let outputDigest: string | null = null;
+    if (item.provenance !== undefined) {
+      const provenance = object(item.provenance, `Memory ${index} provenance`);
+      synthesisVersion = string(
+        provenance.synthesisVersion,
+        `Memory ${index} synthesisVersion`,
+      );
+      inputDigest = string(
+        provenance.inputDigest,
+        `Memory ${index} inputDigest`,
+      );
+      outputDigest = string(
+        provenance.outputDigest,
+        `Memory ${index} outputDigest`,
+      );
+    }
     return {
       kind: 'memory' as const,
       id,
       title: parsedText.body,
       summary: parsedText.body,
-      searchableText: `${parsedText.body}\n${citations.join('\n')}`,
+      searchableText: `${memoryDisplayTitle({
+        title: parsedText.body,
+        summary: parsedText.body,
+      })}\n${citations.join('\n')}`,
       citations,
       timestamp: optionalTimestamp(item, `Memory ${index} timestamp`),
       provenance: {
@@ -698,7 +1130,7 @@ export async function loadTasks(
   );
   const items = validated.items.map((item, index) => {
     const id = string(item.id, `Task ${index} id`);
-    const description = string(item.description, `Task ${index} description`);
+    const description = text(item.description, `Task ${index} description`);
     const completed = boolean(item.completed, `Task ${index} completed`);
     const completedAt = nullableInteger(
       item.completedAt,
@@ -709,7 +1141,7 @@ export async function loadTasks(
       throw new Error(`Task ${index} owner is malformed`);
     }
     const owner = item.owner as string | null;
-    const source = string(item.source, `Task ${index} source`);
+    const source = text(item.source, `Task ${index} source`);
     const provenance = stringArray(item.provenance, `Task ${index} provenance`);
     const sortOrder = finite(item.sortOrder, `Task ${index} sortOrder`);
     const indentLevel = integer(item.indentLevel, `Task ${index} indentLevel`);
@@ -721,7 +1153,7 @@ export async function loadTasks(
     const revision =
       item.revision === null
         ? null
-        : string(item.revision, `Task ${index} revision`);
+        : text(item.revision, `Task ${index} revision`);
     return {
       kind: 'task' as const,
       id,
@@ -731,7 +1163,7 @@ export async function loadTasks(
         : dueAt === null
         ? 'Pending'
         : `Due ${dueAt}`,
-      searchableText: description,
+      searchableText: taskDisplayTitle({title: description}),
       completed,
       completedAt,
       dueAt,

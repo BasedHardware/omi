@@ -77,10 +77,19 @@ jest.mock('../app/useReduceMotion', () => ({
 
 import {Animated} from 'react-native';
 import {Button} from './Button';
-import {ReadStatus} from './ReadStatus';
+import {
+  OutcomeStatus,
+  ReadStatus,
+  coverageStatusCopy,
+  emptyLibraryCopy,
+  homeSearchBannerPhase,
+  homeSearchPhaseCopy,
+  savedDataEmptyTitle,
+} from './ReadStatus';
 import {Field} from './Field';
 import {Icon} from './Icon';
 import {FocusPressable} from './Pressable';
+import {ProjectionRow} from './ProjectionList';
 import {tokens} from './tokens';
 import {Onboarding} from './Onboarding';
 import {
@@ -90,6 +99,7 @@ import {
   omiMarkDotCenter,
   omiMarkGeometry,
 } from './OmiAvatar';
+import {ChatMessageRow} from './ChatTranscript';
 
 function render(element: React.ReactElement) {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
@@ -533,4 +543,1005 @@ test('legacy unknown completeness is not presented as a known incomplete read', 
   expect(JSON.stringify(renderer.toJSON())).toContain(
     'Memories are a partial view.',
   );
+});
+
+test('ReadStatus does not claim more pages when the continue door is unavailable', () => {
+  const page = {
+    windowStatus: 'more' as const,
+    complete: false,
+    hasMore: true,
+    nextCursor: 'next-page',
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  const renderer = render(
+    <ReadStatus continueUnavailable label="Conversations" page={page} />,
+  );
+  expect(JSON.stringify(renderer.toJSON())).toBe('null');
+  act(() => renderer.update(<ReadStatus label="Conversations" page={page} />));
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'More conversations are available.',
+  );
+});
+
+test('OutcomeStatus omits more-available after a closed later page', () => {
+  const page = {
+    windowStatus: 'more' as const,
+    complete: false,
+    hasMore: true,
+    nextCursor: 'next-page',
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  const renderer = render(
+    <OutcomeStatus
+      continueUnavailable
+      label="Conversations"
+      outcome={{status: 'success', value: {items: [], page}}}
+    />,
+  );
+  expect(JSON.stringify(renderer.toJSON())).toBe('null');
+  act(() =>
+    renderer.update(
+      <OutcomeStatus
+        label="Conversations"
+        outcome={{status: 'success', value: {items: [], page}}}
+      />,
+    ),
+  );
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'More conversations are available.',
+  );
+});
+
+test('OutcomeStatus uses mapped library copy instead of a generic unavailable claim', () => {
+  const mapped =
+    'This saved data is not available from the selected Omi service yet.';
+  const renderer = render(
+    <OutcomeStatus
+      label="Conversations"
+      outcome={{status: 'error', error: mapped}}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain(mapped);
+  expect(tree).not.toContain('Conversations are unavailable.');
+});
+
+test('homeSearchPhaseCopy uses mapped copy instead of a generic unavailable claim', () => {
+  const mapped =
+    'This saved data is not available from the selected Omi service yet.';
+  expect(homeSearchPhaseCopy('unavailable', mapped)).toBe(mapped);
+  expect(homeSearchPhaseCopy('unavailable', null)).toBe(
+    'Saved data is unavailable.',
+  );
+  expect(homeSearchPhaseCopy('initial-loading', mapped)).toBe(
+    'Loading saved data…',
+  );
+  expect(homeSearchPhaseCopy('saved-but-refresh-failed', mapped)).toBe(
+    'Showing saved data. Could not refresh.',
+  );
+});
+
+test('homeSearchBannerPhase does not claim showing saved data when conversation and memory doors failed', () => {
+  const mapped =
+    'This saved data is not available from the selected Omi service yet.';
+  expect(homeSearchBannerPhase('saved-but-refresh-failed', true)).toBe(
+    'unavailable',
+  );
+  expect(homeSearchBannerPhase('saved-but-refresh-failed', false)).toBe(
+    'saved-but-refresh-failed',
+  );
+  expect(homeSearchBannerPhase('unavailable', true)).toBe('unavailable');
+  expect(homeSearchBannerPhase('ready', true)).toBe('unavailable');
+  expect(homeSearchBannerPhase('refreshing', true)).toBe('refreshing');
+  expect(
+    homeSearchPhaseCopy(
+      homeSearchBannerPhase('saved-but-refresh-failed', true),
+      mapped,
+    ),
+  ).toBe(mapped);
+  expect(
+    homeSearchPhaseCopy(
+      homeSearchBannerPhase('saved-but-refresh-failed', false),
+      mapped,
+    ),
+  ).toBe('Showing saved data. Could not refresh.');
+});
+
+test('empty library copy keeps completeness instead of claiming emptiness', () => {
+  const incomplete = {
+    windowStatus: 'incomplete' as const,
+    complete: false,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'incomplete' as const,
+    reasons: ['accepted_work_pending'],
+  };
+  const complete = {
+    ...incomplete,
+    windowStatus: 'complete' as const,
+    complete: true,
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  expect(
+    emptyLibraryCopy(
+      'Memories',
+      incomplete,
+      false,
+      'No loaded memories match.',
+      'No memories yet.',
+    ),
+  ).toBe('Memories are incomplete.');
+  expect(
+    emptyLibraryCopy(
+      'Memories',
+      incomplete,
+      true,
+      'No loaded memories match.',
+      'No memories yet.',
+    ),
+  ).toBe('Memories are incomplete.');
+  expect(
+    emptyLibraryCopy(
+      'Memories',
+      complete,
+      true,
+      'No loaded memories match.',
+      'No memories yet.',
+    ),
+  ).toBe('No loaded memories match.');
+  expect(
+    emptyLibraryCopy(
+      'Memories',
+      complete,
+      false,
+      'No loaded memories match.',
+      'No memories yet.',
+    ),
+  ).toBe('No memories yet.');
+  expect(
+    emptyLibraryCopy(
+      'Memories',
+      null,
+      false,
+      'No loaded memories match.',
+      'No memories yet.',
+    ),
+  ).toBe('No memories yet.');
+  expect(
+    emptyLibraryCopy(
+      'Memories',
+      {
+        ...incomplete,
+        completenessStatus: 'degraded',
+        reasons: ['projection_unavailable'],
+      },
+      false,
+      'No loaded memories match.',
+      'No memories yet.',
+    ),
+  ).toBe('Memories may be temporarily incomplete.');
+  const more = {
+    windowStatus: 'more' as const,
+    complete: false,
+    hasMore: true,
+    nextCursor: 'next-page',
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  expect(
+    emptyLibraryCopy(
+      'Tasks',
+      more,
+      true,
+      'No loaded tasks match.',
+      'No tasks yet.',
+      true,
+    ),
+  ).toBe('No loaded tasks match.');
+  expect(
+    emptyLibraryCopy(
+      'Tasks',
+      more,
+      true,
+      'No loaded tasks match.',
+      'No tasks yet.',
+    ),
+  ).toBe('More tasks are available.');
+  expect(
+    emptyLibraryCopy(
+      'Tasks',
+      more,
+      false,
+      'No loaded tasks match.',
+      'No tasks yet.',
+      true,
+    ),
+  ).toBe('More tasks are available.');
+});
+
+test('coverage copy wins over a complete Home search miss', () => {
+  const incomplete = {
+    windowStatus: 'incomplete' as const,
+    complete: false,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'incomplete' as const,
+    reasons: ['accepted_work_pending'],
+  };
+  const complete = {
+    ...incomplete,
+    windowStatus: 'complete' as const,
+    complete: true,
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  expect(coverageStatusCopy(incomplete, complete)).toBe(
+    'Conversations are incomplete.',
+  );
+  expect(coverageStatusCopy(complete, incomplete)).toBe(
+    'Memories are incomplete.',
+  );
+  expect(coverageStatusCopy(complete, complete)).toBeNull();
+  expect(coverageStatusCopy(complete, complete, incomplete)).toBe(
+    'Tasks are incomplete.',
+  );
+  expect(coverageStatusCopy(null, null)).toBeNull();
+  expect(coverageStatusCopy(null, incomplete)).toBe('Memories are incomplete.');
+  expect(coverageStatusCopy(complete, complete, null)).toBeNull();
+  expect(
+    coverageStatusCopy(complete, {
+      ...incomplete,
+      completenessStatus: 'degraded',
+      reasons: ['projection_unavailable'],
+    }),
+  ).toBe('Memories may be temporarily incomplete.');
+  expect(savedDataEmptyTitle(complete, complete, incomplete, true)).toBe(
+    'Tasks are incomplete.',
+  );
+  expect(savedDataEmptyTitle(complete, complete, complete, true)).toBe(
+    'No results',
+  );
+  expect(savedDataEmptyTitle(complete, complete, complete, false)).toBe(
+    'Nothing saved yet',
+  );
+  const morePage = {
+    windowStatus: 'more' as const,
+    complete: false,
+    hasMore: true,
+    nextCursor: 'next-page',
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  expect(
+    savedDataEmptyTitle(morePage, complete, complete, true, {
+      conversations: true,
+    }),
+  ).toBe('No results');
+  expect(
+    savedDataEmptyTitle(morePage, complete, complete, false, {
+      conversations: true,
+    }),
+  ).toBe('More conversations are available.');
+  expect(
+    savedDataEmptyTitle(complete, morePage, complete, true, {
+      memories: true,
+    }),
+  ).toBe('No results');
+  expect(
+    savedDataEmptyTitle(complete, complete, morePage, true, {tasks: true}),
+  ).toBe('No results');
+  expect(
+    coverageStatusCopy(morePage, complete, complete, {conversations: true}),
+  ).toBeNull();
+  const orchestrator = readFileSync(
+    resolve(__dirname, '../app/AppOrchestrator.tsx'),
+    'utf8',
+  );
+  expect(orchestrator).toContain('homeSearchEmptyTitle');
+  expect(orchestrator).toContain('savedDataEmptyTitle(');
+  expect(orchestrator).toContain('homeSearchItems(');
+  expect(orchestrator).toContain('homeSearchBannerPhase(');
+  expect(orchestrator).toContain("readOutcomes.tasks.status === 'success'");
+  expect(orchestrator).toContain(
+    'conversations: conversationNotice === desktopBackendUnavailableCopy',
+  );
+  expect(orchestrator).toContain(
+    'memories: memoryNotice === desktopBackendUnavailableCopy',
+  );
+  expect(orchestrator).toContain(
+    'tasks: taskNotice === desktopBackendUnavailableCopy',
+  );
+  expect(orchestrator).toContain(
+    'conversationNotice ===\n                                        desktopBackendUnavailableCopy',
+  );
+  expect(orchestrator).toContain(
+    'memoryNotice ===\n                                        desktopBackendUnavailableCopy',
+  );
+  expect(orchestrator).toContain(
+    'taskNotice === desktopBackendUnavailableCopy',
+  );
+  expect(orchestrator).toContain('<OutcomeStatus');
+  expect(orchestrator).toContain('label="Tasks"');
+  expect(orchestrator).toContain('outcome={readOutcomes.tasks}');
+  const unavailableGate = orchestrator.indexOf('!allHomeReadsUnavailable && (');
+  const tasksBlock = orchestrator.indexOf(
+    '{readOutcomes !== null && (\n                                <OutcomeStatus',
+  );
+  expect(unavailableGate).toBeGreaterThan(-1);
+  expect(tasksBlock).toBeGreaterThan(unavailableGate);
+  expect(orchestrator.slice(unavailableGate, tasksBlock)).toContain(
+    'label="Conversations"',
+  );
+  expect(orchestrator.slice(unavailableGate, tasksBlock)).toContain(
+    'label="Memories"',
+  );
+  expect(orchestrator.slice(unavailableGate, tasksBlock)).not.toContain(
+    'label="Tasks"',
+  );
+  expect(orchestrator.slice(tasksBlock, tasksBlock + 400)).toContain(
+    'label="Tasks"',
+  );
+  expect(orchestrator.slice(tasksBlock, tasksBlock + 400)).not.toContain(
+    'allHomeReadsUnavailable',
+  );
+  expect(orchestrator).toContain('recapCoverageCopy=');
+  expect(orchestrator).toContain('taskCoverageCopy=');
+  expect(orchestrator).toContain("readStatusCopy(\n                'Recaps'");
+  expect(orchestrator).toContain("readStatusCopy(\n                'Tasks'");
+  expect(orchestrator).toContain('mindMapCoverageCopy=');
+  expect(orchestrator).toContain('mindMapHasItems=');
+  expect(orchestrator).toContain('mindMapEmptyCopy=');
+  expect(orchestrator).toContain("emptyLibraryCopy(\n          'Memories'");
+  expect(orchestrator).toContain('onOpenRecap=');
+  expect(orchestrator).not.toContain('onOpenCalls=');
+  expect(orchestrator).toContain('conversationDayLabel(');
+  expect(orchestrator).not.toContain("weekday: 'long'");
+  expect(orchestrator).toContain(
+    'requestedConversationId={requestedConversationId}',
+  );
+  const transcript = readFileSync(
+    resolve(__dirname, 'ChatTranscript.tsx'),
+    'utf8',
+  );
+  expect(transcript).toContain('chatClockLabel(');
+  expect(transcript).not.toContain('function formatChatTime');
+  const conversationHistory = readFileSync(
+    resolve(__dirname, 'ChatConversationHistory.tsx'),
+    'utf8',
+  );
+  expect(conversationHistory).toContain('chatClockLabel(');
+  expect(conversationHistory).not.toContain('function formatChatTime');
+  const desktopHome = readFileSync(
+    resolve(__dirname, '../desktop/DesktopHome.tsx'),
+    'utf8',
+  );
+  expect(desktopHome).toContain('chatClockLabel(');
+  expect(desktopHome).not.toContain('function formatChatTime');
+});
+
+test('chat message timestamps date older days instead of time only', () => {
+  const now = new Date(2026, 7, 14, 12, 0);
+  jest.useFakeTimers();
+  jest.setSystemTime(now);
+  const time = (value: Date) =>
+    value.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  const message = (createdAt: number) => ({
+    id: 'chat-1',
+    text: 'Hello',
+    sender: 'human' as const,
+    createdAt,
+    generationOutcome: null,
+  });
+  try {
+    const today = new Date(2026, 7, 14, 8, 0);
+    const todayTree = JSON.stringify(
+      render(
+        <ChatMessageRow
+          animate={false}
+          compact
+          message={message(today.getTime())}
+          reduceMotion
+        />,
+      ).toJSON(),
+    );
+    expect(todayTree).toContain(time(today));
+    expect(todayTree).not.toContain('Yesterday');
+    expect(todayTree).not.toContain(' · ');
+    const yesterday = new Date(2026, 7, 13, 23, 0);
+    expect(
+      JSON.stringify(
+        render(
+          <ChatMessageRow
+            animate={false}
+            compact
+            message={message(yesterday.getTime())}
+            reduceMotion
+          />,
+        ).toJSON(),
+      ),
+    ).toContain(`Yesterday · ${time(yesterday)}`);
+    const older = new Date(2026, 7, 10, 12, 0);
+    expect(
+      JSON.stringify(
+        render(
+          <ChatMessageRow
+            animate={false}
+            compact
+            message={message(older.getTime())}
+            reduceMotion
+          />,
+        ).toJSON(),
+      ),
+    ).toContain(
+      `${older.toLocaleDateString(undefined, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })} · ${time(older)}`,
+    );
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('a zero chat timestamp says Time unavailable instead of 1970', () => {
+  const tree = JSON.stringify(
+    render(
+      <ChatMessageRow
+        animate={false}
+        compact
+        message={{
+          id: 'chat-1',
+          text: 'Hello',
+          sender: 'human',
+          createdAt: 0,
+          generationOutcome: null,
+        }}
+        reduceMotion
+      />,
+    ).toJSON(),
+  );
+  expect(tree).toContain('Time unavailable');
+  expect(tree).not.toContain('1970');
+});
+
+test('a cancelled empty chat message says Response stopped instead of a blank bubble', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-cancelled',
+        text: '',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'cancelled',
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Response stopped');
+  expect(copies).not.toContain('');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('a cancelled whitespace-only chat message says Response stopped instead of a blank bubble', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-cancelled-whitespace',
+        text: ' \t\n',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'cancelled',
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Response stopped');
+  expect(copies).not.toContain(' \t\n');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('a cancelled NEXT LINE-only chat message says Response stopped instead of a blank bubble', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-cancelled-next-line',
+        text: '\u0085',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'cancelled',
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Response stopped');
+  expect(copies).not.toContain('\u0085');
+  expect(copies.filter(copy => copy === 'Response stopped')).toHaveLength(1);
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('an empty chat bubble keeps history attachment names instead of Message text unavailable', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-human-attachment',
+        text: ' \t\n',
+        sender: 'human',
+        createdAt: Date.now(),
+        generationOutcome: null,
+        attachments: [
+          {
+            id: 'att-notes',
+            displayName: 'notes.txt',
+            mediaType: 'text/plain',
+            sizeBytes: 12,
+          },
+        ],
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('notes.txt');
+  expect(copies).not.toContain('Message text unavailable');
+  expect(copies).not.toContain(' \t\n');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('a whitespace-only human chat message says Message text unavailable instead of a blank bubble', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-human-whitespace',
+        text: ' \t\n',
+        sender: 'human',
+        createdAt: Date.now(),
+        generationOutcome: null,
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Message text unavailable');
+  expect(copies).not.toContain(' \t\n');
+  expect(copies).not.toContain('Response stopped');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('a completed whitespace-only chat message says Message text unavailable instead of a blank bubble', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-completed-whitespace',
+        text: ' \t\n',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Message text unavailable');
+  expect(copies).not.toContain(' \t\n');
+  expect(copies).not.toContain('Response stopped');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('a cancelled chat message with text still says Response stopped', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-cancelled-text',
+        text: 'Partial answer',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'cancelled',
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Partial answer');
+  expect(copies).toContain('Response stopped');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('an unknown chat sender says Sender unavailable instead of looking like a quiet AI turn', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-unknown',
+        text: 'stored without a known sender',
+        sender: 'unknown',
+        createdAt: Date.now(),
+        generationOutcome: null,
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Sender unavailable');
+  expect(copies).toContain('stored without a known sender');
+  expect(copies).not.toContain('You');
+  expect(copies).not.toContain('Omi');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('wide Home search rows keep untitled processing conversations visible', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'listen:processing-home-search',
+        title: '',
+        summary: '',
+        searchableText:
+          'Processing conversation…\nConversation summary is not ready yet.',
+        createdAt: '2026-09-07T00:00:00.000Z',
+        updatedAt: '2026-09-07T00:01:00.000Z',
+        startedAt: '2026-09-07T00:00:00.000Z',
+        finishedAt: '2026-09-07T00:01:00.000Z',
+        starred: false,
+        status: 'processing',
+        source: 'listen',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Processing conversation…');
+  expect(tree).toContain('Conversation summary is not ready yet.');
+});
+
+test('wide Home search rows keep empty completed conversation copy visible', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'recording:completed-home-search',
+        title: '',
+        summary: '',
+        searchableText:
+          'Conversation title unavailable\nConversation summary unavailable',
+        createdAt: '2026-09-07T00:00:00.000Z',
+        updatedAt: '2026-09-07T00:01:00.000Z',
+        startedAt: '2026-09-07T00:00:00.000Z',
+        finishedAt: '2026-09-07T00:01:00.000Z',
+        starred: false,
+        status: 'completed',
+        source: 'omi',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Conversation title unavailable');
+  expect(tree).toContain('Conversation summary unavailable');
+});
+
+test('wide Home search rows keep supplied conversation title and summary', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'recording:named-home-search',
+        title: 'Morning walk',
+        summary: 'Discussed the launch.',
+        searchableText: 'Morning walk\nDiscussed the launch.',
+        createdAt: '2026-09-07T00:00:00.000Z',
+        updatedAt: '2026-09-07T00:01:00.000Z',
+        startedAt: '2026-09-07T00:00:00.000Z',
+        finishedAt: '2026-09-07T00:01:00.000Z',
+        starred: false,
+        status: 'completed',
+        source: 'omi',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Morning walk');
+  expect(tree).toContain('Discussed the launch.');
+  expect(tree).not.toContain('Processing conversation…');
+  expect(tree).not.toContain('Conversation title unavailable');
+});
+
+test('wide Home search rows keep empty memory text visible', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'memory',
+        id: 'memory-blank-home-search',
+        title: '',
+        summary: '',
+        searchableText: 'Memory text unavailable',
+        citations: [],
+        timestamp: null,
+        provenance: {
+          label: null,
+          synthesisVersion: '1',
+          inputDigest: 'a',
+          outputDigest: 'b',
+        },
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Memory text unavailable');
+  expect(tree).toContain('0 citations');
+  expect(tree).not.toContain('Synthesized memory with source citations');
+});
+
+test('wide Home search rows strip namespaced memory prefixes', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'memory',
+        id: 'memory-entity-home-search',
+        title:
+          'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
+        summary:
+          'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
+        searchableText: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
+        citations: [],
+        timestamp: null,
+        provenance: {
+          label: 'entity:qa:000008',
+          synthesisVersion: null,
+          inputDigest: null,
+          outputDigest: null,
+        },
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('qa_memory (observed 2026-07-30T12:00:00.000Z).');
+  expect(tree).not.toContain('entity:qa:000008');
+  expect(tree).toContain('0 citations');
+  expect(tree).not.toContain('Synthesized memory with source citations');
+});
+
+test('wide Home search rows report a single memory citation', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'memory',
+        id: 'memory-one-citation-home-search',
+        title: 'Prefers concise release notes',
+        summary: 'Release notes should lead with the outcome.',
+        searchableText:
+          'Prefers concise release notes\nRelease notes should lead with the outcome.',
+        citations: ['citation-v1:launch'],
+        timestamp: null,
+        provenance: {
+          label: null,
+          synthesisVersion: '1',
+          inputDigest: 'a',
+          outputDigest: 'b',
+        },
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Prefers concise release notes');
+  expect(tree).toContain('1 citation');
+  expect(tree).not.toContain('Synthesized memory with source citations');
+});
+
+test('wide Home search rows omit whitespace-only memory citations from the count', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'memory',
+        id: 'memory-whitespace-citation-home-search',
+        title: 'Prefers concise release notes',
+        summary: 'Release notes should lead with the outcome.',
+        searchableText:
+          'Prefers concise release notes\nRelease notes should lead with the outcome.',
+        citations: [' \t\n', ''],
+        timestamp: null,
+        provenance: {
+          label: null,
+          synthesisVersion: '1',
+          inputDigest: 'a',
+          outputDigest: 'b',
+        },
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('0 citations');
+  expect(tree).not.toContain('2 citations');
+  expect(tree).not.toContain('"1 citation"');
+});
+
+test('wide Home search rows date task dues instead of a raw epoch', () => {
+  const dueAt = 1786000000;
+  const expected = `Due ${new Date(dueAt * 1000).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })}`;
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'task',
+        id: 'task-due-home-search',
+        title: 'Prepare launch notes',
+        summary: `Due ${dueAt}`,
+        searchableText: 'Prepare launch notes',
+        completed: false,
+        completedAt: null,
+        dueAt,
+        owner: null,
+        source: 'assistant',
+        provenance: [],
+        sortOrder: 1,
+        indentLevel: 0,
+        createdAt: 1785900000,
+        updatedAt: 1785900100,
+        revision: null,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Prepare launch notes');
+  expect(tree).toContain(expected);
+  expect(tree).not.toContain('Due 1786000000');
 });

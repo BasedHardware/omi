@@ -83,6 +83,7 @@
   // omi-memory-claims (768-d) and omi-v5-retrieval-benchmark-staging
   // (synthetic benchmark only). Neither is an omi-v5 staging memories
   // index. Vectorize cannot serve canonical content; until a canonical
-  // memory store is connected, /v1/memories fail-closed with retryable
-  // projection_unavailable.
+  // memory store is connected, /v1/memories fail-closed with
+  // non-retryable projection_unavailable. Transient canonical transport
+  // failures stay retryable.
 }

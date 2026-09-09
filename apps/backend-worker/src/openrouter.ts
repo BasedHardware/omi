@@ -1,6 +1,9 @@
 import { gatewayFailureEvent } from "./observability";
 import { withTimeout } from "./wire";
-import type { GenerationHistoryMessage } from "./generation-prompt";
+import {
+  isVisibleGenerationText,
+  type GenerationHistoryMessage,
+} from "./generation-prompt";
 
 const SYSTEM_PROMPT = "You are Omi, a concise and helpful personal assistant.";
 const MAX_TOKENS = 768;
@@ -119,7 +122,7 @@ function extractText(body: unknown): string | null {
   const message = (first as Record<string, unknown>)["message"];
   if (message === null || typeof message !== "object") return null;
   const content = (message as Record<string, unknown>)["content"];
-  if (typeof content !== "string" || content.length === 0) return null;
+  if (!isVisibleGenerationText(content)) return null;
   return content.length > MAX_RESPONSE_TEXT
     ? content.slice(0, MAX_RESPONSE_TEXT)
     : content;

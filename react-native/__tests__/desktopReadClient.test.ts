@@ -1,22 +1,54 @@
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {
+  conversationDisplaySummary,
+  conversationDisplayTitle,
+  conversationDayLabel,
   conversationGroupLabel,
+  conversationStatusCopy,
+  dataProtectionCopy,
+  developerWebhookRowCopy,
+  developerWebhookStatusCopy,
+  developerWebhookTypeCopy,
+  appCategoryCopy,
+  appDisplaySource,
+  appDisplayName,
+  deviceDisplayName,
+  accountFieldCopy,
+  connectionIdentityCopy,
+  chatMessageDisplayText,
+  chatSenderCopy,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopBackendForbiddenCopy,
   desktopCloudBaseURL,
   desktopLocalBackendServiceCopy,
   desktopProjectionUnavailableCopy,
+  desktopBackendUnavailableCopy,
+  desktopAppsUnavailableCopy,
+  desktopAccountSettingUnavailableCopy,
   desktopBackendServiceCopy,
   desktopReadErrorCopy,
+  desktopReadsCanRetry,
   desktopRecoveryCopy,
+  homeSearchItems,
   loadConversations,
   loadDesktopReads,
   loadMemories,
   loadTasks,
+  memoryDisplayBody,
+  memoryDisplayTitle,
+  memoryCitationCopy,
+  memorySynthesisCopy,
   parseMemoryText,
+  chatClockLabel,
+  formatTaskDue,
+  projectionClockLabel,
   projectionTimestamp,
+  subscriptionPlanCopy,
+  subscriptionStatusCopy,
+  taskDisplaySummary,
+  taskDisplayTitle,
   taskGroup,
   timelineGroups,
 } from '../src/desktopReadClient';
@@ -29,16 +61,20 @@ import type {
 import type {NativeHttpRequest, OmiBackend} from '../src/omiNative';
 import {omiAuth as browserOmiAuth} from '../src/omiNative.web';
 import {
+  cloudErrorCanRetry,
   disableCloudApp,
   enableCloudApp,
   exploreApps,
   installedApps,
   loadAccountSettings,
   loadConnectors,
+  loadServiceSettings,
   myApps,
+  optInTrainingData,
   parseCloudApp,
   parseCloudApps,
   parseCloudProfile,
+  parseCloudSubscription,
   parseEnabledAppIds,
   serviceApps,
 } from '../src/desktopCloudClient';
@@ -69,6 +105,12 @@ test('macOS mounts DesktopApp only for a ready session', () => {
   expect(orchestrator).toContain('onboardingRequired');
   expect(orchestrator).toMatch(/if \(macDesktop\) \{/);
   expect(orchestrator).toContain('<DesktopApp');
+  expect(orchestrator).toMatch(
+    /<DesktopApp[\s\S]*onLoadMoreConversations=\{\s*conversationsPageRetryable/,
+  );
+  expect(orchestrator).toMatch(
+    /<DesktopApp[\s\S]*onLoadMoreMemories=\{\s*memoriesPageRetryable/,
+  );
   expect(orchestrator).toContain('onboardingRequired !== false');
   expect(orchestrator).not.toMatch(
     /onboardingRequired === false\s*\?\s*macDesktopNav\s*:\s*null/,
@@ -261,6 +303,15 @@ test('maps native cloud-first backend failures to actionable, credential-safe co
   expect(desktopReadErrorCopy(new Error(desktopBackendForbiddenCopy))).toBe(
     desktopBackendForbiddenCopy,
   );
+  expect(desktopReadErrorCopy(new Error(desktopBackendUnavailableCopy))).toBe(
+    desktopBackendUnavailableCopy,
+  );
+  expect(desktopReadErrorCopy(new Error(desktopAppsUnavailableCopy))).toBe(
+    desktopAppsUnavailableCopy,
+  );
+  expect(
+    desktopReadErrorCopy(new Error(desktopAccountSettingUnavailableCopy)),
+  ).toBe(desktopAccountSettingUnavailableCopy);
 });
 
 describe('desktopRecoveryCopy', () => {
@@ -323,6 +374,124 @@ describe('desktopRecoveryCopy', () => {
         success(),
       ),
     ).toBe(desktopBackendServiceCopy);
+  });
+});
+
+describe('homeSearchItems', () => {
+  const conversation: DesktopReadProjection = {
+    kind: 'conversation',
+    id: 'conversation-search',
+    title: 'Morning walk',
+    summary: 'Discussed the launch.',
+    searchableText: 'Morning walk\nDiscussed the launch.',
+    createdAt: '2026-08-14T01:00:00.000Z',
+    updatedAt: '2026-08-14T02:00:00.000Z',
+    startedAt: '2026-08-14T01:00:00.000Z',
+    finishedAt: '2026-08-14T01:30:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  const task: DesktopReadProjection = {
+    kind: 'task',
+    id: 'task-search',
+    title: 'Ship the desktop chrome',
+    summary: 'Pending',
+    searchableText: 'Ship the desktop chrome',
+    completed: false,
+    completedAt: null,
+    dueAt: null,
+    owner: null,
+    source: 'manual',
+    provenance: [],
+    sortOrder: 0,
+    indentLevel: 0,
+    createdAt: Date.parse('2026-08-14T03:00:00.000Z'),
+    updatedAt: Date.parse('2026-08-14T03:00:00.000Z'),
+    revision: '1',
+  };
+
+  test('includes matching tasks instead of only conversation and memory rows', () => {
+    expect(
+      homeSearchItems([conversation], [task], 'desktop chrome').map(
+        item => item.id,
+      ),
+    ).toEqual(['task-search']);
+    expect(
+      homeSearchItems([conversation], [task], 'walk').map(item => item.id),
+    ).toEqual(['conversation-search']);
+    expect(
+      homeSearchItems([], [task], 'desktop chrome').map(item => item.id),
+    ).toEqual(['task-search']);
+  });
+
+  test('omits tasks when the task page did not load', () => {
+    expect(homeSearchItems([conversation], null, 'desktop chrome')).toEqual([]);
+  });
+
+  test('a NEXT LINE-only query keeps rows instead of claiming a miss', () => {
+    expect(
+      homeSearchItems([conversation], [task], '\u0085').map(item => item.id),
+    ).toEqual(['task-search', 'conversation-search']);
+    expect(
+      homeSearchItems([conversation], [task], '').map(item => item.id),
+    ).toEqual(['task-search', 'conversation-search']);
+  });
+});
+
+describe('desktopReadsCanRetry', () => {
+  const pageState = {
+    windowStatus: 'complete' as const,
+    complete: true,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'complete' as const,
+    reasons: [] as string[],
+  };
+  const success = {
+    status: 'success' as const,
+    value: {items: [], page: {...pageState}, accountEpoch: null},
+  };
+  const error = (message: string) =>
+    ({
+      status: 'error' as const,
+      error: message,
+    } as const);
+
+  test('omits retry when every failed library door is nested non-retryable', () => {
+    expect(desktopReadsCanRetry(null)).toBe(true);
+    expect(
+      desktopReadsCanRetry({
+        conversations: success,
+        memories: success,
+        tasks: success,
+      }),
+    ).toBe(true);
+    expect(
+      desktopReadsCanRetry({
+        conversations: error(desktopBackendUnavailableCopy),
+        memories: error(desktopBackendUnavailableCopy),
+        tasks: error(desktopBackendUnavailableCopy),
+      }),
+    ).toBe(false);
+    expect(
+      desktopReadsCanRetry({
+        conversations: error(desktopBackendUnavailableCopy),
+        memories: error(desktopBackendServiceCopy),
+        tasks: success,
+      }),
+    ).toBe(true);
+    expect(
+      desktopReadsCanRetry({
+        conversations: error(desktopBackendForbiddenCopy),
+        memories: error(desktopBackendUnavailableCopy),
+        tasks: error(desktopBackendUnavailableCopy),
+      }),
+    ).toBe(true);
   });
 });
 
@@ -430,10 +599,466 @@ test('keeps processing conversations whose title and overview are not ready yet'
           title: '',
           summary: '',
           status: 'processing',
+          searchableText:
+            'Processing conversation…\nConversation summary is not ready yet.',
         }),
       ],
     }),
   );
+});
+
+test('empty conversation titles stay visible instead of a blank row', () => {
+  expect(conversationDisplayTitle({title: '', status: 'processing'})).toBe(
+    'Processing conversation…',
+  );
+  expect(conversationDisplayTitle({title: '', status: 'completed'})).toBe(
+    'Conversation title unavailable',
+  );
+  expect(conversationDisplayTitle({title: ' \t\n', status: 'processing'})).toBe(
+    'Processing conversation…',
+  );
+  expect(conversationDisplayTitle({title: ' \t\n', status: 'completed'})).toBe(
+    'Conversation title unavailable',
+  );
+  expect(conversationDisplayTitle({title: '\u0085', status: 'completed'})).toBe(
+    'Conversation title unavailable',
+  );
+  expect(
+    conversationDisplayTitle({title: 'Morning walk', status: 'processing'}),
+  ).toBe('Morning walk');
+  expect(
+    conversationDisplayTitle({title: '  Morning walk  ', status: 'completed'}),
+  ).toBe('Morning walk');
+});
+
+test('conversation status copy is not a raw wire token', () => {
+  expect(conversationStatusCopy('in_progress')).toBe('In progress');
+  expect(conversationStatusCopy('processing')).toBe('Processing');
+  expect(conversationStatusCopy('merging')).toBe('Merging');
+  expect(conversationStatusCopy('completed')).toBe('Completed');
+  expect(conversationStatusCopy('failed')).toBe('Failed');
+  expect(conversationStatusCopy('')).toBe('Status unavailable');
+  expect(conversationStatusCopy(' \t\n')).toBe('Status unavailable');
+  expect(conversationStatusCopy('\u00A0')).toBe('Status unavailable');
+  expect(conversationStatusCopy('\u0085')).toBe('Status unavailable');
+  expect(conversationStatusCopy('queued')).toBe('queued');
+  expect(conversationStatusCopy('  queued  ')).toBe('queued');
+});
+
+test('account subscription copy is not a raw wire token', () => {
+  expect(subscriptionPlanCopy('plus')).toBe('Plus');
+  expect(subscriptionStatusCopy('active')).toBe('Active');
+  expect(subscriptionStatusCopy('past_due')).toBe('Past due');
+  expect(subscriptionPlanCopy('')).toBe('Plan unavailable');
+  expect(subscriptionStatusCopy('')).toBe('Plan unavailable');
+  expect(subscriptionPlanCopy('\u0085')).toBe('Plan unavailable');
+  expect(dataProtectionCopy('standard')).toBe('Standard');
+  expect(dataProtectionCopy('')).toBe('Data protection unavailable');
+  expect(dataProtectionCopy('\u0085')).toBe('Data protection unavailable');
+});
+
+test('developer webhook titles are not raw API keys', () => {
+  expect(developerWebhookTypeCopy('memory_created')).toBe(
+    'Conversation Events',
+  );
+  expect(developerWebhookTypeCopy('realtime_transcript')).toBe(
+    'Real-time Transcript',
+  );
+  expect(developerWebhookTypeCopy('audio_bytes')).toBe('Audio Bytes');
+  expect(developerWebhookTypeCopy('day_summary')).toBe('Day Summary');
+  expect(developerWebhookTypeCopy('button_event')).toBe('Button event');
+  expect(developerWebhookTypeCopy('')).toBe('Webhook unavailable');
+});
+
+test('developer webhook status copy does not say unknown for a missing enablement bit', () => {
+  expect(developerWebhookStatusCopy(true)).toBe('Enabled');
+  expect(developerWebhookStatusCopy(false)).toBe('Disabled');
+  expect(developerWebhookStatusCopy(null)).toBe('Status unavailable');
+});
+
+test('developer webhook rows omit empty or whitespace URLs', () => {
+  expect(
+    developerWebhookRowCopy({
+      enabled: true,
+      url: 'https://example.test/conversation',
+    }),
+  ).toBe('Enabled · https://example.test/conversation');
+  expect(developerWebhookRowCopy({enabled: false, url: null})).toBe('Disabled');
+  expect(developerWebhookRowCopy({enabled: true, url: ''})).toBe('Enabled');
+  expect(developerWebhookRowCopy({enabled: true, url: ' \t\n'})).toBe(
+    'Enabled',
+  );
+  expect(developerWebhookRowCopy({enabled: true, url: '\u0085'})).toBe(
+    'Enabled',
+  );
+  expect(developerWebhookRowCopy({enabled: null, url: '\u00A0'})).toBe(
+    'Status unavailable',
+  );
+  expect(
+    developerWebhookRowCopy({enabled: true, url: '  https://example.test/a  '}),
+  ).toBe('Enabled · https://example.test/a');
+});
+
+test('whitespace-only account fields stay unset instead of a blank row', () => {
+  expect(accountFieldCopy(null, 'Name not set on this account.')).toBe(
+    'Name not set on this account.',
+  );
+  expect(accountFieldCopy(' \t\n', 'Name not set on this account.')).toBe(
+    'Name not set on this account.',
+  );
+  expect(accountFieldCopy('\u00A0', 'Email not set on this account.')).toBe(
+    'Email not set on this account.',
+  );
+  expect(accountFieldCopy('  Ada  ', 'Name not set on this account.')).toBe(
+    'Ada',
+  );
+});
+
+test('whitespace-only connection identity stays unavailable', () => {
+  expect(connectionIdentityCopy(null)).toBe(
+    'Identity unavailable for this connection.',
+  );
+  expect(connectionIdentityCopy({displayName: '', email: ''})).toBe(
+    'Identity unavailable for this connection.',
+  );
+  expect(connectionIdentityCopy({displayName: ' \t', email: '\n'})).toBe(
+    'Identity unavailable for this connection.',
+  );
+  expect(connectionIdentityCopy({displayName: '\u0085', email: '\u0085'})).toBe(
+    'Identity unavailable for this connection.',
+  );
+  expect(
+    connectionIdentityCopy({displayName: '  Local identity  ', email: ''}),
+  ).toBe('Local identity');
+  expect(
+    connectionIdentityCopy({
+      displayName: '',
+      email: '  ada@example.com  ',
+    }),
+  ).toBe('ada@example.com');
+});
+
+test('app category copy is not a raw wire token', () => {
+  expect(appCategoryCopy('productivity')).toBe('Productivity');
+  expect(appCategoryCopy('health-fitness')).toBe('Health fitness');
+  expect(appCategoryCopy('')).toBe('');
+});
+
+test('empty app source stays visible instead of a blank meta line', () => {
+  expect(appDisplaySource({author: '', category: '', description: ''})).toBe(
+    'App details unavailable',
+  );
+  expect(
+    appDisplaySource({author: ' \t\n', category: ' \t', description: '\u00A0'}),
+  ).toBe('App details unavailable');
+  expect(
+    appDisplaySource({
+      author: '\u0085',
+      category: '\u0085',
+      description: '\u0085',
+    }),
+  ).toBe('App details unavailable');
+  expect(
+    appDisplaySource({
+      author: '  Omi  ',
+      category: 'productivity',
+      description: 'Calendar sync',
+    }),
+  ).toBe('Omi');
+  expect(
+    appDisplaySource({
+      author: '',
+      category: 'productivity',
+      description: 'Calendar sync',
+    }),
+  ).toBe('Productivity');
+  expect(
+    appDisplaySource({
+      author: '',
+      category: '',
+      description: '  Calendar sync  ',
+    }),
+  ).toBe('Calendar sync');
+});
+
+test('empty app names stay visible instead of a blank title', () => {
+  expect(appDisplayName('')).toBe('App name unavailable');
+  expect(appDisplayName(' \t\n')).toBe('App name unavailable');
+  expect(appDisplayName('\u00A0')).toBe('App name unavailable');
+  expect(appDisplayName('  Owned app  ')).toBe('Owned app');
+});
+
+test('empty device names stay visible instead of a blank row', () => {
+  expect(deviceDisplayName('')).toBe('Device name unavailable');
+  expect(deviceDisplayName(' \t\n')).toBe('Device name unavailable');
+  expect(deviceDisplayName('\u00A0')).toBe('Device name unavailable');
+  expect(deviceDisplayName('  Omi  ')).toBe('Omi');
+});
+
+test('empty chat bodies stay visible instead of a blank bubble', () => {
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: null,
+    }),
+  ).toBe('Message text unavailable');
+  expect(
+    chatMessageDisplayText({
+      text: ' \t\n',
+      generationOutcome: 'completed',
+    }),
+  ).toBe('Message text unavailable');
+  expect(
+    chatMessageDisplayText({
+      text: '\u00A0',
+      generationOutcome: null,
+    }),
+  ).toBe('Message text unavailable');
+  expect(
+    chatMessageDisplayText({
+      text: '\u0085',
+      generationOutcome: 'completed',
+    }),
+  ).toBe('Message text unavailable');
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: 'cancelled',
+    }),
+  ).toBe('Response stopped');
+  expect(
+    chatMessageDisplayText(
+      {
+        text: ' \t',
+        generationOutcome: 'cancelled',
+      },
+      'Response stopped.',
+    ),
+  ).toBe('Response stopped.');
+  expect(
+    chatMessageDisplayText({
+      text: '  Hello  ',
+      generationOutcome: null,
+    }),
+  ).toBe('Hello');
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: 'failed',
+      generationRetryable: true,
+    }),
+  ).toBe('Response failed. Try again.');
+});
+
+test('empty chat bodies still show attachment names from history', () => {
+  expect(
+    chatMessageDisplayText({
+      text: ' \t\n',
+      generationOutcome: null,
+      attachments: [
+        {
+          displayName: 'notes.txt',
+        },
+      ],
+    }),
+  ).toBe('notes.txt');
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: 'completed',
+      attachments: [
+        {
+          displayName: ' \t\n',
+        },
+      ],
+    }),
+  ).toBe('Attachment name unavailable');
+  expect(
+    chatMessageDisplayText({
+      text: '  Hello  ',
+      generationOutcome: null,
+      attachments: [
+        {
+          displayName: 'notes.txt',
+        },
+      ],
+    }),
+  ).toBe('Hello\nnotes.txt');
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: 'cancelled',
+      attachments: [
+        {
+          displayName: 'notes.txt',
+        },
+      ],
+    }),
+  ).toBe('Response stopped');
+});
+
+test('unknown chat senders stay visible instead of failing the history page', () => {
+  expect(chatSenderCopy('human')).toBe('You');
+  expect(chatSenderCopy('ai')).toBe('Omi');
+  expect(chatSenderCopy('unknown')).toBe('Sender unavailable');
+});
+
+test('empty memory text stays visible instead of a blank row', () => {
+  expect(memoryDisplayTitle({title: '', summary: ''})).toBe(
+    'Memory text unavailable',
+  );
+  expect(memoryDisplayBody({title: '', summary: ''})).toBe(
+    'Memory text unavailable',
+  );
+  expect(
+    memoryDisplayTitle({
+      title: 'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
+      summary:
+        'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
+    }),
+  ).toBe('qa_memory (observed 2026-07-30T12:00:00.000Z).');
+  expect(
+    memoryDisplayTitle({
+      title: 'Prefers concise release notes',
+      summary: 'Release notes should lead with the outcome.',
+    }),
+  ).toBe('Prefers concise release notes');
+  expect(
+    memoryDisplayBody({
+      title: 'Prefers concise release notes',
+      summary: 'Release notes should lead with the outcome.',
+    }),
+  ).toBe('Release notes should lead with the outcome.');
+  expect(memoryDisplayTitle({title: 'A walk.', summary: 'A walk.'})).toBe(
+    'A walk.',
+  );
+  expect(memoryDisplayTitle({title: ' \t', summary: ''})).toBe(
+    'Memory text unavailable',
+  );
+  expect(memoryDisplayBody({title: '', summary: ' \t\n'})).toBe(
+    'Memory text unavailable',
+  );
+  expect(memoryDisplayTitle({title: ' \t', summary: 'A walk.'})).toBe(
+    'A walk.',
+  );
+});
+
+test('memory citation copy matches the citation count', () => {
+  expect(memoryCitationCopy([])).toBe('0 citations');
+  expect(memoryCitationCopy(['citation-v1:launch'])).toBe('1 citation');
+  expect(memoryCitationCopy(['a', 'b'])).toBe('2 citations');
+  expect(memoryCitationCopy([''])).toBe('0 citations');
+  expect(memoryCitationCopy([' \t', '\n'])).toBe('0 citations');
+  expect(memoryCitationCopy(['', 'citation-v1:launch'])).toBe('1 citation');
+  expect(
+    memorySynthesisCopy({provenance: {synthesisVersion: null}}),
+  ).toBeNull();
+  expect(
+    memorySynthesisCopy({provenance: {synthesisVersion: ' \t\n'}}),
+  ).toBeNull();
+  expect(
+    memorySynthesisCopy({provenance: {synthesisVersion: '\u0085'}}),
+  ).toBeNull();
+  expect(memorySynthesisCopy({provenance: {synthesisVersion: '1'}})).toBe(
+    'Synthesized memory',
+  );
+});
+
+test('task due copy uses a calendar date instead of a raw epoch', () => {
+  const secondScaleDue = 1786000000;
+  const millisecondDue = Date.UTC(2026, 8, 8);
+  const secondScaleCopy = new Date(secondScaleDue * 1000).toLocaleDateString(
+    undefined,
+    {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    },
+  );
+  const millisecondCopy = new Date(millisecondDue).toLocaleDateString(
+    undefined,
+    {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    },
+  );
+  expect(secondScaleCopy).toContain('2026');
+  expect(secondScaleCopy).not.toContain('1970');
+  expect(formatTaskDue(secondScaleDue)).toBe(secondScaleCopy);
+  expect(formatTaskDue(millisecondDue)).toBe(millisecondCopy);
+  expect(taskDisplaySummary({completed: false, dueAt: secondScaleDue})).toBe(
+    `Due ${secondScaleCopy}`,
+  );
+  expect(
+    taskDisplaySummary({completed: false, dueAt: secondScaleDue}),
+  ).not.toBe('Due 1786000000');
+  expect(taskDisplaySummary({completed: false, dueAt: null})).toBe('Pending');
+  expect(taskDisplaySummary({completed: true, dueAt: secondScaleDue})).toBe(
+    'Completed',
+  );
+  expect(formatTaskDue(null)).toBe('No due date');
+  expect(formatTaskDue(0)).toBe('Date unavailable');
+  expect(formatTaskDue(0)).not.toContain('1970');
+  expect(taskDisplaySummary({completed: false, dueAt: 0})).toBe(
+    'Date unavailable',
+  );
+  expect(taskGroup(0, Date.now())).toBe('Later');
+});
+
+test('empty task titles stay visible instead of a blank row', () => {
+  expect(taskDisplayTitle({title: ''})).toBe('Task title unavailable');
+  expect(taskDisplayTitle({title: ' \t\n'})).toBe('Task title unavailable');
+  expect(taskDisplayTitle({title: '\u0085'})).toBe('Task title unavailable');
+  expect(taskDisplayTitle({title: 'Prepare demo'})).toBe('Prepare demo');
+  expect(taskDisplayTitle({title: '  Prepare demo  '})).toBe('Prepare demo');
+});
+
+test('empty conversation summaries stay visible instead of a blank subtitle', () => {
+  expect(
+    conversationDisplaySummary({
+      summary: '',
+      status: 'processing',
+    }),
+  ).toBe('Conversation summary is not ready yet.');
+  expect(
+    conversationDisplaySummary({
+      summary: '',
+      status: 'completed',
+    }),
+  ).toBe('Conversation summary unavailable');
+  expect(
+    conversationDisplaySummary({
+      summary: 'Walked to the market.',
+      status: 'processing',
+    }),
+  ).toBe('Walked to the market.');
+  expect(
+    conversationDisplaySummary({
+      summary: ' \t\n',
+      status: 'processing',
+    }),
+  ).toBe('Conversation summary is not ready yet.');
+  expect(
+    conversationDisplaySummary({
+      summary: ' \t\n',
+      status: 'completed',
+    }),
+  ).toBe('Conversation summary unavailable');
+  expect(
+    conversationDisplaySummary({
+      summary: '\u0085',
+      status: 'completed',
+    }),
+  ).toBe('Conversation summary unavailable');
+  expect(
+    conversationDisplaySummary({
+      summary: '  Walked to the market.  ',
+      status: 'completed',
+    }),
+  ).toBe('Walked to the market.');
 });
 
 test('groups validated UTC conversation timestamps by local calendar day', () => {
@@ -452,6 +1077,161 @@ test('groups validated UTC conversation timestamps by local calendar day', () =>
       month: 'short',
       year: 'numeric',
     }),
+  );
+});
+
+test('conversation day labels prefer startedAt and keep Today/Yesterday/date', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  const older = new Date(2026, 7, 10, 12, 0).toISOString();
+  expect(
+    conversationDayLabel(new Date(2026, 7, 14, 1, 0).toISOString(), older, now),
+  ).toBe('Today');
+  expect(
+    conversationDayLabel(null, new Date(2026, 7, 13, 23, 0).toISOString(), now),
+  ).toBe('Yesterday');
+  expect(conversationDayLabel(null, older, now)).toBe(
+    new Date(2026, 7, 10, 12, 0).toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }),
+  );
+});
+
+test('conversation day labels treat a zero timestamp as Date unavailable', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  expect(conversationGroupLabel(new Date(0).toISOString(), now)).toBe(
+    'Date unavailable',
+  );
+  expect(conversationDayLabel(null, new Date(0).toISOString(), now)).toBe(
+    'Date unavailable',
+  );
+  expect(
+    conversationDayLabel(
+      new Date(0).toISOString(),
+      new Date(now).toISOString(),
+      now,
+    ),
+  ).toBe('Date unavailable');
+});
+
+test('clock labels keep Today as time and date older days', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  const conversation = (
+    startedAt: string | null,
+    createdAt: string,
+  ): DesktopReadProjection => ({
+    kind: 'conversation',
+    id: 'conversation-1',
+    title: 'Product review',
+    summary: '',
+    searchableText: '',
+    createdAt,
+    updatedAt: createdAt,
+    startedAt,
+    finishedAt: null,
+    starred: false,
+    status: 'completed',
+    source: 'desktop',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  });
+  const time = (value: Date) =>
+    value.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  const today = new Date(2026, 7, 14, 8, 0);
+  expect(
+    projectionClockLabel(conversation(null, today.toISOString()), now),
+  ).toBe(time(today));
+  const yesterday = new Date(2026, 7, 13, 23, 0);
+  expect(
+    projectionClockLabel(
+      conversation(yesterday.toISOString(), today.toISOString()),
+      now,
+    ),
+  ).toBe(`Yesterday · ${time(yesterday)}`);
+  const older = new Date(2026, 7, 10, 12, 0);
+  expect(
+    projectionClockLabel(conversation(null, older.toISOString()), now),
+  ).toBe(
+    `${older.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })} · ${time(older)}`,
+  );
+  expect(
+    projectionClockLabel(
+      {
+        kind: 'memory',
+        id: 'memory-1',
+        title: 'Undated',
+        summary: '',
+        searchableText: '',
+        citations: [],
+        timestamp: null,
+        provenance: {
+          label: null,
+          synthesisVersion: null,
+          inputDigest: null,
+          outputDigest: null,
+        },
+      },
+      now,
+    ),
+  ).toBe('Time unavailable');
+  expect(
+    projectionClockLabel(
+      {
+        kind: 'memory',
+        id: 'memory-zero',
+        title: 'Epoch',
+        summary: '',
+        searchableText: '',
+        citations: [],
+        timestamp: 0,
+        provenance: {
+          label: null,
+          synthesisVersion: null,
+          inputDigest: null,
+          outputDigest: null,
+        },
+      },
+      now,
+    ),
+  ).toBe('Time unavailable');
+  expect(
+    projectionClockLabel(conversation(null, new Date(0).toISOString()), now),
+  ).toBe('Time unavailable');
+});
+
+test('chat clock labels date older days and keep seconds or milliseconds', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  const time = (value: Date) =>
+    value.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  const today = new Date(2026, 7, 14, 8, 0);
+  expect(chatClockLabel(today.getTime(), now)).toBe(time(today));
+  expect(chatClockLabel(Math.floor(today.getTime() / 1000), now)).toBe(
+    time(today),
+  );
+  const yesterday = new Date(2026, 7, 13, 23, 0);
+  expect(chatClockLabel(yesterday.getTime(), now)).toBe(
+    `Yesterday · ${time(yesterday)}`,
+  );
+  const older = new Date(2026, 7, 10, 12, 0);
+  expect(chatClockLabel(older.getTime(), now)).toBe(
+    `${older.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })} · ${time(older)}`,
   );
 });
 
@@ -620,6 +1400,41 @@ test('surfaces typed unavailable projections as truthful retryable copy', async 
   expect(result.tasks).toEqual(expect.objectContaining({status: 'success'}));
 });
 
+test('surfaces nested non-retryable projection_unavailable without retry copy', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'projection_unavailable',
+      retryable: false,
+      action: 'none',
+    },
+  });
+  const backend = backendFor(() => ({status: 503, body}));
+  await expect(loadMemories(backend)).rejects.toThrow(
+    desktopBackendUnavailableCopy,
+  );
+  await expect(loadTasks(backend)).rejects.toThrow(
+    desktopBackendUnavailableCopy,
+  );
+  expect(desktopBackendUnavailableCopy).not.toBe(
+    desktopProjectionUnavailableCopy,
+  );
+});
+
+test('surfaces nested non-retryable 503s without connection-retry copy', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  });
+  const backend = backendFor(() => ({status: 503, body}));
+  await expect(loadConversations(backend)).rejects.toThrow(
+    desktopBackendUnavailableCopy,
+  );
+  expect(desktopBackendUnavailableCopy).not.toBe(desktopBackendServiceCopy);
+});
+
 test('rejects a malformed page envelope before projecting items', async () => {
   const malformed = {
     ...page([], 'recall-completeness-v1'),
@@ -751,6 +1566,13 @@ test('groups task epochs by deterministic UTC day boundaries', () => {
   expect(taskGroup(null, now)).toBe('Later');
 });
 
+test('groups second-scale task dues on the same UTC day as millisecond dues', () => {
+  const now = Date.UTC(2026, 7, 5, 12, 0);
+  expect(taskGroup(1786000000, now)).toBe('Tomorrow');
+  expect(taskGroup(1786000000000, now)).toBe('Tomorrow');
+  expect(taskGroup(Date.UTC(2026, 7, 6, 7, 6, 40), now)).toBe('Tomorrow');
+});
+
 test('accepts an omitted account epoch and retains a null task revision', async () => {
   const response = page([{...task, revision: null}], 'tasks-completeness-v1');
   delete (response as {accountEpoch?: number}).accountEpoch;
@@ -767,6 +1589,122 @@ test('accepts an omitted account epoch and retains a null task revision', async 
       revision: null,
     }),
   );
+});
+
+test('keeps ratified empty task descriptions instead of failing the page', async () => {
+  const result = await loadTasks(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify(
+        page(
+          [
+            {...task, description: ''},
+            {...task, id: 'task2_abc', description: ' \t\n'},
+            {...task, id: 'task3_abc', source: '', revision: ''},
+          ],
+          'tasks-completeness-v1',
+        ),
+      ),
+    })),
+  );
+  expect(result.items).toEqual([
+    expect.objectContaining({
+      id: 'task1_abc',
+      title: '',
+      searchableText: 'Task title unavailable',
+    }),
+    expect.objectContaining({
+      id: 'task2_abc',
+      title: ' \t\n',
+      searchableText: 'Task title unavailable',
+    }),
+    expect.objectContaining({
+      id: 'task3_abc',
+      title: 'Prepare launch notes',
+      source: '',
+      revision: '',
+      searchableText: 'Prepare launch notes',
+    }),
+  ]);
+});
+
+test('keeps ratified memories that omit citations and provenance', async () => {
+  const item = {...memory};
+  delete (item as {citations?: unknown}).citations;
+  delete (item as {provenance?: unknown}).provenance;
+  const result = await loadMemories(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify(
+        page([item, {...memory, id: 'memory2_abc'}], 'recall-completeness-v1'),
+      ),
+    })),
+  );
+  expect(result.items).toEqual([
+    expect.objectContaining({
+      id: 'memory1_abc',
+      citations: [],
+      provenance: {
+        label: null,
+        synthesisVersion: null,
+        inputDigest: null,
+        outputDigest: null,
+      },
+    }),
+    expect.objectContaining({
+      id: 'memory2_abc',
+      citations: ['citation-v1:launch'],
+      provenance: expect.objectContaining({
+        synthesisVersion: 'synthesis-v1',
+        inputDigest: 'a'.repeat(64),
+        outputDigest: 'b'.repeat(64),
+      }),
+    }),
+  ]);
+});
+
+test('still fails closed for empty memory text', async () => {
+  await expect(
+    loadMemories(
+      backendFor(() => ({
+        status: 200,
+        body: JSON.stringify(
+          page([{...memory, text: ''}], 'recall-completeness-v1'),
+        ),
+      })),
+    ),
+  ).rejects.toThrow('Memory 0 text is malformed');
+});
+
+test('keeps empty conversation status and source instead of failing the page', async () => {
+  const result = await loadConversations(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify(
+        conversationPage([
+          {...conversation, status: ''},
+          {...conversation, id: 'conversation-2', source: ''},
+          {...conversation, id: 'conversation-3', status: ' \t\n'},
+        ]),
+      ),
+    })),
+  );
+  expect(result.items).toEqual([
+    expect.objectContaining({
+      id: 'conversation-1',
+      status: '',
+      source: 'omi',
+    }),
+    expect.objectContaining({
+      id: 'conversation-2',
+      source: '',
+      status: 'completed',
+    }),
+    expect.objectContaining({
+      id: 'conversation-3',
+      status: ' \t\n',
+    }),
+  ]);
 });
 
 test('marks a full conversation window as potentially incomplete', async () => {
@@ -915,6 +1853,75 @@ test('parses catalogue, enabled, owned, and service app records without inventin
   );
 });
 
+test('keeps empty catalogue names instead of failing the Apps page', () => {
+  expect(
+    parseCloudApps(
+      [
+        {id: 'catalog-app-1', name: ''},
+        {id: 'catalog-app-2', name: ' \t\n'},
+        {id: 'catalog-app-3', name: 'Owned app'},
+      ],
+      'Apps response',
+    ),
+  ).toEqual([
+    expect.objectContaining({id: 'catalog-app-1', name: ''}),
+    expect.objectContaining({id: 'catalog-app-2', name: ' \t\n'}),
+    expect.objectContaining({id: 'catalog-app-3', name: 'Owned app'}),
+  ]);
+  expect(() => parseCloudApp({id: 'catalog-app-1'}, 'App 0')).toThrow(
+    'App 0 is malformed',
+  );
+});
+
+test('keeps empty subscription plan tokens instead of failing Settings Plan', () => {
+  expect(
+    parseCloudSubscription({plan: '', status: ''}, 'Subscription response'),
+  ).toEqual(
+    expect.objectContaining({
+      plan: '',
+      status: '',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    }),
+  );
+  expect(
+    parseCloudSubscription(
+      {plan: 'plus', status: 'active'},
+      'Subscription response',
+    ),
+  ).toEqual(expect.objectContaining({plan: 'plus', status: 'active'}));
+  expect(() =>
+    parseCloudSubscription({status: 'active'}, 'Subscription response'),
+  ).toThrow('Subscription response is malformed');
+});
+
+test('keeps an empty Settings entitlement limitKey instead of failing the page', async () => {
+  const result = await loadServiceSettings(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify({
+        identity: {displayName: 'Local identity', email: ''},
+        entitlement: {limitKey: '', used: 7, limit: 100},
+      }),
+    })),
+  );
+  expect(result).toEqual({
+    identity: {displayName: 'Local identity', email: ''},
+    entitlement: {limitKey: '', used: 7, limit: 100},
+  });
+  await expect(
+    loadServiceSettings(
+      backendFor(() => ({
+        status: 200,
+        body: JSON.stringify({
+          identity: {displayName: 'Local identity', email: ''},
+          entitlement: {used: 7, limit: 100},
+        }),
+      })),
+    ),
+  ).rejects.toThrow('Usage allowance response is malformed');
+});
+
 test('loadConnectors merges enabled ids and keeps owner filtering honest', async () => {
   const backend = backendFor(request => {
     if (request.path === '/v1/apps') {
@@ -942,6 +1949,7 @@ test('loadConnectors merges enabled ids and keeps owner filtering honest', async
   });
   const snapshot = await loadConnectors(backend);
   expect(snapshot.ownerUid).toBe('user-1');
+  expect(snapshot.ownerError).toBeNull();
   expect(exploreApps(snapshot).map(app => app.id)).toEqual([
     'catalog-app-1',
     'catalog-app-2',
@@ -951,6 +1959,169 @@ test('loadConnectors merges enabled ids and keeps owner filtering honest', async
     'catalog-app-1',
   ]);
   expect(serviceApps(snapshot).map(app => app.id)).toEqual(['catalog-app-1']);
+});
+
+test('loadConnectors nested non-retryable 503s are unavailable without retry copy', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  });
+  const backend = backendFor(() => ({status: 503, body}));
+  await expect(loadConnectors(backend)).rejects.toMatchObject({
+    message: desktopAppsUnavailableCopy,
+    retryable: false,
+  });
+  expect(cloudErrorCanRetry({message: desktopAppsUnavailableCopy})).toBe(true);
+  expect(
+    cloudErrorCanRetry(
+      Object.assign(new Error(desktopAppsUnavailableCopy), {
+        retryable: false,
+      }),
+    ),
+  ).toBe(false);
+});
+
+test('loadConnectors nested non-retryable profile 503s do not claim the owner is still loading', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  });
+  const backend = backendFor(request => {
+    if (request.path === '/v1/apps') {
+      return {
+        status: 200,
+        body: JSON.stringify([{id: 'catalog-app-1', name: 'Owned app'}]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {status: 503, body};
+    }
+    return {status: 404, body: null};
+  });
+  const snapshot = await loadConnectors(backend);
+  expect(snapshot.ownerUid).toBeNull();
+  expect(snapshot.ownerError).toBe(desktopAccountSettingUnavailableCopy);
+  expect(snapshot.ownerError).not.toBe(desktopBackendUnavailableCopy);
+});
+
+test('loadConnectors nested non-retryable enabled 503s do not claim catalogue apps are installed', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  });
+  const backend = backendFor(request => {
+    if (request.path === '/v1/apps') {
+      return {
+        status: 200,
+        body: JSON.stringify([
+          {id: 'catalog-app-1', name: 'Owned app', enabled: true},
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {status: 503, body};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {status: 200, body: JSON.stringify({uid: 'user-1'})};
+    }
+    return {status: 404, body: null};
+  });
+  const snapshot = await loadConnectors(backend);
+  expect(snapshot.enabledIds).toBeNull();
+  expect(snapshot.enabledError).toBe(desktopAppsUnavailableCopy);
+  expect(snapshot.enabledError).not.toBe(desktopBackendUnavailableCopy);
+  expect(installedApps(snapshot)).toEqual([]);
+  expect(exploreApps(snapshot).map(app => app.enabled)).toEqual([false]);
+});
+
+test('loadAccountSettings nested non-retryable 503s keep slices independent without retry copy', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  });
+  const backend = backendFor(request => {
+    if (request.path === '/v1/users/profile') {
+      return {status: 503, body};
+    }
+    if (request.path === '/v1/users/me/subscription') {
+      return {
+        status: 200,
+        body: JSON.stringify({plan: 'plus', status: 'active'}),
+      };
+    }
+    if (request.path === '/v1/users/store-recording-permission') {
+      return {
+        status: 200,
+        body: JSON.stringify({store_recording_permission: true}),
+      };
+    }
+    if (request.path === '/v1/users/training-data-opt-in') {
+      return {status: 200, body: JSON.stringify({opted_in: false})};
+    }
+    if (request.path === '/v1/users/private-cloud-sync') {
+      return {
+        status: 200,
+        body: JSON.stringify({private_cloud_sync_enabled: false}),
+      };
+    }
+    if (request.path === '/v1/users/developer/webhooks/status') {
+      return {status: 200, body: JSON.stringify({})};
+    }
+    return {status: 404, body: null};
+  });
+  const snapshot = await loadAccountSettings(backend);
+  expect(snapshot.profile).toBeNull();
+  expect(snapshot.profileError).toBe(desktopAccountSettingUnavailableCopy);
+  expect(snapshot.profileError).not.toBe(desktopBackendUnavailableCopy);
+  expect(snapshot.subscription).toEqual(
+    expect.objectContaining({plan: 'plus', status: 'active'}),
+  );
+  expect(snapshot.storeRecordingPermission).toBe(true);
+});
+
+test('nested non-retryable account setting writes use unavailable copy', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  });
+  const backend = backendFor(() => ({status: 503, body}));
+  const error = await optInTrainingData(backend).catch(reason => reason);
+  expect(error).toMatchObject({
+    message: desktopAccountSettingUnavailableCopy,
+    retryable: false,
+  });
+  expect(cloudErrorCanRetry(error)).toBe(false);
+});
+
+test('omitted account setting 503 stays a retryable write failure', async () => {
+  const backend = backendFor(() => ({
+    status: 503,
+    body: '{"error":"service_unavailable"}',
+  }));
+  const error = await optInTrainingData(backend).catch(e => e);
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toBe(
+    'desktop-training-opt-in-write failed (503)',
+  );
+  expect(cloudErrorCanRetry(error)).toBe(true);
 });
 
 test('enableCloudApp requires a real ok status and does not treat errors as installed', async () => {

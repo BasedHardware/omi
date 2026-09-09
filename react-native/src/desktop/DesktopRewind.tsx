@@ -8,6 +8,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import {
+  accountFieldCopy,
+  clockLabel,
+  visibleDisplayText,
+} from '../desktopReadClient';
 import {FocusPressable} from '../ui/Pressable';
 import {desktopTokens as token} from './tokens';
 import type {useRewindCapture} from '../app/useRewindCapture';
@@ -31,13 +36,31 @@ type Rewind = {
   ): Promise<{id: string; mimeType: 'image/jpeg'; base64: string}>;
 };
 
+function errorCode(error: unknown): string | undefined {
+  return (error as {code?: string} | null)?.code;
+}
+
 function errorCopy(error: unknown) {
-  const code = (error as {code?: string} | null)?.code;
+  const code = errorCode(error);
   if (code === 'OMI_REWIND_UNAVAILABLE')
     return 'No local Rewind history is available for this account on this Mac.';
   if (code === 'OMI_REWIND_AUTH')
     return 'Sign in again to open your screen history.';
   return 'Screen history could not be loaded. Try again.';
+}
+
+function formatRewindCaptureTime(capturedAtMs: number): string {
+  const label = clockLabel(capturedAtMs, Date.now());
+  return label === '' ? 'Time unavailable' : label;
+}
+
+function rewindAppName(appName: string): string {
+  return accountFieldCopy(appName, 'Captured screen');
+}
+
+export function rewindLaterPageCanRetry(error: unknown): boolean {
+  const code = errorCode(error);
+  return code !== 'OMI_REWIND_UNAVAILABLE' && code !== 'OMI_REWIND_AUTH';
 }
 
 export function DesktopRewind({
@@ -146,7 +169,12 @@ export function DesktopRewind({
       });
       setCursor(page.nextCursor);
     } catch (failure) {
-      if (epoch.current === current) setError(errorCopy(failure));
+      if (epoch.current === current) {
+        setError(errorCopy(failure));
+        if (!rewindLaterPageCanRetry(failure)) {
+          setCursor(null);
+        }
+      }
     } finally {
       if (epoch.current === current) {
         loading.current = false;
@@ -155,7 +183,7 @@ export function DesktopRewind({
     }
   };
   const search = () => {
-    setQuery(draft.trim());
+    setQuery(visibleDisplayText(draft));
     setRevision(value => value + 1);
   };
   return (
@@ -205,29 +233,30 @@ export function DesktopRewind({
       </Text>
       {capture !== undefined ? (
         <View style={styles.toolbar}>
-          <FocusPressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              capture.capturing || capture.busy
-                ? 'Stop screen capture'
-                : 'Start screen capture'
-            }
-            disabled={!capture.available}
-            onPress={() => {
-              if (capture.capturing || capture.busy)
-                void capture.stop().catch(() => undefined);
-              else {
-                setSource('captured');
-                void capture.start();
+          {capture.available ? (
+            <FocusPressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                capture.capturing || capture.busy
+                  ? 'Stop screen capture'
+                  : 'Start screen capture'
               }
-            }}
-            style={styles.button}>
-            <Text style={styles.text}>
-              {capture.capturing || capture.busy
-                ? 'Stop capture'
-                : 'Start capture'}
-            </Text>
-          </FocusPressable>
+              onPress={() => {
+                if (capture.capturing || capture.busy)
+                  void capture.stop().catch(() => undefined);
+                else {
+                  setSource('captured');
+                  void capture.start();
+                }
+              }}
+              style={styles.button}>
+              <Text style={styles.text}>
+                {capture.capturing || capture.busy
+                  ? 'Stop capture'
+                  : 'Start capture'}
+              </Text>
+            </FocusPressable>
+          ) : null}
           <Text style={[styles.meta, styles.status]}>
             {!capture.available
               ? 'Capture is available in the native Mac app.'
@@ -267,21 +296,21 @@ export function DesktopRewind({
                 styles.row,
                 selected?.id === frame.id && styles.selected,
               ]}>
-              <Text style={styles.text}>
-                {frame.appName || 'Captured screen'}
-              </Text>
-              <Text style={styles.meta} numberOfLines={2}>
-                {frame.windowTitle}
-              </Text>
+              <Text style={styles.text}>{rewindAppName(frame.appName)}</Text>
+              {visibleDisplayText(frame.windowTitle) !== '' ? (
+                <Text style={styles.meta} numberOfLines={2}>
+                  {visibleDisplayText(frame.windowTitle)}
+                </Text>
+              ) : null}
               <Text style={styles.meta}>
-                {new Date(frame.capturedAtMs).toLocaleString()}
+                {formatRewindCaptureTime(frame.capturedAtMs)}
               </Text>
             </FocusPressable>
           ))}
           {busy ? (
             <Text style={styles.meta}>Loading screen history…</Text>
           ) : null}
-          {!busy && error === null && frames.length === 0 ? (
+          {!busy && error === null && frames.length === 0 && cursor === null ? (
             <Text style={styles.text}>
               {query
                 ? 'No captures match this search.'
@@ -295,7 +324,7 @@ export function DesktopRewind({
               disabled={busy}
               onPress={() => void more()}
               style={styles.button}>
-              <Text style={styles.text}>Load more</Text>
+              <Text style={styles.text}>Load more history</Text>
             </FocusPressable>
           ) : null}
         </ScrollView>
@@ -311,7 +340,9 @@ export function DesktopRewind({
           ) : (
             <Image
               key={selected.id}
-              accessibilityLabel={`Captured screen from ${selected.appName}`}
+              accessibilityLabel={`Captured screen from ${rewindAppName(
+                selected.appName,
+              )}`}
               source={{uri: image}}
               resizeMode="contain"
               style={styles.image}

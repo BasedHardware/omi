@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   MAIN_CHAT_CONVERSATION_ID,
   composeChatSessionsIntoConversationPage,
+  composeConversationUnionPage,
   type ChatConversationSessionItem,
 } from "./chat-conversation-sessions";
 
@@ -91,5 +92,139 @@ describe("chat conversation composition", () => {
       page([{ id: "recording:one", updatedAt: "later" }]),
       [session()],
     )).toBeNull();
+  });
+
+  test("merges a named chat session beside chat:chat-main without inventing extra rows", () => {
+    const named = session({
+      id: "chat:session-alpha",
+      title: "named prompt",
+      overview: "named answer",
+      createdAt: 1500,
+      updatedAt: 3500,
+      startedAt: 1500,
+    });
+    const composed = composeChatSessionsIntoConversationPage(
+      page([{ id: "recording:one", updatedAt: 3000, title: "Recording" }]),
+      [session(), named],
+    );
+    expect(composed?.items.map((item) => item.id)).toEqual([
+      named.id,
+      "recording:one",
+      MAIN_CHAT_CONVERSATION_ID,
+    ]);
+  });
+});
+
+const workerPaginate = (
+  items: ReadonlyArray<{ id: string; updatedAt: number }>,
+  limit: number,
+  cursorId: string | undefined,
+) => {
+  const sorted = [...items].sort((left, right) => {
+    if (right.updatedAt !== left.updatedAt) return right.updatedAt - left.updatedAt;
+    return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+  });
+  let start = 0;
+  if (cursorId !== undefined) {
+    const index = sorted.findIndex((item) => item.id === cursorId);
+    if (index === -1) return "invalid_cursor" as const;
+    start = index + 1;
+  }
+  const pageRows = sorted.slice(start, start + limit);
+  return {
+    items: pageRows,
+    hasMore: start + pageRows.length < sorted.length,
+  };
+};
+
+describe("conversation union pagination", () => {
+  test("does not invent chat:chat-main when no granted sessions exist", () => {
+    const empty = composeConversationUnionPage([], [], 1, null);
+    expect(empty).toEqual({ items: [], hasMore: false });
+    const listenOnly = composeConversationUnionPage(
+      [{ id: "recording:one", updatedAt: 3000 }],
+      [],
+      1,
+      null,
+    );
+    expect(listenOnly?.items.map((item) => item.id)).toEqual(["recording:one"]);
+    expect(listenOnly?.hasMore).toBe(false);
+  });
+
+  test("keeps exact limit instead of dumping every chat onto the first page", () => {
+    const listen = [
+      { id: "recording:newer", updatedAt: 4000 },
+      { id: "recording:older", updatedAt: 500 },
+    ];
+    const first = composeConversationUnionPage(listen, [session()], 1, null);
+    expect(first?.items.map((item) => item.id)).toEqual(["recording:newer"]);
+    expect(first?.hasMore).toBe(true);
+    const second = composeConversationUnionPage(
+      listen,
+      [session()],
+      1,
+      { id: "recording:newer", updatedAt: 4000 },
+    );
+    expect(second?.items.map((item) => item.id)).toEqual([MAIN_CHAT_CONVERSATION_ID]);
+    expect(second?.hasMore).toBe(true);
+    const third = composeConversationUnionPage(
+      listen,
+      [session()],
+      1,
+      { id: MAIN_CHAT_CONVERSATION_ID, updatedAt: 2000 },
+    );
+    expect(third?.items.map((item) => item.id)).toEqual(["recording:older"]);
+    expect(third?.hasMore).toBe(false);
+  });
+
+  test("matches Worker updatedAt DESC then id ASC paging when the full list is present", () => {
+    const named = session({
+      id: "chat:session-alpha",
+      title: "named prompt",
+      overview: "named answer",
+      createdAt: 1500,
+      updatedAt: 3500,
+      startedAt: 1500,
+    });
+    const listen = [
+      { id: "recording:one", updatedAt: 3000, title: "Recording" },
+      { id: "recording:two", updatedAt: 100, title: "Older" },
+    ];
+    const universe = [...listen, session(), named].map((item) => ({
+      id: String(item.id),
+      updatedAt: Number(item.updatedAt),
+    }));
+    const workerFirst = workerPaginate(universe, 2, undefined);
+    const unionFirst = composeConversationUnionPage(listen, [session(), named], 2, null);
+    expect(workerFirst).not.toBe("invalid_cursor");
+    if (workerFirst === "invalid_cursor") return;
+    expect(unionFirst?.items.map((item) => item.id)).toEqual(
+      workerFirst.items.map((item) => item.id),
+    );
+    expect(unionFirst?.hasMore).toBe(workerFirst.hasMore);
+    const last = workerFirst.items[workerFirst.items.length - 1]!;
+    const workerSecond = workerPaginate(universe, 2, last.id);
+    const unionSecond = composeConversationUnionPage(
+      listen,
+      [session(), named],
+      2,
+      { id: last.id, updatedAt: last.updatedAt },
+    );
+    expect(workerSecond).not.toBe("invalid_cursor");
+    if (workerSecond === "invalid_cursor") return;
+    expect(unionSecond?.items.map((item) => item.id)).toEqual(
+      workerSecond.items.map((item) => item.id),
+    );
+    expect(unionSecond?.hasMore).toBe(workerSecond.hasMore);
+  });
+
+  test("rejects a malformed listen row instead of dropping or inventing rows", () => {
+    expect(composeConversationUnionPage(
+      [{ id: "recording:one", updatedAt: "later" }],
+      [session()],
+      1,
+      null,
+    )).toBeNull();
+    expect(composeConversationUnionPage([], [session()], 0, null)).toBeNull();
   });
 });

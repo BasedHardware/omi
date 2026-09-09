@@ -9,9 +9,15 @@ jest.mock('../src/omiNative', () => ({
 jest.mock('../src/taskMutationClient', () => ({
   prepareTaskPatch: jest.fn(),
   sendTaskPatch: jest.fn(),
+  TASK_WRITE_UNAVAILABLE_DETAIL:
+    'Task edit is not available on this backend yet',
 }));
 
-import {prepareTaskPatch, sendTaskPatch} from '../src/taskMutationClient';
+import {
+  prepareTaskPatch,
+  sendTaskPatch,
+  TASK_WRITE_UNAVAILABLE_DETAIL,
+} from '../src/taskMutationClient';
 import {useTaskMutations} from '../src/app/useTaskMutations';
 
 const prepare = prepareTaskPatch as jest.Mock;
@@ -59,7 +65,7 @@ function Harness(
 }
 
 async function mount(
-  outcome: TaskReadOutcome = {status: 'success', value: read},
+  outcome: TaskReadOutcome | null = {status: 'success', value: read},
 ) {
   let state!: ReturnType<typeof useTaskMutations>;
   const refreshTasks = jest.fn(async (): Promise<TaskRead | null> => read);
@@ -156,6 +162,19 @@ test('legacy reads without an epoch stay read-only', async () => {
   await ReactTestRenderer.act(async () => app.renderer.unmount());
 });
 
+test.each([null, {status: 'error' as const, error: 'unavailable'}])(
+  'unsettled task reads do not claim a closed write door',
+  async outcome => {
+    const app = await mount(outcome);
+    expect(app.state.writesAvailable).toBeNull();
+    await ReactTestRenderer.act(async () => {
+      app.state.onTaskToggle('task');
+    });
+    expect(prepare).not.toHaveBeenCalled();
+    await ReactTestRenderer.act(async () => app.renderer.unmount());
+  },
+);
+
 test.each([false, true])(
   'sign-out during preparation retires the write before transport (old=%s)',
   async old => {
@@ -190,6 +209,29 @@ test.each([false, true])(
     await ReactTestRenderer.act(async () => app.renderer.unmount());
   },
 );
+
+test('closed task-write doors use unavailable copy without retry', async () => {
+  send.mockResolvedValue({
+    ok: false,
+    failure: {
+      kind: 'permanent',
+      reason: 'gone',
+      detail: TASK_WRITE_UNAVAILABLE_DETAIL,
+    },
+    controlUnavailable: false,
+  });
+  const app = await mount();
+  await ReactTestRenderer.act(async () => {
+    app.state.onTaskEdit('task', 'Call Jo');
+  });
+  expect(app.state.onRetryTaskMutation).toBeUndefined();
+  expect(app.state.taskMutationError).toBe(
+    'Task editing is not available from this backend yet.',
+  );
+  expect(app.state.taskMutationError).not.toContain('not accepted');
+  expect(app.refreshTasks).not.toHaveBeenCalled();
+  await ReactTestRenderer.act(async () => app.renderer.unmount());
+});
 
 test('permanent epoch refusal keeps the edit visible without retry', async () => {
   send.mockResolvedValue({
