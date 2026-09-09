@@ -117,31 +117,31 @@ async function readGenerationHistory(
     const row = rows[index]!;
     if (!isVisibleGenerationText(row.text)) continue;
     const visible = visibleGenerationTrim(row.text);
-    const size = utf8Bytes(row.text);
-    if (size > remaining) {
-      const prefix = utf8Prefix(row.text, remaining);
-      if (isVisibleGenerationText(prefix)) {
-        history.push({
-          role: row.sender === "human" ? "user" : "assistant",
-          content: prefix,
-        });
-        break;
-      }
-      const visiblePrefix = utf8Prefix(visible, remaining);
-      if (isVisibleGenerationText(visiblePrefix) && index === rows.length - 1) {
-        history.push({
-          role: row.sender === "human" ? "user" : "assistant",
-          content: visiblePrefix,
-        });
-        break;
-      }
+    const visibleSize = utf8Bytes(visible);
+    if (visibleSize <= remaining) {
+      remaining -= visibleSize;
+      history.push({
+        role: row.sender === "human" ? "user" : "assistant",
+        content: visible,
+      });
       continue;
     }
-    remaining -= utf8Bytes(visible);
-    history.push({
-      role: row.sender === "human" ? "user" : "assistant",
-      content: visible,
-    });
+    const prefix = utf8Prefix(row.text, remaining);
+    if (isVisibleGenerationText(prefix)) {
+      history.push({
+        role: row.sender === "human" ? "user" : "assistant",
+        content: prefix,
+      });
+      break;
+    }
+    const visiblePrefix = utf8Prefix(visible, remaining);
+    if (isVisibleGenerationText(visiblePrefix) && index === rows.length - 1) {
+      history.push({
+        role: row.sender === "human" ? "user" : "assistant",
+        content: visiblePrefix,
+      });
+      break;
+    }
   }
   return history.reverse();
 }
