@@ -286,13 +286,18 @@ jobs:
           # ---- regression guards -------------------------------------------
           # Desktop Swift CI once drifted silently to 27-42 min suite steps
           # and 60-120 min verdicts because nothing flagged duration. These
-          # budgets turn drift into a red run instead. Measured when this
-          # guard landed: fast lane 15m42s (batch 50; ~12m at 100), full
-          # lane 17m46s (batch 100), auth-subject PRs that wake the serial
-          # cluster ~24m — so 1800s covers every legitimate shape with
-          # headroom while sitting far below the regression. Raise only with
-          # measured evidence in the PR that raises it.
-          OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: "1800"
+          # budgets turn drift into a red run instead — the very first
+          # guarded run caught a 37m07s full lane (run 34363659680) that
+          # would previously have published green. Lane-aware: the PR fast
+          # lane measured 15m42s at batch 50 (~12m at 100; ~24m for auth
+          # PRs that wake the serial cluster), so 1800s holds it with
+          # headroom. The full lane (re-baselined runner diffs, main
+          # pushes, scheduled health) legitimately spans ~28-40m on a slow
+          # runner day — 9.7m prebuild + ~3.5m parallel batches + 15.3m
+          # sequential serial/solo tail — so it carries 2700s to catch the
+          # 50m+ drift class without failing quiet-day variance. Raise
+          # either only with measured evidence in the PR that raises it.
+          OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ github.event_name == 'pull_request' && '1800' || '2700' }}
           # Any PR-lane suite whose own test time exceeds this and is not
           # ratcheted in swift-test-slow-suites.json fails the run: the fast
           # lane cannot silently grow a slow tail. Deferred suites that woke

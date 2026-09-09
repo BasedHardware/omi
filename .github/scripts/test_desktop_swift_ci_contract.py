@@ -511,7 +511,13 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         regression; they move only through this file's review.
         """
         verify_job = self.jobs["desktop-swift-verify"]
-        self.assertIn('OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: "1800"', verify_job)
+        # Lane-aware: the PR fast lane carries the tight budget; the full
+        # lane legitimately spans ~28-40m (measured 37m07s on run
+        # 34363659680) and carries 2700s against the 50m+ drift class.
+        self.assertIn(
+            "OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ github.event_name == 'pull_request' && '1800' || '2700' }}",
+            verify_job,
+        )
         self.assertIn('OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS: "60"', verify_job)
         self.assertIn('OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS: "360"', verify_job)
         self.assertIn("swift suite step wall: ${elapsed}s", verify_job)
