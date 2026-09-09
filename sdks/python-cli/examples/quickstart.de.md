@@ -42,20 +42,24 @@ omi --help
 | Authentifizierungsmethode | Typischer Anwendungsfall | Beispielbefehl |
 | :--- | :--- | :--- |
 | **Entwickler-API-Schlüssel (`omi_dev_*`)** | CI/CD, Hintergrundskripte, autonome KI-Agenten | `omi auth login --api-key ...` oder `OMI_API_KEY` |
-| **Browser OAuth (Google/Apple)** | Lokale Workstations, interaktive Nutzung | `omi auth login --browser` |
+| **Browser OAuth (Google/Apple)** | Lokale Workstations, interaktive Nutzung | `omi auth login --browser` (Google) / `--provider apple` |
 
 ### Interaktiver Login
 Wird der Befehl ohne Optionen ausgeführt, erscheint ein Auswahldialog:
 
 ```bash
 omi auth login
-# 1) Browser — Anmeldung über Google- oder Apple-Konto im Webbrowser
+# 1) Browser — Anmeldung über Google (oder `--provider apple` für Apple) im Webbrowser
 # 2) API key — Entwickler-API-Schlüssel von app.omi.me einfügen
 ```
 
 ### Direkter Browser-Login
 ```bash
+# Standard-Login über Google
 omi auth login --browser
+
+# Alternativ über Apple
+omi auth login --browser --provider apple
 ```
 
 ### Verwendung eines Entwickler-API-Schlüssels
@@ -70,7 +74,7 @@ export OMI_API_KEY="omi_dev_..."
 ```
 
 ### Überprüfung des Authentifizierungsstatus
-* `omi auth status`: Zeigt das aktive lokale Profil, maskierte Tokens und Ablaufzeiten an (funktioniert offline).
+* `omi auth status`: Zeigt das aktive lokale Profil und maskierte Anmeldeinformationen an; das Ablaufdatum wird nur bei OAuth-Profilen ausgewiesen (funktioniert offline).
 * `omi auth whoami`: Sendet eine Verifizierungsanfrage an den Omi-Server zur Bestätigung der Gültigkeit (erfordert Netzwerkverbindung).
 
 ```bash
@@ -167,8 +171,8 @@ Zur zuverlässigen Fehlerbehandlung gibt `omi-cli` standardisierte Exit-Codes zu
 | Exit-Code | Bedeutung | Beschreibung |
 | :---: | :--- | :--- |
 | `0` | **Erfolg (Success)** | Der Befehl wurde fehlerfrei ausgeführt. |
-| `1` | **Nutzungsfehler (Usage Error)** | Ungültige Argumente, fehlende Pflichtparameter oder Syntaxfehler. |
-| `2` | **Authentifizierungsfehler (Auth Error)** | Fehlende Anmeldung, abgelaufenes Token oder ungültiger API-Schlüssel. |
+| `1` | **Nutzungsfehler (Validierungsfehler)** | Ungültige Werte oder Anwendungsvalidierung; Click-Syntaxfehler wie fehlende Pflichtparameter oder unbekannte Optionen verwenden Exit-Code `2`. |
+| `2` | **Authentifizierungsfehler (Auth Error)** | Fehlende Anmeldung, abgelaufenes Token oder ungültiger API-Schlüssel; Click-Syntaxfehler können ebenfalls diesen Code zurückgeben. |
 | `3` | **Server-/Netzwerkfehler (Server Error)** | HTTP 5xx Fehler, Verbindungstimeout oder nicht erreichbarer Server. |
 | `4` | **Ratenbegrenzung (Rate Limited)** | HTTP 429 Too Many Requests — Wiederholungslogik erforderlich. |
 | `5` | **Nicht gefunden (Not Found)** | HTTP 404 Not Found — angeforderte ID existiert nicht. |
