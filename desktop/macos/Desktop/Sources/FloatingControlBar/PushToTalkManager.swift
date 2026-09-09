@@ -296,6 +296,13 @@ class PushToTalkManager: ObservableObject {
   /// opt-in lane exercises the same manager routing and controller admission as
   /// a physical hold, while injecting PCM rather than opening CoreAudio.
   private var automationExercisesRealtimePath = false
+  /// Capture-only `ptt_start` must not block on WindowServer. The realtime
+  /// automation path (`beginRealtimePushToTalkForAutomation`, `ptt_manager_turn`,
+  /// synthetic PCM) still needs the pre-overlay frame for the screen-evidence
+  /// protocol and native OCR, so it is excluded.
+  private var skipsCompositorCaptureForAutomation: Bool {
+    automationCaptureBypass && !automationExercisesRealtimePath
+  }
 
   // Double-tap detection
   private var lastOptionDownTime: TimeInterval = 0
@@ -795,9 +802,10 @@ class PushToTalkManager: ObservableObject {
     voiceTypingLastOutcome = VoiceTypingOutcome()
     currentContextSnapshot = nil
 
-    // Play start-of-PTT sound. Headless automation skips CoreAudio init so a cold
-    // first `ptt_start` is not blocked on output-device bring-up.
-    if ShortcutSettings.shared.pttSoundsEnabled, !automationCaptureBypass {
+    // Play start-of-PTT sound. Capture-only `ptt_start` skips CoreAudio init so a
+    // cold first press is not blocked on output-device bring-up. The realtime
+    // automation path keeps the sound, matching a physical hold.
+    if ShortcutSettings.shared.pttSoundsEnabled, !skipsCompositorCaptureForAutomation {
       let sound = NSSound(named: "Funk")
       sound?.volume = 0.3
       sound?.play()
@@ -1068,6 +1076,11 @@ class PushToTalkManager: ObservableObject {
       "state": VoiceTurnCoordinator.phaseLabel(phase ?? .idle),
       "listening": isRecording ? "true" : "false",
       "admission": admission == .immediate ? "immediate" : "capture_and_buffer",
+      "ptt_admission": admission == .immediate ? "immediate" : "capture_and_buffer",
+      "hub_ready": RealtimeHubController.shared.isTransportReady ? "true" : "false",
+      "screen_evidence": isRecording
+        ? RealtimeHubController.shared.automationScreenEvidenceAdmissionLabel()
+        : "unavailable",
     ]
   }
 
@@ -1978,9 +1991,10 @@ class PushToTalkManager: ObservableObject {
   /// screenshot tool; it must never take a second, pointer-selected screen capture.
   private func captureTurnScreenEvidence() -> CGImage? {
     guard let turnID = currentVoiceTurnID else { return nil }
-    if automationCaptureBypass {
+    if skipsCompositorCaptureForAutomation {
       // Deferring compositor capture would run after overlay expansion and include
       // Omi's own chrome. Skip it and record explicit unavailable skip-state.
+      // Realtime automation is excluded: it still needs the pre-overlay frame.
       RealtimeHubController.shared.installScreenEvidence(
         RealtimeScreenEvidenceCapture.unavailable(for: turnID, failure: .automationBypass))
       return nil

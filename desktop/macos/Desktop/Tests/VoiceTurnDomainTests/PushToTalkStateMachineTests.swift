@@ -285,6 +285,60 @@ final class PushToTalkStateMachineTests: XCTestCase {
         captureIDDuringCapture,
         "physical pre-overlay capture must run before captureStarted is published")
     }
+
+    @MainActor
+    func testRealtimeAutomationPathCapturesSynchronouslyBeforeCaptureStarted() {
+      let manager = PushToTalkManager.shared
+      let previousAuthOwner = UserDefaults.standard.object(forKey: .authUserId)
+      let previousAutomationOwner = UserDefaults.standard.object(forKey: .automationOwnerOverride)
+      manager.cleanup()
+      RealtimeHubController.shared.clearScreenGrounding()
+      UserDefaults.standard.set("ptt-realtime-owner", forKey: .authUserId)
+      UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+      let previousMute = ShortcutSettings.shared.pttMuteSystemAudio
+      let previousSounds = ShortcutSettings.shared.pttSoundsEnabled
+      ShortcutSettings.shared.pttMuteSystemAudio = false
+      ShortcutSettings.shared.pttSoundsEnabled = false
+      var compositorInvocations = 0
+      var captureIDDuringCapture: VoiceCaptureID?
+      manager.testingTurnScreenEvidenceCapture = { turnID in
+        compositorInvocations += 1
+        captureIDDuringCapture = VoiceTurnCoordinator.shared.model.turn?.captureID
+        return RealtimeScreenEvidenceCapture.unavailable(for: turnID, failure: .captureUnavailable)
+      }
+      defer {
+        manager.testingTurnScreenEvidenceCapture = nil
+        ShortcutSettings.shared.pttMuteSystemAudio = previousMute
+        ShortcutSettings.shared.pttSoundsEnabled = previousSounds
+        manager.cleanup()
+        RealtimeHubController.shared.clearScreenGrounding()
+        if let previousAuthOwner {
+          UserDefaults.standard.set(previousAuthOwner, forKey: .authUserId)
+        } else {
+          UserDefaults.standard.removeObject(forKey: .authUserId)
+        }
+        if let previousAutomationOwner {
+          UserDefaults.standard.set(previousAutomationOwner, forKey: .automationOwnerOverride)
+        } else {
+          UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+        }
+      }
+
+      let started = manager.beginRealtimePushToTalkForAutomation()
+      XCTAssertEqual(started["listening"], "true")
+      XCTAssertEqual(started["screen_evidence"], "unavailable")
+      XCTAssertNotEqual(started["screen_evidence"], "skipped")
+      XCTAssertEqual(compositorInvocations, 1)
+      XCTAssertNil(
+        captureIDDuringCapture,
+        "realtime automation must capture before captureStarted is published")
+      XCTAssertNotEqual(
+        RealtimeHubController.shared.screenEvidence?.descriptor.captureFailure,
+        .automationBypass)
+      XCTAssertEqual(
+        RealtimeHubController.shared.automationScreenEvidenceAdmissionLabel(),
+        "unavailable")
+    }
   #endif
 
   // The owner-boundary suite drives DEBUG-only seams (ownerBoundarySnapshot,
