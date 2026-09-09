@@ -198,9 +198,10 @@ export async function readHistory(
   olderCursor?: string,
   chatSessionId?: string
 ): Promise<HistoryResult> {
-  const boundary = olderCursor === undefined ? null : decodeCursor(olderCursor);
-  if (olderCursor !== undefined && boundary === null) return "invalid_cursor";
   const sessionFilter = chatSessionId ?? null;
+  const boundary =
+    olderCursor === undefined ? null : decodeCursor(olderCursor, sessionFilter);
+  if (olderCursor !== undefined && boundary === null) return "invalid_cursor";
 
   const result = await db
     .prepare(
@@ -245,7 +246,10 @@ export async function readHistory(
     messages,
     page:
       hasOlder && oldest !== undefined
-        ? { olderCursor: encodeCursor(oldest.position), hasOlder: true }
+        ? {
+            olderCursor: encodeCursor(oldest.position, sessionFilter),
+            hasOlder: true,
+          }
         : { olderCursor: null, hasOlder: false },
     capabilities: CHAT_CAPABILITIES,
   };
@@ -846,20 +850,47 @@ function isTerminal(event: GenerationEvent): boolean {
   );
 }
 
-function encodeCursor(position: number): string {
-  return btoa(String(position))
+function encodeCursor(position: number, chatSessionId: string | null): string {
+  return btoa(JSON.stringify({ p: position, s: chatSessionId }))
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replace(/=+$/, "");
 }
 
-function decodeCursor(cursor: string): number | null {
-  if (!/^[A-Za-z0-9_-]{1,32}$/.test(cursor)) return null;
+function decodeCursor(
+  cursor: string,
+  chatSessionId: string | null
+): number | null {
+  if (!/^[A-Za-z0-9_-]{1,512}$/.test(cursor)) return null;
   try {
     const standard = cursor.replaceAll("-", "+").replaceAll("_", "/");
     const padded = standard + "=".repeat((4 - (standard.length % 4)) % 4);
-    const value = Number(atob(padded));
-    return Number.isSafeInteger(value) && value > 0 ? value : null;
+    const parsed: unknown = JSON.parse(atob(padded));
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
+      return null;
+    }
+    const record = parsed as Record<string, unknown>;
+    if (
+      Object.keys(record).sort().join(",") !== "p,s" ||
+      typeof record.p !== "number" ||
+      !Number.isSafeInteger(record.p) ||
+      record.p <= 0 ||
+      !(record.s === null || typeof record.s === "string") ||
+      record.s !== chatSessionId
+    ) {
+      return null;
+    }
+    if (
+      typeof record.s === "string" &&
+      (record.s.length === 0 || record.s.length > 128)
+    ) {
+      return null;
+    }
+    return record.p;
   } catch {
     return null;
   }

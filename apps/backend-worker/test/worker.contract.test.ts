@@ -1320,6 +1320,106 @@ describe("worker request contract", () => {
     });
   });
 
+  test("chat history GET refuses an olderCursor from another session", async () => {
+    const insert = async (
+      id: string,
+      position: number,
+      chatSessionId: string | null
+    ) => {
+      await d1Mock
+        .prepare(
+          "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+        )
+        .bind(
+          id,
+          "test-account",
+          id,
+          position,
+          position,
+          JSON.stringify({
+            id,
+            text: id,
+            sender: "human",
+            type: "text",
+            createdAt: position,
+            updatedAt: position,
+            chatSessionId,
+            appId: null,
+            journalRevision: 0,
+            payloadHash: "sha256:test",
+            messageSource: "desktop_chat",
+            rating: null,
+            reported: false,
+            generationOutcome: null,
+            revision: String(position),
+            attachments: [],
+          })
+        )
+        .run();
+    };
+    await insert("session-bind-main-1", 1, null);
+    await insert("session-bind-main-2", 2, null);
+    await insert("session-bind-named-1", 3, "session-alpha");
+    await insert("session-bind-named-2", 4, "session-alpha");
+
+    const namedFirst = await fetchWorker(
+      "/v1/chat-messages?limit=1&chatSessionId=session-alpha",
+      { headers: authenticatedHeaders }
+    );
+    expect(namedFirst.status).toBe(200);
+    const namedBody = (await namedFirst.json()) as {
+      messages: Array<{ id: string }>;
+      page: { olderCursor: string | null; hasOlder: boolean };
+    };
+    expect(namedBody.messages.map((message) => message.id)).toEqual([
+      "session-bind-named-2",
+    ]);
+    expect(namedBody.page.hasOlder).toBe(true);
+    const namedCursor = namedBody.page.olderCursor;
+    expect(namedCursor).not.toBeNull();
+
+    const crossed = await fetchWorker(
+      `/v1/chat-messages?limit=2&olderCursor=${encodeURIComponent(
+        namedCursor!
+      )}`,
+      { headers: authenticatedHeaders }
+    );
+    expect(crossed.status).toBe(400);
+    expect((await crossed.json()) as unknown).toEqual({
+      error: {
+        code: "bad_request",
+        retryable: false,
+        action: "refresh_history",
+      },
+    });
+
+    const namedOlder = await fetchWorker(
+      `/v1/chat-messages?limit=2&olderCursor=${encodeURIComponent(
+        namedCursor!
+      )}&chatSessionId=session-alpha`,
+      { headers: authenticatedHeaders }
+    );
+    expect(namedOlder.status).toBe(200);
+    expect(
+      (
+        (await namedOlder.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["session-bind-named-1"]);
+
+    const legacyPosition = await fetchWorker(
+      "/v1/chat-messages?olderCursor=MTA",
+      { headers: authenticatedHeaders }
+    );
+    expect(legacyPosition.status).toBe(400);
+    expect((await legacyPosition.json()) as unknown).toEqual({
+      error: {
+        code: "bad_request",
+        retryable: false,
+        action: "refresh_history",
+      },
+    });
+  });
+
   test("chat history reads persisted messages from D1 without resolving the DO", async () => {
     const response = await fetchWorker("/v1/chat-messages?limit=100", {
       headers: authenticatedHeaders,
