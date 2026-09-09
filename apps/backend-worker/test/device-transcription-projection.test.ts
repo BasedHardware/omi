@@ -198,6 +198,21 @@ describe("device transcription client projection", () => {
     expect(recordingListSpeech("Stored speech", null)).toBe("Stored speech");
   });
 
+  test("list titles skip malformed segment windows like production Listen 0065", () => {
+    const segments = [
+      "invalid",
+      { start: 0, end: 0.2, text: 1 },
+      { start: 0.2, end: 0.4, text: "Recorded speech" },
+    ];
+    expect(recordingListSpeech("Stored speech", segments)).toBe(
+      "Recorded speech"
+    );
+    expect(recordingTranscriptSpeech("Stored speech", segments)).toBe(
+      "Stored speech"
+    );
+    expect(recordingTranscriptSpeech("", segments)).toBe("");
+  });
+
   test("list titles visible-trim kept Whisper segments before join", () => {
     const segments = [
       { start: 0, end: 0.1, text: "First words\u0085" },

@@ -266,6 +266,7 @@ function joinWellFormedSegmentTexts(
       typeof segment !== "object" ||
       Array.isArray(segment)
     ) {
+      if (skipEmptyAfterTrim) continue;
       return null;
     }
     const text = (segment as { text?: unknown }).text;
@@ -273,7 +274,10 @@ function joinWellFormedSegmentTexts(
       if (!skipEmptyAfterTrim) parts.push("");
       continue;
     }
-    if (typeof text !== "string") return null;
+    if (typeof text !== "string") {
+      if (skipEmptyAfterTrim) continue;
+      return null;
+    }
     if (skipEmptyAfterTrim) {
       const visible = visibleTranscriptText(text).slice(0, 240);
       if (visible === "") continue;

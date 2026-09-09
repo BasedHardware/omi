@@ -310,6 +310,40 @@ test("recording titles use skip-empty segment speech when stored text is also pr
   expect(rows[0]?.overview).not.toContain("Stored speech");
 });
 
+test("recording titles skip malformed segment windows like production Listen 0065", async () => {
+  const session = await recording();
+  await completeDeviceSession(env.DB, "record-owner", session.id, 102);
+  await env.DB.prepare(
+    "UPDATE device_transcriptions SET state = 'completed', text = ?, segments = ? WHERE session_id = ?"
+  )
+    .bind(
+      "Stored speech",
+      JSON.stringify([
+        "invalid",
+        { start: 0, end: 0.2, text: 1 },
+        { start: 0.2, end: 0.4, text: "Recorded speech" },
+      ]),
+      session.id
+    )
+    .run();
+  const rows = await readConversations(env.DB, "record-owner");
+  expect(rows[0]).toMatchObject({
+    id: `recording:${session.id}`,
+    title: "Recorded speech",
+    overview: "Recorded speech",
+    status: "completed",
+  });
+  expect(rows[0]?.title).not.toContain("Stored speech");
+  expect(
+    projectDeviceTranscription(
+      await readDeviceTranscription(env.DB, "record-owner", session.id)
+    )
+  ).toMatchObject({
+    state: "completed",
+    text: "Stored speech",
+  });
+});
+
 test("recording titles stay empty when a stored segment array has no visible speech", async () => {
   const session = await recording();
   await completeDeviceSession(env.DB, "record-owner", session.id, 102);
