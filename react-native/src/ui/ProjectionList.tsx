@@ -62,8 +62,7 @@ export const ProjectionRow = memo(function ProjectionRow({
     conversation !== null
       ? conversationCaptureCopy(conversation.capturedAtMs)
       : null;
-  const synthesis =
-    !home && item.kind === 'memory' ? memorySynthesisCopy(item) : null;
+  const synthesis = item.kind === 'memory' ? memorySynthesisCopy(item) : null;
   return (
     <View
       style={[

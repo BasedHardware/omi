@@ -1621,7 +1621,7 @@ test('wide Home search memory rows keep GET synthesized-memory chrome instead of
   expect(tree).toContain('Synthesized memory');
 });
 
-test('compact Home current memory rows omit synthesized-memory chrome', () => {
+test('compact Home current memory rows keep GET synthesized-memory chrome', () => {
   const renderer = render(
     <ProjectionRow
       home
@@ -1645,7 +1645,7 @@ test('compact Home current memory rows omit synthesized-memory chrome', () => {
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('A walk.');
   expect(tree).toContain('1 citation');
-  expect(tree).not.toContain('Synthesized memory');
+  expect(tree).toContain('Synthesized memory');
 });
 
 test('a zero wide Home search conversation timestamp says Time unavailable', () => {
