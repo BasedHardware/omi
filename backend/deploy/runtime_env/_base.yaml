@@ -221,6 +221,15 @@ environment_shared:
         --vpc-egress: private-ranges-only
     services:
       backend-integration:
+        # D2 (plan-source-of-truth): plan quotas come only from backend/config/plan_catalog.json.
+        # These legacy overlays outranked the catalog at runtime (utils/subscription.py
+        # _basic_transcription_overlay); the deploy must strip them and the live check
+        # must find them absent.
+        forbidden_env:
+        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
@@ -298,6 +307,15 @@ environment_shared:
           GCP_LOCATION:
             value: us-central1
       backend:
+        # D2 (plan-source-of-truth): plan quotas come only from backend/config/plan_catalog.json.
+        # These legacy overlays outranked the catalog at runtime (utils/subscription.py
+        # _basic_transcription_overlay); the deploy must strip them and the live check
+        # must find them absent.
+        forbidden_env:
+        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         capabilities:
         - conversation.finalize.persisted
         - memory.canonical.mutate
@@ -423,6 +441,15 @@ environment_shared:
             value: canonical_memory_atoms
             category: memory_rollout
       backend-sync-backfill:
+        # D2 (plan-source-of-truth): plan quotas come only from backend/config/plan_catalog.json.
+        # These legacy overlays outranked the catalog at runtime (utils/subscription.py
+        # _basic_transcription_overlay); the deploy must strip them and the live check
+        # must find them absent.
+        forbidden_env:
+        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
@@ -519,6 +546,15 @@ environment_shared:
             category: memory_rollout
         provisional: true
       backend-sync:
+        # D2 (plan-source-of-truth): plan quotas come only from backend/config/plan_catalog.json.
+        # These legacy overlays outranked the catalog at runtime (utils/subscription.py
+        # _basic_transcription_overlay); the deploy must strip them and the live check
+        # must find them absent.
+        forbidden_env:
+        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         capabilities:
         - conversation.finalize.persisted
         - memory.canonical.mutate

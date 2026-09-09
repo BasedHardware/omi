@@ -41,6 +41,15 @@ meaning; reading those as a finite zero would hand every Free user a zero allowa
 is bridged too — charts set `300`, so the zero branch is latent, but a deployed `0` there would make
 `has_transcription_credits` false for every Free user.
 
+**D2 (2026-09-09): no serving identity carries a `BASIC_TIER_*` overlay any more.** They were deleted from both
+backend-listen charts and both pusher charts, and the Cloud Run services declare them as `forbidden_env` in
+`backend/deploy/runtime_env/_base.yaml`, which the runtime-env validator turns into a required `--remove-env-vars`
+entry in `.github/actions/deploy-backend-stack` / `sync-backfill-lifecycle` and an absence check against the live
+service. `backend/tests/unit/test_plan_quota_env_retirement.py` pins all three. The `_legacy_overlay` bridge stays
+in code only until the prod dispatch has removed the deployed values (the live check proves it); delete the bridge
+with its tests in the follow-up, never before. Behaviour change on that dispatch: prod `GET /v1/users/me/subscription`
+stops advertising 600 free minutes and reports the catalog's 300, which the listen plane already enforced (P9 ruling).
+
 The **chat overlays** (`FREE/NEO/OPERATOR_CHAT_QUESTIONS_PER_MONTH`, `ARCHITECT_CHAT_COST_USD_PER_MONTH`) and
 the **Plus transcription overlay** are deliberately **not** bridged: no chart or deploy file sets any of them,
 so there is no deployed configuration to protect, and under David's ruling a finite `0` means zero. That is

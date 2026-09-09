@@ -364,6 +364,10 @@ overlay:
             category: rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
+        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         secrets:
           SERVICE_ACCOUNT_JSON:
             secret: SERVICE_ACCOUNT_JSON
@@ -417,6 +421,10 @@ overlay:
             category: rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
+        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         secrets:
           SERVICE_ACCOUNT_JSON:
             secret: SERVICE_ACCOUNT_JSON
@@ -470,6 +478,10 @@ overlay:
             category: rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
+        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         secrets:
           SERVICE_ACCOUNT_JSON:
             secret: SERVICE_ACCOUNT_JSON
