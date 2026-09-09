@@ -11,7 +11,26 @@ class WhisperTranscriber:
     Feature gate: only importable/usable when a runner is provided or whisper is installed.
     """
 
-    def __init__(self, *, model_name: str = "tiny.en", runner: Optional[Callable[[bytes], str]] = None) -> None:
+    def __init__(
+        self,
+        *,
+        model_name: str = "tiny.en",
+        runner: Optional[Callable[[bytes], str]] = None,
+        batch_seconds: float = 5.0,
+    ) -> None:
+        """Batch 0.1-30 seconds of 16 kHz mono s16le PCM before inference.
+
+        This is an audio-duration threshold, not a wall-clock deadline. The
+        complete queue chunk that reaches the threshold is retained, just as
+        with the default five-second batching behavior.
+        """
+        if not (isinstance(batch_seconds, (int, float)) and not isinstance(batch_seconds, bool)) or not (
+            0.1 <= batch_seconds <= 30.0
+        ):
+            raise ValueError("batch_seconds must be between 0.1 and 30 seconds")
+        self.batch_seconds = float(batch_seconds)
+        # Quantize to complete PCM samples, never an odd number of bytes (16000 samples/sec * 2 bytes/sample).
+        self._target_bytes = int(16000 * self.batch_seconds) * 2
         self.model_name = model_name
         self.runner = runner
         self._model = None
@@ -32,7 +51,7 @@ class WhisperTranscriber:
     ) -> None:
         # Batch PCM for a simple offline-style loop (parity surface, not ultra-low-latency).
         buffer = bytearray()
-        target = 16000 * 2 * 5  # ~5s mono s16le
+        target = self._target_bytes
         while True:
             chunk = await audio_queue.get()
             buffer.extend(chunk)
