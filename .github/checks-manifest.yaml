@@ -897,6 +897,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "hermetic fixture coverage for the duplicate-route scanner: shadowed duplicate fails with the colliding path, unique routes pass, same path on different apps is not a duplicate, api_route methods expand"
 
+  - id: device-typescript-tests
+    command: ["bun", "test", "./sdks/device/typescript/src"]
+    triggers: ["sdks/device/typescript/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "BLE setup failures must release listeners and connections; covers issue 13003."
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
