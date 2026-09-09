@@ -1658,6 +1658,53 @@ describe("worker request contract", () => {
     expect(accountCalls).toEqual([]);
   });
 
+  test("chat history GET pages by created_at then id", async () => {
+    await insertChatMessage({
+      id: "history-later-clock",
+      accountId: "test-account",
+      text: "Later clock first position",
+      createdAt: 500,
+      position: 1,
+      chatSessionId: "history-clock-skew",
+    });
+    await insertChatMessage({
+      id: "history-earlier-clock",
+      accountId: "test-account",
+      text: "Earlier clock last position",
+      createdAt: 100,
+      position: 2,
+      chatSessionId: "history-clock-skew",
+    });
+
+    const newest = await fetchWorker(
+      "/v1/chat-messages?limit=1&chatSessionId=history-clock-skew",
+      { headers: authenticatedHeaders }
+    );
+    expect(newest.status).toBe(200);
+    const newestBody = (await newest.json()) as {
+      messages: Array<{ id: string }>;
+      page: { olderCursor: string | null; hasOlder: boolean };
+    };
+    expect(newestBody.messages.map((message) => message.id)).toEqual([
+      "history-later-clock",
+    ]);
+    expect(newestBody.page.hasOlder).toBe(true);
+    expect(newestBody.page.olderCursor).not.toBeNull();
+
+    const older = await fetchWorker(
+      `/v1/chat-messages?limit=2&olderCursor=${encodeURIComponent(
+        newestBody.page.olderCursor!
+      )}&chatSessionId=history-clock-skew`,
+      { headers: authenticatedHeaders }
+    );
+    expect(older.status).toBe(200);
+    expect(
+      (
+        (await older.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["history-earlier-clock"]);
+  });
+
   test("chat history GET maps an undecodable olderCursor to refresh_history", async () => {
     const invalidCursor = await fetchWorker(
       "/v1/chat-messages?olderCursor=not-a-cursor",

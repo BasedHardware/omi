@@ -1266,6 +1266,10 @@ describe("static PostgreSQL schema contract", () => {
     expect(chatMainSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.save_conversation_union_cursor");
     expect(chatMainSql).toContain("p_chat_session_id IS NULL OR p_chat_session_id='chat-main'");
     expect(chatMainSql).toContain("btrim(m.chat_session_id)='chat-main'");
+    expect(chatMainSql).toContain("ORDER BY m.created_at DESC, m.id DESC");
+    expect(chatMainSql).toContain(
+      "m.created_at<p_older_created_at OR (m.created_at=p_older_created_at AND m.id<p_older_id)",
+    );
     expect(chatMainSql).not.toContain("THEN 'Chat'");
     expect(chatMainSql).toContain("chr(133)");
     expect(chatMainSql).toContain("chr(160)");

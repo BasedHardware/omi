@@ -214,18 +214,20 @@ export async function readHistory(
            )} AS session_key
          FROM chat_messages WHERE account_id = ?
        ) AS normalized
-       WHERE (? IS NULL OR position < ?)
+       WHERE (? IS NULL OR created_at < ? OR (created_at = ? AND id < ?))
          AND CASE WHEN ? IS NULL
            THEN NOT (typeof(session_key) = 'text' AND length(CAST(session_key AS BLOB)) > 0)
            ELSE typeof(session_key) = 'text' AND length(CAST(session_key AS BLOB)) > 0 AND session_key = ?
          END
-       ORDER BY position DESC
+       ORDER BY created_at DESC, id DESC
        LIMIT ?`
     )
     .bind(
       accountId,
-      boundary,
-      boundary,
+      boundary?.createdAt ?? null,
+      boundary?.createdAt ?? 0,
+      boundary?.createdAt ?? 0,
+      boundary?.id ?? "",
       sessionFilter,
       sessionFilter,
       limit + 1
@@ -247,7 +249,11 @@ export async function readHistory(
     page:
       hasOlder && oldest !== undefined
         ? {
-            olderCursor: encodeCursor(oldest.position, sessionFilter),
+            olderCursor: encodeCursor(
+              oldest.createdAt,
+              oldest.id,
+              sessionFilter
+            ),
             hasOlder: true,
           }
         : { olderCursor: null, hasOlder: false },
@@ -850,9 +856,13 @@ function isTerminal(event: GenerationEvent): boolean {
   );
 }
 
-function encodeCursor(position: number, chatSessionId: string | null): string {
+function encodeCursor(
+  createdAt: number,
+  id: string,
+  chatSessionId: string | null
+): string {
   const bytes = new TextEncoder().encode(
-    JSON.stringify({ p: position, s: chatSessionId })
+    JSON.stringify({ t: createdAt, i: id, s: chatSessionId })
   );
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -865,7 +875,7 @@ function encodeCursor(position: number, chatSessionId: string | null): string {
 function decodeCursor(
   cursor: string,
   chatSessionId: string | null
-): number | null {
+): { createdAt: number; id: string } | null {
   if (!/^[A-Za-z0-9_-]{1,1024}$/.test(cursor)) return null;
   try {
     const standard = cursor.replaceAll("-", "+").replaceAll("_", "/");
@@ -887,10 +897,13 @@ function decodeCursor(
     }
     const record = parsed as Record<string, unknown>;
     if (
-      Object.keys(record).sort().join(",") !== "p,s" ||
-      typeof record.p !== "number" ||
-      !Number.isSafeInteger(record.p) ||
-      record.p <= 0 ||
+      Object.keys(record).sort().join(",") !== "i,s,t" ||
+      typeof record.t !== "number" ||
+      !Number.isSafeInteger(record.t) ||
+      record.t < 0 ||
+      typeof record.i !== "string" ||
+      record.i.length < 1 ||
+      record.i.length > 256 ||
       !(record.s === null || typeof record.s === "string") ||
       record.s !== chatSessionId
     ) {
@@ -902,7 +915,7 @@ function decodeCursor(
     ) {
       return null;
     }
-    return record.p;
+    return { createdAt: record.t, id: record.i };
   } catch {
     return null;
   }
