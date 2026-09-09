@@ -213,6 +213,7 @@ export async function readHistory(
              "chatSessionId"
            )} AS session_key
          FROM chat_messages WHERE account_id = ?
+           AND ${recoveredPayloadTextKeySql("chat_messages", "appId")} IS NULL
        ) AS normalized
        WHERE (? IS NULL OR created_at < ? OR (created_at = ? AND id < ?))
          AND CASE WHEN ? IS NULL

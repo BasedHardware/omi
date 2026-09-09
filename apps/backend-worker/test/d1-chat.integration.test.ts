@@ -196,6 +196,48 @@ describe("D1-authoritative chat persistence", () => {
     expect(body.messages[0]!.sender).toBe("human");
   });
 
+  test("history GET omits admitted app-scoped rows", async () => {
+    const unscoped = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(chatCreate("d1-unscoped-main", "main speech")),
+    });
+    const scoped = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("d1-app-scoped", "plugin speech"),
+        appId: "legacy-app",
+      }),
+    });
+    expect(unscoped.status).toBe(201);
+    expect(scoped.status).toBe(201);
+    expect(
+      (
+        await env.DB.prepare("SELECT id FROM chat_messages WHERE id = ?")
+          .bind("d1-app-scoped")
+          .first<{ id: string }>()
+      )?.id
+    ).toBe("d1-app-scoped");
+
+    const history = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(history.status).toBe(200);
+    expect(
+      ((await history.json()) as { messages: Array<{ id: string }> }).messages.map(
+        (message) => message.id
+      )
+    ).toEqual(["d1-unscoped-main"]);
+
+    const rows = await readConversations(env.DB, "test-account");
+    expect(rows.find((row) => row.id === MAIN_CONVERSATION_ID)).toMatchObject({
+      id: MAIN_CONVERSATION_ID,
+      title: "main speech",
+      overview: "main speech",
+    });
+  });
+
   test("history GET stays on the main session unless chatSessionId is requested", async () => {
     await fetchWorker("/v1/chat-messages", {
       method: "POST",
@@ -816,6 +858,53 @@ describe("D1 chat projects an honest conversation list", () => {
       startedAt: 100,
       finishedAt: null,
       status: "in_progress",
+    });
+  });
+
+  test("chat list omits app-scoped rows", async () => {
+    const accountId = "app-scoped-chat-list";
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind(
+        "app-scoped-plugin",
+        accountId,
+        "Plugin speech",
+        900,
+        2,
+        JSON.stringify({ chatSessionId: null, appId: "legacy-app" })
+      )
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind(
+        "app-scoped-named",
+        accountId,
+        "Named plugin speech",
+        800,
+        3,
+        JSON.stringify({ chatSessionId: "plugin-only", appId: "legacy-app" })
+      )
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind(
+        "unscoped-main",
+        accountId,
+        "Main speech",
+        100,
+        1,
+        JSON.stringify({ chatSessionId: null, appId: null })
+      )
+      .run();
+    const rows = await readConversations(env.DB, accountId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: MAIN_CONVERSATION_ID,
+      title: "Main speech",
+      overview: "Main speech",
     });
   });
 

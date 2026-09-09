@@ -90,6 +90,7 @@ export async function readConversations(
              "chatSessionId"
            )} AS session_key
          FROM chat_messages WHERE account_id = ?
+           AND ${recoveredPayloadTextKeySql("chat_messages", "appId")} IS NULL
        ), sessions AS (
          SELECT message_id, position, sender, created_at, generation_outcome, text,
            CASE WHEN typeof(session_key) = 'text' AND length(CAST(session_key AS BLOB)) > 0

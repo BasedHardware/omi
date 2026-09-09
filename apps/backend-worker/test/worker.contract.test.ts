@@ -276,6 +276,7 @@ const insertChatMessage = async (input: {
   createdAt: number;
   position: number;
   chatSessionId: string | null;
+  appId?: string | null;
   sender?: "human" | "ai";
   generationOutcome?: "completed" | "cancelled" | null;
 }) => {
@@ -302,7 +303,7 @@ const insertChatMessage = async (input: {
         createdAt: input.createdAt,
         updatedAt: input.createdAt,
         chatSessionId: input.chatSessionId,
-        appId: null,
+        appId: input.appId ?? null,
         journalRevision: 0,
         payloadHash: "sha256:test",
         messageSource:
@@ -1703,6 +1704,72 @@ describe("worker request contract", () => {
         (await older.json()) as { messages: Array<{ id: string }> }
       ).messages.map((message) => message.id)
     ).toEqual(["history-earlier-clock"]);
+  });
+
+  test("chat GET history and list omit app-scoped rows", async () => {
+    await insertChatMessage({
+      id: "app-scoped-main",
+      accountId: "test-account",
+      text: "Plugin speech",
+      createdAt: 900,
+      position: 2,
+      chatSessionId: null,
+      appId: "legacy-app",
+    });
+    await insertChatMessage({
+      id: "app-scoped-padded",
+      accountId: "test-account",
+      text: "Whitespace app speech",
+      createdAt: 800,
+      position: 3,
+      chatSessionId: null,
+      appId: " ",
+    });
+    await insertChatMessage({
+      id: "app-scoped-named",
+      accountId: "test-account",
+      text: "Named plugin speech",
+      createdAt: 700,
+      position: 4,
+      chatSessionId: "plugin-only",
+      appId: "legacy-app",
+    });
+    await insertChatMessage({
+      id: "unscoped-main",
+      accountId: "test-account",
+      text: "Main speech",
+      createdAt: 100,
+      position: 1,
+      chatSessionId: null,
+    });
+
+    const history = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(history.status).toBe(200);
+    expect(
+      (
+        (await history.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["unscoped-main"]);
+
+    const listed = await fetchWorker("/v1/conversations", {
+      headers: authenticatedHeaders,
+    });
+    expect(listed.status).toBe(200);
+    const page = (await listed.json()) as {
+      items: Array<{ id: string; title: string; overview: string }>;
+    };
+    expect(page.items.find((item) => item.id === "chat:chat-main")).toEqual(
+      expect.objectContaining({
+        id: "chat:chat-main",
+        title: "Main speech",
+        overview: "Main speech",
+      })
+    );
+    expect(
+      page.items.find((item) => item.id === "chat:plugin-only")
+    ).toBeUndefined();
   });
 
   test("chat history GET maps an undecodable olderCursor to refresh_history", async () => {

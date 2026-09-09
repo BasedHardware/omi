@@ -1267,6 +1267,7 @@ describe("static PostgreSQL schema contract", () => {
     expect(chatMainSql).toContain("p_chat_session_id IS NULL OR p_chat_session_id='chat-main'");
     expect(chatMainSql).toContain("btrim(m.chat_session_id)='chat-main'");
     expect(chatMainSql).toContain("ORDER BY m.created_at DESC, m.id DESC");
+    expect(chatMainSql).toContain("WHERE m.account_id=v_account AND m.app_id IS NULL");
     expect(chatMainSql).toContain(
       "m.created_at<p_older_created_at OR (m.created_at=p_older_created_at AND m.id<p_older_id)",
     );
@@ -1314,6 +1315,7 @@ describe("static PostgreSQL schema contract", () => {
     expect(visibleOverviewSql).toContain("WHEN length(btrim(m.text,v_ws))>0 THEN 0 ELSE 1 END, m.created_at DESC, m.id DESC");
     expect(visibleOverviewSql).not.toContain("(array_agg(m.text ORDER BY m.created_at DESC, m.id DESC))[1] AS last_text");
     expect(visibleOverviewSql).toContain("WHEN m.sender='human' AND length(btrim(m.text,v_ws))>0 THEN 0");
+    expect(visibleOverviewSql).toContain("WHERE m.account_id=v_account AND m.app_id IS NULL");
     expect(visibleOverviewSql).not.toContain("THEN 'Chat'");
     expect(visibleOverviewSql).toContain("chr(133)");
     const skipEmptyListenSql = migrationSql.find((migration) => migration.version === 65)!.sql;
