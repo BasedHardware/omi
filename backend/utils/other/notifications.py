@@ -905,8 +905,24 @@ async def _send_bulk_summary_notification(
     return True
 
 
+def should_send_wear_device_reminder() -> bool:
+    """Daily "wear your Omi" blast.
+
+    Issue #3328: current devices record onboard when BLE drops, so a morning
+    wear/disconnect nag does not recover lost audio and causes notification
+    fatigue. Keep the helper so the cron can be re-enabled without hunting
+    copy. Max 1/day was already true of the 08:00 cron; the product ask is
+    to stop sending them.
+    """
+    return False
+
+
 async def send_daily_notification() -> None:
     try:
+        if not should_send_wear_device_reminder():
+            logger.info('Skipping daily wear reminder (#3328)')
+            return None
+
         morning_alert_title = "omi says"
         morning_alert_body = "Wear your omi and capture your conversations today."
         morning_target_time = "08:00"
