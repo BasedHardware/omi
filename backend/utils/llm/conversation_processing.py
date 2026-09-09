@@ -35,7 +35,7 @@ from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
 from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_MINIMUM_TOKENS,
     EXPLICIT_CACHE_OPTIONS,
-    GPT56_EXPLICIT_CACHE_ENABLED_ENV,
+    GPT56_EXPLICIT_CACHE_ENABLED_ENV,  # noqa: F401  — compatibility re-export; test_conversation_structure_timezone reads it via this module
     explicit_cache_switch_enabled,
     has_cacheable_prefix,
     marked_prefix_request,
@@ -1649,7 +1649,7 @@ Respond in {language_code}.'''
     # The None/legacy split keys on gateway mode (like get_transcript_structure) so
     # gateway-on requests never fall back to a legacy implicit routing key.
     cache_key = marked_key or (None if gateway_mode_enabled else 'omi-app-result')
-    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
+    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled and not has_byok_keys() else None
     app_result_llm = get_llm('conv_app_result', cache_key=cache_key, prompt_cache_options=cache_options)
     response = app_result_llm.invoke(marked_messages or prompt)
     content = strip_speaker_placeholders(_content_str(response).replace('```json', '').replace('```', ''))

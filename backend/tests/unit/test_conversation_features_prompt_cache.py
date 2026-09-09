@@ -140,18 +140,25 @@ def test_app_result_cache_key_is_content_derived_stable_and_versioned():
 
 
 @pytest.mark.parametrize(
-    'kwargs',
+    ('kwargs', 'expected_options'),
     [
-        {'memory_prompt': SHORT_TASK},  # prefix under the provider floor
-        {'byok': True},  # a BYOK key can route this feature off GPT-5.6
-        {'explicit': False},  # kill switch
+        # Prefix under the provider floor: no breakpoint is bought, but the request
+        # still carries the explicit-mode opt-out so the provider cannot bill an
+        # unreadable automatic cache write.
+        ({'memory_prompt': SHORT_TASK}, EXPLICIT_CACHE_OPTIONS),
+        # A BYOK key can route this feature off GPT-5.6, where a typed cache field
+        # is not a valid content part: no cache field at all.
+        ({'byok': True}, None),
+        # Kill switch: the field disappears with the feature.
+        ({'explicit': False}, None),
     ],
 )
-def test_app_result_falls_back_to_the_unmarked_request(kwargs):
-    """Every guard must land on a plain request, never on an unreadable cache write."""
+def test_app_result_falls_back_to_the_unmarked_request(kwargs, expected_options):
+    """Every guard must land on an unmarked request, never on an unreadable cache write."""
     captured = _run_app_result(**kwargs)
     assert isinstance(captured['payload'], str)
     assert captured['llm_kwargs']['cache_key'] is None
+    assert captured['llm_kwargs']['prompt_cache_options'] == expected_options
 
 
 def test_app_result_keeps_the_legacy_routing_key_off_gateway_mode():
