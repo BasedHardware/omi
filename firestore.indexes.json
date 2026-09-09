@@ -1667,6 +1667,28 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "daily_summary_enabled",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "daily_summary_hour_local",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "time_zone",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [

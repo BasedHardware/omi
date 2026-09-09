@@ -32,7 +32,7 @@ preconditions:
 steps:
   - id: S1
     name: Verify Home tab is active
-    do: "Verify the app opens on the conversation. The top bar shows Home, Memories, Tasks, Rewind and Apps pills. Below it, a search bar with the placeholder 'Search what you've seen and heard…' sits above the chat panel, whose own composer ('Ask a follow-up…') is pinned under the transcript. Typing in the search bar swaps the panel to live-narrowing results; clearing it returns to the chat."
+    do: "Verify the app opens on the conversation. The top bar shows Home, Memories, Tasks, Rewind and Apps pills. Below it, a search bar with the placeholder 'Search what you've seen and heard…' sits above the chat panel, whose own composer ('Ask Omi') is pinned under the transcript. Typing in the search bar swaps the panel to live-narrowing results; clearing it returns to the chat."
     expect:
       interactive_count: { min: 6 }
       text_visible:

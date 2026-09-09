@@ -389,6 +389,16 @@ OMI_TRANSCRIPTION_LATENCY_SECONDS = Histogram(
     buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300),
 )
 
+# Audio duration actually submitted for transcription (from PCM byte length or
+# WAV headers), not wall-clock latency: query as minutes to compare provider
+# STT volume. Skips deployment_version to keep cardinality at provider+route+
+# outcome+platform.
+OMI_TRANSCRIPTION_AUDIO_SECONDS_TOTAL = Counter(
+    'omi_voice_transcription_audio_seconds_total',
+    'Audio seconds submitted for accepted prerecorded transcription journeys (measured duration, not latency)',
+    ['route', 'provider', 'outcome', 'client_platform'],
+)
+
 OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL = Counter(
     'omi_sync_transcription_segments_total',
     'Terminal semantic outcomes for sync transcription segments',
@@ -410,6 +420,15 @@ OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL = Counter(
 OMI_LIVE_STT_ACCEPTED_TOTAL = Counter(
     'omi_live_stt_accepted_total',
     'Accepted live-STT attempts by bounded provider, client platform, and deployment environment',
+    ['provider', 'client_platform', 'deployment_environment'],
+)
+
+# VAD-measured speech seconds for backend-provider live sessions, metered once
+# per speech-delta flush: speech sent to the provider, not wall-clock session
+# length and not fair-use transcription_seconds.
+OMI_LIVE_STT_AUDIO_SECONDS_TOTAL = Counter(
+    'omi_live_stt_audio_seconds_total',
+    'VAD speech seconds flushed for backend-provider live-STT sessions (speech sent, not wall-clock)',
     ['provider', 'client_platform', 'deployment_environment'],
 )
 

@@ -31,3 +31,19 @@ def test_screenshot_alias_output(config_path, cli_runner, tmp_path, key, write_f
         assert payload["result"][key + "_chars"] == len(encoded)
     else:
         assert payload[key] == encoded
+
+
+@pytest.mark.parametrize("metadata", [None, "", 7, {"width": 100}, [1, 2]])
+def test_screenshot_output_preserves_non_payload_data(config_path, cli_runner, tmp_path, metadata):
+    _configure_local_profile(config_path)
+    encoded = base64.b64encode(b"synthetic pixels").decode()
+    output = tmp_path / "shot.jpg"
+    with respx.mock(base_url=FAKE_LOCAL_URL) as router:
+        router.post("/v1/local/tool").respond(json={"image_base64": encoded, "data": metadata})
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "9", "--output", str(output)])
+    assert result.exit_code == 0, result.output
+    assert output.read_bytes() == b"synthetic pixels"
+    payload = json.loads(result.stdout)["result"]
+    assert payload["data"] == metadata
+    assert "data_redacted" not in payload
+    assert "image_base64" not in payload
