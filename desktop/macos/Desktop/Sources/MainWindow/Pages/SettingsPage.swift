@@ -373,6 +373,9 @@ struct SettingsContentView: View {
   @State var localModelOptions: [String] = []
   @State var isFetchingLocalModels = false
   @State var localModelsFetchFailed = false
+  // Not private: read from the localProviderFields computed view in the
+  // SettingsContentView+FloatingBarAndChat.swift extension file.
+  @FocusState var isLocalBaseURLFieldFocused: Bool
   @AppStorage("realtimeOmniProvider") var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
   @AppStorage("askModeEnabled") var askModeEnabled = false
   @AppStorage("aiChatWorkingDirectory") var aiChatWorkingDirectory: String = ""

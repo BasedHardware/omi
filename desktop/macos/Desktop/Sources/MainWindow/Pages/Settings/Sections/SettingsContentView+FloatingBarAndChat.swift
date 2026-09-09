@@ -188,7 +188,20 @@ extension SettingsContentView {
           .foregroundColor(Ink.secondary)
         TextField(AIProvider.defaultLocalBaseURL, text: $localLLMBaseURL)
           .textFieldStyle(.roundedBorder)
-          .onSubmit { fetchLocalModelOptions() }
+          .focused($isLocalBaseURLFieldFocused)
+          .onSubmit {
+            fetchLocalModelOptions(onComplete: restartLocalBridgesIfActive)
+          }
+          // Enter (onSubmit) commits the field, but a user who just clicks
+          // away without pressing Enter would otherwise keep the old bridge
+          // talking to the old server indefinitely — the exact stale-process
+          // bug restartLocalBridgesIfActive was added to fix for the model
+          // fields (see 5f3abca24a), just missed here for Base URL.
+          .onChange(of: isLocalBaseURLFieldFocused) { wasFocused, isFocused in
+            if wasFocused && !isFocused {
+              fetchLocalModelOptions(onComplete: restartLocalBridgesIfActive)
+            }
+          }
       }
 
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
@@ -301,7 +314,12 @@ extension SettingsContentView {
   /// empty) on any failure — the server may be asleep, off-network, or the
   /// base URL may not be a real server yet, none of which should block Local
   /// from being usable via manual model-id entry.
-  func fetchLocalModelOptions() {
+  /// - Parameter onComplete: runs on the main actor after the fetch settles,
+  ///   success or failure. Callers that change a provider-relevant field
+  ///   (Base URL) pass `restartLocalBridgesIfActive` here so the restart
+  ///   happens after the model list (and possibly the auto-selected model
+  ///   id) has settled, not racing ahead of it.
+  func fetchLocalModelOptions(onComplete: (() -> Void)? = nil) {
     guard !isFetchingLocalModels else { return }
     isFetchingLocalModels = true
     localModelsFetchFailed = false
@@ -328,12 +346,14 @@ extension SettingsContentView {
           if currentModelId.isEmpty, let firstModel = models.first {
             self.localLLMModelID = firstModel
           }
+          onComplete?()
         }
       } catch {
         await MainActor.run {
           self.localModelOptions = []
           self.isFetchingLocalModels = false
           self.localModelsFetchFailed = true
+          onComplete?()
         }
       }
     }
