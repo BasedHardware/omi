@@ -3471,7 +3471,7 @@ class PushToTalkManager: ObservableObject {
       return run
     }
     run.text = text
-    run.completion = voiceTypeSession.deliver(text)
+    run.completion = await voiceTypeSession.deliver(text)
     return run
   }
 

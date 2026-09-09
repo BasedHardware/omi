@@ -42,8 +42,8 @@ final class VoiceTypeSession: ObservableObject {
     case none
     /// The exact insertion was read back from the captured field.
     case pasted(String)
-    /// Paste was dispatched to the captured app, but its result is asynchronous
-    /// and has not been verified. Clipboard restoration still belongs to the sink.
+    /// Paste was dispatched to the captured app and the editor never showed it
+    /// landing. Clipboard restoration still belongs to the sink.
     case pasteRequested(String)
     /// Focus moved (or the paste could not be posted), so the text was left on
     /// the clipboard for the user instead of being pasted into the wrong app.
@@ -56,8 +56,10 @@ final class VoiceTypeSession: ObservableObject {
       switch self {
       case .none, .pasted: return nil
       case .copied: return "Copied — press ⌘V to paste"
-      case .pasteRequested: return "Paste requested — check the editor"
-      case .insertionUncertain: return "Insertion unconfirmed — check the editor"
+      // Plain enough to act on. "Insertion unconfirmed" read to people as an
+      // error the dictation had hit, rather than as the one thing it means:
+      // the words were sent and Omi could not watch them arrive.
+      case .pasteRequested, .insertionUncertain: return "Couldn't confirm it landed — check the editor"
       }
     }
 
@@ -187,7 +189,7 @@ final class VoiceTypeSession: ObservableObject {
   /// Pastes the dictated text into the app that had focus at release, and
   /// ends the turn. If focus has moved since, the text is copied instead —
   /// the user gets it with one ⌘V rather than finding it in the wrong window.
-  func deliver(_ text: String) -> Completion {
+  func deliver(_ text: String) async -> Completion {
     defer {
       latch = .none
       releaseFocusTarget = nil
@@ -216,11 +218,14 @@ final class VoiceTypeSession: ObservableObject {
       return .copied(trimmed)
     }
     let separator = aimed.needsSeparatingSpace ? " " : ""
-    switch sink.paste(separator + trimmed, into: aimed) {
+    switch await sink.paste(separator + trimmed, into: aimed) {
     case .inserted:
       break
     case .pastePosted:
-      log("VoiceTypeSession: requested paste of \(trimmed.count) chars into \(aimed.bundleIdentifier)")
+      log("VoiceTypeSession: paste of \(trimmed.count) chars into \(aimed.bundleIdentifier) was not read back")
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "voice_typing", from: "clipboard_paste", to: "insertion_unconfirmed",
+        reason: "other", outcome: .degraded)
       return .pasteRequested(trimmed)
     case .notInserted:
       log("VoiceTypeSession: no insertion dispatched — copied \(trimmed.count) chars instead")
