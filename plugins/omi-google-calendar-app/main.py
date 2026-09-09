@@ -220,8 +220,8 @@ def parse_datetime(dt_str: str) -> tuple[datetime, bool]:
 
     # Default: try to parse as ISO format
     try:
-        parsed = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-        return parsed.replace(tzinfo=None), False
+        parsed = datetime.fromisoformat(dt_str.replace("z", "+00:00"))
+        return parsed, False
     except:
         pass
 

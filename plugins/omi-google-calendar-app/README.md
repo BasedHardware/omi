@@ -115,3 +115,18 @@ When creating/updating the Omi app, use these URLs:
 - "Schedule a dentist appointment on Friday at 10am"
 - "Delete my 3pm meeting"
 - "Reschedule my team sync to 4pm"
+
+## Offline regression tests
+
+From the repository root, run:
+
+```sh
+python3 plugins/omi-google-calendar-app/test_main.py
+```
+
+These stdlib-only tests execute the complete production module's create/update
+handlers and API payload construction, with framework, storage and HTTP doubles.
+They verify RFC3339 instants for fractional/nonfractional offsets and UTC `Z`,
+plus naive UTC times, default duration, all-day dates and invalid input. No live
+Google account, OAuth exchange, FastAPI routing or Redis service is exercised.
+The suite runs in both local and CI check-manifest lanes.
