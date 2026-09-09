@@ -1403,6 +1403,41 @@ test('wide Home search rows keep supplied conversation title and summary', () =>
   expect(tree).not.toContain('Conversation title unavailable');
 });
 
+test('wide Home search rows keep listen overview speech on the title', () => {
+  const title = 'a'.repeat(80);
+  const summary = `${title} later speech`;
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'conversation-one',
+        title,
+        summary,
+        searchableText: `${title}\n${summary}`,
+        createdAt: '2026-09-07T00:00:00.000Z',
+        updatedAt: '2026-09-07T00:01:00.000Z',
+        startedAt: '2026-09-07T00:00:00.000Z',
+        finishedAt: '2026-09-07T00:01:00.000Z',
+        starred: false,
+        status: 'completed',
+        source: 'listen',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain(summary);
+  expect(tree).not.toContain('Conversation title unavailable');
+  expect(
+    renderer.root.findAll(
+      node => node.props.numberOfLines === 3 && node.props.children === summary,
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
 test('wide Home search rows keep empty memory text visible', () => {
   const renderer = render(
     <ProjectionRow

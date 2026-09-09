@@ -6,6 +6,8 @@ import Sparkles from 'lucide-react-native/icons/sparkles';
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
+  conversationListUsesListenOverview,
+  conversationRecapTitle,
   memoryDisplayBody,
   memoryDisplayTitle,
   projectionClockLabel,
@@ -48,12 +50,14 @@ export const ReadRow = memo(function ReadRow({
 }: {
   item: DesktopReadProjection;
 }) {
+  const listenOverview =
+    item.kind === 'conversation' && conversationListUsesListenOverview(item);
   const meta =
     item.kind === 'conversation'
       ? [
           timeLabel(item),
           item.starred ? 'Starred' : '',
-          conversationDisplaySummary(item),
+          listenOverview ? '' : conversationDisplaySummary(item),
         ]
       : item.kind === 'memory'
       ? [timeLabel(item), 'Memory']
@@ -62,9 +66,11 @@ export const ReadRow = memo(function ReadRow({
     <View style={styles.row}>
       <RowGlyph kind={item.kind} />
       <View style={styles.rowCopy}>
-        <Text numberOfLines={1} style={styles.rowTitle}>
+        <Text numberOfLines={listenOverview ? 3 : 1} style={styles.rowTitle}>
           {item.kind === 'conversation'
-            ? conversationDisplayTitle(item)
+            ? listenOverview
+              ? conversationRecapTitle(item)
+              : conversationDisplayTitle(item)
             : item.kind === 'memory'
             ? memoryDisplayTitle(item)
             : taskDisplayTitle(item)}
@@ -82,18 +88,21 @@ export const ConversationRow = memo(function ConversationRow({
 }: {
   item: ConversationProjection;
 }) {
+  const listenOverview = conversationListUsesListenOverview(item);
   return (
     <View style={styles.row}>
       <RowGlyph kind="conversation" />
       <View style={styles.rowCopy}>
-        <Text numberOfLines={1} style={styles.rowTitle}>
-          {conversationDisplayTitle(item)}
+        <Text numberOfLines={listenOverview ? 3 : 1} style={styles.rowTitle}>
+          {listenOverview
+            ? conversationRecapTitle(item)
+            : conversationDisplayTitle(item)}
         </Text>
         <Text numberOfLines={1} style={styles.rowMeta}>
           {[
             timeLabel(item),
             item.starred ? 'Starred' : '',
-            conversationDisplaySummary(item),
+            listenOverview ? '' : conversationDisplaySummary(item),
           ]
             .filter(part => part !== '')
             .join(' · ')}

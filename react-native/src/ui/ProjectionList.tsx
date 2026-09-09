@@ -9,6 +9,8 @@ import {
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
+  conversationListUsesListenOverview,
+  conversationRecapTitle,
   memoryCitationCopy,
   memoryDisplayTitle,
   taskDisplaySummary,
@@ -22,7 +24,9 @@ function displayTitle(item: DesktopReadProjection): string {
     return memoryDisplayTitle(item);
   }
   if (item.kind === 'conversation') {
-    return conversationDisplayTitle(item);
+    return conversationListUsesListenOverview(item)
+      ? conversationRecapTitle(item)
+      : conversationDisplayTitle(item);
   }
   return taskDisplayTitle(item);
 }
@@ -46,6 +50,8 @@ export const ProjectionRow = memo(function ProjectionRow({
   home?: boolean;
   spine?: boolean;
 }) {
+  const listenOverview =
+    item.kind === 'conversation' && conversationListUsesListenOverview(item);
   return (
     <View
       style={[
@@ -83,7 +89,7 @@ export const ProjectionRow = memo(function ProjectionRow({
         )}
       </View>
       <Text
-        numberOfLines={2}
+        numberOfLines={listenOverview ? 3 : 2}
         style={[
           styles.resultTitle,
           home && styles.homeCurrentTitle,
@@ -91,15 +97,17 @@ export const ProjectionRow = memo(function ProjectionRow({
         ]}>
         {displayTitle(item)}
       </Text>
-      <Text
-        numberOfLines={2}
-        style={[
-          styles.resultSummary,
-          home && styles.homeCurrentSummary,
-          spine && styles.homeSpineSummary,
-        ]}>
-        {displaySummary(item)}
-      </Text>
+      {listenOverview ? null : (
+        <Text
+          numberOfLines={2}
+          style={[
+            styles.resultSummary,
+            home && styles.homeCurrentSummary,
+            spine && styles.homeSpineSummary,
+          ]}>
+          {displaySummary(item)}
+        </Text>
+      )}
     </View>
   );
 });

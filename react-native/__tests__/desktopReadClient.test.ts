@@ -3,6 +3,7 @@ import {resolve} from 'node:path';
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
+  conversationListUsesListenOverview,
   conversationRecapTitle,
   conversationDayLabel,
   conversationGroupLabel,
@@ -755,6 +756,27 @@ test('compact recaps keep list overview speech when GET title is empty', () => {
       status: 'in_progress',
     }),
   ).toBe(`${'a'.repeat(80)}`);
+  expect(
+    conversationListUsesListenOverview({
+      id: 'conversation-one',
+      title: `${'a'.repeat(80)}`,
+      summary: `${'a'.repeat(80)} later speech`,
+    }),
+  ).toBe(true);
+  expect(
+    conversationListUsesListenOverview({
+      id: 'chat:named-session',
+      title: `${'a'.repeat(80)}`,
+      summary: `${'a'.repeat(80)} later speech`,
+    }),
+  ).toBe(false);
+  expect(
+    conversationListUsesListenOverview({
+      id: 'recording:',
+      title: 'Short title',
+      summary: 'Short title with later speech',
+    }),
+  ).toBe(false);
 });
 
 test('conversation status copy is not a raw wire token', () => {

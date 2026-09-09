@@ -262,6 +262,11 @@ test('listen conversations keep list overview speech on the open control', () =>
   expect(textOf(renderer)).toContain(summary);
   expect(
     renderer.root.findAll(
+      node => node.props.numberOfLines === 3 && node.props.children === summary,
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
       node => node.props.accessibilityLabel === `Open conversation ${summary}`,
     ).length,
   ).toBeGreaterThan(0);

@@ -13,6 +13,7 @@ import Search from 'lucide-react-native/icons/search';
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
+  conversationListUsesListenOverview,
   conversationRecapTitle,
   conversationDayLabel,
   desktopBackendUnavailableCopy,
@@ -40,6 +41,7 @@ const ConversationRow = memo(function ConversationRow({
   selected: boolean;
   onPress: () => void;
 }) {
+  const listenOverview = conversationListUsesListenOverview(item);
   return (
     <FocusPressable
       accessibilityLabel={`Open conversation ${conversationRecapTitle(item)}`}
@@ -63,12 +65,16 @@ const ConversationRow = memo(function ConversationRow({
           </Text>
         ) : null}
       </View>
-      <Text numberOfLines={1} style={styles.resultTitle}>
-        {conversationDisplayTitle(item)}
+      <Text numberOfLines={listenOverview ? 3 : 1} style={styles.resultTitle}>
+        {listenOverview
+          ? conversationRecapTitle(item)
+          : conversationDisplayTitle(item)}
       </Text>
-      <Text numberOfLines={2} style={styles.resultSummary}>
-        {conversationDisplaySummary(item)}
-      </Text>
+      {listenOverview ? null : (
+        <Text numberOfLines={2} style={styles.resultSummary}>
+          {conversationDisplaySummary(item)}
+        </Text>
+      )}
       {conversationHasFinishClock(item) ? (
         <Text style={styles.conversationRowDuration}>
           {formatConversationDuration(item.startedAt, item.finishedAt)}

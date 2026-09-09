@@ -53,6 +53,21 @@ function conversationListUsesListenExcerpt(id: string | undefined): boolean {
   return true;
 }
 
+export function conversationListUsesListenOverview(item: {
+  id?: string;
+  title: string;
+  summary: string;
+}): boolean {
+  const title = visibleDisplayText(item.title);
+  const summary = visibleDisplayText(item.summary);
+  return (
+    conversationListUsesListenExcerpt(item.id) &&
+    title !== '' &&
+    summary !== '' &&
+    summary.startsWith(title)
+  );
+}
+
 export function conversationRecapTitle(item: {
   id?: string;
   title: string;
@@ -61,12 +76,7 @@ export function conversationRecapTitle(item: {
 }): string {
   const title = visibleDisplayText(item.title);
   const summary = visibleDisplayText(item.summary);
-  if (
-    conversationListUsesListenExcerpt(item.id) &&
-    title !== '' &&
-    summary !== '' &&
-    summary.startsWith(title)
-  ) {
+  if (conversationListUsesListenOverview(item)) {
     return summary;
   }
   if (title !== '') {
