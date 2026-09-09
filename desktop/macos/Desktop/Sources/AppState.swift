@@ -297,7 +297,7 @@ extension DesktopAlertPresenting {
 }
 
 /// The root observable application state for the desktop shell: it owns
-/// the session lifecycle and the state every scene observes.
+/// the session lifecycle, the auth session, and the state every scene observes.
 @MainActor
 class AppState: ObservableObject {
   /// Weak reference to the current AppState instance, set on init.
