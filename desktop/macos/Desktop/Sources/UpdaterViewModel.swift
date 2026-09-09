@@ -827,6 +827,18 @@ final class UpdaterViewModel: ObservableObject {
   private let updaterDelegate = UpdaterDelegate()
   private var isInitialized = false
 
+  /// `AppBuild.allowsSparkleUpdates` keys off a `com.omi.*` bundle id. The xctest host
+  /// bundle has none, so `isNonProduction` reads false and the check falls through to
+  /// true — the opposite of a preview/dev build's "never start Sparkle" intent. Starting
+  /// the real updater under xctest lets its automatic check present a blocking
+  /// "Unable to Check For Updates" NSAlert on the main thread, hanging any test that
+  /// runs long enough for the check to land (LocalProviderSettingsRestartTests).
+  /// Suppress only this startup trigger, mirroring how `OmiUISound.isRunningUnderXCTest`
+  /// suppresses its own call site rather than teaching bundle-id detection about tests.
+  private static let isRunningUnderXCTest: Bool =
+    ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    || NSClassFromString("XCTestCase") != nil
+
   var usesManagedUpdatePolicy: Bool {
     AppBuild.allowsSparkleUpdates && !AnalyticsManager.isDevBuild
   }
@@ -927,9 +939,10 @@ final class UpdaterViewModel: ObservableObject {
 
   private init() {
     // Preview builds must not use the shared update feed. Do not start Sparkle for those
-    // artifacts; its manual and background entry points are guarded below as well.
+    // artifacts; its manual and background entry points are guarded below as well. xctest
+    // is excluded the same way, see `isRunningUnderXCTest` above.
     updaterController = SPUStandardUpdaterController(
-      startingUpdater: AppBuild.allowsSparkleUpdates,
+      startingUpdater: AppBuild.allowsSparkleUpdates && !Self.isRunningUnderXCTest,
       updaterDelegate: updaterDelegate,
       userDriverDelegate: nil
     )
