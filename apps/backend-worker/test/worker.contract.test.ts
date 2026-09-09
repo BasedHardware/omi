@@ -1495,6 +1495,57 @@ describe("worker request contract", () => {
     });
   });
 
+  test("chat history GET pages a named session whose id is outside Latin-1", async () => {
+    const chatSessionId = "你".repeat(128);
+    await insertChatMessage({
+      id: "cjk-session-1",
+      accountId: "test-account",
+      text: "older cjk turn",
+      createdAt: 1,
+      position: 1,
+      chatSessionId,
+    });
+    await insertChatMessage({
+      id: "cjk-session-2",
+      accountId: "test-account",
+      text: "newer cjk turn",
+      createdAt: 2,
+      position: 2,
+      chatSessionId,
+    });
+
+    const first = await fetchWorker(
+      `/v1/chat-messages?limit=1&chatSessionId=${encodeURIComponent(
+        chatSessionId
+      )}`,
+      { headers: authenticatedHeaders }
+    );
+    expect(first.status).toBe(200);
+    const firstBody = (await first.json()) as {
+      messages: Array<{ id: string }>;
+      page: { olderCursor: string | null; hasOlder: boolean };
+    };
+    expect(firstBody.messages.map((message) => message.id)).toEqual([
+      "cjk-session-2",
+    ]);
+    expect(firstBody.page.hasOlder).toBe(true);
+    expect(firstBody.page.olderCursor).not.toBeNull();
+    expect(firstBody.page.olderCursor!.length).toBeGreaterThan(512);
+
+    const older = await fetchWorker(
+      `/v1/chat-messages?limit=2&olderCursor=${encodeURIComponent(
+        firstBody.page.olderCursor!
+      )}&chatSessionId=${encodeURIComponent(chatSessionId)}`,
+      { headers: authenticatedHeaders }
+    );
+    expect(older.status).toBe(200);
+    expect(
+      (
+        (await older.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["cjk-session-1"]);
+  });
+
   test("chat history reads persisted messages from D1 without resolving the DO", async () => {
     const response = await fetchWorker("/v1/chat-messages?limit=100", {
       headers: authenticatedHeaders,

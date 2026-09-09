@@ -851,7 +851,12 @@ function isTerminal(event: GenerationEvent): boolean {
 }
 
 function encodeCursor(position: number, chatSessionId: string | null): string {
-  return btoa(JSON.stringify({ p: position, s: chatSessionId }))
+  const bytes = new TextEncoder().encode(
+    JSON.stringify({ p: position, s: chatSessionId })
+  );
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary)
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replace(/=+$/, "");
@@ -861,11 +866,18 @@ function decodeCursor(
   cursor: string,
   chatSessionId: string | null
 ): number | null {
-  if (!/^[A-Za-z0-9_-]{1,512}$/.test(cursor)) return null;
+  if (!/^[A-Za-z0-9_-]{1,1024}$/.test(cursor)) return null;
   try {
     const standard = cursor.replaceAll("-", "+").replaceAll("_", "/");
     const padded = standard + "=".repeat((4 - (standard.length % 4)) % 4);
-    const parsed: unknown = JSON.parse(atob(padded));
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index++) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    const parsed: unknown = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+    );
     if (
       parsed === null ||
       typeof parsed !== "object" ||
