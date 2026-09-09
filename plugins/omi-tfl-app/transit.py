@@ -6,6 +6,7 @@ import threading
 import time
 from collections import deque
 from datetime import datetime, timezone
+from http.client import HTTPException
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -58,7 +59,7 @@ class TfLClient:
             if exc.code == 404:
                 raise ToolError("TfL could not find that stop or line. Search for its exact ID first.") from exc
             raise ToolError(f"TfL is unavailable (HTTP {exc.code}). Please try again later.") from exc
-        except (URLError, TimeoutError, OSError) as exc:
+        except (URLError, TimeoutError, OSError, HTTPException) as exc:
             raise ToolError("TfL could not be reached. Please try again later.") from exc
         except (ValueError, UnicodeError) as exc:
             raise ToolError("TfL returned an invalid response. Please try again later.") from exc
@@ -134,7 +135,7 @@ def find_stops(payload, client, now):
     limit = limit_value(payload.get("limit", 5))
     params = {"query": query, "maxResults": limit, "includeHubs": "false"}
     mode = payload.get("mode")
-    if mode is not None:
+    if "mode" in payload:
         if mode not in MODES:
             raise ToolError(f"mode must be one of: {', '.join(MODES)}.")
         params["modes"] = mode

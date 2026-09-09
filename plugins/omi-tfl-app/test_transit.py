@@ -4,6 +4,7 @@ import io
 import json
 import unittest
 from datetime import datetime, timezone
+from http.client import IncompleteRead
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 
@@ -98,7 +99,7 @@ class TransitToolsTests(unittest.TestCase):
         api = FakeAPI(
             [
                 arrival("2026-09-09T08:10:00Z"),
-                arrival("2026-09-09T08:01:00Z"),
+                arrival("2026-09-09T09:01:00+01:00"),
                 arrival("2026-09-09T08:59:00+01:00"),
             ]
         )
@@ -134,6 +135,7 @@ class TransitToolsTests(unittest.TestCase):
             ("get_line_status", {"line_ids": ["victoria?detail=true"]}),
             ("find_stops", {"query": " "}),
             ("find_stops", {"query": "Oxford", "mode": "aircraft"}),
+            ("find_stops", {"query": "Oxford", "mode": None}),
             ("find_stops", []),
         ]
         for name, payload in cases:
@@ -180,6 +182,16 @@ class TransitToolsTests(unittest.TestCase):
 
 
 class TfLTransportTests(unittest.TestCase):
+    def test_truncated_response_retains_the_tool_error_envelope(self):
+        class TruncatedResponse(io.BytesIO):
+            def read(self, size=-1):
+                raise IncompleteRead(b"private partial response", 100)
+
+        client = TfLClient(opener=lambda request, timeout: TruncatedResponse())
+        result = execute("get_line_status", {}, client, NOW)
+        self.assertIn("error", result)
+        self.assertNotIn("private", result["error"])
+
     def test_http_request_is_bounded_encoded_and_uses_the_official_origin(self):
         requests = []
 

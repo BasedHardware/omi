@@ -9,7 +9,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "line_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 10, "description": "Exact line IDs, for example victoria, central or elizabeth. Omit for all Tube lines."}
+          "line_ids": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9-]+$"}, "maxItems": 10, "description": "Exact line IDs, for example victoria, central or elizabeth. Omit for all Tube lines."}
         }
       }
     },

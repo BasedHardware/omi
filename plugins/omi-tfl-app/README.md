@@ -21,6 +21,8 @@ convert them to the user's timezone. Cached `timeToStation` countdowns are not
 presented as current countdowns. Predictions marked deleted by TfL, past their
 provider expiry time, or past their expected arrival are removed. No predictions
 does **not** mean no service; missing line status is explicitly unknown.
+Malformed prediction records produce an explicit provider error for the lookup;
+the tool does not silently discard them and present an apparently complete list.
 
 ## Run and connect
 
