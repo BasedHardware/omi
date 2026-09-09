@@ -16,6 +16,7 @@ import {
   desktopReadErrorCopy,
   taskDisplayTitle,
   conversationRecapTitle,
+  visibleDisplayText,
   type DesktopReadOutcomes,
 } from '../desktopReadClient';
 import {omiBackend} from '../omiNative';
@@ -294,6 +295,7 @@ type AppTileModel = {
   Icon: typeof Puzzle;
   id: string;
   name: string;
+  description: string;
   source: string;
   status: string;
   enabled: boolean;
@@ -320,6 +322,7 @@ function tilesFromCatalog(
     Icon: Puzzle,
     id: app.id,
     name: appDisplayName(app.name),
+    description: visibleDisplayText(app.description),
     source: appDisplaySource(app),
     status: cloudAppStatus(app, installKnown),
     enabled: app.enabled,
@@ -345,7 +348,14 @@ function AppTile({
           <Icon color={token.color.ink} size={22} />
         </View>
         <Text style={styles.rowTitle}>{item.name}</Text>
-        <Text style={styles.rowMeta}>{item.source}</Text>
+        {item.description !== '' ? (
+          <Text numberOfLines={2} style={styles.rowMeta}>
+            {item.description}
+          </Text>
+        ) : null}
+        {item.source !== '' && item.source !== item.description ? (
+          <Text style={styles.rowMeta}>{item.source}</Text>
+        ) : null}
         {item.status.length > 0 ? (
           <Text style={styles.appStatus}>{item.status}</Text>
         ) : null}

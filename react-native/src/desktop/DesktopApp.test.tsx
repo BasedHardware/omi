@@ -1862,6 +1862,61 @@ test('Apps gallery category labels are not raw wire tokens', async () => {
   expect(tree).not.toContain('productivity');
 });
 
+test('Apps gallery keeps GET description when an author is present', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [
+      {
+        id: 'catalog-app-1',
+        name: 'Catalog fixture app',
+        description: 'Calendar sync for the workday.',
+        category: 'productivity',
+        author: 'Omi',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+    ],
+    enabledError: null,
+    enabledIds: [],
+    ownerUid: null,
+    ownerError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Catalog fixture app');
+  expect(tree).toContain('Calendar sync for the workday.');
+  expect(tree).toContain('Omi');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.numberOfLines === 2 &&
+        node.props.children === 'Calendar sync for the workday.',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.numberOfLines === 1 &&
+        typeof node.props.children === 'string' &&
+        node.props.children.includes('Calendar sync for the workday.'),
+    ).length,
+  ).toBe(0);
+});
+
 test('Settings persists a plane switch before reloading the workspace', async () => {
   const onWorkspaceReload = jest.fn();
   const {setDesktopPreference} = jest.requireMock(
