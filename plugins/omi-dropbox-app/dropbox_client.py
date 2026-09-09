@@ -254,13 +254,15 @@ class DropboxClient:
         except Exception as e:
             return None, f"Error listing: {str(e)}"
 
+    DEFAULT_DOWNLOAD_TIMEOUT = 30.0
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((requests.exceptions.Timeout, requests.exceptions.ConnectionError)),
         reraise=True,
     )
-    def _download_request(self, path: str) -> requests.Response:
+    def _download_request(self, path: str, timeout: float = DEFAULT_DOWNLOAD_TIMEOUT) -> requests.Response:
         api_arg = json.dumps({"path": path})
 
         headers = {
@@ -271,15 +273,16 @@ class DropboxClient:
         return requests.post(
             f"{self.CONTENT_BASE}/files/download",
             headers=headers,
+            timeout=timeout,
         )
 
-    def download_file(self, path: str) -> Tuple[Optional[bytes], Optional[str]]:
+    def download_file(self, path: str, timeout: float = DEFAULT_DOWNLOAD_TIMEOUT) -> Tuple[Optional[bytes], Optional[str]]:
         """
         Download a file from Dropbox.
         Returns (file_bytes, error_message).
         """
         try:
-            response = self._download_request(path)
+            response = self._download_request(path, timeout=timeout)
 
             if response.status_code == 200:
                 return response.content, None
