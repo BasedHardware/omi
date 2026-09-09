@@ -3298,10 +3298,9 @@ class TasksStore: ObservableObject {
     guard isCurrent(lease) else { return }
 
     // A local-only task never had a backend row (deleteTask skipped the backend
-    // delete). Restoring it through the backend-recreate path below is wrong on
-    // two counts: syncTaskActionItems([task]) would persist the "local_<rowid>"
-    // placeholder as a *synced* backendId, and createActionItem would mint a
-    // SECOND real backend task — leaving a duplicate/phantom row. Instead
+    // delete). It must not go through the backend-recreate path below: staging
+    // it there and calling createActionItem would mint a SECOND real backend
+    // task for one that already has none — a duplicate/phantom row. Instead
     // re-insert it as an UNSYNCED local row so the pending create-sync pushes it
     // exactly once (carrying completion via retryUnsyncedItems).
     if ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
@@ -3309,10 +3308,16 @@ class TasksStore: ObservableObject {
       return
     }
 
-    // 1. Re-insert into SQLite from the in-memory task object
+    // 1. Stage as an UNSYNCED local row with no stale backend identity (reusing
+    // the same staging shape as the local-only path above). The old backend row
+    // was hard-deleted, so persisting this row under task.id -- its old, now-
+    // invalid backend ID -- and later binding the NEW id the recreate below
+    // mints produced two SQLite rows for one task.
+    let stagedRecord = Self.localOnlyRestoreRecord(from: task)
+    let inserted: ActionItemRecord
     do {
-      try await ActionItemStorage.shared.syncTaskActionItems(
-        [task],
+      inserted = try await ActionItemStorage.shared.insertLocalActionItem(
+        stagedRecord,
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
     } catch {
@@ -3322,18 +3327,25 @@ class TasksStore: ObservableObject {
       return
     }
     guard isCurrent(lease) else { return }
+    guard let localId = inserted.id else {
+      logError("TasksStore: Staged undo row has no local id", error: ActionItemStorageError.recordNotFound)
+      return
+    }
+    let stagedTask = inserted.toTaskActionItem()
 
     // 2. Re-insert into the appropriate in-memory array
-    if task.completed {
-      completedTasks.insert(task, at: 0)
+    if stagedTask.completed {
+      completedTasks.insert(stagedTask, at: 0)
     } else {
-      incompleteTasks.insert(task, at: 0)
+      incompleteTasks.insert(stagedTask, at: 0)
     }
 
     // 3. Re-create on backend (hard-delete already removed it). Pass the full
     // field set — restore used to send only description/dueAt/priority, so undo
     // silently dropped source, category, tags, recurrence, goal/workstream, and
-    // completion state.
+    // completion state. Completion now rides this same create request (the
+    // create endpoint honors it) instead of a separate best-effort PATCH, so a
+    // failed follow-up can no longer leave the restored task incomplete.
     do {
       var restoreMetadata: [String: Any] = [:]
       if let existing = task.metadata,
@@ -3357,30 +3369,24 @@ class TasksStore: ObservableObject {
         recurrenceParentId: task.recurrenceParentId,
         goalId: task.goalId,
         workstreamId: task.workstreamId,
+        completed: task.completed ? true : nil,
         expectedOwnerId: lease.ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
       )
       guard isCurrent(lease) else { return }
-      // createActionItem cannot set completion; restore the completed state of
-      // a task that was done when it was deleted via a follow-up update.
-      var resolved = created
-      if task.completed, !created.completed {
-        resolved =
-          (try? await APIClient.shared.updateActionItem(
-            id: created.id,
-            completed: true,
-            expectedOwnerId: lease.ownerID,
-            authorizationSnapshot: lease.authorizationSnapshot
-          )) ?? created
-        guard isCurrent(lease) else { return }
-      }
-      // Update local record with new backend ID
-      try await ActionItemStorage.shared.syncTaskActionItems(
-        [resolved],
+      // Bind this same staged row to its new backend ID -- never a second insert.
+      try await ActionItemStorage.shared.markSynced(
+        id: localId,
+        backendId: created.id,
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
       guard isCurrent(lease) else { return }
-      log("TasksStore: Restored task via undo (new backend ID: \(resolved.id))")
+      if stagedTask.completed, let idx = completedTasks.firstIndex(where: { $0.id == stagedTask.id }) {
+        completedTasks[idx] = created
+      } else if !stagedTask.completed, let idx = incompleteTasks.firstIndex(where: { $0.id == stagedTask.id }) {
+        incompleteTasks[idx] = created
+      }
+      log("TasksStore: Restored task via undo (new backend ID: \(created.id))")
     } catch {
       if isCurrent(lease) {
         logError("TasksStore: Failed to re-create task on backend (local restore preserved)", error: error)
