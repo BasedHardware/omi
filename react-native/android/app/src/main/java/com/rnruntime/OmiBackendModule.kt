@@ -65,7 +65,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
 
   @ReactMethod
   fun addListener(eventName: String) {
-    if (eventName == "omiBackendSessionInvalidated") listeners.incrementAndGet()
+    listeners.incrementAndGet()
   }
 
   @ReactMethod
@@ -80,6 +80,16 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     if (listeners.get() > 0) reactApplicationContext
       .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
       .emit("omiBackendSessionInvalidated", Arguments.createMap())
+  }
+
+  private fun emitGenerationFrame(streamId: String, frame: String) {
+    if (disposed || listeners.get() <= 0 || streamId.isEmpty() || frame.isEmpty()) return
+    reactApplicationContext
+      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+      .emit("omiGenerationFrame", Arguments.createMap().apply {
+        putString("streamId", streamId)
+        putString("frame", frame)
+      })
   }
 
   @ReactMethod
@@ -274,6 +284,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     }
     val key = "omi-chat:$requestId"
     val stream = OmiGenerationStream(null, true)
+    stream.setFrameListener { frame -> emitGenerationFrame(requestId, frame) }
     val active = ActiveGeneration(stream, promise)
     synchronized(retirement) {
       if (disposed) { promise.reject("OMI_HTTP_CANCELLED", "Native backend is disposed"); return }
@@ -329,6 +340,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
       promise.reject("OMI_HTTP_INVALID_REQUEST", "Native generation cursor is invalid")
       return
     }
+    stream.setFrameListener { frame -> emitGenerationFrame(generationId, frame) }
     val active = ActiveGeneration(stream, promise)
     synchronized(retirement) {
     if (disposed) { promise.reject("OMI_HTTP_CANCELLED", "Native backend is disposed"); return }

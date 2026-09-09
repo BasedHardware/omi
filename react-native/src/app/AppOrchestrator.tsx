@@ -20,11 +20,15 @@ import {
   ChatBackendError,
   chatErrorCopy,
   chatHistoryErrorCopy,
+  chatRequestCancelled,
   chatSessionLost,
   createLocalChatMessage,
+  createPendingAssistantMessage,
+  isStreamingAssistant,
   loadNewestChatHistory,
   loadOlderChatHistory,
   mergeOlderChatHistory,
+  pendingAssistantId,
   reconcileCanonicalChatHistory,
   sendChatMessage,
   type ChatMessage,
@@ -482,7 +486,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     setChatError(null);
     shouldFollowChat.current = true;
     const localMessage = createLocalChatMessage(text);
-    setMessages(current => [...current, localMessage]);
+    const pending = createPendingAssistantMessage(localMessage);
+    const pendingId = pending.id;
+    setMessages(current => [...current, localMessage, pending]);
     setDraft('');
     try {
       const result = await sendChatMessage(
@@ -493,6 +499,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           admitted = true;
           if (chatSessionEpochRef.current === session) {
             setActiveGenerationId(id);
+            setMessages(current =>
+              current.map(message =>
+                message.id === pendingId
+                  ? {...message, generationId: id}
+                  : message,
+              ),
+            );
           }
         },
         localMessage,
@@ -502,6 +515,19 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           omiRequestRef.current = id;
           setActiveOmiRequestId(id);
           return true;
+        },
+        visible => {
+          if (
+            chatSessionEpochRef.current !== session ||
+            (requestStarted && omiRequestRef.current !== localMessage.id)
+          ) {
+            return;
+          }
+          setMessages(current =>
+            current.map(message =>
+              message.id === pendingId ? {...message, text: visible} : message,
+            ),
+          );
         },
       );
       // A gate transition (sign-out, dead session, plane switch) retired the
@@ -520,7 +546,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         const withoutCanonical = current.filter(
           message =>
             message.id !== result.human.id &&
-            message.id !== result.assistant?.id,
+            message.id !== result.assistant?.id &&
+            message.id !== pendingId,
         );
         if (echoIndex < 0) {
           return [
@@ -544,13 +571,26 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       ) {
         if (!admitted && !requestStarted) {
           setMessages(current =>
-            current.filter(message => message.id !== localMessage.id),
+            current.filter(
+              message =>
+                message.id !== localMessage.id && message.id !== pendingId,
+            ),
           );
           setDraft(current => (current === '' ? text : current));
+        } else {
+          setMessages(current =>
+            current.map(message =>
+              message.id === pendingId && message.generationOutcome === null
+                ? {...message, generationOutcome: 'cancelled'}
+                : message,
+            ),
+          );
         }
         setChatError(
           admitted || requestStarted
-            ? 'Response interrupted. It may still complete.'
+            ? chatRequestCancelled(error)
+              ? 'Response stopped locally. It may still complete on the server.'
+              : 'Response interrupted. It may still complete.'
             : chatErrorCopy(error),
         );
         if (nativeSessionRequired && chatSessionLost(error)) {
@@ -680,6 +720,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           omiRequestRef.current = null;
           setActiveOmiRequestId(null);
           setChatBusy(false);
+          setMessages(current =>
+            current.map(message =>
+              message.id === pendingAssistantId(requestId) &&
+              message.generationOutcome === null
+                ? {...message, generationOutcome: 'cancelled'}
+                : message,
+            ),
+          );
           setChatError(
             'Response stopped locally. It may still complete on the server.',
           );
@@ -1456,9 +1504,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                 reduceMotion={reduceMotion}
                               />
                             ))}
-                            {chatBusy && (
-                              <ChatThinking reduceMotion={reduceMotion} />
-                            )}
+                            {chatBusy &&
+                              !messages.some(isStreamingAssistant) && (
+                                <ChatThinking reduceMotion={reduceMotion} />
+                              )}
                             {chatError !== null && (
                               <Text style={styles.error}>{chatError}</Text>
                             )}

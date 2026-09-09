@@ -21,6 +21,10 @@ public final class OmiGenerationStream {
     void received(int status) throws Exception;
   }
 
+  public interface FrameListener {
+    void onFrame(String frame);
+  }
+
   public static final class Result {
     public final int status;
     public final String body;
@@ -38,6 +42,7 @@ public final class OmiGenerationStream {
   private long deadline;
   private final boolean omi;
   private int receivedBytes;
+  private FrameListener frames;
 
   public OmiGenerationStream(String lastEventId) { this(lastEventId, false); }
 
@@ -48,6 +53,10 @@ public final class OmiGenerationStream {
       throw new IllegalArgumentException("Invalid event cursor");
     }
     this.lastEventId = lastEventId;
+  }
+
+  public void setFrameListener(FrameListener listener) {
+    this.frames = listener;
   }
 
   public void cancel() {
@@ -130,6 +139,7 @@ public final class OmiGenerationStream {
       if (cancelled.getCount() == 0) throw new IOException("Generation cancelled");
       if (line.isEmpty()) {
         if (eventId != null) lastEventId = eventId.isEmpty() ? null : eventId;
+        if (frame.length() > 0 && frames != null) frames.onFrame(frame + "\n");
         if (data.length() > 0) {
           String payload = data.substring(0, data.length() - 1);
           if (omi) {

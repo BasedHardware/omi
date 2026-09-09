@@ -229,6 +229,7 @@ const generationControllers = new Map<string, AbortController>();
 async function browserGenerationEvents(
   generationId: string,
   lastEventId: string | null,
+  onFrame?: (frame: string) => void,
 ): Promise<NativeHttpResponse> {
   const controller = new AbortController();
   generationControllers.set(generationId, controller);
@@ -236,6 +237,7 @@ async function browserGenerationEvents(
   try {
     result = await readBrowserGenerationEvents({
       initialLastEventId: lastEventId,
+      onEvent: onFrame,
       open: (resumeEventId, signal) =>
         fetch(
           proxyPath(
@@ -294,8 +296,8 @@ const browserBackend: OmiBackend = {
       }
     });
   },
-  generationEvents(generationId, lastEventId) {
-    return browserGenerationEvents(generationId, lastEventId);
+  generationEvents(generationId, lastEventId, onFrame) {
+    return browserGenerationEvents(generationId, lastEventId, onFrame);
   },
   request(request) {
     return browserRequest(request, 'application/json');

@@ -1,4 +1,5 @@
 import {
+  IncrementalOmiChatParser,
   omiHistoryOffset,
   parseOmiChatStream,
   parseOmiHistory,
@@ -39,4 +40,29 @@ test('old custom done frame decodes Unicode and actual message identity without 
   });
   expect(() => parseOmiChatStream('data: incomplete\n\n')).toThrow();
   expect(() => parseOmiChatStream('done: broken\n\n')).toThrow();
+});
+
+test('old stream parser yields data across split UTF-8 and CRLF frames then reconciles done', () => {
+  const terminal = Buffer.from(
+    JSON.stringify(message('server-id', 'ai', 'Hello 世界')),
+  ).toString('base64');
+  const parser = new IncrementalOmiChatParser();
+  const world = Buffer.from('世界', 'utf8');
+  expect(parser.push('data: Hel')).toEqual([]);
+  expect(parser.push('lo ')).toEqual([]);
+  expect([
+    ...parser.push(world.subarray(0, 2)),
+    ...parser.push(world.subarray(2)),
+  ]).toEqual([]);
+  expect(parser.push('\n\nthink: searching__CRLF__now\r\n\r\n')).toEqual([
+    {kind: 'data', text: 'Hello 世界'},
+    {kind: 'think', text: 'searching\nnow'},
+  ]);
+  expect(parser.push(`done: ${terminal.slice(0, 8)}`)).toEqual([]);
+  expect(parser.push(`${terminal.slice(8)}\n\n`)).toEqual([
+    expect.objectContaining({
+      kind: 'done',
+      message: expect.objectContaining({id: 'server-id', text: 'Hello 世界'}),
+    }),
+  ]);
 });

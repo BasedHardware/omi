@@ -108,6 +108,76 @@ test.each([false, true])(
   },
 );
 
+test('streaming assistant row keeps the Omi mark moving and replaces skeleton with text', () => {
+  const start = jest.fn();
+  const stop = jest.fn();
+  const loop = jest
+    .spyOn(Animated, 'loop')
+    .mockReturnValue({start, stop, reset: jest.fn()});
+  const pending = {
+    id: 'pending:human',
+    sender: 'ai' as const,
+    text: '',
+    createdAt: 1000,
+    generationOutcome: null,
+    generationId: 'generation-1',
+  };
+  let tree!: Renderer.ReactTestRenderer;
+  try {
+    act(() => {
+      tree = Renderer.create(
+        <ChatMessageRow
+          message={pending}
+          animate={false}
+          compact={false}
+          reduceMotion={false}
+        />,
+      );
+    });
+    expect(start).toHaveBeenCalled();
+    expect(
+      tree.root.findAll(
+        node => node.props.accessibilityLabel === 'Waiting for response',
+      ).length,
+    ).toBeGreaterThan(0);
+    act(() =>
+      tree.update(
+        <ChatMessageRow
+          message={{...pending, text: 'Hello'}}
+          animate={false}
+          compact={false}
+          reduceMotion={false}
+        />,
+      ),
+    );
+    expect(
+      tree.root.findAll(
+        node => node.props.accessibilityLabel === 'Waiting for response',
+      ),
+    ).toHaveLength(0);
+    expect(tree.root.findByType(OmiAvatar).props.animate).toBe(true);
+    act(() =>
+      tree.update(
+        <ChatMessageRow
+          message={{
+            ...pending,
+            text: 'Hello',
+            generationOutcome: 'completed',
+            generationId: undefined,
+          }}
+          animate={false}
+          compact={false}
+          reduceMotion
+        />,
+      ),
+    );
+    expect(tree.root.findByType(OmiAvatar).props.animate).toBe(false);
+    act(() => tree.unmount());
+  } finally {
+    loop.mockRestore();
+  }
+});
+
 test('pending Omi mark circles beside the skeleton and both stop for reduced motion or unmount', () => {
   const start = jest.fn();
   const stop = jest.fn();

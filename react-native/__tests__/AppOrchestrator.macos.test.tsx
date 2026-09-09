@@ -1189,3 +1189,69 @@ test.each(['stop', 'unmount', 'signout'])(
     }
   },
 );
+
+test('old chat shows streamed tokens before the terminal frame arrives', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.getApiContract.mockResolvedValue('omi');
+  mockBackend.request.mockImplementation(async value => ({
+    id: value.id,
+    status: 200,
+    body: '[]',
+  }));
+  let settle!: (value: {id: string; status: number; body: string}) => void;
+  let onFrame: ((frame: string) => void) | undefined;
+  mockBackend.sendOmiChat.mockImplementation(
+    (_id: string, _text: string, frame?: (value: string) => void) => {
+      onFrame = frame;
+      return new Promise(resolve => {
+        settle = resolve;
+      });
+    },
+  );
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(node => node.props.placeholder === 'Ask about your day…')!;
+  act(() => omnibar.props.onChangeText('stream this'));
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send')
+      .props.onPress();
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Waiting for response',
+    ).length,
+  ).toBeGreaterThan(0);
+  await act(async () => {
+    onFrame?.('data: STREAMING PARTIAL 世界\n\n');
+  });
+  expect(textOf(renderer)).toContain('STREAMING PARTIAL 世界');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Waiting for response',
+    ),
+  ).toHaveLength(0);
+  const requestId = mockBackend.sendOmiChat.mock.calls[0][0];
+  await act(async () => {
+    settle({
+      id: requestId,
+      status: 200,
+      body: `done: ${Buffer.from(
+        JSON.stringify({
+          id: 'server-stream',
+          text: 'STREAMING FINAL 世界',
+          sender: 'ai',
+          created_at: '2026-09-07T00:00:00Z',
+        }),
+      ).toString('base64')}\n\n`,
+    });
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain('STREAMING FINAL 世界');
+  expect(textOf(renderer)).not.toContain('STREAMING PARTIAL 世界');
+});

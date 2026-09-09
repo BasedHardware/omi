@@ -201,6 +201,37 @@ test("web native boundary never invents a connected Omi device", async () => {
   expect(snapshot.capture).toBe("idle");
 });
 
+test("web generation streaming emits frames before the request completes", async () => {
+  const previousFetch = globalThis.fetch;
+  const snapshot =
+    'id: first\nevent: snapshot\ndata: {"kind":"snapshot","text":"Hel"}\n\n';
+  const delta =
+    'id: second\nevent: delta\ndata: {"kind":"delta","text":"lo"}\n\n';
+  const done =
+    'id: terminal\nevent: done\ndata: {"kind":"done","message":{"id":"assistant-1"}}\n\n';
+  globalThis.fetch = (async () =>
+    streamResponse([
+      snapshot.slice(0, 18),
+      snapshot.slice(18) + delta,
+      done,
+    ])) as unknown as typeof globalThis.fetch;
+  const frames: string[] = [];
+  try {
+    await expect(
+      omiBackend.generationEvents("generation-live", null, (frame) => {
+        frames.push(frame);
+      })
+    ).resolves.toMatchObject({
+      body: `${snapshot}${delta}${done}`,
+      id: "generation-live",
+      status: 200,
+    });
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+  expect(frames).toEqual([snapshot, delta, done]);
+});
+
 test("web generation streaming reconnects with the last event id", async () => {
   const calls: Array<{ headers: Headers; input: RequestInfo | URL }> = [];
   const previousFetch = globalThis.fetch;
