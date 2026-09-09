@@ -135,6 +135,12 @@ def test_deploy_action_remove_lists_name_every_overlay(action: str) -> None:
     assert lists, action
     for entry in lists:
         assert RETIRED_PLAN_QUOTA_ENV <= set(entry.split(',')), (action, entry)
+    # The backfill worker clones its env from the live backend-sync service; a name
+    # missing from REMOVE_ENV_VARS there is cloned back into env_vars and re-set on
+    # backend-sync-backfill in the same deploy, nullifying the removal above.
+    clone_strips = re.findall(r'REMOVE_ENV_VARS: ([A-Z0-9_,]+)', text)
+    for entry in clone_strips:
+        assert RETIRED_PLAN_QUOTA_ENV <= set(entry.split(',')), (action, entry)
 
 
 @pytest.mark.slow  # per-test fresh reload of utils.subscription (~1 s CPU); slow-guardrail lane
