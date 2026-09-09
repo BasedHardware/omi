@@ -45,6 +45,7 @@ import {
   readDeviceTranscription,
   processDeviceTranscriptions,
   projectDeviceTranscription,
+  type DeviceTranscriptionProjection,
   type TranscriptionAI,
 } from "./device-transcriptions";
 import { parseTaskLimit, readTasks } from "./tasks";
@@ -884,6 +885,19 @@ export async function handleTaskWrite(context: CoreContext): Promise<Response> {
   });
 }
 
+function listenTranscriptResponse(
+  transcription: DeviceTranscriptionProjection,
+  transcribe: boolean
+): Response {
+  const pending =
+    transcription.state === "queued" || transcription.state === "running";
+  return json(
+    { transcription },
+    transcribe && pending ? 202 : 200,
+    pending ? { "retry-after": "2" } : undefined
+  );
+}
+
 export async function handleTranscription(
   context: CoreContext
 ): Promise<Response> {
@@ -898,7 +912,7 @@ export async function handleTranscription(
   const transcription = projectDeviceTranscription(row);
   if (transcription === null)
     return backendError("service_unavailable", "none", 503);
-  return json({ transcription });
+  return listenTranscriptResponse(transcription, false);
 }
 
 export async function handleTranscribe(
@@ -930,15 +944,9 @@ export async function handleTranscribe(
   const response = await handleTranscription(context);
   if (response.status !== 200) return response;
   const payload = (await response.json()) as {
-    transcription: { state: string };
+    transcription: DeviceTranscriptionProjection;
   };
-  return json(
-    payload,
-    payload.transcription.state === "queued" ||
-      payload.transcription.state === "running"
-      ? 202
-      : 200
-  );
+  return listenTranscriptResponse(payload.transcription, true);
 }
 
 export const publicRoutes: readonly CoreRoute[] = [

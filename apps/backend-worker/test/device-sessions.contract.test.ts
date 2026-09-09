@@ -229,6 +229,7 @@ describe("device session request validators", () => {
       bindings
     );
     expect(completed.status).toBe(200);
+    expect(completed.headers.get("retry-after")).toBeNull();
     const completedBody = (await completed.json()) as object;
     expect(completedBody).toEqual({
       transcription: {
@@ -248,6 +249,7 @@ describe("device session request validators", () => {
       bindings
     );
     expect(fetched.status).toBe(200);
+    expect(fetched.headers.get("retry-after")).toBeNull();
     expect((await fetched.json()) as object).toEqual(completedBody);
     expect(
       (
@@ -277,6 +279,68 @@ describe("device session request validators", () => {
         action: "none",
       },
     });
+  });
+  test("pending transcript GET and transcribe POST send production Listen retry-after", async () => {
+    const opened = await fetchWorker("/v1/device-sessions", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({
+        ...openBody,
+        captureId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        codec: 1,
+      }),
+    });
+    const { session } = (await opened.json()) as { session: { id: string } };
+    expect(
+      (
+        await fetchWorker(`/v1/device-sessions/${session.id}/audio`, {
+          method: "POST",
+          headers: authenticatedHeaders,
+          body: JSON.stringify({
+            chunks: [
+              {
+                chunkIndex: 0,
+                bytesBase64: btoa(String.fromCharCode(0, 0, 0, 128, 129)),
+              },
+            ],
+          }),
+        })
+      ).status
+    ).toBe(200);
+    expect(
+      (
+        await fetchWorker(`/v1/device-sessions/${session.id}/complete`, {
+          method: "POST",
+          headers: authenticatedHeaders,
+        })
+      ).status
+    ).toBe(200);
+    const queued = await fetchWorker(
+      `/v1/device-sessions/${session.id}/transcript`,
+      { headers: authenticatedHeaders }
+    );
+    expect(queued.status).toBe(200);
+    expect(queued.headers.get("retry-after")).toBe("2");
+    expect(
+      ((await queued.json()) as { transcription: { state: string } })
+        .transcription.state
+    ).toBe("queued");
+    await d1Mock
+      .prepare(
+        "UPDATE device_transcriptions SET available_at = ? WHERE session_id = ?"
+      )
+      .bind(Date.now() + 900_000, session.id)
+      .run();
+    const transcribe = await fetchWorker(
+      `/v1/device-sessions/${session.id}/transcribe`,
+      { method: "POST", headers: authenticatedHeaders }
+    );
+    expect(transcribe.status).toBe(202);
+    expect(transcribe.headers.get("retry-after")).toBe("2");
+    expect(
+      ((await transcribe.json()) as { transcription: { state: string } })
+        .transcription.state
+    ).toBe("queued");
   });
   test("missing transcription attachments is nested non-retryable without inventing speech", async () => {
     const opened = await fetchWorker("/v1/device-sessions", {
