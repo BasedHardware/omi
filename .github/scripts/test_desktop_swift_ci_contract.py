@@ -409,14 +409,17 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         saved empty suppressed every later save (run 34295159347). The restore
         must cover the tests lane, an explicit warm-up step builds whatever the
         restore missed BEFORE any consumer runs, and the save immediately
-        follows the warm-up under a fresh -v2 key.
+        follows the warm-up under a fresh -v3 key carrying only the built
+        binaries (the v2 full-tree archives lost eviction races against the
+        lingering 5.3 GB release .build entries and kept re-paying the
+        from-source rebuild).
         """
         job = self.jobs["desktop-swift-verify"]
         self.assertIn(
             "(needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true')",
             job,
         )
-        self.assertIn("desktop-swift-tools-v2-", job)
+        self.assertIn("desktop-swift-tools-v3-", job)
         restore_index = job.index("Restore Swift formatter and linter tools")
         warm_index = job.index("Warm pinned formatter and linter tools")
         save_index = job.index("Save Swift formatter and linter tools after warm-up")

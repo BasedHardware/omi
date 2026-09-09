@@ -143,26 +143,28 @@ jobs:
         # Restored for the tests lane too, not only static: the launcher
         # script tests exercise the pinned swift-format binary, and without
         # the restore a tests-only diff pays a ~15 min from-source rebuild.
-        # The -v2 prefix deliberately abandons entries the old workflow
-        # saved before any consumer had built the tools: an exact-key hit on
-        # an empty archive suppressed every later save (run 34295159347).
+        # The -v3 prefix caches ONLY the built binaries (globbed files,
+        # ~100 MB): the v2 full-build-tree archives were GB-scale and lost
+        # every eviction race against the lingering 5.3 GB release .build
+        # entries, so warm-ups kept paying the from-source rebuild (run
+        # 34330641589-era measurements: 8-9 min, twice in one day).
         if: ${{ always() && !cancelled() && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}
         id: swift-tools-cache
         uses: actions/cache/restore@v6
         with:
           path: |
-            ~/.cache/omi-swift-format
-            ~/.cache/omi-swiftlint
-          key: ${{ runner.os }}-desktop-swift-tools-v2-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
+            ~/.cache/omi-swift-format/*/.build/release/swift-format
+            ~/.cache/omi-swiftlint/*/swiftlint
+          key: ${{ runner.os }}-desktop-swift-tools-v3-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
           restore-keys: |
-            ${{ runner.os }}-desktop-swift-tools-v2-xcode164-
+            ${{ runner.os }}-desktop-swift-tools-v3-xcode164-
 
       - name: Warm pinned formatter and linter tools
         # One explicit bootstrap instead of whichever launcher test happens
         # to touch a wrapper first. A cache miss pays the ~15 min from-source
-        # build here, visibly, and the save right below captures it before
-        # any launcher test runs (three #13219 runs each rebuilt the tools
-        # inside the launcher step and lost them).
+        # build here, visibly, and the save right below captures the built
+        # binary before any launcher test runs (three #13219 runs each
+        # rebuilt the tools inside the launcher step and lost them).
         if: ${{ always() && !cancelled() && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}
         id: swift_tools_warm
         run: |
@@ -174,9 +176,9 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: |
-            ~/.cache/omi-swift-format
-            ~/.cache/omi-swiftlint
-          key: ${{ runner.os }}-desktop-swift-tools-v2-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
+            ~/.cache/omi-swift-format/*/.build/release/swift-format
+            ~/.cache/omi-swiftlint/*/swiftlint
+          key: ${{ runner.os }}-desktop-swift-tools-v3-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
 
       - name: Install uv for manifest checks
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' }}
@@ -254,14 +256,14 @@ jobs:
           # performance harness starts timing out.
           OMI_SWIFT_TEST_SUITE_WORKERS: "3"
           OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS: "300"
-          # Per-invocation overhead (SwiftPM startup + xctest host launch)
-          # dominates the suite step: ~35 invocations at batch 25 measured
-          # 27-30 min on three workers while the tests themselves execute in
-          # minutes. The deferred slow tail empties the budget-eaters out of
-          # batches, so CI carries twice the suites per invocation; the local
-          # default stays 25. Every invocation logs its wall seconds, so a
-          # regression here is visible in the run log itself.
-          OMI_SWIFT_TEST_SUITE_BATCH_SIZE: "50"
+          # Per-invocation overhead (SwiftPM startup + xctest host launch,
+          # ~36s flat) dominates the suite step; batching amortizes it and
+          # the bisect fallback bounds a flaky batch's cost to ~3
+          # invocations, so CI carries 100 suites per invocation (measured
+          # fast lane at 50: 17 batches/3 workers ≈ 9 min of invocation
+          # overhead). The local default stays 25 and every invocation logs
+          # its wall seconds, so a regression is visible in the run log.
+          OMI_SWIFT_TEST_SUITE_BATCH_SIZE: "100"
           # PRs defer ratcheted slow suites (swift-test-slow-suites.json) to
           # the full lane unless this diff touches their own inputs; pushes,
           # scheduled health runs, and manual dispatch always run everything.
