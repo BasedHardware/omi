@@ -185,13 +185,14 @@ def save(config: Config) -> None:
     written. POSIX uses mode ``0o600``; Windows uses a protected owner-rights
     DACL supplied directly to ``CreateFileW``.
     """
-    config.path.parent.mkdir(parents=True, exist_ok=True)
-    # Tighten parent dir perms too — credentials live underneath. Best-effort:
-    # don't fail if the user has a custom mode they want to keep.
-    try:
-        os.chmod(config.path.parent, 0o700)
-    except OSError:
-        pass
+    # Restrict directories we create without changing a user's existing directory.
+    missing = []
+    directory = config.path.parent
+    while not directory.exists():
+        missing.append(directory)
+        directory = directory.parent
+    for directory in reversed(missing):
+        directory.mkdir(mode=0o700, exist_ok=True)
 
     payload: dict[str, Any] = {
         **config.extra,
