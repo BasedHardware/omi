@@ -655,9 +655,9 @@ describe("D1 chat projects an honest conversation list", () => {
       id: "chat:large",
       title: `${"😀".repeat(130)}${" ".repeat(107)}...`,
       overview: `${overview.trim().slice(0, 237)}...`,
-      createdAt: 900,
-      updatedAt: 500,
-      startedAt: 900,
+      createdAt: 500,
+      updatedAt: 1074,
+      startedAt: 500,
       finishedAt: null,
       status: "in_progress",
     });
@@ -775,6 +775,46 @@ describe("D1 chat projects an honest conversation list", () => {
       title: "",
       overview: "Assistant words",
       source: "chat",
+      status: "in_progress",
+    });
+  });
+
+  test("chat list timestamps follow min and max created_at", async () => {
+    const accountId = "created-at-chat-timestamps";
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind(
+        "created-at-later-clock",
+        accountId,
+        "Later clock first position",
+        500,
+        1,
+        JSON.stringify({ chatSessionId: "clock-skew" })
+      )
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind(
+        "created-at-earlier-clock",
+        accountId,
+        "Earlier clock last position",
+        100,
+        2,
+        JSON.stringify({ chatSessionId: "clock-skew" })
+      )
+      .run();
+    const rows = await readConversations(env.DB, accountId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: "chat:clock-skew",
+      title: "Later clock first position",
+      overview: "Earlier clock last position",
+      createdAt: 100,
+      updatedAt: 500,
+      startedAt: 100,
+      finishedAt: null,
       status: "in_progress",
     });
   });

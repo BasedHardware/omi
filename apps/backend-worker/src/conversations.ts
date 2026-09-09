@@ -97,24 +97,24 @@ export async function readConversations(
          FROM normalized
        ), ranked AS (
          SELECT *,
-           row_number() OVER (PARTITION BY session_id ORDER BY position) AS first_rank,
-           row_number() OVER (PARTITION BY session_id ORDER BY position DESC) AS last_rank,
            row_number() OVER (PARTITION BY session_id ORDER BY CASE WHEN sender = 'human' AND length(${visibleStoredTextTrimSql(
              "text"
            )}) > 0 THEN 0 WHEN sender = 'human' THEN 1 ELSE 2 END, position) AS title_rank,
            row_number() OVER (PARTITION BY session_id ORDER BY CASE WHEN length(${visibleStoredTextTrimSql(
              "text"
-           )}) > 0 THEN 0 ELSE 1 END, position DESC) AS overview_rank
+           )}) > 0 THEN 0 ELSE 1 END, position DESC) AS overview_rank,
+           min(created_at) OVER (PARTITION BY session_id) AS session_created_at,
+           max(created_at) OVER (PARTITION BY session_id) AS session_updated_at
          FROM sessions
        ), selected AS (
          SELECT *, ${visibleStoredTextTrimSql("text")} AS display_text
-         FROM ranked WHERE first_rank = 1 OR last_rank = 1 OR title_rank = 1 OR overview_rank = 1
+         FROM ranked WHERE title_rank = 1 OR overview_rank = 1
        )
        SELECT CAST(session_id AS BLOB) AS id,
          max(CASE WHEN title_rank = 1 THEN substr(CAST(display_text AS BLOB), 1, 964) END) AS title,
          max(CASE WHEN overview_rank = 1 THEN substr(CAST(display_text AS BLOB), 1, 964) END) AS overview,
-         max(CASE WHEN first_rank = 1 THEN created_at END) AS createdAt,
-         max(CASE WHEN last_rank = 1 THEN created_at END) AS updatedAt
+         max(session_created_at) AS createdAt,
+         max(session_updated_at) AS updatedAt
        FROM selected GROUP BY session_id`
     )
     .bind(accountId)

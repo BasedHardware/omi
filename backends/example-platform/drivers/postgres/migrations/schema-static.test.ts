@@ -1301,6 +1301,8 @@ describe("static PostgreSQL schema contract", () => {
     expect(visibleOverviewSql).toContain(
       "WHEN char_length(btrim(last_text, v_ws))>240 THEN left(btrim(last_text, v_ws),237)||'...'",
     );
+    expect(visibleOverviewSql).toContain("min(m.created_at) AS created_at");
+    expect(visibleOverviewSql).toContain("max(m.created_at) AS updated_at");
     expect(visibleOverviewSql).not.toContain("octet_length(btrim(title_text");
     expect(visibleOverviewSql).toContain("WHEN length(btrim(m.text,v_ws))>0 THEN 0 ELSE 1 END, m.created_at DESC");
     expect(visibleOverviewSql).not.toContain("(array_agg(m.text ORDER BY m.created_at DESC, m.id DESC))[1] AS last_text");

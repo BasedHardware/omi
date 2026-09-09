@@ -1427,6 +1427,46 @@ describe("worker request contract", () => {
     );
   });
 
+  test("conversation list timestamps follow min and max created_at", async () => {
+    await insertChatMessage({
+      id: "clock-later",
+      accountId: "test-account",
+      text: "Later clock first position",
+      createdAt: 500,
+      position: 1,
+      chatSessionId: "clock-skew",
+    });
+    await insertChatMessage({
+      id: "clock-earlier",
+      accountId: "test-account",
+      text: "Earlier clock last position",
+      createdAt: 100,
+      position: 2,
+      chatSessionId: "clock-skew",
+    });
+
+    const listed = await fetchWorker("/v1/conversations", {
+      headers: authenticatedHeaders,
+    });
+    expect(listed.status).toBe(200);
+    const page = (await listed.json()) as {
+      items: Array<{
+        id: string;
+        createdAt: number;
+        updatedAt: number;
+        startedAt: number;
+      }>;
+    };
+    expect(page.items.find((item) => item.id === "chat:clock-skew")).toEqual(
+      expect.objectContaining({
+        id: "chat:clock-skew",
+        createdAt: 100,
+        updatedAt: 500,
+        startedAt: 100,
+      })
+    );
+  });
+
   test("conversation list keeps chat sessions in progress after a completed assistant", async () => {
     await insertChatMessage({
       id: "chat-open-human",
