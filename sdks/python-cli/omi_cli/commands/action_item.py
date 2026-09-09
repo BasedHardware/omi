@@ -79,6 +79,11 @@ def get_action_item(
         # Like memories, the dev API has no single-resource GET for action items.
         # Page through up to 5 pages of 200 to find it; beyond that the user
         # probably wants `omi action-item list` directly.
+        #
+        # NOTE: stop only on a genuinely empty page, not a short one.
+        # The backend can filter locked records after fetching a full page,
+        # so a response with fewer than 200 items does not mean there are no
+        # more records at higher offsets (issue #13214).
         for offset in range(0, 1000, 200):
             page = client.get("/v1/dev/user/action-items", params={"limit": 200, "offset": offset})
             if not page:
@@ -87,8 +92,6 @@ def get_action_item(
                 if item.get("id") == action_item_id:
                     ctx.renderer.emit(item, title="action item")
                     return
-            if len(page) < 200:
-                break
     # Exit code 5 (NotFoundError) — same contract as a server-side 404,
     # whether or not the dev API exposed a direct GET for this noun.
     raise NotFoundError(message=f"Action item not found: {action_item_id}")
