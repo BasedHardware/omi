@@ -194,11 +194,17 @@ fi
 # Optional XCTest-shaped per-suite timing blocks, so the duration-harvest
 # summary can be exercised hermetically. Includes the "All tests" aggregate
 # wrapper, which the harvest must not record as a suite. Only test
-# invocations emit it — `swift build` (prebuild) never does.
+# invocations emit it — `swift build` (prebuild) never does. One suite can
+# carry a large duration (FAKE_XCRUN_SLOW_TIMING_SUITE) to exercise the
+# PR-lane slow-suite ratchet.
 if [ -n "${FAKE_XCRUN_XCTEST_TIMING:-}" ] && [ "${#suites[@]}" -gt 0 ]; then
   for filtered_suite in ${suites[@]+"${suites[@]}"}; do
     echo "Test Suite '$filtered_suite' passed at 2026-09-08 00:00:00.000."
-    echo "	 Executed 2 tests, with 0 failures (0 unexpected) in 0.100 (0.250) seconds"
+    if [ "${filtered_suite}" = "${FAKE_XCRUN_SLOW_TIMING_SUITE:-}" ]; then
+      echo "	 Executed 2 tests, with 0 failures (0 unexpected) in 500.000 (999.000) seconds"
+    else
+      echo "	 Executed 2 tests, with 0 failures (0 unexpected) in 0.100 (0.250) seconds"
+    fi
   done
   echo "Test Suite 'All tests' passed at 2026-09-08 00:00:00.000."
   echo "	 Executed 4 tests, with 0 failures (0 unexpected) in 0.400 (0.900) seconds"
@@ -441,6 +447,36 @@ if grep -q -- "--- BATCH " "$TMPDIR/batch-budget-runner.out"; then
 fi
 unset FAKE_XCRUN_SLOW_SUITE FAKE_XCRUN_SLOW_SECONDS OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS
 export OMI_SWIFT_TEST_SUITE_BATCH_PER_SUITE_SECONDS=0
+
+# The scaled batch budget grows with the batch size (300s + 30s per extra
+# suite), so CI's batch of 100 budgets 3270s — 54.5 minutes inside a
+# 60-minute job, leaving a wedged batch no room for its bisect fallback
+# before the job timeout kills the whole runner.
+# OMI_SWIFT_TEST_BATCH_CEILING_SECONDS clamps that budget independently of
+# the formula. Same five-suite shape as the scenario above: a suite slow
+# enough to outlive a 3s ceiling (well under its own 13s scaled budget)
+# must get the batch watchdog-killed and failed over to the isolated
+# per-suite path, where the same slow suite also exceeds the 1s per-suite
+# budget and fails for real.
+export OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS=1
+export OMI_SWIFT_TEST_SUITE_BATCH_PER_SUITE_SECONDS=3
+export OMI_SWIFT_TEST_BATCH_CEILING_SECONDS=3
+export FAKE_XCRUN_SLOW_SUITE=BetaTests
+export FAKE_XCRUN_SLOW_SECONDS=8
+if "$RUNNER" >"$TMPDIR/batch-ceiling-runner.out" 2>"$TMPDIR/batch-ceiling-runner.err"; then
+  fail "batch under a 3s ceiling unexpectedly survived an 8s suite"
+fi
+if ! grep -q -- "--- BATCH worker-0-0 exited" "$TMPDIR/batch-ceiling-runner.out"; then
+  fail "ceiling did not fail the batch over to the isolated fallback"
+fi
+if ! grep -q "budget 3s" "$TMPDIR/batch-ceiling-runner.out"; then
+  fail "batch invocation did not report the clamped 3s budget"
+fi
+if ! grep -q -- "--- FAILED: BetaTests ---" "$TMPDIR/batch-ceiling-runner.out"; then
+  fail "isolated fallback under the ceiling did not re-fail BetaTests"
+fi
+unset FAKE_XCRUN_SLOW_SUITE FAKE_XCRUN_SLOW_SECONDS OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS
+unset OMI_SWIFT_TEST_BATCH_CEILING_SECONDS OMI_SWIFT_TEST_SUITE_BATCH_PER_SUITE_SECONDS
 
 # A red batch is never authoritative: every suite it carried is re-run through
 # the isolated per-suite path, and only what fails there is reported failed.
@@ -791,6 +827,45 @@ fi
 if grep -q "All tests" "$TMPDIR/timing-runner.out"; then
   fail "duration harvest recorded the aggregate 'All tests' wrapper as a suite"
 fi
+unset FAKE_XCRUN_XCTEST_TIMING OMI_SWIFT_TEST_SLOW_SUITES_FILE OMI_SWIFT_TEST_LANE
+
+# --- PR-lane slow-suite ratchet ---
+#
+# The fast lane must not silently grow a slow tail: any executed suite over
+# the ratchet threshold that is not ratcheted in the slow list fails the
+# run with defer instructions. A slow-LISTED suite that woke (its declaring
+# file changed) is exempt — deferral is the slow list's job.
+export OMI_SWIFT_TEST_LANE=pr
+export OMI_SWIFT_TEST_SLOW_SUITES_FILE="$TMPDIR/slow-suites.json"
+export FAKE_XCRUN_XCTEST_TIMING=1
+export OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS=60
+export FAKE_XCRUN_SLOW_TIMING_SUITE=APIClientRoutingTests
+if "$RUNNER" >"$TMPDIR/ratchet-runner.out" 2>"$TMPDIR/ratchet-runner.err"; then
+  fail "slow-suite ratchet unexpectedly passed with a 999s unlisted suite"
+fi
+if ! grep -q "FAILED slow-suite ratchet" "$TMPDIR/ratchet-runner.err"; then
+  fail "ratchet failure did not identify itself"
+fi
+if ! grep -q "APIClientRoutingTests=999.000s" "$TMPDIR/ratchet-runner.err"; then
+  fail "ratchet failure did not name the offending suite with its duration"
+fi
+if ! grep -q "swift-test-slow-suites.json" "$TMPDIR/ratchet-runner.err"; then
+  fail "ratchet failure did not point at the deferral list"
+fi
+if grep -q "FAILED Swift suites:" "$TMPDIR/ratchet-runner.out"; then
+  fail "ratchet scenario reported suite failures; every suite passed"
+fi
+
+# A woken, slow-listed suite carrying the same 999s timing stays exempt.
+export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/Desktop/Tests/BetaTests.swift"
+export FAKE_XCRUN_SLOW_TIMING_SUITE=BetaTests
+if ! "$RUNNER" >"$TMPDIR/ratchet-exempt-runner.out" 2>"$TMPDIR/ratchet-exempt-runner.err"; then
+  fail "ratchet flagged a woken slow-listed suite"
+fi
+if grep -q "FAILED slow-suite ratchet" "$TMPDIR/ratchet-exempt-runner.err"; then
+  fail "a woken slow-listed suite must be exempt from the ratchet"
+fi
+unset FAKE_XCRUN_SLOW_TIMING_SUITE OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS OMI_SWIFT_TEST_CHANGED_FILES
 unset FAKE_XCRUN_XCTEST_TIMING OMI_SWIFT_TEST_SLOW_SUITES_FILE OMI_SWIFT_TEST_LANE
 
 echo "swift-test-suites tests passed"
