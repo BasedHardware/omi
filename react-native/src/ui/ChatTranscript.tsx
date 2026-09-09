@@ -83,8 +83,8 @@ const ChatMessageRow = memo(function ChatMessageRow({
         <View
           style={[
             styles.chatBubble,
-            human ? styles.chatBubbleHuman : styles.chatBubbleAi,
-            desktop && (human ? desktopStyles.human : desktopStyles.ai),
+            human ? transcriptStyles.human : styles.chatBubbleAi,
+            desktop && !human && desktopStyles.ai,
             message.generationOutcome === 'cancelled' &&
               styles.cancelledMessage,
           ]}>
@@ -120,57 +120,69 @@ const ChatMessageRow = memo(function ChatMessageRow({
   );
 });
 
-function ChatThinking({reduceMotion}: {reduceMotion: boolean}) {
-  const dots = useRef([
-    new Animated.Value(1),
-    new Animated.Value(1),
-    new Animated.Value(1),
-  ]).current;
+function ChatThinking({
+  reduceMotion,
+  desktop = false,
+}: {
+  reduceMotion: boolean;
+  desktop?: boolean;
+}) {
+  const opacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (reduceMotion) {
+      opacity.setValue(1);
       return;
     }
     const animation = Animated.loop(
-      Animated.stagger(
-        150,
-        dots.map(dot =>
-          Animated.sequence([
-            Animated.timing(dot, {
-              duration: 300,
-              toValue: 0.3,
-              useNativeDriver: true,
-            }),
-            Animated.timing(dot, {
-              duration: 300,
-              toValue: 1,
-              useNativeDriver: true,
-            }),
-          ]),
-        ),
-      ),
+      Animated.sequence([
+        Animated.timing(opacity, {
+          duration: 700,
+          toValue: 0.45,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          duration: 700,
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+      ]),
     );
     animation.start();
     return () => animation.stop();
-  }, [dots, reduceMotion]);
+  }, [opacity, reduceMotion]);
   return (
-    <View style={[styles.chatMessageRow, styles.chatMessageRowAi]}>
-      <OmiAvatar animate reduceMotion={reduceMotion} />
-      <View
-        accessibilityLabel="Thinking"
-        style={[styles.chatBubble, styles.chatBubbleAi]}>
-        {reduceMotion ? (
-          <Text style={styles.thinkingText}>Thinking…</Text>
-        ) : (
-          <View style={styles.thinkingDots}>
-            {dots.map((opacity, index) => (
-              <Animated.View
-                key={index}
-                style={[styles.thinkingDot, {opacity}]}
-              />
-            ))}
-          </View>
-        )}
-      </View>
+    <View
+      accessible
+      accessibilityLabel="Waiting for response"
+      accessibilityLiveRegion="polite"
+      accessibilityState={{busy: true}}
+      style={[styles.chatMessageRow, styles.chatMessageRowAi]}>
+      <OmiAvatar
+        tone={desktop ? 'ink' : 'identity'}
+        inkColor={desktop ? token.color.ink : undefined}
+        animate={false}
+        reduceMotion={reduceMotion}
+      />
+      <Animated.View
+        accessible={false}
+        style={[
+          styles.chatBubble,
+          styles.chatBubbleAi,
+          desktop && desktopStyles.ai,
+          transcriptStyles.skeleton,
+          {opacity},
+        ]}>
+        {[100, 86, 62].map(width => (
+          <View
+            key={width}
+            style={[
+              transcriptStyles.line,
+              desktop && transcriptStyles.desktopLine,
+              {width: `${width}%`},
+            ]}
+          />
+        ))}
+      </Animated.View>
     </View>
   );
 }
@@ -179,8 +191,23 @@ export {ChatMessageRow, ChatThinking};
 
 const desktopStyles = StyleSheet.create({
   column: {maxWidth: '82%'},
-  human: {backgroundColor: token.color.glassSelected},
-  ai: {backgroundColor: 'transparent', borderWidth: 0, paddingLeft: 4},
+  ai: {backgroundColor: token.color.glassQuiet, borderWidth: 0},
   text: {color: token.color.ink, fontSize: 15, lineHeight: 24},
   time: {color: token.color.inkFaint, fontSize: 11},
+});
+
+const transcriptStyles = StyleSheet.create({
+  human: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 4,
+  },
+  skeleton: {width: 260, maxWidth: '80%', gap: 10},
+  line: {
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  desktopLine: {backgroundColor: token.color.glassSelected},
 });
