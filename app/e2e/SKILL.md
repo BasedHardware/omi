@@ -122,7 +122,7 @@ Onboarding (wrapper.dart) — step wizard
 └── 11: Complete (complete_screen.dart) → Home
 
 Home (home/page.dart) — main app after auth, 4-slot bottom nav
-├── ["Ask Omi anything…" input bar] → Chat (chat/page.dart) — full-width bar above bottom nav, not a tab
+├── ["Ask Omi" input bar] → Chat (chat/page.dart) — full-width bar above bottom nav, not a tab
 │   ├── Message history, "Ask anything" field, AI responses
 │   └── AI-message action row: Copy ("✨ Message copied to clipboard" snackbar), thumbs up, thumbs down, Share
 ├── [mic in the bar] → Chat with voice auto-start
@@ -249,7 +249,7 @@ Speech Profile (speech_profile/page.dart)
   slot 3 = Apps marketplace ("Search 1500+ Apps" / "Featured")
 
 **Chat entry point (not a bottom-nav tab):**
-- Open chat by tapping the "Ask Omi anything…" input bar on the home screen — a full-width gesture
+- Open chat by tapping the "Ask Omi" input bar on the home screen — a full-width gesture
   element directly above the bottom nav (~y=756, w≈382 on a 414pt-wide screen; verified iOS 2026-07-11)
 
 **Settings gear:**

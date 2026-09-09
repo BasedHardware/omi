@@ -4,6 +4,12 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: go-device-sdk-tests
+    command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
+    triggers: ["sdks/device/go/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "Parakeet readiness is written by the WebSocket reader and read by PCM submission; execute the in-memory handshake with the race detector"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
@@ -893,7 +899,7 @@ checks:
 
   - id: device-typescript-tests
     command: ["bun", "test", "./sdks/device/typescript/src"]
-    triggers: ["sdks/device/typescript/**"]
+    triggers: ["sdks/device/typescript/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "BLE setup failures must release listeners and connections; covers issue 13003."
 

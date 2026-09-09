@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Optional
 
 import typer
 
+from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import NotFoundError, UsageError
 from omi_cli.output import shorten
 
@@ -32,8 +33,8 @@ def list_action_items(
     typer_ctx: typer.Context,
     completed: Optional[bool] = typer.Option(None, "--completed/--open", help="Filter by completion."),
     conversation_id: Optional[str] = typer.Option(None, "--conversation-id"),
-    start_date: Optional[datetime] = typer.Option(None, "--start-date"),
-    end_date: Optional[datetime] = typer.Option(None, "--end-date"),
+    start_date: Optional[datetime] = typer.Option(None, "--start-date", formats=ISO_DATETIME_FORMATS),
+    end_date: Optional[datetime] = typer.Option(None, "--end-date", formats=ISO_DATETIME_FORMATS),
     limit: int = typer.Option(100, "--limit", min=1, max=500),
     offset: int = typer.Option(0, "--offset", min=0),
 ) -> None:
@@ -98,7 +99,7 @@ def create_action_item(
     typer_ctx: typer.Context,
     description: str = typer.Argument(..., help="Action item description (1-500 chars)."),
     completed: bool = typer.Option(False, "--completed/--open"),
-    due_at: Optional[datetime] = typer.Option(None, "--due-at", help="ISO datetime."),
+    due_at: Optional[datetime] = typer.Option(None, "--due-at", formats=ISO_DATETIME_FORMATS, help="ISO datetime."),
 ) -> None:
     ctx = _ctx(typer_ctx)
     body: dict[str, object] = {"description": description, "completed": completed}
@@ -116,7 +117,7 @@ def update_action_item(
     action_item_id: str = typer.Argument(..., help="Action item ID."),
     description: Optional[str] = typer.Option(None, "--description"),
     completed: Optional[bool] = typer.Option(None, "--completed/--open"),
-    due_at: Optional[datetime] = typer.Option(None, "--due-at"),
+    due_at: Optional[datetime] = typer.Option(None, "--due-at", formats=ISO_DATETIME_FORMATS),
 ) -> None:
     ctx = _ctx(typer_ctx)
     body: dict[str, object] = {}
@@ -158,5 +159,7 @@ def delete_action_item(
     if not confirm:
         typer.confirm(f"Delete action item {action_item_id}?", abort=True)
     with ctx.make_client() as client:
-        client.delete(f"/v1/dev/user/action-items/{action_item_id}")
+        result = client.delete(f"/v1/dev/user/action-items/{action_item_id}")
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit(result)
     ctx.renderer.success(f"Deleted action item [bold]{action_item_id}[/bold].")
