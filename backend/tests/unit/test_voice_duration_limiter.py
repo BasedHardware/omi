@@ -482,6 +482,76 @@ class TestConstants:
 
 
 # ===========================================================================
+# Metering rate by surface
+# ===========================================================================
+
+
+class TestBudgetCostBySurface:
+    """Voice typing spends the shared allowance a tenth as fast as PTT does."""
+
+    def test_ptt_pays_the_full_duration(self):
+        from utils.voice_duration_limiter import VoiceBudgetSurface, budget_cost_ms
+
+        assert budget_cost_ms(30_000, VoiceBudgetSurface.PTT) == 30_000
+
+    def test_the_default_surface_is_undiscounted(self):
+        """An un-declared caller must not silently get the dictation rate."""
+        from utils.voice_duration_limiter import budget_cost_ms
+
+        assert budget_cost_ms(30_000) == 30_000
+
+    def test_voice_typing_pays_a_tenth(self):
+        from utils.voice_duration_limiter import VoiceBudgetSurface, budget_cost_ms
+
+        assert budget_cost_ms(30_000, VoiceBudgetSurface.VOICE_TYPING) == 3_000
+
+    def test_a_short_dictation_still_costs_something(self):
+        """Rounding a real turn down to free would make the budget unenforceable."""
+        from utils.voice_duration_limiter import VoiceBudgetSurface, budget_cost_ms
+
+        assert budget_cost_ms(5, VoiceBudgetSurface.VOICE_TYPING) == 1
+        assert budget_cost_ms(1, VoiceBudgetSurface.VOICE_TYPING) == 1
+
+    def test_a_probe_stays_free(self):
+        from utils.voice_duration_limiter import VoiceBudgetSurface, budget_cost_ms
+
+        assert budget_cost_ms(0, VoiceBudgetSurface.VOICE_TYPING) == 0
+
+    def test_the_dictation_rate_is_ten_times_cheaper(self):
+        """The number the product decision names, asserted directly."""
+        from utils.voice_duration_limiter import VoiceBudgetSurface, budget_cost_ms
+
+        duration_ms = 600_000  # ten minutes of dictation
+        ptt = budget_cost_ms(duration_ms, VoiceBudgetSurface.PTT)
+        typing = budget_cost_ms(duration_ms, VoiceBudgetSurface.VOICE_TYPING)
+        assert ptt == typing * 10
+
+    def test_a_full_allowance_of_dictation_is_twenty_hours(self):
+        from utils.voice_duration_limiter import DAILY_BUDGET_MS, VoiceBudgetSurface, budget_cost_ms
+
+        one_hour_ms = 3_600_000
+        spent = budget_cost_ms(20 * one_hour_ms, VoiceBudgetSurface.VOICE_TYPING)
+        assert spent == DAILY_BUDGET_MS
+
+
+class TestResolveBudgetSurface:
+    """The surface is client-declared, so every unknown value must read as PTT."""
+
+    def test_known_surfaces_resolve(self):
+        from utils.voice_duration_limiter import VoiceBudgetSurface, resolve_budget_surface
+
+        assert resolve_budget_surface('voice_typing') == VoiceBudgetSurface.VOICE_TYPING
+        assert resolve_budget_surface('VOICE_TYPING') == VoiceBudgetSurface.VOICE_TYPING
+        assert resolve_budget_surface(' ptt ') == VoiceBudgetSurface.PTT
+
+    @pytest.mark.parametrize('raw', [None, '', 'typing', 'dictation', 'free', '10'])
+    def test_anything_else_pays_full_rate(self, raw):
+        from utils.voice_duration_limiter import VoiceBudgetSurface, resolve_budget_surface
+
+        assert resolve_budget_surface(raw) == VoiceBudgetSurface.PTT
+
+
+# ===========================================================================
 # Concurrent WS admission (real Lua via fakeredis)
 # ===========================================================================
 

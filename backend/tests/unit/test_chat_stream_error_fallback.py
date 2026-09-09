@@ -89,6 +89,7 @@ def _make_client():
     pre_recorded.prerecorded = MagicMock(return_value=[{'word': 'hello'}])
     pre_recorded.prerecorded_from_bytes = MagicMock(return_value=[{'word': 'hello'}])
     pre_recorded.get_prerecorded_service = MagicMock(return_value=('parakeet', 'en', 'parakeet'))
+    pre_recorded.get_prerecorded_service_chain = MagicMock(return_value=(('parakeet', 'en', 'parakeet'),))
     pre_recorded.PrerecordedSTTConfigurationError = type('PrerecordedSTTConfigurationError', (Exception,), {})
 
     common.usage_tracker.track_usage = MagicMock()

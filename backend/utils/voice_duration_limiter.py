@@ -17,6 +17,13 @@ Design:
 Constants:
 - MAX_SESSION_DURATION_S: 120 seconds per request/session.
 - DAILY_BUDGET_MS: 7,200,000 ms (2 hours) per rolling 24h window.
+
+Metering rate:
+- The allowance is one shared pool, but surfaces do not spend it at the same
+  rate. Voice typing is charged a tenth of its audio, so a dictation-heavy day
+  cannot consume a user's whole voice-message allowance. The rate itself lives
+  in config.voice_budget_policy (budget_cost_ms), which has no dependencies and
+  is therefore readable by callers and tests that never stand up Redis.
 """
 
 import logging
@@ -25,6 +32,11 @@ from typing import Any, Dict, Optional
 
 import av
 
+from config.voice_budget_policy import (  # re-exported so callers may read the rate off the limiter
+    VoiceBudgetSurface as VoiceBudgetSurface,
+    budget_cost_ms as budget_cost_ms,
+    resolve_budget_surface as resolve_budget_surface,
+)
 from database.redis_db import r
 
 logger = logging.getLogger(__name__)

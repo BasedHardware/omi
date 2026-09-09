@@ -91,6 +91,7 @@ from utils.observability import submit_langsmith_feedback
 from utils.observability.fallback import record_fallback
 from utils.journey_metrics_contract import resolve_client_kind, resolve_client_kind_from_headers
 from utils.observability.journeys import ClientJourneyAttempt, JourneyAttempt
+from config.voice_budget_policy import budget_cost_ms, resolve_budget_surface
 from utils.voice_duration_limiter import (
     MAX_SESSION_DURATION_S,
     compute_pcm_duration_ms,
@@ -1019,6 +1020,7 @@ async def transcribe_voice_message(
         stt_provider, _, stt_model = get_prerecorded_service(resolved_language)
         context_keywords = _parse_context_keywords(request.query_params.get("keywords"))
         encoding = request.query_params.get("encoding", "linear16")
+        budget_surface = resolve_budget_surface(request.query_params.get("surface"))
         try:
             sample_rate = int(request.query_params.get("sample_rate", "16000"))
             channels = int(request.query_params.get("channels", "1"))
@@ -1054,7 +1056,7 @@ async def transcribe_voice_message(
         parity_capture = SurfaceParityCapture.from_environ(
             principal_id=uid,
             session_id=str(uuid.uuid4()),
-            surface="ptt",
+            surface=budget_surface.value,
             source="desktop_ptt_http",
             provider_lane="stt",
             route_or_model=stt_model or stt_provider or "prerecorded",
@@ -1068,9 +1070,11 @@ async def transcribe_voice_message(
         )
         parity_capture.observe_audio("client", audio_bytes)
 
-        # Daily budget check
+        # Daily budget check. Voice typing is metered at a tenth of its audio
+        # (budget_cost_ms) — the turn still runs at full length, it just costs a
+        # dictation-shaped fraction of the shared allowance.
         duration_ms = compute_pcm_duration_ms(len(audio_bytes), sample_rate, channels)
-        allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
+        allowed, used_ms, remaining_ms = try_consume_budget(uid, budget_cost_ms(duration_ms, budget_surface))
         if not allowed:
             del audio_bytes
             raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
@@ -1085,7 +1089,7 @@ async def transcribe_voice_message(
             audio_seconds=duration_ms / 1000 if encoding == 'linear16' else None,
         )
         try:
-            transcript, detected_language = await run_blocking(
+            transcription = await run_blocking(
                 sync_executor,
                 transcribe_pcm_bytes,
                 audio_bytes,
@@ -1096,6 +1100,11 @@ async def transcribe_voice_message(
                 channels=channels,
                 keywords=context_keywords,
             )
+            transcript, detected_language = transcription.text, transcription.language
+            # Report the provider that produced these words, not the one selection
+            # started on: the chain may have failed over to Velma behind Parakeet.
+            stt_provider = transcription.provider or stt_provider
+            stt_model = transcription.model or stt_model
             outcome = TranscriptionOutcome.SUCCESS if transcript else TranscriptionOutcome.EXPECTED_SILENCE
             parity_capture.observe(
                 "inbound",

@@ -822,6 +822,9 @@ class TestProcessSegmentReal:
         sys.modules['utils.stt.pre_recorded'].get_prerecorded_service = MagicMock(
             return_value=('deepgram', 'multi', 'nova-3')
         )
+        sys.modules['utils.stt.pre_recorded'].get_prerecorded_service_chain = MagicMock(
+            return_value=(('deepgram', 'multi', 'nova-3'),)
+        )
         sys.modules['utils.stt.vad'].vad_is_empty = MagicMock()
         sys.modules['utils.speaker_assignment'].process_speaker_assigned_segments = MagicMock()
         sys.modules['utils.speaker_identification'].detect_speaker_from_text = MagicMock(return_value=None)
@@ -1428,6 +1431,9 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['utils.stt.pre_recorded'].get_deepgram_model_for_language = MagicMock(return_value=('en', 'nova-3'))
         sys.modules['utils.stt.pre_recorded'].get_prerecorded_service = MagicMock(
             return_value=('deepgram', 'en', 'nova-3')
+        )
+        sys.modules['utils.stt.pre_recorded'].get_prerecorded_service_chain = MagicMock(
+            return_value=(('deepgram', 'en', 'nova-3'),)
         )
         sys.modules['utils.stt.vad'].VADAudioDecodeError = type('VADAudioDecodeError', (RuntimeError,), {})
         sys.modules['utils.stt.vad'].VADProcessingError = type('VADProcessingError', (RuntimeError,), {})

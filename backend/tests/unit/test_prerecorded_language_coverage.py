@@ -4,7 +4,11 @@ import pytest
 
 from config.prerecorded_stt import TranscriptionOutcome
 from utils.stt.outcomes import TranscriptionFailure, failure_from_exception
-from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
+from utils.stt.pre_recorded import (
+    PrerecordedSTTService,
+    get_prerecorded_service,
+    get_prerecorded_service_chain,
+)
 
 # Every base language the mobile picker offers (app/lib/providers/home_provider.dart).
 CLIENT_OFFERED_LANGUAGES = (
@@ -153,6 +157,39 @@ def test_parakeet_only_deployment_still_reaches_velma_for_a_language_it_cannot_s
     service, resolved_language, _model = get_prerecorded_service('hi')
     assert service == PrerecordedSTTService.MODULATE
     assert resolved_language == 'multi'
+
+
+def test_the_chain_orders_every_provider_the_deployment_declared(monkeypatch):
+    """The failover tail is the deployment's own ordering, not a second guess."""
+    monkeypatch.setenv('STT_PRERECORDED_MODEL', 'parakeet,modulate-velma-2')
+
+    assert get_prerecorded_service_chain('en') == (
+        (PrerecordedSTTService.PARAKEET, 'en', 'parakeet'),
+        (PrerecordedSTTService.MODULATE, 'en', 'velma-2'),
+    )
+
+
+def test_the_chain_head_is_what_selection_returns(monkeypatch):
+    monkeypatch.setenv('STT_PRERECORDED_MODEL', 'parakeet,modulate-velma-2')
+
+    assert get_prerecorded_service('en') == get_prerecorded_service_chain('en')[0]
+
+
+def test_a_language_only_one_provider_serves_has_no_failover(monkeypatch):
+    """Velma cannot be a fallback for a language it will not take a code for."""
+    monkeypatch.setenv('STT_PRERECORDED_MODEL', 'parakeet,modulate-velma-2')
+
+    assert get_prerecorded_service_chain('ru') == ((PrerecordedSTTService.PARAKEET, 'ru', 'parakeet'),)
+
+
+def test_a_repeated_model_token_does_not_repeat_a_provider(monkeypatch):
+    """A duplicated token must not spend two attempts on the same provider."""
+    monkeypatch.setenv('STT_PRERECORDED_MODEL', 'parakeet,parakeet,modulate-velma-2')
+
+    assert get_prerecorded_service_chain('en') == (
+        (PrerecordedSTTService.PARAKEET, 'en', 'parakeet'),
+        (PrerecordedSTTService.MODULATE, 'en', 'velma-2'),
+    )
 
 
 def test_no_enabled_provider_raises_a_non_retryable_config_failure(monkeypatch):

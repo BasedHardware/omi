@@ -265,6 +265,7 @@ def wire_common_stubs(install) -> SimpleNamespace:
     prerecorded = install('utils.stt.pre_recorded', ModuleType('utils.stt.pre_recorded'))
     prerecorded.PrerecordedSTTConfigurationError = type('PrerecordedSTTConfigurationError', (Exception,), {})
     prerecorded.get_prerecorded_service = MagicMock(return_value=('parakeet', 'en', 'parakeet'))
+    prerecorded.get_prerecorded_service_chain = MagicMock(return_value=(('parakeet', 'en', 'parakeet'),))
 
     usage_tracker = install('utils.llm.usage_tracker', ModuleType('utils.llm.usage_tracker'))
     usage_tracker.set_usage_context = MagicMock(return_value='usage-token')
