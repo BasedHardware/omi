@@ -50,7 +50,11 @@ export const ReadRow = memo(function ReadRow({
 }) {
   const meta =
     item.kind === 'conversation'
-      ? [timeLabel(item), conversationDisplaySummary(item)]
+      ? [
+          timeLabel(item),
+          item.starred ? 'Starred' : '',
+          conversationDisplaySummary(item),
+        ]
       : item.kind === 'memory'
       ? [timeLabel(item), 'Memory']
       : [timeLabel(item)];
@@ -86,7 +90,11 @@ export const ConversationRow = memo(function ConversationRow({
           {conversationDisplayTitle(item)}
         </Text>
         <Text numberOfLines={1} style={styles.rowMeta}>
-          {[timeLabel(item), conversationDisplaySummary(item)]
+          {[
+            timeLabel(item),
+            item.starred ? 'Starred' : '',
+            conversationDisplaySummary(item),
+          ]
             .filter(part => part !== '')
             .join(' · ')}
         </Text>

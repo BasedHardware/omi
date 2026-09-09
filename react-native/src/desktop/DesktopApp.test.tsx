@@ -317,6 +317,36 @@ test('renders the shipping search-first desktop hierarchy', () => {
   expect(renderer.root.findAllByType(ScrollView).length).toBeGreaterThan(0);
 });
 
+test('Home conversation rows name starred conversations without an empty star toggle', () => {
+  const renderer = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      conversations: {
+        ...outcomes.conversations,
+        value: {
+          ...outcomes.conversations.value,
+          items: outcomes.conversations.value.items.map(item => ({
+            ...item,
+            starred: true,
+          })),
+        },
+      },
+    },
+    reads: outcomes.conversations.value.items.map(item => ({
+      ...item,
+      starred: true,
+    })),
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Starred');
+  expect(tree).not.toContain('☆');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Not starred',
+    ),
+  ).toHaveLength(0);
+});
+
 test('Home conversation rows open shared Conversations details', () => {
   const renderer = renderDesktop();
   act(() => {

@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
+import {Text} from 'react-native';
 import {LibraryPage, TasksPage} from './DesktopPages';
 import type {DesktopReadOutcomes} from '../desktopReadClient';
 
@@ -265,4 +266,31 @@ test('a requested conversation opens shared details without a second search', ()
   mounted.push(view);
   expect(label(view, 'Selected conversation details')).toBeDefined();
   expect(onRequestedConversationConsumed).toHaveBeenCalledTimes(1);
+});
+
+test('library rows name starred conversations without an empty star toggle', () => {
+  const value = libraryOutcome();
+  if (value.conversations.status !== 'success') {
+    throw new Error('Expected fixture');
+  }
+  value.conversations.value.items[0]!.starred = true;
+  let view!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    view = ReactTestRenderer.create(<LibraryPage outcomes={value} />);
+  });
+  mounted.push(view);
+  const copy = view.root
+    .findAllByType(Text)
+    .flatMap(node =>
+      Array.isArray(node.props.children)
+        ? node.props.children
+        : [node.props.children],
+    )
+    .filter((part): part is string => typeof part === 'string')
+    .join(' ');
+  expect(copy).toContain('Starred');
+  expect(copy).not.toContain('☆');
+  expect(
+    view.root.findAll(node => node.props.accessibilityLabel === 'Not starred'),
+  ).toHaveLength(0);
 });
