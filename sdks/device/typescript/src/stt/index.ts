@@ -146,9 +146,6 @@ export function createTranscriber(
     return createParakeetTranscriber({ ...opts, apiUrl } as any);
   }
   if (engine === 'whisper') {
-    if (opts.sampleRate !== undefined && opts.sampleRate !== 16000) {
-      throw new Error('Whisper requires 16000 Hz PCM; resample audio before transcription');
-    }
     if (!opts.whisperRunner) throw new Error('Whisper requires whisperRunner');
     return createWhisperTranscriber({
       runner: opts.whisperRunner,
