@@ -2094,6 +2094,76 @@ test('Apps gallery keeps GET ratings instead of a scoreless catalogue', async ()
   expect(tree).not.toContain('Official');
 });
 
+test('Apps gallery keeps GET http images instead of a logo-less catalogue', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [
+      {
+        id: 'catalog-app-imaged',
+        name: 'Owned app',
+        description: '',
+        category: '',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        image: 'https://cdn.example.test/app.png',
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+      {
+        id: 'catalog-app-relative',
+        name: 'Catalog fixture app',
+        description: '',
+        category: '',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        image: '/assets/apps/foo.png',
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+    ],
+    enabledError: null,
+    enabledIds: [],
+    ownerUid: null,
+    ownerError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Owned app');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'App image' &&
+        node.props.source?.uri === 'https://cdn.example.test/app.png',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(tree).toContain('Catalog fixture app');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'App image' &&
+        node.props.source?.uri === '/assets/apps/foo.png',
+    ),
+  ).toHaveLength(0);
+  expect(tree).not.toContain('Official');
+});
+
 test('Settings persists a plane switch before reloading the workspace', async () => {
   const onWorkspaceReload = jest.fn();
   const {setDesktopPreference} = jest.requireMock(

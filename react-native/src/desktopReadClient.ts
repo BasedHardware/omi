@@ -291,6 +291,14 @@ export function appDisplayAttribution(app: {
     .join(' · ');
 }
 
+export function appImageUrl(image: string | null | undefined): string | null {
+  const trimmed = visibleDisplayText(image ?? '');
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
 export function appRatingCopy(
   ratingAvg: number | null | undefined,
   ratingCount: number | null | undefined,

@@ -1000,6 +1000,12 @@ export const styles = StyleSheet.create({
   },
   cloudRowBody: {flex: 1, gap: 4},
   cloudRowTitle: {color: '#eeeeee', fontSize: 14, fontWeight: '600'},
+  cloudAppImage: {
+    backgroundColor: '#35343B',
+    borderRadius: 12,
+    height: 40,
+    width: 40,
+  },
   cloudRowMeta: {color: '#888888', fontSize: 12, lineHeight: 17},
   cloudAction: {
     alignItems: 'center',

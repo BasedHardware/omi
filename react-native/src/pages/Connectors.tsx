@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
+  Image,
   Platform,
   ScrollView,
   Text,
@@ -26,12 +27,28 @@ import {
   desktopReadErrorCopy,
   appCategoryCopy,
   appDisplayName,
+  appImageUrl,
   appRatingCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
+
+function CatalogAppImage({uri}: {uri: string}) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return null;
+  }
+  return (
+    <Image
+      accessibilityLabel="App image"
+      onError={() => setFailed(true)}
+      source={{uri}}
+      style={styles.cloudAppImage}
+    />
+  );
+}
 
 function appRowMeta(app: CloudApp, installKnown: boolean): string {
   const category = appCategoryCopy(app.category);
@@ -261,10 +278,14 @@ export function ConnectorsPage({
                   const meta = appRowMeta(app, installKnown);
                   const name = appDisplayName(app.name);
                   const description = visibleDisplayText(app.description);
+                  const imageUrl = appImageUrl(app.image);
                   return (
                     <View
                       key={`${section.key}-${app.id}`}
                       style={styles.cloudRow}>
+                      {imageUrl !== null ? (
+                        <CatalogAppImage uri={imageUrl} />
+                      ) : null}
                       <View style={styles.cloudRowBody}>
                         <Text style={styles.cloudRowTitle}>{name}</Text>
                         {description !== '' && (

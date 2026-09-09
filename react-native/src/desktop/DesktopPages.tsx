@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {ScrollView, StyleSheet, Text, View} from 'react-native';
+import {Image, ScrollView, StyleSheet, Text, View} from 'react-native';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import {
   cloudErrorCanRetry,
@@ -12,6 +12,7 @@ import {
   appDisplayName,
   appDisplaySource,
   appDisplayAttribution,
+  appImageUrl,
   appRatingCopy,
   desktopAppsUnavailableCopy,
   desktopBackendUnavailableCopy,
@@ -303,6 +304,7 @@ type AppTileModel = {
   enabled: boolean;
   private: boolean;
   rating: string | null;
+  imageUrl: string | null;
 };
 
 function cloudAppStatus(app: CloudApp, installKnown: boolean): string {
@@ -340,8 +342,34 @@ function tilesFromCatalog(
       enabled: app.enabled,
       private: app.private,
       rating: appRatingCopy(app.ratingAvg, app.ratingCount),
+      imageUrl: appImageUrl(app.image),
     };
   });
+}
+
+function CatalogAppIcon({
+  Icon,
+  imageUrl,
+}: {
+  Icon: typeof Puzzle;
+  imageUrl: string | null;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (imageUrl === null || failed) {
+    return (
+      <View style={styles.appIcon}>
+        <Icon color={token.color.ink} size={22} />
+      </View>
+    );
+  }
+  return (
+    <Image
+      accessibilityLabel="App image"
+      onError={() => setFailed(true)}
+      source={{uri: imageUrl}}
+      style={styles.appIconImage}
+    />
+  );
 }
 
 function AppTile({
@@ -359,9 +387,7 @@ function AppTile({
   return (
     <View style={styles.appSlot}>
       <View style={styles.appCard}>
-        <View style={styles.appIcon}>
-          <Icon color={token.color.ink} size={22} />
-        </View>
+        <CatalogAppIcon Icon={Icon} imageUrl={item.imageUrl} />
         <Text style={styles.rowTitle}>{item.name}</Text>
         {item.private ? <Text style={styles.rowMeta}>Private</Text> : null}
         {item.description !== '' ? (
@@ -635,6 +661,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     height: 40,
     justifyContent: 'center',
+    marginBottom: 12,
+    width: 40,
+  },
+  appIconImage: {
+    backgroundColor: token.color.glassStrong,
+    borderRadius: 12,
+    height: 40,
     marginBottom: 12,
     width: 40,
   },

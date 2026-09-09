@@ -1277,3 +1277,61 @@ test('Connectors rows keep GET ratings instead of a scoreless catalogue', async 
   expect(tree).not.toContain('0.0');
   expect(tree).not.toContain('Official');
 });
+
+test('Connectors rows keep GET http images instead of a logo-less catalogue', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-imaged',
+            name: 'Owned app',
+            image: 'https://cdn.example.test/app.png',
+          },
+          {
+            id: 'catalog-app-relative',
+            name: 'Catalog fixture app',
+            image: '/assets/apps/foo.png',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([]),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Owned app');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'App image' &&
+        node.props.source?.uri === 'https://cdn.example.test/app.png',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(tree).toContain('Catalog fixture app');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'App image' &&
+        node.props.source?.uri === '/assets/apps/foo.png',
+    ),
+  ).toHaveLength(0);
+  expect(tree).not.toContain('Official');
+});

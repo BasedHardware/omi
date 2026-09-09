@@ -22,6 +22,7 @@ export type CloudApp = {
   installs: number;
   ratingAvg?: number | null;
   ratingCount?: number | null;
+  image?: string;
   hasExternalIntegration: boolean;
   connectedAccounts: string[];
 };
@@ -201,6 +202,7 @@ export function parseCloudApp(value: unknown, label: string): CloudApp {
       record.rating_count >= 0
         ? record.rating_count
         : null,
+    image: typeof record.image === 'string' ? record.image : '',
     hasExternalIntegration:
       record.external_integration !== null &&
       record.external_integration !== undefined,

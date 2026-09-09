@@ -18,6 +18,7 @@ import {
   appDisplayAttribution,
   appDisplayName,
   appRatingCopy,
+  appImageUrl,
   deviceDisplayName,
   accountFieldCopy,
   connectionIdentityCopy,
@@ -976,6 +977,27 @@ test('app rating copy keeps GET scores instead of inventing zeros', () => {
   expect(appRatingCopy(undefined, undefined)).toBe(null);
   expect(appRatingCopy(Number.NaN, 12)).toBe(null);
   expect(appRatingCopy(4.5, -1)).toBe('4.5');
+});
+
+test('app image URLs keep GET http(s) images instead of inventing a GitHub host', () => {
+  expect(appImageUrl('https://cdn.example.test/app.png')).toBe(
+    'https://cdn.example.test/app.png',
+  );
+  expect(appImageUrl('http://cdn.example.test/app.png')).toBe(
+    'http://cdn.example.test/app.png',
+  );
+  expect(appImageUrl('  HTTPS://cdn.example.test/app.png  ')).toBe(
+    'HTTPS://cdn.example.test/app.png',
+  );
+  expect(appImageUrl('/assets/apps/foo.png')).toBe(null);
+  expect(appImageUrl('assets/foo.png')).toBe(null);
+  expect(appImageUrl('javascript:https://evil.test')).toBe(null);
+  expect(appImageUrl('data:image/png;base64,abc')).toBe(null);
+  expect(appImageUrl('')).toBe(null);
+  expect(appImageUrl(' \t\n')).toBe(null);
+  expect(appImageUrl('\u0085')).toBe(null);
+  expect(appImageUrl(null)).toBe(null);
+  expect(appImageUrl(undefined)).toBe(null);
 });
 
 test('empty device names stay visible instead of a blank row', () => {
@@ -2181,6 +2203,35 @@ test('parses catalogue, enabled, owned, and service app records without inventin
       ratingAvg: null,
       ratingCount: null,
       installs: 0,
+      image: '',
+    }),
+  );
+  expect(
+    parseCloudApp(
+      {
+        id: 'catalog-app-image',
+        name: 'Imaged app',
+        image: 'https://cdn.example.test/app.png',
+      },
+      'App 2',
+    ),
+  ).toEqual(
+    expect.objectContaining({
+      image: 'https://cdn.example.test/app.png',
+    }),
+  );
+  expect(
+    parseCloudApp(
+      {
+        id: 'catalog-app-relative',
+        name: 'Relative app',
+        image: '/assets/apps/foo.png',
+      },
+      'App 3',
+    ),
+  ).toEqual(
+    expect.objectContaining({
+      image: '/assets/apps/foo.png',
     }),
   );
   expect(parseEnabledAppIds(['catalog-app-1'], 'Enabled')).toEqual([
