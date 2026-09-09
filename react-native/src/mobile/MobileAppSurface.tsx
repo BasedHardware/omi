@@ -53,6 +53,7 @@ export type MobileRecap = {
   id: string;
   title: string;
   dateLabel: string;
+  starred?: boolean;
 };
 
 export type MobileDeviceState = {
@@ -217,6 +218,13 @@ const RecapCard = memo(function RecapCard({
       <Text numberOfLines={3} style={styles.recapTitle}>
         {recap.title}
       </Text>
+      {recap.starred === true ? (
+        <Text
+          accessibilityLabel="Starred conversation"
+          style={styles.recapStar}>
+          Starred
+        </Text>
+      ) : null}
       <Text style={styles.recapDate}>{recap.dateLabel}</Text>
     </View>
   );
@@ -971,6 +979,10 @@ const styles = StyleSheet.create({
     width: 250,
   },
   recapTitle: {...mobileType.body, color: mobileColor.text},
+  recapStar: {
+    ...mobileType.caption,
+    color: mobileColor.textMuted,
+  },
   recapDate: {
     ...mobileType.caption,
     alignSelf: 'flex-end',

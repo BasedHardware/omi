@@ -1073,6 +1073,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               recapNow,
             ),
             id: item.id,
+            starred: item.starred,
             title: conversationDisplayTitle(item),
           }))
         : [];

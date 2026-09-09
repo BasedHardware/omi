@@ -727,6 +727,44 @@ test('empty Tasks tab keeps incomplete coverage instead of claiming emptiness', 
   expect(renderedText(renderer)).not.toContain("Nothing's waiting on you.");
 });
 
+test('Daily Recaps name starred conversations without an empty star toggle', () => {
+  const starred = render({
+    recaps: [
+      {
+        id: 'recap-starred',
+        title: 'Product review',
+        dateLabel: 'Yesterday',
+        starred: true,
+      },
+    ],
+  });
+  expect(renderedText(starred)).toContain('Starred');
+  expect(
+    starred.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Starred conversation' &&
+        node.props.children === 'Starred',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    starred.root.findAll(
+      node => node.props.accessibilityLabel === 'Not starred',
+    ),
+  ).toHaveLength(0);
+
+  const unstarred = render({
+    recaps: [
+      {id: 'recap-plain', title: 'Omi gets simpler', dateLabel: 'Yesterday'},
+    ],
+  });
+  expect(renderedText(unstarred)).not.toContain('Starred');
+  expect(
+    unstarred.root.findAll(
+      node => node.props.accessibilityLabel === 'Not starred',
+    ),
+  ).toHaveLength(0);
+});
+
 test('untitled processing recaps stay visible instead of rendering a blank card', () => {
   const renderer = render({
     recaps: [
