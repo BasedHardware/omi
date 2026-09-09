@@ -468,7 +468,15 @@ def test_config_profile_rename_cli_command(config_path: Path, cli_runner) -> Non
     assert res_missing.exit_code != 0
     assert "No such profile" in res_missing.stderr
 
-    # Test CLI error on existing collision
-    res_collision = cli_runner.invoke(app, ["config", "profile", "rename", "final-profile", "final-profile"])
-    assert res_collision.exit_code == 0  # no-op succeeds
+    # Test rename to self is a no-op that succeeds
+    res_self = cli_runner.invoke(app, ["config", "profile", "rename", "final-profile", "final-profile"])
+    assert res_self.exit_code == 0
 
+    # Test CLI error on collision with another existing profile
+    config_with_two = cfg.load()
+    p2 = config_with_two.get_profile("other-profile")
+    config_with_two.set_profile(p2)
+    cfg.save(config_with_two)
+    res_collision = cli_runner.invoke(app, ["config", "profile", "rename", "final-profile", "other-profile"])
+    assert res_collision.exit_code != 0
+    assert "already exists" in res_collision.stderr
