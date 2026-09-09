@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.328",
+      "date": "2026-09-09",
+      "changes": [
+        "Fixed undoing the deletion of a completed task duplicating it instead of restoring it"
+      ]
+    },
+    {
       "version": "0.12.327",
       "date": "2026-09-09",
       "changes": [
