@@ -10,6 +10,7 @@ export type BrowserGenerationStreamOptions = {
   open: OpenStream;
   signal: AbortSignal;
   maxAttempts?: number;
+  onEvent?: (frame: string) => void;
 };
 
 export type BrowserGenerationStreamResult = {
@@ -129,6 +130,7 @@ async function readConnection(
   response: Response,
   signal: AbortSignal,
   seenEventIds: Set<string>,
+  onEvent?: (frame: string) => void,
 ): Promise<ConnectionResult> {
   if (signal.aborted) {
     throw new BrowserGenerationCancelledError();
@@ -166,6 +168,7 @@ async function readConnection(
         seenEventIds.add(event.id);
       }
       body += event.raw;
+      onEvent?.(event.raw);
       terminal = terminal || isTerminalKind(eventKind(event.data));
     }
     eventId = null;
@@ -286,6 +289,7 @@ export async function readBrowserGenerationEvents(
         response,
         options.signal,
         seenEventIds,
+        options.onEvent,
       );
       body += connection.body;
       lastEventId = connection.lastEventId ?? lastEventId;

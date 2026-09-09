@@ -1,6 +1,6 @@
 import React, {memo, useEffect, useRef} from 'react';
 import {Animated, Easing, StyleSheet, Text, View} from 'react-native';
-import type {ChatMessage} from '../chatClient';
+import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {OmiAvatar} from './OmiAvatar';
 import {ChatMessageContent} from './ChatMessageContent';
 import {styles} from './styles';
@@ -56,11 +56,20 @@ const ChatMessageRow = memo(function ChatMessageRow({
     return () => animation.stop();
   }, [animate, opacity, reduceMotion, translateY]);
   const human = message.sender === 'human';
+  const streaming = isStreamingAssistant(message);
+  const waiting = streaming && message.text === '';
   return (
     <Animated.View
       accessibilityLabel={
-        message.generationOutcome === 'failed' ? 'Failed response' : undefined
+        message.generationOutcome === 'failed'
+          ? 'Failed response'
+          : waiting
+          ? 'Waiting for response'
+          : undefined
       }
+      accessibilityLiveRegion={streaming ? 'polite' : undefined}
+      accessibilityState={streaming ? {busy: true} : undefined}
+      accessible={waiting || message.generationOutcome === 'failed'}
       style={[
         styles.chatMessageRow,
         human ? styles.chatMessageRowHuman : styles.chatMessageRowAi,
@@ -70,6 +79,8 @@ const ChatMessageRow = memo(function ChatMessageRow({
         <OmiAvatar
           tone={desktop ? 'ink' : 'identity'}
           inkColor={desktop ? token.color.ink : undefined}
+          animate={streaming}
+          reduceMotion={reduceMotion}
         />
       )}
       <View
@@ -103,14 +114,24 @@ const ChatMessageRow = memo(function ChatMessageRow({
               style={[styles.message, desktop && desktopStyles.text]}>
               {message.text}
             </Text>
+          ) : waiting ? (
+            <View accessible={false} style={transcriptStyles.skeleton}>
+              {[100, 86, 62].map(width => (
+                <View
+                  key={width}
+                  style={[
+                    transcriptStyles.line,
+                    desktop && transcriptStyles.desktopLine,
+                    {width: `${width}%`},
+                  ]}
+                />
+              ))}
+            </View>
           ) : (
             <ChatMessageContent
               text={message.text}
               style={[styles.message, desktop && desktopStyles.text]}
-              streaming={
-                message.generationOutcome === null &&
-                message.generationId !== undefined
-              }
+              streaming={streaming}
               reduceMotion={reduceMotion}
             />
           )}

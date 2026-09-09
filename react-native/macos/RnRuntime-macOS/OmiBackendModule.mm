@@ -11,6 +11,7 @@ static NSString *const OmiContractVersion = @"1.0.0";
 static NSString *const OmiDevelopmentBackendUnsupportedBody = @"{\"error\":{\"code\":\"development_backend_unsupported\",\"retryable\":false,\"action\":\"none\"}}";
 static NSString *const OmiSoftwarePlaneDefaultsKey = @"omi.backend.softwarePlane";
 static NSString *const OmiBackendSessionInvalidatedEvent = @"omiBackendSessionInvalidated";
+static NSString *const OmiBackendGenerationFrameEvent = @"omiGenerationFrame";
 
 typedef NS_ENUM(NSInteger, OmiBackendCredentialKind) {
   OmiBackendCredentialKindCloud,
@@ -492,6 +493,7 @@ static NSDictionary *OmiDevelopmentBackendUnsupportedResponse(NSString *requestI
 @property(nonatomic, copy) NSString *requestId;
 @property(nonatomic, strong) OmiBackendPolicy *policy;
 @property(nonatomic, copy) void (^unauthorizedResponse)(NSInteger);
+@property(nonatomic, copy) void (^onFrame)(NSString *);
 - (instancetype)initWithResolve:(RCTPromiseResolveBlock)resolve
                           reject:(RCTPromiseRejectBlock)reject
                          cleanup:(dispatch_block_t)cleanup;
@@ -584,6 +586,8 @@ didReceiveResponse:(NSURLResponse *)response
   if (self.omiChat) text = [text stringByReplacingOccurrencesOfString:@"\r\n" withString:@"\n"];
   NSArray<NSString *> *blocks = [text componentsSeparatedByString:@"\n\n"];
   for (NSUInteger index = 0; index + 1 < blocks.count; index += 1) {
+    NSString *rawFrame = [blocks[index] stringByAppendingString:@"\n\n"];
+    if (self.onFrame != nil) self.onFrame(rawFrame);
     if (self.omiChat) {
       for (NSString *line in [blocks[index] componentsSeparatedByString:@"\n"]) {
         if (![line hasPrefix:@"done:"]) continue;
@@ -594,7 +598,7 @@ didReceiveResponse:(NSURLResponse *)response
         if (![message isKindOfClass:NSDictionary.class]) {
           [self finishWithValue:nil code:@"OMI_HTTP_TRANSPORT" message:@"Omi terminal message is invalid"]; return;
         }
-        [self finishWithValue:[blocks[index] stringByAppendingString:@"\n\n"] code:nil message:nil]; return;
+        [self finishWithValue:rawFrame code:nil message:nil]; return;
       }
       continue;
     }
@@ -613,11 +617,11 @@ didReceiveResponse:(NSURLResponse *)response
     if (parts.count == 0) continue;
     if (eventId.length > 0) self.lastEventId = eventId;
     NSData *jsonData = [[parts componentsJoinedByString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];
-    NSDictionary *frame = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:nil];
-    NSString *kind = [frame[@"kind"] isKindOfClass:NSString.class] ? frame[@"kind"] : nil;
+    NSDictionary *payload = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:nil];
+    NSString *kind = [payload[@"kind"] isKindOfClass:NSString.class] ? payload[@"kind"] : nil;
     if ([kind isEqualToString:@"done"] || [kind isEqualToString:@"failed"] ||
         [kind isEqualToString:@"cancelled"]) {
-      [self finishWithValue:[blocks[index] stringByAppendingString:@"\n\n"] code:nil message:nil];
+      [self finishWithValue:rawFrame code:nil message:nil];
       return;
     }
   }
@@ -685,7 +689,16 @@ RCT_EXPORT_MODULE(OmiBackend)
 }
 
 - (NSArray<NSString *> *)supportedEvents {
-  return @[OmiBackendSessionInvalidatedEvent];
+  return @[OmiBackendSessionInvalidatedEvent, OmiBackendGenerationFrameEvent];
+}
+
+- (void)emitGenerationFrame:(NSString *)streamId frame:(NSString *)frame {
+  if (self.disposed || !self.hasListeners || streamId.length == 0 || frame.length == 0) return;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (!self.disposed && self.hasListeners) {
+      [self sendEventWithName:OmiBackendGenerationFrameEvent body:@{@"streamId": streamId, @"frame": frame}];
+    }
+  });
 }
 
 - (void)startObserving {
@@ -1139,6 +1152,11 @@ RCT_REMAP_METHOD(sendOmiChat,
     delegate.omiChat = YES;
     delegate.request = request;
     delegate.requestId = requestId;
+    delegate.onFrame = ^(NSString *frame) {
+      OmiBackendModule *owner = weakSelf;
+      if (owner == nil) return;
+      [owner emitGenerationFrame:requestId frame:frame];
+    };
     delegate.policy = policy;
     delegate.unauthorizedResponse = ^(NSInteger status) {
       OmiBackendModule *owner = weakSelf;
@@ -1234,6 +1252,11 @@ RCT_REMAP_METHOD(generationEvents,
   delegate.session = [NSURLSession sessionWithConfiguration:configuration delegate:delegate delegateQueue:queue];
   delegate.request = request;
   delegate.requestId = generationId;
+  delegate.onFrame = ^(NSString *frame) {
+    OmiBackendModule *owner = weakSelf;
+    if (owner == nil) return;
+    [owner emitGenerationFrame:generationId frame:frame];
+  };
   delegate.policy = policy;
   delegate.unauthorizedResponse = ^(NSInteger status) {
     OmiBackendModule *owner = weakSelf;

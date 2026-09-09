@@ -1,7 +1,7 @@
 import React, {useCallback, useLayoutEffect, useRef, useState} from 'react';
 import {FlatList, Platform, StyleSheet, Text, View} from 'react-native';
 import X from 'lucide-react-native/icons/x';
-import type {ChatMessage} from '../chatClient';
+import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
 import {FocusPressable} from '../ui/Pressable';
 import {useReduceMotion} from '../app/useReduceMotion';
@@ -210,7 +210,9 @@ export function DesktopChat({
             </View>
           }
           ListFooterComponent={
-            busy ? <ChatThinking reduceMotion={reduceMotion} desktop /> : null
+            busy && !messages.some(isStreamingAssistant) ? (
+              <ChatThinking reduceMotion={reduceMotion} desktop />
+            ) : null
           }
         />
       </ScrollFade>

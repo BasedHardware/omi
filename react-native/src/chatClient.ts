@@ -1,4 +1,5 @@
 import {
+  IncrementalOmiChatParser,
   omiHistoryOffset,
   parseOmiHistory,
   parseOmiChatStream,
@@ -9,6 +10,7 @@ import {
   wireToChatAdmissionEnvelope,
   wireToChatHistoryEnvelope,
 } from '@omi-core/adapters-platform/dist/chat';
+import {IncrementalChatGenerationParser} from '@omi-core/adapters-platform/dist/chat-generation';
 
 export type ChatMessage = {
   id: string;
@@ -139,6 +141,37 @@ export function createLocalChatMessage(
   };
 }
 
+export function createPendingAssistantMessage(
+  human: ChatMessage,
+  generationId: string = human.id,
+): ChatMessage {
+  return {
+    id: pendingAssistantId(human.id),
+    text: '',
+    sender: 'ai',
+    createdAt: human.createdAt,
+    generationOutcome: null,
+    generationId,
+    localOnly: true,
+  };
+}
+
+export function pendingAssistantId(humanId: string): string {
+  return `pending:${humanId}`;
+}
+
+export function isStreamingAssistant(message: ChatMessage): boolean {
+  return (
+    message.sender === 'ai' &&
+    message.generationOutcome === null &&
+    message.generationId !== undefined
+  );
+}
+
+export function chatRequestCancelled(error: unknown): boolean {
+  return isNativeCancellation(error);
+}
+
 function parseJson(body: string | null): unknown {
   if (body === null) {
     throw new Error('Backend returned an empty response');
@@ -254,6 +287,7 @@ export async function sendChatMessage(
   onGenerationStarted?: (generationId: string) => void,
   localMessage?: ChatMessage,
   onRequestStarted?: (requestId: string) => boolean | void,
+  onAssistantText?: (text: string) => void,
 ): Promise<{human: ChatMessage; assistant: ChatMessage | null}> {
   if ((await backend.getApiContract?.()) === 'omi') {
     if (backend.sendOmiChat === undefined)
@@ -264,7 +298,21 @@ export async function sendChatMessage(
         code: 'OMI_HTTP_CANCELLED',
       });
     }
-    const response = await backend.sendOmiChat(human.id, text);
+    const parser = new IncrementalOmiChatParser();
+    let visible = '';
+    const response = await backend.sendOmiChat(human.id, text, frame => {
+      try {
+        for (const event of parser.push(frame)) {
+          if (event.kind !== 'data') {
+            continue;
+          }
+          visible += event.text;
+          onAssistantText?.(visible);
+        }
+      } catch {
+        return;
+      }
+    });
     if (response.status !== 200) throwBackendError(response);
     const assistant = parseOmiChatStream(response.body);
     return {human, assistant};
@@ -304,10 +352,27 @@ export async function sendChatMessage(
   };
   onGenerationStarted?.(admission.generation.id);
   let terminal: TerminalFrame;
+  const parser = new IncrementalChatGenerationParser();
+  let visible = '';
+  const onFrame = (frame: string) => {
+    try {
+      for (const event of parser.push(frame)) {
+        if (event.frame.kind === 'snapshot') {
+          visible = event.frame.text;
+          onAssistantText?.(visible);
+        } else if (event.frame.kind === 'delta') {
+          visible += event.frame.text;
+          onAssistantText?.(visible);
+        }
+      }
+    } catch {
+      return;
+    }
+  };
   try {
     terminal = parseTerminal(
       readGeneration(
-        await backend.generationEvents(admission.generation.id, null),
+        await backend.generationEvents(admission.generation.id, null, onFrame),
       ),
     );
   } catch (error) {

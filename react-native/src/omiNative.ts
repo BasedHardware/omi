@@ -90,8 +90,95 @@ export function subscribeOmiNativeEvents(
   return () => subscription.remove();
 }
 
+export function subscribeOmiGenerationFrame(
+  listener: (event: {streamId: string; frame: string}) => void,
+): () => void {
+  const nativeModule = NativeModules.OmiBackend;
+  if (nativeModule == null) {
+    return () => undefined;
+  }
+  const emitter = new NativeEventEmitter(nativeModule);
+  const subscription = emitter.addListener(
+    'omiGenerationFrame',
+    (value: unknown) => {
+      if (value === null || typeof value !== 'object') {
+        return;
+      }
+      const event = value as {streamId?: unknown; frame?: unknown};
+      if (
+        typeof event.streamId !== 'string' ||
+        typeof event.frame !== 'string'
+      ) {
+        return;
+      }
+      listener({streamId: event.streamId, frame: event.frame});
+    },
+  );
+  return () => subscription.remove();
+}
+
+function listenToGenerationFrames(
+  streamId: string,
+  onFrame?: (frame: string) => void,
+): () => void {
+  if (onFrame === undefined) {
+    return () => undefined;
+  }
+  let live = true;
+  const stop = subscribeOmiGenerationFrame(event => {
+    if (!live || event.streamId !== streamId) {
+      return;
+    }
+    onFrame(event.frame);
+  });
+  return () => {
+    live = false;
+    stop();
+  };
+}
+
 export function resolveOmiBackend(nativeModule: OmiBackend | null | undefined) {
-  return {adapter: nativeModule, installed: nativeModule != null};
+  if (nativeModule == null) {
+    return {adapter: nativeModule, installed: false};
+  }
+  const sendOmiChat = nativeModule.sendOmiChat?.bind(nativeModule);
+  const generationEvents = nativeModule.generationEvents.bind(nativeModule);
+  return {
+    adapter: Object.create(nativeModule, {
+      sendOmiChat: {
+        value:
+          sendOmiChat === undefined
+            ? undefined
+            : async (
+                requestId: string,
+                text: string,
+                onFrame?: (frame: string) => void,
+              ) => {
+                const stop = listenToGenerationFrames(requestId, onFrame);
+                try {
+                  return await sendOmiChat(requestId, text);
+                } finally {
+                  stop();
+                }
+              },
+      },
+      generationEvents: {
+        value: async (
+          generationId: string,
+          lastEventId: string | null,
+          onFrame?: (frame: string) => void,
+        ) => {
+          const stop = listenToGenerationFrames(generationId, onFrame);
+          try {
+            return await generationEvents(generationId, lastEventId);
+          } finally {
+            stop();
+          }
+        },
+      },
+    }) as OmiBackend,
+    installed: true,
+  };
 }
 
 export function subscribeOmiBackendSessionInvalidated(

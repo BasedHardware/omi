@@ -133,6 +133,61 @@ test('admits one main-scope human message and accepts only a terminal SSE messag
   );
 });
 
+test('canonical generation updates one pending reply as snapshot and delta frames arrive', async () => {
+  const human: ChatMessage = {
+    id: 'desktop-100-1',
+    text: 'Hello',
+    sender: 'human',
+    createdAt: 100,
+    generationOutcome: null,
+  };
+  const assistant: ChatMessage = {
+    id: 'assistant-1',
+    text: 'Hello 世界',
+    sender: 'ai',
+    createdAt: 101,
+    generationOutcome: 'completed',
+  };
+  const streamed: string[] = [];
+  const backend = {
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 201,
+      body: admissionBody(human, 'generation-1'),
+    }),
+    generationEvents: async (generationId, lastEventId, onFrame) => {
+      expect(lastEventId).toBeNull();
+      onFrame?.(
+        'event: snapshot\nid: e1\ndata: {"kind":"snapshot","text":"Hel"}\n\n',
+      );
+      onFrame?.(
+        'event: delta\nid: e2\ndata: {"kind":"delta","text":"lo "}\n\n',
+      );
+      onFrame?.(
+        `event: done\nid: e3\ndata: ${JSON.stringify({
+          kind: 'done',
+          message: wireMessage(assistant),
+        })}\n\n`,
+      );
+      return {
+        id: generationId,
+        status: 200,
+        body: `event: done\nid: e3\ndata: ${JSON.stringify({
+          kind: 'done',
+          message: wireMessage(assistant),
+        })}\n\n`,
+      };
+    },
+    cancelGenerationEvents: async () => {},
+  } satisfies OmiBackend;
+  await expect(
+    sendChatMessage(backend, 'Hello', 100, undefined, human, undefined, text =>
+      streamed.push(text),
+    ),
+  ).resolves.toEqual({human, assistant});
+  expect(streamed).toEqual(['Hel', 'Hello ']);
+});
+
 test('fails closed when SSE ends without a terminal frame', () => {
   expect(() =>
     parseTerminal(
@@ -539,6 +594,38 @@ test('explicit old contract uses real messages history and send stream without c
   expect(started).not.toHaveBeenCalled();
   expect(generationEvents).not.toHaveBeenCalled();
   expect(sendOmiChat).toHaveBeenCalledTimes(1);
+  const streamed: string[] = [];
+  const sendOmiChatStream = jest.fn(
+    async (_id: string, _text: string, onFrame?: (frame: string) => void) => {
+      onFrame?.('data: 你\n\n');
+      onFrame?.(
+        `data: 好\n\ndone: ${Buffer.from(JSON.stringify(ai)).toString(
+          'base64',
+        )}\n\n`,
+      );
+      return {
+        id: 'send',
+        status: 200,
+        body: `done: ${Buffer.from(JSON.stringify(ai)).toString('base64')}\n\n`,
+      };
+    },
+  );
+  const streamedResult = await sendChatMessage(
+    {
+      getApiContract: async () => 'omi',
+      request,
+      sendOmiChat: sendOmiChatStream,
+      generationEvents,
+    } as unknown as OmiBackend,
+    'Hello',
+    1,
+    undefined,
+    undefined,
+    undefined,
+    text => streamed.push(text),
+  );
+  expect(streamed).toEqual(['你', '你好']);
+  expect(streamedResult.assistant?.text).toBe('你好');
   await loadOlderChatHistory(backend, 'omi-offset:50');
   expect(request).toHaveBeenLastCalledWith({
     id: 'omi-chat-history',

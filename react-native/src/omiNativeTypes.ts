@@ -46,7 +46,11 @@ export type OmiBackend = {
   getSoftwarePlane?(): Promise<'old' | 'new'>;
   setSoftwarePlane?(plane: 'old' | 'new'): Promise<'old' | 'new'>;
   stampedV5BackendOrigin?(): Promise<string | null>;
-  sendOmiChat?(requestId: string, text: string): Promise<NativeHttpResponse>;
+  sendOmiChat?(
+    requestId: string,
+    text: string,
+    onFrame?: (frame: string) => void,
+  ): Promise<NativeHttpResponse>;
   cancelOmiChat?(requestId: string): Promise<void>;
   createRecordingJournal?(
     input: RecordingJournalInput,
@@ -65,6 +69,7 @@ export type OmiBackend = {
   generationEvents(
     generationId: string,
     lastEventId: string | null,
+    onFrame?: (frame: string) => void,
   ): Promise<NativeHttpResponse>;
   cancelGenerationEvents(generationId: string): Promise<void>;
 };

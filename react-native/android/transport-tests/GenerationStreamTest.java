@@ -112,6 +112,14 @@ public final class GenerationStreamTest {
       throw new AssertionError("Cancelled request completed");
     } catch (java.io.IOException expected) {}
     assert sends.get() == 0;
+    java.util.ArrayList<String> seen = new java.util.ArrayList<>();
+    OmiGenerationStream streamed = new OmiGenerationStream(null, true);
+    streamed.setFrameListener(seen::add);
+    String streaming = "data: Hel\n\ndata: lo\n\n" + done;
+    OmiGenerationStream.Result live = streamed.run(cursor -> fixture(streaming),
+        value -> value.equals("{\"id\":\"message\"}"), status -> {});
+    assert live.body.equals(done);
+    assert seen.size() == 3 && seen.get(0).equals("data: Hel\n\n") && seen.get(1).equals("data: lo\n\n") && seen.get(2).equals(done);
     System.out.println("Omi terminal, malformed, incomplete, size and cancellation protocol tests passed");
   }
 

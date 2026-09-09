@@ -92,7 +92,26 @@ static void testPendingOmiCancellation(void) {
 }
 
 static void testOmiFrames(void) {
-  NSString *done = [NSString stringWithFormat:@"done: %@\n\n", [[@"{\"id\":\"message\"}" dataUsingEncoding:NSUTF8StringEncoding] base64EncodedStringWithOptions:0]];
+  NSString *done = [NSString stringWithFormat:@"done: %@\n\n", [[@"{\"id\":\"message\",\"text\":\"Hello 世界\",\"sender\":\"ai\",\"created_at\":\"2026-09-07T00:00:00Z\"}" dataUsingEncoding:NSUTF8StringEncoding] base64EncodedStringWithOptions:0]];
+  {
+    __block NSMutableArray<NSString *> *frames = [NSMutableArray array];
+    __block NSUInteger accepted = 0, rejected = 0;
+    OmiGenerationDelegate *delegate = [[OmiGenerationDelegate alloc] initWithResolve:^(id value) { accepted++; } reject:^(NSString *code, NSString *message, NSError *error) { rejected++; } cleanup:^{}];
+    delegate.omiChat = YES; delegate.responseStatus = 200; delegate.requestId = @"test";
+    delegate.onFrame = ^(NSString *frame) { [frames addObject:frame]; };
+    NSString *world = @"世界";
+    NSData *worldBytes = [world dataUsingEncoding:NSUTF8StringEncoding];
+    [delegate URLSession:nil dataTask:nil didReceiveData:[@"data: Hel" dataUsingEncoding:NSUTF8StringEncoding]];
+    assert(accepted == 0 && frames.count == 0);
+    [delegate URLSession:nil dataTask:nil didReceiveData:[@"lo " dataUsingEncoding:NSUTF8StringEncoding]];
+    [delegate URLSession:nil dataTask:nil didReceiveData:[worldBytes subdataWithRange:NSMakeRange(0, 1)]];
+    assert(accepted == 0 && frames.count == 0);
+    [delegate URLSession:nil dataTask:nil didReceiveData:[worldBytes subdataWithRange:NSMakeRange(1, worldBytes.length - 1)]];
+    [delegate URLSession:nil dataTask:nil didReceiveData:[@"\n\n" dataUsingEncoding:NSUTF8StringEncoding]];
+    assert(accepted == 0 && frames.count == 1 && [frames[0] isEqual:@"data: Hello 世界\n\n"]);
+    [delegate URLSession:nil dataTask:nil didReceiveData:[done dataUsingEncoding:NSUTF8StringEncoding]];
+    assert(accepted == 1 && rejected == 0 && frames.count == 2);
+  }
   for (NSString *frame in @[done, @"done: invalid!\n\n", [done stringByTrimmingCharactersInSet:NSCharacterSet.newlineCharacterSet], [@"x" stringByPaddingToLength:3 * 1024 * 1024 + 1 withString:@"x" startingAtIndex:0]]) {
     __block NSUInteger accepted = 0, rejected = 0, cleaned = 0;
     OmiGenerationDelegate *delegate = [[OmiGenerationDelegate alloc] initWithResolve:^(id value) { accepted++; } reject:^(NSString *code, NSString *message, NSError *error) { rejected++; } cleanup:^{ cleaned++; }];
