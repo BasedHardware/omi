@@ -596,6 +596,7 @@ describe("worker request contract", () => {
       );
 
       expect(response.status).toBe(503);
+      expect(response.headers.get("retry-after")).toBeNull();
       expect((await response.json()) as unknown).toEqual({
         error: {
           code: "service_unavailable",
@@ -603,6 +604,63 @@ describe("worker request contract", () => {
           action: "retry",
         },
       });
+      expect(accountCalls).toEqual([]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("Firebase verifier outage sends production retry-after on chat Settings and Listen GET", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(
+      async () => new Response(null, { status: 302 })
+    ) as never;
+    const unavailable = {
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    };
+    try {
+      const bindings = { ...env, FIREBASE_API_KEY: "test-firebase-key" };
+      const chat = await handler.fetch(
+        onTheWireRequest("/v1/chat-messages?limit=50", {
+          authorization: "Bearer firebase-id-token",
+          "x-omi-client-id": "desktop-client",
+        }),
+        bindings as never,
+        executionContext as never
+      );
+      const settings = await handler.fetch(
+        onTheWireRequest("/v1/settings", {
+          authorization: "Bearer firebase-id-token",
+          "x-omi-client-id": "desktop-client",
+        }),
+        bindings as never,
+        executionContext as never
+      );
+      const transcript = await handler.fetch(
+        onTheWireRequest(
+          "/v1/device-sessions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/transcript",
+          {
+            authorization: "Bearer firebase-id-token",
+            "x-omi-client-id": "desktop-client",
+          }
+        ),
+        bindings as never,
+        executionContext as never
+      );
+
+      expect(chat.status).toBe(503);
+      expect(chat.headers.get("retry-after")).toBe("60");
+      expect((await chat.json()) as unknown).toEqual(unavailable);
+      expect(settings.status).toBe(503);
+      expect(settings.headers.get("retry-after")).toBe("60");
+      expect((await settings.json()) as unknown).toEqual(unavailable);
+      expect(transcript.status).toBe(503);
+      expect(transcript.headers.get("retry-after")).toBe("1");
+      expect((await transcript.json()) as unknown).toEqual(unavailable);
       expect(accountCalls).toEqual([]);
     } finally {
       globalThis.fetch = originalFetch;

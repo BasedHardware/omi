@@ -321,6 +321,33 @@ async function firebaseAccountId(
   }
 }
 
+function firebaseUnavailableRetryAfter(
+  method: string,
+  url: string
+): string | undefined {
+  let pathname: string;
+  try {
+    pathname = new URL(url).pathname;
+  } catch {
+    return undefined;
+  }
+  if (method === "GET" && pathname === "/v1/chat-messages") return "60";
+  if (method === "GET" && pathname === "/v1/settings") return "60";
+  if (
+    method === "GET" &&
+    /^\/v1\/device-sessions\/[^/]+\/transcript$/.test(pathname)
+  ) {
+    return "1";
+  }
+  if (
+    method === "POST" &&
+    /^\/v1\/device-sessions\/[^/]+\/transcribe$/.test(pathname)
+  ) {
+    return "1";
+  }
+  return undefined;
+}
+
 export async function authorizeV1(
   context: CoreContext
 ): Promise<Response | null> {
@@ -378,8 +405,19 @@ export async function authorizeV1(
     authorization.slice("Bearer ".length),
     firebaseApiKey
   );
-  if (accountId === "unavailable")
-    return backendError("service_unavailable", "retry", 503, true);
+  if (accountId === "unavailable") {
+    const retryAfter = firebaseUnavailableRetryAfter(
+      context.req.method,
+      context.req.url
+    );
+    return backendError(
+      "service_unavailable",
+      "retry",
+      503,
+      true,
+      retryAfter === undefined ? undefined : { "retry-after": retryAfter }
+    );
+  }
   if (accountId === "invalid")
     return backendError("unauthorized", "reauthenticate", 401);
   context.set("accountId", accountId);
