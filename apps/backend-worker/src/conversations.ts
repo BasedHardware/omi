@@ -84,14 +84,14 @@ export async function readConversations(
   const result = await db
     .prepare(
       `WITH normalized AS (
-         SELECT position, sender, created_at, generation_outcome, text,
+         SELECT id AS message_id, position, sender, created_at, generation_outcome, text,
            ${recoveredPayloadTextKeySql(
              "chat_messages",
              "chatSessionId"
            )} AS session_key
          FROM chat_messages WHERE account_id = ?
        ), sessions AS (
-         SELECT position, sender, created_at, generation_outcome, text,
+         SELECT message_id, position, sender, created_at, generation_outcome, text,
            CASE WHEN typeof(session_key) = 'text' AND length(CAST(session_key AS BLOB)) > 0
              THEN 'chat:' || session_key ELSE 'chat:chat-main' END AS session_id
          FROM normalized
@@ -99,10 +99,10 @@ export async function readConversations(
          SELECT *,
            row_number() OVER (PARTITION BY session_id ORDER BY CASE WHEN sender = 'human' AND length(${visibleStoredTextTrimSql(
              "text"
-           )}) > 0 THEN 0 WHEN sender = 'human' THEN 1 ELSE 2 END, position) AS title_rank,
+           )}) > 0 THEN 0 WHEN sender = 'human' THEN 1 ELSE 2 END, created_at, message_id) AS title_rank,
            row_number() OVER (PARTITION BY session_id ORDER BY CASE WHEN length(${visibleStoredTextTrimSql(
              "text"
-           )}) > 0 THEN 0 ELSE 1 END, position DESC) AS overview_rank,
+           )}) > 0 THEN 0 ELSE 1 END, created_at DESC, message_id DESC) AS overview_rank,
            min(created_at) OVER (PARTITION BY session_id) AS session_created_at,
            max(created_at) OVER (PARTITION BY session_id) AS session_updated_at
          FROM sessions

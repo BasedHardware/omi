@@ -1304,7 +1304,10 @@ describe("static PostgreSQL schema contract", () => {
     expect(visibleOverviewSql).toContain("min(m.created_at) AS created_at");
     expect(visibleOverviewSql).toContain("max(m.created_at) AS updated_at");
     expect(visibleOverviewSql).not.toContain("octet_length(btrim(title_text");
-    expect(visibleOverviewSql).toContain("WHEN length(btrim(m.text,v_ws))>0 THEN 0 ELSE 1 END, m.created_at DESC");
+    expect(visibleOverviewSql).toContain(
+      "WHEN m.sender='human' AND length(btrim(m.text,v_ws))>0 THEN 0 WHEN m.sender='human' THEN 1 ELSE 2 END, m.created_at, m.id",
+    );
+    expect(visibleOverviewSql).toContain("WHEN length(btrim(m.text,v_ws))>0 THEN 0 ELSE 1 END, m.created_at DESC, m.id DESC");
     expect(visibleOverviewSql).not.toContain("(array_agg(m.text ORDER BY m.created_at DESC, m.id DESC))[1] AS last_text");
     expect(visibleOverviewSql).toContain("WHEN m.sender='human' AND length(btrim(m.text,v_ws))>0 THEN 0");
     expect(visibleOverviewSql).not.toContain("THEN 'Chat'");

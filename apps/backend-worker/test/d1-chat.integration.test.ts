@@ -654,7 +654,7 @@ describe("D1 chat projects an honest conversation list", () => {
     expect(rows[0]).toMatchObject({
       id: "chat:large",
       title: `${"😀".repeat(130)}${" ".repeat(107)}...`,
-      overview: `${overview.trim().slice(0, 237)}...`,
+      overview: `${"m".repeat(237)}...`,
       createdAt: 500,
       updatedAt: 1074,
       startedAt: 500,
@@ -779,7 +779,7 @@ describe("D1 chat projects an honest conversation list", () => {
     });
   });
 
-  test("chat list timestamps follow min and max created_at", async () => {
+  test("chat list visible turns follow created_at then id", async () => {
     const accountId = "created-at-chat-timestamps";
     await env.DB.prepare(
       "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
@@ -809,8 +809,8 @@ describe("D1 chat projects an honest conversation list", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       id: "chat:clock-skew",
-      title: "Later clock first position",
-      overview: "Earlier clock last position",
+      title: "Earlier clock last position",
+      overview: "Later clock first position",
       createdAt: 100,
       updatedAt: 500,
       startedAt: 100,

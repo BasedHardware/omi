@@ -1427,7 +1427,7 @@ describe("worker request contract", () => {
     );
   });
 
-  test("conversation list timestamps follow min and max created_at", async () => {
+  test("conversation list visible turns follow created_at then id", async () => {
     await insertChatMessage({
       id: "clock-later",
       accountId: "test-account",
@@ -1452,6 +1452,8 @@ describe("worker request contract", () => {
     const page = (await listed.json()) as {
       items: Array<{
         id: string;
+        title: string;
+        overview: string;
         createdAt: number;
         updatedAt: number;
         startedAt: number;
@@ -1460,6 +1462,8 @@ describe("worker request contract", () => {
     expect(page.items.find((item) => item.id === "chat:clock-skew")).toEqual(
       expect.objectContaining({
         id: "chat:clock-skew",
+        title: "Earlier clock last position",
+        overview: "Later clock first position",
         createdAt: 100,
         updatedAt: 500,
         startedAt: 100,
