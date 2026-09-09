@@ -997,33 +997,23 @@ def search_canonical_memories(
 
     now = datetime.now(timezone.utc)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
+    hydration = _hydrate_bounded_ledger_search_items(
+        uid,
+        merged_ids,
+        db_client=client,
+        policy=policy,
+        now=now,
+        device_scope=device_scope,
+        client_device_id=client_device_id,
+    )
+    lineage_items_by_id = hydration.lineage_items_by_id
+    survivor_items_by_id = hydration.survivor_items_by_id
     if ledger_kinds is None:
-        all_items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
-        visible_items = filter_canonical_default_visible_items(all_items, policy=policy, now=now)
-        scoped_items = filter_items_by_device_scope(
-            visible_items,
-            device_scope=device_scope if device_scope in ("current", "all", "explicit") else "all",
-            client_device_id=client_device_id,
-        )
-        lineage_items_by_id = {item.memory_id: item for item in all_items}
-        survivor_items_by_id = {item.memory_id: item for item in scoped_items}
         candidate_ids = merged_ids
     else:
-        hydration = _hydrate_bounded_ledger_search_items(
-            uid,
-            merged_ids,
-            db_client=client,
-            policy=policy,
-            now=now,
-            device_scope=device_scope,
-            client_device_id=client_device_id,
-        )
-        candidate_items = list(hydration.candidate_items)
-        lineage_items_by_id = hydration.lineage_items_by_id
-        survivor_items_by_id = hydration.survivor_items_by_id
         candidate_items = [
             item
-            for item in candidate_items
+            for item in hydration.candidate_items
             if _ledger_search_lineage_is_complete(item, lineage_items_by_id=lineage_items_by_id)
         ]
         candidate_ids = [item.memory_id for item in candidate_items]

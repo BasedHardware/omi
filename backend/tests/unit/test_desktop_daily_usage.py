@@ -99,14 +99,51 @@ def test_get_desktop_daily_usage_sums_devices_and_returns_zero_for_missing_field
 
 
 def test_memories_created_counts_canonical_and_legacy_shapes_without_duplicates():
+    canonical_query = _CreatedCountQuery(['canonical-only', 'shared'])
+    legacy_query = _CreatedCountQuery(['legacy-only', 'shared'])
+
+    result = _count_memories_with_queries(canonical_query, legacy_query)
+
+    assert result == 3
+    assert canonical_query.stream_calls == 1
+    assert legacy_query.stream_calls == 1
+    assert canonical_query.count_calls == 0
+    assert legacy_query.count_calls == 0
+
+
+class _CreatedCountQuery:
+    def __init__(self, ids, count_fails=False):
+        self._ids = list(ids)
+        self.stream_calls = 0
+        self.count_calls = 0
+        self.count_fails = count_fails
+
+    def limit(self, count):
+        del count
+        return _CreatedCountQuery(self._ids[:1] if self._ids else [])
+
+    def stream(self):
+        self.stream_calls += 1
+        return [SimpleNamespace(id=memory_id) for memory_id in self._ids]
+
+    def count(self):
+        self.count_calls += 1
+        ids = self._ids
+        fails = self.count_fails
+
+        class _Aggregation:
+            def get(self):
+                if fails:
+                    raise RuntimeError('aggregation failed')
+                return [[SimpleNamespace(value=len(ids))]]
+
+        return _Aggregation()
+
+
+def _count_memories_with_queries(canonical_query, legacy_query):
     fake_db = MagicMock()
-    canonical_query = MagicMock()
-    legacy_query = MagicMock()
-    canonical_query.stream.return_value = [SimpleNamespace(id='canonical-only'), SimpleNamespace(id='shared')]
-    legacy_query.stream.return_value = [SimpleNamespace(id='legacy-only'), SimpleNamespace(id='shared')]
     start = datetime(2026, 9, 1, tzinfo=timezone.utc)
     end = datetime(2026, 9, 2, tzinfo=timezone.utc)
-
     with patch.object(
         memories_db,
         'CANONICAL_MEMORIES_CAPTURED_RANGE_QUERY',
@@ -116,9 +153,29 @@ def test_memories_created_counts_canonical_and_legacy_shapes_without_duplicates(
         'MEMORIES_CREATED_RANGE_QUERY',
         SimpleNamespace(build=MagicMock(return_value=legacy_query)),
     ):
-        result = memories_db.count_memories_created('uid1', start, end, firestore_client=fake_db)
+        return memories_db.count_memories_created('uid1', start, end, firestore_client=fake_db)
 
-    assert result == 3
+
+def test_memories_created_uses_sot_count_when_legacy_store_is_empty():
+    canonical_query = _CreatedCountQuery(['canonical-only', 'shared'])
+    legacy_query = _CreatedCountQuery([])
+
+    result = _count_memories_with_queries(canonical_query, legacy_query)
+
+    assert result == 2
+    assert canonical_query.count_calls == 1
+    assert legacy_query.stream_calls == 0
+
+
+def test_memories_created_does_not_stream_when_aggregation_fails():
+    canonical_query = _CreatedCountQuery(['canonical-only', 'shared'], count_fails=True)
+    legacy_query = _CreatedCountQuery([])
+
+    result = _count_memories_with_queries(canonical_query, legacy_query)
+
+    assert result == 0
+    assert canonical_query.count_calls == 1
+    assert canonical_query.stream_calls == 0
 
 
 # ---------------------------------------------------------------------------
