@@ -1463,6 +1463,41 @@ def release_daily_summary_lock(uid: str, date: str) -> None:
         logger.warning('Failed to release daily summary lock uid=%s date=%s: %s', uid, date, error)
 
 
+_NOTIFICATIONS_JOB_RUN_LOCK_KEY = 'notifications_job:run_lock'
+# Compare-and-delete: a late release from a timed-out execution must not drop a
+# newer run's lock. Same Lua shape as the rate-limit scripts above.
+_RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA = r.register_script("""
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+else
+    return 0
+end
+""")
+
+
+def try_acquire_notifications_job_run_lock(token: str, ttl: int = 55 * 60) -> bool:
+    """Acquire the hourly notifications-job run lock. True iff this caller owns it.
+
+    Cloud Scheduler fires hourly and the Cloud Run task timeout is 3600s, so two
+    executions can overlap. The lock lets an overlapping execution skip the
+    notification section instead of duplicating the pass.
+    """
+    result = r.set(_NOTIFICATIONS_JOB_RUN_LOCK_KEY, token, ex=ttl, nx=True)
+    return result is not None
+
+
+def release_notifications_job_run_lock(token: str) -> None:
+    """Release the run lock only if ``token`` still owns it.
+
+    The token keeps a late release from deleting a newer run's lock. Redis
+    errors are swallowed: the key expires via TTL.
+    """
+    try:
+        _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[_NOTIFICATIONS_JOB_RUN_LOCK_KEY], args=[token])
+    except Exception as error:
+        logger.warning('Failed to release notifications job run lock: %s', error)
+
+
 @try_catch_decorator
 def set_credits_invalidation_signal(uid: str, ttl: int = 120) -> None:
     """Signal active WebSocket sessions to refresh credits immediately.

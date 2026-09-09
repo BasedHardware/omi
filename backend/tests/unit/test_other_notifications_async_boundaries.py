@@ -55,6 +55,8 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
             try_acquire_daily_summary_lock=lambda *_args: True,
             # Declines before the LLM call hand the day back instead of sitting on the 2h key.
             release_daily_summary_lock=lambda *_args: None,
+            try_acquire_notifications_job_run_lock=lambda *_args, **_kwargs: True,
+            release_notifications_job_run_lock=lambda *_args, **_kwargs: None,
         ),
         'models.notification_message': _module(
             'models.notification_message',
