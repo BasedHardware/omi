@@ -42,7 +42,14 @@ MACOS_JOBS = ["desktop-swift-verify", "desktop-swift-release-compile"]
 # Hosted macOS budgets are per-job: the consolidated verify lane needs a longer
 # cold-runner ceiling than the narrower release-compile job.
 MACOS_JOB_TIMEOUT_MINUTES = {
-    "desktop-swift-verify": 90,
+    # A wedge-guard, not a lane budget: it must admit one legitimate
+    # cold-tools run (~15 min from-source bootstrap) ahead of the full lane,
+    # which still executes every suite on runner-changing diffs. Two #13219
+    # runs were cancelled by tighter ceilings before completing.
+    "desktop-swift-verify": 60,
+    # A notification-boundary change compiles release mode AND builds the
+    # release test target for the regression (~50 min observed on
+    # run 34239723019), so this lane keeps the same bound.
     "desktop-swift-release-compile": 60,
 }
 
@@ -108,6 +115,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("should_run_static", changes)
         self.assertIn("should_run_tests", changes)
         self.assertIn("should_release_compile", changes)
+        self.assertIn("desktop_swift_changed_files", changes)
         self.assertIn("diff_base", changes)
 
         for job_id, output in (("desktop-swift-release-compile", "should_release_compile"),):
@@ -374,6 +382,112 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("steps.swiftpm-cache.outputs.cache-hit != 'true'", job)
         self.assertIn("~/Library/Caches/org.swift.swiftpm", job)
         self.assertNotIn("desktop/macos/Desktop/.build", job)
+
+    def test_release_job_does_not_archive_build_products(self):
+        """The 5.3 GB release .build archive is gone from both directions.
+
+        Measurement on every recent run showed the release compile step at
+        23-25 min whether the archive hit exactly, partially, or not at all,
+        while each main-push save evicted the small swift-format/swiftlint
+        tool caches from the repository's ~10 GB cache budget — and a tools
+        cache miss made the verify job's launcher tests rebuild swift-format
+        from source for ~15 min. Neither job may restore or save it again.
+        """
+        release_job = self.jobs["desktop-swift-release-compile"]
+        self.assertNotIn("desktop/macos/Desktop/.build", release_job)
+        self.assertNotIn("desktop-swift-release-xcode164", release_job)
+        self.assertIn("Restore SwiftPM dependency cache", release_job)
+
+    def test_tools_cache_covers_the_launcher_test_lane(self):
+        """The launcher tests exercise the pinned swift-format binary.
+
+        The tools restore used to be gated on the static lane alone, so a
+        tests-only diff (static selection empty) rebuilt swift-format from
+        source for ~15 min inside the launcher tests, every run: the cache was
+        never restored, and the save ran before the step that built the tools,
+        caching nothing. Worse, an exact-key hit on an entry the old workflow
+        saved empty suppressed every later save (run 34295159347). The restore
+        must cover the tests lane, an explicit warm-up step builds whatever the
+        restore missed BEFORE any consumer runs, and the save immediately
+        follows the warm-up under a fresh -v2 key.
+        """
+        job = self.jobs["desktop-swift-verify"]
+        self.assertIn(
+            "(needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true')",
+            job,
+        )
+        self.assertIn("desktop-swift-tools-v2-", job)
+        restore_index = job.index("Restore Swift formatter and linter tools")
+        warm_index = job.index("Warm pinned formatter and linter tools")
+        save_index = job.index("Save Swift formatter and linter tools after warm-up")
+        launcher_index = job.index("Desktop launcher script tests")
+        self.assertLess(restore_index, warm_index)
+        self.assertLess(warm_index, save_index)
+        self.assertLess(save_index, launcher_index)
+
+    def test_pr_test_lane_defers_slow_suites_with_changed_file_wake(self):
+        """The PR lane defers ratcheted slow suites; their own diffs wake them.
+
+        Deferral is the runner's decision from swift-test-slow-suites.json; the
+        workflow only selects the lane and forwards the deferral-relevant diff
+        so a PR that edits a deferred suite's own test file still executes it.
+        """
+        verify_job = self.jobs["desktop-swift-verify"]
+        self.assertIn("OMI_SWIFT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}", verify_job)
+        self.assertIn("OMI_SWIFT_TEST_CHANGED_FILES: ${{ needs.changes.outputs.desktop_swift_changed_files }}", verify_job)
+        # The serial/solo clusters cost one ~30s invocation per member for
+        # sub-second tests, sequentially (24 invocations / 12.9 min measured
+        # on run 34306382692); the PR lane defers them behind the same
+        # declaring-file and ratcheted-watch wake rules.
+        self.assertIn('OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL: "1"', verify_job)
+        # The slow list and its validator are full-suite inputs: editing them
+        # must wake the debug test lane.
+        self.assertTrue(resolve_impact(["desktop/macos/scripts/swift-test-slow-suites.json"]).includes("desktop-swift-tests"))
+        self.assertTrue(resolve_impact(["desktop/macos/scripts/swift-test-skip-ratchet.py"]).includes("desktop-swift-tests"))
+
+    def test_changed_file_forwarding_covers_the_deferral_infrastructure(self):
+        """The runner can only wake/re-baseline on files CI actually forwards.
+
+        The ratchet script decides deferral (--slow-list); a change to it must
+        reach the runner's CHANGED_FILES, and the runner's own re-baseline
+        pattern must include it — otherwise the PR lane would judge a modified
+        selection algorithm against the stale slow list it replaces.
+        """
+        changes_job = self.jobs["changes"]
+        self.assertIn("swift-test-skip-ratchet\\.py", changes_job)
+        self.assertIn("swift-test-skip-ratchet\\.py", _suite_runner_text())
+
+    def test_pr_lane_deferral_matcher_handles_multi_entry_slow_lists(self):
+        """--slow-list is newline-delimited; the matcher must see every entry.
+
+        A space-delimited case glob over raw newline output matches nothing
+        for the real multi-suite slow list, silently disabling the whole
+        80/20 deferral. The runner must normalize before matching.
+        """
+        suite_runner = _suite_runner_text()
+        # The watch-aware lookup splits the tab field first, then normalizes:
+        # names feed the matcher space-delimited either way.
+        self.assertIn("cut -f1 | tr '\\n' ' '", suite_runner)
+
+    def test_release_compile_is_reserved_off_ordinary_prs(self):
+        """One hosted Mac per ordinary PR; pushes and package edits compile release.
+
+        The predictor owns this asymmetry; pin it here because the required
+        aggregate check and the release planner both consume the job's verdict.
+        """
+        source_probe = ["desktop/macos/Desktop/Sources/OmiApp.swift"]
+        self.assertFalse(resolve_impact(source_probe, event="pull_request").includes("desktop-swift-release-compile"))
+        self.assertTrue(resolve_impact(source_probe, event="push").includes("desktop-swift-release-compile"))
+        self.assertTrue(
+            resolve_impact(["desktop/macos/Desktop/Package.swift"], event="pull_request").includes(
+                "desktop-swift-release-compile"
+            )
+        )
+        for event in ("schedule", "workflow_dispatch"):
+            with self.subTest(event=event):
+                self.assertTrue(
+                    resolve_impact(["backend/database/users.py"], event=event).includes("desktop-swift-release-compile")
+                )
 
     # --- changed-file gate assertions --------------------------------------
 
