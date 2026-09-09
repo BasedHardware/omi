@@ -77,13 +77,13 @@ def test_daily_summary_list_json_retains_shape(authed_profile, respx_mock, cli_r
 def test_daily_summary_list_invalid_date_format(authed_profile, cli_runner) -> None:
     result = cli_runner.invoke(app, ["daily-summary", "list", "--start-date", "2026/04/25"])
     assert result.exit_code == 1
-    assert "Invalid date format" in result.output
+    assert "Invalid date format" in result.stderr
 
 
 def test_daily_summary_list_invalid_calendar_date(authed_profile, cli_runner) -> None:
     result = cli_runner.invoke(app, ["daily-summary", "list", "--end-date", "2026-02-30"])
     assert result.exit_code == 1
-    assert "Invalid calendar date" in result.output
+    assert "Invalid calendar date" in result.stderr
 
 
 def test_daily_summary_list_json_error(authed_profile, monkeypatch, capsys) -> None:
@@ -102,13 +102,33 @@ def test_daily_summary_list_json_error(authed_profile, monkeypatch, capsys) -> N
 
 
 def test_daily_summary_get(authed_profile, respx_mock, cli_runner) -> None:
-    summary_data = _SAMPLE_SUMMARIES["summaries"][0]
+    summary_data = {
+        "id": "ds_01",
+        "date": "2026-04-25",
+        "day_emoji": "🚀",
+        "headline": "Launched the new Omi CLI daily summaries feature",
+        "overview": "Detailed overview of the launch activities and discussions.",
+        "created_at": "2026-04-25T20:00:00Z",
+        "highlights": ["Shipped CLI release", "Team demo went smoothly"],
+        "action_items": [{"description": "Write release notes", "completed": True}],
+        "knowledge_nuggets": ["Typer options formatting rules"],
+        "stats": {
+            "total_conversations": 5,
+            "action_items_count": 2,
+            "words_spoken": 1200,
+        },
+    }
     respx_mock.get("/v1/dev/user/daily-summaries/ds_01").respond(json=summary_data)
     result = cli_runner.invoke(app, ["--json", "daily-summary", "get", "ds_01"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     assert payload["id"] == "ds_01"
     assert payload["day_emoji"] == "🚀"
+    assert payload["highlights"] == ["Shipped CLI release", "Team demo went smoothly"]
+    assert payload["action_items"] == [{"description": "Write release notes", "completed": True}]
+    assert payload["knowledge_nuggets"] == ["Typer options formatting rules"]
+    assert payload["stats"]["total_conversations"] == 5
+    assert payload["stats"]["words_spoken"] == 1200
 
 
 def test_daily_summary_get_not_found(authed_profile, respx_mock, cli_runner) -> None:
@@ -117,7 +137,7 @@ def test_daily_summary_get_not_found(authed_profile, respx_mock, cli_runner) -> 
     )
     result = cli_runner.invoke(app, ["daily-summary", "get", "missing_id"])
     assert result.exit_code == 5
-    assert "not found" in result.output.lower()
+    assert "not found" in result.stderr.lower()
 
 
 def test_daily_summary_get_not_found_json(authed_profile, respx_mock, monkeypatch, capsys) -> None:

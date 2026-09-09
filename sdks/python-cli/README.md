@@ -3,7 +3,7 @@
 > Talk to Omi from your terminal. Designed for humans **and** agents.
 
 `omi-cli` is the command-line interface to the [Omi](https://omi.me) developer
-API. It exposes scoped, agent-friendly verbs for the four primary nouns Omi
+API. It exposes scoped, agent-friendly verbs for the five primary nouns Omi
 maintains about you:
 
 * **memories** — facts and learnings the system knows about you

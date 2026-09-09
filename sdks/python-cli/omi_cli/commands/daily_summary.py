@@ -48,8 +48,12 @@ def list_daily_summaries(
     typer_ctx: typer.Context,
     limit: int = typer.Option(30, "--limit", min=1, max=100, help="Number of daily summaries to return (1-100)."),
     offset: int = typer.Option(0, "--offset", min=0, help="Number of daily summaries to skip (>=0)."),
-    start_date: Optional[str] = typer.Option(None, "--start-date", help="Filter summaries on or after date (YYYY-MM-DD)."),
-    end_date: Optional[str] = typer.Option(None, "--end-date", help="Filter summaries on or before date (YYYY-MM-DD)."),
+    start_date: Optional[str] = typer.Option(
+        None, "--start-date", help="Filter summaries on or after date (YYYY-MM-DD)."
+    ),
+    end_date: Optional[str] = typer.Option(
+        None, "--end-date", help="Filter summaries on or before date (YYYY-MM-DD)."
+    ),
 ) -> None:
     ctx = _ctx(typer_ctx)
     if start_date is not None:
