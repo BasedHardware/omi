@@ -168,6 +168,26 @@ test("recording titles keep visible words after a NEXT LINE prefix longer than t
   });
 });
 
+test("recording overviews hard-slice 240 UTF-16 units without chat ellipsis", async () => {
+  const session = await recording();
+  await completeDeviceSession(env.DB, "record-owner", session.id, 102);
+  await env.DB.prepare(
+    "UPDATE device_transcriptions SET state = 'completed', text = ? WHERE session_id = ?"
+  )
+    .bind("a".repeat(241), session.id)
+    .run();
+  const rows = await readConversations(env.DB, "record-owner");
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    id: `recording:${session.id}`,
+    title: "a".repeat(80),
+    overview: "a".repeat(240),
+    source: "omi",
+    status: "completed",
+  });
+  expect(rows[0]?.overview.endsWith("...")).toBe(false);
+});
+
 test("recording conversation preserves capture provenance separately from server times", async () => {
   for (const capturedAtMs of [undefined, 0, 8640000000000000]) {
     const session = await recording(capturedAtMs);

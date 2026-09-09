@@ -141,8 +141,8 @@ export async function readConversations(
   for (const recording of recordings.results) {
     conversations.push({
       id: `recording:${recording.id}`,
-      title: displayText(recording.text ?? "").slice(0, 80),
-      overview: displayText(recording.text ?? ""),
+      title: recordingExcerpt(recording.text ?? "").slice(0, 80),
+      overview: recordingExcerpt(recording.text ?? ""),
       createdAt: recording.started_at,
       updatedAt: recording.updated_at,
       startedAt: recording.started_at,
@@ -301,9 +301,8 @@ function boundedDisplayText(bytes: number[]): string {
     : text;
 }
 
-function displayText(text: string): string {
-  const trimmed = visibleGenerationTrim(text);
-  return trimmed.length > 240 ? `${trimmed.slice(0, 237)}...` : trimmed;
+function recordingExcerpt(text: string): string {
+  return visibleGenerationTrim(text).slice(0, 240);
 }
 
 function iso(value: number): string {

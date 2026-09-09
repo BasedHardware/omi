@@ -99,6 +99,18 @@ test("a 240-character NEXT LINE prefix still shows later speech when the excerpt
   });
 });
 
+test("completed excerpts hard-slice 240 UTF-16 units without chat ellipsis", () => {
+  const record = parseConversationReadSnapshot({
+    revision: 1,
+    records: [row({ excerpt: "a".repeat(241), locked: false })],
+  }).records[0]!.record;
+  expect(record.structured).toEqual({
+    title: "a".repeat(80),
+    overview: "a".repeat(240),
+  });
+  expect(record.structured.overview.endsWith("...")).toBe(false);
+});
+
 test("rejects corrupt, ambiguous, oversized or reordered snapshots instead of silently claiming a partial page", () => {
   for (const records of [
     [row({ state: "unknown" })],
