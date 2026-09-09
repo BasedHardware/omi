@@ -248,6 +248,10 @@ omi
 `conversation from-segments` reads JSON files as UTF-8 (with or without a BOM),
 UTF-16, or UTF-32, independently of the system's default text encoding.
 
+### Reject non-finite goal values before requests
+
+Goal numeric options and progress values must be finite. NaN, infinities, and overflowing exponents are rejected before an API request.
+
 ## Global flags
 
 ```text
@@ -304,6 +308,8 @@ The dev API enforces per-policy hourly limits:
 The CLI retries `429` automatically with exponential backoff and honors the
 server's `Retry-After` hint where present. After all retries are exhausted you
 get exit code `4` plus a message telling you how long to wait.
+
+
 
 ## Datetime options
 Conversation and action-item datetime options accept ISO timestamps with `Z`
