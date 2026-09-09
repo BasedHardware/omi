@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: composio-notion-memory-tests
+    command: ["bash", "plugins/composio/test.sh"]
+    triggers: ["plugins/composio/**"]
+    lanes: ["local", "ci"]
+    reason: "#13302: first-person Notion memories were silently dropped because input and keyword case differed; exercise keyword detection and the real extraction route with offline responses"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]

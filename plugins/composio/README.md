@@ -85,4 +85,20 @@ This plugin is designed to work with Composio, a platform for connecting various
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request. 
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+Run the offline memory-extraction regression tests from this directory after
+installing `requirements.txt`:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Alternatively, with `uv` installed, run `bash test.sh`. This provisions Python
+3.11 and the plugin's pinned direct dependencies in an isolated environment.
+The repository's local and CI check manifest runs the same script when plugin
+files change. Dependency provisioning requires network access; the tests do not.
+
+The tests exercise personal-keyword detection and the Notion extraction route
+with synthetic responses; no Notion or OMI account is needed. Personal-keyword
+matching is case-insensitive and retains the existing sentence-length filter.
