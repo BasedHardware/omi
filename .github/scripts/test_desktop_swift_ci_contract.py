@@ -42,14 +42,14 @@ MACOS_JOBS = ["desktop-swift-verify", "desktop-swift-release-compile"]
 # Hosted macOS budgets are per-job: the consolidated verify lane needs a longer
 # cold-runner ceiling than the narrower release-compile job.
 MACOS_JOB_TIMEOUT_MINUTES = {
-    # The PR lane defers ratcheted slow suites and holds one runner for
-    # ~15-20 min once the formatter/linter tool cache is warm; the ceiling
-    # must also cover one legitimate cold-tools run (~15 min from-source
-    # bootstrap) ahead of the full lane, which still runs everything.
-    "desktop-swift-verify": 55,
+    # A wedge-guard, not a lane budget: it must admit one legitimate
+    # cold-tools run (~15 min from-source bootstrap) ahead of the full lane,
+    # which still executes every suite on runner-changing diffs. Two #13219
+    # runs were cancelled by tighter ceilings before completing.
+    "desktop-swift-verify": 60,
     # A notification-boundary change compiles release mode AND builds the
     # release test target for the regression (~50 min observed on
-    # run 34239723019), so this lane keeps the wider bound.
+    # run 34239723019), so this lane keeps the same bound.
     "desktop-swift-release-compile": 60,
 }
 

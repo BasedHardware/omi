@@ -120,12 +120,12 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}
     runs-on: macos-15
-    # Bounds manifest checks, launcher coverage, and the debug suite. The PR
-    # lane defers ratcheted slow suites and holds one runner for ~15-20 min
-    # once the formatter/linter tool cache is warm; the ceiling must also
-    # cover one legitimate cold-tools run (a ~15 min from-source bootstrap)
-    # ahead of the full lane, which still runs everything.
-    timeout-minutes: 55
+    # Bounds manifest checks, launcher coverage, and the debug suite — a
+    # wedge-guard, not a lane budget: the ceiling must admit one legitimate
+    # cold-tools run (~15 min from-source bootstrap ahead of the full lane,
+    # which still executes every suite on this branch's own runner-changing
+    # diffs). Two runs were cancelled by tighter ceilings before completing.
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -249,6 +249,19 @@ jobs:
           done
           exit "$failed"
 
+      # Placed directly after the launcher tests — the last consumer of the
+      # formatter/linter tools — so even a red or timed-out debug suite
+      # preserves a cold bootstrap for the next run. (A save placed after the
+      # test step lost the build on both ceiling-cancelled runs of #13219.)
+      - name: Save Swift formatter and linter tools after checks
+        if: ${{ always() && !cancelled() && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') && steps.swift-tools-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cache/omi-swift-format
+            ~/.cache/omi-swiftlint
+          key: ${{ runner.os }}-desktop-swift-tools-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
+
       # Debug build+test only on the PR critical path. Release compile is a
       # separate job (main push, scheduled health, manual dispatch, or a PR
       # that touches Package.swift/Package.resolved) so ordinary PRs do not
@@ -286,18 +299,6 @@ jobs:
           path: |
             ~/Library/Caches/org.swift.swiftpm
           key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
-
-      # Placed after every consumer (manifest checks and the launcher tests):
-      # whichever step bootstrapped the pinned tools, this captures the built
-      # binaries so the next run restores instead of rebuilding from source.
-      - name: Save Swift formatter and linter tools after checks
-        if: ${{ always() && !cancelled() && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') && steps.swift-tools-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v6
-        with:
-          path: |
-            ~/.cache/omi-swift-format
-            ~/.cache/omi-swiftlint
-          key: ${{ runner.os }}-desktop-swift-tools-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
 
       - name: Require independent macOS phase verdicts
         if: ${{ always() && !cancelled() }}
