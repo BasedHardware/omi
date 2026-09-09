@@ -86,7 +86,26 @@ int main(void) {
     require(first != nil && second != nil && ![first[@"base64"] isEqual:second[@"base64"]]);
     store.disposed = YES; require([store read:identifier error:nil] == nil);
     require([[NSData dataWithContentsOfFile:dbPath] isEqual:before]);
+    store.disposed = NO;
+    NSDictionary *request = @{@"query":@"",@"limit":@50};
+    // Missing history is normal; malformed or unreadable existing history is
+    // not. Exercise the actual SQLite boundary and native timeline error codes.
+    require([NSFileManager.defaultManager removeItemAtPath:dbPath error:nil]);
+    NSError *failure = nil;
+    require([store list:request error:&failure] == nil && [failure.domain isEqual:@"OMI_REWIND_UNAVAILABLE"]);
+    require(sqlite3_open(dbPath.UTF8String, &db) == SQLITE_OK); sqlite3_close(db);
+    failure = nil;
+    require([store list:request error:&failure] == nil && [failure.domain isEqual:@"OMI_REWIND_STORAGE"]);
+    NSData *invalid = [@"not a SQLite database" dataUsingEncoding:NSUTF8StringEncoding];
+    require([invalid writeToFile:dbPath atomically:YES]);
+    failure = nil;
+    require([store list:request error:&failure] == nil && [failure.domain isEqual:@"OMI_REWIND_STORAGE"]);
+    require([[NSData dataWithContentsOfFile:dbPath] isEqual:invalid]);
+    require([NSFileManager.defaultManager removeItemAtPath:dbPath error:nil]);
+    require([NSFileManager.defaultManager createDirectoryAtPath:dbPath withIntermediateDirectories:NO attributes:nil error:nil]);
+    failure = nil;
+    require([store list:request error:&failure] == nil && [failure.domain isEqual:@"OMI_REWIND_STORAGE"]);
     require([NSFileManager.defaultManager removeItemAtPath:root error:nil]);
-    puts("Rewind read-only SQLite, JPEG, exact HEVC samples, pagination, literal search, containment and owner-retirement tests passed");
+    puts("Rewind read-only SQLite, missing versus unreadable storage, JPEG, exact HEVC samples, pagination, literal search, containment and owner-retirement tests passed");
   }
 }
