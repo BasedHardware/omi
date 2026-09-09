@@ -1,4 +1,5 @@
 """Hermetic production-client retries; HTTP/token seams, no credentials or sleeps."""
+import asyncio
 import importlib.util
 from pathlib import Path
 import sys
@@ -45,15 +46,29 @@ class GraphRetryTests(unittest.IsolatedAsyncioTestCase):
     async def test_server_cooldown_then_success(self):
         for method in ('get', 'get_bytes'):
             for status in (429, 503):
-                for header, delay in [('60', 60), ('0', 0), (' 7 ', 7)]:
+                for header, delay in [('60', 60), ('0', 0), (' 7 ', 7),
+                                      (str(int(sys.float_info.max)), int(sys.float_info.max))]:
                     with self.subTest(method=method, status=status, header=header):
                         await self.exercise(method, [response(status, header), response(200)], [delay])
 
     async def test_missing_or_invalid_header_uses_exponential_backoff(self):
         for method in ('get', 'get_bytes'):
-            for header in (None, '', 'invalid', '-1', '1.5'):
+            for header in (None, '', 'invalid', '-1', '1.5', '9' * 400, '9' * 5000,
+                           str(int(sys.float_info.max) * 2)):
                 with self.subTest(method=method, header=header):
                     await self.exercise(method, [response(429, header), response(503, header), response(200)], [2, 3])
+
+    async def test_delay_can_be_scheduled_by_real_event_loop(self):
+        module = load_client()
+        for header in ('9' * 400, str(int(sys.float_info.max) * 2),
+                       str(int(sys.float_info.max)), '60'):
+            with self.subTest(header_digits=len(header)):
+                # Start the real sleep so call_later performs its float arithmetic,
+                # then cancel on the next callback: no timer or wall-clock wait.
+                task = asyncio.create_task(asyncio.sleep(module._retry_delay(header, 0)))
+                asyncio.get_running_loop().call_soon(task.cancel)
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
 
     async def test_attempt_cap_preserves_graph_error(self):
         for method in ('get', 'get_bytes'):
