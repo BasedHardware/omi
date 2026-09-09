@@ -65,12 +65,21 @@ def test_action_item_create_batch_dict_format(authed_profile, respx_mock, cli_ru
     )
     result = cli_runner.invoke(app, ["action-item", "create-batch", str(batch_file)])
     assert result.exit_code == 0
-    assert "1 items" in result.stdout or "write tests" in result.stdout
+    assert "1 items" in result.stderr
+    assert "write tests" in result.stdout
 
 
 def test_action_item_create_batch_missing_file(authed_profile, cli_runner, tmp_path) -> None:
     missing = tmp_path / "does_not_exist.json"
     result = cli_runner.invoke(app, ["action-item", "create-batch", str(missing)])
+    assert result.exit_code == 1
+    assert "file not found" in result.stderr.lower()
+
+
+def test_action_item_create_batch_directory_rejected(authed_profile, cli_runner, tmp_path) -> None:
+    directory = tmp_path / "batch_dir"
+    directory.mkdir()
+    result = cli_runner.invoke(app, ["action-item", "create-batch", str(directory)])
     assert result.exit_code == 1
     assert "file not found" in result.stderr.lower()
 
@@ -95,6 +104,14 @@ def test_action_item_create_batch_oversize_rejected(authed_profile, cli_runner, 
 def test_action_item_create_batch_invalid_item_rejected(authed_profile, cli_runner, tmp_path) -> None:
     batch_file = tmp_path / "invalid_item.json"
     batch_file.write_text(json.dumps([{"description": "  "}]), encoding="utf-8")
+    result = cli_runner.invoke(app, ["action-item", "create-batch", str(batch_file)])
+    assert result.exit_code == 1
+    assert "must be an object with a non-empty 'description'" in result.stderr.lower()
+
+
+def test_action_item_create_batch_non_string_description_rejected(authed_profile, cli_runner, tmp_path) -> None:
+    batch_file = tmp_path / "non_string_item.json"
+    batch_file.write_text(json.dumps([{"description": 12345}]), encoding="utf-8")
     result = cli_runner.invoke(app, ["action-item", "create-batch", str(batch_file)])
     assert result.exit_code == 1
     assert "must be an object with a non-empty 'description'" in result.stderr.lower()
