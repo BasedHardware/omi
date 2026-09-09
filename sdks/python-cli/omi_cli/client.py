@@ -1,12 +1,12 @@
 """HTTP client for the Omi developer API.
 
-This is the single surface every command goes through. It owns:
+The shared request surface for Omi developer-API commands. It owns:
 
 * Bearer-token injection from the active :class:`omi_cli.config.Profile`.
 * Retry/backoff for ``429`` and ``5xx`` responses, honoring ``Retry-After`` when
   the server provides one.
-* Translating non-2xx responses into the :mod:`omi_cli.errors` hierarchy so the
-  call sites just see a clean exception.
+* Translating non-2xx responses and exhausted transport failures into the
+  :mod:`omi_cli.errors` hierarchy so the call sites just see a clean exception.
 * Sniffing the rate-limit policy from the response body so the user gets a
   useful message instead of a bare ``429``.
 
@@ -32,7 +32,8 @@ from tenacity import (
 
 from omi_cli import __version__
 from omi_cli.config import Profile
-from omi_cli.errors import CliError, RateLimitError, ServerError, from_status
+from omi_cli.errors import CliError, RateLimitError, ServerError, TransportError, UsageError, from_status
+from omi_cli.output import current_renderer
 
 USER_AGENT = f"omi-cli/{__version__} (+https://github.com/BasedHardware/omi)"
 DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
@@ -51,10 +52,36 @@ KNOWN_RATE_LIMIT_POLICIES = {
 }
 
 
+def validate_api_base(value: str) -> httpx.URL:
+    """Validate local API configuration before authentication or HTTP work."""
+    # HTTPX accepts port zero and ports above the TCP port range. Reject these here
+    # instead of retrying the resulting ConnectError as a server failure.
+    try:
+        api_base: Optional[httpx.URL] = httpx.URL(value.rstrip("/"))
+    except httpx.InvalidURL:
+        api_base = None
+    if (
+        api_base is None
+        or api_base.scheme not in ("http", "https")
+        or not api_base.host
+        or (api_base.port is not None and not 1 <= api_base.port <= 65535)
+    ):
+        # Never include a possibly credential-bearing URL in public errors.
+        raise UsageError(
+            message="Invalid API base URL",
+            detail="Use a valid absolute http:// or https:// URL for the Omi API.",
+        )
+    return api_base
+
+
 class OmiClient:
     """Thin wrapper around :class:`httpx.Client`. One per CLI invocation."""
 
     def __init__(self, profile: Profile, *, timeout: Optional[httpx.Timeout] = None, verbose: bool = False) -> None:
+        # Invalid local configuration must not trigger requests, token refresh,
+        # or transport retries. Do not include a possibly credential-bearing URL.
+        api_base = validate_api_base(profile.api_base)
+
         # Pre-flight: if this is an OAuth profile and the cached Firebase ID
         # token is expired (or close to it), refresh before we build the bearer
         # header so the very first request goes out with a fresh token.
@@ -73,7 +100,7 @@ class OmiClient:
         self._profile = profile
         self._verbose = verbose
         self._http = httpx.Client(
-            base_url=profile.api_base.rstrip("/"),
+            base_url=api_base,
             headers=self._build_headers(profile),
             timeout=timeout or DEFAULT_TIMEOUT,
             follow_redirects=False,
@@ -159,10 +186,21 @@ class OmiClient:
             # We exhausted retries — convert to the proper CliError now.
             raise self._error_from_response(exc.response)
         except httpx.TransportError as exc:
-            raise ServerError(
-                message="Connection failed",
-                detail="Unable to reach the Omi API. Check your network connection or try again shortly.",
-            ) from exc
+            # Transport failures can contain credentials or URLs; keep public
+            # output fixed per category while retaining the cause for debugging.
+            if isinstance(exc, httpx.ConnectError):
+                message = "Connection failed"
+                detail = "Could not reach the Omi API after multiple attempts. Check your connection and try again."
+            elif isinstance(exc, httpx.TimeoutException):
+                message = "Request timed out"
+                detail = "The Omi API request timed out after multiple attempts."
+            elif isinstance(exc, httpx.ProtocolError):
+                message = "Protocol error"
+                detail = "The Omi API request encountered a protocol error after multiple attempts."
+            else:
+                message = "API communication failed"
+                detail = "Communication with the Omi API failed after multiple attempts."
+            raise TransportError(message=message, detail=detail) from exc
         # Unreachable — Retrying always either returns or raises — but the type
         # checker doesn't know that.
         raise RuntimeError("unreachable")
@@ -198,11 +236,8 @@ class OmiClient:
     def _maybe_log(self, method: str, path: str, response: httpx.Response) -> None:
         if not self._verbose:
             return
-        # Use stderr via direct sys.stderr.write to avoid pulling Renderer in here.
-        import sys
-
-        sys.stderr.write(
-            f"[debug] {method} {path} → {response.status_code} ({response.elapsed.total_seconds():.2f}s)\n"
+        current_renderer(verbose=True).debug(
+            f"{method} {path} → {response.status_code} ({response.elapsed.total_seconds():.2f}s)"
         )
 
     @staticmethod

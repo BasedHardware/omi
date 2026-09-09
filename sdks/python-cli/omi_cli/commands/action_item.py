@@ -107,7 +107,7 @@ def create_action_item(
         body["due_at"] = due_at.isoformat()
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/action-items", json_body=body)
-    ctx.renderer.success(f"Action item created: [bold]{result.get('id')}[/bold]")
+    ctx.renderer.success(f"Action item created: {result.get('id')}")
     ctx.renderer.emit(result)
 
 
@@ -133,7 +133,7 @@ def update_action_item(
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/action-items/{action_item_id}", json_body=body)
-    ctx.renderer.success(f"Updated action item [bold]{action_item_id}[/bold].")
+    ctx.renderer.success(f"Updated action item {action_item_id}.")
     ctx.renderer.emit(result)
 
 
@@ -145,7 +145,7 @@ def complete_action_item(
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/action-items/{action_item_id}", json_body={"completed": True})
-    ctx.renderer.success(f"Completed action item [bold]{action_item_id}[/bold].")
+    ctx.renderer.success(f"Completed action item {action_item_id}.")
     ctx.renderer.emit(result)
 
 
@@ -156,10 +156,7 @@ def delete_action_item(
     confirm: bool = typer.Option(False, "--yes", "-y"),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    if not confirm:
-        typer.confirm(f"Delete action item {action_item_id}?", abort=True)
+    ctx.renderer.confirm(f"Delete action item {action_item_id}?", yes=confirm)
     with ctx.make_client() as client:
         result = client.delete(f"/v1/dev/user/action-items/{action_item_id}")
-    if ctx.renderer.json_mode:
-        ctx.renderer.emit(result)
-    ctx.renderer.success(f"Deleted action item [bold]{action_item_id}[/bold].")
+    ctx.renderer.complete(result, message=f"Deleted action item {action_item_id}.")

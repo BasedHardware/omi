@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-cli-public-output-boundary",
+  "violated_contract": "The omi console and python -m omi_cli entrypoints must preserve literal user/API text in human output and provide parseable JSON results, structured diagnostics, and documented exit codes in JSON mode. Per-command printing, markup escaping, implicit prompts, and entrypoint-specific error handling must not bypass this public contract.",
+  "canonical_prevention": "Renderer owns literal data, status, diagnostic, completion, and confirmation output. Both entrypoints call main(), which selects the renderer before strict parsing and normalizes parser, API, transport, interruption, and unexpected failures. A reusable conformance fixture invokes the actual console target and module entrypoint across both modes, including newly registered commands, empty results, configuration mutations, local tools, and failure paths.",
+  "canonical_prevention_artifact": [
+    "sdks/python-cli/tests/test_public_contract.py",
+    "sdks/python-cli/tests/test_output.py",
+    "sdks/python-cli/tests/test_delete_output.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "sdks/python-cli/omi_cli/**",
+    "sdks/python-cli/tests/**",
+    ".github/workflows/python-cli-ci.yml"
+  ],
+  "status": "open"
+}

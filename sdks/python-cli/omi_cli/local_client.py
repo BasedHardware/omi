@@ -102,11 +102,10 @@ class LocalOmiClient:
     ) -> None:
         if not self._verbose:
             return
-        import sys
+        from omi_cli.output import current_renderer
 
-        sys.stderr.write(
-            f"[debug] {method} {path} tool={tool_name} → {response.status_code} "
-            f"({response.elapsed.total_seconds():.2f}s)\n"
+        current_renderer(verbose=True).debug(
+            f"{method} {path} tool={tool_name} → {response.status_code} " f"({response.elapsed.total_seconds():.2f}s)"
         )
 
     def _error_from_response(self, response: httpx.Response) -> CliError:

@@ -264,19 +264,58 @@ UTF-16, or UTF-32, independently of the system's default text encoding.
 
 ```text
 0  success
-1  usage error (bad flags, missing args, validation)
+1  usage error (bad flags, missing args, validation) or unexpected local failure
 2  auth error (no creds, expired token, insufficient scope)
 3  server error (5xx, connection failure)
 4  rate limited (429) — retry recommended
 5  not found (404)
+130 interrupted (Ctrl-C / Ctrl-D)
 ```
+
+For requests through the shared Omi API client, including post-login credential
+verification, connection failures, timeouts, and transport protocol errors are
+retried automatically. If all attempts fail, the CLI exits with code `3` and
+emits a safe error message on stderr (JSON when `--json` is set), without raw
+transport exception details. This guarantee does not cover separate OAuth HTTP
+requests (token exchange, refresh, or API-key minting) or local companion API
+requests.
+
+If browser-login verification encounters a transport or usage error after the
+OAuth flow has already saved the new credential, the error explicitly reports
+that it is stored but unverified. JSON errors include
+`credential_stored: true` and `credential_verified: false`; the transport failure
+still exits with code `3`. Run `omi auth whoami` when connectivity is restored
+to verify the stored credential. An API-key login candidate remains in memory
+until verification completes, so a transport failure leaves the saved profile
+unchanged.
+
+The shared client requires a valid absolute `http://` or `https://` API base URL,
+with any explicit port in the range `1`–`65535` (port `0` is reserved).
+Invalid API base configuration is reported as a usage error (exit `1`) before
+the client attempts a request or refreshes credentials.
 
 ## For agents
 
 The CLI is built so an LLM can use it without a wrapper:
 
-* `--json` returns valid JSON to stdout. Nothing else writes to stdout in JSON
-  mode (errors go to stderr as `{"error": "...", "detail": "..."}`).
+* `omi` and `python -m omi_cli` share the same output and exit-code contract.
+* Successful commands with the global `--json` flag return a JSON result to
+  stdout. Cloud `delete` commands preserve the API response body. An empty
+  successful response (such as HTTP 204), or a status-only command such as
+  `config set`, returns JSON `null`.
+* Errors leave stdout empty and use stderr as
+  `{"error": "...", "detail": "..."}`. This includes bad flags, missing
+  arguments, HTTP errors, and exhausted transport failures. With `--verbose`,
+  stderr is JSON Lines: `{"debug": "..."}` diagnostics followed by the error
+  object if the command fails. Unexpected local errors report their type
+  without exposing raw exception details.
+* `--json version` and `--json --version` return `{"version": "..."}`.
+  Explicit `--help` and shell-completion actions remain text interfaces.
+  Human-mode implicit help also keeps the framework's text and exit status.
+  An incomplete command in JSON mode is a usage error, without implicit help.
+* Use `--yes` with commands that require confirmation. JSON mode never prompts
+  to confirm a mutation. For `auth login`, pass `--browser` or `--api-key`, or
+  pipe an API key on stdin; the interactive picker is for human output only.
 * Stable exit codes (above) let an agent disambiguate retryable vs terminal
   errors.
 * Successful resource `delete --yes` commands preserve the API response in
@@ -290,6 +329,22 @@ The CLI is built so an LLM can use it without a wrapper:
 
 See [`examples/agent_quickstart.md`](examples/agent_quickstart.md) for a worked
 example.
+
+Command implementations send results, statuses, and diagnostics through the
+shared `Renderer`. Human output treats API data, identifiers, profile names,
+and error details literally, including Rich-like brackets and emoji shortcodes.
+Pass plain strings; callers do not add markup or escape data themselves.
+
+For contributors, use `ctx.renderer.emit(result)` for data and
+`ctx.renderer.success(message)` for status. Successful commands with no data
+inherit the JSON `null` result from the root completion callback. An integer
+command return preserves its exit status; a nonzero return does not emit a
+successful `null` result. Use
+`ctx.renderer.confirm(message, yes=confirm)` for confirmation, and raise a
+`CliError` for an expected failure. Lower-level helpers use `current_renderer()`
+for progress and debug output. Add behavior cases to `tests/test_public_contract.py`;
+its reusable fixture runs both installed entrypoint targets in human and JSON
+modes within the existing CLI test suite.
 
 ## Rate limits
 

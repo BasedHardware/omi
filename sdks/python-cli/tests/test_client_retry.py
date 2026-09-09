@@ -10,13 +10,54 @@ import pytest
 from omi_cli import __version__
 from omi_cli import config as cfg
 from omi_cli.auth.store import store_oauth_tokens
-from omi_cli.client import USER_AGENT, OmiClient
-from omi_cli.errors import AuthError, CliError, NotFoundError, RateLimitError, ServerError
+from omi_cli.client import MAX_RETRY_ATTEMPTS, USER_AGENT, OmiClient, validate_api_base
+from omi_cli.errors import AuthError, CliError, NotFoundError, RateLimitError, ServerError, UsageError
 
 
 def test_user_agent_contains_version_and_repo() -> None:
     assert __version__ in USER_AGENT
     assert "omi-cli" in USER_AGENT
+
+
+@pytest.mark.parametrize(
+    "api_base",
+    [
+        "ftp://user:secret@example.invalid/?token=private-token",
+        "ws://example.invalid",
+        "example.invalid",
+        "https://",
+        "https://example.invalid:private-token",
+        "http://127.0.0.1:0",
+        "http://127.0.0.1:65536",
+        "https://user:secret@example.invalid:99999/?token=private-token",
+    ],
+)
+def test_invalid_api_base_fails_before_http_or_oauth(authed_profile, monkeypatch, api_base) -> None:
+    authed_profile.api_base = api_base
+    authed_profile.auth_method = "oauth"
+    authed_profile.id_token = "expired"
+    authed_profile.id_token_expires_at = time.time() - 60
+
+    def unexpected_call(*args, **kwargs):
+        pytest.fail("Invalid API configuration must fail before HTTP, OAuth refresh, or retry backoff")
+
+    monkeypatch.setattr(httpx, "Client", unexpected_call)
+    monkeypatch.setattr("omi_cli.auth.oauth.refresh_id_token", unexpected_call)
+    monkeypatch.setattr(time, "sleep", unexpected_call)
+
+    with pytest.raises(UsageError) as info:
+        OmiClient(authed_profile)
+
+    assert info.value.exit_code == 1
+    assert info.value.message == "Invalid API base URL"
+    assert info.value.detail == "Use a valid absolute http:// or https:// URL for the Omi API."
+    assert "secret" not in str(info.value)
+    assert "private-token" not in str(info.value)
+
+
+@pytest.mark.parametrize("api_base", ["http://localhost:1", "https://localhost:65535", "https://api.omi.me"])
+def test_valid_api_base_port_boundaries(api_base) -> None:
+    assert validate_api_base(api_base).host
 
 
 def test_oauth_pre_flight_refresh_when_token_expired(config_path, monkeypatch) -> None:
@@ -160,6 +201,74 @@ def test_500_then_200_succeeds_after_retry(authed_profile, respx_mock) -> None:
     assert result == []
 
 
+@pytest.mark.parametrize(
+    "error_type, expected_message, expected_detail",
+    [
+        (
+            httpx.ConnectError,
+            "Connection failed",
+            "Could not reach the Omi API after multiple attempts. Check your connection and try again.",
+        ),
+        (httpx.ConnectTimeout, "Request timed out", "The Omi API request timed out after multiple attempts."),
+        (httpx.ReadTimeout, "Request timed out", "The Omi API request timed out after multiple attempts."),
+        (httpx.WriteTimeout, "Request timed out", "The Omi API request timed out after multiple attempts."),
+        (httpx.PoolTimeout, "Request timed out", "The Omi API request timed out after multiple attempts."),
+        (
+            httpx.RemoteProtocolError,
+            "Protocol error",
+            "The Omi API request encountered a protocol error after multiple attempts.",
+        ),
+        (
+            httpx.LocalProtocolError,
+            "Protocol error",
+            "The Omi API request encountered a protocol error after multiple attempts.",
+        ),
+        (
+            httpx.ReadError,
+            "API communication failed",
+            "Communication with the Omi API failed after multiple attempts.",
+        ),
+    ],
+)
+def test_exhausted_transport_retries_surface_server_error(
+    authed_profile, respx_mock, monkeypatch, error_type, expected_message, expected_detail
+) -> None:
+    failure = error_type("request failed at https://user:secret@example.invalid/?token=private-token")
+    route = respx_mock.get("/v1/dev/user/memories").mock(side_effect=failure)
+    sleeps = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(ServerError) as info:
+            client.get("/v1/dev/user/memories")
+
+    assert route.call_count == MAX_RETRY_ATTEMPTS
+    assert len(sleeps) == MAX_RETRY_ATTEMPTS - 1
+    assert all(delay > 0 for delay in sleeps)
+    assert info.value.exit_code == 3
+    assert info.value.__cause__ is failure
+    assert info.value.message == expected_message
+    assert info.value.detail == expected_detail
+    assert "secret" not in str(info.value)
+    assert "private-token" not in str(info.value)
+
+
+def test_transport_error_then_success_preserves_retry_recovery(authed_profile, respx_mock, monkeypatch) -> None:
+    route = respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[httpx.ConnectError("connection refused"), httpx.Response(200, json=[{"id": "m1"}])]
+    )
+    sleeps = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+
+    with OmiClient(authed_profile) as client:
+        result = client.get("/v1/dev/user/memories")
+
+    assert result == [{"id": "m1"}]
+    assert route.call_count == 2
+    assert len(sleeps) == 1
+    assert sleeps[0] > 0
+
+
 def test_429_surfaces_rate_limit_with_policy(authed_profile, respx_mock) -> None:
     respx_mock.post("/v1/dev/user/conversations").mock(
         side_effect=[
@@ -273,7 +382,7 @@ def test_transport_connect_error_retries_and_surfaces_server_error(authed_profil
     err = info.value
     assert err.exit_code == 3
     assert err.message == "Connection failed"
-    assert "Unable to reach the Omi API" in (err.detail or "")
+    assert "Could not reach the Omi API after multiple attempts" in (err.detail or "")
     assert isinstance(err.__cause__, httpx.ConnectError)
 
 
@@ -285,7 +394,7 @@ def test_transport_read_timeout_surfaces_server_error(authed_profile, respx_mock
             client.get("/v1/dev/user/goals")
     err = info.value
     assert err.exit_code == 3
-    assert err.message == "Connection failed"
+    assert err.message == "Request timed out"
     assert isinstance(err.__cause__, httpx.ReadTimeout)
 
 
@@ -297,7 +406,7 @@ def test_transport_protocol_error_surfaces_server_error(authed_profile, respx_mo
             client.get("/v1/dev/user/goals")
     err = info.value
     assert err.exit_code == 3
-    assert err.message == "Connection failed"
+    assert err.message == "Protocol error"
     assert isinstance(err.__cause__, httpx.ProtocolError)
 
 
@@ -327,7 +436,7 @@ def test_main_cli_transport_error_plain_mode(authed_profile, respx_mock, monkeyp
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "Connection failed" in captured.err
-    assert "Unable to reach the Omi API" in captured.err
+    assert "Could not reach the Omi API after multiple attempts" in captured.err
 
 
 def test_main_cli_transport_error_json_mode(authed_profile, respx_mock, monkeypatch, capsys) -> None:
@@ -346,4 +455,4 @@ def test_main_cli_transport_error_json_mode(authed_profile, respx_mock, monkeypa
     assert captured.out == ""
     payload = json.loads(captured.err)
     assert payload["error"] == "Connection failed"
-    assert "Unable to reach the Omi API" in payload["detail"]
+    assert "Could not reach the Omi API after multiple attempts" in payload["detail"]

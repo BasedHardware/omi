@@ -15,10 +15,11 @@ from __future__ import annotations
 import json
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
+import click
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
@@ -44,6 +45,7 @@ class Renderer:
     json_mode: bool = False
     no_color: bool = False
     verbose: bool = False
+    _has_json_result: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self) -> None:
         # stderr console for messages and errors. In JSON mode, this is the only console
@@ -71,19 +73,32 @@ class Renderer:
             self._emit_json(data)
             return
 
-        if isinstance(data, list):
+        if isinstance(data, list) and all(isinstance(row, Mapping) for row in data):
             self._emit_table(data, columns=columns, title=title)
         elif isinstance(data, Mapping):
             self._emit_mapping(data, title=title)
         else:
-            # Scalars or anything else — just print.
-            self._stdout.print(Text(data) if isinstance(data, str) else data)
+            # Scalars or anything else — print as literal text, not markup.
+            self._stdout.print(Text(_stringify(data)), soft_wrap=True)
 
     def _emit_json(self, data: Any) -> None:
         # Use sys.stdout directly to avoid Rich coloring/wrapping the JSON.
         sys.stdout.write(json.dumps(data, default=_json_default, indent=2, sort_keys=False))
         sys.stdout.write("\n")
         sys.stdout.flush()
+        self._has_json_result = True
+
+    def finish(self) -> None:
+        """Complete a successful invocation, including commands with no result body."""
+        if self.json_mode and not self._has_json_result:
+            self._emit_json(None)
+
+    def complete(self, data: Any, *, message: str) -> None:
+        """Emit a completed command's JSON result or its human success message."""
+        if self.json_mode:
+            self._emit_json(data)
+        else:
+            self.success(message)
 
     def _emit_table(
         self,
@@ -93,25 +108,25 @@ class Renderer:
         title: Optional[str],
     ) -> None:
         if not rows:
-            self._stdout.print("[dim](no results)[/dim]")
+            self._stdout.print(Text("(no results)", style="dim"))
             return
 
         # Pick columns. Caller-supplied wins; otherwise use the keys of the first row.
         cols = list(columns) if columns else list(rows[0].keys())
 
-        table = Table(title=title, show_lines=False, header_style="bold")
+        table = Table(title=Text(title) if title is not None else None, show_lines=False, header_style="bold")
         for col in cols:
-            table.add_column(Text(col, style="bold"))
+            table.add_column(Text(str(col), style="bold"))
         for row in rows:
             table.add_row(*[Text(_stringify(row.get(c))) for c in cols])
         self._stdout.print(table)
 
     def _emit_mapping(self, mapping: Mapping[str, Any], *, title: Optional[str]) -> None:
-        table = Table(title=title, show_header=False, show_lines=False, box=None)
+        table = Table(title=Text(title) if title is not None else None, show_header=False, show_lines=False, box=None)
         table.add_column("field", style="bold")
         table.add_column("value")
         for k, v in mapping.items():
-            table.add_row(Text(k), Text(_stringify(v)))
+            table.add_row(Text(str(k)), Text(_stringify(v)))
         self._stdout.print(table)
 
     # ------------------------------------------------------------------
@@ -121,17 +136,17 @@ class Renderer:
     def info(self, message: str) -> None:
         if self.json_mode:
             return  # silence in JSON mode — keep stderr clean for piping
-        self._stderr.print(message)
+        self._stderr.print(Text(message), soft_wrap=True)
 
     def success(self, message: str) -> None:
         if self.json_mode:
             return
-        self._stderr.print(f"[green]✓[/green] {message}")
+        self._stderr.print(Text.assemble(("✓", "green"), f" {message}"), soft_wrap=True)
 
     def warn(self, message: str) -> None:
         if self.json_mode:
             return
-        self._stderr.print(f"[yellow]![/yellow] {message}")
+        self._stderr.print(Text.assemble(("!", "yellow"), f" {message}"), soft_wrap=True)
 
     def error(self, message: str, *, detail: Optional[str] = None, extra: Optional[Mapping[str, Any]] = None) -> None:
         # Errors are emitted in BOTH modes — JSON mode keeps stdout pristine,
@@ -142,8 +157,7 @@ class Renderer:
                 payload["detail"] = detail
             if extra:
                 payload.update(dict(extra))
-            sys.stderr.write(json.dumps(payload) + "\n")
-            sys.stderr.flush()
+            self._emit_diagnostic(payload)
         else:
             # Error text can include server responses and user input. Apply
             # our decoration to Text spans, without parsing that data as markup.
@@ -155,12 +169,55 @@ class Renderer:
             if extra:
                 for key, value in extra.items():
                     line.append(f"\n  {key}: {_stringify(value)}", style="dim")
-            self._stderr.print(line)
+            self._stderr.print(line, soft_wrap=True)
 
     def debug(self, message: str) -> None:
         if not self.verbose:
             return
-        self._stderr.print(f"[dim][debug][/dim] {message}")
+        if self.json_mode:
+            self._emit_diagnostic({"debug": message})
+        else:
+            self._stderr.print(Text.assemble(("[debug]", "dim"), f" {message}"), soft_wrap=True)
+
+    def _emit_diagnostic(self, payload: Mapping[str, Any]) -> None:
+        sys.stderr.write(json.dumps(payload, default=_json_default) + "\n")
+        sys.stderr.flush()
+
+    def confirm(self, message: str, *, yes: bool = False) -> None:
+        """Keep interactive prompts out of machine output and require explicit consent."""
+        if yes:
+            return
+        from omi_cli.errors import UsageError
+
+        if self.json_mode:
+            raise UsageError(
+                message="Confirmation required",
+                detail="Pass --yes to confirm this operation in JSON mode.",
+            )
+        if not click.confirm(message, err=True):
+            raise UsageError(message="Cancelled")
+
+
+def current_renderer(*, verbose: bool = False) -> Renderer:
+    """Use the invocation's output sink, including before the root callback runs.
+
+    Helpers such as HTTP diagnostics and browser-login progress use this same
+    boundary. Calls outside the CLI retain human output by default.
+    """
+    ctx = click.get_current_context(silent=True)
+    if ctx is not None:
+        if isinstance(ctx.obj, Renderer):
+            return ctx.obj
+        renderer = getattr(ctx.obj, "renderer", None)
+        if isinstance(renderer, Renderer):
+            return renderer
+        params = ctx.find_root().params
+        return Renderer(
+            json_mode=bool(params.get("json_output", False)),
+            no_color=bool(params.get("no_color", False)),
+            verbose=bool(params.get("verbose", verbose)),
+        )
+    return Renderer(verbose=verbose)
 
 
 def _stringify(v: Any) -> str:
