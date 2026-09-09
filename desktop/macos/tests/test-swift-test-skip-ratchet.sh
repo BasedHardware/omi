@@ -149,7 +149,7 @@ if ! grep -q "OK: slow-suite deferrals at ratchet (1)." "$TMPDIR/slow-ok.out"; t
 fi
 # The trailing tab field carries the comma-separated watch prefixes (empty
 # here); the runner splits it to decide subject-path wakes.
-slow_list="$("$RATCHET" --slow-list --slow-file "$TMPDIR/slow-ok.json")"
+slow_list="$("$RATCHET" --slow-list --with-watch --slow-file "$TMPDIR/slow-ok.json")"
 expected=$'SlowHarnessTests\t'
 if [ "$slow_list" != "$expected" ]; then
   fail "slow-list output was '$slow_list'"
@@ -167,7 +167,7 @@ cat >"$TMPDIR/slow-watch.json" <<'JSON'
   }
 }
 JSON
-watch_list="$("$RATCHET" --slow-list --slow-file "$TMPDIR/slow-watch.json")"
+watch_list="$("$RATCHET" --slow-list --with-watch --slow-file "$TMPDIR/slow-watch.json")"
 expected_watch=$'SlowHarnessTests\tdesktop/macos/Desktop/Sources/Widget/'
 if [ "$watch_list" != "$expected_watch" ]; then
   fail "slow-list watch output was '$watch_list'"

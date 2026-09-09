@@ -465,7 +465,9 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         80/20 deferral. The runner must normalize before matching.
         """
         suite_runner = _suite_runner_text()
-        self.assertIn("--slow-file \"$SLOW_SUITES_FILE\" | tr '\\n' ' '", suite_runner)
+        # The watch-aware lookup splits the tab field first, then normalizes:
+        # names feed the matcher space-delimited either way.
+        self.assertIn("cut -f1 | tr '\\n' ' '", suite_runner)
 
     def test_release_compile_is_reserved_off_ordinary_prs(self):
         """One hosted Mac per ordinary PR; pushes and package edits compile release.

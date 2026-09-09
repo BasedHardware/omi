@@ -649,7 +649,7 @@ slow_suites_resolved=""
 slow_watch_map=""
 if [ "$TEST_LANE" = "pr" ]; then
   if [ -f "$SLOW_SUITES_FILE" ]; then
-    slow_lookup="$("$SKIP_RATCHET" --slow-list --slow-file "$SLOW_SUITES_FILE")"
+    slow_lookup="$("$SKIP_RATCHET" --slow-list --with-watch --slow-file "$SLOW_SUITES_FILE")"
     # --slow-list prints one "suite<TAB>watch" pair per line. The names feed
     # the space-delimited word-boundary matcher below, so normalize newlines
     # to spaces — a multi-entry list never matched when newline-joined — and

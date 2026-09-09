@@ -52,6 +52,11 @@ def parse_args() -> argparse.Namespace:
         help="Validate the slow-suite deferral list (schema, ratchet cap, suite existence).",
     )
     parser.add_argument("--slow-list", action="store_true", help="Print deferred slow suite names, one per line.")
+    parser.add_argument(
+        "--with-watch",
+        action="store_true",
+        help="With --slow-list, append each entry's comma-separated watch prefixes as a tab field.",
+    )
     return parser.parse_args()
 
 
@@ -221,10 +226,14 @@ def main() -> int:
         except ValueError as exc:
             print(f"FAIL: {exc}", file=sys.stderr)
             return 1
-        # "suite<TAB>watch1,watch2" — the runner splits the second field into
-        # subject-path prefixes that wake a deferred suite when they change.
+        # Bare names by default; --with-watch appends each entry's
+        # comma-separated subject prefixes as a tab field, which the suite
+        # runner splits into wake rules.
         for name, entry in slow_suites.items():
-            print(f"{name}\t{entry.get('watch', '')}")
+            if args.with_watch:
+                print(f"{name}\t{entry.get('watch', '')}")
+            else:
+                print(name)
         return 0
 
     if args.slow_check:

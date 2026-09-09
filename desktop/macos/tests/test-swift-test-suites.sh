@@ -700,13 +700,15 @@ export OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL=1
 if ! "$RUNNER" >"$TMPDIR/pr-serial-defer-runner.out" 2>"$TMPDIR/pr-serial-defer-runner.err"; then
   fail "green PR lane with serial deferral failed"
 fi
-if ! grep -q "Ran 4 Swift suites in isolation" "$TMPDIR/pr-serial-defer-runner.out"; then
-  fail "PR lane did not defer the serial cluster (expected 4 of 8 executed)"
+# 8 suites = 5 parallel + 3 serial; deferred = both slow-listed parallel
+# suites + all three serial members, so 3 execute.
+if ! grep -q "Ran 3 Swift suites in isolation" "$TMPDIR/pr-serial-defer-runner.out"; then
+  fail "PR lane did not defer the serial cluster (expected 3 of 8 executed)"
 fi
-if ! grep -q "Deferred 4 ratcheted slow suite(s) to the full lane" "$TMPDIR/pr-serial-defer-runner.out"; then
+if ! grep -q "Deferred 5 ratcheted slow suite(s) to the full lane" "$TMPDIR/pr-serial-defer-runner.out"; then
   fail "runner did not announce the deferred serial/slow suites"
 fi
-for deferred_name in BetaTests AuthRefreshResilienceTests AuthTokenStorageTests OwnerAuthorityAdopterTests; do
+for deferred_name in BetaTests ChatDiscoverabilityTests AuthRefreshResilienceTests AuthTokenStorageTests OwnerAuthorityAdopterTests; do
   if ! grep -q "$deferred_name" "$TMPDIR/pr-serial-defer-runner.out"; then
     fail "deferred announcement did not name $deferred_name"
   fi
@@ -715,15 +717,15 @@ for deferred_name in BetaTests AuthRefreshResilienceTests AuthTokenStorageTests 
   fi
 done
 
-# A serial member's own declaring file wakes it (slow-listed BetaTests stays
-# deferred: its own file did not change, so 1 serial wake = 5 executed).
+# A serial member's own declaring file wakes it (both slow-listed suites stay
+# deferred: their own files did not change, so 1 serial wake = 4 executed).
 export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/Desktop/Tests/AuthTokenStorageTests.swift"
 : >"$FAKE_XCRUN_LOG"
 if ! "$RUNNER" >"$TMPDIR/pr-serial-wake-runner.out" 2>"$TMPDIR/pr-serial-wake-runner.err"; then
   fail "PR lane failed when a serial member's declaring file changed"
 fi
-if ! grep -q "Ran 5 Swift suites in isolation" "$TMPDIR/pr-serial-wake-runner.out"; then
-  fail "declaring-file change did not wake the serial member (expected 5 executed)"
+if ! grep -q "Ran 4 Swift suites in isolation" "$TMPDIR/pr-serial-wake-runner.out"; then
+  fail "declaring-file change did not wake the serial member (expected 4 executed)"
 fi
 if ! grep -q -- "--filter AuthTokenStorageTests/" "$FAKE_XCRUN_LOG"; then
   fail "woken serial member did not execute"
