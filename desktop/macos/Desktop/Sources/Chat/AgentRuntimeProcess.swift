@@ -2927,7 +2927,7 @@ actor AgentRuntimeProcess {
       return .incompatibleHandshake
     case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
       .encodingError, .failedToStart, .stopped, .restarting, .requestAlreadyActive,
-      .agentRuntimeFailure, .quotaExceeded, .authMissing:
+      .agentRuntimeFailure, .quotaExceeded, .authMissing, .localConfigMissing:
       return .launchFailed
     }
   }

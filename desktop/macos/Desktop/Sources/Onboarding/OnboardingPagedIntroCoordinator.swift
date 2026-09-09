@@ -1354,7 +1354,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         model: AIProvider.resolveModel(cloudDefault: ModelQoS.Claude.chat),
         systemPrompt:
           "You are a structured onboarding research assistant. Output only valid JSON.",
-        harnessMode: mode.nodeHarnessMode,
+        harnessMode: ChatProvider.harnessMode(for: mode),
         onTextDelta: { @Sendable _ in },
         onToolCall: { @Sendable _, _, _ in return "" },
         onToolActivity: { @Sendable _, _, _, _ in }
