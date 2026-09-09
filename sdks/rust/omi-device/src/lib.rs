@@ -165,6 +165,7 @@ impl<C: BleConnection> Device<C> {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AudioCodec {
+    Pcm16,
     Pcm8,
     Opus,
     OpusFs320,
@@ -174,6 +175,7 @@ pub enum AudioCodec {
 impl AudioCodec {
     pub const fn from_id(id: u8) -> Self {
         match id {
+            0 => Self::Pcm16,
             1 => Self::Pcm8,
             20 => Self::Opus,
             21 => Self::OpusFs320,

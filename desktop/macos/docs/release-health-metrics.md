@@ -51,7 +51,7 @@ the release-evidence layer (`#9523`) will consume.
 ### PTT terminal-outcome funnel — `ptt_audio_capture_lifecycle`
 
 - **Source event:** `desktop_health_event` with `event = ptt_audio_capture_lifecycle`
-  (`telemetry_schema_version >= 2`).
+  (`telemetry_schema_version >= 2`; `turn_kind` from version 3).
 - **Denominator (attempts):** all `ptt_audio_capture_lifecycle` events in the window,
   grouped by `failure_class`. Every terminal disposition — including success — is
   emitted remotely, so the denominator is queryable.

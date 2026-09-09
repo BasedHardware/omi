@@ -392,6 +392,14 @@ struct QueryHeroBar: View {
       maxHeight: maxEditorHeight
     )
     .frame(maxWidth: .infinity)
+    // **The field outranks its neighbours when the lane is contested.** Both rows are one fixed
+    // affordance, this field, and a fixed trailing cluster; the field is the only member with a
+    // reason to flex. A sibling that starts reporting a bloated width (the attach `Menu`'s backing
+    // control was measured at half the lane in a live session) must never be able to take the
+    // field's width with it — the pin on that control's slot is the first guard, and this priority
+    // is the second: whatever else in the row asks for more than it is owed, the reader's typing
+    // surface keeps the space the row owes it.
+    .layoutPriority(1)
     .overlay(alignment: .topLeading) {
       if text.isEmpty && !hasMarkedText {
         Text(placeholder)
@@ -451,6 +459,15 @@ struct QueryHeroBar: View {
     }
     .menuStyle(.borderlessButton)
     .menuIndicator(.hidden)
+    // **The control's slot is one disc wide, whatever its menu machinery reports.** A live session
+    // was measured with this `Menu`'s backing control at 381 pt — half the lane — after which the
+    // HStack split the remaining width evenly between it and the field (the paperclip drawn ~260 pt
+    // into the pill, the caret at the editor's mid-lane leading edge). The label above is already
+    // disc-sized; this pins the *slot*, so the row's one flexible member is always the field and no
+    // state the menu's AppKit side can enter — content rows, a tracking session, a stale fitting
+    // width — can buy lane width. The frame does not clip, so the glyph stays visible wherever the
+    // menu paints it; what it can never again do is move the field.
+    .frame(width: diameter)
     .disabled(attachments.count >= kMaxChatAttachments)
     .help("Attach files or a recent screen frame")
     .accessibilityLabel("Attach files")
@@ -458,7 +475,7 @@ struct QueryHeroBar: View {
   }
 
   private var placeholder: String {
-    mode == .answer ? "Ask a follow-up…" : RewindSearchMetrics.placeholder
+    QueryComposerPlaceholder.text(mode: mode)
   }
 
   private var fontSize: CGFloat {

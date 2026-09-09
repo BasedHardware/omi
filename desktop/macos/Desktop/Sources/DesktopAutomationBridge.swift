@@ -1573,7 +1573,8 @@ final class DesktopAutomationActionRegistry {
     // the shortcut handler calls, so no synthetic key events or cursor are involved.
     register(
       name: "ptt_start",
-      summary: "Begin a push-to-talk capture (mirrors the PTT shortcut key-down)"
+      summary:
+        "Begin a push-to-talk capture after admission (mirrors the PTT shortcut key-down). Returns after capture admission; provider/hub readiness and screen evidence are polled via ptt_turn_snapshot"
     ) { _ in
       PushToTalkManager.shared.beginPushToTalkForAutomation()
     }
@@ -2081,9 +2082,19 @@ final class DesktopAutomationActionRegistry {
       params: ["query"]
     ) { params in
       let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !query.isEmpty else { return ["error": "missing 'query'"] }
       guard let provider = ChatProvider.mainInstance else {
-        return ["error": "main ChatProvider not yet initialized"]
+        return query.isEmpty
+          ? ["error": "missing 'query'"]
+          : ["error": "main ChatProvider not yet initialized"]
+      }
+      guard
+        ChatProvider.hasSendableSubject(
+          text: query,
+          attachmentCount: provider.pendingAttachments.count,
+          referenceCount: provider.pendingComposerReferences.count
+        )
+      else {
+        return ["error": "missing 'query'"]
       }
       // Report the provider's own admission decision. This used to answer
       // `sent` unconditionally, so a send the busy guard refused was reported
@@ -2115,9 +2126,19 @@ final class DesktopAutomationActionRegistry {
       params: ["query", "hold_busy_ms"]
     ) { params in
       let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !query.isEmpty else { return ["error": "missing 'query'"] }
       guard let provider = ChatProvider.mainInstance else {
-        return ["error": "main ChatProvider not yet initialized"]
+        return query.isEmpty
+          ? ["error": "missing 'query'"]
+          : ["error": "main ChatProvider not yet initialized"]
+      }
+      guard
+        ChatProvider.hasSendableSubject(
+          text: query,
+          attachmentCount: provider.pendingAttachments.count,
+          referenceCount: provider.pendingComposerReferences.count
+        )
+      else {
+        return ["error": "missing 'query'"]
       }
       let isSending = provider.isSending
       let isStreaming = provider.messages.contains(where: { $0.isStreaming })

@@ -147,6 +147,8 @@ def notification_harness() -> Iterator[SimpleNamespace]:
         # A guard that declines before the LLM call hands the day back rather than sitting on a
         # 2h key; the harness has to carry it or the module under test cannot import.
         release_daily_summary_lock=MagicMock(),
+        try_acquire_notifications_job_run_lock=lambda *_args, **_kwargs: True,
+        release_notifications_job_run_lock=lambda *_args, **_kwargs: None,
     )
 
     mock_conversation = MagicMock()

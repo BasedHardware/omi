@@ -19,6 +19,16 @@ enum SystemCaptureOutcome: Equatable, Sendable {
   var resultingIsOn: Bool { self == .enabled }
 }
 
+enum AudioRecordingPermissionTransitionPolicy {
+  static func shouldRequestPermission(
+    currentMode: AssistantSettings.AudioRecordingMode,
+    requestedMode: AssistantSettings.AudioRecordingMode,
+    permissionGranted: Bool
+  ) -> Bool {
+    currentMode == .off && requestedMode != .off && !permissionGranted
+  }
+}
+
 /// Single owner of the screen-capture and audio-recording toggle transitions.
 ///
 /// The menu-bar toggles and the notch control cluster are two surfaces over one piece of
@@ -85,7 +95,15 @@ enum SystemCaptureControls {
     }
 
     let current = AssistantSettings.shared.audioRecordingMode
-    AssistantSettings.shared.audioRecordingMode = enabled ? (current == .off ? .onlyMeetings : current) : .off
+    let requested: AssistantSettings.AudioRecordingMode = enabled ? (current == .off ? .onlyMeetings : current) : .off
+    let shouldRequestPermission = AudioRecordingPermissionTransitionPolicy.shouldRequestPermission(
+      currentMode: current,
+      requestedMode: requested,
+      permissionGranted: AudioCaptureService.checkPermission())
+    AssistantSettings.shared.audioRecordingMode = requested
+    if shouldRequestPermission {
+      AppState.current?.requestMicrophonePermission()
+    }
     return enabled ? .enabled : .disabled
   }
 }
