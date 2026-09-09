@@ -46,8 +46,9 @@ export const backendError = (
   code: string,
   action: string,
   status: number,
-  retryable = false
-): Response => json({ error: { code, retryable, action } }, status);
+  retryable = false,
+  headers?: HeadersInit
+): Response => json({ error: { code, retryable, action } }, status, headers);
 
 export async function withTimeout<T>(
   timeoutMilliseconds: number,

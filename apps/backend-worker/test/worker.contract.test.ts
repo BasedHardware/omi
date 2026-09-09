@@ -14,6 +14,7 @@ import {
 } from "../src/conversations";
 import {
   coreContext,
+  handleChatHistory,
   handleConversations,
   handleTasks,
 } from "../src/http-core";
@@ -2258,6 +2259,7 @@ describe("worker request contract", () => {
       headers: authenticatedHeaders,
     });
     expect(broken.status).toBe(503);
+    expect(broken.headers.get("retry-after")).toBe("60");
     expect((await broken.json()) as unknown).toEqual({
       error: {
         code: "service_unavailable",
@@ -2265,6 +2267,40 @@ describe("worker request contract", () => {
         action: "retry",
       },
     });
+  });
+
+  test("history GET retryable 503 sends production chat retry-after", async () => {
+    const missingDb = await handleChatHistory(
+      coreContext({
+        env: { ...env, DB: undefined } as never,
+        request: new Request("https://worker.test/v1/chat-messages?limit=50"),
+        routePath: "/v1/chat-messages",
+        params: {},
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(missingDb.status).toBe(503);
+    expect(missingDb.headers.get("retry-after")).toBe("60");
+    expect((await missingDb.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+
+    const emptyCursor = await fetchWorker("/v1/chat-messages?olderCursor=", {
+      headers: authenticatedHeaders,
+    });
+    expect(emptyCursor.status).toBe(400);
+    expect(emptyCursor.headers.get("retry-after")).toBeNull();
+
+    const invalidCursor = await fetchWorker(
+      "/v1/chat-messages?olderCursor=not-a-cursor",
+      { headers: authenticatedHeaders }
+    );
+    expect(invalidCursor.status).toBe(400);
+    expect(invalidCursor.headers.get("retry-after")).toBeNull();
   });
 
   test("history GET keeps unknown senders instead of labeling them human", async () => {

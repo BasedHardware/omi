@@ -456,7 +456,9 @@ export async function handleChatHistory(
       : requestedSession;
   const db = context.env.DB;
   if (db === undefined)
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "60",
+    });
   const history = await readHistory(
     db,
     context.get("accountId"),
@@ -467,7 +469,9 @@ export async function handleChatHistory(
   if (history === "invalid_cursor")
     return backendError("bad_request", "refresh_history", 400);
   if (history === "unavailable")
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "60",
+    });
   return json(history);
 }
 
