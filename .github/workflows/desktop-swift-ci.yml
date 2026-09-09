@@ -37,6 +37,7 @@ jobs:
       should_release_compile: ${{ steps.changed.outputs.should_release_compile }}
       should_notification_release_regression: ${{ steps.changed.outputs.should_notification_release_regression }}
       desktop_swift_changed_files: ${{ steps.changed.outputs.desktop_swift_changed_files }}
+      swift_test_effective_lane: ${{ steps.changed.outputs.swift_test_effective_lane }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -110,6 +111,21 @@ jobs:
             printf '%s\n' "$DESKTOP_SWIFT_CHANGED"
             echo "DESKTOP_SWIFT_CHANGED_EOF"
           } >> "$GITHUB_OUTPUT"
+
+          # The effective lane must be ONE decision shared by the runner and
+          # the step budget: a diff that touches the runner, the deferral
+          # list, the ratchet, the package manifest, or test.sh re-baselines
+          # the PR lane to the full suite (the runner applies the same rule
+          # from the forwarded file list). Keying the budget on the event
+          # type alone made a re-baselined PR run the full suite against the
+          # tight PR number and false-red at 2013s vs 1800s (run
+          # 34369508858).
+          SWIFT_TEST_EFFECTIVE_LANE=pr
+          if [ "${{ github.event_name }}" != "pull_request" ] || printf '%s\n' "$DESKTOP_SWIFT_CHANGED" | grep -qxE \
+            'desktop/macos/(Desktop/Package\.(swift|resolved)|test\.sh|scripts/(run-swift-ci\.sh|swift-test-suites\.sh|swift-test-slow-suites\.json|swift-test-skip-ratchet\.py))'; then
+            SWIFT_TEST_EFFECTIVE_LANE=full
+          fi
+          echo "swift_test_effective_lane=$SWIFT_TEST_EFFECTIVE_LANE" >> "$GITHUB_OUTPUT"
 
   # Hosted macOS capacity is deliberately scarce. Run static contracts and the
   # optional full suite as steps in one selected job, rather than claiming two
@@ -274,7 +290,9 @@ jobs:
           # PRs defer ratcheted slow suites (swift-test-slow-suites.json) to
           # the full lane unless this diff touches their own inputs; pushes,
           # scheduled health runs, and manual dispatch always run everything.
-          OMI_SWIFT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}
+          # The changes job resolves the EFFECTIVE lane with the runner's own
+          # re-baseline rule so the lane and the budget below always agree.
+          OMI_SWIFT_TEST_LANE: ${{ needs.changes.outputs.swift_test_effective_lane }}
           OMI_SWIFT_TEST_CHANGED_FILES: ${{ needs.changes.outputs.desktop_swift_changed_files }}
           # The PR lane also defers the serial and solo clusters: their
           # isolation contract costs one ~30s invocation per member for
@@ -288,16 +306,18 @@ jobs:
           # and 60-120 min verdicts because nothing flagged duration. These
           # budgets turn drift into a red run instead — the very first
           # guarded run caught a 37m07s full lane (run 34363659680) that
-          # would previously have published green. Lane-aware: the PR fast
-          # lane measured 15m42s at batch 50 (~12m at 100; ~24m for auth
-          # PRs that wake the serial cluster), so 1800s holds it with
-          # headroom. The full lane (re-baselined runner diffs, main
-          # pushes, scheduled health) legitimately spans ~28-40m on a slow
-          # runner day — 9.7m prebuild + ~3.5m parallel batches + 15.3m
-          # sequential serial/solo tail — so it carries 2700s to catch the
-          # 50m+ drift class without failing quiet-day variance. Raise
-          # either only with measured evidence in the PR that raises it.
-          OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ github.event_name == 'pull_request' && '1800' || '2700' }}
+          # would previously have published green. Lane-aware via the
+          # changes job's effective-lane output (same re-baseline rule as
+          # the runner): the PR fast lane measured 15m42s at batch 50
+          # (~12m at 100; ~24m worst case for auth PRs that wake the serial
+          # cluster), so 1800s holds it with headroom. The full lane
+          # (re-baselined runner diffs, main pushes, scheduled health)
+          # legitimately spans ~28-40m on a slow runner day — 9.7m prebuild
+          # + ~3.5m parallel batches + 15.3m sequential serial/solo tail —
+          # so it carries 2700s to catch the 50m+ drift class without
+          # failing quiet-day variance. Raise either only with measured
+          # evidence in the PR that raises it.
+          OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ needs.changes.outputs.swift_test_effective_lane == 'pr' && '1800' || '2700' }}
           # Any PR-lane suite whose own test time exceeds this and is not
           # ratcheted in swift-test-slow-suites.json fails the run: the fast
           # lane cannot silently grow a slow tail. Deferred suites that woke
