@@ -391,7 +391,7 @@ export function taskDisplaySummary(item: {
   dueAt: number | null;
 }): string {
   if (item.completed) {
-    return 'Completed';
+    return `Completed · ${formatTaskDue(item.dueAt)}`;
   }
   if (item.dueAt === null) {
     return 'Pending';

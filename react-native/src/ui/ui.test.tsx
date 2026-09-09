@@ -1846,3 +1846,42 @@ test('wide Home search rows keep GET locked and discarded flags instead of title
   expect(plainTree).not.toContain('Locked');
   expect(plainTree).not.toContain('Discarded');
 });
+
+test('wide Home search completed tasks keep GET due dates instead of Completed-only', () => {
+  const dueAt = 1786000000;
+  const expected = `Completed · ${new Date(dueAt * 1000).toLocaleDateString(
+    undefined,
+    {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    },
+  )}`;
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'task',
+        id: 'task-completed-home-search',
+        title: 'Prepare launch notes',
+        summary: 'Completed',
+        searchableText: 'Prepare launch notes',
+        completed: true,
+        completedAt: dueAt,
+        dueAt,
+        owner: null,
+        source: 'assistant',
+        provenance: [],
+        sortOrder: 1,
+        indentLevel: 0,
+        createdAt: 1785900000,
+        updatedAt: 1785900100,
+        revision: null,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Prepare launch notes');
+  expect(tree).toContain(expected);
+  expect(tree).not.toContain('"Completed"');
+});

@@ -1173,7 +1173,10 @@ test('task due copy uses a calendar date instead of a raw epoch', () => {
   ).not.toBe('Due 1786000000');
   expect(taskDisplaySummary({completed: false, dueAt: null})).toBe('Pending');
   expect(taskDisplaySummary({completed: true, dueAt: secondScaleDue})).toBe(
-    'Completed',
+    `Completed · ${secondScaleCopy}`,
+  );
+  expect(taskDisplaySummary({completed: true, dueAt: null})).toBe(
+    'Completed · No due date',
   );
   expect(formatTaskDue(null)).toBe('No due date');
   expect(formatTaskDue(0)).toBe('Date unavailable');
