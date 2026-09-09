@@ -25,6 +25,63 @@ export function formatConversationDate(value: string | null): string {
   return label === '' ? 'Time unavailable' : label;
 }
 
+function ConversationClockFields({
+  conversation,
+  ink,
+  locked,
+}: {
+  conversation: ConversationProjection;
+  ink?: {color: string};
+  locked?: boolean;
+}) {
+  const showLocked = locked === true || conversation.locked;
+  return (
+    <View style={styles.conversationDetailFields}>
+      {conversation.capturedAtMs !== undefined && (
+        <Text style={[styles.conversationDetailField, ink]}>
+          Captured (device time) ·{' '}
+          {formatConversationDate(
+            new Date(conversation.capturedAtMs).toISOString(),
+          )}
+        </Text>
+      )}
+      <Text style={[styles.conversationDetailField, ink]}>
+        Started · {formatConversationDate(conversation.startedAt)}
+      </Text>
+      {conversationHasFinishClock(conversation) ? (
+        <Text style={[styles.conversationDetailField, ink]}>
+          Finished · {formatConversationDate(conversation.finishedAt)}
+        </Text>
+      ) : null}
+      {conversationHasFinishClock(conversation) ? (
+        <Text style={[styles.conversationDetailField, ink]}>
+          Duration ·{' '}
+          {formatConversationDuration(
+            conversation.startedAt,
+            conversation.finishedAt,
+          )}
+        </Text>
+      ) : null}
+      <Text style={[styles.conversationDetailField, ink]}>
+        Status · {conversationStatusCopy(conversation.status)}
+      </Text>
+      {conversation.starred ? (
+        <Text
+          accessibilityLabel="Starred conversation"
+          style={[styles.conversationDetailField, ink]}>
+          Starred
+        </Text>
+      ) : null}
+      {showLocked ? (
+        <Text style={[styles.conversationDetailField, ink]}>Locked</Text>
+      ) : null}
+      {conversation.discarded ? (
+        <Text style={[styles.conversationDetailField, ink]}>Discarded</Text>
+      ) : null}
+    </View>
+  );
+}
+
 export function ConversationDetail({
   conversation,
   desktop = false,
@@ -52,49 +109,7 @@ export function ConversationDetail({
       <Text style={[styles.conversationDetailSummary, ink]}>
         {conversationDisplaySummary(conversation)}
       </Text>
-      <View style={styles.conversationDetailFields}>
-        {conversation.capturedAtMs !== undefined && (
-          <Text style={[styles.conversationDetailField, ink]}>
-            Captured (device time) ·{' '}
-            {formatConversationDate(
-              new Date(conversation.capturedAtMs).toISOString(),
-            )}
-          </Text>
-        )}
-        <Text style={[styles.conversationDetailField, ink]}>
-          Started · {formatConversationDate(conversation.startedAt)}
-        </Text>
-        {conversationHasFinishClock(conversation) ? (
-          <Text style={[styles.conversationDetailField, ink]}>
-            Finished · {formatConversationDate(conversation.finishedAt)}
-          </Text>
-        ) : null}
-        {conversationHasFinishClock(conversation) ? (
-          <Text style={[styles.conversationDetailField, ink]}>
-            Duration ·{' '}
-            {formatConversationDuration(
-              conversation.startedAt,
-              conversation.finishedAt,
-            )}
-          </Text>
-        ) : null}
-        <Text style={[styles.conversationDetailField, ink]}>
-          Status · {conversationStatusCopy(conversation.status)}
-        </Text>
-        {conversation.starred ? (
-          <Text
-            accessibilityLabel="Starred conversation"
-            style={[styles.conversationDetailField, ink]}>
-            Starred
-          </Text>
-        ) : null}
-        {conversation.locked && (
-          <Text style={[styles.conversationDetailField, ink]}>Locked</Text>
-        )}
-        {conversation.discarded && (
-          <Text style={[styles.conversationDetailField, ink]}>Discarded</Text>
-        )}
-      </View>
+      <ConversationClockFields conversation={conversation} ink={ink} />
       {conversation.source === 'omi' &&
         conversation.id.startsWith('recording:') &&
         conversation.id.length > 'recording:'.length && (
@@ -210,13 +225,11 @@ function LegacyConversationBody({
           status: conversation.status,
         })}
       </Text>
-      {conversation.starred ? (
-        <Text
-          accessibilityLabel="Starred conversation"
-          style={[styles.conversationDetailField, ink]}>
-          Starred
-        </Text>
-      ) : null}
+      <ConversationClockFields
+        conversation={conversation}
+        ink={ink}
+        locked={detail.locked}
+      />
       {detail.sections.flatMap((section, index) => {
         const heading = visibleDisplayText(section.heading);
         const bodyMarkdown = visibleDisplayText(section.bodyMarkdown);

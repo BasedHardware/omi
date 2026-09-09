@@ -402,3 +402,79 @@ test('legacy conversation details name starred conversations from the list row',
     ).length,
   ).toBeGreaterThan(0);
 });
+
+test('legacy conversation details keep GET clocks from the list row', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: true,
+        sections: [],
+        transcript: {status: 'unavailable'},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {
+        ...conversation,
+        id: 'old-1',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T12:05:00.000Z',
+        status: 'completed',
+        discarded: true,
+      },
+    }),
+  );
+  expect(copy).toContain('Started ·');
+  expect(copy).toContain('Finished ·');
+  expect(copy).toContain('Duration ·');
+  expect(copy).toContain('Status ·');
+  expect(copy).toContain('Completed');
+  expect(copy).toContain('Locked');
+  expect(copy).toContain('Discarded');
+  expect(copy).not.toContain('in_progress');
+});
+
+test('legacy in-progress chats omit Finished like canonical detail', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {
+        ...conversation,
+        id: 'old-1',
+        status: 'in_progress',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: null,
+      },
+    }),
+  );
+  expect(copy).toContain('Started ·');
+  expect(copy).toContain('Status ·');
+  expect(copy).toContain('In progress');
+  expect(copy).not.toContain('Finished ·');
+  expect(copy).not.toContain('Duration ·');
+  expect(copy).not.toContain('Duration unavailable');
+  expect(copy).not.toContain('in_progress');
+});
