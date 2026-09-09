@@ -27,17 +27,32 @@ MESSAGES_SHORT = [{'text': 'we should ship on friday', 'is_user': True}]
 MESSAGES_LONG = [{'text': ' '.join(f'word{i}' for i in range(400)), 'is_user': True}]
 
 
+def _messages_with_timestamp(words, timestamp, is_user=True):
+    return [{'text': ' '.join(f'w{i}' for i in range(words)), 'timestamp': timestamp, 'is_user': is_user}]
+
+
 class _Store:
     """Stand-in for the Redis tier the debounce record lives in."""
 
     def __init__(self):
         self.data: dict[str, dict] = {}
+        self.claims: set[str] = set()
 
     def get(self, uid):
         return self.data.get(uid)
 
     def set(self, uid, state, ttl):
         self.data[uid] = dict(state)
+        return True
+
+    def claim(self, uid, ttl):
+        if uid in self.claims:
+            return False
+        self.claims.add(uid)
+        return True
+
+    def release(self, uid):
+        self.claims.discard(uid)
 
 
 @pytest.fixture
@@ -53,6 +68,8 @@ def gate(integration_harness, monkeypatch):  # noqa: F811 — pytest fixture inj
 
     monkeypatch.setattr(state_module, '_read_shared', shared.get)
     monkeypatch.setattr(state_module, '_write_shared', shared.set)
+    monkeypatch.setattr(state_module, '_claim_shared', shared.claim)
+    monkeypatch.setattr(state_module, '_release_shared', shared.release)
     state_module._local.clear()
     monkeypatch.setattr(app, 'get_mentor_notification_frequency', MagicMock(return_value=3))
 
@@ -133,16 +150,16 @@ def test_time_alone_does_not_reopen_the_gate_without_new_speech(gate):
 
 def test_new_speech_after_the_window_reopens_the_gate(gate):
     _enable(gate)
-    _run(gate, messages=MESSAGES_SHORT)
+    _run(gate, messages=_messages_with_timestamp(400, 100.0))
     _age(gate, 10_000)
-    _run(gate, messages=MESSAGES_SHORT + MESSAGES_LONG)
+    _run(gate, messages=_messages_with_timestamp(400, 100.0) + _messages_with_timestamp(200, 200.0))
     assert gate.evaluate.call_count == 2
 
 
 def test_new_speech_inside_the_time_floor_still_waits(gate):
     _enable(gate)
-    _run(gate, messages=MESSAGES_SHORT)
-    _run(gate, messages=MESSAGES_SHORT + MESSAGES_LONG)
+    _run(gate, messages=_messages_with_timestamp(400, 100.0))
+    _run(gate, messages=_messages_with_timestamp(400, 100.0) + _messages_with_timestamp(200, 200.0))
     assert gate.evaluate.call_count == 1, 'both conditions are required, not either'
 
 
@@ -220,3 +237,85 @@ def test_skip_emits_a_structured_reason(gate, caplog):
     lines = [record.getMessage() for record in caplog.records if 'mentor_gate_debounce' in record.getMessage()]
     assert lines, 'a skip nobody can count is a saving nobody can prove'
     assert 'reason=min_seconds' in lines[0]
+
+
+# ---------------------------------------------------------------------------
+# Review hardening (Cubic round on #13286)
+# ---------------------------------------------------------------------------
+
+
+def test_first_enabled_batch_respects_the_word_floor(gate):
+    """No prior evaluation time to wait out, but 5 words is still not 'genuinely
+    new speech' worth a ~22k-token evaluation."""
+    _enable(gate)
+    assert _run(gate, messages=MESSAGES_SHORT) is None
+    assert gate.evaluate.call_count == 0
+    assert gate.shared.data == {}, 'a skipped first batch records nothing'
+    _run(gate)
+    assert gate.evaluate.call_count == 1
+
+
+def test_other_speaker_words_do_not_open_the_gate(gate):
+    """MIN_NEW_WORDS bounds the user's new speech; a long other-speaker exchange
+    must not satisfy it."""
+    _enable(gate)
+    first = _messages_with_timestamp(400, 100.0)
+    _run(gate, messages=first)
+    _age(gate, 10_000)
+    other_speaker = _messages_with_timestamp(300, 300.0, is_user=False)
+    assert _run(gate, messages=first + other_speaker) is None
+    assert gate.evaluate.call_count == 1
+
+
+def test_evicted_buffer_history_is_not_new_speech(gate):
+    """The buffer keeps its 50-message cap by evicting the FRONT, so a shrinking
+    word count is not proof the conversation restarted. Retained history must not
+    be re-counted as new speech and re-open the gate."""
+    _enable(gate)
+    first = _messages_with_timestamp(300, 100.0) + _messages_with_timestamp(100, 200.0)
+    _run(gate, messages=first)
+    assert gate.evaluate.call_count == 1
+    _age(gate, 10_000)
+    # Front message evicted; what is retained is old speech, and only 50 words are new.
+    retained_and_new = _messages_with_timestamp(100, 200.0) + _messages_with_timestamp(50, 300.0)
+    assert _run(gate, messages=retained_and_new) is None
+    assert gate.evaluate.call_count == 1, 'a shrinking buffer must not replay retained history as new speech'
+
+
+def test_concurrent_same_user_worker_holds_the_claim(gate):
+    """Two same-user workers must not both pass the gate: the second finds the
+    claim held and skips, so only one LLM evaluation is billed."""
+    _enable(gate)
+    gate.shared.claims.add('uid-debounce')  # another worker is mid-evaluation
+    assert _run(gate) is None
+    assert gate.evaluate.call_count == 0
+    gate.shared.claims.discard('uid-debounce')
+    _run(gate)
+    assert gate.evaluate.call_count == 1
+
+
+def test_stale_mirror_is_not_trusted_when_deciding_eligibility(gate):
+    """Another host's fresh evaluation must beat this pod's stale mirror: the
+    eligibility decision is re-made against the shared authority."""
+    _enable(gate)
+    first = _messages_with_timestamp(400, 100.0)
+    _run(gate, messages=first)
+    assert gate.evaluate.call_count == 1
+    _age(gate, 10_000)
+    # Another host evaluated this user just now; only this pod's mirror is stale.
+    gate.shared.data['uid-debounce']['ts'] += 10_000
+    second = first + _messages_with_timestamp(200, 300.0)
+    assert _run(gate, messages=second) is None
+    assert gate.evaluate.call_count == 1
+
+
+def test_failed_shared_write_does_not_throttle_locally(gate, monkeypatch):
+    """Fail-open includes writes: an evaluation that never reached the shared
+    tier must not throttle this pod while every other host falls open."""
+    _enable(gate)
+    monkeypatch.setattr(gate.app.mentor_gate_state, '_write_shared', lambda uid, state, ttl: False)
+    _run(gate)
+    assert gate.evaluate.call_count == 1
+    assert not gate.local, 'an unpersisted evaluation must not be mirrored'
+    _run(gate)
+    assert gate.evaluate.call_count == 2, 'a failed shared write falls open, not closed'
