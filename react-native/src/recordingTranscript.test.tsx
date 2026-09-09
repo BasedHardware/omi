@@ -749,3 +749,34 @@ test('invalid_audio transcript failures name a decode error instead of a generic
     'This recording could not be transcribed.',
   );
 });
+
+test('invalid_transcript failures name an invalid result instead of a generic transcription miss', async () => {
+  const transcription = deviceTranscriptionProjection({
+    sessionId: 'session-one',
+    state: 'failed',
+    providerResult: null,
+    discardedLeadingPackets: 0,
+    errorCode: 'invalid_transcript',
+    updatedAt: 123,
+    startedAt: '2026-09-07T00:00:00Z',
+    codec: 21,
+    chunkCount: 1,
+    byteCount: 3,
+  });
+  mockRequest.mockResolvedValue({
+    id: 'terminal',
+    status: 200,
+    body: JSON.stringify({transcription}),
+  });
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain(
+    'This recording produced an invalid transcript.',
+  );
+  expect(textOf(renderer)).not.toContain(
+    'This recording could not be transcribed.',
+  );
+  expect(textOf(renderer)).not.toContain(
+    'This recording could not be decoded for transcription.',
+  );
+  expect(textOf(renderer)).not.toContain('invalid_transcript');
+});
