@@ -231,8 +231,9 @@ test.each(['completed', 'processing'])(
     const {LibraryPage} = require('./DesktopPages');
     const {StyleSheet} = require('react-native');
     const value = libraryOutcome();
-    if (value.conversations.status !== 'success')
+    if (value.conversations.status !== 'success') {
       throw new Error('Expected fixture');
+    }
     value.conversations.value.items[0]!.title = '';
     value.conversations.value.items[0]!.status = status;
     let view!: ReactTestRenderer.ReactTestRenderer;
@@ -249,5 +250,137 @@ test.each(['completed', 'processing'])(
       StyleSheet.flatten(label(view, 'Back to conversations').props.style)
         .alignSelf,
     ).toBe('flex-start');
+  },
+);
+
+test('memory-only omnibar search opens readable detail without a new search or route', () => {
+  const {LibraryPage} = require('./DesktopPages');
+  const {Text, TextInput} = require('react-native');
+  const value = libraryOutcome();
+  const page =
+    value.conversations.status === 'success'
+      ? value.conversations.value.page
+      : null!;
+  value.memories = {
+    status: 'success',
+    value: {
+      page,
+      items: [
+        {
+          kind: 'memory',
+          id: 'conversation-1',
+          title: 'Tea preference',
+          summary: 'Prefers jasmine tea.',
+          searchableText: 'tea preference prefers jasmine tea',
+          citations: ['conversation-1'],
+          timestamp: 100,
+          provenance: {
+            label: 'Saved preference',
+            synthesisVersion: null,
+            inputDigest: null,
+            outputDigest: null,
+          },
+        },
+      ],
+    },
+  };
+  let view!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    view = ReactTestRenderer.create(
+      <LibraryPage outcomes={value} query="jasmine" />,
+    );
+  });
+  mounted.push(view);
+  expect(view.root.findAllByType(TextInput)).toHaveLength(0);
+  act(() => label(view, 'Open memory Tea preference').props.onPress());
+  expect(label(view, 'Selected memory details')).toBeDefined();
+  expect(
+    view.root
+      .findAllByType(Text)
+      .flatMap(
+        (node: ReactTestRenderer.ReactTestInstance) => node.props.children,
+      )
+      .join(' '),
+  ).toContain('Prefers jasmine tea.');
+  act(() => label(view, 'Back to conversations').props.onPress());
+  expect(label(view, 'Open memory Tea preference')).toBeDefined();
+});
+
+test('memory read failure remains visible instead of false empty search results', () => {
+  const {LibraryPage} = require('./DesktopPages');
+  const {Text} = require('react-native');
+  const value = libraryOutcome();
+  value.memories = {
+    status: 'error',
+    error: 'Memories unavailable for this account.',
+  };
+  let view!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    view = ReactTestRenderer.create(
+      <LibraryPage outcomes={value} query="jasmine" />,
+    );
+  });
+  mounted.push(view);
+  const content = view.root
+    .findAllByType(Text)
+    .flatMap((node: ReactTestRenderer.ReactTestInstance) => node.props.children)
+    .join(' ');
+  expect(content).toContain('Memories unavailable for this account.');
+  expect(content).not.toContain('No loaded');
+  expect(content).not.toContain('Nothing captured');
+});
+
+test.each(['Prefers jasmine tea.', 'Prefers jasmine', ''])(
+  'memory detail renders content once when its title is a repeated preview: %s',
+  title => {
+    const {LibraryPage} = require('./DesktopPages');
+    const {Text, StyleSheet} = require('react-native');
+    const value = libraryOutcome();
+    if (value.conversations.status !== 'success') {
+      throw new Error('Expected fixture');
+    }
+    value.memories = {
+      status: 'success',
+      value: {
+        page: value.conversations.value.page,
+        items: [
+          {
+            kind: 'memory',
+            id: 'memory-1',
+            title,
+            summary: 'Prefers jasmine tea.',
+            searchableText: 'jasmine',
+            citations: [],
+            timestamp: null,
+            provenance: {
+              label: null,
+              synthesisVersion: null,
+              inputDigest: null,
+              outputDigest: null,
+            },
+          },
+        ],
+      },
+    };
+    let view!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      view = ReactTestRenderer.create(
+        <LibraryPage outcomes={value} query="jasmine" />,
+      );
+    });
+    mounted.push(view);
+    act(() => label(view, `Open memory ${title || 'Memory'}`).props.onPress());
+    const detail = label(view, 'Selected memory details');
+    expect(
+      detail
+        .findAllByType(Text)
+        .filter(node => node.props.children === 'Prefers jasmine tea.'),
+    ).toHaveLength(1);
+    expect(
+      detail
+        .findAllByType(Text)
+        .filter(node => node.props.accessibilityRole === 'header'),
+    ).toHaveLength(0);
+    expect(StyleSheet.flatten(detail.props.style).padding).toBeUndefined();
   },
 );
