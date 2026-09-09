@@ -9,15 +9,9 @@ import type {
 import {ChatBackendError} from './chatClient';
 
 const mockRequest = jest.fn();
-let mockInvalidated: (() => void) | undefined;
 jest.mock('./omiNative', () => ({
   omiBackend: {request: (request: unknown) => mockRequest(request)},
-  subscribeOmiBackendSessionInvalidated: (listener: () => void) => {
-    mockInvalidated = listener;
-    return () => {
-      mockInvalidated = undefined;
-    };
-  },
+  subscribeOmiBackendSessionInvalidated: () => () => {},
 }));
 
 const {ConversationsPage} = require('./pages/Conversations');
@@ -125,11 +119,7 @@ async function renderPage(items: ConversationProjection[]) {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await act(async () => {
     renderer = ReactTestRenderer.create(
-      <ConversationsPage
-        outcome={outcome(items)}
-        loading={false}
-        embedded
-      />,
+      <ConversationsPage outcome={outcome(items)} loading={false} embedded />,
     );
   });
   renderers.push(renderer);
@@ -195,9 +185,7 @@ test('shows typed chat grant denial instead of an empty message list', async () 
       )[0]!
       .props.onPress(),
   );
-  expect(textOf(renderer)).toContain(
-    'Chat is not available for this account.',
-  );
+  expect(textOf(renderer)).toContain('Chat is not available for this account.');
   expect(textOf(renderer)).not.toContain('No messages in this chat yet.');
   expect(textOf(renderer)).not.toContain('You ·');
 });
