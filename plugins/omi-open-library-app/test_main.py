@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock, patch
 from urllib.parse import unquote
 
-import pytest
 from fastapi.testclient import TestClient
 
 from main import _subject_slug, app
