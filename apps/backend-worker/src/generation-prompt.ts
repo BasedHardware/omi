@@ -65,7 +65,9 @@ export async function composeGenerationPrompt(
     usedBytes += utf8Bytes(excerpt.value);
     excerpts.push(
       isVisibleGenerationText(attachment.displayName)
-        ? `Attachment "${attachment.displayName}":\n${excerpt.value}`
+        ? `Attachment "${visibleGenerationTrim(attachment.displayName)}":\n${
+            excerpt.value
+          }`
         : excerpt.value
     );
   }

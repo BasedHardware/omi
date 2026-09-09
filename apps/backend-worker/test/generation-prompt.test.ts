@@ -1544,6 +1544,59 @@ describe("composeGenerationPrompt", () => {
     expect(result.prompt).toContain("notes.txt");
   });
 
+  test("quotes a NEXT LINE-prefixed attachment name without padding the prompt label", async () => {
+    await insertBound(db, {
+      id: "att-nel-name",
+      accountId: "acct-a",
+      messageId: "msg-nel-name",
+      mimeType: "text/plain",
+      displayName: `\u0085notes.txt`,
+    });
+    r2.putBytes(
+      "attachments/acct-a/att-nel-name",
+      new TextEncoder().encode("visible file bytes")
+    );
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-nel-name",
+      "summarize this"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.prompt).toContain("summarize this");
+    expect(result.prompt).toContain("visible file bytes");
+    expect(result.prompt).toContain('Attachment "notes.txt":');
+    expect(result.prompt).not.toContain("\u0085");
+  });
+
+  test("omits a NEXT LINE-only attachment name while keeping visible file bytes", async () => {
+    await insertBound(db, {
+      id: "att-nel-blank-name",
+      accountId: "acct-a",
+      messageId: "msg-nel-blank-name",
+      mimeType: "text/plain",
+      displayName: "\u0085",
+    });
+    r2.putBytes(
+      "attachments/acct-a/att-nel-blank-name",
+      new TextEncoder().encode("visible file bytes")
+    );
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-nel-blank-name",
+      "summarize this"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.prompt).toContain("summarize this");
+    expect(result.prompt).toContain("visible file bytes");
+    expect(result.prompt).not.toContain('Attachment "');
+  });
+
   test("omits a whitespace-only attachment name while keeping visible file bytes", async () => {
     await insertBound(db, {
       id: "att-blank-name",
