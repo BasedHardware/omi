@@ -2,7 +2,10 @@ import React, {useEffect, useState} from 'react';
 import {FlatList, ScrollView, StyleSheet, Text, View} from 'react-native';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import {loadConnectors, type CloudApp} from '../desktopCloudClient';
-import type {DesktopReadOutcomes} from '../desktopReadClient';
+import {
+  projectionTimestamp,
+  type DesktopReadOutcomes,
+} from '../desktopReadClient';
 import {omiBackend, subscribeOmiBackendSessionInvalidated} from '../omiNative';
 import {ReadStatus} from '../ui/ReadStatus';
 import {ConversationDetail} from '../ui/ConversationDetail';
@@ -14,7 +17,7 @@ import {
   type TaskMutationProps,
 } from '../ui/TaskEditor';
 import {ShippingListInsert} from './ShippingStage';
-import {ConversationRow, EmptyCopy, TaskRow} from './DesktopRows';
+import {ConversationRow, EmptyCopy, ReadRow, TaskRow} from './DesktopRows';
 import type {DesktopSession} from './desktopChrome';
 import {desktopTokens as token} from './tokens';
 
@@ -38,17 +41,27 @@ export function LibraryPage({
     [],
   );
   const outcome = outcomes?.conversations ?? null;
+  const memoryOutcome = outcomes?.memories ?? null;
   const normalized = query.trim().toLocaleLowerCase();
-  const conversations =
-    outcome?.status === 'success'
-      ? outcome.value.items.filter(
-          item =>
-            normalized === '' ||
-            item.title.toLocaleLowerCase().includes(normalized) ||
-            item.summary.toLocaleLowerCase().includes(normalized),
-        )
-      : [];
-  const selected = conversations.find(item => item.id === selectedId) ?? null;
+  const items = [
+    ...(outcome?.status === 'success' ? outcome.value.items : []),
+    ...(memoryOutcome?.status === 'success' ? memoryOutcome.value.items : []),
+  ]
+    .filter(
+      item =>
+        normalized === '' ||
+        item.searchableText.toLocaleLowerCase().includes(normalized),
+    )
+    .sort(
+      (left, right) =>
+        (projectionTimestamp(right) ?? 0) - (projectionTimestamp(left) ?? 0),
+    );
+  const selected =
+    items.find(item => `${item.kind}:${item.id}` === selectedId) ?? null;
+  const readError = [outcome, memoryOutcome]
+    .filter(value => value?.status === 'error')
+    .map(value => (value?.status === 'error' ? value.error : ''))
+    .join(' ');
   useEffect(() => {
     if (selectedId !== null && selected === null) {
       setSelectedId(null);
@@ -60,10 +73,15 @@ export function LibraryPage({
       : outcome.status === 'error'
       ? outcome.error
       : normalized
-      ? 'No loaded conversations match.'
+      ? 'No loaded conversations or memories match.'
       : 'Nothing captured in this window yet.';
   return (
     <View style={styles.page}>
+      {readError ? (
+        <Text accessibilityRole="alert" style={styles.rowMeta}>
+          {readError}
+        </Text>
+      ) : null}
       {notice ? (
         <Text accessibilityRole="alert" style={styles.rowMeta}>
           {notice}
@@ -80,22 +98,48 @@ export function LibraryPage({
             style={[styles.taskEdit, styles.backAction]}>
             <Text style={styles.rowMeta}>Back to conversations</Text>
           </FocusPressable>
-          <ConversationDetail
-            key={selected.id}
-            conversation={selected}
-            apiContract={
-              outcome?.status === 'success'
-                ? outcome.value.apiContract
-                : undefined
-            }
-            desktop
-          />
+          {selected.kind === 'conversation' ? (
+            <ConversationDetail
+              key={selected.id}
+              conversation={selected}
+              apiContract={
+                outcome?.status === 'success'
+                  ? outcome.value.apiContract
+                  : undefined
+              }
+              desktop
+            />
+          ) : (
+            <View
+              accessibilityLabel="Selected memory details"
+              style={styles.memoryDetail}>
+              {selected.title.trim() !== '' &&
+                !selected.summary.startsWith(selected.title) && (
+                  <Text accessibilityRole="header" style={styles.rowTitle}>
+                    {selected.title}
+                  </Text>
+                )}
+              <Text selectable style={styles.memoryBody}>
+                {selected.summary}
+              </Text>
+              <Text style={styles.rowMeta}>
+                {selected.timestamp === null
+                  ? 'Date unavailable'
+                  : new Date(selected.timestamp * 1000).toLocaleDateString()}
+              </Text>
+              <Text style={styles.rowMeta}>
+                {selected.citations.length}{' '}
+                {selected.citations.length === 1 ? 'citation' : 'citations'} ·{' '}
+                {selected.provenance.label || 'Synthesized memory'}
+              </Text>
+            </View>
+          )}
         </ScrollView>
       ) : (
         <ScrollFade visible={fade.visible} style={styles.list}>
           <FlatList
-            data={conversations}
-            keyExtractor={item => item.id}
+            data={items}
+            keyExtractor={item => `${item.kind}:${item.id}`}
             onLayout={fade.onLayout}
             onScroll={fade.onScroll}
             onContentSizeChange={fade.onContentSizeChange}
@@ -104,39 +148,56 @@ export function LibraryPage({
             renderItem={({item}) => (
               <FocusPressable
                 accessibilityRole="button"
-                accessibilityLabel={`Open conversation ${
+                accessibilityLabel={`Open ${item.kind} ${
                   item.title ||
-                  (item.status === 'processing'
+                  (item.kind === 'memory'
+                    ? 'Memory'
+                    : item.status === 'processing'
                     ? 'Processing conversation…'
                     : 'Conversation title unavailable')
                 }`}
-                onPress={() => setSelectedId(item.id)}>
-                <ConversationRow item={item} />
+                onPress={() => setSelectedId(`${item.kind}:${item.id}`)}>
+                {item.kind === 'conversation' ? (
+                  <ConversationRow item={item} />
+                ) : (
+                  <ReadRow item={item} />
+                )}
               </FocusPressable>
             )}
-            ListEmptyComponent={<EmptyCopy>{emptyCopy}</EmptyCopy>}
+            ListEmptyComponent={
+              readError ? null : <EmptyCopy>{emptyCopy}</EmptyCopy>
+            }
             ListFooterComponent={
-              outcome?.status === 'success' ? (
-                <>
-                  {outcome.value.page.hasMore && onLoadMore ? (
-                    <FocusPressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Load more conversations"
-                      disabled={loadingMore}
-                      onPress={onLoadMore}
-                      style={styles.taskEdit}>
-                      <Text style={styles.rowMeta}>
-                        {loadingMore ? 'Loading…' : 'Load more'}
-                      </Text>
-                    </FocusPressable>
-                  ) : null}
+              <>
+                {outcome?.status === 'success' ? (
+                  <>
+                    {outcome.value.page.hasMore && onLoadMore ? (
+                      <FocusPressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Load more conversations"
+                        disabled={loadingMore}
+                        onPress={onLoadMore}
+                        style={styles.taskEdit}>
+                        <Text style={styles.rowMeta}>
+                          {loadingMore ? 'Loading…' : 'Load more'}
+                        </Text>
+                      </FocusPressable>
+                    ) : null}
+                    <ReadStatus
+                      label="Conversations"
+                      mac
+                      page={outcome.value.page}
+                    />
+                  </>
+                ) : null}
+                {memoryOutcome?.status === 'success' ? (
                   <ReadStatus
-                    label="Conversations"
+                    label="Memories"
                     mac
-                    page={outcome.value.page}
+                    page={memoryOutcome.value.page}
                   />
-                </>
-              ) : null
+                ) : null}
+              </>
             }
           />
         </ScrollFade>
@@ -358,6 +419,8 @@ export function AppsPage({session}: {session: DesktopSession}) {
 const styles = StyleSheet.create({
   page: {flex: 1},
   conversationDetail: {gap: 16, padding: 16},
+  memoryDetail: {gap: 16},
+  memoryBody: {color: token.color.ink, fontSize: 15, lineHeight: 22},
   backAction: {alignSelf: 'flex-start'},
   taskActions: {flexDirection: 'row', alignItems: 'center', gap: 8},
   taskToggle: {flex: 1, minHeight: 44},
