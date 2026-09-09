@@ -32,15 +32,29 @@ extension AppState {
   /// True when transcription specifically is exempt from the paywall — either
   /// the general BYOK exemption above, or because the local provider is
   /// active with a self-hosted backend configured (Settings' "Local Backend
-  /// URL", see `AIProvider.localBackendURLKey`), which routes voice
+  /// URL", see `AIProvider.hasLocalBackendConfigured`), which routes voice
   /// transcription away from Omi's Deepgram proxy entirely. Distinct from
-  /// `isPaywalledEffective`: screen capture/proactive assistants still route
-  /// through Omi's Gemini proxy regardless of this flag, so they stay gated
-  /// by the general paywall until they have their own local path.
+  /// `isScreenCaptureExemptFromPaywall`: transcription needs the extra
+  /// backend-URL check because the Local provider alone only covers text and
+  /// (via the vision subagent) screenshots, not the separate voice pipeline.
   nonisolated static var isTranscriptionExemptFromPaywall: Bool {
     if !isPaywalledEffective { return true }
-    guard UserDefaults.standard.string(forKey: "chatBridgeMode") == "local" else { return false }
-    return !(UserDefaults.standard.string(forKey: AIProvider.localBackendURLKey) ?? "").isEmpty
+    return AIProvider.hasLocalBackendConfigured
+  }
+
+  /// True when screen capture / screenshot interpretation is exempt from the
+  /// paywall — either the general BYOK exemption above, or because the Local
+  /// provider is the active chat/agent provider. Unlike
+  /// `isTranscriptionExemptFromPaywall`, this needs no additional
+  /// self-hosted-backend check: screen capture's only cloud dependency was
+  /// Omi's Gemini proxy for interpreting the image, and the vision-subagent
+  /// delegation (see `ChatProvider.visionSubagentInstruction`) already routes
+  /// that through the local provider's own model/subagent instead. Screen
+  /// capture itself (the macOS frame grab) never leaves the device under any
+  /// provider.
+  nonisolated static var isScreenCaptureExemptFromPaywall: Bool {
+    if !isPaywalledEffective { return true }
+    return AIProvider.isLocalProviderActive
   }
 
   /// Decision for the resume-on-paywall-clear hook in `fetchTrialMetadata()`.

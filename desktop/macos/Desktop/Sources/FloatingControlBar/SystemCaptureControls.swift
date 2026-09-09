@@ -41,7 +41,7 @@ enum SystemCaptureControls {
   // MARK: - Current state
 
   static var isScreenCaptureOn: Bool {
-    !AppState.isPaywalledEffective
+    AppState.isScreenCaptureExemptFromPaywall
       && AssistantSettings.shared.screenAnalysisEnabled
       && ProactiveAssistantsPlugin.shared.isMonitoring
   }
@@ -62,7 +62,7 @@ enum SystemCaptureControls {
       return .disabled
     }
 
-    if AppState.isPaywalledEffective {
+    if !AppState.isScreenCaptureExemptFromPaywall {
       NotificationCenter.default.post(
         name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
       return .blockedPaywall

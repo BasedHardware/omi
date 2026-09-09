@@ -169,6 +169,28 @@ struct AIProvider: Identifiable {
     return ChatProvider.BridgeMode(rawValue: modeRaw) ?? .piMono
   }
 
+  /// True when the Local provider is the active chat/agent provider — every
+  /// text call already routes to the user's own server (see
+  /// `currentProviderMode`), and since the vision-subagent delegation,
+  /// screenshot interpretation does too. Free-tier gates that only exist to
+  /// meter Omi's cloud model should key off this, combined with the
+  /// individual feature's own "does this still call Omi's cloud" check
+  /// (e.g. connector synthesis, which stays gated unless the user opts into
+  /// `connectorSynthesisMode == .cloud`).
+  static var isLocalProviderActive: Bool {
+    resolveBridgeMode() == .local
+  }
+
+  /// True when the Local provider is active AND a self-hosted backend URL
+  /// (`localBackendURLKey`, Settings' "Local Backend URL") is configured —
+  /// the point at which voice transcription and memory/conversation sync
+  /// also leave Omi's cloud proxy path (see `DesktopBackendEnvironment`).
+  /// Narrower than `isLocalProviderActive`: a user who only pointed chat at
+  /// Local still sends audio to Omi's Deepgram proxy until this is also true.
+  static var hasLocalBackendConfigured: Bool {
+    isLocalProviderActive && !(UserDefaults.standard.string(forKey: localBackendURLKey) ?? "").isEmpty
+  }
+
   /// Resolves the model id to use for an LLM call, given what it would use
   /// on a cloud provider. On the local provider this must be the user's
   /// configured local model — passing a Claude id forces the pi-mono

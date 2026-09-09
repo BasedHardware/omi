@@ -959,17 +959,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // Quick toggles for screen capture and audio recording.
     // When paywalled (trial expired / usage limit hit) both render OFF — the
     // features can't run, and tapping a toggle surfaces the upgrade popup.
-    // Audio recording has its own, narrower exemption: it's also off the
-    // hook once transcription is pointed at a self-hosted backend, even
-    // without BYOK — screen capture still routes through Omi's Gemini proxy
-    // regardless, so it stays on the general paywall check.
-    let paywalled = AppState.isPaywalledEffective
+    // Both have their own, narrower exemption beyond BYOK: audio recording is
+    // also off the hook once transcription is pointed at a self-hosted
+    // backend, and screen capture is also off the hook while the Local
+    // provider is active, since the vision-subagent delegation routes
+    // screenshot interpretation to the user's own server instead of Omi's
+    // Gemini proxy (see AppState.isScreenCaptureExemptFromPaywall).
+    let screenCapturePaywalled = !AppState.isScreenCaptureExemptFromPaywall
     let transcriptionPaywalled = !AppState.isTranscriptionExemptFromPaywall
     let screenCaptureItem = NSMenuItem()
     let screenCaptureView = makeToggleItemView(
       title: "Screen Capture",
       iconName: "rectangle.dashed.badge.record",
-      isOn: !paywalled && AssistantSettings.shared.screenAnalysisEnabled
+      isOn: !screenCapturePaywalled && AssistantSettings.shared.screenAnalysisEnabled
         && ProactiveAssistantsPlugin.shared.isMonitoring,
       action: #selector(screenCaptureToggled(_:))
     )
@@ -1318,10 +1320,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     AnalyticsManager.shared.menuBarOpened()
     // Refresh toggle states to match current runtime state. When paywalled,
     // force both OFF — the features can't run until the user upgrades.
-    let paywalled = AppState.isPaywalledEffective
+    let screenCapturePaywalled = !AppState.isScreenCaptureExemptFromPaywall
     let transcriptionPaywalled = !AppState.isTranscriptionExemptFromPaywall
     screenCaptureSwitch?.state =
-      (!paywalled && ProactiveAssistantsPlugin.shared.isMonitoring) ? .on : .off
+      (!screenCapturePaywalled && ProactiveAssistantsPlugin.shared.isMonitoring) ? .on : .off
     audioRecordingSwitch?.state =
       (!transcriptionPaywalled && AssistantSettings.shared.audioRecordingMode != .off) ? .on : .off
   }

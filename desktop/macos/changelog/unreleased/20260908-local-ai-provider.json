@@ -1,3 +1,3 @@
 {
-  "change": "Added a Local AI provider that talks directly to your own OpenAI-compatible server (e.g. LM Studio), with a model picker fetched live from it, for chat and screenshot interpretation that never leaves your network"
+  "change": "Added a Local AI provider that talks directly to your own OpenAI-compatible server (e.g. LM Studio), with a model picker fetched live from it, for chat and screenshot interpretation that never leaves your network. The free plan's monthly limit no longer blocks or counts against chat, the floating bar, quick chat, or screenshot interpretation while Local is active, since none of them touch Omi's cloud model"
 }

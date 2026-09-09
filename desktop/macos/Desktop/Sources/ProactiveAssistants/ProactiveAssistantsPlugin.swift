@@ -280,13 +280,17 @@ public class ProactiveAssistantsPlugin: NSObject {
       return
     }
 
-    // Paywall hard-stop: refuse to start screen capture + Gemini analysis
+    // Paywall hard-stop: refuse to start screen capture + interpretation
     // when the user is past their trial. `AppState` writes
     // `desktop_isPaywalled` to UserDefaults whenever it flips so other
     // singletons can synchronously check. Toggle UI also gates on this.
-    // BYOK users (all four keys configured locally) are never paywalled,
-    // so they bypass this gate even if the flag is transiently stale.
-    if !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: "desktop_isPaywalled") {
+    // BYOK users (all four keys configured locally) are never paywalled, and
+    // neither is the Local provider — since the vision-subagent delegation,
+    // screenshot interpretation runs against the user's own server under
+    // Local, never Omi's Gemini proxy (see
+    // `AppState.isScreenCaptureExemptFromPaywall`) — so both bypass this gate
+    // even if the flag is transiently stale.
+    if !AppState.isScreenCaptureExemptFromPaywall {
       log("Paywall: refusing startMonitoring (trial expired)")
       NotificationCenter.default.post(
         name: .showUsageLimitPopup,
