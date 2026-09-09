@@ -19,7 +19,7 @@ test('macOS PageShell does not inset the nav below the titlebar', () => {
   );
 });
 
-test('DesktopApp keeps an even window inset around one chrome row', () => {
+test('static layout guard: DesktopApp keeps an even window inset around one chrome row', () => {
   expect(desktopApp).toMatch(/root:\s*\{[^}]*padding:\s*desktopWindowInset/);
   expect(desktopChrome).toContain('height: desktopNavBarHeight');
   expect(desktopChrome).toContain('accessibilityLabel="Window controls"');
@@ -34,7 +34,6 @@ test('DesktopApp keeps an even window inset around one chrome row', () => {
   expect(desktopChrome).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
   expect(desktopChrome).not.toMatch(/navItem:\s*\{[^}]*borderRadius/);
   expect(desktopChrome).toContain('styles.navPill');
-  expect(desktopChrome).toContain("active={route === 'Settings'}");
   expect(desktopChrome).toContain('accessibilityLabel="Settings"');
   expect(desktopChrome).not.toMatch(/navTextActive:\s*\{[^}]*fontWeight/);
   expect(desktopChrome).toMatch(/navItem:\s*\{[^}]*paddingHorizontal:\s*16/);

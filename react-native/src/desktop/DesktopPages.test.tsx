@@ -123,3 +123,131 @@ test('lost write eligibility closes an open editor and disables completion', () 
     ),
   ).toHaveLength(0);
 });
+
+function libraryOutcome(): DesktopReadOutcomes {
+  const base = outcomes(false);
+  return {
+    ...base,
+    conversations: {
+      status: 'success',
+      value: {
+        page:
+          base.tasks.status === 'success'
+            ? {...base.tasks.value.page, hasMore: true}
+            : null!,
+        items: [
+          {
+            kind: 'conversation',
+            id: 'conversation-1',
+            title: 'Planning',
+            summary: 'Launch plan',
+            searchableText: 'planning launch plan',
+            createdAt: '2026-09-09T00:00:00Z',
+            updatedAt: null,
+            startedAt: null,
+            finishedAt: null,
+            starred: false,
+            status: 'completed',
+            source: 'import',
+            visibility: 'private',
+            folderId: null,
+            locked: false,
+            discarded: false,
+          },
+        ],
+      },
+    },
+  };
+}
+
+test('library rows open shared details, go back, and paginate without a second search', () => {
+  const {LibraryPage} = require('./DesktopPages');
+  const {TextInput} = require('react-native');
+  const onLoadMore = jest.fn();
+  const props = {outcomes: libraryOutcome(), onLoadMore};
+  let view!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    view = ReactTestRenderer.create(<LibraryPage {...props} />);
+  });
+  mounted.push(view);
+  expect(view.root.findAllByType(TextInput)).toHaveLength(0);
+  act(() => label(view, 'Load more conversations').props.onPress());
+  expect(onLoadMore).toHaveBeenCalledTimes(1);
+  act(() => label(view, 'Open conversation Planning').props.onPress());
+  expect(label(view, 'Selected conversation details')).toBeDefined();
+  act(() => label(view, 'Back to conversations').props.onPress());
+  expect(label(view, 'Open conversation Planning')).toBeDefined();
+  act(() => view.update(<LibraryPage {...props} loadingMore />));
+  expect(label(view, 'Load more conversations').props.disabled).toBe(true);
+});
+
+test.each(['missing', 'error', 'query'])(
+  'library retires selected detail after %s and does not restore it',
+  mode => {
+    const {LibraryPage} = require('./DesktopPages');
+    const initial = libraryOutcome();
+    let view!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      view = ReactTestRenderer.create(<LibraryPage outcomes={initial} />);
+    });
+    mounted.push(view);
+    act(() => label(view, 'Open conversation Planning').props.onPress());
+    const changed = {
+      ...initial,
+      conversations:
+        mode === 'error'
+          ? {status: 'error', error: 'Sign in again'}
+          : {
+              status: 'success',
+              value: {
+                ...((initial.conversations as {value: unknown})
+                  .value as object),
+                items: [],
+              },
+            },
+    };
+    act(() =>
+      view.update(
+        <LibraryPage
+          outcomes={mode === 'query' ? initial : changed}
+          query={mode === 'query' ? 'unmatched' : ''}
+        />,
+      ),
+    );
+    expect(
+      view.root.findAll(
+        node =>
+          node.props.accessibilityLabel === 'Selected conversation details',
+      ),
+    ).toHaveLength(0);
+    act(() => view.update(<LibraryPage outcomes={initial} />));
+    expect(label(view, 'Open conversation Planning')).toBeDefined();
+  },
+);
+
+test.each(['completed', 'processing'])(
+  'untitled %s conversation has a useful label and a leading back button',
+  status => {
+    const {LibraryPage} = require('./DesktopPages');
+    const {StyleSheet} = require('react-native');
+    const value = libraryOutcome();
+    if (value.conversations.status !== 'success')
+      throw new Error('Expected fixture');
+    value.conversations.value.items[0]!.title = '';
+    value.conversations.value.items[0]!.status = status;
+    let view!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      view = ReactTestRenderer.create(<LibraryPage outcomes={value} />);
+    });
+    mounted.push(view);
+    const title =
+      status === 'processing'
+        ? 'Processing conversation…'
+        : 'Conversation title unavailable';
+    act(() => label(view, `Open conversation ${title}`).props.onPress());
+    expect(
+      StyleSheet.flatten(label(view, 'Back to conversations').props.style)
+        .alignSelf,
+    ).toBe('flex-start');
+  },
+);

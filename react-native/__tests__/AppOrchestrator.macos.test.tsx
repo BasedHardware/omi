@@ -390,11 +390,7 @@ test('a send still in flight when the session dies never seeds the next session'
   // A send starts while the session is still ready.
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(
-      node =>
-        node.props.placeholder === 'Ask about your day…' ||
-        node.props.placeholder === 'Message Omi…',
-    )!;
+    .find(node => node.props.placeholder === 'Ask about your day…')!;
   act(() => {
     omnibar.props.onChangeText('PRIVATE IN-FLIGHT MESSAGE');
   });
@@ -469,11 +465,7 @@ test('a send still in flight when the session dies never seeds the next session'
   // starts a new admission.
   const omnibarAgain = renderer.root
     .findAllByType(TextInput)
-    .find(
-      node =>
-        node.props.placeholder === 'Ask about your day…' ||
-        node.props.placeholder === 'Message Omi…',
-    )!;
+    .find(node => node.props.placeholder === 'Ask about your day…')!;
   act(() => {
     omnibarAgain.props.onChangeText('fresh account message');
   });
@@ -685,11 +677,7 @@ test('a stale older-history recovery cannot overwrite a newer desktop send', asy
 
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(
-      node =>
-        node.props.placeholder === 'Ask about your day…' ||
-        node.props.placeholder === 'Message Omi…',
-    )!;
+    .find(node => node.props.placeholder === 'Ask about your day…')!;
   act(() => {
     omnibar.props.onChangeText('fresh question');
   });
@@ -734,11 +722,7 @@ test.each(['', 'next question'])(
     const renderer = await renderApp();
     const omnibar = renderer.root
       .findAllByType(TextInput)
-      .find(
-        node =>
-          node.props.placeholder === 'Ask about your day…' ||
-          node.props.placeholder === 'Message Omi…',
-      )!;
+      .find(node => node.props.placeholder === 'Ask about your day…')!;
     act(() => {
       omnibar.props.onChangeText('unsent question');
     });
@@ -812,11 +796,7 @@ test('an admitted stream failure keeps its uncertain interruption visible', asyn
   });
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(
-      node =>
-        node.props.placeholder === 'Ask about your day…' ||
-        node.props.placeholder === 'Message Omi…',
-    )!;
+    .find(node => node.props.placeholder === 'Ask about your day…')!;
   act(() => {
     omnibar.props.onChangeText('interrupted question');
   });
@@ -903,11 +883,7 @@ test('a send during the initial history load still receives the transcript', asy
 
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(
-      node =>
-        node.props.placeholder === 'Ask about your day…' ||
-        node.props.placeholder === 'Message Omi…',
-    )!;
+    .find(node => node.props.placeholder === 'Ask about your day…')!;
   act(() => {
     omnibar.props.onChangeText('sent before history landed');
   });
@@ -1052,11 +1028,7 @@ test('a send during an older-history load still keeps the earlier page', async (
 
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(
-      node =>
-        node.props.placeholder === 'Ask about your day…' ||
-        node.props.placeholder === 'Message Omi…',
-    )!;
+    .find(node => node.props.placeholder === 'Ask about your day…')!;
   act(() => {
     omnibar.props.onChangeText('sent while older loading');
   });
@@ -1159,11 +1131,7 @@ test.each(['stop', 'unmount', 'signout'])(
     });
     const omnibar = renderer.root
       .findAllByType(TextInput)
-      .find(
-        node =>
-          node.props.placeholder === 'Ask about your day…' ||
-          node.props.placeholder === 'Message Omi…',
-      )!;
+      .find(node => node.props.placeholder === 'Ask about your day…')!;
     act(() => omnibar.props.onChangeText('my old request'));
     await act(async () => {
       renderer.root

@@ -17,45 +17,13 @@ import {
   type DomainReadOutcome,
 } from '../desktopReadClient';
 import {FocusPressable} from '../ui/Pressable';
-import {RecordingTranscript} from '../ui/RecordingTranscript';
-import {ChatConversationHistory} from '../ui/ChatConversationHistory';
-import {MAIN_CHAT_CONVERSATION_ID} from '../chatConversationHistory';
+import {
+  ConversationDetail,
+  formatConversationDate,
+  formatConversationDuration,
+} from '../ui/ConversationDetail';
 import {ReadStatus} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
-
-function formatConversationDate(value: string | null): string {
-  if (value === null) {
-    return 'Time unavailable';
-  }
-  return new Intl.DateTimeFormat(undefined, {
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    month: 'short',
-  }).format(new Date(value));
-}
-
-function formatConversationDuration(
-  startedAt: string | null,
-  finishedAt: string | null,
-): string {
-  if (startedAt === null || finishedAt === null) {
-    return 'Duration unavailable';
-  }
-  const duration = Date.parse(finishedAt) - Date.parse(startedAt);
-  if (!Number.isFinite(duration) || duration < 0) {
-    return 'Duration unavailable';
-  }
-  const minutes = Math.round(duration / 60_000);
-  if (minutes < 60) {
-    return `${minutes} min`;
-  }
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return remainingMinutes === 0
-    ? `${hours} hr`
-    : `${hours} hr ${remainingMinutes} min`;
-}
 
 const ConversationRow = memo(function ConversationRow({
   item,
@@ -341,63 +309,14 @@ export function ConversationsPage({
                     </Text>
                   </FocusPressable>
                 )}
-                <Text style={styles.conversationDetailTitle}>
-                  {selected.title}
-                </Text>
-                <Text style={styles.conversationDetailSummary}>
-                  {selected.summary}
-                </Text>
-                <View style={styles.conversationDetailFields}>
-                  {selected.capturedAtMs !== undefined && (
-                    <Text style={styles.conversationDetailField}>
-                      Captured (device time) ·{' '}
-                      {new Date(selected.capturedAtMs).toLocaleString()}
-                    </Text>
-                  )}
-                  <Text style={styles.conversationDetailField}>
-                    Started · {formatConversationDate(selected.startedAt)}
-                  </Text>
-                  <Text style={styles.conversationDetailField}>
-                    Finished · {formatConversationDate(selected.finishedAt)}
-                  </Text>
-                  <Text style={styles.conversationDetailField}>
-                    Duration ·{' '}
-                    {formatConversationDuration(
-                      selected.startedAt,
-                      selected.finishedAt,
-                    )}
-                  </Text>
-                  <Text style={styles.conversationDetailField}>
-                    Status · {selected.status}
-                  </Text>
-                  {selected.locked && (
-                    <Text style={styles.conversationDetailField}>Locked</Text>
-                  )}
-                  {selected.discarded && (
-                    <Text style={styles.conversationDetailField}>
-                      Discarded
-                    </Text>
-                  )}
-                </View>
-                {selected.source === 'omi' &&
-                  selected.id.startsWith('recording:') &&
-                  selected.id.length > 'recording:'.length && (
-                    <RecordingTranscript
-                      key={selected.id}
-                      sessionId={selected.id.slice('recording:'.length)}
-                      revision={selected.updatedAt ?? undefined}
-                    />
-                  )}
-                {selected.source === 'chat' &&
-                  selected.id === MAIN_CHAT_CONVERSATION_ID && (
-                    <ChatConversationHistory key={selected.id} />
-                  )}
-                {selected.source === 'chat' &&
-                  selected.id !== MAIN_CHAT_CONVERSATION_ID && (
-                    <Text style={styles.conversationDetailSummary}>
-                      Chat history for this conversation is not available here.
-                    </Text>
-                  )}
+                <ConversationDetail
+                  conversation={selected}
+                  apiContract={
+                    outcome?.status === 'success'
+                      ? outcome.value.apiContract
+                      : undefined
+                  }
+                />
               </>
             )}
           </ScrollView>

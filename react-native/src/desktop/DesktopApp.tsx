@@ -43,6 +43,9 @@ export function DesktopSessionProbe() {
 }
 
 type Props = TaskMutationProps & {
+  onLoadMoreConversations?: () => void;
+  conversationsLoadingMore?: boolean;
+  conversationNotice?: string | null;
   taskPagination?: React.ReactNode;
   deviceContent?: React.ReactNode;
   activeGenerationId: string | null;
@@ -70,6 +73,9 @@ type Props = TaskMutationProps & {
 };
 
 export function DesktopApp({
+  onLoadMoreConversations,
+  conversationsLoadingMore = false,
+  conversationNotice = null,
   activeGenerationId,
   authError,
   deviceContent,
@@ -102,6 +108,21 @@ export function DesktopApp({
   const [route, setRoute] = useState<DesktopRoute>('Home');
   const [mode, setMode] = useState<OmnibarMode>('Ask');
   const [recallQuery, setRecallQuery] = useState('');
+  const beforeChat = useRef<{route: DesktopRoute; mode: OmnibarMode}>({
+    route: 'Home',
+    mode: 'Ask',
+  });
+  const openChat = () => {
+    if (route !== 'Chat') {
+      beforeChat.current = {route, mode};
+    }
+    setMode('Ask');
+    setRoute('Chat');
+  };
+  const closeChat = () => {
+    setRoute(beforeChat.current.route);
+    setMode(beforeChat.current.mode);
+  };
   useEffect(() => {
     if (mode !== 'Recall') {
       return;
@@ -121,19 +142,6 @@ export function DesktopApp({
     }
   };
   const omnibarRef = useRef<TextInput>(null);
-  const [searchFocusRequest, setSearchFocusRequest] = useState(0);
-  const focusedSearchRequest = useRef(0);
-  useEffect(() => {
-    if (
-      route === 'Home' &&
-      session === 'ready' &&
-      searchFocusRequest !== focusedSearchRequest.current &&
-      omnibarRef.current !== null
-    ) {
-      focusedSearchRequest.current = searchFocusRequest;
-      omnibarRef.current.focus();
-    }
-  }, [route, session, searchFocusRequest]);
   useEffect(() => {
     if (session !== 'ready') {
       setRoute('Home');
@@ -143,7 +151,7 @@ export function DesktopApp({
     const subscription = subscribeDesktopSearchCommand(() => {
       setMode('Search');
       setRoute('Home');
-      setSearchFocusRequest(value => value + 1);
+      omnibarRef.current?.focus();
     });
     return () => subscription.remove();
   }, []);
@@ -185,15 +193,17 @@ export function DesktopApp({
         onDraftChange={onDraftChange}
         mode={mode}
         onModeChange={next => {
-          setMode(next);
-          setRoute(
-            next === 'Recall' ? 'Rewind' : next === 'Ask' ? 'Chat' : 'Home',
-          );
+          if (next === 'Ask') {
+            openChat();
+          } else {
+            setMode(next);
+            setRoute(next === 'Recall' ? 'Rewind' : 'Home');
+          }
         }}
         onNavigate={navigate}
         onSend={() => {
           if (mode === 'Ask') {
-            setRoute('Chat');
+            openChat();
             onSend();
           } else if (mode === 'Recall') {
             setRecallQuery(draft.trim().slice(0, 200));
@@ -204,6 +214,7 @@ export function DesktopApp({
         }}
         onStop={onStop}
         route={route}
+        backgroundRoute={beforeChat.current.route}
       />
       {route === 'Conversations' || route === 'Tasks' ? (
         <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
@@ -216,10 +227,7 @@ export function DesktopApp({
             hasOlderChat={hasOlderChat}
             loadingOlderChat={loadingOlderChat}
             messages={messages}
-            onOpenChat={() => {
-              setMode('Ask');
-              setRoute('Chat');
-            }}
+            onOpenChat={openChat}
             onOpenRewind={() => navigate('Rewind')}
             onOpenTasks={() => setRoute('Tasks')}
             onOpenConversations={() => setRoute('Conversations')}
@@ -232,19 +240,21 @@ export function DesktopApp({
         ) : route === 'Chat' ? (
           <DesktopChat
             messages={messages}
-            draft={draft}
             busy={chatBusy || activeGenerationId !== null}
-            canStop={activeGenerationId !== null}
+            onClose={closeChat}
             error={chatNotice}
             hasOlder={hasOlderChat}
             loadingOlder={loadingOlderChat}
             onLoadOlder={onLoadOlderChat}
-            onDraftChange={onDraftChange}
-            onSend={onSend}
-            onStop={onStop}
           />
         ) : route === 'Conversations' ? (
-          <LibraryPage outcomes={outcomes} />
+          <LibraryPage
+            outcomes={outcomes}
+            query={mode === 'Search' ? draft : ''}
+            onLoadMore={onLoadMoreConversations}
+            loadingMore={conversationsLoadingMore}
+            notice={conversationNotice}
+          />
         ) : route === 'Rewind' ? (
           <DesktopRewind
             captureRevision={captureRevision}
