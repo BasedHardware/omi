@@ -28,3 +28,14 @@ def test_keeps_plain_text_and_intra_word_punctuation() -> None:
 
 def test_empty_body_is_unchanged() -> None:
     assert to_plain_text('') == ''
+
+
+def test_flattens_parenthesized_link_and_image_destinations() -> None:
+    assert to_plain_text("[Function](https://example.test/wiki/Function_(mathematics))") == "Function"
+    assert to_plain_text("[Function](https://example.test/wiki/Function_(mathematics)).") == "Function."
+    assert to_plain_text("![Photo](https://example.com/img_(1).png)") == "Photo"
+    assert to_plain_text("[Search](https://example.com?q=(test))") == "Search"
+    assert to_plain_text("([Function](https://example.test/wiki/Function_(mathematics)))") == "(Function)"
+    assert to_plain_text("See [docs](https://omi.me) (version 2.0).") == "See docs (version 2.0)."
+    assert to_plain_text("[One](https://a.com(1)) and [Two](https://b.com(2))") == "One and Two"
+
