@@ -1457,6 +1457,34 @@ test('wide Home search rows strip namespaced memory prefixes', () => {
   expect(tree).not.toContain('Synthesized memory with source citations');
 });
 
+test('wide Home search rows strip namespaced memory prefixes separated by NEXT LINE', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'memory',
+        id: 'memory-entity-home-search-nel',
+        title:
+          'entity:qa:000008\u0085qa_memory (observed 2026-07-30T12:00:00.000Z).',
+        summary:
+          'entity:qa:000008\u0085qa_memory (observed 2026-07-30T12:00:00.000Z).',
+        searchableText: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
+        citations: [],
+        timestamp: null,
+        provenance: {
+          label: null,
+          synthesisVersion: null,
+          inputDigest: null,
+          outputDigest: null,
+        },
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('qa_memory (observed 2026-07-30T12:00:00.000Z).');
+  expect(tree).not.toContain('entity:qa:000008');
+  expect(tree).not.toContain('\u0085');
+});
+
 test('wide Home search rows report a single memory citation', () => {
   const renderer = render(
     <ProjectionRow

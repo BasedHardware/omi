@@ -1324,6 +1324,12 @@ test('separates a machine slug from visible memory text', () => {
       provenanceLabel: 'quiet-river-lantern',
     },
   );
+  expect(
+    parseMemoryText('quiet-river-lantern:\u0085The launch is Friday.'),
+  ).toEqual({
+    body: 'The launch is Friday.',
+    provenanceLabel: 'quiet-river-lantern',
+  });
   expect(parseMemoryText('A normal memory: with punctuation.')).toEqual({
     body: 'A normal memory: with punctuation.',
     provenanceLabel: null,
@@ -1339,6 +1345,21 @@ test('separates a namespaced entity id from visible memory text', () => {
     body: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
     provenanceLabel: 'entity:qa:000008',
   });
+  expect(
+    parseMemoryText(
+      'entity:qa:000008\u0085qa_memory (observed 2026-07-30T12:00:00.000Z).',
+    ),
+  ).toEqual({
+    body: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
+    provenanceLabel: 'entity:qa:000008',
+  });
+  expect(
+    memoryDisplayTitle({
+      title:
+        'entity:qa:000008\u0085qa_memory (observed 2026-07-30T12:00:00.000Z).',
+      summary: '',
+    }),
+  ).toBe('qa_memory (observed 2026-07-30T12:00:00.000Z).');
 });
 
 test.each([
