@@ -300,6 +300,7 @@ type AppTileModel = {
   source: string;
   status: string;
   enabled: boolean;
+  private: boolean;
 };
 
 function cloudAppStatus(app: CloudApp, installKnown: boolean): string {
@@ -335,6 +336,7 @@ function tilesFromCatalog(
           : appDisplaySource(app),
       status: cloudAppStatus(app, installKnown),
       enabled: app.enabled,
+      private: app.private,
     };
   });
 }
@@ -358,6 +360,7 @@ function AppTile({
           <Icon color={token.color.ink} size={22} />
         </View>
         <Text style={styles.rowTitle}>{item.name}</Text>
+        {item.private ? <Text style={styles.rowMeta}>Private</Text> : null}
         {item.description !== '' ? (
           <Text numberOfLines={2} style={styles.rowMeta}>
             {item.description}

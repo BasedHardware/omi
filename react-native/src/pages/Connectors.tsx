@@ -38,6 +38,7 @@ function appRowMeta(app: CloudApp, installKnown: boolean): string {
   return [
     category !== '' ? category : null,
     author !== '' ? author : null,
+    app.private ? 'Private' : null,
     app.connectedAccounts.length > 0
       ? 'Connected'
       : installKnown
