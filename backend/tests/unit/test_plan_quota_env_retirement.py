@@ -137,6 +137,7 @@ def test_deploy_action_remove_lists_name_every_overlay(action: str) -> None:
         assert RETIRED_PLAN_QUOTA_ENV <= set(entry.split(',')), (action, entry)
 
 
+@pytest.mark.slow  # per-test fresh reload of utils.subscription (~1 s CPU); slow-guardrail lane
 def test_catalog_is_the_only_source_when_no_overlay_is_present(monkeypatch: pytest.MonkeyPatch) -> None:
     """With the overlays gone, Free transcription is the catalog's 300 minutes on every plane."""
     for name in RETIRED_PLAN_QUOTA_ENV:
