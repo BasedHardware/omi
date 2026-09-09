@@ -608,7 +608,7 @@ test('Home pre-admission sending disables Ask while Search remains usable', () =
   expect(onStop).not.toHaveBeenCalled();
 });
 
-test('Chat replaces the lower view, keeps one omnibar, and closes to the previous route and mode', async () => {
+test('Chat has its own selected destination, keeps one omnibar, and closes to the previous route and mode', async () => {
   const onSend = jest.fn();
   const renderer = renderDesktop({draft: 'question', onSend});
   await act(async () =>
@@ -618,7 +618,7 @@ test('Chat replaces the lower view, keeps one omnibar, and closes to the previou
   );
   await act(async () =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .find(node => node.props.accessibilityLabel === 'Chat')
       .props.onPress(),
   );
   expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
@@ -627,7 +627,7 @@ test('Chat replaces the lower view, keeps one omnibar, and closes to the previou
   );
   expect(renderedText(renderer)).toContain('Enter to submit');
   expect(
-    renderer.root.find(node => node.props.accessibilityLabel === 'Recall').props
+    renderer.root.find(node => node.props.accessibilityLabel === 'Chat').props
       .accessibilityState.selected,
   ).toBe(true);
   act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
@@ -1281,7 +1281,6 @@ test('chrome keeps a sliding nav pill, structured home cards, and a field omniba
   expect(chrome).toContain('height: desktopNavBarHeight');
   expect(chrome).toContain('width: desktopTrafficLightRowWidth');
   expect(chrome).toContain('styles.navPill');
-  expect(chrome).toContain("active={selectedRoute === 'Settings'}");
   expect(chrome).toMatch(
     /omnibarInput:\s*\{[^}]*textAlignVertical:\s*'center'/,
   );

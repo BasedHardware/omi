@@ -1,4 +1,4 @@
-import React, {useEffect, useRef} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   Animated,
   StyleSheet,
@@ -10,21 +10,47 @@ import {FocusPressable} from '../ui/Pressable';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {pressMotionDuration, runShippingTiming} from './desktopMotion';
 
+const AnimatedPressable = Animated.createAnimatedComponent(FocusPressable);
+
 export function ShippingPressable({
   active = false,
   children,
   style,
+  onPressIn,
+  onPressOut,
+  onHoverIn,
+  onHoverOut,
   ...props
 }: Omit<PressableProps, 'children'> & {
   active?: boolean;
   children?: React.ReactNode;
 }) {
   const reduceMotion = useReduceMotion();
+  const [pressed, setPressed] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const disabled =
+    props.disabled ??
+    props['aria-disabled'] ??
+    props.accessibilityState?.disabled;
+  const press = useRef(new Animated.Value(0)).current;
   const progress = useRef(new Animated.Value(active ? 1 : 0)).current;
+  useEffect(() => {
+    if (disabled) {
+      setPressed(false);
+    }
+    const animation = runShippingTiming(
+      press,
+      pressed && !disabled ? 1 : 0,
+      reduceMotion ? 0 : 120,
+      true,
+    );
+    animation?.start();
+    return () => animation?.stop();
+  }, [disabled, press, pressed, reduceMotion]);
   useEffect(() => {
     const animation = runShippingTiming(
       progress,
-      active ? 1 : 0,
+      active ? 1 : hovered && !disabled ? 0.5 : 0,
       pressMotionDuration(reduceMotion),
       false,
     );
@@ -32,17 +58,55 @@ export function ShippingPressable({
     return () => {
       animation?.stop();
     };
-  }, [active, progress, reduceMotion]);
+  }, [active, disabled, hovered, progress, reduceMotion]);
+  const resolved =
+    typeof style === 'function'
+      ? style({pressed: pressed && !disabled})
+      : (style as StyleProp<ViewStyle>);
+  const flattened = StyleSheet.flatten(resolved);
+  const existingTransform = flattened?.transform;
   return (
-    <FocusPressable
+    <AnimatedPressable
       {...props}
-      style={state => {
-        const resolved =
-          typeof style === 'function'
-            ? style(state)
-            : (style as StyleProp<ViewStyle>);
-        return [resolved, state.pressed ? styles.pressed : null];
-      }}>
+      onPressIn={event => {
+        if (!disabled) {
+          setPressed(true);
+        }
+        onPressIn?.(event);
+      }}
+      onPressOut={event => {
+        setPressed(false);
+        onPressOut?.(event);
+      }}
+      onHoverIn={event => {
+        setHovered(true);
+        onHoverIn?.(event);
+      }}
+      onHoverOut={event => {
+        setHovered(false);
+        onHoverOut?.(event);
+      }}
+      style={[
+        resolved,
+        {
+          opacity: Animated.multiply(
+            flattened?.opacity ?? 1,
+            press.interpolate({inputRange: [0, 1], outputRange: [1, 0.92]}),
+          ),
+          transform:
+            reduceMotion || typeof existingTransform === 'string'
+              ? existingTransform
+              : [
+                  ...(existingTransform ?? []),
+                  {
+                    scale: press.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, 0.985],
+                    }),
+                  },
+                ],
+        },
+      ]}>
       <Animated.View
         pointerEvents="none"
         style={[
@@ -56,7 +120,7 @@ export function ShippingPressable({
         ]}
       />
       {children}
-    </FocusPressable>
+    </AnimatedPressable>
   );
 }
 
@@ -69,5 +133,4 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  pressed: {opacity: 0.78},
 });

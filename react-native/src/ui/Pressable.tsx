@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {forwardRef, useState} from 'react';
 import {
   Pressable as NativePressable,
   type PressableProps,
@@ -6,16 +6,15 @@ import {
 } from 'react-native';
 import {tokens} from './tokens';
 
-export function FocusPressable({
-  onBlur,
-  onFocus,
-  style,
-  ...props
-}: PressableProps) {
+export const FocusPressable = forwardRef<
+  React.ElementRef<typeof NativePressable>,
+  PressableProps
+>(function FocusPressable({onBlur, onFocus, style, ...props}, ref) {
   const [focused, setFocused] = useState(false);
 
   return (
     <NativePressable
+      ref={ref}
       {...props}
       aria-checked={props['aria-checked'] ?? props.accessibilityState?.checked}
       aria-selected={
@@ -44,7 +43,7 @@ export function FocusPressable({
       ]}
     />
   );
-}
+});
 
 export const Pressable = FocusPressable;
 

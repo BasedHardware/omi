@@ -158,9 +158,9 @@ function ChatThinking({
       accessibilityState={{busy: true}}
       style={[styles.chatMessageRow, styles.chatMessageRowAi]}>
       <OmiAvatar
-        tone={desktop ? 'ink' : 'identity'}
+        tone="ink"
         inkColor={desktop ? token.color.ink : undefined}
-        animate={false}
+        animate
         reduceMotion={reduceMotion}
       />
       <Animated.View
