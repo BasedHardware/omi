@@ -4,11 +4,9 @@ import {
   FlatList,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
-import ArrowUp from 'lucide-react-native/icons/arrow-up';
-import Square from 'lucide-react-native/icons/square';
+import X from 'lucide-react-native/icons/x';
 import type {ChatMessage} from '../chatClient';
 import {ChatMessageRow} from '../ui/ChatTranscript';
 import {FocusPressable} from '../ui/Pressable';
@@ -18,29 +16,21 @@ import {desktopTokens as token} from './tokens';
 
 type Props = {
   messages: ChatMessage[];
-  draft: string;
   busy: boolean;
-  canStop: boolean;
   error: string | null;
   hasOlder: boolean;
   loadingOlder: boolean;
   onLoadOlder: () => void;
-  onDraftChange: (value: string) => void;
-  onSend: () => void;
-  onStop: () => void;
+  onClose: () => void;
 };
 export function DesktopChat({
   messages,
-  draft,
   busy,
-  canStop,
   error,
   hasOlder,
   loadingOlder,
   onLoadOlder,
-  onDraftChange,
-  onSend,
-  onStop,
+  onClose,
 }: Props) {
   const list = useRef<FlatList<ChatMessage>>(null);
   const follow = useRef(true);
@@ -60,6 +50,15 @@ export function DesktopChat({
   );
   return (
     <View style={styles.root} accessibilityLabel="Chat with Omi">
+      <View style={styles.header}>
+        <FocusPressable
+          accessibilityRole="button"
+          accessibilityLabel="Close chat"
+          onPress={onClose}
+          style={styles.close}>
+          <X size={18} color={token.color.ink} />
+        </FocusPressable>
+      </View>
       <ScrollFade visible={fade.visible} style={styles.history}>
         <FlatList
           maintainVisibleContentPosition={{minIndexForVisible: 1}}
@@ -80,7 +79,9 @@ export function DesktopChat({
           }}
           onContentSizeChange={(width, height) => {
             fade.onContentSizeChange(width, height);
-            if (follow.current) list.current?.scrollToEnd({animated: false});
+            if (follow.current) {
+              list.current?.scrollToEnd({animated: false});
+            }
           }}
           ListHeaderComponent={
             hasOlder ? (
@@ -124,36 +125,6 @@ export function DesktopChat({
           {error}
         </Text>
       ) : null}
-      <View style={styles.composer}>
-        <TextInput
-          accessibilityLabel="Message Omi"
-          placeholder="Message Omi…"
-          placeholderTextColor={token.color.inkMuted}
-          multiline
-          value={draft}
-          onChangeText={onDraftChange}
-          style={styles.input}
-        />
-        <FocusPressable
-          accessibilityRole="button"
-          accessibilityLabel={canStop ? 'Stop' : busy ? 'Sending…' : 'Send'}
-          disabled={!canStop && (busy || !draft.trim())}
-          onPress={() => {
-            follow.current = true;
-            if (canStop) {
-              onStop();
-            } else if (!busy && draft.trim()) {
-              onSend();
-            }
-          }}
-          style={styles.send}>
-          {canStop ? (
-            <Square size={16} color={token.color.ink} />
-          ) : (
-            <ArrowUp size={18} color={token.color.ink} />
-          )}
-        </FocusPressable>
-      </View>
     </View>
   );
 }
@@ -172,27 +143,12 @@ const styles = StyleSheet.create({
   muted: {fontSize: 13, lineHeight: 20, color: token.color.inkMuted},
   earlier: {alignSelf: 'center', padding: 10},
   thinking: {padding: 12},
-  composer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 12,
-    padding: 12,
-    margin: 12,
-    borderRadius: 20,
-    backgroundColor: token.color.glassQuiet,
-  },
-  input: {
-    flex: 1,
-    minHeight: 30,
-    maxHeight: 160,
-    fontSize: 15,
-    lineHeight: 22,
-    color: token.color.ink,
-  },
-  send: {
-    padding: 10,
-    borderRadius: 16,
-    backgroundColor: token.color.glassSelected,
+  header: {alignItems: 'flex-end'},
+  close: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   error: {color: token.color.ink, paddingHorizontal: 24, fontSize: 13},
 });

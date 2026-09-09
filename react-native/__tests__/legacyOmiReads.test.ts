@@ -38,6 +38,7 @@ test('old bare conversation array preserves nullable metadata and offset paginat
     Array.from({length: 50}, (_, i) => ({...conversation, id: `old-${i}`})),
   );
   const first = await loadConversations(api);
+  expect(first.apiContract).toBe('omi');
   expect(first.items[0]).toMatchObject({
     title: 'Real title',
     summary: 'Actual overview',
@@ -65,6 +66,7 @@ test('old memories use v3 content without manufacturing canonical provenance', a
     },
   ]);
   const result = await loadMemories(api);
+  expect(result.apiContract).toBe('omi');
   expect(request).toHaveBeenCalledWith(
     expect.objectContaining({path: '/v3/memories?limit=50&offset=0'}),
   );

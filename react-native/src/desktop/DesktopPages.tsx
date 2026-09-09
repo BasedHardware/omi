@@ -1,10 +1,12 @@
 import React, {useEffect, useState} from 'react';
-import {ScrollView, StyleSheet, Text, View} from 'react-native';
+import {FlatList, ScrollView, StyleSheet, Text, View} from 'react-native';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import {loadConnectors, type CloudApp} from '../desktopCloudClient';
 import type {DesktopReadOutcomes} from '../desktopReadClient';
-import {omiBackend} from '../omiNative';
+import {omiBackend, subscribeOmiBackendSessionInvalidated} from '../omiNative';
 import {ReadStatus} from '../ui/ReadStatus';
+import {ConversationDetail} from '../ui/ConversationDetail';
+import {ScrollFade, useScrollFade} from './ScrollFade';
 import {FocusPressable} from '../ui/Pressable';
 import {
   TaskEditor,
@@ -18,38 +20,127 @@ import {desktopTokens as token} from './tokens';
 
 export function LibraryPage({
   outcomes,
+  query = '',
+  onLoadMore,
+  loadingMore = false,
+  notice = null,
 }: {
   outcomes: DesktopReadOutcomes | null;
+  query?: string;
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
+  notice?: string | null;
 }) {
+  const fade = useScrollFade();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  useEffect(
+    () => subscribeOmiBackendSessionInvalidated(() => setSelectedId(null)),
+    [],
+  );
   const outcome = outcomes?.conversations ?? null;
+  const normalized = query.trim().toLocaleLowerCase();
   const conversations =
-    outcome?.status === 'success' ? outcome.value.items : [];
-  // A failed or unsettled read must never claim "nothing captured": only a
-  // successful empty page is an empty library.
+    outcome?.status === 'success'
+      ? outcome.value.items.filter(
+          item =>
+            normalized === '' ||
+            item.title.toLocaleLowerCase().includes(normalized) ||
+            item.summary.toLocaleLowerCase().includes(normalized),
+        )
+      : [];
+  const selected = conversations.find(item => item.id === selectedId) ?? null;
+  useEffect(() => {
+    if (selectedId !== null && selected === null) {
+      setSelectedId(null);
+    }
+  }, [selectedId, selected]);
   const emptyCopy =
     outcome === null
       ? 'Loading conversations…'
       : outcome.status === 'error'
       ? outcome.error
+      : normalized
+      ? 'No loaded conversations match.'
       : 'Nothing captured in this window yet.';
   return (
     <View style={styles.page}>
-      <ScrollView
-        contentContainerStyle={styles.listContent}
-        style={styles.list}>
-        {conversations.length > 0 ? (
-          conversations.map(item => (
-            <ShippingListInsert itemKey={item.id} key={item.id}>
-              <ConversationRow item={item} />
-            </ShippingListInsert>
-          ))
-        ) : (
-          <EmptyCopy>{emptyCopy}</EmptyCopy>
-        )}
-        {outcome?.status === 'success' ? (
-          <ReadStatus label="Conversations" mac page={outcome.value.page} />
-        ) : null}
-      </ScrollView>
+      {notice ? (
+        <Text accessibilityRole="alert" style={styles.rowMeta}>
+          {notice}
+        </Text>
+      ) : null}
+      {selected !== null ? (
+        <ScrollView
+          accessibilityLabel="Selected conversation details"
+          contentContainerStyle={styles.conversationDetail}>
+          <FocusPressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to conversations"
+            onPress={() => setSelectedId(null)}
+            style={[styles.taskEdit, styles.backAction]}>
+            <Text style={styles.rowMeta}>Back to conversations</Text>
+          </FocusPressable>
+          <ConversationDetail
+            key={selected.id}
+            conversation={selected}
+            apiContract={
+              outcome?.status === 'success'
+                ? outcome.value.apiContract
+                : undefined
+            }
+            desktop
+          />
+        </ScrollView>
+      ) : (
+        <ScrollFade visible={fade.visible} style={styles.list}>
+          <FlatList
+            data={conversations}
+            keyExtractor={item => item.id}
+            onLayout={fade.onLayout}
+            onScroll={fade.onScroll}
+            onContentSizeChange={fade.onContentSizeChange}
+            scrollEventThrottle={16}
+            contentContainerStyle={styles.listContent}
+            renderItem={({item}) => (
+              <FocusPressable
+                accessibilityRole="button"
+                accessibilityLabel={`Open conversation ${
+                  item.title ||
+                  (item.status === 'processing'
+                    ? 'Processing conversation…'
+                    : 'Conversation title unavailable')
+                }`}
+                onPress={() => setSelectedId(item.id)}>
+                <ConversationRow item={item} />
+              </FocusPressable>
+            )}
+            ListEmptyComponent={<EmptyCopy>{emptyCopy}</EmptyCopy>}
+            ListFooterComponent={
+              outcome?.status === 'success' ? (
+                <>
+                  {outcome.value.page.hasMore && onLoadMore ? (
+                    <FocusPressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Load more conversations"
+                      disabled={loadingMore}
+                      onPress={onLoadMore}
+                      style={styles.taskEdit}>
+                      <Text style={styles.rowMeta}>
+                        {loadingMore ? 'Loading…' : 'Load more'}
+                      </Text>
+                    </FocusPressable>
+                  ) : null}
+                  <ReadStatus
+                    label="Conversations"
+                    mac
+                    page={outcome.value.page}
+                  />
+                </>
+              ) : null
+            }
+          />
+        </ScrollFade>
+      )}
     </View>
   );
 }
@@ -266,6 +357,8 @@ export function AppsPage({session}: {session: DesktopSession}) {
 
 const styles = StyleSheet.create({
   page: {flex: 1},
+  conversationDetail: {gap: 16, padding: 16},
+  backAction: {alignSelf: 'flex-start'},
   taskActions: {flexDirection: 'row', alignItems: 'center', gap: 8},
   taskToggle: {flex: 1, minHeight: 44},
   taskEdit: {

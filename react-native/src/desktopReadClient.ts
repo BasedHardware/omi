@@ -163,12 +163,12 @@ export type ReadPageState = {
 };
 
 export type DomainRead<T extends DesktopReadProjection> = {
+  apiContract?: 'omi';
   items: T[];
   page: ReadPageState;
 };
 
 export type TaskRead = DomainRead<TaskProjection> & {
-  apiContract?: 'omi';
   accountEpoch: number | null;
 };
 

@@ -55,6 +55,7 @@ type Props = {
   onModeChange?: (mode: OmnibarMode) => void;
   activeGenerationId: string | null;
   route: DesktopRoute;
+  backgroundRoute?: DesktopRoute;
   onNavigate: (route: DesktopRoute) => void;
   draft: string;
   onDraftChange: (value: string) => void;
@@ -78,6 +79,7 @@ export function DesktopChrome({
   onSend,
   onStop,
   route,
+  backgroundRoute,
 }: Props) {
   const reduceMotion = useReduceMotion();
   const canStop = mode === 'Ask' && activeGenerationId !== null;
@@ -91,7 +93,11 @@ export function DesktopChrome({
   const placed = useRef(false);
   const animating = useRef(false);
   const lastTarget = useRef({x: -1, width: -1});
-  const activeNav = route === 'Settings' || route === 'Chat' ? null : route;
+  const selectedRoute = route === 'Chat' ? backgroundRoute ?? 'Home' : route;
+  const activeNav =
+    selectedRoute === 'Settings' || selectedRoute === 'Chat'
+      ? null
+      : selectedRoute;
   const activeFrame = activeNav === null ? undefined : frames[activeNav];
   const activeX = activeFrame?.x;
   const activeWidth = activeFrame?.width;
@@ -179,7 +185,7 @@ export function DesktopChrome({
           />
           {desktopNavItems.map((label, index) => {
             const Icon = navIcons[label];
-            const active = route === label;
+            const active = selectedRoute === label;
             return (
               <View
                 key={label}
@@ -252,8 +258,8 @@ export function DesktopChrome({
         <ShippingPressable
           accessibilityLabel="Settings"
           accessibilityRole="button"
-          accessibilityState={{selected: route === 'Settings'}}
-          active={route === 'Settings'}
+          accessibilityState={{selected: selectedRoute === 'Settings'}}
+          active={selectedRoute === 'Settings'}
           onPress={() => onNavigate('Settings')}
           style={styles.settingsButton}>
           <Settings color={token.color.ink} size={15} />
@@ -264,93 +270,94 @@ export function DesktopChrome({
           {capture.error}
         </Text>
       ) : null}
-      {route !== 'Chat' ? (
-        <View style={styles.omnibar}>
-          <View style={styles.modes}>
-            {(['Ask', 'Search', 'Recall'] as const).map(value => {
-              const Icon =
-                value === 'Ask'
-                  ? MessageCircle
-                  : value === 'Search'
-                  ? Search
-                  : History;
-              return (
-                <FocusPressable
-                  key={value}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Use ${value} mode`}
-                  accessibilityState={{selected: mode === value}}
-                  onPress={() => onModeChange?.(value)}
-                  style={[
-                    styles.modeButton,
-                    mode === value && styles.modeActive,
-                  ]}>
-                  <Icon
-                    size={15}
-                    color={
-                      mode === value ? token.color.ink : token.color.inkMuted
-                    }
-                  />
-                </FocusPressable>
-              );
-            })}
-          </View>
-          <TextInput
-            accessibilityLabel={
-              mode === 'Ask'
-                ? 'Ask Omi'
-                : mode === 'Recall'
-                ? 'Search Recall'
-                : 'Search history'
-            }
-            blurOnSubmit={false}
-            onChangeText={onDraftChange}
-            onSubmitEditing={() => {
-              if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
-                onSend();
-              }
-            }}
-            placeholder={
-              mode === 'Recall'
-                ? 'Find a moment on your screen…'
-                : mode === 'Ask'
-                ? 'Ask about your day…'
-                : desktopSearchPlaceholder
-            }
-            placeholderTextColor={token.color.inkMuted}
-            ref={omnibarRef}
-            style={styles.omnibarInput}
-            value={draft}
-          />
-          <FocusPressable
-            accessibilityLabel={
-              canStop
-                ? 'Stop'
-                : sending
-                ? 'Sending…'
-                : mode === 'Ask'
-                ? 'Send'
-                : 'Search'
-            }
-            accessibilityRole="button"
-            disabled={mode === 'Ask' && !canStop && (chatBusy || !draft.trim())}
-            onPress={() => {
-              if (canStop) {
-                onStop();
-              } else if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
-                onSend();
-              }
-            }}
-            style={({pressed}) => [styles.send, pressed && styles.pressed]}>
-            {canStop ? (
-              <Square size={15} color={token.color.ink} />
-            ) : mode === 'Ask' ? (
-              <ArrowUp size={17} color={token.color.ink} />
-            ) : (
-              <Search size={16} color={token.color.ink} />
-            )}
-          </FocusPressable>
+      <View style={styles.omnibar}>
+        <View style={styles.modes}>
+          {(['Ask', 'Search', 'Recall'] as const).map(value => {
+            const Icon =
+              value === 'Ask'
+                ? MessageCircle
+                : value === 'Search'
+                ? Search
+                : History;
+            return (
+              <FocusPressable
+                key={value}
+                accessibilityRole="button"
+                accessibilityLabel={`Use ${value} mode`}
+                accessibilityState={{selected: mode === value}}
+                onPress={() => onModeChange?.(value)}
+                style={[
+                  styles.modeButton,
+                  mode === value && styles.modeActive,
+                ]}>
+                <Icon
+                  size={15}
+                  color={
+                    mode === value ? token.color.ink : token.color.inkMuted
+                  }
+                />
+              </FocusPressable>
+            );
+          })}
         </View>
+        <TextInput
+          accessibilityLabel={
+            mode === 'Ask'
+              ? 'Ask Omi'
+              : mode === 'Recall'
+              ? 'Search Recall'
+              : 'Search history'
+          }
+          blurOnSubmit={false}
+          onChangeText={onDraftChange}
+          onSubmitEditing={() => {
+            if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
+              onSend();
+            }
+          }}
+          placeholder={
+            mode === 'Recall'
+              ? 'Find a moment on your screen…'
+              : mode === 'Ask'
+              ? 'Ask about your day…'
+              : desktopSearchPlaceholder
+          }
+          placeholderTextColor={token.color.inkMuted}
+          ref={omnibarRef}
+          style={styles.omnibarInput}
+          value={draft}
+        />
+        <FocusPressable
+          accessibilityLabel={
+            canStop
+              ? 'Stop'
+              : sending
+              ? 'Sending…'
+              : mode === 'Ask'
+              ? 'Send'
+              : 'Search'
+          }
+          accessibilityRole="button"
+          disabled={mode === 'Ask' && !canStop && (chatBusy || !draft.trim())}
+          onPress={() => {
+            if (canStop) {
+              onStop();
+            } else if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
+              onSend();
+            }
+          }}
+          style={({pressed}) => [styles.send, pressed && styles.pressed]}>
+          {canStop ? (
+            <Square size={15} color={token.color.ink} />
+          ) : mode === 'Ask' ? (
+            <ArrowUp size={17} color={token.color.ink} />
+          ) : (
+            <Search size={16} color={token.color.ink} />
+          )}
+        </FocusPressable>
+      </View>
+      {mode === 'Ask' ? (
+        <Text style={styles.submitHint}>Enter to submit</Text>
       ) : null}
       {chatNotice === null ? null : (
         <Text
@@ -446,7 +453,7 @@ const styles = StyleSheet.create({
     gap: 8,
     height: desktopOmnibarHeight,
     minWidth: 220,
-    paddingHorizontal: 14,
+    padding: 4,
   },
   omnibarInput: {
     color: token.color.ink,
@@ -458,9 +465,11 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     lineHeight: 20,
     minWidth: 0,
-    paddingVertical: 10,
+    height: 32,
+    paddingVertical: 6,
     textAlignVertical: 'center',
   },
+  submitHint: {color: token.color.inkMuted, fontSize: 11, paddingHorizontal: 4},
   notice: {
     color: token.color.inkMuted,
     fontFamily: token.font,
@@ -470,7 +479,8 @@ const styles = StyleSheet.create({
   send: {
     alignItems: 'center',
     flexShrink: 0,
-    height: 30,
+    height: 32,
+    width: 32,
     justifyContent: 'center',
     paddingHorizontal: 6,
   },

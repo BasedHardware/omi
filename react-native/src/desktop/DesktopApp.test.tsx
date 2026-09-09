@@ -17,6 +17,7 @@ jest.mock('../app/useReduceMotion', () => ({
 
 jest.mock('../omiNative', () => ({
   omiBackend: {request: jest.fn()},
+  subscribeOmiBackendSessionInvalidated: jest.fn(() => () => undefined),
 }));
 
 jest.mock('./ShippingPressable', () => {
@@ -393,7 +394,7 @@ test('persistent capture toggle uses the existing owner across Home, Recall and 
   }
 });
 
-test('keyboard search from Chat focuses the newly mounted omnibar', () => {
+test('keyboard search from Chat focuses the persistent omnibar', () => {
   const focus = jest.mocked(TextInput.prototype.focus);
   focus.mockClear();
   const renderer = renderDesktop();
@@ -403,7 +404,7 @@ test('keyboard search from Chat focuses the newly mounted omnibar', () => {
       .props.onPress(),
   );
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
-    'Message Omi',
+    'Ask Omi',
   );
   const command = jest
     .mocked(subscribeDesktopSearchCommand)
@@ -507,7 +508,7 @@ test('empty Ask is disabled and Enter cannot send, while its mode icon still ope
       .props.onPress(),
   );
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
-    'Message Omi',
+    'Ask Omi',
   );
 });
 
@@ -600,6 +601,50 @@ test('Home pre-admission sending disables Ask while Search remains usable', () =
   expect(onStop).not.toHaveBeenCalled();
 });
 
+test('Chat replaces the lower view, keeps one omnibar, and closes to the previous route and mode', async () => {
+  const onSend = jest.fn();
+  const renderer = renderDesktop({draft: 'question', onSend});
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Recall mode')
+      .props.onPress(),
+  );
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .props.onPress(),
+  );
+  expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
+  expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Ask Omi',
+  );
+  expect(renderedText(renderer)).toContain('Enter to submit');
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Recall').props
+      .accessibilityState.selected,
+  ).toBe(true);
+  act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
+  expect(onSend).toHaveBeenCalledTimes(1);
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Close chat')
+      .props.onPress(),
+  );
+  expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Search Recall',
+  );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Recall screen history',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Chat with Omi',
+    ),
+  ).toHaveLength(0);
+});
+
 test('omnibar send uses the existing chat send path', () => {
   const onSend = jest.fn();
   const onDraftChange = jest.fn();
@@ -647,7 +692,7 @@ test('sending from another page opens Chat and an active response can stop', asy
   expect(onSend).toHaveBeenCalledTimes(1);
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
-  ).toEqual(['Message Omi…']);
+  ).toEqual(['Ask about your day…']);
 
   await act(async () => {
     renderer.update(
@@ -722,7 +767,7 @@ test('desktop chat can load earlier messages', () => {
   expect(onLoadOlderChat).toHaveBeenCalledTimes(1);
 });
 
-test('Continue chat opens full loaded history with one bottom composer', () => {
+test('Continue chat opens full loaded history with one persistent omnibar', () => {
   const messages = Array.from({length: 5}, (_, index) => ({
     id: `chat-${index}`,
     text: `Loaded message ${index}`,
@@ -738,7 +783,7 @@ test('Continue chat opens full loaded history with one bottom composer', () => {
   }
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
-  ).toEqual(['Message Omi…']);
+  ).toEqual(['Ask about your day…']);
 });
 
 test.each(['Search', 'Recall'])(
@@ -976,7 +1021,7 @@ test('signed-out first paint shows no chat transport error and no shell', () => 
   ).toHaveLength(0);
 });
 
-test('chat transport errors appear only in the dedicated Chat page', () => {
+test('chat transport errors appear only in the lower Chat view', () => {
   const renderer = renderDesktop({
     chatError: 'Chat is temporarily unavailable.',
   });
@@ -991,7 +1036,7 @@ test('chat transport errors appear only in the dedicated Chat page', () => {
   expect(renderedText(renderer)).toContain('Chat is temporarily unavailable.');
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
-  ).toEqual(['Message Omi…']);
+  ).toEqual(['Ask about your day…']);
   act(() =>
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Home')
@@ -1125,8 +1170,7 @@ const kitSources = Object.fromEntries(
 
 const allKitSource = kitFiles.map(fileName => kitSources[fileName]).join('\n');
 
-test('desktop lists never use FlatList and the stage stays copy-driven', () => {
-  expect(allKitSource).not.toMatch(/\bFlatList\b/);
+test('static tripwire: desktop stage preserves real state copy and shared glass ownership', () => {
   expect(allKitSource).toContain('ScrollView');
   expect(allKitSource).not.toContain('function GlassSurface');
   expect(allKitSource).not.toContain("I'm ready.");
@@ -1146,11 +1190,11 @@ test('chrome keeps a sliding nav pill, structured home cards, and a field omniba
   expect(chrome).toContain('height: desktopNavBarHeight');
   expect(chrome).toContain('width: desktopTrafficLightRowWidth');
   expect(chrome).toContain('styles.navPill');
-  expect(chrome).toContain("active={route === 'Settings'}");
+  expect(chrome).toContain("active={selectedRoute === 'Settings'}");
   expect(chrome).toMatch(
     /omnibarInput:\s*\{[^}]*textAlignVertical:\s*'center'/,
   );
-  expect(chrome).toMatch(/omnibarInput:\s*\{[^}]*paddingVertical:\s*10/);
+  expect(chrome).toMatch(/omnibarInput:\s*\{[^}]*paddingVertical:\s*6/);
   expect(chrome).not.toMatch(/navItem:\s*\{[^}]*borderRadius/);
   expect(chrome).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
   expect(home).toMatch(/section:\s*\{[^}]*borderRadius:\s*16/);
@@ -1621,6 +1665,46 @@ test('desktop General settings mounts the live device composition slot', async (
   });
   expect(renderedText(renderer)).toContain('Live device controls');
   await act(async () => renderer.unmount());
+});
+
+test('desktop Library forwards pagination and prevents another click while loading', () => {
+  const onLoadMoreConversations = jest.fn();
+  const renderer = renderDesktop({
+    onLoadMoreConversations,
+    outcomes: {
+      ...outcomes,
+      conversations: {
+        ...outcomes.conversations,
+        value: {
+          ...outcomes.conversations.value,
+          page: {
+            ...outcomes.conversations.value.page,
+            hasMore: true,
+            nextCursor: 'next-page',
+          },
+        },
+      },
+    },
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Conversations')
+      .props.onPress(),
+  );
+  const more = () =>
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Load more conversations',
+    );
+  expect(more().props.disabled).toBe(false);
+  act(() => more().props.onPress());
+  expect(onLoadMoreConversations).toHaveBeenCalledTimes(1);
+  const props = renderer.root.findByType(DesktopApp)
+    .props as React.ComponentProps<typeof DesktopApp>;
+  act(() =>
+    renderer.update(<DesktopApp {...props} conversationsLoadingMore />),
+  );
+  expect(more().props.disabled).toBe(true);
+  expect(renderedText(renderer)).toContain('Loading…');
 });
 
 test('actual desktop task page exposes the shared pagination action', () => {

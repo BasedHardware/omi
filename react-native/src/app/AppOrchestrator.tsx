@@ -872,6 +872,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     return (
       <PageShell macDesktop workspaceMaterial>
         <DesktopApp
+          onLoadMoreConversations={() => {
+            loadMoreConversations().catch(() => undefined);
+          }}
+          conversationsLoadingMore={conversationsLoadingMore}
+          conversationNotice={conversationNotice}
           taskPagination={taskPagination}
           {...taskMutations}
           activeGenerationId={activeGenerationId ?? activeOmiRequestId}
