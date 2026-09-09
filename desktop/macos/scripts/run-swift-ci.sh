@@ -67,9 +67,12 @@ case "${1:-}" in
     [ "$#" -eq 1 ] || usage
     select_toolchain
     cd "$MACOS_DIR"
-    # No `rm -rf Desktop/.build`: CI restores a release .build cache written
-    # from main pushes, and hosted runners start clean anyway, so a forced
-    # cold build only converted every cached run back into a ~20-minute one.
+    # No `rm -rf Desktop/.build`: a leftover local tree keeps incremental
+    # state, and hosted runners start clean anyway. CI does NOT cache the
+    # release build products: whole-module optimization recompiles on any
+    # source change, so the measured compile time was 23-25 min with or
+    # without a restored archive, while each 5.3 GB save evicted the small
+    # tool caches from the repository's cache budget.
     # The release-notification-regression mode below also reuses this build.
     xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
     ;;

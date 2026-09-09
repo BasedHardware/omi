@@ -111,7 +111,7 @@ def parse_gmail_message(message: Dict[str, Any]) -> Dict[str, Any]:
     headers = payload.get('headers', [])
 
     # Extract headers
-    header_dict = {h['name']: h['value'] for h in headers}
+    header_dict = {h['name'].lower(): h['value'] for h in headers}
 
     # Extract body
     body_text = ''
@@ -135,7 +135,7 @@ def parse_gmail_message(message: Dict[str, Any]) -> Dict[str, Any]:
             data = payload.get('body', {}).get('data', '')
             if data:
                 body_text = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
-    date_str: str = header_dict.get('Date', '')
+    date_str: str = header_dict.get('date', '')
     # Parse date
     date_parsed = None
     if date_str:
@@ -147,9 +147,9 @@ def parse_gmail_message(message: Dict[str, Any]) -> Dict[str, Any]:
     return {
         'id': message.get('id'),
         'threadId': message.get('threadId'),
-        'subject': header_dict.get('Subject', '(No subject)'),
-        'from': header_dict.get('From', 'Unknown'),
-        'to': header_dict.get('To', 'Unknown'),
+        'subject': header_dict.get('subject', '(No subject)'),
+        'from': header_dict.get('from', 'Unknown'),
+        'to': header_dict.get('to', 'Unknown'),
         'date': date_parsed.isoformat() if date_parsed else date_str,
         'snippet': message.get('snippet', ''),
         'body': body_text,
