@@ -1379,6 +1379,47 @@ describe("worker request contract", () => {
     );
   });
 
+  test("conversation list keeps chat sessions in progress after a completed assistant", async () => {
+    await insertChatMessage({
+      id: "chat-open-human",
+      accountId: "test-account",
+      text: "Ask something",
+      createdAt: 10,
+      position: 1,
+      chatSessionId: "still-open",
+    });
+    await insertChatMessage({
+      id: "chat-open-ai",
+      accountId: "test-account",
+      text: "Answered",
+      createdAt: 20,
+      position: 2,
+      chatSessionId: "still-open",
+      sender: "ai",
+    });
+
+    const listed = await fetchWorker("/v1/conversations", {
+      headers: authenticatedHeaders,
+    });
+    expect(listed.status).toBe(200);
+    const page = (await listed.json()) as {
+      items: Array<{
+        id: string;
+        status: string;
+        finishedAt: number | null;
+        updatedAt: number;
+      }>;
+    };
+    expect(page.items.find((item) => item.id === "chat:still-open")).toEqual(
+      expect.objectContaining({
+        id: "chat:still-open",
+        status: "in_progress",
+        finishedAt: null,
+        updatedAt: 20,
+      })
+    );
+  });
+
   test("conversation pagination and query validation match neighboring list routes", async () => {
     await insertChatMessage({
       id: "page-a",

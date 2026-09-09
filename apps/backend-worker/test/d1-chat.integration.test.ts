@@ -658,8 +658,8 @@ describe("D1 chat projects an honest conversation list", () => {
       createdAt: 900,
       updatedAt: 500,
       startedAt: 900,
-      finishedAt: 500,
-      status: "completed",
+      finishedAt: null,
+      status: "in_progress",
     });
     expect(rows[1]).toMatchObject({
       id: MAIN_CONVERSATION_ID,
@@ -775,7 +775,7 @@ describe("D1 chat projects an honest conversation list", () => {
       title: "",
       overview: "Assistant words",
       source: "chat",
-      status: "completed",
+      status: "in_progress",
     });
   });
 

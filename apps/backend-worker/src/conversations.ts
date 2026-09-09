@@ -10,7 +10,6 @@ type StoredConversation = {
   overview: number[];
   createdAt: number;
   updatedAt: number;
-  completed: number;
 };
 
 export const CONVERSATIONS_READ_CONTRACT_VERSION = "1.0.0" as const;
@@ -115,8 +114,7 @@ export async function readConversations(
          max(CASE WHEN title_rank = 1 THEN substr(CAST(display_text AS BLOB), 1, 964) END) AS title,
          max(CASE WHEN overview_rank = 1 THEN substr(CAST(display_text AS BLOB), 1, 964) END) AS overview,
          max(CASE WHEN first_rank = 1 THEN created_at END) AS createdAt,
-         max(CASE WHEN last_rank = 1 THEN created_at END) AS updatedAt,
-         max(CASE WHEN last_rank = 1 THEN sender = 'ai' AND generation_outcome = 'completed' ELSE 0 END) AS completed
+         max(CASE WHEN last_rank = 1 THEN created_at END) AS updatedAt
        FROM selected GROUP BY session_id`
     )
     .bind(accountId)
@@ -254,9 +252,9 @@ function projectConversation(row: StoredConversation): ConversationProjection {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     startedAt: row.createdAt,
-    finishedAt: row.completed ? row.updatedAt : null,
+    finishedAt: null,
     source: "chat",
-    status: row.completed ? "completed" : "in_progress",
+    status: "in_progress",
     discarded: false,
     starred: false,
     visibility: "private",
