@@ -120,7 +120,9 @@ export async function readConversations(
   const conversations = result.results.map(projectConversation);
   const recordings = await db
     .prepare(
-      "SELECT s.id, s.started_at, s.ended_at, s.captured_at_ms, t.state, substr(trim(t.text), 1, 241) AS text, t.updated_at FROM device_transcriptions t JOIN device_sessions s ON s.id = t.session_id AND s.account_id = t.account_id WHERE t.account_id = ? ORDER BY s.started_at DESC"
+      `SELECT s.id, s.started_at, s.ended_at, s.captured_at_ms, t.state, substr(${visibleStoredTextTrimSql(
+        "t.text"
+      )}, 1, 241) AS text, t.updated_at FROM device_transcriptions t JOIN device_sessions s ON s.id = t.session_id AND s.account_id = t.account_id WHERE t.account_id = ? ORDER BY s.started_at DESC`
     )
     .bind(accountId)
     .all<{
