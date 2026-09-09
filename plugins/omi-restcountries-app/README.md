@@ -44,7 +44,7 @@ Built for zero-latency voice interactions with **zero OAuth tokens or API keys r
 **Response:**
 ```json
 {
-  "result": "🇫🇷 **France** (French Republic)\n• **Capital:** Paris\n• **Region:** Europe (Western Europe)\n• **Population:** 67,391,582 citizens (Frenchs)\n• **Area:** 551,695 km²\n• **Currency:** Euro (€) [EUR]\n• **Languages:** French\n• **Borders:** 8 neighboring countries: Andorra, Belgium, Germany, Italy, Luxembourg, Monaco and 2 more\n• **ISO Codes:** FR / FRA"
+  "result": "🇫🇷 **France** (French Republic)\n• **Capital:** Paris\n• **Region:** Europe (Western Europe)\n• **Population:** 68,688,000 (Demonym: French)\n• **Area:** 551,695.0 km²\n• **Currency:** Euro (€) [EUR]\n• **Languages:** French\n• **Borders:** 8 neighboring countries: Andorra, Belgium, Germany, Italy, Luxembourg, Monaco and 2 more\n• **ISO Codes:** FR / FRA"
 }
 ```
 
@@ -59,7 +59,7 @@ Built for zero-latency voice interactions with **zero OAuth tokens or API keys r
 **Response:**
 ```json
 {
-  "result": "📊 **Comparison: 🇯🇵 Japan vs 🇩🇪 Germany**\n\n• **Population:** 125,836,021 vs 83,240,525\n  ↳ Japan has 42,595,496 more residents.\n• **Area:** 377,930 km² vs 357,114 km²\n  ↳ Japan is larger by 20,816 km².\n• **Capital:** Tokyo vs Berlin\n• **Region:** Asia (Eastern Asia) vs Europe (Western Europe)\n• **Languages:** Japanese vs German"
+  "result": "📊 **Comparison: 🇯🇵 Japan vs 🇩🇪 Germany**\n\n• **Population:** 123,300,000 vs 83,517,030\n  ↳ Japan has 39,782,970 more residents.\n• **Area:** 377,930.0 km² vs 357,114.0 km²\n  ↳ Japan is larger by 20,816.0 km².\n• **Capital:** Tokyo vs Berlin\n• **Region:** Asia (Eastern Asia) vs Europe (Western Europe)\n• **Languages:** Japanese vs German"
 }
 ```
 
@@ -77,13 +77,13 @@ Built for zero-latency voice interactions with **zero OAuth tokens or API keys r
   ```bash
   python -m unittest test_main.py
   ```
-  *(23/23 passing in 0.025s)*
+  *(28/28 passing in 0.027s)*
 
 - **ASGI Integration Smoke Tests**:
   ```bash
   python smoke_test.py
   ```
-  *(8/8 passing)*
+  *(9/9 passing)*
 
 ---
 
