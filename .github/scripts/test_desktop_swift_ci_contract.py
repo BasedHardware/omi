@@ -448,6 +448,29 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertTrue(resolve_impact(["desktop/macos/scripts/swift-test-slow-suites.json"]).includes("desktop-swift-tests"))
         self.assertTrue(resolve_impact(["desktop/macos/scripts/swift-test-skip-ratchet.py"]).includes("desktop-swift-tests"))
 
+    def test_duration_regression_guards_are_enforced(self):
+        """Desktop Swift CI once drifted silently to 27-42 min suite steps.
+
+        Duration must fail the run, not just appear in logs: the suite and
+        launcher steps carry wall-clock budgets that hard-fail when exceeded,
+        and the PR lane ratchets slow suites so the fast lane cannot silently
+        grow a slow tail. Budgets are generous against every measured
+        legitimate shape (fast lane 15m42s at batch 50, full lane 17m46s at
+        batch 100, serial-woken auth PRs ~24m) and sit far below the
+        regression; they move only through this file's review.
+        """
+        verify_job = self.jobs["desktop-swift-verify"]
+        self.assertIn('OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: "1800"', verify_job)
+        self.assertIn('OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS: "60"', verify_job)
+        self.assertIn('OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS: "360"', verify_job)
+        self.assertIn("swift suite step wall: ${elapsed}s", verify_job)
+        self.assertIn("launcher step wall: ${elapsed}s", verify_job)
+        self.assertIn("over its ${OMI_SWIFT_TEST_STEP_BUDGET_SECONDS}s regression budget", verify_job)
+        self.assertIn("over its ${OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS}s regression budget", verify_job)
+        suite_runner = _suite_runner_text()
+        self.assertIn("FAILED slow-suite ratchet", suite_runner)
+        self.assertIn("SLOW_RATCHET_SECONDS", suite_runner)
+
     def test_changed_file_forwarding_covers_the_deferral_infrastructure(self):
         """The runner can only wake/re-baseline on files CI actually forwards.
 

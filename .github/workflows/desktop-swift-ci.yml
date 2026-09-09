@@ -276,13 +276,44 @@ jobs:
           # and ratcheted subject watch paths still wake them; the full lane
           # always executes them.
           OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL: "1"
-        run: ./scripts/run-swift-ci.sh --test
+          # ---- regression guards -------------------------------------------
+          # Desktop Swift CI once drifted silently to 27-42 min suite steps
+          # and 60-120 min verdicts because nothing flagged duration. These
+          # budgets turn drift into a red run instead. Measured when this
+          # guard landed: fast lane 15m42s (batch 50; ~12m at 100), full
+          # lane 17m46s (batch 100), auth-subject PRs that wake the serial
+          # cluster ~24m — so 1800s covers every legitimate shape with
+          # headroom while sitting far below the regression. Raise only with
+          # measured evidence in the PR that raises it.
+          OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: "1800"
+          # Any PR-lane suite whose own test time exceeds this and is not
+          # ratcheted in swift-test-slow-suites.json fails the run: the fast
+          # lane cannot silently grow a slow tail. Deferred suites that woke
+          # (their files or watched subjects changed) are exempt by
+          # membership in the slow list.
+          OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS: "60"
+        run: |
+          step_started=$SECONDS
+          ./scripts/run-swift-ci.sh --test
+          elapsed=$((SECONDS - step_started))
+          echo "swift suite step wall: ${elapsed}s (budget ${OMI_SWIFT_TEST_STEP_BUDGET_SECONDS}s)"
+          if [ "${OMI_SWIFT_TEST_STEP_BUDGET_SECONDS}" -gt 0 ] && [ "$elapsed" -gt "${OMI_SWIFT_TEST_STEP_BUDGET_SECONDS}" ]; then
+            echo "FAIL: the Desktop Swift suite step took ${elapsed}s, over its ${OMI_SWIFT_TEST_STEP_BUDGET_SECONDS}s regression budget. Fix the regression (the per-invocation and slowest-suite lines above name the cost centers), or raise the budget in desktop-swift-ci.yml with measured evidence." >&2
+            exit 1
+          fi
 
       - name: Desktop launcher script tests
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
         id: desktop_launcher_tests
         working-directory: desktop/macos
+        env:
+          # Regression guard, same rationale as the suite step's budget: this
+          # step measured 1m55s-2m27s once the sentinel build went incremental
+          # and the reclaim fixture went hermetic, after previously costing
+          # 17-21 min. 360s catches that class of drift with headroom.
+          OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS: "360"
         run: |
+          step_started=$SECONDS
           # Discovery, not a hardcoded list — a new tests/test-*.sh runs here
           # automatically, mirroring swift-test-suites.sh's auto-discovery.
           # Three-way parallel (the hosted runner has 3 cores): the serial loop
@@ -325,6 +356,12 @@ jobs:
             echo "--- $(basename "$log" .log) output ---"
             cat "$log"
           done
+          elapsed=$((SECONDS - step_started))
+          echo "launcher step wall: ${elapsed}s (budget ${OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS}s)"
+          if [ "${OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS}" -gt 0 ] && [ "$elapsed" -gt "${OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS}" ]; then
+            echo "FAIL: the launcher script test step took ${elapsed}s, over its ${OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS}s regression budget. The per-test PASS lines above name the slow test; fix it or raise the budget with measured evidence." >&2
+            exit 1
+          fi
           exit "$failed"
 
       # Preserve resolved dependency downloads after a failed test command, but
