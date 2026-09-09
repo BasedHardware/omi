@@ -126,6 +126,7 @@
         "@omi-core/adapters-platform": "workspace:*",
         "@omi-core/contracts": "workspace:*",
         "@omi-core/ratified-contracts": "workspace:*",
+        "base64-js": "1.5.1",
         "lucide-react-native": "^1.31.0",
         "react": "19.0.0",
         "react-native": "0.79.6",

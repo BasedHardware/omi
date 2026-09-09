@@ -1,3 +1,4 @@
+import {decodeBase64} from '../base64';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {
   appendDeviceSessionAudio,
@@ -21,15 +22,6 @@ import {
   recordingJournalBackend,
   restoreRecording,
 } from '../recordingJournalClient';
-
-function bytesFromBase64(value: string): Uint8Array {
-  const binary = globalThis.atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
-}
 
 function mergeDiscovery(
   snapshot: PlatformNativeSnapshot,
@@ -576,7 +568,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       const bytes =
         size > DEVICE_UPLOAD_LIMITS.maxPendingBytes
           ? null
-          : bytesFromBase64(event.payloadBase64);
+          : decodeBase64(event.payloadBase64);
       const startsFrame = bytes !== null && bytes.length > 3 && bytes[2] === 0;
       const sequence =
         bytes !== null && bytes.length > 3

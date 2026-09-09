@@ -1,3 +1,4 @@
+import {decodeBase64} from './base64';
 import type {ChatHistoryPage, ChatMessage} from './chatClient';
 
 export function parseOmiMessage(value: unknown): ChatMessage {
@@ -58,10 +59,10 @@ export function parseOmiChatStream(body: string | null): ChatMessage {
   }
   for (const frame of body.split(/\r?\n\r?\n/).reverse()) {
     if (!frame.startsWith('done: ')) continue;
-    const binary = globalThis.atob(frame.slice(6).trim());
+    const bytes = decodeBase64(frame.slice(6).trim());
     const encoded = Array.from(
-      binary,
-      character => `%${character.charCodeAt(0).toString(16).padStart(2, '0')}`,
+      bytes,
+      byte => `%${byte.toString(16).padStart(2, '0')}`,
     ).join('');
     const message = parseOmiMessage(JSON.parse(decodeURIComponent(encoded)));
     if (message.sender !== 'ai')

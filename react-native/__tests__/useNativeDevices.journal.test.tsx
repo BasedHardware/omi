@@ -8,6 +8,18 @@ import type {
   RecordingJournalInput,
 } from '../src/omiNativeTypes';
 
+// JavaScriptCore's embedded native context has neither browser Base64 global.
+const atobDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'atob');
+const btoaDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'btoa');
+beforeAll(() => {
+  Reflect.deleteProperty(globalThis, 'atob');
+  Reflect.deleteProperty(globalThis, 'btoa');
+});
+afterAll(() => {
+  if (atobDescriptor) Object.defineProperty(globalThis, 'atob', atobDescriptor);
+  if (btoaDescriptor) Object.defineProperty(globalThis, 'btoa', btoaDescriptor);
+});
+
 const mockCapture = '11111111-2222-4333-8444-555555555555';
 const mockSession = '99999999-2222-4333-8444-555555555555';
 const mockSnapshot: NativeSnapshot = {

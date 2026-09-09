@@ -1,3 +1,4 @@
+import {encodeBase64} from './base64';
 import {isOptionalCaptureTimestamp} from './captureTimestamp';
 import type {NativeHttpResponse, OmiBackend} from './omiNativeTypes';
 import {
@@ -103,14 +104,6 @@ function rejectIfUnusable(response: NativeHttpResponse): void {
   throw new DeviceSessionBackendError(response.status, backendCode);
 }
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let index = 0; index < bytes.byteLength; index += 1) {
-    binary += String.fromCharCode(bytes[index] ?? 0);
-  }
-  return globalThis.btoa(binary);
-}
-
 export async function openDeviceSession(
   backend: OmiBackend,
   input: {
@@ -178,7 +171,7 @@ export async function appendDeviceSessionAudio(
   const body = JSON.stringify({
     chunks: packets.map((bytes, offset) => ({
       chunkIndex: chunkIndex + offset,
-      bytesBase64: bytesToBase64(bytes),
+      bytesBase64: encodeBase64(bytes),
     })),
   });
   if (body.length > 2097152)
