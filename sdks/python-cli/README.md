@@ -9,6 +9,7 @@ maintains about you:
 * **memories** — facts and learnings the system knows about you
 * **conversations** — captured & processed audio/text exchanges
 * **action items** — tasks and follow-ups
+* **daily summaries** — stored daily recaps
 * **goals** — tracked progress metrics
 
 It's intentionally small, scriptable, and JSON-first — everything you need to
@@ -224,6 +225,9 @@ omi
 │   ├── update <id> [--description ...] [--completed/--open] [--due-at ...]
 │   ├── complete <id>
 │   └── delete <id> [-y]
+├── daily-summary
+│   ├── list [--limit N] [--offset N] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
+│   └── get <id>
 ├── local
 │   ├── configure --url URL --token TOKEN
 │   ├── status
