@@ -17,6 +17,8 @@ loop here would buy nothing.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import json
 import re
 from typing import Any, Iterator, Mapping, Optional
@@ -319,12 +321,22 @@ def _format_validation_error(entry: Any) -> str:
 
 
 def _parse_retry_after(value: Optional[str]) -> Optional[float]:
-    """Parse the Retry-After header. Supports the seconds form only — that's what FastAPI emits."""
+    """Parse the Retry-After header per RFC 9110 (delay-seconds or HTTP-date)."""
     if not value:
         return None
+    cleaned = value.strip()
     try:
-        return max(0.0, float(value.strip()))
+        return max(0.0, float(cleaned))
     except ValueError:
+        pass
+
+    try:
+        dt = parsedate_to_datetime(cleaned)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        diff = (dt - datetime.now(timezone.utc)).total_seconds()
+        return max(0.0, diff)
+    except Exception:
         return None
 
 

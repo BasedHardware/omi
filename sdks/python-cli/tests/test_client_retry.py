@@ -207,6 +207,25 @@ def test_503_retry_after_exhaustion_preserves_server_error(authed_profile, respx
     assert info.value.detail == "Maintenance"
 
 
+def test_503_retry_after_http_date(authed_profile, respx_mock, monkeypatch) -> None:
+    from email.utils import formatdate
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+    future_date = formatdate(time.time() + 10.0, usegmt=True)
+    route = respx_mock.get("/v1/dev/user/goals").mock(
+        side_effect=[
+            httpx.Response(503, headers={"Retry-After": future_date}, json={"detail": "Maintenance"}),
+            httpx.Response(200, json=[]),
+        ]
+    )
+    with OmiClient(authed_profile) as client:
+        result = client.get("/v1/dev/user/goals")
+    assert result == []
+    assert len(sleeps) == 1
+    assert 8.0 <= sleeps[0] <= 11.0
+
+
 
 def test_429_surfaces_rate_limit_with_policy(authed_profile, respx_mock) -> None:
     respx_mock.post("/v1/dev/user/conversations").mock(
