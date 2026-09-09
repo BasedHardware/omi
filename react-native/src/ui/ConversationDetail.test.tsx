@@ -249,6 +249,59 @@ test('legacy NEXT LINE-prefixed segments keep later speech', () => {
   expect(copy).not.toContain('The transcript is empty.');
 });
 
+test('legacy NEXT LINE-prefixed sections keep later notes', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [{heading: '\u0085Notes', bodyMarkdown: '\u0085Full notes'}],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('Notes');
+  expect(copy).toContain('Full notes');
+  expect(copy).not.toContain('\u0085');
+});
+
+test('legacy NEXT LINE-only sections stay omitted instead of blank notes', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [{heading: '\u0085', bodyMarkdown: '\u0085'}],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).not.toContain('\u0085');
+  expect(copy).toContain('The transcript is empty.');
+});
+
 test('legacy load failure offers retry without inventing an empty transcript', () => {
   const reload = jest.fn();
   mockLegacy.mockReturnValue({

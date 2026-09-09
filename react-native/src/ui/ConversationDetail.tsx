@@ -246,16 +246,29 @@ function LegacyConversationBody({
           Starred
         </Text>
       ) : null}
-      {detail.sections.map((section, index) => (
-        <View key={index} style={styles.conversationDetailFields}>
-          <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
-            {section.heading}
-          </Text>
-          <Text selectable style={[styles.conversationTranscriptText, ink]}>
-            {section.bodyMarkdown}
-          </Text>
-        </View>
-      ))}
+      {detail.sections.flatMap((section, index) => {
+        const heading = visibleDisplayText(section.heading);
+        const bodyMarkdown = visibleDisplayText(section.bodyMarkdown);
+        if (heading === '' && bodyMarkdown === '') {
+          return [];
+        }
+        return [
+          <View key={index} style={styles.conversationDetailFields}>
+            {heading !== '' ? (
+              <Text
+                accessibilityRole="header"
+                style={[styles.resultTitle, ink]}>
+                {heading}
+              </Text>
+            ) : null}
+            {bodyMarkdown !== '' ? (
+              <Text selectable style={[styles.conversationTranscriptText, ink]}>
+                {bodyMarkdown}
+              </Text>
+            ) : null}
+          </View>,
+        ];
+      })}
       <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
         Transcript
       </Text>
