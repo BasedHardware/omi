@@ -1846,6 +1846,61 @@ test('wide Home search rows date task dues instead of a raw epoch', () => {
   expect(tree).not.toContain('Due 1786000000');
 });
 
+test('wide Home search rows with no due date say No due date instead of Pending', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'task',
+        id: 'task-missing-due-home-search',
+        title: 'Prepare launch notes',
+        summary: 'Pending',
+        searchableText: 'Prepare launch notes',
+        completed: false,
+        completedAt: null,
+        dueAt: null,
+        owner: null,
+        source: 'assistant',
+        provenance: [],
+        sortOrder: 1,
+        indentLevel: 0,
+        createdAt: 1785900000,
+        updatedAt: 1785900100,
+        revision: null,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Prepare launch notes');
+  expect(tree).toContain('No due date');
+  expect(tree).not.toContain('Pending');
+  const currents = render(
+    <ProjectionRow
+      home
+      item={{
+        kind: 'task',
+        id: 'task-missing-due-home-current',
+        title: 'Prepare launch notes',
+        summary: 'Pending',
+        searchableText: 'Prepare launch notes',
+        completed: false,
+        completedAt: null,
+        dueAt: null,
+        owner: null,
+        source: 'assistant',
+        provenance: [],
+        sortOrder: 1,
+        indentLevel: 0,
+        createdAt: 1785900000,
+        updatedAt: 1785900100,
+        revision: null,
+      }}
+    />,
+  );
+  const currentsTree = JSON.stringify(currents.toJSON());
+  expect(currentsTree).toContain('No due date');
+  expect(currentsTree).not.toContain('Pending');
+});
+
 test('wide Home search rows keep GET locked and discarded flags instead of title-only', () => {
   const renderer = render(
     <ProjectionRow

@@ -393,11 +393,8 @@ export function taskDisplaySummary(item: {
   if (item.completed) {
     return `Completed · ${formatTaskDue(item.dueAt)}`;
   }
-  if (item.dueAt === null) {
-    return 'Pending';
-  }
-  if (!Number.isFinite(item.dueAt) || item.dueAt <= 0) {
-    return 'Date unavailable';
+  if (item.dueAt === null || !Number.isFinite(item.dueAt) || item.dueAt <= 0) {
+    return formatTaskDue(item.dueAt);
   }
   return `Due ${formatTaskDue(item.dueAt)}`;
 }
@@ -1270,7 +1267,7 @@ export async function loadTasks(
       summary: completed
         ? 'Completed'
         : dueAt === null
-        ? 'Pending'
+        ? 'No due date'
         : `Due ${dueAt}`,
       searchableText: taskDisplayTitle({title: description}),
       completed,
