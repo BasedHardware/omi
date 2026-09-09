@@ -48,10 +48,39 @@ async def listen(
         if inspect.isawaitable(result):
             await result
 
-    async with BleakClient(device_id) as client:
+    disconnected_event = asyncio.Event()
+
+    def _on_disconnect(_client: BleakClient) -> None:
+        disconnected_event.set()
+
+    try:
+        client = BleakClient(device_id, disconnected_callback=_on_disconnect)
+    except TypeError:
+        client = BleakClient(device_id)
+        if hasattr(client, "set_disconnected_callback"):
+            client.set_disconnected_callback(_on_disconnect)
+
+    async with client:
         await client.start_notify(char_uuid, _handler)
-        while True:
-            await asyncio.sleep(3600)
+        while not disconnected_event.is_set():
+            disconnect_task = asyncio.create_task(disconnected_event.wait())
+            sleep_task = asyncio.create_task(asyncio.sleep(3600))
+            try:
+                done, pending = await asyncio.wait(
+                    [disconnect_task, sleep_task],
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+            finally:
+                for task in (disconnect_task, sleep_task):
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(
+                    disconnect_task, sleep_task, return_exceptions=True
+                )
+            for d in done:
+                if d is sleep_task and d.exception():
+                    raise d.exception()
+        raise ConnectionError(f"Device {device_id} disconnected")
 
 
 async def listen_payload(

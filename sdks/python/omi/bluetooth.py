@@ -26,8 +26,38 @@ async def listen_to_omi(
         char_uuid: UUID of the audio characteristic (use AUDIO_DATA_UUID)
         data_handler: Callback function to handle incoming audio data
     """
-    async with BleakClient(mac_address) as client:
+    disconnected_event = asyncio.Event()
+
+    def _on_disconnect(_client: BleakClient) -> None:
+        disconnected_event.set()
+
+    try:
+        client = BleakClient(mac_address, disconnected_callback=_on_disconnect)
+    except TypeError:
+        client = BleakClient(mac_address)
+        if hasattr(client, "set_disconnected_callback"):
+            client.set_disconnected_callback(_on_disconnect)
+
+    async with client:
         print(f"Connected to {mac_address}")
         await client.start_notify(char_uuid, data_handler)
         print("Listening for data...")
-        await asyncio.sleep(99999)
+        while not disconnected_event.is_set():
+            disconnect_task = asyncio.create_task(disconnected_event.wait())
+            sleep_task = asyncio.create_task(asyncio.sleep(99999))
+            try:
+                done, pending = await asyncio.wait(
+                    [disconnect_task, sleep_task],
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+            finally:
+                for task in (disconnect_task, sleep_task):
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(
+                    disconnect_task, sleep_task, return_exceptions=True
+                )
+            for d in done:
+                if d is sleep_task and d.exception():
+                    raise d.exception()
+        raise ConnectionError(f"Device {mac_address} disconnected")
