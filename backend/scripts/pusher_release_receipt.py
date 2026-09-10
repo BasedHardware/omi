@@ -307,8 +307,15 @@ def validate_live_identity(
         if not isinstance(pod, dict):
             continue
         pod_metadata = pod.get("metadata") if isinstance(pod.get("metadata"), dict) else {}
+        # kubectl get pods includes terminating replicas. Helm rollout status can
+        # return success while an old replica is still pending deletion, which
+        # made auto-qual fail closed on a matching live Deployment (2026-09-10).
+        if pod_metadata.get("deletionTimestamp"):
+            continue
         pod_spec = pod.get("spec") if isinstance(pod.get("spec"), dict) else {}
         pod_status = pod.get("status") if isinstance(pod.get("status"), dict) else {}
+        if pod_status.get("phase") not in (None, "Running"):
+            continue
         spec_images = [
             image
             for item in pod_spec.get("containers", [])

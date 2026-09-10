@@ -478,6 +478,53 @@ def test_rejects_contradictory_deployment_receipt(
     assert any("config_sha256 contradicts" in error for error in errors)
 
 
+def test_live_receipt_ignores_terminating_old_replica(receipt_builder: SimpleNamespace) -> None:
+    old_digest = "sha256:" + "f" * 64
+    deployment = {
+        "metadata": {"name": "dev-omi-pusher", "uid": "deploy", "generation": 4},
+        "spec": {"template": {"spec": {"containers": [{"name": "pusher", "image": f"{REPOSITORY}@{DIGEST}"}]}}},
+        "status": {"observedGeneration": 4, "replicas": 1, "readyReplicas": 1, "availableReplicas": 1},
+    }
+    pods = {
+        "items": [
+            {
+                "metadata": {
+                    "name": "pusher-old",
+                    "uid": "pod-old",
+                    "deletionTimestamp": "2026-09-10T02:13:51Z",
+                },
+                "spec": {"containers": [{"name": "pusher", "image": f"{REPOSITORY}@{old_digest}"}]},
+                "status": {
+                    "phase": "Running",
+                    "containerStatuses": [
+                        {"name": "pusher", "ready": False, "imageID": f"docker-pullable://{REPOSITORY}@{old_digest}"}
+                    ],
+                },
+            },
+            {
+                "metadata": {"name": "pusher-new", "uid": "pod-new"},
+                "spec": {"containers": [{"name": "pusher", "image": f"{REPOSITORY}@{DIGEST}"}]},
+                "status": {
+                    "phase": "Running",
+                    "containerStatuses": [
+                        {"name": "pusher", "ready": True, "imageID": f"docker-pullable://{REPOSITORY}@{DIGEST}"}
+                    ],
+                },
+            },
+        ]
+    }
+
+    identity = receipt_builder.validate_live_identity(
+        deployment,
+        pods,
+        namespace="dev-omi-backend",
+        repository=REPOSITORY,
+        digest=DIGEST,
+    )
+    assert identity["replicas"] == 1
+    assert [pod["name"] for pod in identity["pods"]] == ["pusher-new"]
+
+
 def test_live_receipt_rejects_a_pod_running_another_digest(receipt_builder: SimpleNamespace) -> None:
     deployment = {
         "metadata": {"name": "dev-omi-pusher", "uid": "deploy", "generation": 4},
