@@ -5603,7 +5603,11 @@ class FloatingControlBarManager {
           barWindow?.state.isAILoading = false
           if let barWindow = barWindow, !hasSetUpResponseHeight {
             hasSetUpResponseHeight = true
-            if !barWindow.state.showingAIResponse {
+            // A quiet (wake-word) answer stays closed: presenting `.mainResponse` while the
+            // quiet latch blocks the resize left the bar claiming an open conversation in an
+            // island-sized window — notifications suppressed, hover menu dead, surface floor
+            // deferred — long after the answer settled.
+            if !barWindow.state.showingAIResponse, !barWindow.state.answersQuietly {
               OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
                 barWindow.state.present(.mainResponse)
               }
@@ -5743,8 +5747,9 @@ class FloatingControlBarManager {
     }
 
     // Ensure the response view is visible and resized (handles the case where
-    // the sink never fired because no streaming data arrived before the error)
-    if !barWindow.state.showingAIResponse {
+    // the sink never fired because no streaming data arrived before the error).
+    // A quiet answer stays closed here too — same reason as the streaming sink.
+    if !barWindow.state.showingAIResponse, !barWindow.state.answersQuietly {
       OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
         barWindow.state.present(.mainResponse)
       }

@@ -383,6 +383,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
   /// fifth of the screen is the opposite of what was asked for. It has to survive the whole
   /// query rather than just its start: the answer's arrival presents `.mainResponse` again
   /// on its own, which is why suppressing only the initial expansion left the panel showing.
+  /// The query's own presentation sites skip presenting entirely while this is set, so the
+  /// flag ends when any *other* open surface is presented — `present(_:)` clears it — never
+  /// sooner. A latch that outlived its answer silently swallowed the next agent-chat or
+  /// notification-conversation growth (`resizeAnchored(makeResizable: true)`).
   @Published var answersQuietly: Bool = false
 
   @Published var conversationSurface: FloatingConversationSurface = .closed
@@ -844,6 +848,12 @@ class FloatingControlBarState: NSObject, ObservableObject {
   }
 
   func present(_ surface: FloatingConversationSurface) {
+    // Presenting an open surface is an explicit choice to show content, and it ends a
+    // quiet (wake-word) answer's silence. The quiet answer's own presentation sites never
+    // present while the latch is set, so this only fires for surfaces opened afterwards
+    // (agent chat, a tapped notification, a restored conversation) — exactly the surfaces
+    // whose growth the stale latch would otherwise silently swallow.
+    if surface.isOpen { answersQuietly = false }
     conversationSurface = surface
     activeAgentChatPillID = surface.agentID
     showingAIConversation = surface.isOpen

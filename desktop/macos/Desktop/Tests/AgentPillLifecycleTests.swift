@@ -2060,6 +2060,15 @@ import XCTest
     // one re-wired in openAIInputWithQuery.
     XCTAssertTrue(windowSource.contains("barWindow.state.answersQuietly = false"))
     XCTAssertTrue(windowSource.contains("window.state.answersQuietly = false"))
+
+    // The quiet answer's own presentation sites stay closed for the whole query. Both the
+    // streaming sink and the completion tail present `.mainResponse` on their own; presenting
+    // against a quiet-blocked resize left an open conversation flag on an island-sized
+    // window (notifications suppressed, hover menu dead, surface floor deferred) long after
+    // the answer settled. Exactly these two sites carry the guard.
+    XCTAssertEqual(
+      windowSource.components(separatedBy: "if !barWindow.state.showingAIResponse, !barWindow.state.answersQuietly {")
+        .count - 1, 2)
   }
 
   private func agentPillSource() throws -> String {
