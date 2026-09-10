@@ -70,6 +70,34 @@ def test_load_invalid_utf8_records_unicode_error(config_path: Path) -> None:
     assert "not valid UTF-8" in config.load_error
 
 
+@pytest.mark.parametrize(
+    "document",
+    [
+        'profiles = "mistake"\n',
+        'profiles = ["mistake"]\n',
+        '[profiles]\ndefault = "mistake"\n',
+        '[profiles]\ndefault = 12\n',
+        '[profiles]\ndefault = ["mistake"]\n',
+    ],
+)
+def test_non_table_profiles_keep_diagnostics_and_refuse_writes(config_path: Path, cli_runner, document: str) -> None:
+    config_path.write_text(document, encoding="utf-8")
+    original = config_path.read_bytes()
+    config = cfg.load()
+    assert config.was_load_error
+    assert config.profiles == {}
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
+
+    result = cli_runner.invoke(app, ["--json", "config", "path"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["path"] == str(config_path)
+
+    result = cli_runner.invoke(app, ["config", "set", "api_base", "https://example.test"])
+    assert result.exit_code != 0
+    assert config_path.read_bytes() == original
+
+
 def test_save_refuses_to_overwrite_malformed_config(config_path: Path) -> None:
     """save() must refuse to overwrite a file that failed to parse on load:
     a write command would otherwise silently destroy profiles/credentials the
