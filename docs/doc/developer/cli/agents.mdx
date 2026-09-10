@@ -35,6 +35,11 @@ omi --json memory list --limit 25 | jq '.[] | {id, content, category}'
 These codes are **part of the contract** — they won't shift between minor
 versions. Branch on them in your harness without parsing English errors.
 
+Local SQL execution failures return exit code `1` from both `omi local sql`
+and `omi local call execute_sql`, including when Desktop wraps the error in
+an HTTP 200 response. With `--json`, the error goes to stderr and stdout stays
+empty. A successful query with no rows still returns exit code `0`.
+
 ## Authentication: API key vs browser OAuth
 
 The CLI supports both — but for **agents** specifically, the API-key path is
