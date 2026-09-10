@@ -1159,6 +1159,30 @@ describe("worker request contract", () => {
     });
   });
 
+  test("tasks GET does not omit a neighboring row when item id carries whitespace", async () => {
+    await d1Mock
+      .prepare(
+        "INSERT INTO tasks (id, account_id, description, completed, completed_at, due_at, owner, source, provenance, sort_order, indent_level, created_at, updated_at, revision) VALUES (?, ?, ?, 0, NULL, NULL, NULL, 'assistant', '[]', 1, 0, 1, 1, NULL)"
+      )
+      .bind("task:readable-id", "test-account", "readable id")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO tasks (id, account_id, description, completed, completed_at, due_at, owner, source, provenance, sort_order, indent_level, created_at, updated_at, revision) VALUES (?, ?, ?, 0, NULL, NULL, NULL, 'assistant', '[]', 2, 0, 2, 2, NULL)"
+      )
+      .bind("task one two", "test-account", "whitespace id")
+      .run();
+
+    const response = await fetchWorker("/v1/tasks?limit=10", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(500);
+    expect(response.headers.get("retry-after")).toBeNull();
+    expect((await response.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+  });
+
   test("conversation and task reads fail closed when D1 is unbound", async () => {
     const missingDb = { ...env, DB: undefined };
     const unavailable = {

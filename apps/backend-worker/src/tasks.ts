@@ -1,4 +1,5 @@
 import {
+  parseTaskItemId,
   TASKS_READ_CONTRACT_VERSION,
   type TaskRead,
 } from "@omi-core/ratified-contracts/projections/tasks";
@@ -105,7 +106,8 @@ function toTaskItem(row: StoredTask): TaskRead.Item | null {
   ) {
     return null;
   }
-  if (typeof row.id !== "string" || row.id.length < 1) return null;
+  if (typeof row.id !== "string" || parseTaskItemId(row.id) === null)
+    return null;
   if (typeof row.description !== "string") return null;
   if (!(row.completedAt === null || Number.isSafeInteger(row.completedAt)))
     return null;
