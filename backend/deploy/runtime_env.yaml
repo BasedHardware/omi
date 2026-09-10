@@ -61,7 +61,7 @@ environments:
             value: dev
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: parakeet,modulate-velma-2,dg-nova-3
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -91,6 +91,9 @@ environments:
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
             value: http://parakeet.omiapi.com
+          HOSTED_PARAKEET_STREAM_API_URL:
+            category: service_discovery
+            value: http://dev-omi-parakeet-stream.dev-omi-backend.svc.cluster.local:8080
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -210,6 +213,19 @@ environments:
             value: '100'
             category: rollout
         values_file: backend/charts/parakeet/dev_omi_parakeet_values.yaml
+      parakeet-stream:
+        env:
+          PARAKEET_SERVICE_MODE:
+            value: stream
+            category: runtime_identity
+          PARAKEET_STREAM_CAPACITY:
+            value: '25'
+            category: reliability
+          PARAKEET_STREAM_ALLOCATION_PERCENT:
+            value: '100'
+            category: rollout
+        values_base_file: backend/charts/parakeet/dev_omi_parakeet_values.yaml
+        values_file: backend/charts/parakeet/dev_omi_parakeet_stream_values.yaml
       pusher:
         capabilities:
         - conversation.finalize.persisted
@@ -298,7 +314,7 @@ environments:
             value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: parakeet,modulate-velma-2,dg-nova-3
             category: stt_policy
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware-dev
@@ -376,7 +392,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: parakeet,modulate-velma-2,dg-nova-3
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -512,6 +528,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
+            HOSTED_PARAKEET_STREAM_API_URL:
+              env_var: HOSTED_PARAKEET_STREAM_API_URL
+              category: service_discovery
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -1354,7 +1373,7 @@ environments:
             value: prod
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: parakeet,modulate-velma-2,dg-nova-3
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -1384,6 +1403,9 @@ environments:
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
             value: http://parakeet.omi.me
+          HOSTED_PARAKEET_STREAM_API_URL:
+            category: service_discovery
+            value: http://prod-omi-parakeet-stream.prod-omi-backend.svc.cluster.local:8080
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -1533,6 +1555,19 @@ environments:
             value: '100'
             category: rollout
         values_file: backend/charts/parakeet/prod_omi_parakeet_values.yaml
+      parakeet-stream:
+        env:
+          PARAKEET_SERVICE_MODE:
+            value: stream
+            category: runtime_identity
+          PARAKEET_STREAM_CAPACITY:
+            value: '25'
+            category: reliability
+          PARAKEET_STREAM_ALLOCATION_PERCENT:
+            value: '100'
+            category: rollout
+        values_base_file: backend/charts/parakeet/prod_omi_parakeet_values.yaml
+        values_file: backend/charts/parakeet/prod_omi_parakeet_stream_values.yaml
       pusher:
         capabilities:
         - conversation.finalize.persisted
@@ -1578,7 +1613,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: parakeet,modulate-velma-2,dg-nova-3
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -1731,6 +1766,9 @@ environments:
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
+            HOSTED_PARAKEET_STREAM_API_URL:
+              env_var: HOSTED_PARAKEET_STREAM_API_URL
+              category: service_discovery
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability

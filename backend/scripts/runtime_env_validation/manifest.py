@@ -111,6 +111,35 @@ def _manifest_literal_env_value(env_map: object, key: str) -> str | None:
     return str(entry['value'])
 
 
+def _deep_merge_values(base: object, overlay: object) -> object:
+    """Merge Helm-style values files for a runtime manifest contract.
+
+    The dedicated Parakeet stream release is rendered from the environment's
+    normal values file followed by a small stream overlay. The overlay omits
+    ``env`` deliberately so the base image and secret bindings remain intact;
+    mappings therefore merge recursively while lists retain Helm's replacement
+    behavior.
+    """
+    if isinstance(base, dict) and isinstance(overlay, dict):
+        merged = dict(base)
+        for key, value in overlay.items():
+            merged[key] = _deep_merge_values(merged[key], value) if key in merged else value
+        return merged
+    return overlay
+
+
+def _load_gke_values(service_config: ConfigDict) -> ConfigDict:
+    """Load the primary values file plus any declared base values file."""
+    values_file = ROOT / service_config['values_file']
+    values = _load_yaml(values_file)
+    base_values_file = service_config.get('values_base_file')
+    if base_values_file is not None:
+        if not isinstance(base_values_file, str) or not base_values_file:
+            raise ValueError('values_base_file must be a non-empty path')
+        values = _deep_merge_values(_load_yaml(ROOT / base_values_file), values)
+    return values
+
+
 def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[ValidationError]:
     errors: list[ValidationError] = []
     gke_config = _as_config_dict(env_config.get('gke')) or {}
@@ -124,9 +153,16 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
         if service_config is None:
             errors.append(ValidationError(f'gke/{service}', 'service config must be a mapping'))
             continue
-        values_file = ROOT / service_config['values_file']
-        values = _load_yaml(values_file)
+        values = _load_gke_values(service_config)
         actual_env = _env_entries_by_name(values.get('env', []))
+        # Helm's Parakeet deployment template emits this identity from the
+        # chart-level serviceMode value, rather than from the values env list.
+        service_mode = values.get('serviceMode')
+        if service_mode is not None and 'PARAKEET_SERVICE_MODE' not in actual_env:
+            actual_env['PARAKEET_SERVICE_MODE'] = {
+                'name': 'PARAKEET_SERVICE_MODE',
+                'value': str(service_mode),
+            }
         errors.extend(
             _validate_env_entries(
                 scope=f'gke/{service}',

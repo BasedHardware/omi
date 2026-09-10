@@ -327,6 +327,8 @@ env:
     value: "us-central1"
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
+  - name: HOSTED_PARAKEET_STREAM_API_URL
+    value: "http://prod-omi-parakeet-stream.prod-omi-backend.svc.cluster.local:8080"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: DEEPGRAM_API_KEY
@@ -337,7 +339,7 @@ env:
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,dg-nova-3,parakeet"
+    value: "parakeet,modulate-velma-2,dg-nova-3"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS

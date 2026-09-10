@@ -49,6 +49,8 @@ overlay:
             key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omi.me
+        HOSTED_PARAKEET_STREAM_API_URL:
+          value: http://prod-omi-parakeet-stream.prod-omi-backend.svc.cluster.local:8080
         HOSTED_TRANSLATION_API_URL:
           value: http://nllb.omi.me
         SERVICE_ACCOUNT_JSON:
@@ -121,7 +123,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,dg-nova-3,parakeet
+          value: parakeet,modulate-velma-2,dg-nova-3
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:

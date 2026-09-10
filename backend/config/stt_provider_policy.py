@@ -131,71 +131,82 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
 # providers approved above. A deployment's literal ordering is checked against
 # these values by validate-backend-runtime-env.py.
 #
-# Parakeet is the bounded-capacity last resort: the Parakeet service owns the
-# hard stream gate (see parakeet/admission.py), so every listener converges on
-# one cap per serving pod instead of listener-local counters.
+# Parakeet leads streaming and PTT wherever the deployed TDTv3 model supports
+# the requested language. Velma-2 and hosted Deepgram remain ordered fallbacks
+# for capacity, connection, and language capability failures. The Parakeet
+# service owns the hard stream gate (see parakeet/admission.py), so every
+# listener converges on one cap per serving pod instead of listener-local
+# counters.
 DEFAULT_MODELS_BY_SURFACE: Final[Mapping[STTServingSurface, tuple[str, ...]]] = {
-    # Velma-2 leads on cost. Soniox is streaming-capable but not a default hop:
-    # prod's SONIOX_API_KEY is empty, so listing it consumed a mental next slot
-    # while accepted=0. Deepgram is the overflow; Parakeet stays last (bounded
-    # GPU, English-only streaming) and is honorable when a client asks by name.
-    STTServingSurface.STREAMING: ('modulate-velma-2', 'dg-nova-3', 'parakeet'),
+    # Parakeet is the primary for the languages supported by its deployed TDTv3
+    # model. Velma-2 and hosted Deepgram remain ordered fallbacks for capacity,
+    # connection, and language capability failures. Soniox is deliberately not a
+    # default hop because its credential is optional and its presence would
+    # consume a fallback slot.
+    STTServingSurface.STREAMING: ('parakeet', 'modulate-velma-2', 'dg-nova-3'),
     # Batch work is queued, so Parakeet's bounded GPU means waiting rather than the
     # user-visible failure it causes on the streaming surface. Prefer the self-hosted
     # provider here and keep Velma as the overflow.
     STTServingSurface.PRERECORDED: ('parakeet', 'modulate-velma-2'),
-    STTServingSurface.PTT: ('modulate-velma-2', 'parakeet'),
+    # PTT has no Deepgram connector. Keep the PTT chain to the two providers
+    # that transcribe_voice_message_stream can actually connect.
+    STTServingSurface.PTT: ('parakeet', 'modulate-velma-2'),
 }
 
-# The Parakeet deployment has distinct batch and real-time models. The batch
-# `parakeet-tdt-0.6b-v3` model can detect 25 languages, while streaming and
-# PTT both use the English-only `parakeet-rnnt-1.1b` model. Keep capabilities
-# tied to the deployed model rather than to the provider token, so a model
-# change must update this policy and its regression coverage together.
+# The Parakeet deployment has distinct batch and real-time model settings. TDTv3
+# supports the same 25 languages on batch and streaming/PTT; ``multi`` is our
+# auto-detect sentinel. The selector must validate the user's normalized base
+# language before passing that sentinel to Parakeet, because auto-detection is
+# only safe for those 25 languages. Keep capabilities tied to the deployed model
+# rather than to the provider token, so a model change must update this policy and
+# its regression coverage together.
+PARAKEET_TDT_V3_MODEL: Final[str] = 'nvidia/parakeet-tdt-0.6b-v3'
+PARAKEET_TDT_V3_SUPPORTED_LANGUAGES: Final[frozenset[str]] = frozenset(
+    {
+        'bg',
+        'hr',
+        'cs',
+        'da',
+        'nl',
+        'en',
+        'et',
+        'fi',
+        'fr',
+        'de',
+        'el',
+        'hu',
+        'it',
+        'lt',
+        'lv',
+        'mt',
+        'pl',
+        'pt',
+        'ro',
+        'ru',
+        'sk',
+        'sl',
+        'es',
+        'sv',
+        'uk',
+    }
+)
 PARAKEET_MODEL_BY_SURFACE: Final[Mapping[STTServingSurface, str]] = {
-    STTServingSurface.STREAMING: 'nvidia/parakeet-rnnt-1.1b',
-    STTServingSurface.PTT: 'nvidia/parakeet-rnnt-1.1b',
-    STTServingSurface.PRERECORDED: 'nvidia/parakeet-tdt-0.6b-v3',
+    STTServingSurface.STREAMING: PARAKEET_TDT_V3_MODEL,
+    STTServingSurface.PTT: PARAKEET_TDT_V3_MODEL,
+    STTServingSurface.PRERECORDED: PARAKEET_TDT_V3_MODEL,
 }
 PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL: Final[Mapping[str, frozenset[str]]] = {
+    # Retain the historical entry for callers inspecting an older model name;
+    # no current serving surface selects RNNT.
     'nvidia/parakeet-rnnt-1.1b': frozenset({'en'}),
-    'nvidia/parakeet-tdt-0.6b-v3': frozenset(
-        {
-            'multi',
-            'bg',
-            'hr',
-            'cs',
-            'da',
-            'nl',
-            'en',
-            'et',
-            'fi',
-            'fr',
-            'de',
-            'el',
-            'hu',
-            'it',
-            'lt',
-            'lv',
-            'mt',
-            'pl',
-            'pt',
-            'ro',
-            'ru',
-            'sk',
-            'sl',
-            'es',
-            'sv',
-            'uk',
-        }
-    ),
+    PARAKEET_TDT_V3_MODEL: PARAKEET_TDT_V3_SUPPORTED_LANGUAGES | frozenset({'multi'}),
 }
 
 
 def parakeet_supports_language(surface: STTServingSurface, language: str) -> bool:
     """Return whether the deployed Parakeet model supports a normalized language."""
     model = PARAKEET_MODEL_BY_SURFACE[surface]
-    return language.strip().lower() in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[model]
+    return normalized_stt_language(language) in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[model]
 
 
 def normalized_stt_language(language: str | None) -> str:

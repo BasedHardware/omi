@@ -2,11 +2,117 @@
 
 from __future__ import annotations
 
+import os
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from config.stt_provider_policy import PARAKEET_PROVIDER
+from routers.listen import receiver as receiver_mod
+from routers.listen.receiver import ListenReceiver
 from utils.stt import streaming
+
+
+def test_parakeet_stream_endpoint_prefers_dedicated_url_over_legacy_url():
+    with patch.dict(
+        os.environ,
+        {
+            'HOSTED_PARAKEET_STREAM_API_URL': 'ws://stream-parakeet',
+            'HOSTED_PARAKEET_API_URL': 'http://batch-parakeet',
+        },
+    ):
+        assert streaming.parakeet_stream_api_url() == 'ws://stream-parakeet'
+
+
+def test_parakeet_stream_endpoint_keeps_legacy_compatibility():
+    with patch.dict(
+        os.environ,
+        {'HOSTED_PARAKEET_STREAM_API_URL': '', 'HOSTED_PARAKEET_API_URL': 'http://batch-parakeet'},
+    ):
+        assert streaming.parakeet_stream_api_url() == 'http://batch-parakeet'
+
+
+def test_real_selector_uses_parakeet_for_mono_and_vendor_for_two_channel_guard():
+    """The runtime's channel guard must override the Parakeet preference safely."""
+    with (
+        patch.object(streaming, 'stt_service_models', ['parakeet', 'modulate-velma-2', 'dg-nova-3']),
+        patch.object(streaming, '_deepgram_is_available', return_value=False),
+        patch.dict(os.environ, {'HOSTED_PARAKEET_STREAM_API_URL': 'http://stream-parakeet'}),
+        patch.object(streaming, 'record_fallback'),
+    ):
+        mono = streaming.get_stt_service_for_language('en', multi_lang_enabled=False, preferred_service='parakeet')
+        two_channel = streaming.get_stt_service_for_language(
+            'en',
+            multi_lang_enabled=False,
+            preferred_service='parakeet',
+            exclude=frozenset({PARAKEET_PROVIDER}),
+        )
+
+    assert mono == (streaming.STTService.parakeet, 'en', 'parakeet')
+    assert two_channel == (streaming.STTService.modulate, 'en', 'velma-2')
+
+
+@pytest.mark.parametrize(
+    ('language', 'preferred_service', 'exclude', 'expected'),
+    [
+        ('en', None, frozenset(), (streaming.STTService.parakeet, 'multi', 'parakeet')),
+        ('fr', None, frozenset(), (streaming.STTService.parakeet, 'multi', 'parakeet')),
+        ('zh', None, frozenset(), (streaming.STTService.modulate, 'multi', 'velma-2')),
+        ('fr', 'parakeet', frozenset(), (streaming.STTService.parakeet, 'multi', 'parakeet')),
+        ('fr', 'parakeet', frozenset({PARAKEET_PROVIDER}), (streaming.STTService.modulate, 'multi', 'velma-2')),
+        ('zh', 'parakeet', frozenset(), (streaming.STTService.modulate, 'multi', 'velma-2')),
+    ],
+)
+def test_tdt_v3_multilingual_selection_respects_language_capability_and_failover(
+    language, preferred_service, exclude, expected
+):
+    """TDT v3 accepts supported languages in auto-detect mode, while zh stays on Velma."""
+    with (
+        patch.object(streaming, 'stt_service_models', ['parakeet', 'modulate-velma-2']),
+        patch.dict(os.environ, {'HOSTED_PARAKEET_STREAM_API_URL': 'http://stream-parakeet'}),
+        patch.object(streaming, 'record_fallback'),
+    ):
+        result = streaming.get_stt_service_for_language(
+            language,
+            multi_lang_enabled=True,
+            preferred_service=preferred_service,
+            exclude=exclude,
+        )
+
+    assert result == expected
+
+
+def test_explicit_modulate_preference_survives_new_parakeet_default():
+    with (
+        patch.object(streaming, 'stt_service_models', ['parakeet', 'modulate-velma-2']),
+        patch.dict(os.environ, {'HOSTED_PARAKEET_STREAM_API_URL': 'http://stream-parakeet'}),
+    ):
+        result = streaming.get_stt_service_for_language('en', multi_lang_enabled=False, preferred_service='modulate')
+
+    assert result == (streaming.STTService.modulate, 'en', 'velma-2')
+
+
+@pytest.mark.asyncio
+async def test_process_audio_parakeet_uses_dedicated_stream_endpoint():
+    socket = MagicMock()
+    socket.start = AsyncMock()
+    with (
+        patch.dict(
+            os.environ,
+            {
+                'HOSTED_PARAKEET_STREAM_API_URL': 'http://stream-parakeet',
+                'HOSTED_PARAKEET_API_URL': 'http://batch-parakeet',
+            },
+        ),
+        patch.object(streaming, 'ParakeetWebSocketSocket', return_value=socket) as socket_cls,
+    ):
+        result = await streaming.process_audio_parakeet(MagicMock(), 'en', 16000, 1)
+
+    assert result is socket
+    socket_cls.assert_called_once()
+    assert socket_cls.call_args.args[1:] == ('ws://stream-parakeet/v3/stream', 16000)
+    socket.start.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio
@@ -74,6 +180,159 @@ async def test_unhealthy_parakeet_connection_records_failure_before_fallback():
 
     circuit.record_failure.assert_called_once_with()
     circuit.record_rejection.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_parakeet_primary_walks_modulate_then_deepgram_and_adopts_dg_model():
+    """A Parakeet connect failure must preserve the callback shape on each leg."""
+    host = SimpleNamespace(
+        state=SimpleNamespace(active=True),
+        stt_service=streaming.STTService.parakeet,
+        stt_language='en',
+        stt_model='parakeet',
+        vocabulary=[],
+        is_multi_channel=False,
+    )
+    receiver = SimpleNamespace(host=host, _stt_failed_providers=set())
+    callback = MagicMock(name='parakeet_callback')
+    modulate_callback = MagicMock(name='modulate_callback')
+    dg_socket = SimpleNamespace(is_connection_dead=False, death_reason=None)
+
+    with (
+        patch.object(receiver_mod, 'process_audio_parakeet', new=AsyncMock(return_value=None)),
+        patch.object(receiver_mod, 'process_audio_modulate', new=AsyncMock(return_value=None)) as modulate,
+        patch.object(receiver_mod, 'process_audio_dg', new=AsyncMock(return_value=dg_socket)) as deepgram,
+        patch.object(receiver_mod, 'deepgram_fallback_model', return_value='nova-3'),
+        patch.object(receiver_mod, 'modulate_is_configured_fallback', return_value=True),
+        patch.object(streaming, 'record_fallback'),
+    ):
+        socket = await ListenReceiver._create_stt_socket(
+            receiver,
+            callback,
+            16000,
+            modulate_callback=modulate_callback,
+        )
+
+    assert socket is dg_socket
+    assert host.stt_service == streaming.STTService.deepgram
+    assert host.stt_model == 'nova-3'
+    assert 'parakeet' in receiver._stt_failed_providers
+    assert modulate.await_args.args[0] is modulate_callback
+    assert deepgram.await_args.args[0] is callback
+
+
+@pytest.mark.asyncio
+async def test_parakeet_primary_does_not_retry_an_excluded_modulate_leg():
+    """A rebuild's failed-provider set must reach the connection helper."""
+    host = SimpleNamespace(
+        state=SimpleNamespace(active=True),
+        stt_service=streaming.STTService.parakeet,
+        stt_language='en',
+        stt_model='parakeet',
+        vocabulary=[],
+        is_multi_channel=False,
+    )
+    receiver = SimpleNamespace(host=host, _stt_failed_providers=set())
+    dg_socket = SimpleNamespace(is_connection_dead=False, death_reason=None)
+
+    with (
+        patch.object(receiver_mod, 'process_audio_parakeet', new=AsyncMock(return_value=None)),
+        patch.object(receiver_mod, 'process_audio_modulate', new=AsyncMock()) as modulate,
+        patch.object(receiver_mod, 'process_audio_dg', new=AsyncMock(return_value=dg_socket)) as deepgram,
+        patch.object(receiver_mod, 'deepgram_fallback_model', return_value='nova-3'),
+        patch.object(receiver_mod, 'modulate_is_configured_fallback', return_value=True),
+        patch.object(streaming, 'record_fallback'),
+    ):
+        socket = await ListenReceiver._create_stt_socket(
+            receiver,
+            MagicMock(),
+            16000,
+            exclude=frozenset({'modulate'}),
+        )
+
+    assert socket is dg_socket
+    modulate.assert_not_awaited()
+    deepgram.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_multi_channel_parakeet_keeps_existing_modulate_route_without_new_dg_leg():
+    """The mono-only migration must not silently alter channel routing."""
+    host = SimpleNamespace(
+        state=SimpleNamespace(active=True),
+        stt_service=streaming.STTService.parakeet,
+        stt_language='en',
+        stt_model='parakeet',
+        vocabulary=[],
+        is_multi_channel=True,
+    )
+    receiver = SimpleNamespace(host=host, _stt_failed_providers=set())
+    modulate_socket = SimpleNamespace(is_connection_dead=False, death_reason=None)
+
+    with (
+        patch.object(receiver_mod, 'process_audio_parakeet', new=AsyncMock(return_value=None)) as parakeet,
+        patch.object(receiver_mod, 'process_audio_modulate', new=AsyncMock(return_value=modulate_socket)),
+        patch.object(receiver_mod, 'process_audio_dg', new=AsyncMock()) as deepgram,
+        patch.object(receiver_mod, 'modulate_is_configured_fallback', return_value=True),
+        patch.object(streaming, 'record_fallback'),
+    ):
+        socket = await ListenReceiver._create_stt_socket(receiver, MagicMock(), 16000)
+
+    assert socket is modulate_socket
+    parakeet.assert_not_awaited()
+    deepgram.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_multi_channel_vendor_primary_does_not_fall_back_to_parakeet():
+    host = SimpleNamespace(
+        state=SimpleNamespace(active=True),
+        stt_service=streaming.STTService.modulate,
+        stt_language='en',
+        stt_model='velma-2',
+        vocabulary=[],
+        is_multi_channel=True,
+    )
+    receiver = SimpleNamespace(host=host, _stt_failed_providers=set())
+
+    with (
+        patch.object(receiver_mod, 'process_audio_modulate', new=AsyncMock(return_value=None)),
+        patch.object(receiver_mod, 'process_audio_dg', new=AsyncMock(return_value=None)),
+        patch.object(receiver_mod, 'process_audio_parakeet', new=AsyncMock()) as parakeet,
+        patch.object(receiver_mod, 'deepgram_fallback_model', return_value=None),
+        patch.object(receiver_mod, 'parakeet_is_configured_fallback', return_value=True),
+        patch.object(streaming, 'record_fallback'),
+        pytest.raises(RuntimeError, match='No STT fallback provider was configured'),
+    ):
+        await ListenReceiver._create_stt_socket(receiver, MagicMock(), 16000)
+
+    parakeet.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_parakeet_does_not_call_an_unconfigured_modulate_fallback():
+    host = SimpleNamespace(
+        state=SimpleNamespace(active=True),
+        stt_service=streaming.STTService.parakeet,
+        stt_language='en',
+        stt_model='parakeet',
+        vocabulary=[],
+        is_multi_channel=False,
+    )
+    receiver = SimpleNamespace(host=host, _stt_failed_providers=set())
+
+    with (
+        patch.object(receiver_mod, 'process_audio_parakeet', new=AsyncMock(return_value=None)),
+        patch.object(receiver_mod, 'process_audio_modulate', new=AsyncMock()) as modulate,
+        patch.object(receiver_mod, 'deepgram_fallback_model', return_value=None),
+        patch.object(receiver_mod, 'modulate_is_configured_fallback', return_value=False),
+        patch.object(receiver_mod, 'parakeet_is_configured_fallback', return_value=False),
+        patch.object(streaming, 'record_fallback'),
+        pytest.raises(RuntimeError, match='No STT fallback provider was configured'),
+    ):
+        await ListenReceiver._create_stt_socket(receiver, MagicMock(), 16000)
+
+    modulate.assert_not_awaited()
 
 
 @pytest.mark.asyncio

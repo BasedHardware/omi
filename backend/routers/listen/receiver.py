@@ -31,6 +31,7 @@ else:
 
 from fastapi.websockets import WebSocketDisconnect
 
+from config.stt_provider_policy import provider_for_service
 from models.conversation_photo import ConversationPhoto
 from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent
 from models.transcript_segment import SpeakerIdentityStatus
@@ -49,7 +50,6 @@ from utils.stt.live_failure import (
     send_live_stt_audio,
     terminate_live_stt_session,
 )
-from config.stt_provider_policy import provider_for_service
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.streaming import (
     STTService,
@@ -254,9 +254,52 @@ class ListenReceiver:
         elif request.codec == 'lc3':
             self.lc3_decoder = _get_lc3().Decoder(self.host.lc3_frame_duration_us, request.sample_rate)
 
-    async def _create_stt_socket(self, callback: Any, sample_rate: int, modulate_callback: Any = None) -> Any:
+    async def _create_stt_socket(
+        self,
+        callback: Any,
+        sample_rate: int,
+        modulate_callback: Any = None,
+        *,
+        exclude: frozenset[str] = frozenset(),
+    ) -> Any:
+        requested_service = self.host.stt_service
+
+        def remember_requested_provider_failure(actual_service: STTService) -> None:
+            """Keep an initial connect failure out of this session's next hop."""
+            if actual_service == requested_service:
+                return
+            failed_providers = getattr(self, '_stt_failed_providers', None)
+            failed_provider = provider_for_service(requested_service)
+            if failed_providers is not None and failed_provider:
+                failed_providers.add(failed_provider)
+
         keywords = self.host.vocabulary[:100] if self.host.vocabulary else []
+        is_multi_channel = getattr(self.host, 'is_multi_channel', False)
+        if is_multi_channel and self.host.stt_service == STTService.parakeet:
+            # Selection excludes this combination, but keep the receiver safe
+            # for stale/explicit host state too: channel stitching still has no
+            # provider replacement contract, so use the existing vendor lane.
+            logger.warning('Routing multi-channel STT away from unsupported Parakeet provider')
+            self.host.stt_service = STTService.modulate
+            self.host.stt_model = 'velma-2'
         if self.host.stt_service == STTService.parakeet:
+            # Multi-channel routing has per-channel speaker stitching and no
+            # mid-session socket replacement. Keep its existing vendor route
+            # until the channel-level failover contract is designed.
+            allow_deepgram_fallback = not getattr(self.host, 'is_multi_channel', False)
+            dg_fallback_model = deepgram_fallback_model(self.host.stt_language) if allow_deepgram_fallback else None
+
+            def connect_deepgram_fallback() -> Any:
+                return process_audio_dg(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model=cast(str, dg_fallback_model),
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                )
+
             socket, actual_service = await connect_stt_socket_with_fallback(
                 primary_service=STTService.parakeet,
                 connect_primary=lambda: process_audio_parakeet(
@@ -268,15 +311,26 @@ class ListenReceiver:
                     keywords=keywords,
                     is_active=lambda: self.host.state.active,
                 ),
-                connect_modulate=lambda: process_audio_modulate(
-                    modulate_callback or callback,
-                    sample_rate,
-                    self.host.stt_language,
+                connect_modulate=(
+                    (
+                        lambda: process_audio_modulate(
+                            modulate_callback or callback,
+                            sample_rate,
+                            self.host.stt_language,
+                        )
+                    )
+                    if modulate_is_configured_fallback(self.host.stt_language)
+                    else None
                 ),
+                connect_deepgram=connect_deepgram_fallback if dg_fallback_model else None,
+                exclude=exclude,
             )
+            remember_requested_provider_failure(actual_service)
             self.host.stt_service = actual_service
             if actual_service == STTService.modulate:
                 self.host.stt_model = 'velma-2'
+            elif actual_service == STTService.deepgram:
+                self.host.stt_model = cast(str, dg_fallback_model)
             return socket
         if self.host.stt_service == STTService.soniox:
             # Soniox identifies language itself, so no language gate on the fallbacks;
@@ -313,7 +367,9 @@ class ListenReceiver:
                     else None
                 ),
                 connect_deepgram=connect_deepgram_from_soniox if dg_fallback_model else None,
+                exclude=exclude,
             )
+            remember_requested_provider_failure(actual_service)
             self.host.stt_service = actual_service
             if actual_service == STTService.modulate:
                 self.host.stt_model = 'velma-2'
@@ -356,9 +412,13 @@ class ListenReceiver:
                 ),
                 connect_deepgram=connect_deepgram_fallback if dg_fallback_model else None,
                 connect_parakeet=(
-                    connect_parakeet_fallback if parakeet_is_configured_fallback(self.host.stt_language) else None
+                    connect_parakeet_fallback
+                    if not is_multi_channel and parakeet_is_configured_fallback(self.host.stt_language)
+                    else None
                 ),
+                exclude=exclude,
             )
+            remember_requested_provider_failure(actual_service)
             self.host.stt_service = actual_service
             if actual_service == STTService.deepgram:
                 self.host.stt_model = cast(str, dg_fallback_model)
@@ -378,7 +438,11 @@ class ListenReceiver:
                     is_active=lambda: self.host.state.active,
                 )
 
-            if not modulate_is_configured_fallback(self.host.stt_language):
+            modulate_fallback_configured = modulate_is_configured_fallback(self.host.stt_language)
+            parakeet_fallback_configured = not is_multi_channel and parakeet_is_configured_fallback(
+                self.host.stt_language
+            )
+            if not modulate_fallback_configured and not parakeet_fallback_configured:
                 return await connect_deepgram()
 
             def connect_parakeet() -> Any:
@@ -395,15 +459,21 @@ class ListenReceiver:
             socket, actual_service = await connect_stt_socket_with_fallback(
                 primary_service=STTService.deepgram,
                 connect_primary=connect_deepgram,
-                connect_modulate=lambda: process_audio_modulate(
-                    modulate_callback or callback,
-                    sample_rate,
-                    self.host.stt_language,
+                connect_modulate=(
+                    (
+                        lambda: process_audio_modulate(
+                            modulate_callback or callback,
+                            sample_rate,
+                            self.host.stt_language,
+                        )
+                    )
+                    if modulate_fallback_configured
+                    else None
                 ),
-                connect_parakeet=(
-                    connect_parakeet if parakeet_is_configured_fallback(self.host.stt_language) else None
-                ),
+                connect_parakeet=(connect_parakeet if parakeet_fallback_configured else None),
+                exclude=exclude,
             )
+            remember_requested_provider_failure(actual_service)
             self.host.stt_service = actual_service
             if actual_service == STTService.modulate:
                 self.host.stt_model = 'velma-2'
@@ -574,6 +644,7 @@ class ListenReceiver:
                 parakeet_callback,
                 sample_rate,
                 modulate_callback=modulate_callback,
+                exclude=frozenset(self._stt_failed_providers),
             )
         except Exception:
             logger.exception('STT failover connect raised')
