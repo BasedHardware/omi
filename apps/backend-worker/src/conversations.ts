@@ -20,6 +20,13 @@ export const CONVERSATIONS_READ_CONTRACT_VERSION = "1.0.0" as const;
 export const CONVERSATIONS_FRONTIER = "frontier-v1:conversations-declared";
 export const MAIN_CONVERSATION_ID = "chat:chat-main";
 
+export class UnprojectableConversationRecordError extends Error {
+  constructor() {
+    super("unprojectable conversation record");
+    this.name = "UnprojectableConversationRecordError";
+  }
+}
+
 /** Domain conversation as the worker projects it from D1 chat. */
 export type ConversationProjection = {
   id: string;
@@ -154,6 +161,12 @@ export async function readConversations(
           ? ""
           : recordingListSpeech(recording.text, parsed) ?? ""
         : "";
+    assertProjectableTimestamp(recording.started_at);
+    assertProjectableTimestamp(recording.updated_at);
+    if (recording.ended_at !== null)
+      assertProjectableTimestamp(recording.ended_at);
+    if (recording.captured_at_ms != null)
+      assertProjectableTimestamp(recording.captured_at_ms);
     conversations.push({
       id: `recording:${recording.id}`,
       title: recordingExcerpt(speech).slice(0, 80),
@@ -261,6 +274,8 @@ export function toLegacyConversation(
 }
 
 function projectConversation(row: StoredConversation): ConversationProjection {
+  assertProjectableTimestamp(row.createdAt);
+  assertProjectableTimestamp(row.updatedAt);
   return {
     id: decodeSessionId(row.id),
     title: boundedDisplayText(row.title),
@@ -278,6 +293,15 @@ function projectConversation(row: StoredConversation): ConversationProjection {
     folderId: null,
     revision: null,
   };
+}
+
+function assertProjectableTimestamp(value: number): void {
+  if (
+    !Number.isSafeInteger(value) ||
+    !Number.isFinite(new Date(value).getTime())
+  ) {
+    throw new UnprojectableConversationRecordError();
+  }
 }
 
 function decodeSessionId(bytes: number[]): string {

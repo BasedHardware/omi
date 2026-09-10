@@ -1367,6 +1367,43 @@ describe("worker request contract", () => {
     expect(Number.isFinite(Date.parse(records[0]!.created_at))).toBe(true);
   });
 
+  test("conversations GET does not omit a neighboring row when createdAt is outside Date range", async () => {
+    await insertChatMessage({
+      id: "readable-created",
+      accountId: "test-account",
+      text: "readable createdAt",
+      createdAt: 1_000,
+      position: 1,
+      chatSessionId: "readable-created",
+    });
+    await insertChatMessage({
+      id: "overflow-created",
+      accountId: "test-account",
+      text: "overflow createdAt",
+      createdAt: 8_640_000_000_000_001,
+      position: 2,
+      chatSessionId: "overflow-created",
+    });
+
+    const envelope = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(envelope.status).toBe(500);
+    expect(envelope.headers.get("retry-after")).toBeNull();
+    expect((await envelope.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+
+    const offset = await fetchWorker("/v1/conversations?limit=50&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    expect(offset.status).toBe(500);
+    expect(offset.headers.get("retry-after")).toBeNull();
+    expect((await offset.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+  });
+
   test("history GET of listed chat:chat-main includes stored chatSessionId chat-main", async () => {
     await insertChatMessage({
       id: "main-key",

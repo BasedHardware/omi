@@ -5,6 +5,7 @@ import {
   paginateConversations,
   readConversations,
   toLegacyConversation,
+  UnprojectableConversationRecordError,
 } from "./conversations";
 import {
   gatewayConfig,
@@ -1028,12 +1029,18 @@ export async function handleConversations(
     const db = context.env.DB;
     if (db === undefined)
       return backendError("service_unavailable", "retry", 503, true);
-    const items = await readConversations(db, context.get("accountId"));
-    return json(
-      items
-        .slice(offset, offset + limit)
-        .map((item) => toLegacyConversation(item))
-    );
+    try {
+      const items = await readConversations(db, context.get("accountId"));
+      return json(
+        items
+          .slice(offset, offset + limit)
+          .map((item) => toLegacyConversation(item))
+      );
+    } catch (error) {
+      if (error instanceof UnprojectableConversationRecordError)
+        return json({ error: "internal_server_error" }, 500);
+      throw error;
+    }
   }
   if (query.getAll("limit").length > 1 || query.getAll("cursor").length > 1) {
     return backendError("bad_request", "edit_request", 400);
@@ -1045,14 +1052,20 @@ export async function handleConversations(
   const db = context.env.DB;
   if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
-  const page = paginateConversations(
-    await readConversations(db, context.get("accountId")),
-    limit,
-    cursor
-  );
-  return page === "invalid_cursor"
-    ? backendError("bad_request", "edit_request", 400)
-    : json(page);
+  try {
+    const page = paginateConversations(
+      await readConversations(db, context.get("accountId")),
+      limit,
+      cursor
+    );
+    return page === "invalid_cursor"
+      ? backendError("bad_request", "edit_request", 400)
+      : json(page);
+  } catch (error) {
+    if (error instanceof UnprojectableConversationRecordError)
+      return json({ error: "internal_server_error" }, 500);
+    throw error;
+  }
 }
 
 export async function handleMemories(context: CoreContext): Promise<Response> {
