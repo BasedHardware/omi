@@ -62,8 +62,9 @@ omi --json memory list | jq '.[] | {id, content}'
 Pretty output displays returned text literally, including square brackets and
 emoji-like codes such as `:warning:`. Styling applies to the table layout, not
 to the contents of your memories or conversations.
+Tables without predefined columns include fields from every row, in first-seen order.
 
-> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md) or [🇺🇦 Практичний посібник українською (Ukrainian Quickstart)](examples/quickstart.uk.md).
+> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), or [🇺🇦 Практичний посібник українською (Ukrainian Quickstart)](examples/quickstart.uk.md).
 
 ## Auth
 
@@ -287,6 +288,9 @@ The CLI is built so an LLM can use it without a wrapper:
 
 * `--json` returns valid JSON to stdout. Nothing else writes to stdout in JSON
   mode (errors go to stderr as `{"error": "...", "detail": "..."}`).
+* Use `omi --json version` for a machine-readable version object
+  (`{"version": "..."}`). `omi version` and the eager `omi --version` flag
+  retain their plain-text output.
 * Stable exit codes (above) let an agent disambiguate retryable vs terminal
   errors.
 * Successful resource `delete --yes` commands preserve the API response in
