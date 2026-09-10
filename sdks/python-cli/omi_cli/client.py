@@ -263,6 +263,8 @@ class _RetryableHttp(Exception):
 def _may_retry(method: str, exc: BaseException) -> bool:
     """Only replay writes when the failure establishes they were not applied."""
     if isinstance(exc, _RetryableHttp):
+        if exc.retry_after is not None and exc.retry_after > MAX_RETRY_AFTER_SECONDS:
+            return False
         return method not in {"POST", "PATCH"} or exc.response.status_code == 429
     if isinstance(exc, httpx.TransportError):
         return method not in {"POST", "PATCH"} or isinstance(
