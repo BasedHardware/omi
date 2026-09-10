@@ -143,47 +143,49 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(AIProvider.currentProviderMode, "omi-local")
   }
 
-  // MARK: - Connector synthesis gate
-  // Regression coverage for the Apple Notes/Calendar/Gmail/AI-profile
-  // synthesis gate: Local+Off must skip (the default), Local+Cloud must
-  // send, and every other provider must send regardless of the setting.
+  // MARK: - Cloud-assisted features gate
+  // Regression coverage for the unified Local-provider "Cloud-assisted
+  // features" setting as it applies to connector synthesis (Apple
+  // Notes/Calendar/Gmail/AI-profile): Local+Off must skip (the default),
+  // Local+Cloud must send, and every other provider must send regardless of
+  // the setting.
 
   func testConnectorSynthesisGate() {
     let bridgeModeKey = AIProvider.selectedProviderRawValueKey
-    let synthesisModeKey = AIProvider.connectorSynthesisModeKey
+    let cloudAssistModeKey = AIProvider.cloudAssistModeKey
     let previousBridgeMode = UserDefaults.standard.string(forKey: bridgeModeKey)
-    let previousSynthesisMode = UserDefaults.standard.string(forKey: synthesisModeKey)
+    let previousCloudAssistMode = UserDefaults.standard.string(forKey: cloudAssistModeKey)
     defer {
       if let previousBridgeMode {
         UserDefaults.standard.set(previousBridgeMode, forKey: bridgeModeKey)
       } else {
         UserDefaults.standard.removeObject(forKey: bridgeModeKey)
       }
-      if let previousSynthesisMode {
-        UserDefaults.standard.set(previousSynthesisMode, forKey: synthesisModeKey)
+      if let previousCloudAssistMode {
+        UserDefaults.standard.set(previousCloudAssistMode, forKey: cloudAssistModeKey)
       } else {
-        UserDefaults.standard.removeObject(forKey: synthesisModeKey)
+        UserDefaults.standard.removeObject(forKey: cloudAssistModeKey)
       }
     }
 
     // Local + Off (the default, including an unset key): skip.
     UserDefaults.standard.set(ChatProvider.BridgeMode.local.rawValue, forKey: bridgeModeKey)
-    UserDefaults.standard.removeObject(forKey: synthesisModeKey)
-    XCTAssertEqual(AIProvider.connectorSynthesisMode, .off)
+    UserDefaults.standard.removeObject(forKey: cloudAssistModeKey)
+    XCTAssertEqual(AIProvider.localCloudAssistMode, .off)
     XCTAssertTrue(AIProvider.shouldSkipConnectorSynthesis())
 
-    UserDefaults.standard.set(AIProvider.ConnectorSynthesisMode.off.rawValue, forKey: synthesisModeKey)
+    UserDefaults.standard.set(AIProvider.CloudAssistMode.off.rawValue, forKey: cloudAssistModeKey)
     XCTAssertTrue(AIProvider.shouldSkipConnectorSynthesis())
 
     // Local + Cloud (opted in): send.
-    UserDefaults.standard.set(AIProvider.ConnectorSynthesisMode.cloud.rawValue, forKey: synthesisModeKey)
-    XCTAssertEqual(AIProvider.connectorSynthesisMode, .cloud)
+    UserDefaults.standard.set(AIProvider.CloudAssistMode.cloud.rawValue, forKey: cloudAssistModeKey)
+    XCTAssertEqual(AIProvider.localCloudAssistMode, .cloud)
     XCTAssertFalse(AIProvider.shouldSkipConnectorSynthesis())
 
     // Omi AI (any non-local provider): always sends, regardless of the
-    // connector-synthesis setting — the setting is meaningless off Local.
+    // cloud-assist setting — the setting is meaningless off Local.
     UserDefaults.standard.set(ChatProvider.BridgeMode.piMono.rawValue, forKey: bridgeModeKey)
-    UserDefaults.standard.set(AIProvider.ConnectorSynthesisMode.off.rawValue, forKey: synthesisModeKey)
+    UserDefaults.standard.set(AIProvider.CloudAssistMode.off.rawValue, forKey: cloudAssistModeKey)
     XCTAssertFalse(AIProvider.shouldSkipConnectorSynthesis())
   }
 
