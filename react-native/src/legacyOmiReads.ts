@@ -1,3 +1,4 @@
+import {isOptionalCaptureTimestamp} from './captureTimestamp';
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
@@ -143,6 +144,9 @@ export async function loadOmiConversations(
       throw new Error('Omi visibility is malformed');
     const status = text(row.status, 'completed');
     const photos = photoCount(row.photos);
+    if (!isOptionalCaptureTimestamp(row.captured_at_ms)) {
+      throw new Error('Omi captured_at_ms is malformed');
+    }
     return {
       kind: 'conversation' as const,
       id: id(row.id),
@@ -166,6 +170,9 @@ export async function loadOmiConversations(
       ...(emoji === '' ? {} : {emoji}),
       ...(category === '' ? {} : {category}),
       ...(photos === 0 ? {} : {photoCount: photos}),
+      ...(row.captured_at_ms === undefined
+        ? {}
+        : {capturedAtMs: row.captured_at_ms}),
     };
   });
   return {apiContract: 'omi', items, page: page(start, items.length)};

@@ -121,6 +121,28 @@ test('old conversations keep wire-non-empty emoji and omit whitespace', async ()
   expect(result.items[1]).not.toHaveProperty('emoji');
 });
 
+test('old conversations keep GET captured_at_ms and omit missing values', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'capture-one',
+      captured_at_ms: 0,
+    },
+    {
+      ...conversation,
+      id: 'capture-two',
+    },
+  ]);
+  const result = await loadConversations(api);
+  expect(result.items[0]!.capturedAtMs).toBe(0);
+  expect(result.items[1]).not.toHaveProperty('capturedAtMs');
+  for (const captured_at_ms of [null, -1, 1.5, '1000', 8640000000000001]) {
+    await expect(
+      loadConversations(backend([{...conversation, captured_at_ms}]).api),
+    ).rejects.toThrow('captured_at_ms');
+  }
+});
+
 test('old bare conversation array preserves nullable metadata and offset pagination', async () => {
   const {api, request} = backend(
     Array.from({length: 50}, (_, i) => ({...conversation, id: `old-${i}`})),
@@ -135,6 +157,7 @@ test('old bare conversation array preserves nullable metadata and offset paginat
   expect(first.items[0]).not.toHaveProperty('emoji');
   expect(first.items[0]).not.toHaveProperty('photoCount');
   expect(first.items[0]).not.toHaveProperty('category');
+  expect(first.items[0]).not.toHaveProperty('capturedAtMs');
   expect(first.apiContract).toBe('omi');
   expect(first.page).toMatchObject({
     complete: false,
