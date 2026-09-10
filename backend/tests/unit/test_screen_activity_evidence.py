@@ -18,7 +18,7 @@ _BACKEND = Path(__file__).resolve().parents[2]
 def sa():
     def _pkg(name):
         mod = ModuleType(name)
-        mod.__path__ = []  # type: ignore[attr-defined]
+        mod.__path__ = [str(_BACKEND / name.replace(".", "/"))]  # type: ignore[attr-defined]
         return mod
 
     def _leaf(name, attrs):
@@ -28,6 +28,8 @@ def sa():
         return mod
 
     fakes = {
+        "utils.observability": _pkg("utils.observability"),
+        "utils.observability.fallback": _leaf("utils.observability.fallback", ["record_fallback"]),
         "database": _pkg("database"),
         "utils": _pkg("utils"),
         "utils.llm": _pkg("utils.llm"),
@@ -203,3 +205,177 @@ def test_search_malformed_timestamp_and_score_do_not_crash(monkeypatch, sa):
     assert 'relevance: unknown' in result
     assert 'nan' not in result.lower()
     assert references == []
+
+
+class _KeywordDoc(_Doc):
+    def __init__(self, key, data):
+        super().__init__(data)
+        self.id = key
+
+
+class _KeywordCollection(_Collection):
+    def __init__(self, rows):
+        super().__init__(rows)
+        self.filters = []
+        self.cap = None
+        self.order = None
+
+    def where(self, *, filter):
+        self.filters.append(filter)
+        return self
+
+    def order_by(self, field, direction):
+        self.order = (field, direction)
+        return self
+
+    def limit(self, cap):
+        self.cap = cap
+        return self
+
+    def stream(self):
+        assert self.order == ('timestamp', 'DESCENDING')
+        assert self.cap == 500
+        rows = list(self._rows.items())
+        for condition in self.filters:
+            rows = [
+                (key, row)
+                for key, row in rows
+                if (
+                    row['timestamp'] >= condition.value
+                    if condition.op_string == '>='
+                    else row['timestamp'] <= condition.value
+                )
+            ]
+        rows.sort(key=lambda item: item[1]['timestamp'], reverse=True)
+        return [_KeywordDoc(key, row) for key, row in rows[: self.cap]]
+
+
+class _KeywordFirestore(_Firestore):
+    def __init__(self, rows):
+        super().__init__(rows)
+        self.screens = _KeywordCollection(rows)
+
+    def collection(self, name):
+        assert name in ('users', 'screen_activity')
+        return self.screens if name == 'screen_activity' else self
+
+    def document(self, name):
+        assert name == 'u1'
+        return self
+
+
+def _keyword_setup(monkeypatch, sa, mode='empty'):
+    monkeypatch.setenv('SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED', 'true')
+    monkeypatch.delenv('SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS', raising=False)
+    rows = {
+        'both': {
+            'timestamp': '2026-09-09 10:00:00.000',
+            'ocrText': 'BUDGET budget',
+            'windowTitle': 'Review',
+            'appName': 'Editor',
+        },
+        'title': {
+            'timestamp': '2026-09-09 11:00:00.000',
+            'ocrText': '',
+            'windowTitle': 'Budget review',
+            'appName': 'Editor',
+        },
+        'partial': {'timestamp': '2026-09-09 12:00:00.000', 'ocrText': 'budget only'},
+        'old': {'timestamp': '2026-08-01 10:00:00.000', 'ocrText': 'budget review'},
+    }
+    _setup(monkeypatch, sa, {}, [])
+    client = _KeywordFirestore(rows)
+    monkeypatch.setattr(sa, 'firestore_db', client)
+    if mode == 'error':
+
+        def fail(query):
+            raise RuntimeError('sensitive provider text')
+
+        monkeypatch.setattr(sa, 'gemini_embed_query', fail)
+    return client
+
+
+@pytest.mark.parametrize('mode', ['error', 'empty', 'malformed', 'disabled'])
+def test_keyword_fallback_preserves_shape_evidence_ranking_and_window(monkeypatch, sa, mode, caplog):
+    client = _keyword_setup(monkeypatch, sa, mode)
+    if mode == 'malformed':
+        monkeypatch.setattr(
+            sa.vector_db, 'search_screen_activity_vectors', lambda **kwargs: [{'screenshot_id': '../bad'}]
+        )
+    if mode == 'disabled':
+        monkeypatch.setenv('SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS', 'other,u1')
+
+        def forbidden(*args, **kwargs):
+            pytest.fail('disabled account attempted cloud vectors')
+
+        monkeypatch.setattr(sa, 'gemini_embed_query', forbidden)
+        monkeypatch.setattr(sa.vector_db, 'search_screen_activity_vectors', forbidden)
+    refs = []
+    result = _search(sa)(
+        'budget REVIEW',
+        end_date='2026-09-10T00:00:00Z',
+        config={'configurable': {'user_id': 'u1', 'evidence_references': refs}},
+    )
+    assert 'Found 2 screen activity matches' in result
+    assert result.count('(relevance: keyword)') == 2
+    assert [ref['frame_id'] for ref in refs] == ['both', 'title']
+    assert refs[0]['captured_at_ms'] == 1_788_948_000_000
+    assert client.screens.filters[0].value == '2026-09-03 00:00:00.000'
+    assert 'sensitive provider text' not in caplog.text
+    assert 'BUDGET' not in caplog.text
+
+
+def test_keyword_empty_is_honest_about_scanned_window(monkeypatch, sa):
+    _keyword_setup(monkeypatch, sa)
+    result = _search(sa)('missing', end_date='2026-09-10T00:00:00Z', config={'configurable': {'user_id': 'u1'}})
+    assert result == 'No matches (keyword search over 3 screens in window).'
+
+
+def test_keyword_scan_caps_at_500_and_single_term_matches_app(monkeypatch, sa):
+    client = _keyword_setup(monkeypatch, sa)
+    client.screens._rows = {str(i): {'timestamp': '2026-09-09 10:00:00.000', 'appName': 'Editor'} for i in range(501)}
+    matches, scanned = sa._keyword_screen_matches('u1', 'editor', None, 1_789_027_200, 10)
+    assert scanned == 500
+    assert len(matches) == 10
+
+
+def test_keyword_flag_off_does_not_override_vector_opt_out(monkeypatch, sa):
+    _keyword_setup(monkeypatch, sa)
+    monkeypatch.setenv('SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED', 'false')
+    monkeypatch.setenv('SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS', 'u1')
+
+    def forbidden(*args, **kwargs):
+        pytest.fail('policy opt-out attempted a provider')
+
+    monkeypatch.setattr(sa, 'gemini_embed_query', forbidden)
+    monkeypatch.setattr(sa, '_keyword_screen_matches', forbidden)
+    result = _search(sa)('budget', config={'configurable': {'user_id': 'u1'}})
+    assert 'keyword fallback is disabled' in result
+
+
+def test_keyword_uses_snapshot_identity_and_skips_malformed_payload(monkeypatch, sa):
+    client = _keyword_setup(monkeypatch, sa)
+    snapshots = [
+        _KeywordDoc('actual', {'_document_id': 'spoofed', 'timestamp': '2026-09-09 10:00:00.000', 'ocrText': 'budget'}),
+        _KeywordDoc('broken', ['not a mapping']),
+    ]
+    monkeypatch.setattr(client.screens, 'stream', lambda: snapshots)
+    matches, scanned = sa._keyword_screen_matches('u1', 'budget', None, 1_789_027_200, 10)
+    assert scanned == 2
+    assert [match['screenshot_id'] for match in matches] == ['actual']
+
+
+def test_keyword_fallback_records_provider_switch(monkeypatch, sa):
+    _keyword_setup(monkeypatch, sa, 'error')
+    from utils.observability.fallback import record_fallback
+
+    record_fallback.reset_mock()
+    _search(sa)('budget', end_date='2026-09-10T00:00:00Z', config={'configurable': {'user_id': 'u1'}})
+    record_fallback.assert_called_once_with(
+        component='agent_tools',
+        from_mode='screen_vectors',
+        to_mode='screen_keyword',
+        reason='capability_mismatch',
+        outcome='degraded',
+        log=sa.logger,
+    )
