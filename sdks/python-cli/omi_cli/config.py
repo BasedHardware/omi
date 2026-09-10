@@ -221,8 +221,7 @@ def save(config: Config) -> None:
     """
     if config.load_error is not None:
         raise PermissionError(
-            f"refusing to overwrite {config.path}: {config.load_error}. "
-            "Fix or remove the config file and try again."
+            f"refusing to overwrite {config.path}: {config.load_error}. " "Fix or remove the config file and try again."
         )
     config.path.parent.mkdir(parents=True, exist_ok=True)
     # Tighten parent dir perms too — credentials live underneath. Best-effort:
@@ -258,18 +257,18 @@ def save(config: Config) -> None:
         try:
             with os.fdopen(fd, "wb") as fh:
                 tomli_w.dump(payload, fh)
+            # Atomic rename. The destination inherits the temp's owner-only access.
+            os.replace(tmp_path, config.path)
         except Exception:
-            # Best-effort cleanup if the dump itself failed mid-write.
+            # Clean up our own temp on serialization or replacement failure.
+            # A failed cleanup must not hide the original save error.
             try:
                 os.unlink(tmp_path)
-            except FileNotFoundError:
+            except OSError:
                 pass
             raise
     finally:
         os.umask(old_umask)
-
-    # Atomic rename. The destination inherits the temp's 0o600 mode.
-    os.replace(tmp_path, config.path)
 
 
 def resolve_profile_name(cli_flag: Optional[str], config: Config) -> str:
