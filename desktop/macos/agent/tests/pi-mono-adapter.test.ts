@@ -667,6 +667,59 @@ describe("PiMonoAdapter prompt correlation", () => {
     );
   });
 
+  it("rejects an empty length-stop completion with an input-token-aware message", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "keep going" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+
+    (adapter as any).handleTurnEnd({
+      type: "turn_end",
+      message: {
+        role: "assistant",
+        content: [],
+        stopReason: "length",
+        usage: { input: 41101, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 41101 },
+      },
+    });
+
+    await expect(prompt).rejects.toThrow("returned no text");
+    await expect(prompt).rejects.toThrow("41,101");
+  });
+
+  it("still resolves a length-stop completion that carries text", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "keep going" }],
+      [],
+      "act",
+      () => {},
+      async () => ""
+    );
+
+    (adapter as any).handleTurnEnd({
+      type: "turn_end",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "here is as much as fit" }],
+        stopReason: "length",
+        usage: { input: 41101, output: 100, cacheRead: 0, cacheWrite: 0, totalTokens: 41201 },
+      },
+    });
+
+    await expect(prompt).resolves.toMatchObject({ text: "here is as much as fit" });
+  });
+
   it("normalizes bare provider HTTP status errors before surfacing them", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1");

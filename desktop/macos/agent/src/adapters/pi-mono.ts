@@ -1727,6 +1727,27 @@ export class PiMonoAdapter implements HarnessAdapter {
       this.finishPublicWebProgress(publicWebTurn, "completed");
     }
 
+    // A "length" stop with no text means the provider's output budget was
+    // already 0 or 1 token before the first token was generated (typically a
+    // local model whose declared context window undercounts what the server
+    // actually loaded). Resolving with an empty string would render as
+    // nothing at all, so surface it as an error instead.
+    if (stopReason === "length" && text.trim().length === 0) {
+      const inputTokens = message?.usage?.input;
+      const detail = typeof inputTokens === "number"
+        ? ` (${inputTokens.toLocaleString("en-US")} input tokens)`
+        : "";
+      const lengthMessage =
+        `The model returned no text: its output budget ran out before the first token because the conversation${detail} is near or past the context window Omi assumes for it. Start a new chat, or raise the model's context length in your local server.`;
+      this.pendingRequests.delete(generation);
+      this.activePromptGeneration = 0;
+      pending.reject(new Error(lengthMessage));
+      this.clearJitUsage();
+      this.eventHandler = null;
+      this.toolExecutor = null;
+      return;
+    }
+
     this.recordServedModel(message ?? undefined);
 
     // Extract usage

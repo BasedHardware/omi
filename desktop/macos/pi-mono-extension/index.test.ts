@@ -52,6 +52,7 @@ import {
   OMI_CHAT_CONTRACT_VERSION,
   __installOmiJitFetchGuardForTest,
   __resetOmiJitFetchGuardForTest,
+  resolveLocalContextWindow,
   default as omiProvider,
 } from "./index.ts";
 import type { ToolCallEvent } from "@earendil-works/pi-coding-agent";
@@ -3070,6 +3071,68 @@ test("registerUserMcpTools: a connecting server gets neutral frozen wording, and
 });
 
 // ---------------------------------------------------------------------------
+// resolveLocalContextWindow
+// ---------------------------------------------------------------------------
+
+test("resolveLocalContextWindow: LM Studio loaded_context_length wins", async () => {
+  const { fetch: fakeFetch } = recordingFetch((url) => {
+    if (url.endsWith("/api/v0/models")) {
+      return {
+        ok: true,
+        json: async () => ({
+          data: [{ id: "qwen3.8-27b-mlx", loaded_context_length: 260608, max_context_length: 131072 }],
+        }),
+      };
+    }
+    return "throw";
+  });
+  const result = await resolveLocalContextWindow("http://127.0.0.1:1234/v1", "qwen3.8-27b-mlx", fakeFetch);
+  assert.deepEqual(result, { contextWindow: 260608, source: "lmstudio loaded_context_length" });
+});
+
+test("resolveLocalContextWindow: falls back to max_context_length when loaded_context_length is null", async () => {
+  const { fetch: fakeFetch } = recordingFetch((url) => {
+    if (url.endsWith("/api/v0/models")) {
+      return {
+        ok: true,
+        json: async () => ({
+          data: [{ id: "qwen3.8-27b-mlx", loaded_context_length: null, max_context_length: 131072 }],
+        }),
+      };
+    }
+    return "throw";
+  });
+  const result = await resolveLocalContextWindow("http://127.0.0.1:1234/v1", "qwen3.8-27b-mlx", fakeFetch);
+  assert.deepEqual(result, { contextWindow: 131072, source: "lmstudio max_context_length" });
+});
+
+test("resolveLocalContextWindow: falls back to /models max_model_len when the LM Studio endpoint 404s", async () => {
+  const { fetch: fakeFetch } = recordingFetch((url) => {
+    if (url.endsWith("/api/v0/models")) {
+      return { ok: false, json: async () => ({}) };
+    }
+    if (url.endsWith("/models")) {
+      return { ok: true, json: async () => ({ data: [{ id: "vllm-model", max_model_len: 131072 }] }) };
+    }
+    return "throw";
+  });
+  const result = await resolveLocalContextWindow("http://127.0.0.1:8000/v1", "vllm-model", fakeFetch);
+  assert.deepEqual(result, { contextWindow: 131072, source: "openai-models max_model_len" });
+});
+
+test("resolveLocalContextWindow: falls back to the default when both endpoints fail", async () => {
+  const { fetch: fakeFetch } = recordingFetch(() => "throw");
+  const result = await resolveLocalContextWindow("http://127.0.0.1:1234/v1", "qwen3.8-27b-mlx", fakeFetch);
+  assert.deepEqual(result, { contextWindow: 32_000, source: "default" });
+});
+
+test("resolveLocalContextWindow: strips a trailing /v1/ to probe the LM Studio origin", async () => {
+  const { fetch: fakeFetch, calls } = recordingFetch(() => "throw");
+  await resolveLocalContextWindow("http://127.0.0.1:1234/v1/", "qwen3.8-27b-mlx", fakeFetch);
+  assert.equal(calls[0], "http://127.0.0.1:1234/api/v0/models");
+});
+
+// ---------------------------------------------------------------------------
 // omiProvider — conditional "omi-local" registration
 // ---------------------------------------------------------------------------
 
@@ -3108,8 +3171,64 @@ function withEnv(vars: Record<string, string | undefined>, fn: () => void) {
   }
 }
 
-test("omiProvider: registers omi-local when both env vars are present", () => {
-  withEnv(
+/** Same as withEnv, but for a test body that must await omiProvider: its
+ *  local-provider registration now awaits a context-window probe before
+ *  calling registerProvider, so a synchronous check right after calling it
+ *  would run before that registration happens. */
+async function withEnvAsync(vars: Record<string, string | undefined>, fn: () => Promise<void>) {
+  const original: Record<string, string | undefined> = {};
+  for (const key of Object.keys(vars)) {
+    original[key] = process.env[key];
+    if (vars[key] === undefined) delete process.env[key];
+    else process.env[key] = vars[key];
+  }
+  try {
+    await fn();
+  } finally {
+    for (const key of Object.keys(original)) {
+      if (original[key] === undefined) delete process.env[key];
+      else process.env[key] = original[key];
+    }
+  }
+}
+
+/** Stubs globalThis.fetch for the duration of `fn`, restoring it after.
+ *  resolveLocalContextWindow's default parameter reads `fetch` at call time,
+ *  so omiProvider's own local-context probe picks up this stub too. This
+ *  is what keeps these tests off the real network. */
+async function withFakeFetch(fakeFetch: typeof fetch, fn: () => Promise<void>) {
+  const original = globalThis.fetch;
+  globalThis.fetch = fakeFetch;
+  try {
+    await fn();
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
+/** Rejects every request immediately: for tests that only care that
+ *  omi-local registers at all, not what context window it resolves to. */
+const alwaysFailFetch: typeof fetch = () => Promise.reject(new Error("network disabled in tests"));
+
+/** A fetch stub that records every URL it was called with and answers via
+ *  `respond`. Return "throw" from `respond` to simulate a network failure
+ *  for that URL. */
+function recordingFetch(
+  respond: (url: string) => { ok: boolean; json: () => Promise<unknown> } | "throw",
+): { fetch: typeof fetch; calls: string[] } {
+  const calls: string[] = [];
+  const fetchImpl = (async (input: unknown) => {
+    const url = String(input);
+    calls.push(url);
+    const result = respond(url);
+    if (result === "throw") throw new Error(`network error for ${url}`);
+    return result as unknown as Response;
+  }) as unknown as typeof fetch;
+  return { fetch: fetchImpl, calls };
+}
+
+test("omiProvider: registers omi-local when both env vars are present", async () => {
+  await withEnvAsync(
     {
       OMI_LOCAL_BASE_URL: "http://100.100.100.100:1234/v1",
       OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx",
@@ -3118,39 +3237,66 @@ test("omiProvider: registers omi-local when both env vars are present", () => {
       // assertion that "omi" still registers alongside "omi-local" holds.
       OMI_API_KEY: "test-key",
     },
-    () => {
-      const pi = fakePi();
-      omiProvider(pi as any);
+    async () => {
+      await withFakeFetch(alwaysFailFetch, async () => {
+        const pi = fakePi();
+        await omiProvider(pi as any);
 
-      const omi = pi.registered.find((r) => r.name === "omi");
-      const local = pi.registered.find((r) => r.name === "omi-local");
-      assert.ok(omi, "existing omi provider must still register");
-      assert.ok(local, "omi-local must register when both env vars are present");
-      assert.equal(local!.config.baseUrl, "http://100.100.100.100:1234/v1");
-      assert.equal(local!.config.models[0].id, "qwen3.8-27b-mlx");
-      assert.equal(local!.config.models[0].cost.input, 0);
-      // pi-ai only recognizes a handful of hosts as needing "max_tokens";
-      // everything else (including a local server) defaults to
-      // "max_completion_tokens", which LM Studio silently ignores — leaving
-      // requests with no effective token cap. This must be forced explicitly.
-      assert.equal(local!.config.models[0].compat.maxTokensField, "max_tokens");
+        const omi = pi.registered.find((r) => r.name === "omi");
+        const local = pi.registered.find((r) => r.name === "omi-local");
+        assert.ok(omi, "existing omi provider must still register");
+        assert.ok(local, "omi-local must register when both env vars are present");
+        assert.equal(local!.config.baseUrl, "http://100.100.100.100:1234/v1");
+        assert.equal(local!.config.models[0].id, "qwen3.8-27b-mlx");
+        assert.equal(local!.config.models[0].cost.input, 0);
+        // pi-ai only recognizes a handful of hosts as needing "max_tokens";
+        // everything else (including a local server) defaults to
+        // "max_completion_tokens", which LM Studio silently ignores, leaving
+        // requests with no effective token cap. This must be forced explicitly.
+        assert.equal(local!.config.models[0].compat.maxTokensField, "max_tokens");
+      });
     }
   );
 });
 
-test("omiProvider: falls back to a non-empty apiKey placeholder for omi-local", () => {
-  withEnv(
+test("omiProvider: registers omi-local with the resolved contextWindow from the probe", async () => {
+  await withEnvAsync(
+    { OMI_LOCAL_BASE_URL: "http://127.0.0.1:1234/v1", OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx" },
+    async () => {
+      const { fetch: fakeFetch } = recordingFetch((url) => {
+        if (url.endsWith("/api/v0/models")) {
+          return {
+            ok: true,
+            json: async () => ({ data: [{ id: "qwen3.8-27b-mlx", loaded_context_length: 260608 }] }),
+          };
+        }
+        return "throw";
+      });
+      await withFakeFetch(fakeFetch, async () => {
+        const pi = fakePi();
+        await omiProvider(pi as any);
+        const local = pi.registered.find((r) => r.name === "omi-local");
+        assert.equal(local!.config.models[0].contextWindow, 260608);
+      });
+    }
+  );
+});
+
+test("omiProvider: falls back to a non-empty apiKey placeholder for omi-local", async () => {
+  await withEnvAsync(
     {
       OMI_LOCAL_BASE_URL: "http://100.100.100.100:1234/v1",
       OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx",
       OMI_LOCAL_API_KEY: undefined,
     },
-    () => {
-      const pi = fakePi();
-      omiProvider(pi as any);
-      const local = pi.registered.find((r) => r.name === "omi-local");
-      // pi's openai-completions client throws on an empty apiKey string.
-      assert.ok(local!.config.apiKey && local!.config.apiKey.length > 0);
+    async () => {
+      await withFakeFetch(alwaysFailFetch, async () => {
+        const pi = fakePi();
+        await omiProvider(pi as any);
+        const local = pi.registered.find((r) => r.name === "omi-local");
+        // pi's openai-completions client throws on an empty apiKey string.
+        assert.ok(local!.config.apiKey && local!.config.apiKey.length > 0);
+      });
     }
   );
 });
@@ -3219,14 +3365,20 @@ test("isLocalProviderName: true only for the local main and vision providers", (
 
 test("before_provider_headers: skips Omi telemetry headers when the active model is the local provider", async () => {
   let handler: ((event: any, ctx: any) => any) | undefined;
-  withEnv(
-    { OMI_LOCAL_BASE_URL: "http://100.100.100.100:1234/v1", OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx" },
-    () => {
-      const pi = fakePi();
-      omiProvider(pi as any);
-      handler = pi.handlers["before_provider_headers"];
-    }
-  );
+  // omiProvider registers this handler before it awaits the local-context
+  // probe, so it's already captured once the synchronous callback below
+  // returns. The fetch stub just keeps that probe's background completion
+  // off the real network.
+  await withFakeFetch(alwaysFailFetch, async () => {
+    withEnv(
+      { OMI_LOCAL_BASE_URL: "http://100.100.100.100:1234/v1", OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx" },
+      () => {
+        const pi = fakePi();
+        omiProvider(pi as any);
+        handler = pi.handlers["before_provider_headers"];
+      }
+    );
+  });
   assert.ok(handler, "before_provider_headers must be registered");
 
   const localHeaders: Record<string, string> = {};

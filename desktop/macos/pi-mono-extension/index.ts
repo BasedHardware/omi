@@ -1862,6 +1862,109 @@ export function __resetUserMcpForTest(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Local server context-window probe
+// ---------------------------------------------------------------------------
+
+/** Used only when the server can't be probed (the previous hardcoded guess). */
+const DEFAULT_LOCAL_CONTEXT_WINDOW = 32_000;
+const LOCAL_CONTEXT_PROBE_TIMEOUT_MS = 2_000;
+
+export interface LocalContextWindowResult {
+  contextWindow: number;
+  source: string;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+/** Strip a trailing "/v1" (or "/v1/") path segment off an OpenAI-compatible
+ *  base URL to recover the server's origin, e.g. "http://127.0.0.1:1234/v1"
+ *  -> "http://127.0.0.1:1234". */
+function localServerOrigin(baseUrl: string): string {
+  return baseUrl.replace(/\/v1\/?$/, "");
+}
+
+/** GET a JSON endpoint with a short timeout. Any failure (network error,
+ *  abort, or non-2xx) resolves to undefined instead of throwing. */
+async function fetchJsonWithTimeout(url: string, fetchImpl: typeof fetch): Promise<unknown> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LOCAL_CONTEXT_PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetchImpl(url, { signal: controller.signal });
+    if (!response.ok) return undefined;
+    return await response.json();
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function probeLmStudioContextWindow(
+  baseUrl: string,
+  modelId: string,
+  fetchImpl: typeof fetch,
+): Promise<LocalContextWindowResult | undefined> {
+  const body = await fetchJsonWithTimeout(`${localServerOrigin(baseUrl)}/api/v0/models`, fetchImpl);
+  const entries = (body as { data?: unknown[] } | undefined)?.data;
+  if (!Array.isArray(entries)) return undefined;
+  const entry = entries.find((e) => (e as { id?: unknown })?.id === modelId) as
+    | { loaded_context_length?: unknown; max_context_length?: unknown }
+    | undefined;
+  if (!entry) return undefined;
+  if (isPositiveInteger(entry.loaded_context_length)) {
+    return { contextWindow: entry.loaded_context_length, source: "lmstudio loaded_context_length" };
+  }
+  if (isPositiveInteger(entry.max_context_length)) {
+    return { contextWindow: entry.max_context_length, source: "lmstudio max_context_length" };
+  }
+  return undefined;
+}
+
+async function probeOpenAiModelsContextWindow(
+  baseUrl: string,
+  modelId: string,
+  fetchImpl: typeof fetch,
+): Promise<LocalContextWindowResult | undefined> {
+  const body = await fetchJsonWithTimeout(`${baseUrl}/models`, fetchImpl);
+  const entries = (body as { data?: unknown[] } | undefined)?.data;
+  if (!Array.isArray(entries)) return undefined;
+  const entry = entries.find((e) => (e as { id?: unknown })?.id === modelId) as
+    | { max_model_len?: unknown }
+    | undefined;
+  if (!entry) return undefined;
+  if (isPositiveInteger(entry.max_model_len)) {
+    return { contextWindow: entry.max_model_len, source: "openai-models max_model_len" };
+  }
+  return undefined;
+}
+
+/** Probe the user's local server for `modelId`'s real context window instead
+ *  of trusting a hardcoded guess. pi derives each request's output budget as
+ *  `contextWindow - estimatedConversationTokens - safety`, clamped to at
+ *  least 1 token: a declared window smaller than what the server actually
+ *  loaded silently collapses that budget to 1 once the conversation outgrows
+ *  it. Tries LM Studio's REST API first (it reports the context length the
+ *  model was actually loaded with), then the OpenAI-compatible `/models`
+ *  endpoint some servers (e.g. vLLM) extend with `max_model_len`. Any
+ *  failure (network error, timeout, non-2xx, missing field, or no matching
+ *  model id) falls back to the previous hardcoded default. Never throws. */
+export async function resolveLocalContextWindow(
+  baseUrl: string,
+  modelId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<LocalContextWindowResult> {
+  const lmStudio = await probeLmStudioContextWindow(baseUrl, modelId, fetchImpl);
+  if (lmStudio) return lmStudio;
+
+  const openaiModels = await probeOpenAiModelsContextWindow(baseUrl, modelId, fetchImpl);
+  if (openaiModels) return openaiModels;
+
+  return { contextWindow: DEFAULT_LOCAL_CONTEXT_WINDOW, source: "default" };
+}
+
+// ---------------------------------------------------------------------------
 // Extension entry point
 // ---------------------------------------------------------------------------
 
@@ -1940,6 +2043,11 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
   const localBaseUrl = process.env.OMI_LOCAL_BASE_URL;
   const localModelId = process.env.OMI_LOCAL_MODEL_ID;
   if (localBaseUrl && localModelId) {
+    const { contextWindow: localContextWindow, source: localContextSource } =
+      await resolveLocalContextWindow(localBaseUrl, localModelId);
+    process.stderr.write(
+      `[omi-provider] omi-local context window=${localContextWindow} (${localContextSource})\n`
+    );
     pi.registerProvider("omi-local", {
       api: "openai-completions",
       baseUrl: localBaseUrl,
@@ -1961,7 +2069,12 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
           // this model id themselves, same trust boundary as the vision
           // and cloud providers below, which already declare both.
           input: ["text", "image"],
-          contextWindow: 32_000,
+          // Probed from the server above (resolveLocalContextWindow), not
+          // hardcoded: pi derives each request's output budget as
+          // contextWindow - estimatedConversationTokens - safety, and a
+          // window smaller than what the server actually loaded collapses
+          // that budget to 1 token once the conversation outgrows it.
+          contextWindow: localContextWindow,
           maxTokens: 8_192,
           // Genuinely free — never tracked anywhere, client or server.
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -1984,6 +2097,11 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
   // single-local-model setups are completely unaffected.
   const localVisionModelId = process.env.OMI_LOCAL_VISION_MODEL_ID;
   if (localBaseUrl && localVisionModelId) {
+    const { contextWindow: visionContextWindow, source: visionContextSource } =
+      await resolveLocalContextWindow(localBaseUrl, localVisionModelId);
+    process.stderr.write(
+      `[omi-provider] omi-local-vision context window=${visionContextWindow} (${visionContextSource})\n`
+    );
     pi.registerProvider("omi-local-vision", {
       api: "openai-completions",
       baseUrl: localBaseUrl,
@@ -1994,7 +2112,8 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
           name: localVisionModelId,
           reasoning: false,
           input: ["text", "image"],
-          contextWindow: 32_000,
+          // See the "omi-local" model above: probed, not hardcoded.
+          contextWindow: visionContextWindow,
           maxTokens: 8_192,
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
           // See the "omi-local" model above — same LM Studio max-tokens quirk.
