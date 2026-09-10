@@ -290,6 +290,23 @@ function LegacyConversationBody({
           {calendarAttendees}
         </Text>
       )}
+      {detail.photoCount !== undefined && detail.photoCount > 0 ? (
+        <Text style={[styles.conversationDetailField, ink]}>
+          {`${detail.photoCount} photos`}
+        </Text>
+      ) : null}
+      {(detail.photoCaptions ?? []).flatMap((caption, index) => {
+        const copy = visibleDisplayText(caption);
+        return copy === ''
+          ? []
+          : [
+              <Text
+                key={`photo-caption-${index}`}
+                style={[styles.conversationDetailField, ink]}>
+                {copy}
+              </Text>,
+            ];
+      })}
       {detail.sections.flatMap((section, index) => {
         const heading = visibleDisplayText(section.heading);
         const bodyMarkdown = visibleDisplayText(section.bodyMarkdown);

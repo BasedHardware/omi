@@ -16,6 +16,8 @@ export type LegacyConversationDetail = {
     startCopy?: string;
     endCopy?: string;
   };
+  photoCount?: number;
+  photoCaptions?: string[];
   transcript:
     | {status: 'unavailable'}
     | {
@@ -139,6 +141,29 @@ function calendarEvent(
     ...(endCopy === '' ? {} : {endCopy}),
   };
 }
+function conversationPhotos(value: unknown):
+  | {
+      count: number;
+      captions: string[];
+    }
+  | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const rows = array(value, 1000);
+  if (rows.length === 0) {
+    return undefined;
+  }
+  const captions = rows.flatMap(raw => {
+    const photo = object(raw);
+    if (photo.description === undefined || photo.description === null) {
+      return [];
+    }
+    const caption = visibleDisplayText(text(photo.description, 10000));
+    return caption === '' ? [] : [caption];
+  });
+  return {count: rows.length, captions};
+}
 
 export async function loadLegacyConversationDetail(
   backend: OmiBackend,
@@ -236,6 +261,7 @@ export async function loadLegacyConversationDetail(
         };
   const address = locationAddress(value.geolocation);
   const linkedEvent = calendarEvent(value.calendar_event);
+  const photos = conversationPhotos(value.photos);
   const overview = text(structured.overview);
   const appSummary = firstAppSummary(
     value.apps_results,
@@ -252,6 +278,14 @@ export async function loadLegacyConversationDetail(
     ...(address === undefined ? {} : {locationAddress: address}),
     ...(appSummary === undefined ? {} : {appSummary}),
     ...(linkedEvent === undefined ? {} : {calendarEvent: linkedEvent}),
+    ...(photos === undefined
+      ? {}
+      : {
+          photoCount: photos.count,
+          ...(photos.captions.length === 0
+            ? {}
+            : {photoCaptions: photos.captions}),
+        }),
     transcript,
   };
 }

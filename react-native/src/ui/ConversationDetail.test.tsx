@@ -783,3 +783,32 @@ test('legacy conversation details name GET calendar event title and attendees', 
   expect(copy).toContain('Alex Chen, sam@example.com');
   expect(copy).toContain('3:00 PM – 4:00 PM');
 });
+
+test('legacy conversation details name GET photo counts and captions', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        photoCount: 3,
+        photoCaptions: ['Whiteboard notes'],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('3 photos');
+  expect(copy).toContain('Whiteboard notes');
+});

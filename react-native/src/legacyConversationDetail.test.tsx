@@ -185,6 +185,57 @@ test('fails closed for malformed GET calendar_event', async () => {
   ).rejects.toMatchObject({kind: 'invalid'});
 });
 
+test('keeps GET photo counts and captions and omits empty lists', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: [
+        {description: 'Whiteboard notes'},
+        {description: ' \t'},
+        {id: 'three'},
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    photoCount: 3,
+    photoCaptions: ['Whiteboard notes'],
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: [],
+    }),
+  );
+  const empty = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(empty).not.toHaveProperty('photoCount');
+  expect(empty).not.toHaveProperty('photoCaptions');
+  mockRequest.mockResolvedValue(response(fixture));
+  const missing = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(missing).not.toHaveProperty('photoCount');
+  expect(missing).not.toHaveProperty('photoCaptions');
+});
+
+test('fails closed for malformed GET photos', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: 'not-an-array',
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: [{description: 1}],
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+});
+
 test('keeps GET geolocation address and omits empty or missing locations', async () => {
   mockRequest.mockResolvedValue(
     response({
