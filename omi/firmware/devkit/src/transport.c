@@ -570,7 +570,7 @@ static bool push_to_gatt(struct bt_conn *conn)
         // Recombine packet
         uint32_t id = packet_next_index++;
         uint32_t packet_size =
-            MIN(current_mtu - ATT_NOTIFICATION_HEADER_SIZE - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
+            MIN(bt_gatt_get_mtu(conn) - ATT_NOTIFICATION_HEADER_SIZE - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
         pusher_temp_data[0] = id & 0xFF;
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
@@ -588,7 +588,7 @@ static bool push_to_gatt(struct bt_conn *conn)
             // Log failure
             if (err) {
                 LOG_DBG("bt_gatt_notify failed (err %d)", err);
-                LOG_DBG("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
+                LOG_DBG("MTU: %d, packet_size: %d", bt_gatt_get_mtu(conn), packet_size + NET_BUFFER_HEADER_SIZE);
                 k_sleep(K_MSEC(1));
                 retry_count++;
                 continue;

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Regression test for DevKit BLE audio notification MTU boundary limits.
 
-Validates that pusher chunk sizes reserve ATT_NOTIFICATION_HEADER_SIZE (3 bytes:
-opcode 0x1B + 16-bit handle) in addition to NET_BUFFER_HEADER_SIZE (3 bytes) so that
-bt_gatt_notify payloads never exceed the negotiated ATT MTU.
+Validates that DevKit audio notification chunk sizes reserve ATT_NOTIFICATION_HEADER_SIZE
+(3 bytes: opcode 0x1B + 16-bit handle) in addition to NET_BUFFER_HEADER_SIZE (3 bytes)
+against the negotiated ATT MTU retrieved via bt_gatt_get_mtu(conn).
 """
 
 from __future__ import annotations
@@ -15,20 +15,26 @@ import sys
 import tempfile
 from pathlib import Path
 
+# (mtu, audio_payload_size, transient_failures, sequence_start)
 TEST_CASES = [
+    # Minimum BLE ATT MTU boundary (23 bytes -> 23 - 3 - 3 = 17 bytes max audio per chunk)
     (23, 0, 0, 0),
-    (23, 17, 0, 0),
-    (23, 18, 0, 0),
+    (23, 17, 0, 0),    # Single chunk: exactly 17 bytes audio
+    (23, 18, 0, 0),    # Two chunks: 17 bytes + 1 byte
+    # Default minimum supported MTU in config.h (MINIMAL_PACKET_SIZE = 100)
     (100, 0, 0, 0),
     (100, 80, 0, 0),
-    (100, 94, 0, 0),
-    (100, 95, 0, 0),
+    (100, 94, 0, 0),   # Exactly 1 chunk (100 - 3 - 3 = 94 bytes capacity)
+    (100, 95, 0, 0),   # Boundary: 2 chunks (94 + 1 bytes)
     (100, 102, 0, 0),
     (100, 160, 0, 0),
+    # Intermediate negotiated MTUs
     (128, 122, 0, 0),
     (128, 123, 0, 0),
+    # Standard MTUs (iOS / Android / Max ATT MTU)
     (185, 160, 0, 0),
     (517, 160, 0, 0),
+    # Retry exhaustion and 16-bit sequence counter wraparound
     (100, 160, 2, 65535),
     (100, 80, 3, 0),
 ]
@@ -71,6 +77,11 @@ static bool read_from_tx_queue(void) {
     return true;
 }
 
+static uint16_t bt_gatt_get_mtu(struct bt_conn *conn) {
+    (void)conn;
+    return current_mtu;
+}
+
 static int bt_gatt_notify(struct bt_conn *conn, const struct bt_gatt_attr *attr, const void *data, uint16_t len) {
     (void)conn; (void)attr;
     calls++;
@@ -89,7 +100,7 @@ static int bt_gatt_notify(struct bt_conn *conn, const struct bt_gatt_attr *attr,
 }
 """
 
-C_SUFFIX = r"""
+C_CHECK_CASE = r"""
 static int check_case(uint16_t mtu, uint32_t size, int transient_failures, uint16_t sequence) {
     current_mtu = mtu;
     tx_buffer_size = size;
@@ -121,30 +132,26 @@ static int check_case(uint16_t mtu, uint32_t size, int transient_failures, uint1
            result, received_size, accepted, calls);
     return !ok;
 }
+"""
 
-int main(void) {
+def generate_c_main() -> str:
+    """Generate C main() dynamically from authoritative TEST_CASES list."""
+    invocations = chr(10).join(
+        f"    failed += check_case({mtu}, {size}, {failures}, {sequence});"
+        for mtu, size, failures, sequence in TEST_CASES
+    )
+    total = len(TEST_CASES)
+    return f"""
+int main(void) {{
     int failed = 0;
-    failed += check_case(23, 0, 0, 0);
-    failed += check_case(23, 17, 0, 0);
-    failed += check_case(23, 18, 0, 0);
-    failed += check_case(100, 0, 0, 0);
-    failed += check_case(100, 80, 0, 0);
-    failed += check_case(100, 94, 0, 0);
-    failed += check_case(100, 95, 0, 0);
-    failed += check_case(100, 102, 0, 0);
-    failed += check_case(100, 160, 0, 0);
-    failed += check_case(128, 122, 0, 0);
-    failed += check_case(128, 123, 0, 0);
-    failed += check_case(185, 160, 0, 0);
-    failed += check_case(517, 160, 0, 0);
-    failed += check_case(100, 160, 2, 65535);
-    failed += check_case(100, 80, 3, 0);
-    printf("\n%d of 15 test cases passed (%d failed)\n", 15 - failed, failed);
+{invocations}
+    printf("\n%d of {total} test cases passed (%d failed)\n", {total} - failed, failed);
     return failed ? 1 : 0;
-}
+}}
 """
 
 def verify_source_tripwire(source_path: Path) -> bool:
+    """Static tripwire: verify that DevKit source code uses bt_gatt_get_mtu(conn) and subtracts headers."""
     print(f"[STATIC TRIPWIRE] Verifying firmware source contract in {source_path.name}...")
     content = source_path.read_text(encoding="utf-8")
 
@@ -152,17 +159,19 @@ def verify_source_tripwire(source_path: Path) -> bool:
         print("FAIL: ATT_NOTIFICATION_HEADER_SIZE definition missing in transport.c")
         return False
 
-    pattern = r"MIN\s*\(\s*current_mtu\s*-\s*ATT_NOTIFICATION_HEADER_SIZE\s*-\s*NET_BUFFER_HEADER_SIZE"
+    pattern = r"MIN\s*\(\s*bt_gatt_get_mtu\s*\(\s*conn\s*\)\s*-\s*ATT_NOTIFICATION_HEADER_SIZE\s*-\s*NET_BUFFER_HEADER_SIZE"
     if not re.search(pattern, content):
-        print("FAIL: packet_size calculation does not subtract ATT_NOTIFICATION_HEADER_SIZE")
+        print("FAIL: packet_size calculation does not subtract ATT_NOTIFICATION_HEADER_SIZE from bt_gatt_get_mtu(conn)")
         return False
 
-    print("PASS: Source code correctly bounds packet_size with ATT_NOTIFICATION_HEADER_SIZE.")
+    print("PASS: Source code correctly bounds packet_size with bt_gatt_get_mtu(conn) and ATT_NOTIFICATION_HEADER_SIZE.")
     return True
 
 def run_c_seam(source_path: Path) -> int:
+    """Extract production push_to_gatt from devkit transport.c and compile with C test seam."""
     cc = shutil.which("cc") or shutil.which("gcc") or shutil.which("clang")
     if not cc:
+        print("\n[NOTE] No native C compiler available on host; falling back to validated behavioral simulation.")
         return -1
 
     print(f"\n[C PRODUCTION SEAM] Compiling push_to_gatt() extracted from {source_path.name} using {cc}...")
@@ -170,25 +179,28 @@ def run_c_seam(source_path: Path) -> int:
     start = source.index("static bool push_to_gatt(struct bt_conn *conn)")
     end = source.index("\n#define OPUS_PREFIX_LENGTH", start)
     function = source[start:end]
-    constants = "\n".join(re.findall(
+    constants = chr(10).join(re.findall(
         r"^#define (?:NET_BUFFER_HEADER_SIZE|ATT_NOTIFICATION_HEADER_SIZE|RING_BUFFER_HEADER_SIZE)\b[^\n]*",
         source,
         flags=re.MULTILINE,
     ))
 
+    c_program = constants + "\n" + C_PREFIX + function + C_CHECK_CASE + generate_c_main()
+
     with tempfile.TemporaryDirectory(prefix="omi-devkit-mtu-check-") as directory:
         c_file = Path(directory) / "check.c"
         executable = Path(directory) / "check"
-        c_file.write_text(constants + "\n" + C_PREFIX + function + C_SUFFIX, encoding="utf-8")
+        c_file.write_text(c_program, encoding="utf-8")
         try:
-            subprocess.run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", str(c_file), "-o", str(executable)], check=True)
+            subprocess.run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", str(c_file), "-o", str(executable)], check=True, capture_output=True, text=True)
             res = subprocess.run([str(executable)], check=False)
             return res.returncode
-        except Exception as e:
-            print(f"Warning: C compiler seam failed ({e}), falling back to behavioral simulation.")
-            return -1
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: C production seam compilation failed:\n{e.stderr}")
+            return 1
 
 def run_behavioral_simulation() -> int:
+    """Behavioral simulation of DevKit push_to_gatt with exact buffer content verification."""
     print("\n[BEHAVIORAL SIMULATION] Running simulated GATT MTU notification test cases:")
     NET_BUFFER_HEADER_SIZE = 3
     ATT_NOTIFICATION_HEADER_SIZE = 3
