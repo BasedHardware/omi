@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+from unittest.mock import MagicMock
+
 import anyio
 import pytest
 from mcp.client.session import ClientSession
 
-from mcp_server_omi.server import OmiTools, create_server, _get_tools
+from mcp_server_omi.server import OmiTools, _execute_tool, _get_tools, create_server
 
 
 @pytest.fixture
@@ -62,3 +65,18 @@ async def test_server_session_list_tools() -> None:
             assert OmiTools.GET_CONVERSATION_BY_ID in tool_names
             assert OmiTools.SEARCH_CONVERSATIONS in tool_names
             tg.cancel_scope.cancel()
+
+
+@pytest.mark.anyio
+async def test_execute_tool_redacts_api_key_in_logs(monkeypatch: pytest.MonkeyPatch) -> None:
+    mock_logger = MagicMock(spec=logging.Logger)
+    monkeypatch.setattr("mcp_server_omi.server.get_memories", lambda *args, **kwargs: [])
+    await _execute_tool(
+        OmiTools.GET_MEMORIES,
+        {"api_key": "secret_key_123", "offset": 0, "limit": 10},
+        mock_logger,
+    )
+    mock_logger.info.assert_called_once()
+    logged_msg = mock_logger.info.call_args[0][0]
+    assert "secret_key_123" not in logged_msg
+    assert "***" in logged_msg

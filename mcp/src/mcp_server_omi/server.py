@@ -323,7 +323,8 @@ def _get_tools() -> list[Tool]:
 
 
 async def _execute_tool(name: str, arguments: dict, logger: logging.Logger) -> list[TextContent]:
-    logger.info(f"Calling tool: {name} with arguments: {arguments}")
+    log_args = {k: (v if k != "api_key" else "***") for k, v in arguments.items()}
+    logger.info(f"Calling tool: {name} with arguments: {log_args}")
 
     api_key = arguments.get("api_key") or os.getenv("OMI_API_KEY")
     if not api_key:
