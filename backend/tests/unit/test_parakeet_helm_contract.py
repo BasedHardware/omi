@@ -208,7 +208,7 @@ def test_rendered_stream_release_has_failure_reserve_hpa_and_drain_contract(envi
     pdb = _document(documents, 'PodDisruptionBudget')
 
     assert hpa['spec']['minReplicas'] == expected_min
-    assert hpa['spec']['maxReplicas'] == (4 if environment == 'dev' else 150)
+    assert hpa['spec']['maxReplicas'] == (4 if environment == 'dev' else 125)
     metrics = {
         metric['pods']['metric']['name']: metric['pods']['target']['averageValue']
         for metric in hpa['spec']['metrics']

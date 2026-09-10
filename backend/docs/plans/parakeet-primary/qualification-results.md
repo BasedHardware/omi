@@ -46,7 +46,7 @@ The attempt was canceled after retaining the failed stream artifact, before all 
 
 Repeat with the same immutable corrected image at a ten-stream admission cap and eight-stream operating target, testing levels 1, 5, 8 and 10, sustained ten-stream replay and rejection above the cap. Explicitly set `PARAKEET_MAX_SPEECH_S=5` to match deployment. Four requested/six allowed CPUs, model identity, memory, fixture and the four-second segment-end latency gate remain unchanged. A contract test now compares the benchmark's model, inference mode, utterance limit, CUDA graph setting and resource budget against the deployment values.
 
-The revised fleet prescription is 99 warm L4 replicas: `ceil(600 × 1.30 / 8) + 1`. Its maximum is 150 plus one surge GPU. This is still provisional until the matched lower-capacity run passes. At public reference rates it costs approximately $61,691/month for compute alone; the cost review explicitly rejects a savings claim. A merge must not activate an undersized fleet by retaining the old 40-node arithmetic.
+The revised fleet prescription is 99 warm L4 replicas: `ceil(600 × 1.30 / 8) + 1`. Its maximum is 125 plus one surge GPU. This is still provisional until the matched lower-capacity run passes. At public reference rates it costs approximately $61,691/month for compute alone; the cost review explicitly rejects a savings claim. A merge must not activate an undersized fleet by retaining the old 40-node arithmetic.
 
 ## Efficiency prescription
 

@@ -73,7 +73,7 @@ latency, and queueing provide the user-path corroboration.
 ## Dedicated realtime deployment
 
 Apply the environment's stream overlay after its base Parakeet values. The
-production floor/ceiling is 99/150, and the node pool needs room for 151 GPUs
+production floor/ceiling is 99/125, and the node pool needs room for 126 GPUs
 including rolling surge; development uses 2/4 and five nodes. The deployment
 must verify actual warm replicas and metric availability before routing.
 The target of 8 streams and admission cap of 10 require exact-image GPU

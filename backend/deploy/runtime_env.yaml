@@ -207,7 +207,7 @@ environments:
       parakeet:
         env:
           PARAKEET_STREAM_CAPACITY:
-            value: '25'
+            value: '10'
             category: reliability
           PARAKEET_STREAM_ALLOCATION_PERCENT:
             value: '100'
@@ -219,7 +219,7 @@ environments:
             value: stream
             category: runtime_identity
           PARAKEET_STREAM_CAPACITY:
-            value: '25'
+            value: '10'
             category: reliability
           PARAKEET_STREAM_ALLOCATION_PERCENT:
             value: '100'
@@ -1549,7 +1549,7 @@ environments:
       parakeet:
         env:
           PARAKEET_STREAM_CAPACITY:
-            value: '25'
+            value: '10'
             category: reliability
           PARAKEET_STREAM_ALLOCATION_PERCENT:
             value: '100'
@@ -1561,7 +1561,7 @@ environments:
             value: stream
             category: runtime_identity
           PARAKEET_STREAM_CAPACITY:
-            value: '25'
+            value: '10'
             category: reliability
           PARAKEET_STREAM_ALLOCATION_PERCENT:
             value: '100'

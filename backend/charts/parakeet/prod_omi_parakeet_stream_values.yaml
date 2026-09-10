@@ -45,7 +45,7 @@ ingress:
 autoscaling:
   enabled: true
   minReplicas: 99
-  maxReplicas: 150
+  maxReplicas: 125
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 0
