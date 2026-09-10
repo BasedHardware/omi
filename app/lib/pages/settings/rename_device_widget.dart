@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -71,6 +72,7 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
                   controller: nameController,
                   autofocus: true,
                   textInputAction: TextInputAction.done,
+                  inputFormatters: [LengthLimitingTextInputFormatter(32)],
                   onSubmitted: (_) => isSaving ? null : _save(),
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                   decoration: InputDecoration(

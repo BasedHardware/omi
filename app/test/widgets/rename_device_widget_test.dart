@@ -91,6 +91,20 @@ void main() {
     expect(SharedPreferencesUtil().getDeviceCustomName(_deviceId), isNull);
   });
 
+  testWidgets('caps the typed name so long names cannot overflow the settings row', (tester) async {
+    final results = await openDialog(tester);
+
+    await tester.enterText(
+      find.byKey(const Key('rename_device_field')),
+      'My extremely long omi pendant name for the kitchen table',
+    );
+    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.pumpAndSettle();
+
+    expect(SharedPreferencesUtil().getDeviceCustomName(_deviceId)!.length, 32);
+    expect(results.single, isTrue);
+  });
+
   testWidgets('cancel leaves the stored name untouched', (tester) async {
     await SharedPreferencesUtil().setDeviceCustomName(_deviceId, 'Studio Pendant');
 
