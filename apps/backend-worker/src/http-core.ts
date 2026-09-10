@@ -32,6 +32,7 @@ import {
 import {
   appendDeviceSessionAudioBatch,
   completeDeviceSession,
+  DEVICE_SESSION_ID,
   listDeviceSessions,
   openDeviceSession,
   parseDeviceSessionAudioBatch,
@@ -766,6 +767,8 @@ export async function handleDeviceSessionOpen(
 export async function handleDeviceSessionAudio(
   context: CoreContext
 ): Promise<Response> {
+  const pathError = listenSessionPathError(context.req.param("id"));
+  if (pathError !== null) return pathError;
   const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
   if (db === undefined)
@@ -806,6 +809,8 @@ export async function handleDeviceSessionAudio(
 export async function handleDeviceSessionComplete(
   context: CoreContext
 ): Promise<Response> {
+  const pathError = listenSessionPathError(context.req.param("id"));
+  if (pathError !== null) return pathError;
   const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
   if (db === undefined)
@@ -1010,9 +1015,17 @@ function listenTranscriptResponse(
   );
 }
 
+function listenSessionPathError(sessionId: string): Response | null {
+  return DEVICE_SESSION_ID.test(sessionId)
+    ? null
+    : backendError("not_found", "none", 404);
+}
+
 export async function handleTranscription(
   context: CoreContext
 ): Promise<Response> {
+  const pathError = listenSessionPathError(context.req.param("id"));
+  if (pathError !== null) return pathError;
   if (context.env.DB === undefined)
     return backendError("service_unavailable", "retry", 503, true, {
       "retry-after": "1",
@@ -1033,6 +1046,8 @@ export async function handleTranscription(
 export async function handleTranscribe(
   context: CoreContext
 ): Promise<Response> {
+  const pathError = listenSessionPathError(context.req.param("id"));
+  if (pathError !== null) return pathError;
   const { DB, ATTACHMENTS, AI } = context.env;
   if (DB === undefined)
     return backendError("service_unavailable", "retry", 503, true, {

@@ -44,10 +44,11 @@ function isBoundedString(value: unknown, maxLength: number): value is string {
   );
 }
 
+export const DEVICE_SESSION_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
 function isSessionId(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
-    value
-  );
+  return DEVICE_SESSION_ID.test(value);
 }
 
 export function parseDeviceSessionCreate(
@@ -71,9 +72,7 @@ export function parseDeviceSessionCreate(
     return null;
   if (
     typeof item["captureId"] !== "string" ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
-      item["captureId"]
-    )
+    !DEVICE_SESSION_ID.test(item["captureId"])
   )
     return null;
   if (

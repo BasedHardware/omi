@@ -595,6 +595,72 @@ describe("device session request validators", () => {
     expect((await complete.json()) as object).toEqual(missing);
   });
 
+  test("illegal capture session path ids use production Listen not_found", async () => {
+    const grammar = {
+      error: {
+        code: "not_found",
+        retryable: false,
+        action: "none",
+      },
+    };
+    const audioBody = JSON.stringify({
+      chunks: [
+        {
+          chunkIndex: 0,
+          bytesBase64: btoa(String.fromCharCode(0, 0, 0, 128, 129)),
+        },
+      ],
+    });
+    for (const illegalId of [
+      "not-a-uuid",
+      "aaaaaaaa-aaaa-1aaa-8aaa-aaaaaaaaaaaa",
+    ]) {
+      const transcript = await fetchWorker(
+        `/v1/device-sessions/${illegalId}/transcript`,
+        { headers: authenticatedHeaders }
+      );
+      expect(transcript.status).toBe(404);
+      expect(transcript.headers.get("retry-after")).toBeNull();
+      expect((await transcript.json()) as object).toEqual(grammar);
+      const transcribe = await fetchWorker(
+        `/v1/device-sessions/${illegalId}/transcribe`,
+        { method: "POST", headers: authenticatedHeaders }
+      );
+      expect(transcribe.status).toBe(404);
+      expect(transcribe.headers.get("retry-after")).toBeNull();
+      expect((await transcribe.json()) as object).toEqual(grammar);
+      const audio = await fetchWorker(
+        `/v1/device-sessions/${illegalId}/audio`,
+        {
+          method: "POST",
+          headers: authenticatedHeaders,
+          body: audioBody,
+        }
+      );
+      expect(audio.status).toBe(404);
+      expect(audio.headers.get("retry-after")).toBeNull();
+      expect((await audio.json()) as object).toEqual(grammar);
+      const malformedAudio = await fetchWorker(
+        `/v1/device-sessions/${illegalId}/audio`,
+        {
+          method: "POST",
+          headers: authenticatedHeaders,
+          body: "{",
+        }
+      );
+      expect(malformedAudio.status).toBe(404);
+      expect(malformedAudio.headers.get("retry-after")).toBeNull();
+      expect((await malformedAudio.json()) as object).toEqual(grammar);
+      const complete = await fetchWorker(
+        `/v1/device-sessions/${illegalId}/complete`,
+        { method: "POST", headers: authenticatedHeaders }
+      );
+      expect(complete.status).toBe(404);
+      expect(complete.headers.get("retry-after")).toBeNull();
+      expect((await complete.json()) as object).toEqual(grammar);
+    }
+  });
+
   test("capture write 409s use production Listen device_session_conflict", async () => {
     const conflict = {
       error: {
