@@ -5,8 +5,9 @@ Tools for accessing screen/computer activity data from the desktop app.
 import contextvars
 import json
 import math
+import os
 import re
-from datetime import datetime, timezone, tzinfo
+from datetime import datetime, timedelta, timezone, tzinfo
 from typing import Any, Dict, List, Optional, Tuple, cast
 from zoneinfo import ZoneInfo
 
@@ -368,6 +369,71 @@ def get_screen_activity_tool(
     return _bounded_screen_activity_result(result.strip(), apps_truncated)
 
 
+def _keyword_screen_matches(
+    uid: str, query: str, start_ts: Optional[int], end_ts: Optional[int], limit: int
+) -> Tuple[List[Dict[str, Any]], int]:
+    """Bounded keyword recall; Firestore timestamps use sortable UTC strings."""
+    from database.read_boundary import parse_snapshots
+    from google.cloud.firestore_v1.base_query import FieldFilter
+
+    end = datetime.fromtimestamp(end_ts, timezone.utc) if end_ts is not None else datetime.now(timezone.utc)
+    start = datetime.fromtimestamp(start_ts, timezone.utc) if start_ts is not None else end - timedelta(days=7)
+    collection = firestore_db.collection('users').document(uid).collection('screen_activity')
+    scan = collection.where(filter=FieldFilter('timestamp', '>=', start.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]))
+    scan = scan.where(filter=FieldFilter('timestamp', '<=', end.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]))
+    snapshots = list(scan.order_by('timestamp', direction='DESCENDING').limit(500).stream())
+    rows = parse_snapshots(
+        dict,
+        snapshots,
+        payload_from_snapshot=lambda snapshot: {**snapshot.to_dict(), '_document_id': snapshot.id},
+    )
+    tokens = set(re.findall(r'[^\W_]+', query.casefold()))
+    ranked = []
+    for row in rows:
+        sid = _validated_screen_evidence_id(row.get('_document_id'))
+        timestamp = _normalized_captured_at_ms(row.get('timestamp'))
+        if sid is None or timestamp is None or not start.timestamp() * 1000 <= timestamp <= end.timestamp() * 1000:
+            continue
+        text = ' '.join(
+            value for key in ('ocrText', 'windowTitle', 'appName') if isinstance(value := row.get(key), str)
+        ).casefold()
+        if tokens and all(token in text for token in tokens):
+            ranked.append((sum(text.count(token) for token in tokens), timestamp, sid, row))
+    ranked.sort(key=lambda item: (-item[0], -item[1], item[2]))
+    matches = [
+        dict(screenshot_id=sid, score='keyword', timestamp=timestamp, appName=row.get('appName', ''), keyword_doc=row)
+        for _, timestamp, sid, row in ranked[:limit]
+    ]
+    return matches, len(snapshots)
+
+
+def _keyword_fallback(
+    uid: str, query: str, start_ts: Optional[int], end_ts: Optional[int], limit: int, reason: str
+) -> Tuple[Optional[List[Dict[str, Any]]], int]:
+    from utils.observability.fallback import record_fallback
+
+    record_fallback(
+        component='agent_tools',
+        from_mode='screen_vectors',
+        to_mode='screen_keyword',
+        reason=reason,
+        outcome='degraded',
+        log=logger,
+    )
+    try:
+        return _keyword_screen_matches(uid, query, start_ts, end_ts, limit)
+    except Exception:
+        # Never include provider errors: they may contain OCR or query text.
+        logger.warning('Screen keyword search unavailable')
+        return None, 0
+
+
+def _screen_vectors_disabled(uid: str) -> bool:
+    """Server-owned account opt-out; absent configuration preserves existing accounts."""
+    disabled = {value.strip() for value in os.getenv('SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS', '').split(',')}
+    return uid in disabled or '*' in disabled
+
+
 @tool
 def search_screen_activity_tool(
     query: str,
@@ -377,9 +443,10 @@ def search_screen_activity_tool(
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
-    Semantic search across the user's screen/computer activity using AI embeddings.
+    Search the user's screen/computer activity using vectors when available, otherwise keywords.
 
-    Finds screenshots where the on-screen text matches the query, even without exact keyword matches.
+    Vector search can find related concepts. Keyword fallback requires every query term and scans
+    at most 500 recent screens in the date window (default last 7 days). Use concise keywords.
 
     **When to use:**
     - "When was I last working on the budget spreadsheet?"
@@ -400,13 +467,13 @@ def search_screen_activity_tool(
     Returns:
         Matching screen activity entries with timestamps, app names, and text snippets.
     """
-    logger.info(f"search_screen_activity_tool called - query='{query}', start_date={start_date}, end_date={end_date}")
+    logger.info("search_screen_activity_tool called")
 
     uid = _get_uid(config)
     if not uid:
         return "Error: User ID not found in configuration"
 
-    limit = min(limit, 20)
+    limit = max(1, min(limit, 20))
 
     # Parse optional date filters to unix timestamps
     start_ts = None
@@ -422,38 +489,41 @@ def search_screen_activity_tool(
         except ValueError:
             pass
 
-    try:
-        query_vector = gemini_embed_query(query)
-    except Exception as e:
-        logger.error(f"search_screen_activity_tool - embedding error: {e}")
-        return f"Error generating search embedding: {e}"
+    fallback_enabled = os.getenv('SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED', 'true').strip().lower() not in {
+        '0',
+        'false',
+        'off',
+    }
+    reason = None
+    matches = []
+    if _screen_vectors_disabled(uid):
+        reason = 'dispatch_disabled'
+    else:
+        try:
+            query_vector = gemini_embed_query(query)
+        except Exception:
+            reason = 'capability_mismatch'
+        else:
+            try:
+                matches = vector_db.search_screen_activity_vectors(
+                    uid=uid, query_vector=query_vector, start_date=start_ts, end_date=end_ts, k=limit
+                )
+            except Exception:
+                reason = 'provider_5xx'
 
-    matches = vector_db.search_screen_activity_vectors(
-        uid=uid,
-        query_vector=query_vector,
-        start_date=start_ts,
-        end_date=end_ts,
-        k=limit,
-    )
-
-    if not matches:
-        return (
-            f"No screen activity found matching '{query}'. "
-            "The user may not have the Omi desktop app installed, or no matching content was captured."
-        )
-
-    # Pinecone metadata is external input.  Keep malformed hits out of the Firestore lookup and
-    # evidence envelope, while preserving the existing result shape for valid hits.
-    valid_matches: List[Dict[str, Any]] = []
-    for raw_match in cast(List[Any], matches):
-        if not isinstance(raw_match, dict) or _validated_screen_evidence_id(raw_match.get('screenshot_id')) is None:
-            continue
-        valid_matches.append(raw_match)
+    valid_matches = [
+        m
+        for m in (matches or [])
+        if isinstance(m, dict) and _validated_screen_evidence_id(m.get('screenshot_id')) is not None
+    ]
     if not valid_matches:
-        return (
-            f"No screen activity found matching '{query}'. "
-            "The matching screen records were unavailable or malformed."
-        )
+        if not fallback_enabled:
+            return 'Screen vector search unavailable or no matches; keyword fallback is disabled.'
+        valid_matches, scanned = _keyword_fallback(uid, query, start_ts, end_ts, limit, reason or 'none')
+        if valid_matches is None:
+            return 'Screen search unavailable: keyword search could not read screens in the requested window.'
+        if not valid_matches:
+            return f'No matches (keyword search over {scanned} screens in window).'
 
     # Fetch full metadata from Firestore for matched screenshot IDs
     screenshot_ids = [cast(str, _validated_screen_evidence_id(m.get('screenshot_id'))) for m in valid_matches]
@@ -461,6 +531,7 @@ def search_screen_activity_tool(
     app_by_id = {sid: m.get('appName', '') for sid, m in zip(screenshot_ids, valid_matches)}
     ts_by_id = {sid: m.get('timestamp', 0) for sid, m in zip(screenshot_ids, valid_matches)}
 
+    docs_by_id = {m['screenshot_id']: m['keyword_doc'] for m in valid_matches if 'keyword_doc' in m}
     display_tz = _resolve_display_tz(uid)
     evidence_references = _evidence_references(config)
     result = f"Found {len(valid_matches)} screen activity matches for '{query}':\n\n"
@@ -483,10 +554,19 @@ def search_screen_activity_tool(
         ocr_preview = ''
         window_title = ''
         try:
-            doc = firestore_db.collection('users').document(uid).collection('screen_activity').document(str(sid)).get()
-            if doc.exists:
-                raw_doc_data = doc.to_dict()
-                doc_data = cast(Dict[str, Any], raw_doc_data) if isinstance(raw_doc_data, dict) else {}
+            from database.read_boundary import parse_snapshot_or_none
+
+            doc_data = docs_by_id.get(sid)
+            if doc_data is None:
+                doc = (
+                    firestore_db.collection('users')
+                    .document(uid)
+                    .collection('screen_activity')
+                    .document(str(sid))
+                    .get()
+                )
+                doc_data = parse_snapshot_or_none(dict, doc)
+            if doc_data is not None:
                 raw_ocr = doc_data.get('ocrText')
                 # Keep the legacy text result's 200-character behavior; the normalized, longer
                 # preview is only for the structured evidence reference.
@@ -496,7 +576,9 @@ def search_screen_activity_tool(
         except Exception:
             pass
 
-        result += f"- **{ts_str}** | {app_name} (relevance: {_bounded_relevance(score)})\n"
+        result += (
+            f"- **{ts_str}** | {app_name} (relevance: {score if score == 'keyword' else _bounded_relevance(score)})\n"
+        )
         if ocr_text:
             result += f"  Text: {ocr_text[:200]}...\n"
         result += "\n"
