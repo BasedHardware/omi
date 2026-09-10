@@ -101,7 +101,7 @@ actor EmbeddingService {
     async throws -> [Float]
   {
     try requireAuthority(authorization)
-    guard !(AIProvider.isLocalProviderActive && !AIProvider.localCloudAssistEnabled) else {
+    guard !AIProvider.isLocalProviderFailingClosed else {
       throw EmbeddingError.localProviderCloudOff
     }
     guard !Self.proxyBaseURL.isEmpty else {
@@ -158,7 +158,7 @@ actor EmbeddingService {
   ///   - texts: Texts to embed
   ///   - taskType: Optional Gemini task type (e.g. "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
   func embedBatch(texts: [String], taskType: String? = nil) async throws -> [[Float]] {
-    guard !(AIProvider.isLocalProviderActive && !AIProvider.localCloudAssistEnabled) else {
+    guard !AIProvider.isLocalProviderFailingClosed else {
       throw EmbeddingError.localProviderCloudOff
     }
     guard !Self.proxyBaseURL.isEmpty else {

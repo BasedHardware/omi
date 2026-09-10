@@ -153,6 +153,19 @@ struct AIProvider: Identifiable {
     isLocalProviderActive && localCloudAssistMode == .cloud
   }
 
+  /// True when the Local provider is active *and* the user has not opted
+  /// cloud-assisted features on: the fail-closed condition every gated
+  /// network call site checks before it may send content off the machine.
+  /// Named so the seven call sites that used to spell out
+  /// `isLocalProviderActive && !localCloudAssistEnabled` (GeminiClient,
+  /// ProactiveLaneClient, EmbeddingService's embed/embedBatch,
+  /// ChatToolExecutor's web_search, and AppState+TrialPaywall's screen-capture
+  /// exemption/popup gate) share one definition, so a future change to the
+  /// condition lands in one place instead of seven.
+  static var isLocalProviderFailingClosed: Bool {
+    isLocalProviderActive && !localCloudAssistEnabled
+  }
+
   /// Whether a connector-synthesis call site (Apple Notes, Calendar, Gmail
   /// memory synthesis, or AI-profile synthesis) should skip its network call
   /// entirely. True only when the Local provider is active *and* the user
