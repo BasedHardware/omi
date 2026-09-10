@@ -154,6 +154,7 @@ describe("kernel ContextSnapshot", () => {
     expect(full.deliveryMode).toBe("full");
     expect(full.rendered).toContain("delta canonical turn 1");
     expect(full.rendered).toContain("delta canonical turn 64");
+    expect(full.rendered).toBe(renderContextSnapshot(first, "main_chat", "coordinator"));
 
     recordJournalTurn(store, {
       ownerId: "owner-delta",
@@ -173,6 +174,9 @@ describe("kernel ContextSnapshot", () => {
     expect(delta.rendered).toContain('"includedTurnCount":1');
     expect(delta.rendered).toContain("delta canonical turn 65");
     expect(delta.rendered).not.toContain("delta canonical turn 2");
+    // A new turn changes contextPlan's dynamicContextIdentity, so contextPlan
+    // (and capabilities, static here) still ride along on this delta.
+    expect(delta.rendered).toContain('"contextPlan"');
 
     updateJournalTurn(store, {
       ownerId: "owner-delta",
@@ -244,6 +248,203 @@ describe("kernel ContextSnapshot", () => {
     expect(result.rendered).toContain("shrink canonical turn 3");
     expect(result.rendered).toContain("shrink canonical turn 6");
     expect(result.rendered).not.toContain("shrink canonical turn 1");
+    expect(result.rendered).toBe(renderContextSnapshot(afterShrink, "main_chat", "coordinator"));
+    store.close();
+  });
+
+  it("omits unchanged sourceOutcomes from delta delivery by payloadHash+outcome, resends on payload or expiry change, and tracks state across deliveries", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-sources",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "sources" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    recordJournalTurn(store, {
+      ownerId: "owner-sources",
+      conversationId: surface.conversationId,
+      turnId: "sources-turn-1",
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "sources canonical turn 1",
+      contentBlocks: [],
+      createdAtMs: 1,
+    });
+    updateContextSource(store, {
+      ownerId: "owner-sources",
+      sessionId: surface.agentSessionId,
+      source: "memories",
+      sourceRevision: "1",
+      outcome: "available",
+      capturedAtMs: 1,
+      expiresAtMs: 500,
+      payload: { items: [{ id: "m1", text: "memory-content-v1" }] },
+    }, 1);
+    updateContextSource(store, {
+      ownerId: "owner-sources",
+      sessionId: surface.agentSessionId,
+      source: "identity",
+      sourceRevision: "1",
+      outcome: "available",
+      capturedAtMs: 1,
+      payload: { name: "Ari" },
+    }, 1);
+
+    const first = buildContextSnapshot(store, surface.agentSessionId, "owner-sources", 10);
+    const full = renderContextSnapshotForBinding(first, "main_chat", "coordinator");
+    expect(full.deliveryMode).toBe("full");
+    expect(full.rendered).toContain("memory-content-v1");
+    expect(full.rendered).toContain('"name":"Ari"');
+
+    // Second delivery: a new turn arrives, both sources are untouched -> both
+    // are omitted from sourceOutcomes and listed as unchanged by id.
+    recordJournalTurn(store, {
+      ownerId: "owner-sources",
+      conversationId: surface.conversationId,
+      turnId: "sources-turn-2",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "sources canonical turn 2",
+      contentBlocks: [],
+      createdAtMs: 11,
+    });
+    const second = buildContextSnapshot(store, surface.agentSessionId, "owner-sources", 20);
+    const delta1 = renderContextSnapshotForBinding(second, "main_chat", "coordinator", full.next);
+    expect(delta1.deliveryMode).toBe("delta");
+    expect(delta1.rendered).toContain("sources canonical turn 2");
+    expect(delta1.rendered).not.toContain("memory-content-v1");
+    expect(delta1.rendered).not.toContain('"name":"Ari"');
+    const delta1Payload = deltaPayload(delta1.rendered);
+    expect(delta1Payload.contextDelivery.includedTurnCount).toBe(1);
+    expect(delta1Payload.contextDelivery.unchangedSources).toEqual(
+      expect.arrayContaining(["identity", "memories"]),
+    );
+    expect(delta1Payload.sourceOutcomes.some((entry) => entry.source === "memories")).toBe(false);
+    expect(delta1Payload.sourceOutcomes.some((entry) => entry.source === "identity")).toBe(false);
+
+    // Third delivery: memories' payload changes (new payloadHash) -> resent;
+    // identity is still untouched -> stays omitted.
+    updateContextSource(store, {
+      ownerId: "owner-sources",
+      sessionId: surface.agentSessionId,
+      source: "memories",
+      sourceRevision: "2",
+      outcome: "available",
+      capturedAtMs: 21,
+      payload: { items: [{ id: "m1", text: "memory-content-v2" }] },
+    }, 21);
+    const third = buildContextSnapshot(store, surface.agentSessionId, "owner-sources", 30);
+    const delta2 = renderContextSnapshotForBinding(third, "main_chat", "coordinator", delta1.next);
+    expect(delta2.deliveryMode).toBe("delta");
+    expect(delta2.rendered).toContain("memory-content-v2");
+    expect(delta2.rendered).not.toContain('"name":"Ari"');
+    const delta2Payload = deltaPayload(delta2.rendered);
+    expect(delta2Payload.contextDelivery.unchangedSources).toEqual(expect.arrayContaining(["identity"]));
+    expect(delta2Payload.contextDelivery.unchangedSources).not.toContain("memories");
+
+    // Fourth delivery: memories is refreshed again with a near expiry, still
+    // fresh at render time -> resent (new payloadHash).
+    updateContextSource(store, {
+      ownerId: "owner-sources",
+      sessionId: surface.agentSessionId,
+      source: "memories",
+      sourceRevision: "3",
+      outcome: "available",
+      capturedAtMs: 31,
+      expiresAtMs: 40,
+      payload: { items: [{ id: "m1", text: "memory-content-v3" }] },
+    }, 31);
+    const fourth = buildContextSnapshot(store, surface.agentSessionId, "owner-sources", 35);
+    const delta3 = renderContextSnapshotForBinding(fourth, "main_chat", "coordinator", delta2.next);
+    expect(delta3.rendered).toContain("memory-content-v3");
+
+    // Fifth delivery: memories has now expired past its expiresAtMs=40. The
+    // kernel resolves expiry into outcome/payload upstream without
+    // recomputing payloadHash, so payloadHash alone would say "unchanged"
+    // here; the outcome flip to "unavailable" must still force a resend.
+    const fifth = buildContextSnapshot(store, surface.agentSessionId, "owner-sources", 45);
+    const delta4 = renderContextSnapshotForBinding(fifth, "main_chat", "coordinator", delta3.next);
+    expect(delta4.deliveryMode).toBe("delta");
+    const delta4Payload = deltaPayload(delta4.rendered);
+    const memoriesEntry = delta4Payload.sourceOutcomes.find((entry) => entry.source === "memories");
+    expect(memoriesEntry?.outcome).toBe("unavailable");
+    expect(delta4Payload.contextDelivery.unchangedSources).not.toContain("memories");
+
+    // Sixth delivery: nothing changes at all (same turn set, same sources) ->
+    // every source, including the just-expired memories, is unchanged
+    // relative to the immediately preceding delivery and fully omitted.
+    const sixth = buildContextSnapshot(store, surface.agentSessionId, "owner-sources", 50);
+    const delta5 = renderContextSnapshotForBinding(sixth, "main_chat", "coordinator", delta4.next);
+    expect(delta5.deliveryMode).toBe("delta");
+    const delta5Payload = deltaPayload(delta5.rendered);
+    expect(delta5Payload.sourceOutcomes).toEqual([]);
+    expect(delta5Payload.contextDelivery.unchangedSources).toEqual(
+      expect.arrayContaining(["identity", "memories"]),
+    );
+    expect(delta5Payload.contextDelivery.includedTurnCount).toBe(0);
+    store.close();
+  });
+
+  it("omits unchanged contextPlan and capabilities from a delta with no turn changes", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-sections",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "sections" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    recordJournalTurn(store, {
+      ownerId: "owner-sections",
+      conversationId: surface.conversationId,
+      turnId: "sections-turn-1",
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "sections canonical turn 1",
+      contentBlocks: [],
+      createdAtMs: 1,
+    });
+    updateContextSource(store, {
+      ownerId: "owner-sections",
+      sessionId: surface.agentSessionId,
+      source: "memories",
+      sourceRevision: "1",
+      outcome: "available",
+      capturedAtMs: 1,
+      payload: { items: [{ id: "m1", text: "memory-content" }] },
+    }, 1);
+
+    const first = buildContextSnapshot(store, surface.agentSessionId, "owner-sections", 10);
+    const full = renderContextSnapshotForBinding(first, "main_chat", "coordinator");
+    expect(full.deliveryMode).toBe("full");
+
+    // Only a source changes; the turn set (and therefore contextPlan) and
+    // capabilities are identical to the previous delivery.
+    updateContextSource(store, {
+      ownerId: "owner-sections",
+      sessionId: surface.agentSessionId,
+      source: "memories",
+      sourceRevision: "2",
+      outcome: "available",
+      capturedAtMs: 11,
+      payload: { items: [{ id: "m1", text: "memory-content-v2" }] },
+    }, 11);
+    const second = buildContextSnapshot(store, surface.agentSessionId, "owner-sections", 20);
+    const delta = renderContextSnapshotForBinding(second, "main_chat", "coordinator", full.next);
+
+    expect(delta.deliveryMode).toBe("delta");
+    expect(delta.rendered).toContain("memory-content-v2");
+    const payload = deltaPayload(delta.rendered);
+    expect(payload.contextDelivery.unchangedSections).toEqual(
+      expect.arrayContaining(["contextPlan", "capabilities"]),
+    );
+    expect(Object.hasOwn(payload, "contextPlan")).toBe(false);
+    expect(Object.hasOwn(payload, "capabilities")).toBe(false);
+    expect(delta.rendered).not.toContain("semanticGuidanceVersion");
+    expect(delta.rendered).not.toContain("manifestDigest");
     store.close();
   });
 
@@ -1058,6 +1259,25 @@ describe("kernel ContextSnapshot", () => {
     store.close();
   });
 });
+
+interface DeltaPayload {
+  contextDelivery: {
+    mode: string;
+    retainedTurnCount: number;
+    includedTurnCount: number;
+    unchangedSources: string[];
+    unchangedSections: string[];
+  };
+  sourceOutcomes: Array<{ source: string; outcome: string; payload: unknown }>;
+}
+
+/** The delta JSON block is the last line of a delta `rendered` string (see
+ * renderContextSnapshotForBinding's header + json layout). */
+function deltaPayload(rendered: string): DeltaPayload {
+  const lastLine = rendered.split("\n").at(-1);
+  if (!lastLine) throw new Error("delta rendering is missing its JSON payload line");
+  return JSON.parse(lastLine) as DeltaPayload;
+}
 
 function journalTurn(
   ownerId: string,
