@@ -200,7 +200,7 @@ for (const adapter of adapters) {
       d1Mock.prepare = () => {
         throw new Error("test database failure");
       };
-      const response = await adapter.fetch("/v1/settings", {
+      const response = await adapter.fetch("/v1/conversations", {
         headers: authenticatedHeaders,
       });
       expect(response.status).toBe(500);

@@ -582,9 +582,15 @@ export async function handleSettings(context: CoreContext): Promise<Response> {
     return backendError("service_unavailable", "retry", 503, true, {
       "retry-after": "60",
     });
-  return json(
-    await readSettings(db, resolved.accountId, context.env.STAGING_CHAT_LIMIT)
-  );
+  try {
+    return json(
+      await readSettings(db, resolved.accountId, context.env.STAGING_CHAT_LIMIT)
+    );
+  } catch {
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "60",
+    });
+  }
 }
 
 export async function handleChatHistory(

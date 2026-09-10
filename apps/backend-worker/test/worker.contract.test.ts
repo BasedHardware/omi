@@ -3449,6 +3449,60 @@ describe("settings entitlement admission contract", () => {
     expect(extra.headers.get("retry-after")).toBeNull();
   });
 
+  test("Settings GET store throw is production retryable unavailable", async () => {
+    const throwingDb = {
+      prepare() {
+        throw new Error("d1 store failed");
+      },
+    };
+    const unavailable = {
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    };
+    const storeThrow = await handleSettings(
+      coreContext({
+        env: { ...env, DB: throwingDb } as never,
+        request: new Request("https://worker.test/v1/settings", {
+          headers: {
+            authorization: "Bearer test-token",
+            "x-omi-client-id": "test-account",
+          },
+        }),
+        routePath: "/v1/settings",
+        params: {},
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(storeThrow.status).toBe(503);
+    expect(storeThrow.headers.get("retry-after")).toBe("60");
+    expect((await storeThrow.json()) as unknown).toEqual(unavailable);
+
+    const throughWorker = await fetchWorker(
+      "/v1/settings",
+      { headers: authenticatedHeaders },
+      { ...env, DB: throwingDb }
+    );
+    expect(throughWorker.status).toBe(503);
+    expect(throughWorker.headers.get("retry-after")).toBe("60");
+    expect((await throughWorker.json()) as unknown).toEqual(unavailable);
+
+    const signedOut = await fetchWorker("/v1/settings", {}, { ...env, DB: throwingDb });
+    expect(signedOut.status).toBe(200);
+    expect((await signedOut.json()) as unknown).toEqual({
+      identity: null,
+      entitlement: null,
+    });
+
+    const extra = await fetchWorker("/v1/settings?appearance=dark", {
+      headers: authenticatedHeaders,
+    }, { ...env, DB: throwingDb });
+    expect(extra.status).toBe(400);
+    expect(extra.headers.get("retry-after")).toBeNull();
+  });
+
   test("Settings renders the same entitlement consumed by chat admission", async () => {
     const before = await fetchWorker("/v1/settings", {
       headers: authenticatedHeaders,
