@@ -1171,6 +1171,71 @@ test('an empty chat bubble keeps history attachment names instead of Message tex
   });
 });
 
+test('chat history names GET image file thumbnails', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-human-photo',
+        text: 'Here is the photo.',
+        sender: 'human',
+        createdAt: Date.now(),
+        generationOutcome: null,
+        attachments: [
+          {
+            id: 'att-photo',
+            displayName: 'photo.png',
+            mediaType: 'image/png',
+            thumbnail: 'https://cdn.example/photo.png',
+          },
+          {
+            id: 'att-local',
+            displayName: 'local.png',
+            mediaType: 'image/png',
+            thumbnail: '/tmp/local.png',
+          },
+          {
+            id: 'att-notes',
+            displayName: 'notes.txt',
+            mediaType: 'text/plain',
+            thumbnail: 'https://cdn.example/notes.png',
+          },
+        ],
+      }}
+      reduceMotion
+    />,
+  );
+  const uris = renderer.root
+    .findAll(node => String(node.type) === 'Image')
+    .map(node => node.props.source?.uri);
+  expect(uris).toEqual(['https://cdn.example/photo.png']);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'photo.png',
+    ).length,
+  ).toBeGreaterThan(0);
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies.some(copy => copy.includes('photo.png'))).toBe(true);
+  expect(copies).not.toContain('https://cdn.example/photo.png');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('a whitespace-only human chat message says Message text unavailable instead of a blank bubble', () => {
   const renderer = render(
     <ChatMessageRow

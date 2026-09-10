@@ -1,8 +1,10 @@
 import React, {memo, useEffect, useRef} from 'react';
-import {Animated, Easing, Text, View} from 'react-native';
+import {Animated, Easing, Image, Text, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {
   chatAppAttributionCopy,
+  chatAttachmentDisplayName,
+  chatAttachmentThumbnailUrl,
   chatClockLabel,
   chatDaySummaryCopy,
   chatMemoryCitationCopy,
@@ -89,6 +91,22 @@ const ChatMessageRow = memo(function ChatMessageRow({
             )}
           </View>
         ) : null}
+        {(message.attachments ?? []).flatMap((attachment, index) => {
+          const uri = chatAttachmentThumbnailUrl(attachment);
+          if (uri === null) {
+            return [];
+          }
+          return [
+            <Image
+              key={`thumb-${index}`}
+              accessibilityLabel={chatAttachmentDisplayName(
+                attachment.displayName,
+              )}
+              source={{uri}}
+              style={styles.chatAttachmentImage}
+            />,
+          ];
+        })}
         {message.generationOutcome === 'cancelled' &&
           visibleDisplayText(message.text) !== '' && (
             <Text style={styles.cancelledLabel}>Response stopped</Text>

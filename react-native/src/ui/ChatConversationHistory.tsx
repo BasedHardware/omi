@@ -1,9 +1,11 @@
 import React from 'react';
-import {ActivityIndicator, Text, View} from 'react-native';
+import {ActivityIndicator, Image, Text, View} from 'react-native';
 import {chatHistoryHasOlder} from '../chatClient';
 import {useChatConversationHistory} from '../chatConversationHistory';
 import {
   chatAppAttributionCopy,
+  chatAttachmentDisplayName,
+  chatAttachmentThumbnailUrl,
   chatClockLabel,
   chatDaySummaryCopy,
   chatMemoryCitationCopy,
@@ -108,6 +110,22 @@ export function ChatConversationHistory({
                     style={[styles.conversationTranscriptText, ink]}>
                     {body === '' ? sender : `${sender} · ${body}`}
                   </Text>
+                  {(message.attachments ?? []).flatMap((attachment, index) => {
+                    const uri = chatAttachmentThumbnailUrl(attachment);
+                    if (uri === null) {
+                      return [];
+                    }
+                    return [
+                      <Image
+                        key={`thumb-${index}`}
+                        accessibilityLabel={chatAttachmentDisplayName(
+                          attachment.displayName,
+                        )}
+                        source={{uri}}
+                        style={styles.chatAttachmentImage}
+                      />,
+                    ];
+                  })}
                   {message.generationOutcome === 'cancelled' &&
                   visibleDisplayText(message.text) !== '' ? (
                     <Text style={[styles.conversationDetailField, ink]}>

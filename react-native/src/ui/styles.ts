@@ -569,6 +569,14 @@ export const styles = StyleSheet.create({
     borderColor: '#343434',
     borderWidth: 1,
   },
+  chatAttachmentImage: {
+    backgroundColor: '#2c2c33',
+    borderRadius: 10,
+    height: 88,
+    marginBottom: 6,
+    marginTop: 2,
+    width: 112,
+  },
   chatAvatar: {
     alignItems: 'center',
     height: 40,

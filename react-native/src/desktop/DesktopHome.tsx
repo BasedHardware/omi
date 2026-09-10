@@ -1,6 +1,7 @@
 import React, {useEffect, useMemo, useRef} from 'react';
 import {
   ActivityIndicator,
+  Image,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   ScrollView,
@@ -11,6 +12,8 @@ import {
 import type {ChatMessage} from '../chatClient';
 import {
   chatAppAttributionCopy,
+  chatAttachmentDisplayName,
+  chatAttachmentThumbnailUrl,
   chatClockLabel,
   chatDaySummaryCopy,
   chatMemoryCitationCopy,
@@ -152,6 +155,22 @@ function AskExchange({
                 {body}
               </Text>
             )}
+            {(item.attachments ?? []).flatMap((attachment, index) => {
+              const uri = chatAttachmentThumbnailUrl(attachment);
+              if (uri === null) {
+                return [];
+              }
+              return [
+                <Image
+                  key={`thumb-${index}`}
+                  accessibilityLabel={chatAttachmentDisplayName(
+                    attachment.displayName,
+                  )}
+                  source={{uri}}
+                  style={styles.attachmentImage}
+                />,
+              ];
+            })}
             {item.generationOutcome === 'cancelled' &&
             visibleDisplayText(item.text) !== '' ? (
               <Text style={styles.rowMeta}>Response stopped</Text>
@@ -554,6 +573,12 @@ const styles = StyleSheet.create({
     color: token.color.ink,
     fontFamily: token.font,
     fontSize: token.type.title,
+  },
+  attachmentImage: {
+    backgroundColor: token.color.glassQuiet,
+    borderRadius: 10,
+    height: 88,
+    width: 112,
   },
   pageAction: {minHeight: 44, justifyContent: 'center'},
   taskToggle: {minHeight: 44},

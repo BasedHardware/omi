@@ -29,6 +29,7 @@ import {
   connectionIdentityCopy,
   chatMessageDisplayText,
   chatChartCopy,
+  chatAttachmentThumbnailUrl,
   chatSenderCopy,
   chatDaySummaryCopy,
   chatAppAttributionCopy,
@@ -1535,6 +1536,45 @@ test('chat message copy names GET chart points and omits empty charts', () => {
     chatChartCopy({
       title: 'Talk time',
       points: [{label: ' \t', value: 12}],
+    }),
+  ).toBeNull();
+});
+
+test('chat attachment thumbnails keep http image GET urls and omit local or non-image paths', () => {
+  expect(
+    chatAttachmentThumbnailUrl({
+      mediaType: 'image/png',
+      thumbnail: 'https://cdn.example/photo.png',
+    }),
+  ).toBe('https://cdn.example/photo.png');
+  expect(
+    chatAttachmentThumbnailUrl({
+      mediaType: 'image/jpeg',
+      thumbnail: ' http://cdn.example/photo.jpg ',
+    }),
+  ).toBe('http://cdn.example/photo.jpg');
+  expect(
+    chatAttachmentThumbnailUrl({
+      mediaType: 'image/png',
+      thumbnail: '/tmp/photo.png',
+    }),
+  ).toBeNull();
+  expect(
+    chatAttachmentThumbnailUrl({
+      mediaType: 'image/png',
+      thumbnail: 'file:///tmp/photo.png',
+    }),
+  ).toBeNull();
+  expect(
+    chatAttachmentThumbnailUrl({
+      mediaType: 'text/plain',
+      thumbnail: 'https://cdn.example/notes.png',
+    }),
+  ).toBeNull();
+  expect(
+    chatAttachmentThumbnailUrl({
+      mediaType: 'image/png',
+      thumbnail: ' \t\n',
     }),
   ).toBeNull();
 });

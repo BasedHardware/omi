@@ -1229,6 +1229,21 @@ export function chatAttachmentMediaCopy(mediaType: string | undefined): string {
   return trimmed === '' ? '' : CHAT_ATTACHMENT_MEDIA_COPY[trimmed] ?? '';
 }
 
+export function chatAttachmentThumbnailUrl(attachment: {
+  mediaType?: string;
+  thumbnail?: string;
+}): string | null {
+  const mediaType = attachment.mediaType;
+  if (typeof mediaType !== 'string' || !mediaType.includes('image')) {
+    return null;
+  }
+  const thumbnail = visibleDisplayText(attachment.thumbnail ?? '');
+  if (thumbnail === '' || !/^https?:\/\//i.test(thumbnail)) {
+    return null;
+  }
+  return thumbnail;
+}
+
 export function chatAttachmentSizeCopy(sizeBytes: number | undefined): string {
   if (sizeBytes === undefined) {
     return '';

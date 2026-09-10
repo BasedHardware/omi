@@ -238,6 +238,94 @@ test('old chat history keeps GET files when files_id is present', () => {
   ).toBeUndefined();
 });
 
+test('old chat history keeps GET files thumbnail and omits empty paths', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'file-thumb',
+        sender: 'human',
+        text: 'Here is the photo.',
+        created_at: '2026-09-07T01:02:03Z',
+        files_id: ['att-photo'],
+        files: [
+          {
+            id: 'att-photo',
+            name: 'photo.png',
+            mime_type: 'image/png',
+            openai_file_id: 'file-photo',
+            created_at: '2026-09-07T01:00:00Z',
+            thumbnail: 'https://cdn.example/photo.png',
+          },
+        ],
+      },
+      {
+        id: 'file-empty-thumb',
+        sender: 'human',
+        text: 'No thumb.',
+        created_at: '2026-09-07T01:02:04Z',
+        files_id: ['att-empty'],
+        files: [
+          {
+            id: 'att-empty',
+            name: 'empty.png',
+            mime_type: 'image/png',
+            openai_file_id: 'file-empty',
+            created_at: '2026-09-07T01:00:00Z',
+            thumbnail: ' \t\n',
+          },
+        ],
+      },
+    ]),
+    0,
+  );
+  expect(
+    page.messages.find(row => row.id === 'file-thumb')?.attachments,
+  ).toEqual([
+    {
+      id: 'att-photo',
+      displayName: 'photo.png',
+      mediaType: 'image/png',
+      thumbnail: 'https://cdn.example/photo.png',
+    },
+  ]);
+  expect(
+    page.messages.find(row => row.id === 'file-empty-thumb')?.attachments,
+  ).toEqual([
+    {
+      id: 'att-empty',
+      displayName: 'empty.png',
+      mediaType: 'image/png',
+    },
+  ]);
+});
+
+test('old chat history rejects malformed GET files thumbnail', () => {
+  expect(() =>
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          id: 'bad-thumb',
+          sender: 'ai',
+          text: 'broken',
+          created_at: '2026-09-07T01:02:03Z',
+          files_id: ['att-notes'],
+          files: [
+            {
+              id: 'att-notes',
+              name: 'notes.txt',
+              mime_type: 'text/plain',
+              openai_file_id: 'file-abc',
+              created_at: '2026-09-07T01:00:00Z',
+              thumbnail: 1,
+            },
+          ],
+        },
+      ]),
+      0,
+    ),
+  ).toThrow('Omi chat files are malformed');
+});
+
 test('old chat history keeps GET chart_data points and omits empty charts', () => {
   const page = parseOmiHistory(
     JSON.stringify([

@@ -61,10 +61,20 @@ function parseOmiChatFiles(
     ) {
       throw new Error('Omi chat files are malformed');
     }
+    if (
+      row.thumbnail !== undefined &&
+      row.thumbnail !== null &&
+      typeof row.thumbnail !== 'string'
+    ) {
+      throw new Error('Omi chat files are malformed');
+    }
+    const thumbnail =
+      typeof row.thumbnail === 'string' ? row.thumbnail : undefined;
     return {
       id: row.id,
       displayName: row.name,
       mediaType: row.mime_type,
+      ...(visibleDisplayText(thumbnail ?? '') === '' ? {} : {thumbnail}),
     };
   });
 }

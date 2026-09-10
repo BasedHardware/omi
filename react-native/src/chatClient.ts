@@ -16,6 +16,7 @@ export type ChatMessageAttachment = {
   displayName: string;
   mediaType: string;
   sizeBytes?: number;
+  thumbnail?: string;
 };
 
 export type ChatMessage = {
