@@ -8,7 +8,13 @@ import type {
 import type { ContextSnapshotProjection, OutboundMessage, OutboundMessageDraft } from "../protocol.js";
 import { AdapterRegistry } from "./adapter-registry.js";
 import { generateAgentId } from "./sqlite-store.js";
-import { AdapterRuntimeError, attachWorkerRecycle, failureFromError, type RuntimeFailure } from "./failures.js";
+import {
+  AdapterRuntimeError,
+  attachWorkerRecycle,
+  failureFromError,
+  workerRecycleDisposition,
+  type RuntimeFailure,
+} from "./failures.js";
 import {
   clearOwnerSurfaceState,
   importLegacyMainChatSessions,
@@ -1396,7 +1402,7 @@ export class KernelCore {
           onWorkerBindingInvalidated: () => {
             this.markBindingStale(binding, attempt, "pinned_worker_recycled_after_execution_error");
           },
-          onWorkerRecycled: (_bindingId, outcome) => {
+          onWorkerRecycled: (_bindingId, outcome, originalError) => {
             this.appendEvent({
               sessionId: accepted.session.sessionId,
               runId: accepted.run.runId,
@@ -1411,7 +1417,11 @@ export class KernelCore {
                     ? "recovered"
                     : "binding_stale_failed",
                 bindingStalePersisted: outcome.bindingInvalidationSucceeded,
-                retryDisposition: "next_send",
+                retryDisposition: workerRecycleDisposition({
+                  ...outcome,
+                  canRetry: attemptNo < maxAttempts,
+                  originalError,
+                }),
               },
             });
           },
@@ -1475,6 +1485,37 @@ export class KernelCore {
           retryReason = "stale_binding";
           resumeFromAttemptId = attempt.attemptId;
           continue;
+        }
+        if (workerRecovery) {
+          const retryDisposition = workerRecycleDisposition({
+            stopSucceeded: workerRecovery.stopSucceeded,
+            bindingInvalidationSucceeded: workerRecovery.bindingInvalidationSucceeded,
+            canRetry: attemptNo < maxAttempts,
+            originalError: executionError,
+          });
+          if (retryDisposition === "same_turn") {
+            const failure: RuntimeFailure = {
+              ...failureFromError(executionError, {
+                code: "adapter_execution_failed",
+                source: "adapter_execution",
+                adapterId: attempt.adapterId,
+                retryable: true,
+              }),
+              recoveryAction: "worker_recycled",
+              recoveryOutcome: "recovered",
+              retryDisposition: "same_turn",
+            };
+            this.failAttemptBeforeExecution(
+              attempt,
+              "adapter_execution_failed",
+              failure.userMessage,
+              true,
+              failure,
+            );
+            retryReason = "worker_recycled";
+            resumeFromAttemptId = attempt.attemptId;
+            continue;
+          }
         }
         if (
           !workerRecovery

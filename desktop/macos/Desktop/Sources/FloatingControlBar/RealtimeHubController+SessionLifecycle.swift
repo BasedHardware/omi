@@ -13,6 +13,10 @@ extension RealtimeHubController {
   /// `userInitiated: true` = direct user intent (PTT, launch, input-return);
   /// see `admitWarmRequest` — passive callers cannot clear an away deferral.
   func ensureWarm(userInitiated: Bool = false) {
+    guard !AppBuild.shouldDisableJITQARealtime else {
+      log("RealtimeHub: JIT QA realtime disabled by OMI_JIT_QA_DISABLE_REALTIME")
+      return
+    }
     guard admitWarmRequest(userInitiated: userInitiated) else { return }
     #if DEBUG
       // The local-profile action owns an already-installed hermetic transport.
@@ -407,7 +411,8 @@ extension RealtimeHubController {
         surface: surface,
         ownerID: ownerID,
         continuityKey: continuityKey,
-        terminalReason: revision.terminalReason)
+        terminalReason: revision.terminalReason,
+        answerTextCompleted: revision.answerTextCompleted)
     }
   }
 
@@ -988,11 +993,18 @@ extension RealtimeHubController {
     terminal: VoiceTurnTerminalReason,
     idempotencyKey: String,
     acceptedSpawnOwnerID: String?,
-    delivery: VoiceTurnJournalStatusPolicy.AnswerDelivery = .pending
+    delivery: VoiceTurnJournalStatusPolicy.AnswerDelivery = .pending,
+    answerTextCompleted: Bool? = nil
   ) async -> Bool {
     var journalStatus = VoiceTurnJournalStatusPolicy.status(
       for: terminal, delivery: delivery)
     var terminalReason = journalStatus == .completed ? nil : terminal.rawValue
+    // Whether the journaled row should state that the answer text completed
+    // (only its spoken delivery was cut). Defaults to the caller's capture;
+    // a `.success` write whose answer never drained keeps the sealed-row
+    // revision's `answerTextCompleted: true` below, because that row was
+    // sealed at provider-response-finish.
+    var rowAnswerTextCompleted = answerTextCompleted
     // Delivery re-check at write time: this closure first awaited transcript
     // resolution (bounded by the 20s LID deadline), and the reducer may have
     // terminalized in that window — or even before the funnel was enqueued
@@ -1007,6 +1019,7 @@ extension RealtimeHubController {
     {
       journalStatus = revision.status
       terminalReason = revision.terminalReason
+      rowAnswerTextCompleted = revision.answerTextCompleted
     }
     guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
       log("RealtimeHub: refusing voice journal write after authenticated owner changed")
@@ -1041,7 +1054,8 @@ extension RealtimeHubController {
       assistantText: assistantText,
       continuityKey: idempotencyKey,
       assistantStatus: journalStatus,
-      terminalReason: terminalReason
+      terminalReason: terminalReason,
+      answerTextCompleted: rowAnswerTextCompleted
     ) {
     case .completed(let accepted):
       fenceNativeTurnEvidence(ownerID: ownerID, continuityKey: idempotencyKey)
@@ -1081,6 +1095,7 @@ extension RealtimeHubController {
             continuityKey: idempotencyKey,
             assistantStatus: journalStatus,
             terminalReason: terminalReason,
+            answerTextCompleted: rowAnswerTextCompleted,
             userScreenContext: self.screenContextByContinuityKey[idempotencyKey],
             userEvidence: evidence)
           guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
@@ -1329,7 +1344,8 @@ extension RealtimeHubController {
               terminal: .interruptedByBargeIn,
               idempotencyKey: turn.idempotencyKey,
               acceptedSpawnOwnerID: turn.acceptedSpawnOwnerID,
-              delivery: turn.answerDelivered ? .delivered : .notDelivered) ?? false
+              delivery: turn.answerDelivered ? .delivered : .notDelivered,
+              answerTextCompleted: turn.answerTextCompleted ? true : nil) ?? false
           }
           return await task.value
         },

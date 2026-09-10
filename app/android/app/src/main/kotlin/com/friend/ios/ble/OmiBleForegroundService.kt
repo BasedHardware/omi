@@ -561,15 +561,21 @@ class OmiBleForegroundService : Service() {
             bleManager.flutterApi?.onPeripheralDisconnected(addr, error) {}
         }
 
-        updateNotification("Disconnected")
-        handleRetryLogic(addr, status)
+        // #3328: only claim "Reconnecting..." when a retry is actually scheduled.
+        // Pairing-lost (137), BT off, teardown, or status -1 never retry — an
+        // honest "Disconnected" is better than a stuck reconnect nag.
+        if (handleRetryLogic(addr, status)) {
+            updateNotification("Reconnecting...")
+        } else if (!isDestroying) {
+            updateNotification("Disconnected")
+        }
     }
 
-    private fun handleRetryLogic(address: String, status: Int) {
+    private fun handleRetryLogic(address: String, status: Int): Boolean {
         val addr = address.uppercase()
-        val managed = managedDevices[addr] ?: return
+        val managed = managedDevices[addr] ?: return false
 
-        if (isDestroying || status == -1 || status == 137 || !isBluetoothEnabled) return
+        if (isDestroying || status == -1 || status == 137 || !isBluetoothEnabled) return false
 
         managed.retryCount++
         Log.i(TAG, "Retry #${managed.retryCount} for $addr in ${RECONNECT_DELAY_MS}ms (status=$status)")
@@ -580,6 +586,7 @@ class OmiBleForegroundService : Service() {
         }
         managed.pendingReconnect = runnable
         handler.postDelayed(runnable, RECONNECT_DELAY_MS)
+        return true
     }
 
     // ── Stability timer ──

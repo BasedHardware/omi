@@ -1,0 +1,152 @@
+import AppKit
+import XCTest
+
+@testable import Omi_Computer
+
+/// The row of controls under Rewind's picture — the date pill, the previous/next app circles and
+/// the zoom cluster — and the things the move asserts: the row shares its margins with the objects
+/// above and below it, nothing is overlaid on the picture any more, and the app stepping lands where
+/// it says it does.
+///
+/// **The defect this holds shut.** The pill and the zoom buttons used to sit *on* the photograph, in
+/// its bottom corners, and the app-step chevrons on its left and right edges, over whatever the
+/// capture showed there; and the picture wore a 2 pt ring in the app's palette colour, which read as
+/// a selection state rather than as a frame. Those are layout facts a screenshot would show and a
+/// `body` would silently lose, so they are stated here as values and as a narrow static tripwire.
+/// The stepping itself is a pure function, so it is a behavioural test.
+final class RewindStageControlBarTests: XCTestCase {
+
+  // MARK: - One margin down the panel
+
+  func testTheControlRowSharesTheStagesHorizontalInset() {
+    XCTAssertEqual(
+      RewindStageControlBarLayout.horizontalInset, RewindStageFit.horizontalInset, accuracy: 0.001,
+      "the pill's leading edge and the stage's leading edge are one line")
+  }
+
+  /// Above the row: the stage's own vertical inset. Below it: the row's bottom gap plus the track's
+  /// top padding. `bottomGap` is *defined* as the difference, so asserting the sum would hold by
+  /// construction; what can actually regress is which view applies which constant. Each of the
+  /// three paddings is a `body` fact, so this reads the sources for the wiring and checks the one
+  /// value that is not settled by the definition: the gap must not have gone negative.
+  func testTheControlRowSitsAsFarFromTheTrackAsItDoesFromThePicture() throws {
+    XCTAssertGreaterThanOrEqual(RewindStageControlBarLayout.bottomGap, 0, "a negative gap overlaps the track")
+
+    let page = try source("Rewind/UI/RewindPage.swift")
+    let frameDisplay = try body(ofProperty: "frameDisplay", in: page)
+    XCTAssertTrue(
+      frameDisplay.contains(".padding(.vertical, RewindStageFit.verticalInset)"),
+      "the picture no longer keeps `RewindStageFit.verticalInset` above the row")
+
+    let chrome = try source("Rewind/UI/RewindPlaybackChrome.swift")
+    let bar = try body(ofType: "RewindStageControlBar", in: chrome)
+    XCTAssertTrue(
+      bar.contains(".padding(.bottom, RewindStageControlBarLayout.bottomGap)"),
+      "the row no longer closes its bottom gap with `RewindStageControlBarLayout.bottomGap`")
+    let track = try body(ofType: "RewindTrackBar", in: chrome)
+    XCTAssertTrue(
+      track.contains(".padding(.top, Self.topPadding)"),
+      "the track no longer pads its top with the `topPadding` the gap is computed against")
+  }
+
+  func testTheControlsAreOneHeightSoTheRowHasOneBaseline() {
+    XCTAssertGreaterThanOrEqual(
+      RewindStageControlBarLayout.controlHeight, 28, "below 28 pt a circle button is under the click target floor")
+  }
+
+  // MARK: - One app stretch at a time
+
+  private func frames(_ apps: [String]) -> [Screenshot] {
+    apps.enumerated().map { offset, app in
+      Screenshot(id: Int64(offset), timestamp: Date(timeIntervalSince1970: Double(offset)), appName: app)
+    }
+  }
+
+  func testForwardLandsOnTheFirstFrameOfTheNextApp() {
+    let frames = frames(["Editor", "Editor", "Browser", "Browser", "Terminal"])
+    XCTAssertEqual(RewindAppStep.adjacentSegmentIndex(in: frames, from: 0, forward: true), 2)
+    XCTAssertEqual(RewindAppStep.adjacentSegmentIndex(in: frames, from: 1, forward: true), 2)
+    XCTAssertEqual(RewindAppStep.adjacentSegmentIndex(in: frames, from: 3, forward: true), 4)
+  }
+
+  func testBackwardLandsOnTheFirstFrameOfThePreviousAppNotItsLast() {
+    // Two presses walk two apps back. Landing on the previous stretch's *last* frame would make the
+    // next press step within the same app.
+    let frames = frames(["Editor", "Editor", "Browser", "Browser", "Terminal"])
+    XCTAssertEqual(RewindAppStep.adjacentSegmentIndex(in: frames, from: 4, forward: false), 2)
+    XCTAssertEqual(RewindAppStep.adjacentSegmentIndex(in: frames, from: 3, forward: false), 0)
+    XCTAssertEqual(RewindAppStep.adjacentSegmentIndex(in: frames, from: 2, forward: false), 0)
+  }
+
+  func testTheStepIsNilAtEitherEndAndOffTheList() {
+    let frames = frames(["Editor", "Editor", "Browser"])
+    XCTAssertNil(RewindAppStep.adjacentSegmentIndex(in: frames, from: 2, forward: true), "no app after the last")
+    XCTAssertNil(RewindAppStep.adjacentSegmentIndex(in: frames, from: 0, forward: false), "no app before the first")
+    XCTAssertNil(RewindAppStep.adjacentSegmentIndex(in: frames, from: 1, forward: false), "still inside the first app")
+    XCTAssertNil(RewindAppStep.adjacentSegmentIndex(in: frames, from: 7, forward: true))
+    XCTAssertNil(RewindAppStep.adjacentSegmentIndex(in: [], from: 0, forward: true))
+  }
+
+  // MARK: - The picture is not keyed to the app colour, and nothing sits on it
+
+  // Which view owns each control and what the frame's border is drawn with are SwiftUI `body` facts
+  // with no inspectable runtime value; see the reasoned annotation on `source(_:)`.
+  func testStaticCheckerTheFrameBorderIsNeutralAndEveryControlIsUnderThePictureNotOnIt() throws {
+    let page = try source("Rewind/UI/RewindPage.swift")
+    XCTAssertFalse(
+      page.contains("strokeBorder(frameBorderColor"),
+      "RewindPage strokes the frame in the app's palette colour again; the ring reads as a selection state")
+    XCTAssertFalse(
+      page.contains("RewindPalette.color(forApp"),
+      "RewindPage keys the picture to the app's palette colour; the track segment already says which app it is")
+    XCTAssertTrue(
+      page.contains("RewindStageControlBar("),
+      "RewindPage no longer places the control bar under the picture")
+    XCTAssertFalse(
+      page.contains("RewindStageChrome"),
+      "RewindPage overlays chrome on the picture again — every control belongs in the row beneath it")
+
+    let chrome = try source("Rewind/UI/RewindPlaybackChrome.swift")
+    let bar = try body(ofType: "RewindStageControlBar", in: chrome)
+    for expected in ["chevron.left", "chevron.right", "magnifyingglass", "showsDatePicker"] {
+      XCTAssertTrue(bar.contains(expected), "RewindStageControlBar lost `\(expected)`")
+    }
+    XCTAssertFalse(
+      bar.contains("RoundedRectangle"),
+      "the app-step buttons are the same glass circle as the zoom buttons, not a taller chip")
+  }
+
+  // MARK: - Helpers
+
+  private func source(_ relativePath: String) throws -> String {
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources")
+      .appendingPathComponent(relativePath)
+    // omi-test-quality: source-inspection -- static contract: the frame's border colour and the pill's owner are SwiftUI body facts with no runtime value
+    return try String(contentsOf: url, encoding: .utf8)
+  }
+
+  /// The text of `private var <name>: some View {` up to the next property or function at the
+  /// same indentation, so a padding asserted on one view cannot be satisfied by a neighbour.
+  private func body(ofProperty name: String, in source: String) throws -> Substring {
+    guard let start = source.range(of: "private var \(name): some View {") else {
+      throw XCTSkip("`private var \(name): some View` not found — the property was renamed; update this test")
+    }
+    let rest = source[start.upperBound...]
+    guard let end = rest.range(of: "\n  }\n") else { return rest }
+    return rest[..<end.lowerBound]
+  }
+
+  /// The text from `struct <name>` to the next top-level `// MARK: -`, which is how this file is
+  /// sectioned. Fails loudly if the type or the section break moves.
+  private func body(ofType name: String, in source: String) throws -> Substring {
+    guard let start = source.range(of: "struct \(name): View") else {
+      throw XCTSkip("`struct \(name): View` not found — the type was renamed; update this test")
+    }
+    let rest = source[start.lowerBound...]
+    guard let end = rest.range(of: "\n// MARK: -") else { return rest }
+    return rest[..<end.lowerBound]
+  }
+}

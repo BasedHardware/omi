@@ -391,9 +391,34 @@ def get_apps_installs_count(app_ids: List[str]) -> Dict[str, int]:
     return {app_id: max(0, int(count)) if count else 0 for app_id, count in zip(app_ids, counts)}
 
 
+def _cache_set_fail_open(key: str, value: Any, ttl: int) -> None:
+    """Best-effort cache write. Redis maxmemory must not 500 product requests."""
+    try:
+        r.set(key, value)
+        r.expire(key, ttl)
+    except Exception as exc:
+        # redis-py types omit ``exceptions``; match the live maxmemory class by name.
+        if type(exc).__name__ != 'OutOfMemoryError':
+            raise
+        prefix = key.split(':', 1)[0]
+        logger.warning('redis cache write skipped capacity_full prefix=%s', prefix)
+        try:
+            from utils.observability.fallback import record_fallback
+
+            record_fallback(
+                component='other',
+                from_mode='cache_write',
+                to_mode='skip',
+                reason='capacity_full',
+                outcome='degraded',
+                log=logger,
+            )
+        except Exception:
+            pass
+
+
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7) -> None:
-    r.set(f'users:{uid}:name', name)
-    r.expire(f'users:{uid}:name', ttl)
+    _cache_set_fail_open(f'users:{uid}:name', name, ttl)
 
 
 def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60) -> None:
@@ -423,11 +448,14 @@ def cache_user_geolocation(uid: str, geolocation: Dict[str, Any]) -> None:
     # was finalizing. Every reader rebuilds ``Geolocation`` from this dict, whose
     # optional fields already default to ``None`` when absent.
     present_fields = {key: value for key, value in geolocation.items() if value is not None}
-    r.set(f'users:{uid}:geolocation', _serialize_cache_value(present_fields))
     # 30m: conversation/tool place tagging does not need second-level freshness;
     # clients re-upload on significant moves and at recording start. Keeps the
     # last-known coords available without inventing a tighter freshness policy.
-    r.expire(f'users:{uid}:geolocation', 60 * 30)
+    _cache_set_fail_open(
+        f'users:{uid}:geolocation',
+        _serialize_cache_value(present_fields),
+        60 * 30,
+    )
 
 
 def get_cached_user_geolocation(uid: str) -> Optional[Dict[str, Any]]:
@@ -1448,6 +1476,12 @@ def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) 
     return result is not None
 
 
+def try_acquire_daily_wear_lock(uid: str, date: str, ttl: int = 60 * 60 * 24) -> bool:
+    """At most one wear FCM per uid per UTC day. True iff this caller may send."""
+    result = r.set(f'users:{uid}:daily_wear_lock:{date}', '1', ex=ttl, nx=True)
+    return result is not None
+
+
 def release_daily_summary_lock(uid: str, date: str) -> None:
     """Release a day lock this process took but did not spend on generation.
 
@@ -1461,6 +1495,41 @@ def release_daily_summary_lock(uid: str, date: str) -> None:
         r.delete(f'users:{uid}:daily_summary_lock:{date}')
     except Exception as error:
         logger.warning('Failed to release daily summary lock uid=%s date=%s: %s', uid, date, error)
+
+
+_NOTIFICATIONS_JOB_RUN_LOCK_KEY = 'notifications_job:run_lock'
+# Compare-and-delete: a late release from a timed-out execution must not drop a
+# newer run's lock. Same Lua shape as the rate-limit scripts above.
+_RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA = r.register_script("""
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+else
+    return 0
+end
+""")
+
+
+def try_acquire_notifications_job_run_lock(token: str, ttl: int = 55 * 60) -> bool:
+    """Acquire the hourly notifications-job run lock. True iff this caller owns it.
+
+    Cloud Scheduler fires hourly and the Cloud Run task timeout is 3600s, so two
+    executions can overlap. The lock lets an overlapping execution skip the
+    notification section instead of duplicating the pass.
+    """
+    result = r.set(_NOTIFICATIONS_JOB_RUN_LOCK_KEY, token, ex=ttl, nx=True)
+    return result is not None
+
+
+def release_notifications_job_run_lock(token: str) -> None:
+    """Release the run lock only if ``token`` still owns it.
+
+    The token keeps a late release from deleting a newer run's lock. Redis
+    errors are swallowed: the key expires via TTL.
+    """
+    try:
+        _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[_NOTIFICATIONS_JOB_RUN_LOCK_KEY], args=[token])
+    except Exception as error:
+        logger.warning('Failed to release notifications job run lock: %s', error)
 
 
 @try_catch_decorator

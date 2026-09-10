@@ -270,7 +270,7 @@ tests/unit/test_translation_optimization.py::test_confident_language_detection_h
 tests/unit/test_upstream_boundary.py::TestExtractionSeamFanOut::test_fan_out_invokes_memory_action_item_and_goal_paths_separately
 tests/unit/test_user_speaker_embedding.py::TestSetUserSpeakerEmbedding::test_stores_embedding_on_user_document
 tests/unit/test_user_speaker_embedding.py::TestSpeechProfileEmbeddingExtraction::test_extraction_called_after_upload
-tests/unit/test_user_speaker_embedding.py::TestSpeechProfileEmbeddingExtraction::test_extraction_failure_does_not_block_upload
+tests/unit/test_user_speaker_embedding.py::TestSpeechProfileEmbeddingExtraction::test_extraction_failure_fails_the_request
 tests/unit/test_v3_real_router_default_off_f4.py::test_production_default_dependency_is_disabled_and_preserves_legacy_get_behavior
 tests/unit/test_v3_real_router_default_off_f4.py::test_router_logs_are_sanitized_and_mutating_route_dependencies_unchanged
 tests/unit/test_workstream_router_contract.py::test_openapi_exposes_intent_and_thread_resources_without_manual_workstream_create
@@ -315,6 +315,8 @@ tests/unit/test_agent_proxy_async_boundaries.py::test_persistent_lease_heartbeat
 tests/unit/test_prompt_cache_wire_payload.py::test_get_llm_forwards_explicit_cache_options_and_production_cache_key
 # Suppressed-prefix expansion round walks 500 historical stubs with status batches;
 # ~0.5s CPU before and after the list-read budget threading (structural, unchanged test).
+# First test in this file-isolated suite also amortizes the memory_service reload.
+tests/unit/test_memory_offset_read_cost.py::test_fully_suppressed_offset_read_stays_within_a_bounded_scan_cost
 tests/unit/test_memory_offset_read_cost.py::test_status_lookups_are_not_repeated_across_expansion_rounds
 # 20k-row large-offset fixture intentionally crosses the legacy 10k boundary to charge
 # server-side offset() work; the in-memory doc list construction is hermetic but structural.

@@ -56,6 +56,10 @@ deterministic equivalent of the Flutter app's Marionette driver). Prefer these o
 ./scripts/omi-ctl action refresh_all_data          # same as Cmd+R
 ./scripts/omi-ctl action toggle_transcription enabled=false
 ```
+Action parameters are string-valued `key=value` arguments. Quote each argument
+for your shell; the CLI JSON-encodes quotes, backslashes, Unicode, and newlines
+without changing the value (for example, `'query=Find "release notes"'`).
+
 `omi-ctl actions` returns descriptors with `category`, `surfaces`, `safety`,
 `sideEffects`, `examples`, and `preferSemantic`. Scan those fields before using
 `agent-swift`: prefer actions whose `surfaces` match the screen and whose
