@@ -94,6 +94,12 @@ omi auth status    # локальная проверка, офлайн
 omi auth whoami    # проверка на сервере
 ```
 
+Обновить истекающий токен без повторного входа:
+
+```bash
+omi auth refresh
+```
+
 Выход:
 
 ```bash
@@ -146,7 +152,26 @@ omi action-item complete <ACTION_ITEM_ID>
 ### Цели (goals)
 
 ```bash
+# список целей
 omi goal list
+
+# прогресс по цели
+omi goal progress <GOAL_ID>
+
+# история изменений
+omi goal history <GOAL_ID>
+```
+
+---
+
+## Вопрос своими словами (`ask`)
+
+Отдельная команда верхнего уровня: задаёт вопрос на естественном языке,
+ответ строится по вашим же разговорам.
+
+```bash
+omi ask "что я решил по поводу переезда"
+omi --json ask "какие задачи я обещал закрыть на этой неделе"
 ```
 
 ---
@@ -273,6 +298,19 @@ omi --profile work auth login
 
 # выполнить команду в конкретном профиле
 omi --profile work memory list
+```
+
+Посмотреть и поменять саму конфигурацию:
+
+```bash
+# что сейчас настроено
+omi config show
+
+# где лежит файл конфигурации
+omi config path
+
+# изменить значение
+omi config set api_base https://api.omi.me
 ```
 
 ---
