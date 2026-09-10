@@ -339,9 +339,27 @@ function firebaseUnavailableRetryAfter(
   ) {
     return "60";
   }
+  if (method === "GET" && pathname === "/v1/device-sessions/ownership") {
+    return "1";
+  }
   if (
     method === "GET" &&
     /^\/v1\/device-sessions\/[^/]+\/transcript$/.test(pathname)
+  ) {
+    return "1";
+  }
+  if (method === "POST" && pathname === "/v1/device-sessions") {
+    return "1";
+  }
+  if (
+    method === "POST" &&
+    /^\/v1\/device-sessions\/[^/]+\/audio$/.test(pathname)
+  ) {
+    return "1";
+  }
+  if (
+    method === "POST" &&
+    /^\/v1\/device-sessions\/[^/]+\/complete$/.test(pathname)
   ) {
     return "1";
   }
@@ -536,7 +554,9 @@ export async function handleChatCreate(
     return backendError("validation", "edit_request", 422);
   const db = context.env.DB;
   if (db === undefined)
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "60",
+    });
   if (body.attachmentIds.length > 0 && context.env.ATTACHMENTS === undefined)
     return backendError("service_unavailable", "none", 503);
   const resolved = await resolveAttachmentsForAdmit(
@@ -630,7 +650,9 @@ export async function handleAttachmentStage(
     return backendError("attachment_rejected", "edit_request", 422);
   const db = context.env.DB;
   if (db === undefined)
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "60",
+    });
   const signedConfig = parseSignedUploadConfig(context.env);
   if (signedConfig === null)
     return backendError("service_unavailable", "none", 503);
@@ -655,7 +677,9 @@ export async function handleAttachmentComplete(
   const ingest = context.env.ATTACHMENT_INGEST;
   const db = context.env.DB;
   if (db === undefined)
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "60",
+    });
   if (r2 === undefined || ingest === undefined)
     return backendError("service_unavailable", "none", 503);
   const attachmentId = context.req.param("id");
@@ -699,7 +723,9 @@ export async function handleDeviceSessionOpen(
   const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
   if (db === undefined)
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "1",
+    });
   if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const parsed = await readBoundedJson(context.req.raw, 65_536);
   if (parsed.kind === "too_large")
@@ -725,7 +751,9 @@ export async function handleDeviceSessionAudio(
   const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
   if (db === undefined)
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "1",
+    });
   if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const parsed = await readBoundedJson(context.req.raw, 2_097_152);
   if (parsed.kind === "too_large")
@@ -746,7 +774,9 @@ export async function handleDeviceSessionAudio(
     case "ok":
       return json({ session: outcome.session });
     case "unavailable":
-      return backendError("service_unavailable", "retry", 503, true);
+      return backendError("service_unavailable", "retry", 503, true, {
+        "retry-after": "1",
+      });
     case "not_found":
       return backendError("device_session_not_found", "none", 404);
     case "conflict":
@@ -762,7 +792,9 @@ export async function handleDeviceSessionComplete(
   const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
   if (db === undefined)
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "1",
+    });
   if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const outcome = await completeDeviceSession(
     db,

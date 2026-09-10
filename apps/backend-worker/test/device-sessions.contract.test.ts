@@ -6,6 +6,9 @@ import {
 } from "../src/device-sessions";
 import {
   coreContext,
+  handleDeviceSessionAudio,
+  handleDeviceSessionComplete,
+  handleDeviceSessionOpen,
   handleTranscribe,
   handleTranscription,
 } from "../src/http-core";
@@ -439,6 +442,110 @@ describe("device session request validators", () => {
         action: "retry",
       },
     });
+  });
+
+  test("capture open audio and complete retryable 503 send production Listen retry-after", async () => {
+    const retryable = {
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    };
+    const missingDbOpen = await handleDeviceSessionOpen(
+      coreContext({
+        env: { ...env, DB: undefined } as never,
+        request: new Request("https://worker.test/v1/device-sessions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(openBody),
+        }),
+        routePath: "/v1/device-sessions",
+        params: {},
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(missingDbOpen.status).toBe(503);
+    expect(missingDbOpen.headers.get("retry-after")).toBe("1");
+    expect((await missingDbOpen.json()) as object).toEqual(retryable);
+    const missingDbAudio = await handleDeviceSessionAudio(
+      coreContext({
+        env: { ...env, DB: undefined } as never,
+        request: new Request(
+          "https://worker.test/v1/device-sessions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/audio",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              chunks: [{ chunkIndex: 0, bytesBase64: btoa("abc") }],
+            }),
+          }
+        ),
+        routePath: "/v1/device-sessions/:id/audio",
+        params: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(missingDbAudio.status).toBe(503);
+    expect(missingDbAudio.headers.get("retry-after")).toBe("1");
+    expect((await missingDbAudio.json()) as object).toEqual(retryable);
+    const missingDbComplete = await handleDeviceSessionComplete(
+      coreContext({
+        env: { ...env, DB: undefined } as never,
+        request: new Request(
+          "https://worker.test/v1/device-sessions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/complete",
+          { method: "POST" }
+        ),
+        routePath: "/v1/device-sessions/:id/complete",
+        params: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(missingDbComplete.status).toBe(503);
+    expect(missingDbComplete.headers.get("retry-after")).toBe("1");
+    expect((await missingDbComplete.json()) as object).toEqual(retryable);
+  });
+
+  test("audio store unavailable retryable 503 sends production Listen retry-after", async () => {
+    const opened = await fetchWorker("/v1/device-sessions", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify(openBody),
+    });
+    expect(opened.status).toBe(201);
+    const created = (await opened.json()) as { session: { id: string } };
+    const originalPut = r2Mock.put;
+    r2Mock.put = (async () => {
+      throw new Error("r2");
+    }) as typeof r2Mock.put;
+    try {
+      const audio = await fetchWorker(
+        `/v1/device-sessions/${created.session.id}/audio`,
+        {
+          method: "POST",
+          headers: authenticatedHeaders,
+          body: JSON.stringify({
+            chunks: [
+              {
+                chunkIndex: 0,
+                bytesBase64: btoa(String.fromCharCode(0, 0, 0, 128, 129)),
+              },
+            ],
+          }),
+        }
+      );
+      expect(audio.status).toBe(503);
+      expect(audio.headers.get("retry-after")).toBe("1");
+      expect((await audio.json()) as object).toEqual({
+        error: {
+          code: "service_unavailable",
+          retryable: true,
+          action: "retry",
+        },
+      });
+    } finally {
+      r2Mock.put = originalPut;
+    }
   });
 
   test("missing device session 404s use production Listen device_session_not_found", async () => {

@@ -14,6 +14,7 @@ import {
 } from "../src/conversations";
 import {
   coreContext,
+  handleChatCreate,
   handleChatHistory,
   handleConversations,
   handleSettings,
@@ -702,6 +703,97 @@ describe("worker request contract", () => {
       expect(transcribe.status).toBe(503);
       expect(transcribe.headers.get("retry-after")).toBe("1");
       expect((await transcribe.json()) as unknown).toEqual(unavailable);
+      const ownership = await handler.fetch(
+        onTheWireRequest("/v1/device-sessions/ownership", {
+          authorization: "Bearer firebase-id-token",
+          "x-omi-client-id": "desktop-client",
+        }),
+        bindings as never,
+        executionContext as never
+      );
+      expect(ownership.status).toBe(503);
+      expect(ownership.headers.get("retry-after")).toBe("1");
+      expect((await ownership.json()) as unknown).toEqual(unavailable);
+      const open = await handler.fetch(
+        new Request("https://worker.test/v1/device-sessions", {
+          method: "POST",
+          headers: {
+            authorization: "Bearer firebase-id-token",
+            "content-type": "application/json",
+            "x-omi-client-id": "desktop-client",
+          },
+          body: JSON.stringify({
+            captureId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            deviceId: "AA:BB:CC:DD:EE:FF",
+            deviceName: "Omi",
+            codec: 21,
+          }),
+        }),
+        bindings as never,
+        executionContext as never
+      );
+      expect(open.status).toBe(503);
+      expect(open.headers.get("retry-after")).toBe("1");
+      expect((await open.json()) as unknown).toEqual(unavailable);
+      const audio = await handler.fetch(
+        new Request(
+          "https://worker.test/v1/device-sessions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/audio",
+          {
+            method: "POST",
+            headers: {
+              authorization: "Bearer firebase-id-token",
+              "content-type": "application/json",
+              "x-omi-client-id": "desktop-client",
+            },
+            body: JSON.stringify({
+              chunks: [
+                {
+                  chunkIndex: 0,
+                  bytesBase64: "AQID",
+                },
+              ],
+            }),
+          }
+        ),
+        bindings as never,
+        executionContext as never
+      );
+      expect(audio.status).toBe(503);
+      expect(audio.headers.get("retry-after")).toBe("1");
+      expect((await audio.json()) as unknown).toEqual(unavailable);
+      const complete = await handler.fetch(
+        new Request(
+          "https://worker.test/v1/device-sessions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/complete",
+          {
+            method: "POST",
+            headers: {
+              authorization: "Bearer firebase-id-token",
+              "x-omi-client-id": "desktop-client",
+            },
+          }
+        ),
+        bindings as never,
+        executionContext as never
+      );
+      expect(complete.status).toBe(503);
+      expect(complete.headers.get("retry-after")).toBe("1");
+      expect((await complete.json()) as unknown).toEqual(unavailable);
+      const chatPost = await handler.fetch(
+        new Request("https://worker.test/v1/chat-messages", {
+          method: "POST",
+          headers: {
+            authorization: "Bearer firebase-id-token",
+            "content-type": "application/json",
+            "x-omi-client-id": "desktop-client",
+          },
+          body: JSON.stringify(chatCreate("firebase-outage")),
+        }),
+        bindings as never,
+        executionContext as never
+      );
+      expect(chatPost.status).toBe(503);
+      expect(chatPost.headers.get("retry-after")).toBeNull();
+      expect((await chatPost.json()) as unknown).toEqual(unavailable);
       expect(accountCalls).toEqual([]);
     } finally {
       globalThis.fetch = originalFetch;
@@ -2499,6 +2591,31 @@ describe("worker request contract", () => {
     );
     expect(invalidCursor.status).toBe(400);
     expect(invalidCursor.headers.get("retry-after")).toBeNull();
+  });
+
+  test("chat POST retryable 503 sends production chat retry-after", async () => {
+    const missingDb = await handleChatCreate(
+      coreContext({
+        env: { ...env, DB: undefined } as never,
+        request: new Request("https://worker.test/v1/chat-messages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(chatCreate("missing-d1")),
+        }),
+        routePath: "/v1/chat-messages",
+        params: {},
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(missingDb.status).toBe(503);
+    expect(missingDb.headers.get("retry-after")).toBe("60");
+    expect((await missingDb.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
   });
 
   test("history GET keeps unknown senders instead of labeling them human", async () => {

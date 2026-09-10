@@ -13,6 +13,11 @@ import {
   stageAttachment,
   type AttachmentIngestMessage,
 } from "../src/attachments";
+import {
+  coreContext,
+  handleAttachmentComplete,
+  handleAttachmentStage,
+} from "../src/http-core";
 import { CHAT_CAPABILITIES } from "../src/wire";
 import { createD1Mock } from "./d1-mock";
 
@@ -467,6 +472,47 @@ describe("attachment staging route fail-closed behavior", () => {
         action: "none",
       },
     });
+  });
+
+  test("attachment stage and complete retryable 503 send production chat retry-after", async () => {
+    const retryable = {
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    };
+    const missingDbStage = await handleAttachmentStage(
+      coreContext({
+        env: { ...env, DB: undefined } as never,
+        request: new Request("https://worker.test/v1/chat-attachments", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(validStageRequest("op-missing-d1")),
+        }),
+        routePath: "/v1/chat-attachments",
+        params: {},
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(missingDbStage.status).toBe(503);
+    expect(missingDbStage.headers.get("retry-after")).toBe("60");
+    expect((await missingDbStage.json()) as object).toEqual(retryable);
+    const missingDbComplete = await handleAttachmentComplete(
+      coreContext({
+        env: { ...env, DB: undefined } as never,
+        request: new Request(
+          "https://worker.test/v1/chat-attachments/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/complete",
+          { method: "POST" }
+        ),
+        routePath: "/v1/chat-attachments/:id/complete",
+        params: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(missingDbComplete.status).toBe(503);
+    expect(missingDbComplete.headers.get("retry-after")).toBe("60");
+    expect((await missingDbComplete.json()) as object).toEqual(retryable);
   });
 
   test("stages successfully when Queue binding is absent and sends no queue message (no queue send at staging)", async () => {
