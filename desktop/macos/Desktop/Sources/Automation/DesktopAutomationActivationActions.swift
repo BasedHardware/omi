@@ -13,7 +13,9 @@
 //  Registered from `DesktopAutomationActionRegistry.registerBuiltins()`.
 //
 
+import AppKit
 import Foundation
+import OmiTheme
 
 extension DesktopAutomationActionRegistry {
 
@@ -102,6 +104,169 @@ extension DesktopAutomationActionRegistry {
       return [
         "requested": "true",
         "pendingDraftLength": String(MainChatNavigationRequestStore.shared.pendingDraft?.count ?? 0),
+      ]
+    }
+
+    register(
+      name: "recent_screen_frames_snapshot",
+      summary: "Rows the composer's recent-screen-frames menu will offer (loader output, metadata only)",
+      params: ["limit"],
+      category: "chat",
+      surfaces: ["main_chat"],
+      safety: "read_only"
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "recent_screen_frames_snapshot is disabled on production bundles"]
+      }
+      let limit = Int(params["limit"] ?? "") ?? 12
+      let rows = await RewindFrameLoader.shared.attachableRows(limit: limit)
+      var detail: [String: String] = [
+        "rowCount": String(rows.count),
+        "hasRows": rows.isEmpty ? "false" : "true",
+      ]
+      if let first = rows.first {
+        // Provenance only, never frame bytes: a harness asserts the menu's
+        // shape, and OCR/window text is not automation's to read.
+        detail["firstAppName"] = first.appName
+        detail["firstAgeSeconds"] = String(Int(Date().timeIntervalSince(first.timestamp)))
+      }
+      return detail
+    }
+
+    register(
+      name: "open_chat_prefilled_with_screen_frame",
+      summary:
+        "Drive the first-real-app card's handoff end to end: capture (or load) the screen referent, "
+        + "stage it, and open the chat with the prompt prefilled and the frame attached (not sent)",
+      params: ["prompt"],
+      category: "chat",
+      surfaces: ["main_chat"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "open_chat_prefilled_with_screen_frame is disabled on production bundles"]
+      }
+      let trimmedPrompt = params["prompt"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let prompt = trimmedPrompt.isEmpty ? FirstRealAppCardPolicy.prompt : trimmedPrompt
+      // The exact chain the card tap's default closure runs, in the same
+      // order: summon the chat with the draft first (the window opens now),
+      // take the referent from the summon boundary the summon itself
+      // recorded, and fall back to the newest stored non-Omi frame when this
+      // tap recorded no boundary. The staged frame lands through
+      // `ChatProvider.addAttachments` after the composer is up.
+      let tappedAt = Date()
+      guard let target = AppDelegate.summonWindowTarget() else {
+        return ["error": "no window target"]
+      }
+      target.openMainAppChat(prefilledDraft: prompt, attachedFrame: nil)
+      let boundary = await RewindFrameLoader.shared.awaitSummonBoundary(recordedAfter: tappedAt)
+      var frame = boundary
+      if frame == nil {
+        frame = await RewindFrameLoader.shared.loadLatestAttachableFrame(
+          maxAgeSeconds: ScreenContextFallbackPolicy.maxFallbackFrameAgeSeconds
+        )
+      }
+      guard let frame else {
+        return [
+          "error": "no screen referent available (no summon boundary, no fresh frame)",
+          "staged": "false",
+        ]
+      }
+      guard
+        let attachment = RecentScreenFrameStaging.attachment(
+          appName: frame.appName,
+          jpegData: frame.data,
+          capturedAt: frame.timestamp
+        )
+      else {
+        return ["error": "frame staging failed", "staged": "false"]
+      }
+      ChatProvider.mainInstance?.addAttachments([attachment])
+      return [
+        "staged": "true",
+        "frameSource": boundary == nil ? "last_external_frame" : "summon_boundary",
+        "frameAppName": frame.appName,
+        "frameAgeSeconds": String(Int(Date().timeIntervalSince(frame.timestamp))),
+        "attachmentBytes": String(attachment.data?.count ?? 0),
+      ]
+    }
+
+    register(
+      name: "chat_composer_snapshot",
+      summary: "Main composer state: draft, staged attachments, placeholder, and query-shell mode",
+      params: [],
+      category: "chat",
+      surfaces: ["main_chat"],
+      safety: "read_only"
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "chat_composer_snapshot is disabled on production bundles"]
+      }
+      return ChatComposerAutomationSnapshot.detail(
+        draft: ChatProvider.mainInstance?.draftText
+          ?? ChatDraftStore.shared.text(for: .mainChat(contextID: "omi:default")),
+        stagedAttachments: ChatProvider.mainInstance?.pendingAttachments.count ?? 0,
+        firstAttachment: ChatProvider.mainInstance?.pendingAttachments.first?.fileName ?? "",
+        mode: QueryShellComposerAutomation.mode
+      )
+    }
+
+    register(
+      name: "paste_clipboard_into_chat",
+      summary:
+        "Run the composer's ⌘V path with a screenshot fixture on the clipboard: pasteboard "
+        + "classifier, staging, and provider staging (non-prod paste harness; replaces the clipboard)",
+      params: [],
+      category: "chat",
+      surfaces: ["main_chat"]
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "paste_clipboard_into_chat is disabled on production bundles"]
+      }
+      // The harness cannot set the system clipboard, so the action stages a
+      // representative screenshot copy itself: 2×2 red pixels as TIFF, the
+      // exact flavor a ⌘⇧⌃4 capture puts on the board. Clobbering the user's
+      // real clipboard is why this stays non-prod.
+      let pasteboard = NSPasteboard.general
+      pasteboard.clearContents()
+      guard
+        let rep = NSBitmapImageRep(
+          bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2, bitsPerSample: 8,
+          samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+          colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+      else {
+        return ["error": "could not build clipboard fixture"]
+      }
+      rep.size = NSSize(width: 2, height: 2)
+      for x in 0..<2 {
+        for y in 0..<2 {
+          rep.setColor(NSColor.red, atX: x, y: y)
+        }
+      }
+      guard let tiff = rep.tiffRepresentation, pasteboard.setData(tiff, forType: .tiff) else {
+        return ["error": "could not write clipboard fixture"]
+      }
+      // The exact chain the composer's paste handler runs: classifier first
+      // (⌘V is a text paste when the board carries readable text), then
+      // staging, then the provider's add path. The main chat is summoned
+      // first so the composer the paste lands on is mounted, exactly as it
+      // is when a person presses ⌘V in it.
+      let classifierAccepted = OmiTextEditor.pasteCarriesAttachments(pasteboard)
+      guard classifierAccepted else {
+        return ["classifierAccepted": "false", "staged": "false"]
+      }
+      guard let target = AppDelegate.summonWindowTarget() else {
+        return ["error": "no window target"]
+      }
+      target.openMainAppChat(prefilledDraft: "")
+      let staged = await PasteboardAttachmentStaging.stageAttachments(from: pasteboard)
+      if let main = ChatProvider.mainInstance {
+        main.addAttachments(staged)
+      }
+      return [
+        "classifierAccepted": "true",
+        "staged": staged.isEmpty ? "false" : "true",
+        "stagedCount": String(staged.count),
+        "firstAttachmentName": staged.first?.fileName ?? "",
       ]
     }
 

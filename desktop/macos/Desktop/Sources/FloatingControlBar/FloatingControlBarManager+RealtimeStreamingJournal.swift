@@ -2,6 +2,25 @@ import Foundation
 import VoiceTurnDomain
 
 extension FloatingControlBarManager {
+  /// Appends native OCR to the exact user row after a late extractor result.
+  /// This uses the existing kernel journal update path; the stable user turn ID
+  /// and owner-bound surface prevent a replacement PTT from receiving it.
+  func attachRealtimeUserEvidence(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    userTurnID: String,
+    evidence: ConversationEvidence
+  ) async -> Bool {
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+      let provider = sharedFloatingProvider
+    else { return false }
+    return await provider.kernelTurnProjection.appendEvidence(
+      surface: surface,
+      turnID: userTurnID,
+      evidence: evidence,
+      ownerID: ownerID) != nil
+  }
+
   /// Admits the user turn and its assistant target atomically so all chat
   /// surfaces show one shared realtime exchange.
   func recordStreamingRealtimeExchange(
@@ -42,7 +61,8 @@ extension FloatingControlBarManager {
     userText: String,
     assistantText: String,
     assistantStatus: KernelJournalTurnStatus = .completed,
-    terminalReason: String? = nil
+    terminalReason: String? = nil,
+    answerTextCompleted: Bool? = nil
   ) async -> Bool {
     guard RuntimeOwnerIdentity.currentOwnerId() == projection.ownerID,
       let provider = sharedFloatingProvider
@@ -59,7 +79,8 @@ extension FloatingControlBarManager {
       if await provider.kernelTurnProjection.updateTurn(
         surface: surface,
         message: projection.assistantMessage(text: assistantText, isStreaming: false),
-        status: assistantStatus, terminalReason: terminalReason, ownerID: projection.ownerID) != nil
+        status: assistantStatus, terminalReason: terminalReason,
+        answerTextCompleted: answerTextCompleted, ownerID: projection.ownerID) != nil
       {
         await consumeInterjectHubTranscript(assistantText)
         return true
@@ -82,7 +103,8 @@ extension FloatingControlBarManager {
     surface: AgentSurfaceReference,
     ownerID: String,
     continuityKey: String,
-    terminalReason: String
+    terminalReason: String,
+    answerTextCompleted: Bool = false
   ) async -> Bool {
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,
       let provider = sharedFloatingProvider
@@ -94,6 +116,7 @@ extension FloatingControlBarManager {
         surface: surface,
         turnId: turnID,
         terminalReason: terminalReason,
+        answerTextCompleted: answerTextCompleted,
         ownerID: ownerID) != nil
       {
         return true

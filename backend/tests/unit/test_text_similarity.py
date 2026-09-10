@@ -3,6 +3,7 @@ Unit tests for compute_text_similarity function.
 Tests character trigram Jaccard similarity across multiple languages.
 """
 
+import unicodedata
 from utils.text_utils import compute_text_similarity
 
 
@@ -205,3 +206,19 @@ class TestComputeTextSimilarity:
         similarity = compute_text_similarity(text1, text2)
         # Should have relatively high similarity
         assert similarity > 0.3
+
+    def test_canonical_equivalence_accented_latin(self):
+        """Canonically equivalent accented Latin strings should have 1.0 similarity."""
+        text_nfc = "El próximo miércoles hablaremos sobre la configuración."
+        text_nfd = unicodedata.normalize("NFD", text_nfc)
+        assert compute_text_similarity(text_nfd, text_nfc) == 1.0
+
+    def test_canonical_equivalence_cjk(self):
+        """Canonically equivalent Korean and Japanese strings should have 1.0 similarity."""
+        korean_nfc = "안녕하세요 세계"
+        korean_nfd = unicodedata.normalize("NFD", korean_nfc)
+        assert compute_text_similarity(korean_nfd, korean_nfc) == 1.0
+
+        japanese_nfc = "がんばってください"
+        japanese_nfd = unicodedata.normalize("NFD", japanese_nfc)
+        assert compute_text_similarity(japanese_nfd, japanese_nfc) == 1.0

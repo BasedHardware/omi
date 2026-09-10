@@ -24,6 +24,9 @@ covers:
   - desktop/macos/Desktop/Sources/ConversationReconciliationPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationRepository.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ConversationCapturePlaybackSection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CaptureTranscriptAlignment.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CaptureTranscriptResync.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/StorageFailureDiagnostics.swift

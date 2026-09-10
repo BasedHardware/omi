@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 
+import httpx
+import pytest
+
 from omi_cli.main import app
 
 
@@ -56,3 +59,32 @@ def test_action_item_get_missing_returns_not_found_exit_code(authed_profile, res
     result = cli_runner.invoke(app, ["action-item", "get", "missing"])
     assert result.exit_code == 5  # EXIT_NOT_FOUND
     assert "not found" in result.stderr.lower()
+
+
+@pytest.mark.parametrize("found", [True, False])
+def test_action_item_get_searches_beyond_five_pages(authed_profile, respx_mock, cli_runner, found) -> None:
+    """A full fifth page cannot establish that an action item does not exist."""
+    offsets = []
+
+    def respond(request):
+        offset = int(request.url.params["offset"])
+        offsets.append(offset)
+        assert request.url.params["limit"] == "200"
+        if offset < 1000:
+            return httpx.Response(200, json=[{"id": f"a{i}"} for i in range(offset, offset + 200)])
+        assert offset == 1000
+        return httpx.Response(200, json=[{"id": "target"}] if found else [])
+
+    respx_mock.get("/v1/dev/user/action-items").mock(side_effect=respond)
+    result = cli_runner.invoke(app, ["--json", "action-item", "get", "target"])
+    assert offsets == [0, 200, 400, 600, 800, 1000]
+    assert result.exit_code == (0 if found else 5)
+    if found:
+        assert json.loads(result.stdout) == {"id": "target"}
+
+
+def test_action_item_get_stops_after_short_page(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.get("/v1/dev/user/action-items").respond(json=[{"id": "other"}])
+    result = cli_runner.invoke(app, ["--json", "action-item", "get", "missing"])
+    assert result.exit_code == 5
+    assert route.call_count == 1

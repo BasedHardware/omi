@@ -1,0 +1,7 @@
+{
+  "version": "0.12.313",
+  "date": "2026-09-07",
+  "changes": [
+    "Clicking the daily summary card in the notch now opens the app on that day's recap page; the click previously did nothing, and a plan/permission card that cannot open a conversation now opens the app's chat instead of ignoring the tap"
+  ]
+}

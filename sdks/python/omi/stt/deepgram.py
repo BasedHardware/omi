@@ -48,7 +48,22 @@ class DeepgramTranscriber:
                                 else:
                                     print(alt)
 
-                    await asyncio.gather(send_audio(), receive())
+                    tasks = (
+                        asyncio.create_task(send_audio()),
+                        asyncio.create_task(receive()),
+                    )
+                    try:
+                        done, _ = await asyncio.wait(
+                            tasks, return_when=asyncio.FIRST_COMPLETED
+                        )
+                        for task in done:
+                            task.result()
+                        # A clean receive EOF must also trigger the retry loop.
+                        raise ConnectionError("Deepgram connection closed")
+                    finally:
+                        for task in tasks:
+                            task.cancel()
+                        await asyncio.gather(*tasks, return_exceptions=True)
             except Exception as exc:
                 print(f"Deepgram error: {exc}")
                 await asyncio.sleep(1)

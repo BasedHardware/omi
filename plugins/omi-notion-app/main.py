@@ -533,6 +533,14 @@ async def tool_get_page(request: Request):
 
         result_parts.append(f"**Page ID:** `{page_id}`")
 
+        if not blocks or "error" in blocks:
+            status = blocks.get("status_code") if blocks else None
+            detail = f" (HTTP {status})" if isinstance(status, int) else ""
+            # Keep independently retrieved metadata, but never report a failed
+            # content read as a successful empty page (including archived pages).
+            metadata = "\n".join(result_parts)
+            return ChatToolResponse(error=f"Failed to retrieve page content{detail}. Please try again.\n\n{metadata}")
+
         # Add content if available
         if blocks and "results" in blocks:
             content = extract_text_content(blocks.get("results", []))

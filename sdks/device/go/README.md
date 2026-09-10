@@ -6,7 +6,13 @@ Protocol helpers + optional BLE scan/listen for the Omi wearable.
 
 ```bash
 go test ./...
+go test -race ./...
 ```
+
+The race-enabled suite exercises streaming-transcriber readiness with in-memory
+WebSocket connections; it needs no device, API credentials, or network service.
+Parakeet ignores PCM until its server sends `ready`, while Deepgram accepts PCM
+as soon as its connection is established.
 
 Exports UUIDs, `StripPacketHeader`, STT helpers. `Scan` / `Listen` / `ListenPayload` / `ReadCodec` return `ErrBLEDisabled`.
 

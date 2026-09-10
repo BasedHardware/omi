@@ -3246,5 +3246,16 @@
     "chatBlockUnavailable": "Vairs nav pieejams",
     "chatBlockRecommendedNextSteps": "Ieteicamie nākamie soļi",
     "couldNotLoadMemories": "Neizdevās ielādēt atmiņas",
-    "couldNotLoadKnowledgeGraph": "Neizdevās ielādēt zināšanu grafu"
+    "couldNotLoadKnowledgeGraph": "Neizdevās ielādēt zināšanu grafu",
+    "speechProfileOwnerTitle": "{name} balss profils",
+    "play": "Atskaņot",
+    "redo": "Ierakstīt vēlreiz",
+    "answerWithYourVoice": "Atbildiet ar balsi:",
+    "speechProfileTopicLocation": "Kur jūs dzīvojat?",
+    "speechProfileTopicWork": "Kādu darbu jūs darāt?",
+    "speechProfileTopicGoal": "Kāds ir jūsu ilgtermiņa mērķis?",
+    "speechToTextUnavailableDesc": "Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.",
+    "memoryHistoryPartial": "Daļa atmiņu vēstures nav pieejama. Tiek rādīta līdz šim saņemtā vēsture.",
+    "tapPlusToStartRecording": "Pieskarieties +, lai sāktu ierakstīšanu",
+    "processingTakingLonger": "Joprojām notiek — tas aizņem ilgāk nekā parasti."
 }

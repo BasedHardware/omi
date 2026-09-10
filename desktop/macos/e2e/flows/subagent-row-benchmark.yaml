@@ -14,8 +14,8 @@ steps:
     bridge.action:
       name: seed_subagents
       count: "3"
-    wait:
-      state.askOmiOpen: true
+    expect:
+      result.detail.count: "3"
 
   - id: S2
     name: Open Subagent 1

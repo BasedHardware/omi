@@ -3246,5 +3246,16 @@
     "chatBlockUnavailable": "Більше недоступно",
     "chatBlockRecommendedNextSteps": "Рекомендовані наступні кроки",
     "couldNotLoadMemories": "Не вдалося завантажити спогади",
-    "couldNotLoadKnowledgeGraph": "Не вдалося завантажити граф знань"
+    "couldNotLoadKnowledgeGraph": "Не вдалося завантажити граф знань",
+    "speechProfileOwnerTitle": "Голосовий профіль: {name}",
+    "play": "Відтворити",
+    "redo": "Записати знову",
+    "answerWithYourVoice": "Відповідайте голосом:",
+    "speechProfileTopicLocation": "Де ви живете?",
+    "speechProfileTopicWork": "Ким ви працюєте?",
+    "speechProfileTopicGoal": "Яка ваша довгострокова мета?",
+    "speechToTextUnavailableDesc": "Перетворення мовлення на текст зараз недоступне. Перевірте підключення до інтернету та налаштування розпізнавання мовлення на пристрої й спробуйте ще раз.",
+    "memoryHistoryPartial": "Частина історії спогадів недоступна. Показано історію, отриману на цей момент.",
+    "tapPlusToStartRecording": "Натисніть +, щоб почати запис",
+    "processingTakingLonger": "Ще обробляється — це триває довше, ніж зазвичай."
 }

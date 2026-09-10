@@ -343,6 +343,7 @@ class TasksViewModel: ObservableObject {
   typealias SelectionSnapshotLoader = (_ completed: Bool) async throws -> [String]
   typealias SearchLoader = (_ query: String, _ includeDeleted: Bool) async throws -> [TaskActionItem]
   typealias BulkDeleteOperation = (_ ids: [String]) async -> TasksStore.BulkDeleteOutcome
+  typealias RestoreTaskOperation = (_ task: TaskActionItem) async -> TaskActionItem?
 
   struct SortOrderSyncOperations: Sendable {
     let updateStorage:
@@ -386,6 +387,7 @@ class TasksViewModel: ObservableObject {
   let selectionSnapshotLoader: SelectionSnapshotLoader
   let searchLoader: SearchLoader
   let bulkDeleteOperation: BulkDeleteOperation
+  let restoreTaskOperation: RestoreTaskOperation
   let bulkDeleteConfirmation: (Int) -> Bool
   private let orderingDefaults: UserDefaults
   private var activeOwnerID: String?
@@ -718,6 +720,7 @@ class TasksViewModel: ObservableObject {
     selectionSnapshotLoader: SelectionSnapshotLoader? = nil,
     searchLoader: SearchLoader? = nil,
     bulkDeleteOperation: BulkDeleteOperation? = nil,
+    restoreTaskOperation: RestoreTaskOperation? = nil,
     bulkDeleteConfirmation: ((Int) -> Bool)? = nil,
     orderingDefaults: UserDefaults = .standard
   ) {
@@ -739,6 +742,10 @@ class TasksViewModel: ObservableObject {
     self.bulkDeleteOperation =
       bulkDeleteOperation ?? { ids in
         await TasksStore.shared.deleteMultipleTasks(ids: ids)
+      }
+    self.restoreTaskOperation =
+      restoreTaskOperation ?? { task in
+        await TasksStore.shared.restoreTask(task)
       }
     self.bulkDeleteConfirmation = bulkDeleteConfirmation ?? Self.confirmBulkDelete
     self.orderingDefaults = orderingDefaults
@@ -2743,13 +2750,15 @@ class TasksViewModel: ObservableObject {
   func undoLastDelete() async {
     guard let lastAction = undoStack.popLast() else { return }
 
-    await store.restoreTask(lastAction.task)
+    guard let restoredTask = await restoreTaskOperation(lastAction.task) else { return }
 
-    // Re-insert into display
-    displayTasks.insert(lastAction.task, at: 0)
+    // The backend hard-delete/recreate flow mints a replacement ID. Rendering
+    // lastAction.task here would keep the deleted ID alive until a refresh and
+    // route the next edit/toggle/delete to a row that no longer exists.
+    displayTasks.insert(restoredTask, at: 0)
     let cat = TaskCategory.today  // Default; will be recategorized on next recompute
     if categorizedTasks[cat] != nil {
-      categorizedTasks[cat]?.insert(lastAction.task, at: 0)
+      categorizedTasks[cat]?.insert(restoredTask, at: 0)
     }
 
     // Hide toast if stack is now empty

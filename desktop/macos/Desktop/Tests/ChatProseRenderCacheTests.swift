@@ -97,7 +97,7 @@ final class ChatProseRenderCacheTests: XCTestCase {
 
   func testEvictionHoldsTheBoundAndTurnsOldestKeysOver() {
     beginFresh()
-    let capacity = 192
+    let capacity = ChatProseRenderCache.maximumEntries
     var produced = Set<String>()
     func produce(_ text: String) -> NSAttributedString {
       produced.insert(text)
@@ -126,6 +126,23 @@ final class ChatProseRenderCacheTests: XCTestCase {
     XCTAssertTrue(produced.isEmpty, "a recently inserted key must not be evicted by later inserts")
     XCTAssertNotNil(newest)
     XCTAssertEqual(ChatProseRenderCache.entryCount, capacity)
+  }
+
+  func testExpandedTranscriptStaysWarmAcrossStreamingFrames() {
+    beginFresh()
+    var productions = 0
+    for frame in 0..<8 {
+      for row in 0..<500 {
+        _ = ChatProseRenderCache.entry(for: Self.key(markdown: "settled row \(row)")) {
+          productions += 1
+          return NSAttributedString(string: "settled row \(row)")
+        }
+      }
+      _ = ChatProseRenderCache.entry(for: Self.key(markdown: "stream frame \(frame)")) {
+        NSAttributedString(string: "stream frame \(frame)")
+      }
+    }
+    XCTAssertEqual(productions, 500, "Streaming must not evict and reparse the mounted history")
   }
 
   // MARK: - Height memo
