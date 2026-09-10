@@ -8,6 +8,8 @@ import {
   conversationHasFinishClock,
   conversationStatusCopy,
   formatConversationDuration,
+  legacyTranscriptCanDisplaySeconds,
+  legacyTranscriptTimestampCopy,
   visibleDisplayText,
   type ConversationProjection,
 } from '../desktopReadClient';
@@ -192,6 +194,9 @@ function LegacyConversationBody({
     );
   }
   const detail = result.value;
+  const showLegacyClocks =
+    detail.transcript.status === 'loaded' &&
+    legacyTranscriptCanDisplaySeconds(detail.transcript.segments);
   const transcriptSegments =
     detail.transcript.status === 'loaded'
       ? detail.transcript.segments.flatMap(segment => {
@@ -264,20 +269,29 @@ function LegacyConversationBody({
           The transcript is empty.
         </Text>
       ) : (
-        transcriptSegments.map((segment, index) => (
-          <Text
-            key={index}
-            selectable
-            style={[styles.conversationTranscriptText, ink]}>
-            {segment.isUser
-              ? 'You'
-              : segment.speaker?.replace(
-                  /^SPEAKER_(\d+)$/,
-                  (_, number: string) => `Speaker ${Number(number) + 1}`,
-                ) || 'Speaker'}{' '}
-            · {segment.text}
-          </Text>
-        ))
+        transcriptSegments.map((segment, index) => {
+          const speaker = segment.isUser
+            ? 'You'
+            : segment.speaker?.replace(
+                /^SPEAKER_(\d+)$/,
+                (_, number: string) => `Speaker ${Number(number) + 1}`,
+              ) || 'Speaker';
+          const clock = showLegacyClocks
+            ? legacyTranscriptTimestampCopy(segment.start, segment.end)
+            : null;
+          return (
+            <View key={index} style={styles.conversationDetailFields}>
+              <Text selectable style={[styles.conversationTranscriptText, ink]}>
+                {speaker} · {segment.text}
+              </Text>
+              {clock !== null ? (
+                <Text style={[styles.conversationDetailField, ink]}>
+                  {clock}
+                </Text>
+              ) : null}
+            </View>
+          );
+        })
       )}
     </>
   );

@@ -249,6 +249,103 @@ test('legacy NEXT LINE-prefixed segments keep later speech', () => {
   expect(copy).not.toContain('The transcript is empty.');
 });
 
+test('legacy transcript names GET start and end when segments do not overlap', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'First words',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              start: 0,
+              end: 1.9,
+            },
+            {
+              text: 'Later words',
+              speaker: 'SPEAKER_01',
+              isUser: false,
+              start: 2,
+              end: 5,
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('Speaker 1');
+  expect(copy).toContain('First words');
+  expect(copy).toContain('00:00:00 - 00:00:01');
+  expect(copy).toContain('Speaker 2');
+  expect(copy).toContain('Later words');
+  expect(copy).toContain('00:00:02 - 00:00:05');
+});
+
+test('legacy transcript omits GET clocks when segments overlap', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'First words',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              start: 0,
+              end: 3,
+            },
+            {
+              text: 'Later words',
+              speaker: 'SPEAKER_01',
+              isUser: false,
+              start: 1,
+              end: 5,
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('Speaker 1');
+  expect(copy).toContain('First words');
+  expect(copy).toContain('Speaker 2');
+  expect(copy).toContain('Later words');
+  expect(copy).not.toContain('00:00:00');
+  expect(copy).not.toContain('00:00:01');
+  expect(copy).not.toContain('00:00:03');
+});
+
 test('legacy NEXT LINE-prefixed sections keep later notes', () => {
   mockLegacy.mockReturnValue({
     result: {

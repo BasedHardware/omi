@@ -146,6 +146,40 @@ export function recordingTranscriptSpeakerCopy(segment: {
   return labeled !== null ? `Speaker ${Number(labeled[1]) + 1}` : trimmed;
 }
 
+export function legacyTranscriptCanDisplaySeconds(
+  segments: readonly {start: number; end: number}[],
+): boolean {
+  for (let i = 0; i < segments.length; i += 1) {
+    for (let j = i + 1; j < segments.length; j += 1) {
+      if (
+        segments[i].start > segments[j].end ||
+        segments[i].end > segments[j].start
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function legacyTranscriptClockPart(totalSeconds: number): string {
+  const seconds = Math.trunc(totalSeconds);
+  const hours = Math.trunc(seconds / 3600);
+  const minutes = Math.trunc(seconds / 60) % 60;
+  const remainder = seconds % 60;
+  const pad = (value: number) => String(Math.abs(value)).padStart(2, '0');
+  return `${pad(hours)}:${pad(minutes)}:${pad(remainder)}`;
+}
+
+export function legacyTranscriptTimestampCopy(
+  start: number,
+  end: number,
+): string {
+  return `${legacyTranscriptClockPart(start)} - ${legacyTranscriptClockPart(
+    end,
+  )}`;
+}
+
 export function conversationHasFinishClock(conversation: {
   finishedAt: string | null;
   status: string;
