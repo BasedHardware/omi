@@ -34,6 +34,7 @@ export type OmiDailySummary = {
   id: string;
   date: string;
   headline: string;
+  overview?: string;
   dayEmoji?: string;
   conversations?: number;
   actionItems?: number;
@@ -110,11 +111,16 @@ export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
       summary.day_emoji === undefined || summary.day_emoji === null
         ? ''
         : visibleDisplayText(text(summary.day_emoji, 32));
+    const overview =
+      summary.overview === undefined || summary.overview === null
+        ? ''
+        : visibleDisplayText(text(summary.overview, 10000));
     const stats = summaryStats(summary.stats);
     items.push({
       id,
       date,
       headline,
+      ...(overview === '' ? {} : {overview}),
       ...(dayEmoji === '' ? {} : {dayEmoji}),
       ...stats,
     });

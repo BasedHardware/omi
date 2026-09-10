@@ -1360,6 +1360,7 @@ test('Settings names GET daily summaries without regenerate or a write sheet', a
               date: '2026-09-09',
               headline: 'Met with the team',
               day_emoji: '🎯',
+              overview: 'Shipped the recap body.',
               stats: {
                 total_conversations: 3,
                 action_items_count: 2,
@@ -1385,6 +1386,7 @@ test('Settings names GET daily summaries without regenerate or a write sheet', a
   expect(tree).toContain('2 action items');
   expect(tree).toContain('10m watching');
   expect(tree).toContain('1 proactive moment');
+  expect(tree).toContain('Shipped the recap body.');
   expect(tree).not.toContain('Your Day in Review');
   expect(tree).not.toContain('📅');
   expect(tree).not.toContain('sum-1');

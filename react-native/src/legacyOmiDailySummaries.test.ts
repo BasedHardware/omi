@@ -13,6 +13,7 @@ test('parses GET daily summary headlines and omits empty headlines', () => {
           date: '2026-09-09',
           headline: 'Met with the team',
           day_emoji: '🎯',
+          overview: 'Shipped the recap body.',
           stats: {
             total_conversations: 3,
             action_items_count: 2,
@@ -30,6 +31,7 @@ test('parses GET daily summary headlines and omits empty headlines', () => {
           id: 'sum-2',
           headline: 'Shipped the recap',
           day_emoji: ' \t',
+          overview: ' \t',
           stats: {
             total_conversations: 0,
             action_items_count: 0,
@@ -46,6 +48,7 @@ test('parses GET daily summary headlines and omits empty headlines', () => {
       id: 'sum-1',
       date: '2026-09-09',
       headline: 'Met with the team',
+      overview: 'Shipped the recap body.',
       dayEmoji: '🎯',
       conversations: 3,
       actionItems: 2,
@@ -111,6 +114,19 @@ test('fails closed for malformed GET daily summaries', () => {
             id: 'sum-1',
             headline: 'One',
             stats: {proactive_moments: '1'},
+          },
+        ],
+      }),
+    ),
+  ).toThrow();
+  expect(() =>
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            headline: 'One',
+            overview: 1,
           },
         ],
       }),

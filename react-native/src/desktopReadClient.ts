@@ -711,6 +711,7 @@ export function dailySummaryCopy(
     id: string;
     date: string;
     headline: string;
+    overview?: string;
     dayEmoji?: string;
     conversations?: number;
     actionItems?: number;
@@ -742,10 +743,12 @@ export function dailySummaryCopy(
     const withCounts =
       counts.length === 0 ? dated : `${dated} · ${counts.join(' · ')}`;
     const emoji = visibleDisplayText(row.dayEmoji ?? '');
+    const headed = emoji === '' ? withCounts : `${emoji} ${withCounts}`;
+    const overview = visibleDisplayText(row.overview ?? '');
     return [
       {
         title: 'Daily summary',
-        copy: emoji === '' ? withCounts : `${emoji} ${withCounts}`,
+        copy: overview === '' ? headed : `${headed}\n${overview}`,
       },
     ];
   });
