@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: stack-overflow-question-handler-tests
+    command: ["python3", "plugins/omi-stack-overflow-app/test_main.py"]
+    triggers: ["plugins/omi-stack-overflow-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13246: search results must use accepted_answer_id, not the positively-scored-answer is_answered flag, for accepted status"
   - id: usgs-earthquake-tests
     command: ["python3", "plugins/omi-usgs-earthquake-app/test_main.py"]
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
