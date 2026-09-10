@@ -623,7 +623,7 @@ describe("worker request contract", () => {
     }
   });
 
-  test("Firebase verifier outage sends production retry-after on chat Settings and Listen GET", async () => {
+  test("Firebase verifier outage sends production retry-after on chat Settings Listen and generation-events GET", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = mock(
       async () => new Response(null, { status: 302 })
@@ -664,6 +664,14 @@ describe("worker request contract", () => {
         bindings as never,
         executionContext as never
       );
+      const events = await handler.fetch(
+        onTheWireRequest("/v1/chat-generations/generation-id/events", {
+          authorization: "Bearer firebase-id-token",
+          "x-omi-client-id": "desktop-client",
+        }),
+        bindings as never,
+        executionContext as never
+      );
 
       expect(chat.status).toBe(503);
       expect(chat.headers.get("retry-after")).toBe("60");
@@ -671,6 +679,9 @@ describe("worker request contract", () => {
       expect(settings.status).toBe(503);
       expect(settings.headers.get("retry-after")).toBe("60");
       expect((await settings.json()) as unknown).toEqual(unavailable);
+      expect(events.status).toBe(503);
+      expect(events.headers.get("retry-after")).toBe("60");
+      expect((await events.json()) as unknown).toEqual(unavailable);
       expect(transcript.status).toBe(503);
       expect(transcript.headers.get("retry-after")).toBe("1");
       expect((await transcript.json()) as unknown).toEqual(unavailable);

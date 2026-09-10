@@ -4,7 +4,11 @@ import {
   parseDeviceSessionAudio,
   parseDeviceSessionCreate,
 } from "../src/device-sessions";
-import { coreContext, handleTranscription } from "../src/http-core";
+import {
+  coreContext,
+  handleTranscribe,
+  handleTranscription,
+} from "../src/http-core";
 import { createD1Mock } from "./d1-mock";
 
 let handler: typeof import("../src/index")["default"];
@@ -408,6 +412,27 @@ describe("device session request validators", () => {
     expect(missingDb.status).toBe(503);
     expect(missingDb.headers.get("retry-after")).toBe("1");
     expect((await missingDb.json()) as object).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+    const missingDbTranscribe = await handleTranscribe(
+      coreContext({
+        env: { ...env, DB: undefined } as never,
+        request: new Request(
+          "https://worker.test/v1/device-sessions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/transcribe",
+          { method: "POST" }
+        ),
+        routePath: "/v1/device-sessions/:id/transcribe",
+        params: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(missingDbTranscribe.status).toBe(503);
+    expect(missingDbTranscribe.headers.get("retry-after")).toBe("1");
+    expect((await missingDbTranscribe.json()) as object).toEqual({
       error: {
         code: "service_unavailable",
         retryable: true,

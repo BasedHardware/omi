@@ -335,6 +335,12 @@ function firebaseUnavailableRetryAfter(
   if (method === "GET" && pathname === "/v1/settings") return "60";
   if (
     method === "GET" &&
+    /^\/v1\/chat-generations\/[^/]+\/events$/.test(pathname)
+  ) {
+    return "60";
+  }
+  if (
+    method === "GET" &&
     /^\/v1\/device-sessions\/[^/]+\/transcript$/.test(pathname)
   ) {
     return "1";
@@ -980,7 +986,9 @@ export async function handleTranscribe(
 ): Promise<Response> {
   const { DB, ATTACHMENTS, AI } = context.env;
   if (DB === undefined)
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "1",
+    });
   if (ATTACHMENTS === undefined || AI === undefined)
     return backendError("service_unavailable", "none", 503);
   const accountId = context.get("accountId"),
