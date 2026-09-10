@@ -1556,3 +1556,184 @@ test('conversation list names discarded GET photo counts and omits them otherwis
   expect(textOf(renderer)).toContain('2 photos');
   expect(textOf(renderer)).not.toContain('3 photos');
 });
+
+test('conversation list names GET goals without add or a write sheet', async () => {
+  const request = jest.fn(async () => ({
+    id: 'omi-goals',
+    status: 200,
+    body: JSON.stringify([
+      {
+        id: 'goal-read',
+        title: 'Read 20 books',
+        current_value: 3,
+        target_value: 10,
+      },
+      {id: 'goal-empty', title: ' \t', current_value: 1, target_value: 2},
+    ]),
+  }));
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Goals');
+  expect(tree).toContain('Read 20 books');
+  expect(tree).toContain('3/10');
+  expect(tree).toContain('No conversations yet.');
+  expect(tree).not.toContain('goal-read');
+  expect(tree).not.toContain('No goals');
+  expect(tree).not.toContain('🎯');
+  expect(tree).not.toContain('Add');
+  expect(request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/goals/all',
+  });
+  expect(request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
+    false,
+  );
+  expect(request.mock.calls.some(call => call[0].path === '/v1/goals')).toBe(
+    false,
+  );
+});
+
+test('conversation list omits GET goals on failure and while searching', async () => {
+  const request = jest.fn(async () => ({
+    id: 'omi-goals',
+    status: 404,
+    body: null,
+  }));
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                kind: 'conversation',
+                id: 'chat:one',
+                title: 'Standup',
+                summary: 'Notes',
+                searchableText: 'Standup\nNotes',
+                createdAt: '2026-09-07T00:00:00.000Z',
+                updatedAt: '2026-09-07T00:01:00.000Z',
+                startedAt: '2026-09-07T00:00:00.000Z',
+                finishedAt: null,
+                starred: false,
+                status: 'in_progress',
+                source: 'chat',
+                visibility: 'private',
+                folderId: null,
+                locked: false,
+                discarded: false,
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(textOf(renderer)).not.toContain('Goals');
+  expect(textOf(renderer)).not.toContain('No goals');
+
+  request.mockResolvedValueOnce({
+    id: 'omi-goals',
+    status: 200,
+    body: JSON.stringify([
+      {
+        id: 'goal-read',
+        title: 'Read 20 books',
+        current_value: 3,
+        target_value: 10,
+      },
+    ]),
+  });
+  await act(async () => {
+    renderer.update(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                kind: 'conversation',
+                id: 'chat:one',
+                title: 'Standup',
+                summary: 'Notes',
+                searchableText: 'Standup\nNotes',
+                createdAt: '2026-09-07T00:00:00.000Z',
+                updatedAt: '2026-09-07T00:01:00.000Z',
+                startedAt: '2026-09-07T00:00:00.000Z',
+                finishedAt: null,
+                starred: false,
+                status: 'in_progress',
+                source: 'chat',
+                visibility: 'private',
+                folderId: null,
+                locked: false,
+                discarded: false,
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(textOf(renderer)).toContain('Goals');
+  expect(textOf(renderer)).toContain('Read 20 books');
+  const search = renderer.root.findByProps({
+    accessibilityLabel: 'Search loaded conversations',
+  });
+  await act(async () => {
+    search.props.onChangeText('Standup');
+  });
+  expect(textOf(renderer)).not.toContain('Goals');
+  expect(textOf(renderer)).not.toContain('Read 20 books');
+  expect(textOf(renderer)).toContain('Standup');
+});
+

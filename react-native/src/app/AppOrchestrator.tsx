@@ -1110,6 +1110,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         activeRoute={activeMobileRoute}
         conversationContent={
           <ConversationsPage
+            backend={omiBackend}
             onRefresh={() => {
               void refreshReads(false);
             }}
@@ -1670,6 +1671,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                   </ScrollView>
                 ) : route === 'Conversations' ? (
                   <ConversationsPage
+                    backend={omiBackend}
                     onRefresh={() => {
                       void refreshReads(false);
                     }}

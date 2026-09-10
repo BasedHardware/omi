@@ -36,6 +36,8 @@ import {
 } from '../ui/ConversationDetail';
 import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
+import {goalProgressCopy, loadOmiGoals, type OmiGoal} from '../legacyOmiGoals';
+import type {OmiBackend} from '../omiNativeTypes';
 
 const ConversationRow = memo(function ConversationRow({
   item,
@@ -145,6 +147,7 @@ export function ConversationsPage({
   notice = null,
   requestedConversationId = null,
   onRequestedConversationConsumed,
+  backend = null,
 }: {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
@@ -155,6 +158,7 @@ export function ConversationsPage({
   notice?: string | null;
   requestedConversationId?: string | null;
   onRequestedConversationConsumed?: () => void;
+  backend?: OmiBackend | null;
 }) {
   const compact = useWindowDimensions().width < 720;
   const conversations = useMemo(
@@ -223,6 +227,28 @@ export function ConversationsPage({
     [filtered, nowEpochMilliseconds],
   );
   const filtering = visibleDisplayText(query) !== '' || starredOnly;
+  const [goals, setGoals] = useState<OmiGoal[]>([]);
+  useEffect(() => {
+    if (backend === undefined || backend === null) {
+      setGoals([]);
+      return;
+    }
+    let cancelled = false;
+    loadOmiGoals(backend)
+      .then(rows => {
+        if (!cancelled) {
+          setGoals(rows);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGoals([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [backend, loading]);
 
   return (
     <View
@@ -301,6 +327,21 @@ export function ConversationsPage({
                 {notice}
               </Text>
             )}
+            {goals.length > 0 && !filtering ? (
+              <View>
+                <Text style={styles.projectionEmptyTitle}>Goals</Text>
+                {goals.map(goal => (
+                  <View key={goal.id}>
+                    <Text numberOfLines={1} style={styles.resultTitle}>
+                      {goal.title}
+                    </Text>
+                    <Text style={styles.conversationRowTime}>
+                      {goalProgressCopy(goal.current, goal.target)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
             {loading && outcome === null ? (
               <View style={styles.projectionEmpty}>
                 <ActivityIndicator color="#888888" />
