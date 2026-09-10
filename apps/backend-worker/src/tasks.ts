@@ -105,6 +105,23 @@ function toTaskItem(row: StoredTask): TaskRead.Item | null {
   ) {
     return null;
   }
+  if (typeof row.id !== "string" || row.id.length < 1) return null;
+  if (typeof row.description !== "string") return null;
+  if (!(row.completedAt === null || Number.isSafeInteger(row.completedAt)))
+    return null;
+  if (!(row.dueAt === null || Number.isSafeInteger(row.dueAt))) return null;
+  if (!(row.owner === null || typeof row.owner === "string")) return null;
+  if (typeof row.source !== "string") return null;
+  if (typeof row.sortOrder !== "number" || !Number.isFinite(row.sortOrder))
+    return null;
+  if (!Number.isSafeInteger(row.indentLevel) || row.indentLevel < 0)
+    return null;
+  if (
+    !Number.isSafeInteger(row.createdAt) ||
+    !Number.isSafeInteger(row.updatedAt)
+  )
+    return null;
+  if (!(row.revision === null || typeof row.revision === "string")) return null;
   const item: Record<string, unknown> = {};
   item["id"] = row.id;
   item["description"] = row.description;
