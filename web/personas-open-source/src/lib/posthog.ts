@@ -3,8 +3,7 @@ import posthog from 'posthog-js';
 const POSTHOG_KEY =
   process.env.NEXT_PUBLIC_POSTHOG_KEY ||
   'phc_xUxO7ovj7ckqMu2GhFltKeNM1EtVOSS6rnVhRH5ClIl';
-const POSTHOG_HOST =
-  process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
+const POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
 
 let isInitialized = false;
 

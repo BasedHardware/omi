@@ -43,8 +43,7 @@ export default function RootLayout({
   const posthogKey =
     process.env.NEXT_PUBLIC_POSTHOG_KEY ||
     'phc_xUxO7ovj7ckqMu2GhFltKeNM1EtVOSS6rnVhRH5ClIl';
-  const posthogHost =
-    process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
+  const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
 
   return (
     <html lang="en">

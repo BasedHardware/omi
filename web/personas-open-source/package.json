@@ -34,7 +34,7 @@
     "uuid": "^11.0.3"
   },
   "devDependencies": {
-    
+
     "@types/node": "^20",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
