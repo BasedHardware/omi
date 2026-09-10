@@ -186,9 +186,9 @@ beforeEach(() => {
 
 describe("attachment staging request validator", () => {
   test("accepts a bounded canonical metadata request", () => {
-    expect(
-      parseAttachmentStageRequest(validStageRequest("op-1"))
-    ).not.toBeNull();
+    expect(parseAttachmentStageRequest(validStageRequest("op-1")).kind).toBe(
+      "ok"
+    );
   });
 
   test("accepts production gif and webp mime types", () => {
@@ -196,14 +196,14 @@ describe("attachment staging request validator", () => {
       parseAttachmentStageRequest({
         ...validStageRequest("op-gif"),
         mimeType: "image/gif",
-      })
-    ).not.toBeNull();
+      }).kind
+    ).toBe("ok");
     expect(
       parseAttachmentStageRequest({
         ...validStageRequest("op-webp"),
         mimeType: "image/webp",
-      })
-    ).not.toBeNull();
+      }).kind
+    ).toBe("ok");
   });
 
   test("sniffs GIF and WEBP magics without using declared metadata", () => {
@@ -225,22 +225,24 @@ describe("attachment staging request validator", () => {
     [{ ...validStageRequest("op-1"), mimeType: "" }],
     [{ ...validStageRequest("op-1"), mimeType: "text/html" }],
     [{ ...validStageRequest("op-1"), mimeType: "application/x-msdownload" }],
+    [{ ...validStageRequest("op-1"), sizeBytes: 1.5 }],
+    [{ ...validStageRequest("op-1"), displayName: "x".repeat(257) }],
+  ])("rejects unsupported or malformed attachment metadata", (value: unknown) => {
+    expect(parseAttachmentStageRequest(value)).toEqual({ kind: "rejected" });
+  });
+
+  test.each([
     [{ ...validStageRequest("op-1"), sizeBytes: 0 }],
     [{ ...validStageRequest("op-1"), sizeBytes: -1 }],
-    [{ ...validStageRequest("op-1"), sizeBytes: 1.5 }],
     [
       {
         ...validStageRequest("op-1"),
         sizeBytes: ATTACHMENT_CAPABILITIES.maxAttachmentBytes + 1,
       },
     ],
-    [{ ...validStageRequest("op-1"), displayName: "x".repeat(257) }],
-  ])(
-    "rejects unsupported or malformed attachment metadata",
-    (value: unknown) => {
-      expect(parseAttachmentStageRequest(value)).toBeNull();
-    }
-  );
+  ])("empty and oversized attachment metadata is invalid", (value: unknown) => {
+    expect(parseAttachmentStageRequest(value)).toEqual({ kind: "invalid" });
+  });
 });
 
 describe("signed upload config parser", () => {
@@ -630,6 +632,33 @@ describe("attachment staging route fail-closed behavior", () => {
     });
 
     expect(response.status).toBe(422);
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "validation",
+        retryable: false,
+        action: "edit_request",
+      },
+    });
+  });
+
+  test("returns 422 validation for empty attachment size through the route", async () => {
+    const response = await fetchWorker("/v1/chat-attachments", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...validStageRequest("op-empty-size"),
+        sizeBytes: 0,
+      }),
+    });
+
+    expect(response.status).toBe(422);
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "validation",
+        retryable: false,
+        action: "edit_request",
+      },
+    });
   });
 
   test("stages successfully when all bindings and signing config are present, returns a usable signed URL, and sends no queue message", async () => {

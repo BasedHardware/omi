@@ -179,32 +179,39 @@ export function makeR2UploadUrlSigner(
     });
 }
 
+export type AttachmentStageParseResult =
+  | { kind: "ok"; request: AttachmentStageRequest }
+  | { kind: "invalid" }
+  | { kind: "rejected" };
+
 export function parseAttachmentStageRequest(
   body: unknown
-): AttachmentStageRequest | null {
+): AttachmentStageParseResult {
   if (body === null || typeof body !== "object" || Array.isArray(body))
-    return null;
+    return { kind: "rejected" };
   const item = body as Record<string, unknown>;
   if (
     !isBoundedString(item["opId"], 128) ||
     !isBoundedString(item["displayName"], 256) ||
     !isBoundedString(item["mimeType"], 128) ||
-    !Number.isSafeInteger(item["sizeBytes"]) ||
-    (item["sizeBytes"] as number) <= 0
+    !Number.isSafeInteger(item["sizeBytes"])
   )
-    return null;
+    return { kind: "rejected" };
+  const sizeBytes = item["sizeBytes"] as number;
+  if (sizeBytes <= 0) return { kind: "invalid" };
   const mimeType = item["mimeType"] as string;
   if (!ATTACHMENT_CAPABILITIES.allowedAttachmentMimeTypes.includes(mimeType))
-    return null;
-  if (
-    (item["sizeBytes"] as number) > ATTACHMENT_CAPABILITIES.maxAttachmentBytes
-  )
-    return null;
+    return { kind: "rejected" };
+  if (sizeBytes > ATTACHMENT_CAPABILITIES.maxAttachmentBytes)
+    return { kind: "invalid" };
   return {
-    opId: item["opId"] as string,
-    displayName: item["displayName"] as string,
-    mimeType,
-    sizeBytes: item["sizeBytes"] as number,
+    kind: "ok",
+    request: {
+      opId: item["opId"] as string,
+      displayName: item["displayName"] as string,
+      mimeType,
+      sizeBytes,
+    },
   };
 }
 

@@ -662,9 +662,12 @@ export async function handleAttachmentStage(
     return backendError("attachment_too_large", "edit_request", 413);
   if (parsed.kind === "invalid")
     return backendError("bad_request", "edit_request", 400);
-  const request = parseAttachmentStageRequest(parsed.value);
-  if (request === null)
+  const staged = parseAttachmentStageRequest(parsed.value);
+  if (staged.kind === "invalid")
+    return backendError("validation", "edit_request", 422);
+  if (staged.kind === "rejected")
     return backendError("attachment_rejected", "edit_request", 422);
+  const request = staged.request;
   const db = context.env.DB;
   if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true, {
