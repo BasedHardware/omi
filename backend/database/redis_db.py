@@ -1448,6 +1448,12 @@ def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) 
     return result is not None
 
 
+def try_acquire_daily_wear_lock(uid: str, date: str, ttl: int = 60 * 60 * 24) -> bool:
+    """At most one wear FCM per uid per UTC day. True iff this caller may send."""
+    result = r.set(f'users:{uid}:daily_wear_lock:{date}', '1', ex=ttl, nx=True)
+    return result is not None
+
+
 def release_daily_summary_lock(uid: str, date: str) -> None:
     """Release a day lock this process took but did not spend on generation.
 
