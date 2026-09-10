@@ -36,6 +36,7 @@ Common labels
 {{- define "parakeet.labels" -}}
 helm.sh/chart: {{ include "parakeet.chart" . }}
 {{ include "parakeet.selectorLabels" . }}
+app.kubernetes.io/component: {{ include "parakeet.serviceMode" . | quote }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -48,6 +49,21 @@ Selector labels
 {{- define "parakeet.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "parakeet.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
+The service mode is a pod label (and a runtime env value), but is deliberately
+not part of selectorLabels: adding it to an existing Deployment selector would
+make a Helm upgrade fail because Kubernetes selectors are immutable.
+*/}}
+{{- define "parakeet.serviceMode" -}}
+{{- default "mixed" .Values.serviceMode | lower | trunc 63 | trimSuffix "-" -}}
+{{- end }}
+
+{{/* Keep the legacy batch BackendConfig name unless a second release supplies
+an explicit name. */}}
+{{- define "parakeet.backendConfigName" -}}
+{{- default "parakeet-backend-config" .Values.backendConfig.name | trunc 63 | trimSuffix "-" -}}
 {{- end }}
 
 {{/*

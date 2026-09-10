@@ -1,17 +1,19 @@
+{{- if .Values.backendConfig.enabled }}
 apiVersion: cloud.google.com/v1
 kind: BackendConfig
 metadata:
-  name: parakeet-backend-config
+  name: {{ include "parakeet.backendConfigName" . }}
 spec:
-  timeoutSec: 120
+  timeoutSec: {{ .Values.backendConfig.timeoutSec }}
   connectionDraining:
-    drainingTimeoutSec: 130
+    drainingTimeoutSec: {{ .Values.backendConfig.drainingTimeoutSec }}
   healthCheck:
     checkIntervalSec: 10
     timeoutSec: 5
     port: {{ .Values.service.port }}
     type: HTTP
     requestPath: /health  # Ensure this path returns 200 OK
+{{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -20,10 +22,20 @@ metadata:
   labels:
     {{- include "parakeet.labels" . | nindent 4 }}
   annotations:
+    {{- if .Values.service.neg.enabled }}
     cloud.google.com/neg: '{"ingress": true}'
-    cloud.google.com/backend-config: '{"default": "parakeet-backend-config"}'  # Link to BackendConfig
+    {{- end }}
+    {{- if .Values.backendConfig.enabled }}
+    cloud.google.com/backend-config: {{ printf "{\"default\": \"%s\"}" (include "parakeet.backendConfigName" .) | quote }}
+    {{- end }}
+    {{- with .Values.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   type: {{ .Values.service.type }}
+  {{- with .Values.service.loadBalancerIP }}
+  loadBalancerIP: {{ . | quote }}
+  {{- end }}
   ports:
     - port: {{ .Values.service.port }}
       targetPort: {{ .Values.service.port }}

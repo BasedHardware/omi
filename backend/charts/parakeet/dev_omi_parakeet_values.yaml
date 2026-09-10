@@ -5,6 +5,10 @@
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 1
 
+# The legacy release owns batch endpoints. Realtime traffic is deployed by the
+# dedicated dev_omi_parakeet_stream_values.yaml overlay.
+serviceMode: batch
+
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: gcr.io/based-hardware-dev/parakeet
@@ -95,7 +99,7 @@ env:
   - name: PARAKEET_MODEL
     value: "nvidia/parakeet-tdt-0.6b-v3"
   - name: PARAKEET_STREAM_MODEL
-    value: "nvidia/parakeet-rnnt-1.1b"
+    value: "nvidia/parakeet-tdt-0.6b-v3"
   - name: PARAKEET_INFERENCE_MODE
     value: "nemo"
   - name: PARAKEET_MAX_SPEECH_S

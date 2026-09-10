@@ -49,7 +49,14 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
                     target = root / relative
                     text = target.read_text(encoding="utf-8")
                     self.assertIn(expected, text)
-                    target.write_text(text.replace(expected, replacement, 1), encoding="utf-8")
+                    # The listener workflow has a source job and a deployment
+                    # job. Both carry the fresh-main fetch because the source
+                    # job admits the image and the deployment job independently
+                    # verifies the checked-out production source. Remove every
+                    # copy for this mutation; changing only the first one would
+                    # leave the static inventory green by accident.
+                    count = -1 if name == "fresh_origin" else 1
+                    target.write_text(text.replace(expected, replacement, count), encoding="utf-8")
                     self.assertTrue(CHECKER.validate(root))
 
     def test_rejects_multiple_image_tag_authorities_and_late_checkouts(self) -> None:

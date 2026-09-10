@@ -33,8 +33,9 @@ PARAKEET_STREAM_CAPACITY_RULES = {
     "omi-parakeet-stream-capacity-critical": ("critical", 20),
 }
 PARAKEET_STREAMS_PER_READY_REPLICA = (
-    'sum(parakeet_active_streams{container="parakeet", namespace="prod-omi-backend"}) '
-    '/ clamp_min(sum(kube_deployment_status_replicas_ready{deployment="prod-omi-parakeet", '
+    'sum(parakeet_active_streams{container="parakeet", namespace="prod-omi-backend", '
+    'pod=~"prod-omi-parakeet-stream-.*"}) '
+    '/ clamp_min(sum(kube_deployment_status_replicas_ready{deployment="prod-omi-parakeet-stream", '
     'namespace="prod-omi-backend"}), 1)'
 )
 PARAKEET_STREAM_CAPACITY_RUNBOOK = "backend/docs/runbooks/parakeet-stream-capacity.md"

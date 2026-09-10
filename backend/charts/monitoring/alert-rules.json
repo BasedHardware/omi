@@ -4370,7 +4370,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet\", namespace=\"prod-omi-backend\"}), 1)",
+          "expr": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\", pod=~\"prod-omi-parakeet-stream-.*\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet-stream\", namespace=\"prod-omi-backend\"}), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -4513,7 +4513,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet\", namespace=\"prod-omi-backend\"}), 1)",
+          "expr": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\", pod=~\"prod-omi-parakeet-stream-.*\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet-stream\", namespace=\"prod-omi-backend\"}), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,

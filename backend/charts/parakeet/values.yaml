@@ -5,6 +5,19 @@
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 1
 
+# Select which GPU workload this release owns.  The mixed default preserves the
+# historical combined service; environment values and the streaming overlays
+# make the ownership explicit before a release is promoted.
+serviceMode: mixed
+
+# Sizing inputs are informational for mixed/batch releases and required by the
+# dedicated stream overlays.  Deployment validation owns the arithmetic; keep
+# the demand and reserve inputs beside the replica settings to prevent drift.
+capacityPlan:
+  peakConcurrentStreams: 0
+  headroomPercent: 30
+  failureReplicas: 1
+
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: nginx
@@ -12,6 +25,10 @@ image:
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
+  # Prefer an immutable digest for promoted stream releases.  Tag rendering
+  # remains available for the existing batch workflow and local development.
+  digest: ""
+  requireDigest: false
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -55,6 +72,22 @@ service:
   type: ClusterIP
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 80
+  # Set type=LoadBalancer and an internal-LB annotation for the dedicated
+  # streaming release.  Leave the IP empty by default: deployment automation
+  # must reserve/read a regional address and pass it to Helm.
+  loadBalancerIP: ""
+  annotations: {}
+  neg:
+    enabled: true
+
+# BackendConfig is shared by the historical batch release unless a release
+# overlay supplies a unique name.  A unique stream name avoids adopting the
+# existing batch resource when both releases run in one namespace.
+backendConfig:
+  enabled: true
+  name: ""
+  timeoutSec: 120
+  drainingTimeoutSec: 130
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -157,6 +190,7 @@ autoscaling:
   minReplicas: 1
   maxReplicas: 100
   # streamsPerPod: 30          # scale on active streaming connections
+  # streamDemandPerPod: 20     # active streams + recent admission pressure
   # requestsPerPod: 40         # scale on total active requests (streams + batch)
   # targetGPUUtilization: 70   # scale on GPU utilization (requires DCGM)
   # targetCPUUtilizationPercentage: 80
@@ -180,3 +214,15 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+# Optional lifecycle hook used by the stream release to hand draining to the
+# application before kubelet sends SIGTERM.
+lifecycle: {}
+
+# A PDB is deliberately opt-in.  The streaming overlays set an integer
+# minAvailable so one voluntary disruption cannot remove the failure reserve.
+podDisruptionBudget: {}
+
+# Set this only when the cluster defines a GPU RuntimeClass.  It is kept
+# configurable because existing Parakeet nodes use the GPU operator default.
+runtimeClassName: ""

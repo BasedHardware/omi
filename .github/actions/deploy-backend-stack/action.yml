@@ -85,6 +85,24 @@ inputs:
     description: 'Telegram chat ID for production deployment notifications'
     required: false
     default: ''
+  parakeet_qualification_evidence:
+    description: >-
+      Path to a passing Parakeet /v3/stream GPU qualification artifact bound to
+      the image digest being deployed. Required for every backend deployment, including Cloud Run PTT.
+    required: false
+    default: ''
+  parakeet_image_ref:
+    description: >-
+      Exact repository@sha256 image reference emitted by the successful
+      Parakeet GPU qualification workflow.
+    required: false
+    default: ''
+  parakeet_node_pool:
+    description: >-
+      Exact task-owned persistent Parakeet stream node-pool name. Existing
+      pools with a different shape or ownership labels are rejected.
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -247,11 +265,8 @@ runs:
           --listener-values="backend/charts/backend-listen/${{ inputs.runtime_env }}_omi_backend_listen_values.yaml" \
           --intent-only >> "$GITHUB_OUTPUT"
 
-    - name: Get GKE credentials for gateway serving gate
-      if: >-
-        ${{ inputs.deploy_profile == 'auto-dev' ||
-        inputs.deploy_targets == 'all' ||
-        (inputs.deploy_profile == 'manual' && steps.gateway-intent.outputs.enabled == 'true') }}
+    # Cloud Run PTT and GKE listen both require qualified streaming capacity.
+    - name: Get GKE credentials for capacity and gateway gates
       uses: google-github-actions/get-gke-credentials@v3
       with:
         cluster_name: ${{ env.GKE_CLUSTER }}
@@ -314,6 +329,58 @@ runs:
       run: |
         docker push gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:latest
         docker push gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
+
+    - name: Install Helm for Parakeet capacity
+      uses: azure/setup-helm@v5
+
+    - name: Admit qualified Parakeet stream image
+      id: parakeet-image
+      shell: bash
+      env:
+        IMAGE_REF: ${{ inputs.parakeet_image_ref }}
+      run: |
+        set -euo pipefail
+        [[ "$IMAGE_REF" =~ ^([^@[:space:]]+)@(sha256:[0-9a-f]{64})$ ]] || {
+          echo "ERROR: parakeet_image_ref must be an exact repository@sha256 digest from GPU qualification." >&2
+          exit 1
+        }
+        image_repository="${BASH_REMATCH[1]}"
+        digest="${BASH_REMATCH[2]}"
+        {
+          echo "image_repository=$image_repository"
+          echo "image_digest=$digest"
+          echo "image_ref=$IMAGE_REF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Prepare and gate Parakeet stream fleet
+      id: parakeet-stream
+      shell: bash
+      env:
+        QUALIFICATION_EVIDENCE: ${{ inputs.parakeet_qualification_evidence }}
+        NODE_POOL: ${{ inputs.parakeet_node_pool }}
+      run: |
+        set -euo pipefail
+        args=(
+          --environment "${{ inputs.runtime_env }}"
+          --project "${{ inputs.project_id }}"
+          --cluster "${{ env.GKE_CLUSTER }}"
+          --region "${{ inputs.region }}"
+          --image-repository "${{ steps.parakeet-image.outputs.image_repository }}"
+          --image-digest "${{ steps.parakeet-image.outputs.image_digest }}"
+          --adapter-values-file "backend/charts/monitoring/prometheus-adapter/${{ inputs.runtime_env }}_omi_prometheus_adapter.yaml"
+          --allow-node-pool-provision
+          --apply
+          --github-output "$GITHUB_OUTPUT"
+        )
+        test -n "$QUALIFICATION_EVIDENCE" || {
+          echo "ERROR: provide the downloaded Parakeet GPU qualification artifact for this exact image." >&2
+          exit 1
+        }
+        args+=(--qualification-evidence "$QUALIFICATION_EVIDENCE" --source-sha "${{ inputs.admitted_sha }}")
+        if [[ -n "$NODE_POOL" ]]; then
+          args+=(--node-pool "$NODE_POOL")
+        fi
+        python3 "$DEPLOY_CONTROL_SCRIPTS/deploy_parakeet_stream.py" "${args[@]}"
 
     - name: Install Helm for combined LLM Gateway deployment
       if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_gateway == 'true' }}
@@ -516,6 +583,7 @@ runs:
         SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
         SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
         SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}
+        HOSTED_PARAKEET_STREAM_API_URL: ${{ steps.parakeet-stream.outputs.hosted_parakeet_stream_api_url }}
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/render_backend_runtime_env.py" \
           --env ${{ inputs.runtime_env }} \
@@ -929,6 +997,7 @@ runs:
         REDIS_DB_HOST: ${{ env.REDIS_DB_HOST }}
         STT_PRERECORDED_MODEL: ${{ env.STT_PRERECORDED_MODEL }}
         STT_SERVICE_MODELS: ${{ env.STT_SERVICE_MODELS }}
+        HOSTED_PARAKEET_STREAM_API_URL: ${{ steps.parakeet-stream.outputs.hosted_parakeet_stream_api_url }}
         SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
         SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}
         TYPESENSE_HOST: ${{ env.TYPESENSE_HOST }}
@@ -951,6 +1020,7 @@ runs:
 
     - name: Deploy ${{ env.SERVICE }}-listen to GKE using Helm
       if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}
+      id: deploy-backend-listen
       shell: bash
       run: |
         helm -n ${{ inputs.runtime_env }}-omi-backend upgrade --install ${{ inputs.runtime_env }}-omi-backend-listen ./backend/charts/backend-listen \
@@ -958,12 +1028,17 @@ runs:
           --set image.repository=gcr.io/${{ inputs.project_id }}/${{ inputs.service }} \
           --set gcpProjectId=${{ inputs.project_id }} \
           --set runtimeGcpProjectId=${{ inputs.runtime_gcp_project_id }} \
-          --set-string image.tag=${{ steps.image-tag.outputs.short_sha }}
+          --set-string image.tag=${{ steps.image-tag.outputs.short_sha }} \
+          --atomic --wait --timeout=30m
         if ! kubectl -n ${{ inputs.runtime_env }}-omi-backend rollout status deploy/${{ inputs.runtime_env }}-omi-backend-listen --timeout=1800s; then
           python3 "$DEPLOY_CONTROL_SCRIPTS/deploy_status_report.py" --env ${{ inputs.runtime_env }} --include-gke --gke-service backend-listen || true
           exit 1
         fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/deploy_status_report.py" --env ${{ inputs.runtime_env }} --include-gke --gke-service backend-listen
+
+    # Keep the verified stream fleet warm if a downstream deployment fails.
+    # Restore application traffic using its existing snapshot below; rolling
+    # back shared capacity first could strand a successfully updated caller.
 
     - name: Verify exact candidate composition
       if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}
