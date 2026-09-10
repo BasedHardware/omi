@@ -53,6 +53,7 @@ def _stream_handler_module():
     mock_transcribe._model = None
     mock_transcribe._gpu_worker = None
     mock_transcribe.INFERENCE_MODE = "nemo"
+    mock_transcribe.SERVICE_MODE = "mixed"
     mock_transcribe.has_builtin_embedding = MagicMock(return_value=False)
     mock_transcribe.report_gpu_inference_error = MagicMock(return_value=False)
     mock_transcribe.wav_bytes_to_waveform = _mock_wav_bytes_to_waveform
@@ -153,6 +154,18 @@ class TestCosineDistance:
 
 
 class TestRNNTWarmup:
+    def test_stream_readiness_requires_builtin_diarizer(self):
+        with patch.object(sh, '_SERVICE_MODE', 'stream'), patch.object(
+            sh, 'has_builtin_embedding', return_value=False
+        ), patch.object(sh, 'SPEAKER_EMBEDDING_URL', 'http://external-diarizer'):
+            assert sh.warmup_diarizer() is False
+
+    def test_mixed_readiness_can_use_configured_external_diarizer(self):
+        with patch.object(sh, '_SERVICE_MODE', 'mixed'), patch.object(
+            sh, 'has_builtin_embedding', return_value=False
+        ), patch.object(sh, 'SPEAKER_EMBEDDING_URL', 'http://external-diarizer'):
+            assert sh.warmup_diarizer() is True
+
     def test_fatal_cuda_error_aborts_startup(self):
         fatal_error = RuntimeError("CUDA error: operation not permitted when stream is capturing")
         model = MagicMock()

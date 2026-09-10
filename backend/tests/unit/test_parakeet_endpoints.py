@@ -1,3 +1,4 @@
+import asyncio
 import io
 import os
 import sys
@@ -647,5 +648,103 @@ class TestMetricsEndpoint:
             "parakeet_gpu_oom_total",
             "parakeet_gpu_fatal_errors_total",
             "parakeet_requests_total",
+            "parakeet_stream_admission_total",
         ]:
             assert name in body, f"Missing metric: {name}"
+
+
+class TestParakeetServiceModes:
+
+    def test_stream_mode_disables_batch_routes(self, monkeypatch):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        monkeypatch.setattr(mod, "SERVICE_MODE", "stream")
+        client = TestClient(app, raise_server_exceptions=False)
+
+        v1 = client.post("/v1/transcribe", files={"file": ("test.wav", b"fake", "audio/wav")})
+        v2 = client.post("/v2/transcribe", files={"file": ("test.wav", b"fake", "audio/wav")})
+        metrics = client.get("/batch/metrics")
+
+        assert v1.status_code == 404
+        assert v2.status_code == 404
+        assert metrics.status_code == 404
+
+    def test_batch_mode_disables_stream_route(self, monkeypatch):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        monkeypatch.setattr(mod, "SERVICE_MODE", "batch")
+        mod.stream_admission = mod.StreamAdmissionController(capacity=2, allocation_percent=100)
+        client = TestClient(app, raise_server_exceptions=False)
+
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect("/v3/stream") as websocket:
+                websocket.receive_json()
+
+        assert exc_info.value.code == 1008
+        assert mod.stream_admission.active == 0
+
+    def test_stream_health_reports_warmed_components_and_admission(self, monkeypatch):
+        app, mod, gpu, _ = _make_app_with_mocks(gpu_ready=True)
+        monkeypatch.setattr(mod, "SERVICE_MODE", "stream")
+        monkeypatch.setattr(mod, "_stream_components_ready", {"rnnt": True, "vad": True, "diarizer": True})
+        mod.stream_admission = mod.StreamAdmissionController(capacity=25, allocation_percent=100)
+
+        client = TestClient(app, raise_server_exceptions=False)
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["mode"] == "stream"
+        assert body["components"] == {"rnnt": True, "vad": True, "diarizer": True}
+        assert body["admission"] == {"capacity": 25, "active": 0, "draining": False}
+        assert gpu.is_ready is True
+
+    @staticmethod
+    def _request(client_host):
+        from starlette.requests import Request
+
+        return Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/__internal/drain",
+                "raw_path": b"/__internal/drain",
+                "query_string": b"",
+                "headers": [],
+                "client": (client_host, 1234),
+                "server": (client_host, 8080),
+                "scheme": "http",
+            }
+        )
+
+    def test_drain_endpoint_rejects_non_loopback_callers(self, monkeypatch):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        monkeypatch.setattr(mod, "SERVICE_MODE", "stream")
+        mod.stream_admission = mod.StreamAdmissionController(capacity=2, allocation_percent=100)
+
+        response = asyncio.run(mod.drain(self._request("10.0.0.8")))
+
+        assert response.status_code == 403
+        assert mod.stream_admission.draining is False
+
+    def test_drain_endpoint_rejects_forwarded_loopback_request(self, monkeypatch):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        monkeypatch.setattr(mod, "SERVICE_MODE", "stream")
+        mod.stream_admission = mod.StreamAdmissionController(capacity=2, allocation_percent=100)
+        request = self._request("127.0.0.1")
+        request.scope["headers"] = [(b"x-forwarded-for", b"10.0.0.8")]
+
+        response = asyncio.run(mod.drain(request))
+
+        assert response.status_code == 403
+        assert mod.stream_admission.draining is False
+
+    def test_loopback_drain_rejects_new_streams(self, monkeypatch):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        monkeypatch.setattr(mod, "SERVICE_MODE", "stream")
+        monkeypatch.setattr(mod, "_stream_components_ready", {"rnnt": True, "vad": True, "diarizer": True})
+        mod.stream_admission = mod.StreamAdmissionController(capacity=2, allocation_percent=100)
+
+        response = asyncio.run(mod.drain(self._request("127.0.0.1")))
+        decision = mod.stream_admission.try_acquire()
+
+        assert response["status"] == "draining"
+        assert decision.reason == "draining"

@@ -85,9 +85,27 @@ helm upgrade --install parakeet ./backend/charts/parakeet \
 
 Backend connects via `HOSTED_PARAKEET_API_URL` (cluster-internal service URL). No auth required — service runs behind internal LB only.
 
-## Proposed primary-provider migration
+## Dedicated realtime service
 
-The [Parakeet-primary implementation plan](../docs/plans/parakeet-primary/README.md)
-scopes a dedicated realtime fleet, capacity qualification, vendor fallbacks and
-staged rollout. It is a draft design; it changes no serving defaults and authorizes
-no provisioning or traffic switch.
+Set `PARAKEET_SERVICE_MODE` to `stream` for RNNT/VAD/speaker embedding only,
+`batch` for TDT/batch diarization, or `mixed` for the historical combined service
+(default). Wrong-mode endpoints reject requests. Stream health becomes ready
+only after required dependencies warm successfully. Run one Uvicorn process
+per GPU so the per-pod admission cap cannot multiply across workers.
+
+Backend live/PTT callers prefer `HOSTED_PARAKEET_STREAM_API_URL`; batch callers
+retain `HOSTED_PARAKEET_API_URL`. The dev/prod stream Helm overlays provision
+separate services and scheduling selectors; apply them after the corresponding
+base environment values. Their production warm floor is 40 and maximum is 60,
+subject to the [capacity qualification contract](../docs/plans/parakeet-primary/capacity-plan.md).
+Do not apply a primary routing change before the dedicated capacity is ready.
+
+`POST /__internal/drain` is pod-loopback only. It removes stream readiness and
+rejects new admissions; shutdown drains leases with a bounded deadline and
+bounds final flushes. The chart invokes it before termination. Counter
+`parakeet_stream_admission_total{reason}` distinguishes admitted, full,
+allocation-rejected, draining and not-ready requests. The existing cluster
+adapter exposes active streams and recent rejection pressure to the stream HPA.
+
+The [implementation and research record](../docs/plans/parakeet-primary/README.md)
+contains fallback behavior, economics, release ordering and qualification limits.

@@ -12,6 +12,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 import soundfile as sf
 import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
+from service_mode import get_service_mode
 
 try:
     import nemo.collections.asr as _nemo_asr  # type: ignore[reportMissingImports]  # nemo_toolkit not installed in dev venv
@@ -96,7 +97,11 @@ class WorkItem:
 
 
 class GPUWorker:
-    def __init__(self, on_fatal_cuda_error: Optional[Callable[[str], None]] = None) -> None:
+    def __init__(
+        self,
+        on_fatal_cuda_error: Optional[Callable[[str], None]] = None,
+        service_mode: Optional[str] = None,
+    ) -> None:
         self._queue: queue.Queue[WorkItem] = queue.Queue(maxsize=_MAX_GPU_QUEUE)
         self._thread: Optional[threading.Thread] = None
         self._model: Any = None
@@ -111,6 +116,12 @@ class GPUWorker:
         self._on_fatal_cuda_error = on_fatal_cuda_error
         self._running: bool = False
         self._submit_lock: threading.Lock = threading.Lock()
+        self._service_mode: str = (
+            get_service_mode({"PARAKEET_SERVICE_MODE": service_mode})
+            if service_mode is not None
+            else get_service_mode(os.environ)
+        )
+        self._model_role: str = "stream_diarizer" if self._service_mode == "stream" else "batch"
         self._attn_mode: str = os.getenv("PARAKEET_ATTENTION_MODE", "full").lower()
         if self._attn_mode not in _VALID_ATTN_MODES:
             raise ValueError(f"PARAKEET_ATTENTION_MODE must be one of {_VALID_ATTN_MODES}, got '{self._attn_mode}'")
@@ -142,6 +153,18 @@ class GPUWorker:
             "attention_mode": self._attn_mode,
             "auto_threshold_sec": self._attn_auto_threshold_sec,
         }
+
+    @property
+    def service_mode(self) -> str:
+        return self._service_mode
+
+    @property
+    def has_batch_model(self) -> bool:
+        return self._model is not None
+
+    @property
+    def has_embedding_model(self) -> bool:
+        return self._embedding_model is not None
 
     def start(self) -> None:
         self._running = True
@@ -203,6 +226,10 @@ class GPUWorker:
     def submit(
         self, payload: Dict[str, Any], loop: asyncio.AbstractEventLoop
     ) -> Tuple[asyncio.Future[Any], Optional[WorkItem]]:
+        if self._service_mode == "stream":
+            fut: asyncio.Future[Any] = loop.create_future()
+            fut.set_exception(RuntimeError("Batch inference disabled in streaming service mode"))
+            return fut, None
         if not self.is_ready:
             fut: asyncio.Future[Any] = loop.create_future()
             fut.set_exception(RuntimeError("GPU worker not ready"))
@@ -221,6 +248,8 @@ class GPUWorker:
             return fut, item
 
     def submit_sync(self, payload: Dict[str, Any], timeout: float = 120.0) -> List[Dict[str, Any]]:
+        if self._service_mode == "stream":
+            raise RuntimeError("Batch inference disabled in streaming service mode")
         if not self.is_ready:
             raise RuntimeError("GPU worker not ready")
         with self._submit_lock:
@@ -332,6 +361,12 @@ class GPUWorker:
             item.loop.call_soon_threadsafe(_safe_set_exception, item.future, exc)
 
     def _load_model(self) -> None:
+        if self._service_mode == "stream":
+            self._load_stream_diarizer()
+            self._record_vram_baseline()
+            logger.info("Streaming-only service mode loaded diarizer dependencies; batch model skipped")
+            return
+
         model_name = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
         device = os.getenv("PARAKEET_DEVICE", "cuda:0")
         do_compile = os.getenv("PARAKEET_TORCH_COMPILE", "false").lower() in ("true", "1", "yes")
@@ -390,6 +425,15 @@ class GPUWorker:
 
         self._load_embedding_model()
 
+        self._record_vram_baseline()
+        logger.info("Batch model loaded and ready")
+
+    def _load_stream_diarizer(self) -> None:
+        """Load the speaker model required by the realtime service only."""
+
+        self._load_embedding_model()
+
+    def _record_vram_baseline(self) -> None:
         if _torch.cuda.is_available():
             device = os.getenv("PARAKEET_DEVICE", "cuda:0")
             dev_idx = int(device.split(":")[-1]) if ":" in device else 0
@@ -400,7 +444,25 @@ class GPUWorker:
                 f"VRAM after model load: {self._vram_baseline_mb:.0f}MiB used / "
                 f"{self._vram_total_mb:.0f}MiB total ({free_bytes / (1024 * 1024):.0f}MiB free)"
             )
-        logger.info("Batch model loaded and ready")
+
+    def warmup_embedding(self, sample_rate: int = 16000) -> bool:
+        """Run one short diarizer inference so stream readiness includes warmup."""
+
+        if self._embedding_model is None:
+            return False
+        try:
+            device = os.getenv("PARAKEET_DEVICE", "cuda:0")
+            kwargs: Dict[str, Any] = {}
+            if _torch.cuda.is_available():
+                kwargs["device"] = device
+            waveform = _torch.zeros((1, sample_rate), **kwargs)
+            result = self.submit_embedding_sync({"waveform": waveform, "sample_rate": sample_rate}, timeout=30.0)
+            return result is not None
+        except Exception as exc:
+            if self.report_inference_error(exc):
+                raise
+            logger.warning("Diarizer warmup failed (exception_type=%s)", type(exc).__name__)
+            return False
 
     def _load_embedding_model(self) -> None:
         if PyannoteModel is None:

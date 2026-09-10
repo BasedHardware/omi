@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import random
 import threading
+import time
 from typing import Callable, Mapping
 
 CAPACITY_ENV = 'PARAKEET_STREAM_CAPACITY'
@@ -58,7 +59,9 @@ class StreamAdmissionController:
         self.allocation_percent = allocation_percent
         self._sample = sample
         self._active = 0
+        self._draining = False
         self._lock = threading.Lock()
+        self._drained = threading.Condition(self._lock)
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> StreamAdmissionController:
@@ -83,17 +86,47 @@ class StreamAdmissionController:
         with self._lock:
             return self._active
 
-    def try_acquire(self) -> AdmissionResult:
-        if self.allocation_percent < 100 and self._sample() >= self.allocation_percent / 100:
-            return AdmissionResult(lease=None, reason='allocation_rejected')
+    @property
+    def draining(self) -> bool:
         with self._lock:
+            return self._draining
+
+    def begin_drain(self) -> int:
+        """Reject new leases and return the number of streams still in flight."""
+
+        with self._lock:
+            self._draining = True
+            return self._active
+
+    def wait_for_drain(self, timeout: float) -> bool:
+        """Wait until all leases are released, bounded by ``timeout`` seconds."""
+
+        if timeout < 0:
+            raise ValueError("drain timeout must be non-negative")
+        deadline = time.monotonic() + timeout
+        with self._drained:
+            while self._active:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                self._drained.wait(timeout=remaining)
+            return True
+
+    def try_acquire(self) -> AdmissionResult:
+        with self._lock:
+            if self._draining:
+                return AdmissionResult(lease=None, reason='draining')
+            if self.allocation_percent < 100 and self._sample() >= self.allocation_percent / 100:
+                return AdmissionResult(lease=None, reason='allocation_rejected')
             if self._active >= self.capacity:
                 return AdmissionResult(lease=None, reason='capacity_full')
             self._active += 1
         return AdmissionResult(lease=StreamAdmissionLease(self), reason='admitted')
 
     def release_lease(self) -> None:
-        with self._lock:
+        with self._drained:
             if self._active <= 0:
                 raise RuntimeError('Parakeet stream admission release without ownership')
             self._active -= 1
+            if self._active == 0:
+                self._drained.notify_all()

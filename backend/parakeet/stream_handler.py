@@ -54,6 +54,7 @@ from transcribe import (
     transcribe_file,
     _stream_model as _asr_model_raw,  # type: ignore[reportPrivateUsage,reportUnknownVariableType]
     INFERENCE_MODE as _INFERENCE_MODE,
+    SERVICE_MODE as _SERVICE_MODE,
     has_builtin_embedding,
     report_gpu_inference_error,
     wav_bytes_to_waveform,
@@ -113,7 +114,7 @@ def _cfg_set(cfg: Any, path: str, value: Any) -> None:
         setattr(cur, parts[-1], value)
 
 
-def warmup_rnnt_decoder(sample_rate: int = 16000) -> None:
+def warmup_rnnt_decoder(sample_rate: int = 16000) -> bool:
     """Run a dummy chunk through the RNNT decoder to pre-compile CUDA kernels.
 
     Call once at service startup to eliminate 15-20s cold-start latency
@@ -121,12 +122,12 @@ def warmup_rnnt_decoder(sample_rate: int = 16000) -> None:
     """
     if _asr_model is None or _INFERENCE_MODE == "nim":
         logger.info("RNNT warmup skipped (no stream model or NIM mode)")
-        return
+        return False
 
     asr_decoding = getattr(_asr_model, "decoding", None)
     if not hasattr(_asr_model, 'decoding') or not hasattr(getattr(asr_decoding, 'decoding', None), 'decoding_computer'):
         logger.info("RNNT warmup skipped (model does not support RNNT streaming)")
-        return
+        return False
 
     logger.info("RNNT warmup: running dummy chunk to pre-compile CUDA kernels...")
     try:
@@ -140,12 +141,14 @@ def warmup_rnnt_decoder(sample_rate: int = 16000) -> None:
         dummy_pcm = b'\x00' * int(sample_rate * 2 * 3)
         decoder.decode_pcm(dummy_pcm, is_last_chunk=True)
         logger.info("RNNT warmup complete")
+        return True
     except Exception as e:
         if report_gpu_inference_error(e):
             logger.error("RNNT warmup hit a fatal CUDA error; GPU worker is unavailable")
             raise
         else:
             logger.warning(f"RNNT warmup failed (non-fatal): {e}")
+            return False
 
 
 class _NemoRNNTStreamingDecoder:
@@ -359,6 +362,7 @@ def _get_vad_model() -> Any:
         if _torch is None:
             logger.warning("torch not available, VAD disabled")
             return None
+
         try:
             model, _ = _torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', trust_repo=True)
             _vad_model = model
@@ -367,6 +371,48 @@ def _get_vad_model() -> Any:
         except Exception as e:
             logger.warning(f"Could not load Silero VAD: {e}")
             return None
+
+
+def warmup_vad(sample_rate: int = 16000) -> bool:
+    """Load Silero VAD and execute one frame before admitting streams."""
+
+    model = _get_vad_model()
+    if model is None or _torch is None:
+        return False
+    try:
+        audio = _torch.frombuffer(b'\x00' * (512 * 2), dtype=_torch.int16).float() / 32768.0
+        model(audio, sample_rate)
+        logger.info("Silero VAD warmup complete")
+        return True
+    except Exception as exc:
+        logger.warning("Silero VAD warmup failed (exception_type=%s)", type(exc).__name__)
+        return False
+
+
+def warmup_diarizer() -> bool:
+    """Warm the speaker model required by this service mode.
+
+    A stream fleet must be self-contained: an external embedding URL can stay
+    configured for mixed mode, but it cannot make a stream pod ready because a
+    provider outage would otherwise be hidden until after admission.
+    """
+
+    if _SERVICE_MODE == "stream" and not has_builtin_embedding():
+        logger.warning("Streaming readiness requires the built-in diarizer model")
+        return False
+
+    if has_builtin_embedding():
+        worker: Any = cast(Any, _transcribe_mod)._gpu_worker
+        warmup = getattr(worker, "warmup_embedding", None)
+        if warmup is None:
+            return False
+        try:
+            return bool(warmup())
+        except Exception:
+            return False
+    # The external diarizer is intentionally request-scoped; making a network
+    # call during readiness would turn a provider blip into a pod outage.
+    return bool(SPEAKER_EMBEDDING_URL)
 
 
 class StreamSession:

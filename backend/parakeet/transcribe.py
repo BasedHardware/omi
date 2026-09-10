@@ -10,12 +10,14 @@ from langdetect import detect as _langdetect_detect_raw  # type: ignore[reportUn
 from langdetect.lang_detect_exception import LangDetectException
 from scipy.cluster.hierarchy import fcluster, linkage
 from speaker_math import SPEAKER_CLUSTERING_MAX_SPEAKERS, cosine_distance as cosine_distance
+from service_mode import get_service_mode
 
 logger = logging.getLogger(__name__)
 
 BATCH_MODEL_NAME: str = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
 STREAM_MODEL_NAME: str = os.getenv("PARAKEET_STREAM_MODEL", "")
 INFERENCE_MODE: str = os.getenv("PARAKEET_INFERENCE_MODE", "nemo")
+SERVICE_MODE: str = get_service_mode(os.environ)
 
 _stream_model: Optional[Any] = None
 _nim_url: Optional[str] = None
@@ -129,6 +131,9 @@ def _load_nemo_model(model_name: str) -> Any:
 
 def _init_stream_model() -> None:
     global _stream_model
+    if SERVICE_MODE == "batch":
+        logger.info("Batch-only service mode: streaming model load skipped")
+        return
     if not STREAM_MODEL_NAME:
         logger.info("No PARAKEET_STREAM_MODEL set, streaming will be unavailable")
         return

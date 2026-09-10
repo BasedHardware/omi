@@ -71,6 +71,30 @@ def test_partial_allocation_is_deterministic_at_the_sampling_seam(admission):
     assert admitted.try_acquire().lease is not None
 
 
+def test_drain_rejects_new_streams_and_waits_for_existing_lease(admission):
+    controller = admission.StreamAdmissionController(capacity=2, allocation_percent=100)
+    lease = controller.try_acquire().lease
+    assert lease is not None
+
+    assert controller.begin_drain() == 1
+    rejected = controller.try_acquire()
+    assert rejected.lease is None
+    assert rejected.reason == 'draining'
+    assert controller.wait_for_drain(0.01) is False
+
+    lease.release()
+    assert controller.wait_for_drain(0.1) is True
+    assert controller.active == 0
+
+
+def test_drain_is_idempotent_and_release_notifies_waiter(admission):
+    controller = admission.StreamAdmissionController(capacity=1, allocation_percent=100)
+    assert controller.begin_drain() == 0
+    assert controller.begin_drain() == 0
+    assert controller.wait_for_drain(0) is True
+    assert controller.draining is True
+
+
 @pytest.mark.parametrize(
     ('env', 'message'),
     [
