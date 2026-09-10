@@ -140,6 +140,56 @@ test('Home currents omit synthesized-memory chrome when GET synthesisVersion is 
   expect(copy).not.toContain('Synthesized memory');
 });
 
+test('Home currents name GET memory ledger chrome and omit empty fields', () => {
+  const item: MemoryProjection = {
+    kind: 'memory',
+    id: 'memory-ledger',
+    title: 'A walk.',
+    summary: 'A walk.',
+    searchableText: 'A walk.',
+    citations: ['citation-v1:launch'],
+    timestamp: 1_788_492_408,
+    provenance: {
+      label: null,
+      synthesisVersion: null,
+      inputDigest: null,
+      outputDigest: null,
+    },
+    ledgerSlot: 'identity.full_name',
+    ledgerBody: 'Open with the weekly recap.',
+    isBaseline: true,
+    captureDeviceLabel: 'Mac',
+  };
+  let named!: ReactTestRenderer.ReactTestRenderer;
+  let omitted!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    named = ReactTestRenderer.create(<ReadRow item={item} />);
+    omitted = ReactTestRenderer.create(
+      <ReadRow
+        item={{
+          ...item,
+          id: 'memory-ledger-omitted',
+          ledgerSlot: ' \t',
+          ledgerBody: '\u0085',
+          isBaseline: false,
+          captureDeviceLabel: '',
+        }}
+      />,
+    );
+  });
+  const copy = textOf(named);
+  expect(copy).toContain('identity.full_name');
+  expect(copy).toContain('Open with the weekly recap.');
+  expect(copy).toContain('Baseline Memory');
+  expect(copy).toContain('Mac');
+  const omittedCopy = textOf(omitted);
+  expect(omittedCopy).toContain('A walk.');
+  expect(omittedCopy).not.toContain('identity.full_name');
+  expect(omittedCopy).not.toContain('Open with the weekly recap.');
+  expect(omittedCopy).not.toContain('Baseline Memory');
+  expect(omittedCopy).not.toContain('Mac');
+});
+
 test('Home currents omit whitespace-only memory citations from the count', () => {
   const item: MemoryProjection = {
     kind: 'memory',

@@ -2071,6 +2071,59 @@ test('compact Home current memory rows keep GET synthesized-memory chrome', () =
   expect(tree).toContain('Synthesized memory');
 });
 
+test('wide Home search and compact Home current memory rows name GET ledger chrome', () => {
+  const item = {
+    kind: 'memory' as const,
+    id: 'memory-ledger-home-search',
+    title: 'A walk.',
+    summary: 'A walk.',
+    searchableText: 'A walk.',
+    citations: ['citation-v1:launch'],
+    timestamp: 1_788_492_408,
+    provenance: {
+      label: null,
+      synthesisVersion: null,
+      inputDigest: null,
+      outputDigest: null,
+    },
+    ledgerSlot: 'identity.full_name',
+    ledgerBody: 'Open with the weekly recap.',
+    isBaseline: true,
+    captureDeviceLabel: 'Mac',
+  };
+  const search = render(<ProjectionRow item={item} />);
+  const searchTree = JSON.stringify(search.toJSON());
+  expect(searchTree).toContain('identity.full_name');
+  expect(searchTree).toContain('Open with the weekly recap.');
+  expect(searchTree).toContain('Baseline Memory');
+  expect(searchTree).toContain('Mac');
+  const currents = render(<ProjectionRow home item={{...item, id: 'memory-ledger-home-current'}} />);
+  const currentTree = JSON.stringify(currents.toJSON());
+  expect(currentTree).toContain('identity.full_name');
+  expect(currentTree).toContain('Open with the weekly recap.');
+  expect(currentTree).toContain('Baseline Memory');
+  expect(currentTree).toContain('Mac');
+  const omitted = render(
+    <ProjectionRow
+      home
+      item={{
+        ...item,
+        id: 'memory-ledger-home-omitted',
+        ledgerSlot: ' \t',
+        ledgerBody: '\u0085',
+        isBaseline: false,
+        captureDeviceLabel: '',
+      }}
+    />,
+  );
+  const omittedTree = JSON.stringify(omitted.toJSON());
+  expect(omittedTree).toContain('A walk.');
+  expect(omittedTree).not.toContain('identity.full_name');
+  expect(omittedTree).not.toContain('Open with the weekly recap.');
+  expect(omittedTree).not.toContain('Baseline Memory');
+  expect(omittedTree).not.toContain('Mac');
+});
+
 test('a zero wide Home search conversation timestamp says Time unavailable', () => {
   const item = {
     kind: 'conversation' as const,

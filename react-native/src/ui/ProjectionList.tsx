@@ -22,6 +22,10 @@ import {
   memoryDisplayTitle,
   memorySynthesisCopy,
   memoryLockedCopy,
+  memoryLedgerSlotCopy,
+  memoryLedgerPlaybookCopy,
+  memoryBaselineCopy,
+  visibleDisplayText,
   taskDisplaySummary,
   taskDisplayTitle,
   taskIndentPadding,
@@ -69,6 +73,14 @@ export const ProjectionRow = memo(function ProjectionRow({
       ? conversationCaptureCopy(conversation.capturedAtMs)
       : null;
   const synthesis = item.kind === 'memory' ? memorySynthesisCopy(item) : null;
+  const ledgerSlot = item.kind === 'memory' ? memoryLedgerSlotCopy(item) : null;
+  const ledgerPlaybook =
+    item.kind === 'memory' ? memoryLedgerPlaybookCopy(item) : null;
+  const baseline = item.kind === 'memory' ? memoryBaselineCopy(item) : null;
+  const captureDevice =
+    item.kind === 'memory'
+      ? visibleDisplayText(item.captureDeviceLabel ?? '')
+      : '';
   const lockedCopy =
     item.kind === 'conversation'
       ? item.locked
@@ -191,6 +203,28 @@ export const ProjectionRow = memo(function ProjectionRow({
       {captureCopy !== null ? (
         <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
           {captureCopy}
+        </Text>
+      ) : null}
+      {ledgerSlot !== null ? (
+        <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+          {ledgerSlot}
+        </Text>
+      ) : null}
+      {ledgerPlaybook !== null ? (
+        <Text
+          numberOfLines={3}
+          style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+          {ledgerPlaybook}
+        </Text>
+      ) : null}
+      {captureDevice !== '' ? (
+        <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+          {captureDevice}
+        </Text>
+      ) : null}
+      {baseline !== null ? (
+        <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+          {baseline}
         </Text>
       ) : null}
       {synthesis !== null ? (

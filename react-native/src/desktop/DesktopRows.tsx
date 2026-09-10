@@ -20,7 +20,11 @@ import {
   memoryDisplayBody,
   memoryDisplayTitle,
   memoryLockedCopy,
+  memoryLedgerSlotCopy,
+  memoryLedgerPlaybookCopy,
+  memoryBaselineCopy,
   memorySynthesisCopy,
+  visibleDisplayText,
   projectionClockLabel,
   taskDisplayTitle,
   taskIndentPadding,
@@ -124,6 +128,14 @@ export const ReadRow = memo(function ReadRow({
   }
   const synthesis = item.kind === 'memory' ? memorySynthesisCopy(item) : null;
   const locked = item.kind === 'memory' ? memoryLockedCopy(item) : null;
+  const ledgerSlot = item.kind === 'memory' ? memoryLedgerSlotCopy(item) : null;
+  const ledgerPlaybook =
+    item.kind === 'memory' ? memoryLedgerPlaybookCopy(item) : null;
+  const baseline = item.kind === 'memory' ? memoryBaselineCopy(item) : null;
+  const captureDevice =
+    item.kind === 'memory'
+      ? visibleDisplayText(item.captureDeviceLabel ?? '')
+      : '';
   const meta =
     item.kind === 'memory'
       ? [timeLabel(item), memoryCitationCopy(item.citations)]
@@ -141,6 +153,20 @@ export const ReadRow = memo(function ReadRow({
           {meta.filter(part => part !== '').join(' · ')}
         </Text>
         {locked !== null ? <Text style={styles.rowMeta}>{locked}</Text> : null}
+        {ledgerSlot !== null ? (
+          <Text style={styles.rowMeta}>{ledgerSlot}</Text>
+        ) : null}
+        {ledgerPlaybook !== null ? (
+          <Text numberOfLines={3} style={styles.rowMeta}>
+            {ledgerPlaybook}
+          </Text>
+        ) : null}
+        {captureDevice !== '' ? (
+          <Text style={styles.rowMeta}>{captureDevice}</Text>
+        ) : null}
+        {baseline !== null ? (
+          <Text style={styles.rowMeta}>{baseline}</Text>
+        ) : null}
         {synthesis !== null ? (
           <Text style={styles.rowMeta}>{synthesis}</Text>
         ) : null}
