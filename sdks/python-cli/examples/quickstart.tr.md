@@ -66,8 +66,8 @@ omi auth login --browser --provider apple
 Anahtarınızı [app.omi.me](https://app.omi.me) panelinde **Developer → API Keys** bölümünden oluşturun:
 
 ```bash
-# Yerel profile kalıcı olarak kaydet (kabuk geçmişini korumak için etkileşimli yapıştırın)
-omi auth login --api-key
+# Komut ile yerel profile kaydetme
+omi auth login --api-key omi_dev_...
 
 # Veya ortam değişkeni olarak tanımlayın (konteynerler ve CI/CD için en iyisi)
 # Not: Etkin yerel profilde kayıtlı anahtar varsa, önce `omi auth logout` çalıştırın.
