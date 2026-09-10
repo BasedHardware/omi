@@ -550,6 +550,137 @@ describe("device session request validators", () => {
     expect((await missingDbComplete.json()) as object).toEqual(retryable);
   });
 
+  test("Listen store throw is production retryable unavailable", async () => {
+    const throwingDb = {
+      prepare() {
+        throw new Error("d1 store failed");
+      },
+    };
+    const retryable = {
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    };
+    const sessionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const storeEnv = { ...env, DB: throwingDb } as never;
+    const account = {
+      accountId: "test-account",
+      requestId: "test-request",
+    };
+    const opened = await handleDeviceSessionOpen(
+      coreContext({
+        env: storeEnv,
+        request: new Request("https://worker.test/v1/device-sessions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(openBody),
+        }),
+        routePath: "/v1/device-sessions",
+        params: {},
+        values: account,
+      })
+    );
+    expect(opened.status).toBe(503);
+    expect(opened.headers.get("retry-after")).toBe("1");
+    expect((await opened.json()) as object).toEqual(retryable);
+    const audio = await handleDeviceSessionAudio(
+      coreContext({
+        env: storeEnv,
+        request: new Request(
+          `https://worker.test/v1/device-sessions/${sessionId}/audio`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              chunks: [{ chunkIndex: 0, bytesBase64: btoa("abc") }],
+            }),
+          }
+        ),
+        routePath: "/v1/device-sessions/:id/audio",
+        params: { id: sessionId },
+        values: account,
+      })
+    );
+    expect(audio.status).toBe(503);
+    expect(audio.headers.get("retry-after")).toBe("1");
+    expect((await audio.json()) as object).toEqual(retryable);
+    const completed = await handleDeviceSessionComplete(
+      coreContext({
+        env: storeEnv,
+        request: new Request(
+          `https://worker.test/v1/device-sessions/${sessionId}/complete`,
+          { method: "POST" }
+        ),
+        routePath: "/v1/device-sessions/:id/complete",
+        params: { id: sessionId },
+        values: account,
+      })
+    );
+    expect(completed.status).toBe(503);
+    expect(completed.headers.get("retry-after")).toBe("1");
+    expect((await completed.json()) as object).toEqual(retryable);
+    const metadata = await handleDeviceSessionRead(
+      coreContext({
+        env: storeEnv,
+        request: new Request(
+          `https://worker.test/v1/device-sessions/${sessionId}`
+        ),
+        routePath: "/v1/device-sessions/:id",
+        params: { id: sessionId },
+        values: account,
+      })
+    );
+    expect(metadata.status).toBe(503);
+    expect(metadata.headers.get("retry-after")).toBe("1");
+    expect((await metadata.json()) as object).toEqual(retryable);
+    const transcript = await handleTranscription(
+      coreContext({
+        env: storeEnv,
+        request: new Request(
+          `https://worker.test/v1/device-sessions/${sessionId}/transcript`
+        ),
+        routePath: "/v1/device-sessions/:id/transcript",
+        params: { id: sessionId },
+        values: account,
+      })
+    );
+    expect(transcript.status).toBe(503);
+    expect(transcript.headers.get("retry-after")).toBe("1");
+    expect((await transcript.json()) as object).toEqual(retryable);
+    const transcribe = await handleTranscribe(
+      coreContext({
+        env: storeEnv,
+        request: new Request(
+          `https://worker.test/v1/device-sessions/${sessionId}/transcribe`,
+          { method: "POST" }
+        ),
+        routePath: "/v1/device-sessions/:id/transcribe",
+        params: { id: sessionId },
+        values: account,
+      })
+    );
+    expect(transcribe.status).toBe(503);
+    expect(transcribe.headers.get("retry-after")).toBe("1");
+    expect((await transcribe.json()) as object).toEqual(retryable);
+    const malformed = await handleDeviceSessionOpen(
+      coreContext({
+        env: storeEnv,
+        request: new Request("https://worker.test/v1/device-sessions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{",
+        }),
+        routePath: "/v1/device-sessions",
+        params: {},
+        values: account,
+      })
+    );
+    expect(malformed.status).toBe(400);
+    expect(malformed.headers.get("retry-after")).toBeNull();
+  });
+
   test("audio store unavailable retryable 503 sends production Listen retry-after", async () => {
     const opened = await fetchWorker("/v1/device-sessions", {
       method: "POST",

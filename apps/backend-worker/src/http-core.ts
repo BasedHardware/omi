@@ -853,15 +853,19 @@ export async function handleDeviceSessionOpen(
   const request = parseDeviceSessionCreate(parsed.value);
   if (request === null)
     return backendError("invalid_request", "edit_request", 400);
-  const session = await openDeviceSession(
-    db,
-    context.get("accountId"),
-    request,
-    Date.now()
-  );
-  return session === null
-    ? backendError("device_session_conflict", "edit_request", 409)
-    : json({ session }, 201);
+  try {
+    const session = await openDeviceSession(
+      db,
+      context.get("accountId"),
+      request,
+      Date.now()
+    );
+    return session === null
+      ? backendError("device_session_conflict", "edit_request", 409)
+      : json({ session }, 201);
+  } catch {
+    return listenRetryableUnavailable();
+  }
 }
 
 export async function handleDeviceSessionAudio(
@@ -882,27 +886,29 @@ export async function handleDeviceSessionAudio(
   const request = parseDeviceSessionAudioBatch(parsed.value);
   if (request === null)
     return backendError("invalid_request", "edit_request", 400);
-  const outcome = await appendDeviceSessionAudioBatch(
-    db,
-    r2,
-    context.get("accountId"),
-    context.req.param("id"),
-    request,
-    Date.now()
-  );
-  switch (outcome.kind) {
-    case "ok":
-      return json({ session: outcome.session });
-    case "unavailable":
-      return backendError("service_unavailable", "retry", 503, true, {
-        "retry-after": "1",
-      });
-    case "not_found":
-      return backendError("device_session_not_found", "none", 404);
-    case "conflict":
-      return backendError("device_session_conflict", "edit_request", 409);
-    case "too_large":
-      return backendError("invalid_request", "edit_request", 400);
+  try {
+    const outcome = await appendDeviceSessionAudioBatch(
+      db,
+      r2,
+      context.get("accountId"),
+      context.req.param("id"),
+      request,
+      Date.now()
+    );
+    switch (outcome.kind) {
+      case "ok":
+        return json({ session: outcome.session });
+      case "unavailable":
+        return listenRetryableUnavailable();
+      case "not_found":
+        return backendError("device_session_not_found", "none", 404);
+      case "conflict":
+        return backendError("device_session_conflict", "edit_request", 409);
+      case "too_large":
+        return backendError("invalid_request", "edit_request", 400);
+    }
+  } catch {
+    return listenRetryableUnavailable();
   }
 }
 
@@ -916,17 +922,21 @@ export async function handleDeviceSessionComplete(
     return backendError("service_unavailable", "retry", 503, true, {
       "retry-after": "1",
     });
-  const outcome = await completeDeviceSession(
-    db,
-    context.get("accountId"),
-    context.req.param("id"),
-    Date.now()
-  );
-  if (outcome.kind === "conflict")
-    return backendError("device_session_conflict", "edit_request", 409);
-  return outcome.kind === "not_found"
-    ? backendError("device_session_not_found", "none", 404)
-    : json({ session: outcome.session });
+  try {
+    const outcome = await completeDeviceSession(
+      db,
+      context.get("accountId"),
+      context.req.param("id"),
+      Date.now()
+    );
+    if (outcome.kind === "conflict")
+      return backendError("device_session_conflict", "edit_request", 409);
+    return outcome.kind === "not_found"
+      ? backendError("device_session_not_found", "none", 404)
+      : json({ session: outcome.session });
+  } catch {
+    return listenRetryableUnavailable();
+  }
 }
 
 export async function handleDeviceSessionRead(
@@ -939,14 +949,18 @@ export async function handleDeviceSessionRead(
     return backendError("service_unavailable", "retry", 503, true, {
       "retry-after": "1",
     });
-  const session = await readDeviceSession(
-    db,
-    context.get("accountId"),
-    context.req.param("id")
-  );
-  return session === null
-    ? backendError("device_session_not_found", "none", 404)
-    : json({ session });
+  try {
+    const session = await readDeviceSession(
+      db,
+      context.get("accountId"),
+      context.req.param("id")
+    );
+    return session === null
+      ? backendError("device_session_not_found", "none", 404)
+      : json({ session });
+  } catch {
+    return listenRetryableUnavailable();
+  }
 }
 
 export async function handleDeviceSessionList(
@@ -1118,6 +1132,12 @@ function listenSessionPathError(sessionId: string): Response | null {
     : backendError("not_found", "none", 404);
 }
 
+function listenRetryableUnavailable(): Response {
+  return backendError("service_unavailable", "retry", 503, true, {
+    "retry-after": "1",
+  });
+}
+
 export function unmatchedRouteError(pathname: string): Response {
   if (pathname === "/v1/settings") return json({ error: "not_found" }, 404);
   const listenPath =
@@ -1138,17 +1158,21 @@ export async function handleTranscription(
     return backendError("service_unavailable", "retry", 503, true, {
       "retry-after": "1",
     });
-  const row = await readDeviceTranscription(
-    context.env.DB,
-    context.get("accountId"),
-    context.req.param("id")
-  );
-  if (row === null)
-    return backendError("device_session_not_found", "none", 404);
-  const transcription = projectDeviceTranscription(row);
-  if (transcription === null)
-    return backendError("service_unavailable", "none", 503);
-  return listenTranscriptResponse(transcription, false);
+  try {
+    const row = await readDeviceTranscription(
+      context.env.DB,
+      context.get("accountId"),
+      context.req.param("id")
+    );
+    if (row === null)
+      return backendError("device_session_not_found", "none", 404);
+    const transcription = projectDeviceTranscription(row);
+    if (transcription === null)
+      return backendError("service_unavailable", "none", 503);
+    return listenTranscriptResponse(transcription, false);
+  } catch {
+    return listenRetryableUnavailable();
+  }
 }
 
 export async function handleTranscribe(
@@ -1165,28 +1189,32 @@ export async function handleTranscribe(
     return backendError("service_unavailable", "none", 503);
   const accountId = context.get("accountId"),
     sessionId = context.req.param("id");
-  const session = await DB.prepare(
-    "SELECT state FROM device_sessions WHERE id = ? AND account_id = ?"
-  )
-    .bind(sessionId, accountId)
-    .first<{ state: string }>();
-  if (session === null)
-    return backendError("device_session_not_found", "none", 404);
-  if (session.state !== "complete")
-    return backendError("device_session_conflict", "retry", 409);
-  await processDeviceTranscriptions(
-    DB,
-    ATTACHMENTS,
-    AI as TranscriptionAI,
-    Date.now(),
-    { accountId, sessionId }
-  );
-  const response = await handleTranscription(context);
-  if (response.status !== 200) return response;
-  const payload = (await response.json()) as {
-    transcription: DeviceTranscriptionProjection;
-  };
-  return listenTranscriptResponse(payload.transcription, true);
+  try {
+    const session = await DB.prepare(
+      "SELECT state FROM device_sessions WHERE id = ? AND account_id = ?"
+    )
+      .bind(sessionId, accountId)
+      .first<{ state: string }>();
+    if (session === null)
+      return backendError("device_session_not_found", "none", 404);
+    if (session.state !== "complete")
+      return backendError("device_session_conflict", "retry", 409);
+    await processDeviceTranscriptions(
+      DB,
+      ATTACHMENTS,
+      AI as TranscriptionAI,
+      Date.now(),
+      { accountId, sessionId }
+    );
+    const response = await handleTranscription(context);
+    if (response.status !== 200) return response;
+    const payload = (await response.json()) as {
+      transcription: DeviceTranscriptionProjection;
+    };
+    return listenTranscriptResponse(payload.transcription, true);
+  } catch {
+    return listenRetryableUnavailable();
+  }
 }
 
 export const publicRoutes: readonly CoreRoute[] = [
