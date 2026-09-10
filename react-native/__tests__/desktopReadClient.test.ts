@@ -9,6 +9,7 @@ import {
   conversationGroupLabel,
   conversationCaptureCopy,
   conversationStatusCopy,
+  conversationListStatusCopy,
   dataProtectionCopy,
   developerWebhookRowCopy,
   developerWebhookStatusCopy,
@@ -807,6 +808,17 @@ test('conversation status copy is not a raw wire token', () => {
   expect(conversationStatusCopy('\u0085')).toBe('Status unavailable');
   expect(conversationStatusCopy('queued')).toBe('queued');
   expect(conversationStatusCopy('  queued  ')).toBe('queued');
+});
+
+test('conversation list status copy names processing without Status on every chat', () => {
+  expect(conversationListStatusCopy('failed')).toBe('Failed');
+  expect(conversationListStatusCopy('processing')).toBe('Processing');
+  expect(conversationListStatusCopy('merging')).toBe('Processing');
+  expect(conversationListStatusCopy('in_progress')).toBeNull();
+  expect(conversationListStatusCopy('completed')).toBeNull();
+  expect(conversationListStatusCopy('queued')).toBeNull();
+  expect(conversationListStatusCopy('')).toBeNull();
+  expect(conversationListStatusCopy(' \t\n')).toBeNull();
 });
 
 test('account subscription copy is not a raw wire token', () => {

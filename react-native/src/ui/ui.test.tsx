@@ -2309,6 +2309,60 @@ test('wide Home search rows keep GET failed status instead of title-only', () =>
   expect(plainTree).not.toContain('In progress');
 });
 
+test('wide Home search rows keep GET processing status instead of title-only', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'recording:processing-home-search',
+        title: 'Morning standup',
+        summary: 'Notes',
+        searchableText: 'Morning standup\nNotes',
+        createdAt: '2026-09-07T12:00:00.000Z',
+        updatedAt: '2026-09-07T12:00:20.000Z',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T12:00:20.000Z',
+        starred: false,
+        status: 'processing',
+        source: 'listen',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Morning standup');
+  expect(tree).toContain('Processing');
+  const merging = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'recording:merging-home-search',
+        title: 'Standup recap',
+        summary: 'Notes',
+        searchableText: 'Standup recap\nNotes',
+        createdAt: '2026-09-07T12:00:00.000Z',
+        updatedAt: '2026-09-07T12:00:20.000Z',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T12:00:20.000Z',
+        starred: false,
+        status: 'merging',
+        source: 'listen',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const mergingTree = JSON.stringify(merging.toJSON());
+  expect(mergingTree).toContain('Standup recap');
+  expect(mergingTree).toContain('Processing');
+  expect(mergingTree).not.toContain('Merging');
+});
+
 test('wide Home search completed tasks keep GET due dates instead of Completed-only', () => {
   const dueAt = 1786000000;
   const expected = `Completed · ${new Date(dueAt * 1000).toLocaleDateString(

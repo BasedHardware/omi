@@ -1228,6 +1228,86 @@ test('conversation list names failed conversations without Status on every row',
   expect(copy).not.toContain(conversationStatusCopy('in_progress'));
 });
 
+test('conversation list names processing conversations without Status on every row', () => {
+  const base = {
+    kind: 'conversation' as const,
+    title: 'Morning standup',
+    summary: 'Notes',
+    searchableText: 'Morning standup\nNotes',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    source: 'listen' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...base,
+                id: 'recording:processing-one',
+                status: 'processing',
+              },
+              {
+                ...base,
+                id: 'recording:merging-one',
+                title: 'Standup recap',
+                searchableText: 'Standup recap\nNotes',
+                status: 'merging',
+              },
+              {
+                ...base,
+                id: 'chat:chat-main',
+                title: 'Hello',
+                searchableText: 'Hello',
+                status: 'in_progress',
+                source: 'chat' as const,
+                finishedAt: null,
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Morning standup');
+  expect(copy).toContain('Standup recap');
+  expect(copy).toContain('Hello');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Processing conversation',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Processing conversation' &&
+        node.props.children === 'Processing',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(copy).not.toContain(conversationStatusCopy('in_progress'));
+  expect(copy).not.toContain(conversationStatusCopy('merging'));
+});
+
 test('conversation list names GET emoji and omits it when discarded or empty', () => {
   const base = {
     kind: 'conversation' as const,

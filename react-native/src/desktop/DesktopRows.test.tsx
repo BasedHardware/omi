@@ -628,6 +628,65 @@ test('Home and Library rows keep GET failed status instead of title-only', () =>
   expect(textOf(plain)).not.toContain('Failed');
 });
 
+test('Home and Library rows keep GET processing status instead of title-only', () => {
+  const processing: ConversationProjection = {
+    kind: 'conversation',
+    id: 'recording:processing-row',
+    title: 'Morning standup',
+    summary: 'Notes',
+    searchableText: 'Morning standup\nNotes',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:00:20.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: '2026-09-07T12:00:20.000Z',
+    starred: false,
+    status: 'processing',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  const merging: ConversationProjection = {
+    ...processing,
+    id: 'recording:merging-row',
+    title: 'Standup recap',
+    searchableText: 'Standup recap\nNotes',
+    status: 'merging',
+  };
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  let library!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    home = ReactTestRenderer.create(<ReadRow item={processing} />);
+    library = ReactTestRenderer.create(<ConversationRow item={merging} />);
+  });
+  expect(textOf(home)).toContain('Morning standup');
+  expect(textOf(home)).toContain('Processing');
+  expect(textOf(library)).toContain('Standup recap');
+  expect(textOf(library)).toContain('Processing');
+  expect(textOf(library)).not.toContain('Merging');
+  let chat!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    chat = ReactTestRenderer.create(
+      <ReadRow
+        item={{
+          ...processing,
+          id: 'chat:chat-main',
+          title: 'Hello',
+          summary: 'Later turn',
+          searchableText: 'Hello\nLater turn',
+          status: 'in_progress',
+          source: 'chat',
+          finishedAt: null,
+        }}
+      />,
+    );
+  });
+  expect(textOf(chat)).toContain('Hello');
+  expect(textOf(chat)).not.toContain('Processing');
+  expect(textOf(chat)).not.toContain('In progress');
+});
+
 test('library conversation rows name GET emoji and omit discarded or empty values', () => {
   const item: ConversationProjection = {
     kind: 'conversation',

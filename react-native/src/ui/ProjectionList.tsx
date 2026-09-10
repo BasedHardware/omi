@@ -10,6 +10,7 @@ import {
   conversationCaptureCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
+  conversationListStatusCopy,
   conversationListUsesListenOverview,
   conversationRecapTitle,
   conversationHasFinishClock,
@@ -73,6 +74,10 @@ export const ProjectionRow = memo(function ProjectionRow({
       : item.kind === 'memory'
       ? memoryLockedCopy(item)
       : null;
+  const listStatusCopy =
+    item.kind === 'conversation'
+      ? conversationListStatusCopy(item.status)
+      : null;
   const indentPad =
     item.kind === 'task' ? taskIndentPadding(item.indentLevel) : 0;
   const rowPad = spine ? 18 : 16;
@@ -123,9 +128,9 @@ export const ProjectionRow = memo(function ProjectionRow({
             Discarded
           </Text>
         ) : null}
-        {item.kind === 'conversation' && item.status === 'failed' ? (
+        {listStatusCopy !== null ? (
           <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
-            Failed
+            {listStatusCopy}
           </Text>
         ) : null}
       </View>

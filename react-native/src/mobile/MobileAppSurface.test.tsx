@@ -830,6 +830,34 @@ test('Daily Recaps name failed conversations without Status on every card', () =
   expect(renderedText(plain)).not.toContain('Failed');
 });
 
+test('Daily Recaps name processing conversations without Status on every card', () => {
+  const flagged = render({
+    recaps: [
+      {
+        id: 'recap-processing',
+        title: 'Morning standup',
+        dateLabel: 'Yesterday',
+        processing: true,
+      },
+    ],
+  });
+  expect(renderedText(flagged)).toContain('Processing');
+  expect(
+    flagged.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Processing conversation' &&
+        node.props.children === 'Processing',
+    ).length,
+  ).toBeGreaterThan(0);
+
+  const plain = render({
+    recaps: [
+      {id: 'recap-plain-process', title: 'Omi gets simpler', dateLabel: 'Yesterday'},
+    ],
+  });
+  expect(renderedText(plain)).not.toContain('Processing');
+});
+
 test('untitled processing recaps stay visible instead of rendering a blank card', () => {
   const renderer = render({
     recaps: [

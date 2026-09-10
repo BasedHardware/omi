@@ -1080,6 +1080,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             locked: item.locked,
             discarded: item.discarded,
             failed: item.status === 'failed',
+            processing:
+              item.status === 'processing' || item.status === 'merging',
             title: conversationRecapTitle(item),
           }))
         : [];

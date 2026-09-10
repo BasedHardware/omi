@@ -17,6 +17,7 @@ import {
   conversationDisplayTitle,
   conversationHasFinishClock,
   conversationListEmoji,
+  conversationListStatusCopy,
   conversationListTag,
   conversationListUsesListenOverview,
   conversationRecapTitle,
@@ -50,6 +51,7 @@ const ConversationRow = memo(function ConversationRow({
   const emoji = conversationListEmoji(item);
   const photosCopy = conversationDiscardedPhotoCopy(item);
   const tag = conversationListTag(item);
+  const listStatusCopy = conversationListStatusCopy(item.status);
   return (
     <FocusPressable
       accessibilityLabel={`Open conversation ${conversationRecapTitle(item)}`}
@@ -96,11 +98,11 @@ const ConversationRow = memo(function ConversationRow({
             {photosCopy}
           </Text>
         ) : null}
-        {item.status === 'failed' ? (
+        {listStatusCopy !== null ? (
           <Text
-            accessibilityLabel="Failed conversation"
+            accessibilityLabel={`${listStatusCopy} conversation`}
             style={styles.conversationRowTime}>
-            Failed
+            {listStatusCopy}
           </Text>
         ) : null}
       </View>

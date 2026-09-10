@@ -10,6 +10,7 @@ import {
   conversationDisplayTitle,
   conversationHasFinishClock,
   conversationListEmoji,
+  conversationListStatusCopy,
   conversationListTag,
   conversationListUsesListenOverview,
   conversationRecapTitle,
@@ -62,6 +63,7 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
   const emoji = conversationListEmoji(item);
   const photosCopy = conversationDiscardedPhotoCopy(item);
   const tag = conversationListTag(item);
+  const listStatusCopy = conversationListStatusCopy(item.status);
   return (
     <View style={styles.rowCopy}>
       {emoji !== null ? <Text style={styles.rowTitle}>{emoji}</Text> : null}
@@ -84,12 +86,12 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
       {captureCopy !== null ? (
         <Text style={styles.rowMeta}>{captureCopy}</Text>
       ) : null}
-      {item.locked || item.discarded || item.status === 'failed' ? (
+      {item.locked || item.discarded || listStatusCopy !== null ? (
         <Text style={styles.rowMeta}>
           {[
             item.locked ? 'Locked' : '',
             item.discarded ? 'Discarded' : '',
-            item.status === 'failed' ? 'Failed' : '',
+            listStatusCopy ?? '',
           ]
             .filter(part => part !== '')
             .join(' · ')}

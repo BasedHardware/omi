@@ -124,6 +124,17 @@ export function conversationStatusCopy(status: string): string {
   return trimmed === '' ? 'Status unavailable' : trimmed;
 }
 
+export function conversationListStatusCopy(status: string): string | null {
+  const trimmed = visibleDisplayText(status);
+  if (trimmed === 'failed') {
+    return 'Failed';
+  }
+  if (trimmed === 'processing' || trimmed === 'merging') {
+    return 'Processing';
+  }
+  return null;
+}
+
 export function recordingTranscriptSpeakerCopy(segment: {
   isUser?: boolean;
   speaker?: string | number | null;
