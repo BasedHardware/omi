@@ -221,12 +221,10 @@ describe("attachment staging request validator", () => {
     [null],
     [[]],
     [{ ...validStageRequest("op-1"), opId: "" }],
-    [{ ...validStageRequest("op-1"), displayName: "" }],
     [{ ...validStageRequest("op-1"), mimeType: "" }],
     [{ ...validStageRequest("op-1"), mimeType: "text/html" }],
     [{ ...validStageRequest("op-1"), mimeType: "application/x-msdownload" }],
     [{ ...validStageRequest("op-1"), sizeBytes: 1.5 }],
-    [{ ...validStageRequest("op-1"), displayName: "x".repeat(257) }],
   ])("rejects unsupported or malformed attachment metadata", (value: unknown) => {
     expect(parseAttachmentStageRequest(value)).toEqual({ kind: "rejected" });
   });
@@ -240,8 +238,30 @@ describe("attachment staging request validator", () => {
         sizeBytes: ATTACHMENT_CAPABILITIES.maxAttachmentBytes + 1,
       },
     ],
+    [{ ...validStageRequest("op-1"), displayName: "" }],
+    [{ ...validStageRequest("op-1"), displayName: " \t" }],
+    [{ ...validStageRequest("op-1"), displayName: "." }],
+    [{ ...validStageRequest("op-1"), displayName: ".." }],
+    [{ ...validStageRequest("op-1"), displayName: "x".repeat(256) }],
   ])("empty and oversized attachment metadata is invalid", (value: unknown) => {
     expect(parseAttachmentStageRequest(value)).toEqual({ kind: "invalid" });
+  });
+
+  test("keeps production basename display names", () => {
+    expect(
+      parseAttachmentStageRequest({
+        ...validStageRequest("op-path"),
+        displayName: "folder\\sub/report.pdf",
+      }),
+    ).toEqual({
+      kind: "ok",
+      request: {
+        opId: "op-path",
+        displayName: "report.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 1024,
+      },
+    });
   });
 });
 
@@ -628,6 +648,26 @@ describe("attachment staging route fail-closed behavior", () => {
       body: JSON.stringify({
         ...validStageRequest("op-oversized"),
         sizeBytes: ATTACHMENT_CAPABILITIES.maxAttachmentBytes + 1,
+      }),
+    });
+
+    expect(response.status).toBe(422);
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "validation",
+        retryable: false,
+        action: "edit_request",
+      },
+    });
+  });
+
+  test("returns 422 validation for empty display names through the route", async () => {
+    const response = await fetchWorker("/v1/chat-attachments", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...validStageRequest("op-empty-name"),
+        displayName: " \t",
       }),
     });
 

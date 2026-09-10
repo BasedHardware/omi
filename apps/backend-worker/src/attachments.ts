@@ -13,6 +13,26 @@ export const ATTACHMENT_CAPABILITIES = {
   stagingTtlMs: 24 * 60 * 60 * 1000,
 } as const;
 
+export const CHAT_ATTACHMENT_MAX_DISPLAY_NAME_BYTES = 255;
+
+function normalizedDisplayName(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const displayName = (raw.replaceAll("\\", "/").split("/").at(-1) ?? "")
+    .normalize("NFC")
+    .trim();
+  if (
+    displayName.length === 0 ||
+    displayName === "." ||
+    displayName === ".." ||
+    /[\u0000-\u001f\u007f]/u.test(displayName) ||
+    new TextEncoder().encode(displayName).byteLength >
+      CHAT_ATTACHMENT_MAX_DISPLAY_NAME_BYTES
+  ) {
+    return null;
+  }
+  return displayName;
+}
+
 export type AttachmentCapabilities = typeof ATTACHMENT_CAPABILITIES;
 
 const SNIFFED_ATTACHMENT_MIME_TYPES = new Set(["image/gif", "image/webp"]);
@@ -192,11 +212,13 @@ export function parseAttachmentStageRequest(
   const item = body as Record<string, unknown>;
   if (
     !isBoundedString(item["opId"], 128) ||
-    !isBoundedString(item["displayName"], 256) ||
+    typeof item["displayName"] !== "string" ||
     !isBoundedString(item["mimeType"], 128) ||
     !Number.isSafeInteger(item["sizeBytes"])
   )
     return { kind: "rejected" };
+  const displayName = normalizedDisplayName(item["displayName"]);
+  if (displayName === null) return { kind: "invalid" };
   const sizeBytes = item["sizeBytes"] as number;
   if (sizeBytes <= 0) return { kind: "invalid" };
   const mimeType = item["mimeType"] as string;
@@ -208,7 +230,7 @@ export function parseAttachmentStageRequest(
     kind: "ok",
     request: {
       opId: item["opId"] as string,
-      displayName: item["displayName"] as string,
+      displayName,
       mimeType,
       sizeBytes,
     },
