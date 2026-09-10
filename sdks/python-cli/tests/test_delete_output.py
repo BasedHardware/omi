@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 
@@ -57,8 +58,9 @@ def test_delete_declined_confirmation_makes_no_request(resource, authed_profile,
 
 @pytest.mark.parametrize("status_code", [400, 401, 403, 404, 500])
 def test_delete_empty_http_error_fails_json_mode(
-    resource, status_code, authed_profile, respx_mock, cli_runner
+    resource, status_code, authed_profile, respx_mock, cli_runner, monkeypatch
 ) -> None:
+    monkeypatch.setattr(time, "sleep", lambda _: None)
     command, path = resource
     route = respx_mock.delete(path).respond(status_code, content=b"")
     result = cli_runner.invoke(app, ["--json", command, "delete", "test-id", "--yes"])
@@ -70,8 +72,9 @@ def test_delete_empty_http_error_fails_json_mode(
 
 @pytest.mark.parametrize("status_code", [400, 401, 403, 404, 500])
 def test_delete_empty_http_error_fails_pretty_mode(
-    resource, status_code, authed_profile, respx_mock, cli_runner
+    resource, status_code, authed_profile, respx_mock, cli_runner, monkeypatch
 ) -> None:
+    monkeypatch.setattr(time, "sleep", lambda _: None)
     command, path = resource
     route = respx_mock.delete(path).respond(status_code, content=b"")
     result = cli_runner.invoke(app, ["--no-color", command, "delete", "test-id", "--yes"])
