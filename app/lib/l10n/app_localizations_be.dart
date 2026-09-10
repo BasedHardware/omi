@@ -10028,7 +10028,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deviceRenameTooShort => 'Назва павінна змяшчаць не менш за 2 сімвалы';
 
   @override
-  String get deviceRenameSaved => 'Назву прылады абноўлена';
+  String get deviceRenameSaved => 'Назва прылады абноўлена';
 
   @override
   String get deviceRenameReset => 'Уласная назва выдалена, паказваецца назва па змаўчанні';
