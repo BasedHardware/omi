@@ -1,12 +1,12 @@
 # Parakeet ASR GPU Service
 
-Self-hosted speech-to-text using **NVIDIA Parakeet** — dual-model architecture with TDT 0.6b (batch) and RNNT 1.1b (streaming). Runs on GKE GPU node pool behind internal load balancer.
+Self-hosted speech-to-text using **NVIDIA Parakeet** — separate TDT v3 serving instances for batch and buffered streaming. Runs on GKE GPU node pool behind internal load balancer.
 
 ## API
 
 ### `POST /v1/transcribe` — Batch ASR
 Multipart audio file (16 kHz mono) → `{"text", "segments": [{text, start, end}]}`
-- Model: TDT 0.6b (0.1% WER)
+- Model: TDT 0.6b v3; accuracy depends on the measured corpus
 - Full punctuation, capitalization, accurate timestamps
 
 ### `POST /v2/transcribe` — Batch + Diarization
@@ -17,13 +17,13 @@ Same as v1 plus server-side speaker diarization and language detection.
 
 ### `WS /v3/stream` — Streaming ASR
 WebSocket: send raw PCM16 chunks, receive JSON segments in real-time.
-- Model: RNNT 1.1b with chunked decoder (2s chunks, 10s left context)
-- VAD endpointing (Silero) with 5s max emission
+- Model: TDT 0.6b v3 with buffered decoder (2s chunks, 2s right context, 10s left context)
+- VAD endpointing (Silero), independent recurrent state for each session
 - AGC normalization for quiet BLE microphone audio
 - Built-in speaker diarization
 - Query params: `sample_rate` (default 16000), `vad_threshold`, `hangover_s`
 - Send text `"finalize"` to end session
-- No punctuation (RNNT limitation — lowercase output)
+- Automatic language detection across the 25 TDT v3 languages; qualify formatting and accuracy on the streaming output
 
 ### `GET /health` — Health check
 Returns `{"status": "healthy", "ready": true}` (200) when the model is ready,
@@ -42,7 +42,7 @@ Returns `{"total_requests", "total_batches", "total_files", "rejected_requests",
 |-----|---------|--------|
 | `PARAKEET_MODEL` | `nvidia/parakeet-tdt-0.6b-v3` | Batch model |
 | `PARAKEET_DEVICE` | `cuda:0` | GPU device for batch inference |
-| `PARAKEET_TORCH_COMPILE` | `true` | Enable torch.compile (+20-30% throughput from kernel fusion) |
+| `PARAKEET_TORCH_COMPILE` | `true` | Enable torch.compile; measure throughput for the deployed image |
 | `PARAKEET_CUDA_GRAPHS` | `false` | Enable CUDA graph decoding. Must stay disabled when `PARAKEET_STREAM_MODEL` is configured because batch and streaming inference share one CUDA context. |
 | `PARAKEET_GC_INTERVAL` | `50` | Full gc.collect() every N batches (gc.collect(0) per batch) |
 | `PARAKEET_GPU_POLL_TIMEOUT` | `0.05` | GPU worker queue poll interval in seconds |
@@ -60,12 +60,12 @@ Returns `{"total_requests", "total_batches", "total_files", "rejected_requests",
 
 | Var | Default | Effect |
 |-----|---------|--------|
-| `PARAKEET_STREAM_MODEL` | (required) | Streaming model (RNNT 1.1b) |
+| `PARAKEET_STREAM_MODEL` | `nvidia/parakeet-tdt-0.6b-v3` | Streaming model (TDT v3 in the primary deployment) |
 | `PARAKEET_MAX_SPEECH_S` | `30` | Max segment duration before forced emission |
 | `PARAKEET_AGC_TARGET` | `0.8` | AGC normalization target peak |
 | `PARAKEET_VAD_THRESHOLD` | `0.5` | Silero VAD speech probability threshold |
-| `PARAKEET_CHUNK_S` | `2.0` | RNNT chunk size in seconds |
-| `PARAKEET_LEFT_CONTEXT_S` | `10.0` | RNNT left context in seconds |
+| `PARAKEET_CHUNK_S` | `2.0` | Buffered decoder chunk size in seconds |
+| `PARAKEET_LEFT_CONTEXT_S` | `10.0` | Buffered decoder left context in seconds |
 
 ### Other
 
@@ -77,17 +77,17 @@ Returns `{"total_requests", "total_batches", "total_files", "rejected_requests",
 
 ## Deploy
 
-```bash
-helm upgrade --install parakeet ./backend/charts/parakeet \
-  -f ./backend/charts/parakeet/prod_omi_parakeet_values.yaml \
-  --namespace prod-omi-backend
-```
+Use the existing backend release workflows. They require an exact-image GPU
+qualification artifact, verify or promote the image into the target registry,
+and establish warm stream capacity before publishing primary routing. The
+[release helper](../scripts/deploy_parakeet_stream.py) prints its source-only
+plan unless `--apply` is passed.
 
-Backend connects via `HOSTED_PARAKEET_API_URL` (cluster-internal service URL). No auth required — service runs behind internal LB only.
+Backend streaming connects via `HOSTED_PARAKEET_STREAM_API_URL`, with the historical `HOSTED_PARAKEET_API_URL` as a compatibility fallback. No auth required — service runs behind internal LB only.
 
 ## Dedicated realtime service
 
-Set `PARAKEET_SERVICE_MODE` to `stream` for RNNT/VAD/speaker embedding only,
+Set `PARAKEET_SERVICE_MODE` to `stream` for one streaming TDT/VAD/speaker embedding instance only,
 `batch` for TDT/batch diarization, or `mixed` for the historical combined service
 (default). Wrong-mode endpoints reject requests. Stream health becomes ready
 only after required dependencies warm successfully. Run one Uvicorn process

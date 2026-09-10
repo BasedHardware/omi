@@ -1,43 +1,36 @@
-# Promotion and fallback contract
+# Release and recovery
 
-Action class: proposed implementation and release design; all activation is withheld.
-Evidence cutoff: 2026-09-10 (source-informed proposal, no live validation).
+This PR implements the provider change and the capacity needed to serve it. No production release has been executed. The existing production release eligibility and explicit approval boundary still apply; merging alone is not evidence of deployment.
 
-## Policy and product invariants
+## Routing contract
 
-One policy owner must resolve surface, language, feature needs, explicit provider/BYOK selection, cohort, health and capacity. Preserve existing explicit-user selection semantics. Qualifying Parakeet as default must not remove working vendor fallbacks or silently lower speaker/language functionality. Audit actual callers before changing defaults.
+Single-channel live sessions in the 25 supported TDT v3 languages, including default multilingual sessions, select Parakeet first, then Modulate and Deepgram cloud on failure. Unsupported language/feature combinations retain supported vendor routing. Multi-channel routing remains outside the first Parakeet-primary cohort. Supported explicit-provider and BYOK paths retain their contracts; an explicit Parakeet request does not override a capability exclusion.
 
-Proposed live order for eligible sessions: Parakeet → Modulate → Deepgram cloud. Noneligible requests use the current working vendor order. Batch remains Parakeet → Modulate until existing Deepgram batch helpers are integrated into the selector, policy-admitted and qualified. PTT is initially Parakeet → Modulate only for qualified English; its current dispatcher does not implement Deepgram. Retaining Deepgram globally does not mean pretending it can serve every endpoint.
+PTT selects Parakeet then Modulate; there is no Deepgram PTT dispatcher. Batch retains Parakeet then Modulate with its separate multilingual TDT pipeline. The stream deployment explicitly loads TDT v3 through the buffered streaming decoder; it does not rely on the batch instance.
 
-The existing connection helper in `omi:backend/utils/stt/streaming.py` has a fixed Modulate → Deepgram → Parakeet fallback order independent of the configured primary list. The Parakeet-primary listen caller currently supplies only the Modulate connection callback, so the proposed three-provider live chain requires wiring and testing a Deepgram leg, including when both Parakeet and Modulate fail before a usable connection. This is core implementation scope. Test actual runtime selection as well as config rendering. Single-channel listen has mid-session rebuilding; multi-channel does not have the same path. Exclude multi-channel from the initial cohort until its continuity path is explicitly qualified, or fund that hardening as additional scope.
+Both initial connection and mid-session rebuilds must reach the vendor fallback chain. Previously failed providers are excluded within a session. Existing replay, timestamp, speaker and finalization semantics remain part of the acceptance contract; a connection-only test cannot establish transcript continuity. Retain shared `record_fallback` telemetry.
 
-Admission remains enforced at the Parakeet serving resource, with unconditional release on socket construction failure, normal completion, cancellation, send/receive failure and finalize timeout. Never multiply a process-local listener cap across replicas. Size for uneven long-lived connection distribution and N+1 failure, not only total cluster average. Protect batch capacity from streaming starvation and vice versa; decide separate pools versus reserved scheduling from mixed-load evidence.
+## Release ordering
 
-Fallback must work both before the first transcript and after partial output. Use bounded replay with audio sequence/timestamp ownership, committed-segment deduplication, speaker remapping, monotonic transcript times and terminal finalization. Do not replay acknowledged audio as new text or lose buffered final words. Keep provider retries bounded and exclude failed providers during a session. If all providers fail, expose an explicit recoverable outcome and preserve the existing catch-up contract; silence is not success.
+1. Resolve the intended backend source and immutable Parakeet image, and obtain passing realtime qualification evidence for that exact image and configured admission capacity.
+2. Verify or promote the qualified digest into the target environment registry, checking that copying preserves its digest. Check GPU quota and the dedicated node pool's ownership, total warm floor and maximum including surge. Create or verify capacity before changing routing; keep existing batch capacity independent.
+3. Extend the existing Prometheus adapter while retaining unrelated live rules and its chart version. Deploy the dedicated stream Helm release with the immutable image.
+4. Require the configured warm floor to be updated, ready and available, with actual model warmup health, ready service endpoints and valid per-pod stream metrics. Pending replicas and empty metric responses cannot pass.
+5. Resolve the internal load-balancer endpoint for Cloud Run and cluster service DNS for backend-listen. Publish the dedicated runtime URL only after capacity validation. The listener image must contain this PR's fallback implementation before it receives the primary configuration.
+6. Promote through the existing environment's deployment gate and verify the serving vector and real transcription path. Recover the prior compatible route/vector on a failed deployment or bake.
 
-Use the shared `record_fallback` contract (`omi:.github/agent-docs/fallback-telemetry.md`) for every provider/mode change. Include bounded reason labels for unsupported capability, admission/capacity, unhealthy, connection, timeout, midstream failure and exhausted chain. Record attempted, admitted, productive, rejected and completed sessions; successful audio hours; billed retries; first/final transcript latency; GPU/queue state and ready-replica capacity. No raw audio/transcripts or user IDs in metric labels. Separate server-send proof from client receipt/render proof.
+The executable release helper and workflow are authoritative for supported flags and operations. Run its source-only plan mode during review. This document is not an instruction to invoke a production command during PR preparation.
 
-## Planned release gates
+## Promotion evidence
 
-| Stage | Evidence required to proceed | Activation boundary |
-| --- | --- | --- |
-| Scope review | Agreement on English-first eligibility, speaker/readability bar and total cost model | Docs only; this draft |
-| Isolated qualification | Benchmark gates pass, fault paths exercised, capacity and costs measured | Future implementation/test work; no production traffic |
-| Dark implementation | Reviewed code, existing policy/runtime rendering tests and client continuity tests pass; promotion allocation remains zero | Separate code PRs and release approval |
-| Consented dogfood | Explicit test identities, verified data plane, aggregate client/server outcomes and rollback rehearsal | Separate approval; no implicit production shadowing |
-| Production canary | Exact release vector and approved policy; fallback quotas and recovery ready | Explicit production approval before any production allocation |
-| Expansion | Per-slice gates, no silent loss, cost and capacity headroom sustained | Subsequent explicit decision; no automatic expansion |
+Attach the exact-source GPU run, image digest, per-concurrency latency/completion/VRAM results, routing tests and independent review to the PR. Record the capacity floor and actual ready node/pod counts at release. Keep customer load samples and negotiated rates private; public charts contain planning envelopes.
 
-Suggested post-approval cohorts: 1% → 5% → 25% → 50% → 100% of **qualified single-channel live sessions**, stable assignment and exclusions preserved. PTT needs a separate qualification verdict and separately approved cohort schedule; batch retains its current primary and is monitored for contention, while multi-channel remains excluded. Report eligible hours / all incoming hours and actual Parakeet productive share, so “100% eligible” cannot masquerade as universal coverage. Each stage requires at least 24 hours including a peak period plus enough observations for its reliability claim; low traffic extends the stage. Percentages alone do not cap load: bind each stage to an absolute admitted concurrency/audio budget.
+The sustained fixture test proves a bounded serving workload. It does not establish representative accuracy, diarization, accents/noise, client receipt/render, 99.9% reliability or region-failure tolerance. Use the [benchmark plan](benchmark-plan.md) for those distinct claims. Retain enough vendor concurrency/rate quota to absorb the entire eligible workload during a Parakeet outage.
 
-## Stop and recovery
+## Stop and recover
 
-Immediately halt expansion on silent audio loss, duplicated committed text, wrong-speaker identity, unsupported-language routing, exhausted admission leases, or failed fallback. Also stop on a benchmark/SLO threshold breach sustained for five minutes, capacity above the qualified headroom boundary, fallback rate above the modeled budget, or divergence of serving policy/release vector. No-data is inconclusive.
+Stop promotion on missing qualification, insufficient warm capacity, missing custom metrics, exhausted fallback quota, unsupported-language routing, silent loss, duplicate committed text or wrong-speaker identity. Do not raise the admission cap to make readiness or capacity checks pass.
 
-Before activation, record the known-good provider order, cohort allocation, admission limits, model/container digests, Cloud Run/GKE vector and fallback credential versions (names only). Rehearse the actual route-revert mechanism and measure propagation; environment-backed changes require deployment/rollout and are not instantaneous toggles. Proposed target is recovery of new-session vendor routing within five minutes, subject to rehearsal. Maintain enough vendor quota to absorb 100% of the canary plus plausible wider incident demand.
+Before routing changes, preserve the previous backend image/configuration and Parakeet/adapter Helm revisions. Recover new sessions to the known-good vendor route and drain existing healthy sessions. Environment-backed routing changes require rollout and are not instantaneous feature flags. Keep GPU and vendor resources during recovery until the restored serving path has been verified; deleting capacity is not a routing rollback.
 
-Recover new sessions to the approved vendor order; drain existing healthy Parakeet sessions or switch them with tested replay/dedup semantics. Restore compatible infrastructure/config when a partial deployment changed more than routing. Read back the entire serving vector and verify client transcript continuity with real accepted audio before calling recovery complete. Do not delete Parakeet or vendor resources as part of emergency recovery.
-
-## Acceptance and closure
-
-Promotion is complete only when approved eligible traffic is primarily served by Parakeet across peak and failure conditions, both vendor fallback paths remain exercised, actual fully loaded cost and quality meet the agreed decision, exceptions are explicit, and rollback has evidence. A green build, ready pod, successful config write or docs merge cannot close this project.
+Observe a representative peak after release and separately exercise initial and midstream fallback, rolling termination and one-node loss. Only live serving evidence can establish completion of the migration. GitHub owns review, CI and release status; these docs do not create a second status tracker.

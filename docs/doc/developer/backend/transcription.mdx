@@ -156,8 +156,13 @@ All audio is internally converted to 16-bit linear PCM before being sent to STT 
 The canonical provider/surface matrix and default model order live in
 `backend/config/stt_provider_policy.py`. The deployment validator requires
 `STT_SERVICE_MODELS` and `STT_PRERECORDED_MODEL` to match that code-owned
-policy; an environment edit cannot re-enable hosted Deepgram. The normal serving
-defaults are `modulate-velma-2,parakeet`. Self-hosted Deepgram is a distinct,
+policy. The live default is `parakeet,modulate-velma-2,dg-nova-3`:
+single-channel sessions in the 25 TDT v3 languages, including default multilingual sessions, use Parakeet first, with Modulate and
+hosted Deepgram available for connection and mid-session fallback. Unsupported
+languages and multi-channel sessions retain a supported vendor route. PTT uses
+`parakeet,modulate-velma-2`; batch retains that same order with different model
+capabilities. Supported explicit-provider and BYOK requests retain their existing policy.
+Self-hosted Deepgram is a distinct,
 streaming-only provider that requires `DEEPGRAM_SELF_HOSTED_ENABLED=true` and a
 non-cloud `DEEPGRAM_SELF_HOSTED_URL`; it is never a fallback to
 `api.deepgram.com`. If no supported provider can serve a language, the request
@@ -176,6 +181,14 @@ flowchart TD
 |----------|-----------|-------|----------|
 | **Modulate** | Provider-dependent | `velma-2` | Supported configured languages |
 | **Parakeet** | Deployment-dependent | `parakeet` | Self-hosted streaming and batch STT |
+| **Deepgram cloud** | Model-dependent | `dg-nova-3` | Live streaming fallback |
+
+Parakeet realtime uses `HOSTED_PARAKEET_STREAM_API_URL`; batch uses
+`HOSTED_PARAKEET_API_URL`. The realtime service runs in `PARAKEET_SERVICE_MODE=stream`
+on dedicated GPU capacity, with model warmup readiness and per-pod admission.
+The deployment must provision and verify this capacity before publishing the
+primary routing configuration. See the [implementation and qualification
+record](https://github.com/BasedHardware/omi/tree/main/backend/docs/plans/parakeet-primary).
 
 ## Batch Transcription Proxy
 

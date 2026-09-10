@@ -1,13 +1,32 @@
 # Qualification benchmark
 
-Action class: proposed isolated local/test evaluation; no benchmark execution or live traffic replay performed in this draft.
-Evidence cutoff: 2026-09-10 (design only).
+Evidence cutoff: 2026-09-10. The existing `parakeet_gpu_tests.yml` workflow now
+builds the selected source into an immutable image and runs an isolated dev GPU
+job. `backend/tests/container/test_parakeet_stream_capacity.py` qualifies the
+actual `/v3/stream` protocol at increasing concurrency and tests admission
+rejection above the configured cap. Artifacts record readiness, completion,
+latency and VRAM. A completed run and its digest must be attached to the PR;
+source code for a benchmark is not a measured result.
+
+The stream model is pinned to Hugging Face revision
+[`541d1f99c6b0c3cd0b11a95167540bb8edefd82b`](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3/tree/541d1f99c6b0c3cd0b11a95167540bb8edefd82b).
+Silero is pinned to its official v6.2.1 commit. Runtime health and qualification
+artifacts must agree on model family and revision. The public English fixture
+contains long pauses; the sustained workload caps those pauses at 200 ms,
+raising its measured speech duty from about 55% to 88%. The artifact records
+the RMS recipe and source/workload hashes. Four phrase sentinels test basic
+English content retention; they are not a substitute for WER or multilingual
+quality evaluation.
+
+This capacity fixture is not a representative quality corpus. Batch WER/DER
+results use a different pipeline and do not qualify buffered-streaming accuracy or speakers.
+The broader acceptance tests below remain necessary before production promotion.
 
 ## Candidate and comparator contract
 
-Compare the actual Omi adapters end to end, not raw model leaderboards. Pin source SHA, model revision/weights hash, container digest, NeMo/CUDA versions, GPU/CPU/RAM, region, codec, audio sample rate, chunking, VAD, diarizer and concurrency settings. Candidates: current RNNT streaming/PTT pipeline, current TDT batch pipeline, and only if separately selected a multilingual realtime candidate. Comparators: configured Modulate endpoint and Deepgram model/options on each supported surface. Deepgram batch helpers exist but are not admitted by the current batch selector/policy, while PTT has no Deepgram dispatcher. A direct API quality experiment must be labeled separately from the enabled production route.
+Compare the actual Omi adapters end to end, not raw model leaderboards. Pin source SHA, model revision/weights hash, container digest, NeMo/CUDA versions, GPU/CPU/RAM, region, codec, audio sample rate, chunking, VAD, diarizer and concurrency settings. Candidates: TDT v3 buffered streaming/PTT and the separate TDT batch pipeline. The previous English RNNT stream model is not the migration candidate. Comparators: configured Modulate endpoint and Deepgram model/options on each supported surface. Deepgram batch helpers exist but are not admitted by the current batch selector/policy, while PTT has no Deepgram dispatcher. A direct API quality experiment must be labeled separately from the enabled production route.
 
-NVIDIA's [TDT v3 model card](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) describes 25-language ASR under CC-BY-4.0. Those model-level capabilities are not evidence that Omi's RNNT service supports those languages, realtime latency, or named speakers. Review licenses for the selected weights and diarizer dependencies before distribution.
+NVIDIA's [TDT v3 model card](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) describes 25-language ASR under CC-BY-4.0. It documents the same buffered streaming API used by this service (2-second chunks, 2-second right context and 10-second left context). That supports the implementation choice, while measured end-to-end latency, accuracy and speaker quality still require the actual deployed pipeline. Review licenses for the selected weights and diarizer dependencies before distribution.
 
 ## Corpus
 
@@ -24,8 +43,8 @@ Thresholds below are planning proposals for product review, not existing Omi SLO
 | Text accuracy | WER/CER, paired session bootstrap 95% CI; raw and normalized text | Upper bound on WER regression ≤1 absolute percentage point against current route for each qualified slice |
 | Names/numbers | Manually labeled entity exact-match error | ≤1 pp absolute error regression; inspect all high-impact command errors |
 | Speaker quality | DER, speaker-attributed WER, named-speaker identity continuity; disclose overlap/collar policy | DER regression ≤2 pp, no cross-session identity leakage; no invented named speaker |
-| Formatting | Blind readability and punctuation review, plus downstream summary/action extraction checks | ≥95% acceptable sessions and ≤2 pp regression; RNNT lowercase/no-punctuation must be explicitly accepted or repaired and remeasured |
-| Realtime latency | First valid audio → first nonempty transcript; speech end → final; client receipt/render separately | p95 first transcript ≤3 s and ≤500 ms regression; p95 end-to-final ≤2 s; separately report p99 |
+| Formatting | Blind readability and punctuation review, plus downstream summary/action extraction checks | ≥95% acceptable sessions and ≤2 pp regression; evaluate the actual TDT streaming output rather than inheriting batch-formatting claims |
+| Realtime latency | First valid audio → first nonempty transcript; speech end → final; client receipt/render separately | record first-transcript and end-to-final p95/p99; the executable capacity gate allows ≤4 s segment-end-to-text because the selected model reserves 2 s of right context; compare receipt/render against vendors before product promotion |
 | PTT | Speech end → complete final text | p95 ≤2 s and ≤300 ms regression; no lost final word |
 | Batch | Queue wait + inference to final, by audio length | p95 completion ≤current route +10%; report real-time factor and queue-age tail |
 | Continuity | Accepted voiced sessions with durable nonempty final transcript | ≥99.9%, no more than 0.1 pp regression; failures and empty outputs included in denominator |
@@ -40,7 +59,7 @@ Run in a dedicated test deployment with test identities and no production data d
 
 Exercise connection refusal, handshake/readiness rejection, timeout, model failure, capacity denial, midstream close, send failure, cancellation, exhausted vendor quota, both fallbacks unavailable, finalize and drain timeout. Include repeated fallback attempts and speaker/timestamp reconciliation across provider boundaries. Establish bounds for retained replay audio and exactly which acknowledged audio can be retried.
 
-Run three repeatable load trials and a 24-hour isolated soak after focused fault tests. Stop on unexpected cost, resource cap breach, data-plane escape or any silent loss. No load/stress tests against production. Paid compute/API execution requires separate approval; the proposed budget and presence of a funded account do not authorize spending. Public API tests require a bounded funded test account; do not export user recordings to a new provider by assumption.
+Run three repeatable load trials and a 24-hour isolated soak after focused fault tests. Stop on unexpected cost, resource cap breach, data-plane escape or any silent loss. No load/stress tests against production. This task authorizes an isolated one-L4 qualification run bounded by the workflow timeout. Larger corpus runs, a 24-hour soak and vendor API comparison require a separately scoped budget. Public API tests require a bounded funded test account; do not export user recordings to a new provider by assumption.
 
 ## Deliverable
 

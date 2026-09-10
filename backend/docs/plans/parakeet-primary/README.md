@@ -1,54 +1,40 @@
-# Parakeet-primary STT: proposed implementation plan
+# Parakeet-primary transcription
 
-Status: draft design for review, 2026-09-10. **No activation or production change is authorized by this document or its merge.**
+Implementation and research record, 2026-09-10. This PR changes executable routing, serving, capacity and release configuration. It is a draft pending integrated qualification; no production deployment has been performed by this task.
 
-Source baseline: `4e1f98cbe1fdf02ecb051e14f3e2ddb6d6078902`. This PR changes documentation only. It contains prescriptions for subsequent implementation, capacity qualification and explicitly approved rollout; it does not claim the target design exists today.
+## Decision
 
-## Recommendation
+Use Parakeet TDT v3 first for single-channel backend live transcription in its 25 supported languages, including the default multilingual mode, then Modulate and Deepgram cloud. Keep vendor routing for unsupported languages and multi-channel sessions; BYOK and supported explicit-provider paths retain their contracts. This changes the deployed stream model as well as provider order: the old English RNNT model would bypass most default multilingual sessions. PTT uses Parakeet then Modulate; its dispatcher does not implement Deepgram. Batch keeps Parakeet then Modulate and its separate TDT model.
 
-Promote Parakeet first for **qualified English, single-channel backend live transcription**, keep Modulate then Deepgram cloud as fallbacks, and scale a dedicated realtime GPU fleet before admitting traffic. Preserve existing Parakeet-first batch service. Qualify PTT separately; preserve on-device, explicit-provider and BYOK behavior. Exclude multi-channel and unsupported language/feature combinations until separately qualified.
+Separate realtime and batch GPU fleets. A streaming replica loads one TDT v3 instance, VAD and speaker embedding dependencies without a second batch instance, and cannot accept batch requests. Batch releases cannot accept streaming requests. The image retains a mixed mode for existing standalone installations. The dedicated stream endpoint takes precedence over the historical shared endpoint.
 
-Approve an isolated two-replica L4 streaming qualification as the next engineering milestone, not a global provider-order flip. Target one `g2-standard-8` / L4 per streaming replica initially; compare cheaper shapes only after CPU, memory and diarizer headroom are measured. Retain the existing batch fleet independently. For an approved pilot, propose two warm streaming replicas and a four-replica ceiling, plus schedulable rolling-update surge capacity. These are proposed values, not manifests changed by this PR. They must shrink or grow if qualification shows different safe capacity.
+The production streaming manifest specifies 40 warm L4 replicas and a ceiling of 60; development specifies 2–4. One GPU and one process own each pod's admission cap. The production floor covers a planning envelope of 600 concurrent eligible streams, 30% reserve and one node failure at an operating target of 20 streams per pod. The TDT checkpoint and Silero source are pinned for repeatability. The hard cap of 25 and target of 20 remain qualification assumptions until the exact image passes sustained realtime testing. These are not measured throughput results.
 
-Use a provisional hard cap of 25 streams per streaming pod and an operating/HPA target of 20, **only if the full quality/latency suite proves those values**. A cap protects a resource; it does not prove the model can meet latency at that load. Size each expansion from measured eligible demand, 30% demand reserve, one-replica loss and node/model warmup. Do not increase the per-pod cap just to fit more users.
+## What ships
 
-Do not promise savings yet. Public Modulate rates are low enough that a lightly utilized redundant GPU fleet may cost more. Require a fully loaded cost decision at measured occupancy before approving broad scale. If reliability or control justifies a premium, approve that premium explicitly.
+| Boundary | Implementation |
+| --- | --- |
+| Provider policy | Parakeet-first live/PTT defaults; language/surface eligibility retained |
+| Live fallback | Both vendor callbacks wired from Parakeet; previously failed providers excluded during session rebuilding |
+| Serving | Explicit mixed/batch/stream modes; stream model warmup readiness, admission metrics and bounded drain |
+| Capacity | Dedicated GPU selectors, hostname anti-affinity, warm floor, disruption budget, zero-unavailable rolling updates and one surge GPU |
+| Autoscaling | Per-pod active streams plus recent capacity rejections through the existing Prometheus adapter; absent metrics remain absent |
+| Endpoint contract | Dedicated `HOSTED_PARAKEET_STREAM_API_URL`; existing batch URL retained |
+| Qualification | Existing GPU workflow extended with exact-source image build and isolated realtime load tests, immutable digest and result artifacts |
 
-## Current source and required change
-
-| Surface/boundary | Current source | Prescription |
-| --- | --- | --- |
-| Live default | `modulate-velma-2,dg-nova-3,parakeet` | Eligible cohort: Parakeet → Modulate → Deepgram; preserve current vendors for all other requests |
-| Actual fallback wiring | Shared helper has fixed fallback order, but Parakeet-primary listen caller supplies only Modulate | Wire and test Deepgram for initial connection and mid-session exhaustion; config ordering alone is insufficient |
-| Batch / catch-up | `parakeet,modulate-velma-2` | Preserve; separate its capacity from realtime, verify contention and overflow |
-| PTT | `modulate-velma-2,parakeet`; only these two dispatchers | Separate English-first trial; new Deepgram PTT adapter is optional later scope |
-| Model capability | RNNT 1.1b realtime/PTT, English-only; TDT 0.6b v3 batch, 25 languages | Do not use batch capability as proof of multilingual live support |
-| Multi-channel | Different initialization/send path, without the same single-channel failover monitor | Exclude initially; budget a separate continuity design |
-| Capacity | Existing service-owned per-pod admission and shared batch/stream GPU architecture | Separate fleets; retain admission; replace batch-driven realtime scaling assumptions with qualified stream-demand scaling |
-
-Authoritative code: [provider policy](../../../config/stt_provider_policy.py), [connection helper](../../../utils/stt/streaming.py), [listen receiver](../../../routers/listen/receiver.py), [PTT](../../../routers/chat.py), [batch selector](../../../utils/stt/pre_recorded.py), [Parakeet service](../../../parakeet/README.md), [chart](../../../charts/parakeet/), [runtime environment](../../../deploy/runtime_env.yaml).
+Code authorities: [provider policy](../../../config/stt_provider_policy.py), [connection helper](../../../utils/stt/streaming.py), [listen receiver](../../../routers/listen/receiver.py), [Parakeet service](../../../parakeet/README.md), [chart](../../../charts/parakeet/), [runtime environment](../../../deploy/runtime_env.yaml).
 
 ## Review packet
 
-- [Capacity and infrastructure prescriptions](capacity-plan.md): fleet separation, scaling controls, absolute budgets, node headroom and failure/drain design.
-- [Benchmark plan](benchmark-plan.md): corpus, quality, speaker identity, client continuity, latency, reliability, capacity and fault gates.
-- [Cost and effort](cost-and-effort.md): public pricing, utilization sensitivity, fully loaded cost and capacity-inclusive implementation estimate.
-- [Rollout and rollback](rollout-plan.md): admission, vendor fallback, separate surface canaries and release-vector recovery.
+- [Capacity](capacity-plan.md): replica arithmetic, GPU pool limits, metrics, readiness and failure assumptions.
+- [Benchmark](benchmark-plan.md): executable capacity test and broader quality evidence required for promotion.
+- [Cost and effort](cost-and-effort.md): first-party prices, utilization sensitivity and remaining qualification work.
+- [Release and recovery](rollout-plan.md): capacity-before-routing ordering and production approval boundary.
 
-## Proposed implementation sequence
+Do not claim cost savings from raw model throughput. At the researched public G2 price, 40 continuously warm GPUs cost approximately $24,926/month for compute alone. This can exceed Modulate at modest average occupancy. Review the premium alongside latency, quality and control benefits.
 
-| Slice | Files / responsibility | Reviewable exit |
-| --- | --- | --- |
-| 1. Demand and quality baseline | Existing `backend/scripts/stt/` benchmarks, metrics and test corpus manifest | Eligible load and coverage; paired quality report; no routing changes |
-| 2. Independent realtime capacity | `backend/parakeet/` startup/readiness/drain; `backend/charts/parakeet/`; model-specific endpoint/config declarations | Isolated streaming/batch releases, trained/warm readiness, leak-free admission, replica-loss test |
-| 3. Correct routing and fallback | `backend/config/stt_provider_policy.py`, `backend/utils/stt/streaming.py`, `backend/routers/listen/receiver.py`, associated unit tests | Qualified single-channel Parakeet-primary path reaches both vendors without lost/duplicate text |
-| 4. Scaling and deployment contract | Parakeet HPA/service monitoring, metric adapter rules, canonical runtime env and existing release validation | Live-stream scaling metric proven end-to-end; manifest parity; stage budget, drain and rollback rehearsed |
-| 5. Qualification and activation decision | Existing unit/container gates, consented client runs, aggregate results | Model/capacity/cost gates pass, exact release artifact and explicit promotion approval |
+## Acceptance boundary
 
-Keep each implementation PR independently dark and testable. No new CI workflow is prescribed; extend the existing owning lanes. Do not remove or weaken admission, capability policy or deployment recovery to make the new route pass. Optional Deepgram batch/PTT expansion, multilingual live models and multi-channel failover do not silently enter the initial slice.
+A merge changes the deployable implementation. The repository's production release still requires its existing release eligibility and explicit production gate. No production gate is bypassed by this PR. Before promotion, the release must establish warm, schedulable capacity and current custom metrics; unit tests or desired replica counts alone cannot establish that the fleet sustains users.
 
-## Decisions proposed for morning review
-
-Adopt the architecture, English-first eligibility and qualification gates above; fund capacity qualification before routing work; reserve an initial isolated test budget up to $500 after computing the exact resource/run cap. This proposed budget is not spend authorization; obtain separate approval before paid compute/API execution. Withhold production allocation and purchases/commitments. The next go/no-go is the measured quality + safe capacity + fully loaded economics packet. A failure there means retain vendor-primary while improving the candidate, not promote it anyway.
-
-No live production throughput, invoice amounts, internal service identities or customer recordings are published here. Public scenarios are explicitly illustrative. Operational measurements and negotiated financial inputs stay in the private coordination record; they must be refreshed before execution.
+The representative quality corpus, vendor invoice reconciliation, sustained GPU capacity results and production failure/rollback evidence have separate evidentiary value. Keep missing results explicit. Do not represent a short public-fixture load test as a multilingual, speaker-quality or whole-user-base certificate. Live customer measurements and negotiated rates remain in the private coordination record.

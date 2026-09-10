@@ -1,6 +1,6 @@
 # Economics and engineering estimate
 
-Action class: read-only public pricing research and local arithmetic; no spend or paid benchmark incurred.
+Public pricing research and reproducible local arithmetic. Isolated GPU qualification costs are additional and must be reported from actual run duration; no production capacity has been provisioned by this task.
 Evidence cutoff: 2026-09-10. USD; public list prices are not Omi contract prices.
 
 ## Public price snapshot
@@ -30,19 +30,29 @@ For a simplified all-eligible workload, one fallback at rate r, failure fraction
 
 Only valid when the denominator is positive and fleet size/capacity remain valid at H. Add backoff/retry overlap using measured billed hours, not a guessed percentage.
 
-## Sensitivity calculation — assumptions, not measured savings
+## Sensitivity at the actual proposed warm floor
 
-Assume F=$730/month (a hypothetical $1 per fleet-hour ×730, not a GPU quote), O=$0, v=$0.005/audio-hour, e=a=1, 5% Modulate overflow at $0.06/audio-hour, no duplicates, and baseline entirely Modulate multilingual streaming at $0.06. Then candidate cost is `730 + 0.008H`; baseline is `0.06H`.
+The proposed 40 `g2-standard-8` nodes at $0.853624312/node-hour cost
+$24,925.83 per 730-hour month for compute alone. The following calculation adds
+5% fallback hours at Modulate's $0.06/audio-hour list price, and compares an
+all-Modulate baseline. It excludes networking, storage, extra scaling, operations
+and duplicated retry billing, so candidate totals are lower bounds.
 
-| Unique audio hours/month | Vendor baseline | Parakeet + overflow | Difference (baseline minus candidate) |
+| Average concurrent audio streams | Monthly audio hours | Modulate baseline | 40-node compute + 5% fallback |
 | --- | ---: | ---: | ---: |
-| 10,000 | $600 | $810 | −$210 |
-| 50,000 | $3,000 | $1,130 | $1,870 |
-| 100,000 | $6,000 | $1,530 | $4,470 |
+| 50 | 36,500 | $2,190 | $25,035.33 |
+| 100 | 73,000 | $4,380 | $25,144.83 |
+| 300 | 219,000 | $13,140 | $25,582.83 |
+| 600 | 438,000 | $26,280 | $26,239.83 |
 
-Break-even is 14,038.46 hours/month. Doubling fixed cost to $1,460 raises it to 28,076.92 hours. Adding an illustrative $2,000/month operations allocation to the original case raises it to 52,500 hours. These are optimistic arithmetic scenarios, not claims that one fleet serves 100,000 hours: that volume averages 137 concurrent streams before peaks and redundancy. Fleet cost must be resized using the measured capacity curve; recompute every row after sizing.
-
-For orientation, 10,000 hours at Deepgram's promotional monolingual base rate cost $2,880 before diarization. Comparing only to that rate would exaggerate savings if Omi already sends most hours to cheaper Modulate. Replacing Modulate is a harder cost gate than replacing Deepgram.
+At these assumptions, compute plus fallback alone reaches break-even around
+437,295 audio hours/month, or 599 average concurrent streams. That is near the
+entire planning peak envelope, before other costs. A peak is not an average:
+the last row is a utilization sensitivity, not a forecast. This initial capacity
+prescription prioritizes a warm user-serving reserve and should be reviewed as
+a likely cost premium over Modulate. A smaller floor requires measured safe
+per-GPU capacity and demand/startup evidence; do not reduce reserve just to
+produce a favorable spreadsheet.
 
 ## Evidence needed for an investment decision
 
@@ -50,11 +60,11 @@ Collect a trailing 28-day finalized baseline by surface/language/provider: uniqu
 
 Obtain a region/SKU-specific infrastructure quote and actual committed rates. Model any infrastructure commitment/true-up and credits separately from resource savings; privately refresh applicable contracts before claiming cash savings. Do not annualize a short promotional or partial billing window.
 
-Proposed financial gate: ≥20% reduction in fully loaded cost for migrated hours at expected demand, with a non-negative incremental cash case and a downside case for 20% overflow plus N+1 capacity. If a resilience/quality benefit justifies higher cost, The approving owner must record that explicit tradeoff instead of calling it savings. Qualification spend proposal: ≤$500 external compute/API costs, no automatic purchases; revise from actual rate and runtime inputs before provisioning.
+Proposed financial gate: ≥20% reduction in fully loaded cost for migrated hours at expected demand, with a non-negative incremental cash case and a downside case for 20% overflow plus N+1 capacity. If a resilience/quality benefit justifies higher cost, the approving owner must record that explicit tradeoff instead of calling it savings. Qualification spend proposal: ≤$500 external compute/API costs, no automatic purchases; revise from actual rate and runtime inputs before provisioning.
 
 ## Capacity-priced scenarios
 
-Use the [capacity prescription](capacity-plan.md), not the earlier hypothetical $730 fleet, for capacity approval. Google's [accelerator-optimized price page](https://cloud.google.com/products/compute/pricing/accelerator-optimized) lists an on-demand `g2-standard-8` with one L4 at **$0.853624312/hour** in its default displayed pricing context (checked 2026-09-10). Confirm the intended region/currency/SKU in a saved quote before purchase; this is a public reference rate, not a negotiated or region-locked quote. The G2 VM price includes the accelerator; do not add a second GPU charge. At 730 hours, one node is **$623.15/month** before disks, network, management, observability, fallback and operations.
+Use the [capacity prescription](capacity-plan.md) for capacity approval. Google's [accelerator-optimized price page](https://cloud.google.com/products/compute/pricing/accelerator-optimized) lists an on-demand `g2-standard-8` with one L4 at **$0.853624312/hour** in its default displayed pricing context (checked 2026-09-10). Confirm the intended region/currency/SKU in a saved quote before purchase; this is a public reference rate, not a negotiated or region-locked quote. The G2 VM price includes the accelerator; do not add a second GPU charge. At 730 hours, one node is **$623.15/month** before disks, network, management, observability, fallback and operations.
 
 | Warm streaming fleet, held for 730 hours | Compute-only monthly reference | Boundary |
 | --- | ---: | --- |
@@ -68,9 +78,9 @@ These are constant-fleet references, not HPA forecasts. Recompute from actual ho
 
 For a deliberately conservative example, a 600-peak/300-average workload with 40 nodes kept warm all month consumes 219,000 unique audio hours. At $0.06 the vendor baseline is $13,140; streaming compute alone is $24,925.83, already $11,785.83 higher. This does not rule out a cheaper demand-following fleet or better measured throughput; it rules out claiming savings from a raw per-GPU throughput figure. The prescribed ≥20% fully loaded savings gate must hold after failure reserve, batch separation, fallback and operations, or be replaced by an explicitly approved reliability/control premium.
 
-## Capacity-inclusive effort prescription
+## Engineering effort and remaining qualification
 
-Person-days; estimates, not commitments. Assumes experienced backend/ML/SRE support and available test hardware/data. Includes the split-service and scaling work absent from a provider-order-only estimate.
+The table records the original manual engineering scope, not work still entirely unimplemented: this PR now implements serving separation, routing, charts and release orchestration. Corpus collection, measured GPU qualification, client/failure testing and operational review remain separately evidenced. Person-days are planning estimates, not measured task duration or commitments. Assumes experienced backend/ML/SRE support and available test hardware/data. Includes the split-service and scaling work absent from a provider-order-only estimate.
 
 | Work package | Person-days | Deliverable |
 | --- | ---: | --- |
@@ -84,4 +94,4 @@ Person-days; estimates, not commitments. Assumes experienced backend/ML/SRE supp
 
 With two effective engineers and overlapping corpus/infrastructure work, budget 4–6 calendar weeks plus external data/quota/approval waits. Add 20–30% contingency (roughly 32–55 person-days total). Critical path is corpus/model viability → safe per-pod capacity → infrastructure/unit economics → integrated failover/drain qualification → explicit rollout decision.
 
-Optional scope: 2–4 person-days to policy-admit/integrate existing Deepgram batch helpers; 3–6 for a new Deepgram PTT adapter; 5–10 for a multilingual/punctuated realtime feasibility spike, with implementation re-estimated afterward. Multi-channel failover remains a separate unsized design until its contract is agreed. Production observation time is additional.
+Optional scope: 2–4 person-days to policy-admit/integrate existing Deepgram batch helpers; 3–6 for a new Deepgram PTT adapter. TDT v3 multilingual buffered streaming is included in this implementation; multilingual quality qualification remains part of the core corpus work. Multi-channel failover remains a separate unsized design until its contract is agreed. Production observation time is additional.

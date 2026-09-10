@@ -2,23 +2,24 @@
 
 Draft, 2026-09-10. No values in this plan have been applied. Numbers marked provisional are qualification targets, not certified capacity.
 
-## Why scaling is a first-class implementation slice
+## Fleet ownership
 
-The [production values](../../../charts/parakeet/prod_omi_parakeet_values.yaml) at the plan's source baseline declare one GPU/pod, HPA min 1/max 2, active-request target 20 and GPU target 70%, scale-up limited to one pod/300 seconds, scale-down stabilization 600 seconds, and rolling updates with one unavailable/zero surge. These are source declarations, not a live inventory. A larger node pool alone cannot overcome a two-pod HPA ceiling; increasing that ceiling alone cannot create GPU quota, ready nodes or warmed model replicas.
+The streaming release applies `prod_omi_parakeet_stream_values.yaml` after the
+production base values (and the equivalent dev overlay). It uses a separate
+service, internal load balancer and labeled GPU node pool. `serviceMode: stream`
+loads one TDT v3 instance, VAD and speaker dependencies without a second batch model; the existing batch release
+uses `serviceMode: batch`. One process owns one GPU and its admission limit.
 
-The [startup](../../../parakeet/main.py) initializes a batch GPU worker/engine and RNNT decoder together. Batch and stream admission are separate but share GPU resources. Stream admission is a process-local owner at the one-process, one-GPU pod boundary, not a listener-local limit. Preserve those assumptions; multiple Uvicorn workers could multiply the limit.
+Stream readiness includes actual model warmup, and draining removes readiness
+and rejects new leases. The `parakeet_stream_demand` Pods metric combines active
+streams with capacity-full admission pressure over one minute. It is exposed
+through the existing cluster Prometheus adapter. HPA also observes active
+streams. Missing series remain absent; never replace them with zero.
 
-The [HPA template](../../../charts/parakeet/templates/hpa.yaml) supports a stream gauge, but production values currently use total active requests. Custom metric rules under the chart are not proof that the cluster-wide adapter serves them. Verify custom/external metrics and HPA conditions end to end before enabling scale-dependent traffic. A missing metric must not be treated as zero load.
-
-## Chosen architecture
-
-**Separate realtime and batch deployments/services, initially on separate labeled GPU capacity.** Reuse the current image/build lineage, with explicit serving modes that load only required models and expose only the matching endpoints. A realtime replica loads RNNT, VAD and speaker dependencies; a batch replica loads TDT and required batch diarization. Give each service independent readiness, admission/queue limits, HPA, dashboards and endpoint configuration. Retain the batch service and its validated capacity during migration.
-
-This requires startup/endpoint-gating code, chart/release wiring and separate backend endpoint selection. It is not an existing env-only switch. Fail startup on contradictory mode/model configuration. Prove streaming readiness with decoder/diarizer warmup, not merely a batch GPU-worker-ready flag. Avoid duplicating unrelated business logic across services.
-
-Reason: realtime peak latency should not depend on batch queue occupancy, large-file VRAM spikes or batch rollout. Splitting costs a warm redundant streaming floor; include that expense rather than promising that existing idle batch GPU is free. Revisit co-location only if a measured scheduler with enforceable reservations can preserve both SLOs and improve cost.
-
-Start with one dedicated L4 and one process per `g2-standard-8` replica. Do not introduce time-slicing/MPS or Spot-only primary capacity in the first release. Batch opportunistic capacity is a later cost option, with tested retry and queue durability. A larger accelerator is not prescribed until L4 qualification identifies the actual bottleneck.
+Use one dedicated L4 on `g2-standard-8` per replica. No GPU sharing or Spot-only
+primary capacity is introduced. Batch and realtime use independent capacity,
+so batch VRAM spikes cannot consume a streaming pod's resources. Revisit
+co-location only with an enforceable reservation scheduler and measured benefit.
 
 ## Sizing contract and initial values
 
@@ -38,7 +39,12 @@ The extra replica covers one pod loss; the 30% factor covers demand uncertainty.
 | 300 | 21 | Material fleet and cost decision |
 | 600 | 40 | Stress-sizing example, not an observed eligible workload |
 
-Recommended isolated qualification: two streaming replicas; one failure must leave capacity for the small test cohort. Recommended approved pilot: min 2/max 4 streaming replicas, no batch removal. Stage traffic by absolute concurrency as well as percentage. Exceeding the cohort budget routes new eligible sessions to vendors; it must not create an unbounded GPU waiting room.
+The checked-in production floor is 40 and ceiling is 60. The development
+floor/ceiling is 2/4. Streaming node-pool total capacity must reach 61/5,
+respectively, to accommodate one rolling-update surge node. The 600-stream
+production value is a conservative planning envelope, not a published live
+customer measurement. Measure combined live and PTT pressure before promotion.
+Excess per-pod admissions fall through to vendors instead of an unbounded queue.
 
 Maintain `N_peak` warm for the peak interval. Off-peak downscaling is allowed only after verifying sufficient ready reserve throughout measured node/model startup time. Measure metric propagation + HPA reaction + node provisioning + image/model download + warmup as one distribution. Prewarm ahead of predictable peaks; cover unpredictable arrivals during that interval with ready spare capacity and vendor overflow. Do not count Pending/Starting pods as available.
 
@@ -47,7 +53,7 @@ Before fleet purchase/activation, collect a complete 28-day, at-most-one-minute-
 ## Autoscaling and infrastructure changes
 
 - Streaming HPA primary: per-pod `parakeet_active_streams`, provisional target 20. Before capacity-dependent routing, require an implemented and verified offered-eligible-load/admission-rejection signal with bounded cardinality, a tested scale-up response, and explicit behavior on metric loss; these are mandatory acceptance criteria. Include this pressure as a separate bounded signal: admitted streams plateau at the cap and can hide demand. Keep GPU/VRAM and latency as guardrails; CPU alone is insufficient. Batch scales against its own queue age/active jobs and completion SLO.
-- Propose scale-up of at most two pods/60 seconds for the pilot, no stabilization delay, max four; qualify that behavior against measured scheduling/warmup before using it. For larger fleets, review bounded percentage-based scaling from observed arrivals, not this pilot setting. Preserve at least 600-second scale-down stabilization and limit removal to one fully drained pod per interval.
+- The stream overlays allow two additional pods per 60 seconds with no scale-up stabilization delay; the warm floor covers the planning peak while nodes start. Qualify that rate against measured provisioning and arrival bursts. Preserve at least 600-second scale-down stabilization and limit removal to one fully drained pod per interval.
 - Existing HPA/metric plumbing should be extended through the cluster's owning adapter contract. Verify metric values match pod gauges, invalid/missing metrics surface as unhealthy, HPA conditions are healthy and desired replicas are schedulable. Do not deploy a competing cluster-wide adapter as a shortcut.
 - Node-pool capacity must support streaming HPA maximum **plus one surge GPU**, independently of batch reservations. Check regional and per-zone L4 quota, actual stock/reservations, driver compatibility, node labels/taints, IP/CPU/RAM limits and cluster-autoscaler ceilings. Distinguish per-zone min/max settings from total fleet counts. A configured quota is not a promise of available hardware.
 - Change rolling update to `maxUnavailable: 0`, `maxSurge: 1`, with surge node capacity already schedulable. For the two-replica pilot, use a PDB with `minAvailable: 2`; voluntary eviction therefore waits for a third ready replica or an explicitly reviewed maintenance plan. For larger stages, set `minAvailable: max(2, N_peak-1)` from the approved stage budget, and reconcile it with the HPA floor before reducing replicas. HPA scale-down and rollout strategy still need their own safety checks; a PDB does not govern every termination path.
@@ -57,11 +63,16 @@ Kubernetes describes [HPA behavior and missing metrics](https://kubernetes.io/do
 
 ## Drain, recovery and acceptance
 
-Current chart has no explicit stream-drain coordinator/preStop hook. BackendConfig source declares 130-second connection draining and pod termination 150 seconds; neither guarantees completion of arbitrarily long sessions. Implement an explicit draining state that refuses new sessions, removes readiness, allows a bounded finalization interval, and triggers tested listener fallback/reconnect for remaining streams. Synchronize readiness removal, load-balancer propagation, final-audio replay and process exit. Measure the real propagation delays before fixing a deadline; do not rely on a blind sleep.
+The stream chart invokes the loopback-only drain endpoint, waits 30 seconds,
+and allows 105 seconds total termination grace. New sessions are refused while
+existing leases drain; Uvicorn graceful shutdown is bounded to 30 seconds and final flush to five seconds. The total grace includes the preStop request/wait, server handler shutdown, admission drain and a margin. Arbitrarily long
+sessions cannot finish naturally inside this interval and must exercise the
+listener's vendor failover path. Measure readiness/LB propagation and transcript
+continuity during real rolling termination; a preStop delay alone is not proof.
 
 Acceptance must include multi-listener sessions distributed across replicas; loss of one pod; full node failure; cold replacement; voluntary rollout; blocked GPU scheduling; metric-adapter failure; quota exhaustion; partial deploy recovery; leaked leases; vendor quota exhaustion; and batch/stream isolation. Assert transcript completeness, deduplication, speaker/timestamp continuity, fallback reason telemetry and sustainable latency through these failures. A PDB cannot prevent involuntary hardware loss.
 
-Update implementation-owned contracts together: `backend/parakeet/` startup/drain; `backend/charts/parakeet/`; monitoring adapter values; `backend/deploy/runtime_env/_base.yaml` and generated `runtime_env.yaml`; `backend/scripts/runtime_env_parakeet_contract.py`; service-specific backend URLs; admission/Helm/runtime-env unit tests; existing GPU container tests; [capacity runbook](../../runbooks/parakeet-stream-capacity.md). No chart, node-pool or runtime value is changed in this design PR.
+Update implementation-owned contracts together: `backend/parakeet/` startup/drain; `backend/charts/parakeet/`; monitoring adapter values; `backend/deploy/runtime_env/_base.yaml` and generated `runtime_env.yaml`; `backend/scripts/deploy_parakeet_stream.py` and `backend/scripts/parakeet_stream_contract.py`; service-specific backend URLs; admission/Helm/runtime-env unit tests; existing GPU container tests; [capacity runbook](../../runbooks/parakeet-stream-capacity.md). These contracts are changed together in this implementation PR. No production rollout has been executed by the preparation task.
 
 ## Go/no-go prescription
 
