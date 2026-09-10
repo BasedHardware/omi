@@ -8,24 +8,18 @@ chat) — only the displayed body is flattened.
 
 import re
 
-_FENCE_RE = re.compile(r"^\s*```.*$", re.MULTILINE)
-_IMAGE_RE = re.compile(
-    r'!\[([^\]]*)\]\((?:[^()\s]+|\([^()]*\)|"[^"]*"|\'[^\']*\')*(?:\s+(?:"[^"]*"|\'[^\']*\'))?\)'
-)
-_LINK_RE = re.compile(
-    r'\[([^\]]*)\]\((?:[^()\s]+|\([^()]*\)|"[^"]*"|\'[^\']*\')*(?:\s+(?:"[^"]*"|\'[^\']*\'))?\)'
-)
-_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+", re.MULTILINE)
-_BLOCKQUOTE_RE = re.compile(r"^\s{0,3}>\s?", re.MULTILINE)
-_HORIZONTAL_RULE_RE = re.compile(r"^\s{0,3}([-*_])\s*(?:\1\s*){2,}$", re.MULTILINE)
-_BULLET_RE = re.compile(r"^(\s*)[-*+]\s+", re.MULTILINE)
-_INLINE_CODE_RE = re.compile(r"`+([^`]+)`+")
-_BOLD_ITALIC_RE = re.compile(r"(\*{1,3})(\S.*?\S|\S)\1", re.DOTALL)
-_UNDERSCORE_EMPHASIS_RE = re.compile(
-    r"(?<![\w\\])(_{1,3})(\S.*?\S|\S)\1(?![\w])", re.DOTALL
-)
-_STRIKETHROUGH_RE = re.compile(r"~~(\S.*?\S|\S)~~", re.DOTALL)
-_BLANK_LINES_RE = re.compile(r"\n{3,}")
+_FENCE_RE = re.compile(r'^\s*`{3,}[^`\n]*$', re.MULTILINE)
+_IMAGE_RE = re.compile(r'!\[([^\]]*)\]\((?:[^()\s]|\([^()]*\))*(?:\s+(?:"[^"]*"|\'[^\']*\'|\([^()]*\)))?\)')
+_LINK_RE = re.compile(r'\[([^\]]*)\]\((?:[^()\s]|\([^()]*\))*(?:\s+(?:"[^"]*"|\'[^\']*\'|\([^()]*\)))?\)')
+_HEADING_RE = re.compile(r'^\s{0,3}#{1,6}\s+', re.MULTILINE)
+_BLOCKQUOTE_RE = re.compile(r'^\s{0,3}>\s?', re.MULTILINE)
+_HORIZONTAL_RULE_RE = re.compile(r'^\s{0,3}([-*_])\s*(?:\1\s*){2,}$', re.MULTILINE)
+_BULLET_RE = re.compile(r'^(\s*)[-*+]\s+', re.MULTILINE)
+_INLINE_CODE_RE = re.compile(r'`+([^`]+)`+')
+_BOLD_ITALIC_RE = re.compile(r'(\*{1,3})(\S.*?\S|\S)\1', re.DOTALL)
+_UNDERSCORE_EMPHASIS_RE = re.compile(r'(?<![\w\\])(_{1,3})(\S.*?\S|\S)\1(?![\w])', re.DOTALL)
+_STRIKETHROUGH_RE = re.compile(r'~~(\S.*?\S|\S)~~', re.DOTALL)
+_BLANK_LINES_RE = re.compile(r'\n{3,}')
 
 
 def to_plain_text(body: str) -> str:
