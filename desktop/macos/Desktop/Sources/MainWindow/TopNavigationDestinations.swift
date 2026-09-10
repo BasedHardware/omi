@@ -522,33 +522,40 @@ extension TopNavigationDestinationRow {
     let isSelected: Bool
 
     var body: some View {
-      HStack(spacing: TopNavigationGlassSegmentMetrics.countSpacing) {
-        Label(item.title, systemImage: item.icon)
-          .labelStyle(.titleAndIcon)
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-          .lineLimit(1)
-          .fixedSize()
-        countSlot
-      }
-      .foregroundStyle(isSelected ? Ink.primary : Ink.secondary)
-      .padding(.horizontal, TopNavigationGlassSegmentMetrics.horizontalPadding)
-      .frame(height: TopNavigationGlassSegmentMetrics.height)
+      Label(item.title, systemImage: item.icon)
+        .labelStyle(.titleAndIcon)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .lineLimit(1)
+        .fixedSize()
+        .foregroundStyle(isSelected ? Ink.primary : Ink.secondary)
+        .padding(.horizontal, TopNavigationGlassSegmentMetrics.horizontalPadding)
+        .frame(height: TopNavigationGlassSegmentMetrics.height)
+        .overlay(alignment: .topTrailing) { countBadge }
     }
 
     private var count: Int { badges.count(forNavItemIndex: item.index) }
 
-    /// The count, in a slot as wide as the widest string it can ever show. The hidden template
-    /// reserves that width in every segment, zero count included, so the row is measured from the
-    /// slot and not from the count; `monospacedDigit` keeps a crossing digit boundary from nudging
-    /// even the pixels inside it.
-    private var countSlot: some View {
-      ZStack {
-        Text(verbatim: TopNavigationSegmentSelection.widestCountText).hidden()
-        if count > 0 {
-          Text(verbatim: TopNavigationSegmentSelection.countText(for: count))
-        }
+    /// The count as a corner-badge overlay. It takes no part in layout, so every segment measures —
+    /// and its title centers — identically at every count, and the lens stays under the words it
+    /// marks. This is the row's own `TopNavigationBadge` visual, on the one surface whose cells are
+    /// equal-width and must not re-measure when a count changes.
+    @ViewBuilder
+    private var countBadge: some View {
+      if count > 0 {
+        Text(verbatim: TopNavigationSegmentSelection.countText(for: count))
+          .scaledFont(size: OmiType.micro, weight: .bold)
+          .foregroundColor(Ink.primary)
+          .monospacedDigit()
+          .lineLimit(1)
+          .fixedSize()
+          .padding(.horizontal, 5)
+          .padding(.vertical, 1)
+          .background(Capsule(style: .continuous).fill(Ink.rowFillHover))
+          .allowsHitTesting(false)
+          .offset(
+            x: TopNavigationGlassSegmentMetrics.countBadgeOverhang,
+            y: -TopNavigationGlassSegmentMetrics.countBadgeLift)
       }
-      .scaledMonospacedDigitFont(size: OmiType.caption, weight: .semibold)
     }
   }
 
@@ -674,8 +681,10 @@ enum TopNavigationGlassSegmentMetrics {
   /// The air between the track's glass edge and the lens.
   static let trackInset: CGFloat = 3
   static let horizontalPadding: CGFloat = 14
-  /// The air between a segment's word and its count slot.
-  static let countSpacing: CGFloat = 3
+  /// How far the count badge overhangs the segment's trailing padding, and how far it lifts off
+  /// the label's cap height. It is an overlay: these move pixels, never measurements.
+  static let countBadgeOverhang: CGFloat = 7
+  static let countBadgeLift: CGFloat = 2
   static let height: CGFloat = 28
   /// How much the lens grows while held.
   static let liftScale: CGFloat = 1.08

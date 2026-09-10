@@ -459,8 +459,9 @@ final class TopNavigationBarLayoutTests: XCTestCase {
   /// segment from its title with the `+N` folded in, so any count change — a task completed, a
   /// conversation landed, one of the several store ticks a page transition fires mid-animation —
   /// re-measured and re-laid-out the whole track with a width animation. That was the lag. The
-  /// count renders in a slot reserved by a hidden template now, so a segment measures the same
-  /// with counts at their widest and at zero; this fails against the measure-the-title behaviour.
+  /// count renders as a corner-badge overlay that layout never sees now, so a segment measures the
+  /// same with counts at their widest and at zero; this fails against the measure-the-title
+  /// behaviour.
   func testSegmentMeasurementIsIndependentOfBadgeCounts() {
     let widest = TopNavigationDestinationBadges(library: 99, tasks: 99)
     let none = TopNavigationDestinationBadges()
@@ -477,15 +478,6 @@ final class TopNavigationBarLayoutTests: XCTestCase {
         XCTAssertEqual(
           rowWidth(none), rowWidth(widest), accuracy: 0.5,
           "the bar's width follows the badge counts, so a badge change re-lays-out the bar")
-        // The reserved slot has to hold everything it can be asked to show, or the hidden template
-        // stops being the widest thing in it and the guarantees above turn font-dependent.
-        let template = countTextWidth(TopNavigationSegmentSelection.widestCountText)
-        XCTAssertGreaterThan(template, 0)
-        for count in [1, 4, 9, 10, 42, 99] {
-          XCTAssertLessThanOrEqual(
-            countTextWidth(TopNavigationSegmentSelection.countText(for: count)), template,
-            "+\(count) does not fit the slot every segment reserves for it")
-        }
         return
       }
     #endif
@@ -546,15 +538,6 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     ) -> CGFloat {
       NSHostingView(
         rootView: TopNavigationGlassSegmentLabel(item: item, badges: badges, isSelected: false)
-      ).fittingSize.width
-    }
-
-    /// What the count slot renders a string at, in isolation — the reserved template has to be at
-    /// least this wide for every count the slot can show.
-    private func countTextWidth(_ text: String) -> CGFloat {
-      NSHostingView(
-        rootView: Text(verbatim: text)
-          .scaledMonospacedDigitFont(size: OmiType.caption, weight: .semibold)
       ).fittingSize.width
     }
   #endif
