@@ -1699,8 +1699,12 @@ test('chat day_summary GET createdAt names Flutter MMM, dd without inventing �
   const createdAt = Date.parse('2026-09-07T12:00:00.000Z');
   expect(chatDaySummaryDateCopy(0)).toBe('');
   expect(chatDaySummaryDateCopy(-1)).toBe('');
+  expect(chatDaySummaryDateCopy(8_640_000_000_000_001)).toBe('');
   expect(chatDaySummaryCopy('day_summary', 0)).toBe('Day Summary');
   expect(chatDaySummaryCopy('day_summary', -1)).toBe('Day Summary');
+  expect(chatDaySummaryCopy('day_summary', 8_640_000_000_000_001)).toBe(
+    'Day Summary',
+  );
   expect(chatDaySummaryDateCopy(createdAt)).toMatch(/^[A-Za-z]{3}, \d{2}$/);
   expect(chatDaySummaryDateCopy(createdAt)).not.toContain('📅');
   expect(chatDaySummaryDateCopy(createdAt)).not.toContain('1970');
@@ -1866,6 +1870,17 @@ test('task due copy uses a calendar date instead of a raw epoch', () => {
     'Date unavailable',
   );
   expect(taskGroup(0, Date.now())).toBe('Later');
+});
+
+test('an out-of-range task due timestamp says Date unavailable instead of Invalid Date', () => {
+  expect(formatTaskDue(8_640_000_000_000_001)).toBe('Date unavailable');
+  expect(formatTaskDue(8_640_000_000_000_001)).not.toContain('Invalid Date');
+  expect(
+    taskDisplaySummary({completed: false, dueAt: 8_640_000_000_000_001}),
+  ).toBe('Date unavailable');
+  expect(
+    taskDisplaySummary({completed: true, dueAt: 8_640_000_000_000_001}),
+  ).toBe('Completed · Date unavailable');
 });
 
 test('empty task titles stay visible instead of a blank row', () => {
@@ -2242,6 +2257,16 @@ test('chat clock labels date older days and keep seconds or milliseconds', () =>
       year: 'numeric',
     })} · ${time(older)}`,
   );
+});
+
+test('an out-of-range clock timestamp says Time unavailable instead of throwing', () => {
+  const now = Date.now();
+  expect(clockLabel(8_640_000_000_000_001, now)).toBe('');
+  expect(chatClockLabel(8_640_000_000_000_001, now)).toBe('');
+  expect(conversationCaptureCopy(8_640_000_000_000_001, now)).toBe(
+    'Captured (device time) · Time unavailable',
+  );
+  expect(developerKeyCreatedCopy(8_640_000_000_000_001)).toBe('');
 });
 
 test('groups timeline rows through one canonical timestamp policy', () => {

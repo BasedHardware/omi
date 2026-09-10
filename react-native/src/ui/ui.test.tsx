@@ -1024,6 +1024,27 @@ test('a zero chat timestamp says Time unavailable instead of 1970', () => {
   expect(tree).not.toContain('1970');
 });
 
+test('an out-of-range chat timestamp says Time unavailable instead of Invalid Date', () => {
+  const tree = JSON.stringify(
+    render(
+      <ChatMessageRow
+        animate={false}
+        compact
+        message={{
+          id: 'chat-overflow',
+          text: 'Hello',
+          sender: 'human',
+          createdAt: 8_640_000_000_000_001,
+          generationOutcome: null,
+        }}
+        reduceMotion
+      />,
+    ).toJSON(),
+  );
+  expect(tree).toContain('Time unavailable');
+  expect(tree).not.toContain('Invalid Date');
+});
+
 test('a cancelled empty chat message says Response stopped instead of a blank bubble', () => {
   const renderer = render(
     <ChatMessageRow

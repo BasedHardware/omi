@@ -1091,7 +1091,7 @@ export function developerWebhookRowCopy(webhook: {
 }
 
 export function developerKeyCreatedCopy(createdAtMs: number): string {
-  if (!Number.isFinite(createdAtMs) || createdAtMs <= 0) {
+  if (!isRepresentableTimestampMs(createdAtMs) || createdAtMs <= 0) {
     return '';
   }
   return visibleDisplayText(
@@ -1376,7 +1376,7 @@ export function chatSenderCopy(sender: 'human' | 'ai' | 'unknown'): string {
 
 export function chatDaySummaryDateCopy(createdAt: number): string {
   const timestampMs = epochMilliseconds(createdAt);
-  if (!Number.isFinite(timestampMs) || timestampMs <= 0) {
+  if (!isRepresentableTimestampMs(timestampMs) || timestampMs <= 0) {
     return '';
   }
   const date = new Date(timestampMs);
@@ -1566,14 +1566,19 @@ export function epochMilliseconds(value: number): number {
   return value > 100_000_000_000 ? value : value * 1000;
 }
 
+function isRepresentableTimestampMs(value: number): boolean {
+  return Number.isFinite(value) && Number.isFinite(new Date(value).getTime());
+}
+
 export function formatTaskDue(dueAt: number | null): string {
   if (dueAt === null) {
     return 'No due date';
   }
-  if (!Number.isFinite(dueAt) || dueAt <= 0) {
+  const timestampMs = epochMilliseconds(dueAt);
+  if (!isRepresentableTimestampMs(timestampMs) || timestampMs <= 0) {
     return 'Date unavailable';
   }
-  return new Date(epochMilliseconds(dueAt)).toLocaleDateString(undefined, {
+  return new Date(timestampMs).toLocaleDateString(undefined, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -1585,13 +1590,14 @@ export function taskDisplaySummary(item: {
   completed: boolean;
   dueAt: number | null;
 }): string {
+  const due = formatTaskDue(item.dueAt);
   if (item.completed) {
-    return `Completed · ${formatTaskDue(item.dueAt)}`;
+    return `Completed · ${due}`;
   }
-  if (item.dueAt === null || !Number.isFinite(item.dueAt) || item.dueAt <= 0) {
-    return formatTaskDue(item.dueAt);
+  if (due === 'No due date' || due === 'Date unavailable') {
+    return due;
   }
-  return `Due ${formatTaskDue(item.dueAt)}`;
+  return `Due ${due}`;
 }
 
 export function taskDisplayTitle(item: {title: string}): string {
@@ -1784,14 +1790,18 @@ export function projectionTimestamp(
       : item.createdAt === null
       ? null
       : epochMilliseconds(item.createdAt);
-  return timestamp === null || !Number.isFinite(timestamp) ? null : timestamp;
+  return timestamp === null ||
+    !Number.isFinite(timestamp) ||
+    !isRepresentableTimestampMs(timestamp)
+    ? null
+    : timestamp;
 }
 
 export function clockLabel(
   timestampMs: number,
   nowEpochMilliseconds: number,
 ): string {
-  if (!Number.isFinite(timestampMs) || timestampMs <= 0) {
+  if (!isRepresentableTimestampMs(timestampMs) || timestampMs <= 0) {
     return '';
   }
   const day = conversationGroupLabel(
