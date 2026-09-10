@@ -463,4 +463,3 @@ def test_active_profile_non_string_diagnostics_succeed(config_path: Path, cli_ru
 
     result_path = cli_runner.invoke(app, ["config", "path"])
     assert result_path.exit_code == 0, result_path.output
-
