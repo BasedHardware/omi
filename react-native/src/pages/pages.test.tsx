@@ -1371,6 +1371,68 @@ test('Settings names GET daily summaries without regenerate or a write sheet', a
   expect(tree).not.toContain('Your Day in Review');
   expect(tree).not.toContain('sum-1');
   expect(tree).not.toContain('Regenerate');
+  expect(tree).not.toContain('Delivery time');
+  expect(tree).not.toContain('10:00 PM');
+  expect(tree).not.toContain('Notification frequency');
+});
+
+test('Settings names GET daily-summary-settings without a picker or Flutter defaults', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/daily-summary-settings') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({enabled: true, hour: 22}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Daily summaries');
+  expect(tree).toContain('Enabled');
+  expect(tree).toContain('Delivery time');
+  expect(tree).toContain('10:00 PM');
+  expect(tree).not.toContain('Your Day in Review');
+  expect(mockBackend.request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/users/daily-summary-settings',
+  });
+  expect(mockBackend.request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
+    false,
+  );
+});
+
+test('Settings names GET mentor notification frequency without a purple slider', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/mentor-notification-settings') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({frequency: 1}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Notification frequency');
+  expect(tree).toContain('Minimal');
+  expect(tree).not.toContain('Balanced');
+  expect(tree).not.toContain('Only critical reminders');
+  expect(mockBackend.request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/users/mentor-notification-settings',
+  });
+  expect(mockBackend.request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
+    false,
+  );
 });
 
 test('Settings developer webhook URLs omit empty or whitespace values', async () => {

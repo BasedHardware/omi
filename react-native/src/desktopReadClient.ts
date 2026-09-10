@@ -638,6 +638,58 @@ export function dailySummaryCopy(
   });
 }
 
+export function dailySummaryHourCopy(hour: number): string {
+  const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  const period = hour >= 12 ? 'PM' : 'AM';
+  return `${hour12}:00 ${period}`;
+}
+
+export function dailySummaryScheduleCopy(
+  settings: {enabled: boolean; hour: number} | null | undefined,
+): {title: string; copy: string}[] {
+  if (settings === null || settings === undefined) {
+    return [];
+  }
+  return [
+    {
+      title: 'Daily summaries',
+      copy: settings.enabled ? 'Enabled' : 'Off',
+    },
+    {
+      title: 'Delivery time',
+      copy: dailySummaryHourCopy(settings.hour),
+    },
+  ];
+}
+
+const mentorNotificationFrequencyLabels = [
+  'Off',
+  'Minimal',
+  'Low',
+  'Balanced',
+  'High',
+  'Maximum',
+] as const;
+
+export function mentorNotificationFrequencyCopy(
+  frequency: number | null | undefined,
+): {title: string; copy: string}[] {
+  if (
+    typeof frequency !== 'number' ||
+    !Number.isInteger(frequency) ||
+    frequency < 0 ||
+    frequency > 5
+  ) {
+    return [];
+  }
+  return [
+    {
+      title: 'Notification frequency',
+      copy: mentorNotificationFrequencyLabels[frequency],
+    },
+  ];
+}
+
 function fairUseStageCopy(stage: string): string | null {
   if (stage === 'warning') {
     return 'Warning';

@@ -74,6 +74,9 @@ import {
   fairUseCopy,
   dailySummaryDateCopy,
   dailySummaryCopy,
+  dailySummaryHourCopy,
+  dailySummaryScheduleCopy,
+  mentorNotificationFrequencyCopy,
   subscriptionPeriodCopy,
   taskDisplaySummary,
   taskDisplayTitle,
@@ -969,6 +972,47 @@ test('daily summary copy names GET headlines without inventing Your Day in Revie
     {title: 'Daily summary', copy: 'Today · Met with the team'},
     {title: 'Daily summary', copy: 'Shipped the recap'},
   ]);
+});
+
+test('daily summary schedule copy names GET hour without Flutter 10:00 PM default', () => {
+  expect(dailySummaryHourCopy(0)).toBe('12:00 AM');
+  expect(dailySummaryHourCopy(12)).toBe('12:00 PM');
+  expect(dailySummaryHourCopy(22)).toBe('10:00 PM');
+  expect(dailySummaryHourCopy(23)).toBe('11:00 PM');
+  expect(dailySummaryScheduleCopy({enabled: true, hour: 22})).toEqual([
+    {title: 'Daily summaries', copy: 'Enabled'},
+    {title: 'Delivery time', copy: '10:00 PM'},
+  ]);
+  expect(dailySummaryScheduleCopy({enabled: false, hour: 0})).toEqual([
+    {title: 'Daily summaries', copy: 'Off'},
+    {title: 'Delivery time', copy: '12:00 AM'},
+  ]);
+  expect(dailySummaryScheduleCopy(null)).toEqual([]);
+  expect(dailySummaryScheduleCopy(undefined)).toEqual([]);
+});
+
+test('mentor notification copy names GET frequency without Balanced default', () => {
+  expect(mentorNotificationFrequencyCopy(0)).toEqual([
+    {title: 'Notification frequency', copy: 'Off'},
+  ]);
+  expect(mentorNotificationFrequencyCopy(1)).toEqual([
+    {title: 'Notification frequency', copy: 'Minimal'},
+  ]);
+  expect(mentorNotificationFrequencyCopy(2)).toEqual([
+    {title: 'Notification frequency', copy: 'Low'},
+  ]);
+  expect(mentorNotificationFrequencyCopy(3)).toEqual([
+    {title: 'Notification frequency', copy: 'Balanced'},
+  ]);
+  expect(mentorNotificationFrequencyCopy(4)).toEqual([
+    {title: 'Notification frequency', copy: 'High'},
+  ]);
+  expect(mentorNotificationFrequencyCopy(5)).toEqual([
+    {title: 'Notification frequency', copy: 'Maximum'},
+  ]);
+  expect(mentorNotificationFrequencyCopy(6)).toEqual([]);
+  expect(mentorNotificationFrequencyCopy(-1)).toEqual([]);
+  expect(mentorNotificationFrequencyCopy(null)).toEqual([]);
 });
 
 test('firmware update copy names GET latest without Available on current or draft', () => {

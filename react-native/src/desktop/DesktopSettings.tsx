@@ -25,6 +25,8 @@ import {
   peopleNameRows,
   fairUseCopy,
   dailySummaryCopy,
+  dailySummaryScheduleCopy,
+  mentorNotificationFrequencyCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {
@@ -44,6 +46,8 @@ import {omiBackend} from '../omiNative';
 import {loadOmiPeopleNames} from '../legacyOmiPeople';
 import {loadOmiFairUseStatus} from '../legacyOmiFairUse';
 import {loadOmiDailySummaries} from '../legacyOmiDailySummaries';
+import {loadOmiDailySummarySchedule} from '../legacyOmiDailySummarySchedule';
+import {loadOmiMentorNotificationSettings} from '../legacyOmiMentorNotifications';
 import {FocusPressable} from '../ui/Pressable';
 import {
   desktopMotion,
@@ -249,6 +253,12 @@ export function DesktopSettings({
   const [dailySummaries, setDailySummaries] = useState<
     ReturnType<typeof dailySummaryCopy>
   >([]);
+  const [dailySummarySchedule, setDailySummarySchedule] = useState<
+    ReturnType<typeof dailySummaryScheduleCopy>
+  >([]);
+  const [notificationFrequency, setNotificationFrequency] = useState<
+    ReturnType<typeof mentorNotificationFrequencyCopy>
+  >([]);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
     Record<PrivacyWriteKind, boolean>
@@ -275,12 +285,23 @@ export function DesktopSettings({
     let nextPeople: {id: string; name: string}[] = [];
     let nextFairUse: ReturnType<typeof fairUseCopy> = null;
     let nextDailySummaries: ReturnType<typeof dailySummaryCopy> = [];
+    let nextDailySummarySchedule: ReturnType<typeof dailySummaryScheduleCopy> =
+      [];
+    let nextNotificationFrequency: ReturnType<
+      typeof mentorNotificationFrequencyCopy
+    > = [];
     if (backend !== undefined && backend !== null && session === 'ready') {
       const peopleTask = loadOmiPeopleNames(backend).catch(
         () => new Map<string, string>(),
       );
       const fairUseTask = loadOmiFairUseStatus(backend).catch(() => null);
       const dailySummariesTask = loadOmiDailySummaries(backend).catch(() => []);
+      const dailySummaryScheduleTask = loadOmiDailySummarySchedule(
+        backend,
+      ).catch(() => null);
+      const notificationFrequencyTask = loadOmiMentorNotificationSettings(
+        backend,
+      ).catch(() => null);
       try {
         nextAccount = await loadAccountSettings(backend);
       } catch (reason) {
@@ -289,6 +310,12 @@ export function DesktopSettings({
       nextPeople = peopleNameRows(await peopleTask);
       nextFairUse = fairUseCopy(await fairUseTask);
       nextDailySummaries = dailySummaryCopy(await dailySummariesTask);
+      nextDailySummarySchedule = dailySummaryScheduleCopy(
+        await dailySummaryScheduleTask,
+      );
+      nextNotificationFrequency = mentorNotificationFrequencyCopy(
+        (await notificationFrequencyTask)?.frequency,
+      );
     }
     if (seq !== reloadSeqRef.current) {
       return;
@@ -297,6 +324,8 @@ export function DesktopSettings({
     setPeopleNames(nextPeople);
     setFairUse(nextFairUse);
     setDailySummaries(nextDailySummaries);
+    setDailySummarySchedule(nextDailySummarySchedule);
+    setNotificationFrequency(nextNotificationFrequency);
   }, [backend, session]);
 
   useEffect(() => {
@@ -599,6 +628,12 @@ export function DesktopSettings({
         <Row copy={person.name} key={person.id} title="People" />
       ))}
       {fairUse?.map((row, index) => (
+        <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
+      ))}
+      {notificationFrequency.map((row, index) => (
+        <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
+      ))}
+      {dailySummarySchedule.map((row, index) => (
         <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
       ))}
       {dailySummaries.map((row, index) => (

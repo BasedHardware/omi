@@ -39,12 +39,16 @@ import {
   peopleNameRows,
   fairUseCopy,
   dailySummaryCopy,
+  dailySummaryScheduleCopy,
+  mentorNotificationFrequencyCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {loadOmiPeopleNames} from '../legacyOmiPeople';
 import {loadOmiFairUseStatus} from '../legacyOmiFairUse';
 import {loadOmiDailySummaries} from '../legacyOmiDailySummaries';
+import {loadOmiDailySummarySchedule} from '../legacyOmiDailySummarySchedule';
+import {loadOmiMentorNotificationSettings} from '../legacyOmiMentorNotifications';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {parseSoftwarePlane, type SoftwarePlane} from '../v5BackendOrigin';
@@ -179,6 +183,12 @@ export function SettingsPage({
   const [dailySummaries, setDailySummaries] = useState<
     ReturnType<typeof dailySummaryCopy>
   >([]);
+  const [dailySummarySchedule, setDailySummarySchedule] = useState<
+    ReturnType<typeof dailySummaryScheduleCopy>
+  >([]);
+  const [notificationFrequency, setNotificationFrequency] = useState<
+    ReturnType<typeof mentorNotificationFrequencyCopy>
+  >([]);
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
@@ -229,6 +239,8 @@ export function SettingsPage({
       setPeopleNames([]);
       setFairUse(null);
       setDailySummaries([]);
+      setDailySummarySchedule([]);
+      setNotificationFrequency([]);
       setError(cloudSessionUnavailableCopy(backend));
       setPhase('error');
       return;
@@ -270,6 +282,8 @@ export function SettingsPage({
         setPeopleNames([]);
         setFairUse(null);
         setDailySummaries([]);
+        setDailySummarySchedule([]);
+        setNotificationFrequency([]);
         setError(desktopBackendServiceCopy);
         setSettingsCanRetry(true);
         setPhase('error');
@@ -280,6 +294,8 @@ export function SettingsPage({
         setPeopleNames([]);
         setFairUse(null);
         setDailySummaries([]);
+        setDailySummarySchedule([]);
+        setNotificationFrequency([]);
         setError(desktopBackendUnauthorizedCopy);
         setPhase('signed-out');
         return;
@@ -290,6 +306,12 @@ export function SettingsPage({
     );
     const fairUseTask = loadOmiFairUseStatus(backend).catch(() => null);
     const dailySummariesTask = loadOmiDailySummaries(backend).catch(() => []);
+    const dailySummaryScheduleTask = loadOmiDailySummarySchedule(backend).catch(
+      () => null,
+    );
+    const notificationFrequencyTask = loadOmiMentorNotificationSettings(
+      backend,
+    ).catch(() => null);
     try {
       const account = await loadAccountSettings(backend);
       if (!current()) {
@@ -310,12 +332,18 @@ export function SettingsPage({
     const names = await peopleTask;
     const status = await fairUseTask;
     const summaries = await dailySummariesTask;
+    const schedule = await dailySummaryScheduleTask;
+    const frequency = await notificationFrequencyTask;
     if (!current()) {
       return;
     }
     setPeopleNames(peopleNameRows(names));
     setFairUse(fairUseCopy(status));
     setDailySummaries(dailySummaryCopy(summaries));
+    setDailySummarySchedule(dailySummaryScheduleCopy(schedule));
+    setNotificationFrequency(
+      mentorNotificationFrequencyCopy(frequency?.frequency),
+    );
   }, [browser]);
 
   useEffect(() => {
@@ -477,6 +505,20 @@ export function SettingsPage({
           <SettingRow copy={person.name} key={person.id} title="People" />
         ))}
         {fairUse?.map((row, index) => (
+          <SettingRow
+            copy={row.copy}
+            key={`${row.title}-${index}`}
+            title={row.title}
+          />
+        ))}
+        {notificationFrequency.map((row, index) => (
+          <SettingRow
+            copy={row.copy}
+            key={`${row.title}-${index}`}
+            title={row.title}
+          />
+        ))}
+        {dailySummarySchedule.map((row, index) => (
           <SettingRow
             copy={row.copy}
             key={`${row.title}-${index}`}
