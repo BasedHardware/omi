@@ -22,7 +22,9 @@ struct LocalEmbeddingRuntime: Sendable {
       area: "local_embeddings", from: from, to: "keyword", reason: reason, outcome: .degraded)
   }
 
-  /// Apple NLCE is the production default. Selection still fail-closes until its probe passes.
+  /// Apple NLCE is the registered engine. Released bundles stay on Gemini until
+  /// `localEmbeddingsEnabled` / `OMI_LOCAL_EMBEDDINGS=1` opts in; non-production
+  /// dogfoods it. Selection still fail-closes until the probe passes.
   /// Probe cache and engine are process-wide so chat search pays the 32-token probe once.
   static func makeDefault() -> Self {
     let apple = AppleNLContextualEmbeddingEngine.shared
@@ -35,6 +37,9 @@ struct LocalEmbeddingRuntime: Sendable {
     let wanted = killSwitches.forcedEngineRaw ?? defaultEngineID
     guard !killSwitches.isDisabled else {
       record("local_embeddings", "dispatch_disabled")
+      return .disabled
+    }
+    guard killSwitches.isEnabled else {
       return .disabled
     }
     guard !Task.isCancelled, let wanted, let engine = engines.first(where: { $0.engineID == wanted }) else {
@@ -66,7 +71,7 @@ struct LocalEmbeddingRuntime: Sendable {
 
   /// Also used after selection so an engine failure cannot change the search route to Gemini.
   func embed(_ texts: [String], task: LocalEmbeddingTask, using engine: any LocalEmbeddingService) async -> [[Float]]? {
-    guard !killSwitches.isDisabled, !Task.isCancelled else { return nil }
+    guard killSwitches.isEnabled, !killSwitches.isDisabled, !Task.isCancelled else { return nil }
     do {
       guard texts.count <= engine.capabilities.maxBatchSize else {
         throw LocalInferenceError.invalidResponse("invalid local vector shape")

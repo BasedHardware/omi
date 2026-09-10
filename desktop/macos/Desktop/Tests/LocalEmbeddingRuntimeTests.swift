@@ -118,3 +118,101 @@ final class LocalEmbeddingRuntimeTests: XCTestCase {
     XCTAssertFalse(probe.permits(engine, budget: .seconds(2)))
   }
 }
+
+@MainActor
+final class LocalEmbeddingOptInTests: XCTestCase {
+  override func tearDown() async throws {
+    await LocalEmbeddingIndexer.shared.setRuntimeForTesting(.makeDefault())
+    try await super.tearDown()
+  }
+
+  func testProductionFamilyDefaultDisablesEngineAndIndexer() async throws {
+    let (defaults, cleanup) = try emptyDefaults()
+    defer { cleanup() }
+    let flags = LocalEmbeddingKillSwitches.resolve(
+      environment: [:], defaults: defaults, isNonProduction: false)
+    XCTAssertFalse(flags.isEnabled)
+    XCTAssertFalse(flags.isDisabled)
+
+    let engine = FailOnCallEmbeddingEngine()
+    var runtime = LocalEmbeddingRuntime(
+      engines: [engine], killSwitches: flags, defaultEngineID: engine.engineID, record: { _, _ in })
+    runtime.probe = { _ in
+      XCTFail("opted-out runtime must not probe")
+      return LocalEmbeddingProbe(
+        appleSilicon: true, assetsAvailable: true, fixtureSucceeded: true, elapsed: .zero, dimension: 8)
+    }
+    guard case .disabled = await runtime.selectEngine() else {
+      return XCTFail("production-family default must keep the Gemini route")
+    }
+
+    await LocalEmbeddingIndexer.shared.setRuntimeForTesting(runtime)
+    await LocalEmbeddingIndexer.shared.indexFinalizedSession(sessionId: 1)
+    await LocalEmbeddingIndexer.shared.indexMemory(id: 1, content: "synthetic opted-out memory")
+    await LocalEmbeddingIndexer.shared.backfillIfNeeded()
+  }
+
+  func testNonProductionDefaultSelectsEngine() async throws {
+    let (defaults, cleanup) = try emptyDefaults()
+    defer { cleanup() }
+    let engine = HashEmbeddingEngine()
+    let flags = LocalEmbeddingKillSwitches.resolve(
+      environment: [:], defaults: defaults, isNonProduction: true)
+    XCTAssertTrue(flags.isEnabled)
+    var runtime = LocalEmbeddingRuntime(
+      engines: [engine], killSwitches: flags, defaultEngineID: engine.engineID, record: { _, _ in })
+    runtime.probe = { _ in
+      LocalEmbeddingProbe(
+        appleSilicon: true, assetsAvailable: true, fixtureSucceeded: true, elapsed: .zero, dimension: 8)
+    }
+    guard case .engine = await runtime.selectEngine() else {
+      return XCTFail("non-production default must select the local engine")
+    }
+  }
+
+  func testDefaultsKeyEnablesProductionFamily() async throws {
+    let (defaults, cleanup) = try emptyDefaults()
+    defer { cleanup() }
+    defaults.set(true, forKey: .localEmbeddingsEnabled)
+    let flags = LocalEmbeddingKillSwitches.resolve(
+      environment: [:], defaults: defaults, isNonProduction: false)
+    XCTAssertTrue(flags.isEnabled)
+    let engine = HashEmbeddingEngine()
+    var runtime = LocalEmbeddingRuntime(
+      engines: [engine], killSwitches: flags, defaultEngineID: engine.engineID, record: { _, _ in })
+    runtime.probe = { _ in
+      LocalEmbeddingProbe(
+        appleSilicon: true, assetsAvailable: true, fixtureSucceeded: true, elapsed: .zero, dimension: 8)
+    }
+    guard case .engine = await runtime.selectEngine() else {
+      return XCTFail("localEmbeddingsEnabled must opt production-family bundles in")
+    }
+  }
+
+  func testEnvironmentFlagTurnsLocalEmbeddingsOff() async throws {
+    let (defaults, cleanup) = try emptyDefaults()
+    defer { cleanup() }
+    defaults.set(true, forKey: .localEmbeddingsEnabled)
+    let flags = LocalEmbeddingKillSwitches.resolve(
+      environment: ["OMI_LOCAL_EMBEDDINGS": "0"], defaults: defaults, isNonProduction: true)
+    XCTAssertFalse(flags.isEnabled)
+    let engine = FailOnCallEmbeddingEngine()
+    var runtime = LocalEmbeddingRuntime(
+      engines: [engine], killSwitches: flags, defaultEngineID: engine.engineID, record: { _, _ in })
+    runtime.probe = { _ in
+      XCTFail("env-disabled runtime must not probe")
+      return LocalEmbeddingProbe(
+        appleSilicon: true, assetsAvailable: true, fixtureSucceeded: true, elapsed: .zero, dimension: 8)
+    }
+    guard case .disabled = await runtime.selectEngine() else {
+      return XCTFail("OMI_LOCAL_EMBEDDINGS=0 must keep the Gemini route")
+    }
+  }
+
+  private func emptyDefaults() throws -> (UserDefaults, () -> Void) {
+    let name = "LocalEmbeddingOptInTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+    defaults.removePersistentDomain(forName: name)
+    return (defaults, { defaults.removePersistentDomain(forName: name) })
+  }
+}
