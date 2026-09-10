@@ -1529,6 +1529,111 @@ test('a chat message names a resolved GET app and omits raw ids', () => {
   });
 });
 
+test('a chat message names GET content_blocks without inventing write actions', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-blocks',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        contentBlocks: [
+          {
+            eyebrow: 'Discovery',
+            title: 'Quiet mornings',
+            detail: 'You like a slow start.',
+          },
+          {eyebrow: 'Memory', title: 'Prefers concise notes'},
+          {eyebrow: 'Question', title: 'Schedule the follow-up?'},
+        ],
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Here is what I found.');
+  expect(copies).toContain('Discovery');
+  expect(copies).toContain('Quiet mornings');
+  expect(copies).toContain('You like a slow start.');
+  expect(copies).toContain('Memory');
+  expect(copies).toContain('Prefers concise notes');
+  expect(copies).toContain('Question');
+  expect(copies).toContain('Schedule the follow-up?');
+  expect(copies).not.toContain('Open in Memories');
+  expect(copies).not.toContain('Open conversation');
+  expect(copies).not.toContain('Open in Goals');
+  expect(copies).not.toContain('Show more');
+  expect(copies).not.toContain('Yes, schedule it');
+  const omitted = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-plain',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+      }}
+      reduceMotion
+    />,
+  );
+  expect(JSON.stringify(omitted.toJSON())).not.toContain('Quiet mornings');
+  const human = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-blocks-human',
+        text: 'Save this.',
+        sender: 'human',
+        createdAt: Date.now(),
+        generationOutcome: null,
+        contentBlocks: [{eyebrow: 'Discovery', title: 'Quiet mornings'}],
+      }}
+      reduceMotion
+    />,
+  );
+  const humanCopies = human.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(humanCopies).toContain('Save this.');
+  expect(humanCopies).not.toContain('Discovery');
+  expect(humanCopies).not.toContain('Quiet mornings');
+  act(() => {
+    renderer.unmount();
+    omitted.unmount();
+    human.unmount();
+  });
+});
+
 test('an unknown chat sender says Sender unavailable instead of looking like a quiet AI turn', () => {
   const renderer = render(
     <ChatMessageRow

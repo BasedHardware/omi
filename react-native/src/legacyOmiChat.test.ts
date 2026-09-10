@@ -370,3 +370,157 @@ test('old chat history keeps GET plugin_id over app_id and omits empty ids', () 
     'appId',
   );
 });
+
+test('old chat history names GET content_blocks without inventing writes', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'blocks-1',
+        sender: 'ai',
+        text: 'Here is what I found.',
+        created_at: '2026-09-07T01:02:03Z',
+        content_blocks: [
+          {
+            type: 'discoveryCard',
+            id: 'd1',
+            title: 'Quiet mornings',
+            summary: 'You like a slow start.',
+            full_text: 'Longer body stays collapsed.',
+          },
+          {
+            type: 'memory_link',
+            id: 'm1',
+            memory_id: 'mem-1',
+            summary: 'Prefers concise notes',
+          },
+          {
+            type: 'goalLink',
+            id: 'g1',
+            goalId: 'goal-1',
+            summary: 'Ship the release notes',
+          },
+          {
+            type: 'conversation_link',
+            id: 'c1',
+            conversation_id: 'conv-1',
+            summary: 'Standup recap',
+            recommended_action_items: [{description: 'Send the agenda'}],
+          },
+          {
+            type: 'question_card',
+            id: 'q1',
+            question_id: 'q-1',
+            text: 'Schedule the follow-up?',
+            subject: {kind: 'task', id: 'task-1'},
+            options: [
+              {option_id: 'yes', label: 'Yes, schedule it'},
+              {option_id: 'no', label: 'Not now'},
+            ],
+          },
+          {
+            type: 'task_card',
+            id: 't1',
+            task_id: 'task-1',
+          },
+          {
+            type: 'agent_spawn',
+            id: 'a1',
+            session_id: 'sess-1',
+            run_id: 'run-1',
+            title: 'Draft recap',
+            objective: 'Summarize standup',
+          },
+          {
+            type: 'agent_completion',
+            id: 'a2',
+            status: 'timed_out',
+            title: 'Draft recap',
+            output: 'Stopped waiting.',
+          },
+        ],
+      },
+      {
+        id: 'blocks-answered',
+        sender: 'ai',
+        text: 'Noted.',
+        created_at: '2026-09-07T01:02:04Z',
+        content_blocks: [
+          {
+            type: 'questionCard',
+            id: 'q2',
+            questionId: 'q-2',
+            text: 'Keep this goal?',
+            subject: {kind: 'goal', id: 'goal-2'},
+            selectedOptionId: 'keep',
+            options: [
+              {optionId: 'keep', label: 'Keep it'},
+              {optionId: 'drop', label: 'Drop it'},
+            ],
+          },
+        ],
+      },
+      {
+        id: 'blocks-malformed',
+        sender: 'ai',
+        text: 'Plain answer stays.',
+        created_at: '2026-09-07T01:02:05Z',
+        content_blocks: 'not-an-array',
+      },
+      {
+        id: 'blocks-metadata',
+        sender: 'ai',
+        text: 'From metadata.',
+        created_at: '2026-09-07T01:02:06Z',
+        metadata: JSON.stringify({
+          content_blocks: [
+            {
+              type: 'capture_link',
+              id: 'cap-1',
+              conversation_id: 'conv-2',
+              summary: 'Kitchen capture',
+            },
+          ],
+        }),
+      },
+    ]),
+    0,
+  );
+  expect(
+    page.messages.find(row => row.id === 'blocks-1')?.contentBlocks,
+  ).toEqual([
+    {
+      eyebrow: 'Discovery',
+      title: 'Quiet mornings',
+      detail: 'You like a slow start.',
+    },
+    {eyebrow: 'Memory', title: 'Prefers concise notes'},
+    {eyebrow: 'Goal', title: 'Ship the release notes'},
+    {eyebrow: 'Conversation', title: 'Standup recap'},
+    {eyebrow: 'Recommended next steps', title: 'Send the agenda'},
+    {eyebrow: 'Question', title: 'Schedule the follow-up?'},
+    {
+      eyebrow: 'Processing',
+      title: 'Draft recap',
+      detail: 'Summarize standup',
+    },
+    {
+      eyebrow: 'Timed out',
+      title: 'Draft recap',
+      detail: 'Stopped waiting.',
+    },
+  ]);
+  expect(
+    page.messages.find(row => row.id === 'blocks-answered')?.contentBlocks,
+  ).toEqual([
+    {eyebrow: 'Question', title: 'Keep this goal?', detail: 'Keep it'},
+  ]);
+  expect(
+    page.messages.find(row => row.id === 'blocks-malformed')?.contentBlocks,
+  ).toBeUndefined();
+  expect(page.messages.find(row => row.id === 'blocks-malformed')?.text).toBe(
+    'Plain answer stays.',
+  );
+  expect(
+    page.messages.find(row => row.id === 'blocks-metadata')?.contentBlocks,
+  ).toEqual([{eyebrow: 'Conversation', title: 'Kitchen capture'}]);
+});

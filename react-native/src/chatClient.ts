@@ -35,6 +35,7 @@ export type ChatMessage = {
     points: {label: string; value: number}[];
   };
   evidence?: {title: string; detail: string}[];
+  contentBlocks?: {eyebrow: string; title?: string; detail?: string}[];
   appId?: string;
   appName?: string;
 };

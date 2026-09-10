@@ -261,6 +261,286 @@ function parseOmiChatAppId(row: Record<string, unknown>): string | undefined {
   return id === '' ? undefined : id;
 }
 
+function wireString(
+  row: Record<string, unknown>,
+  camel: string,
+  snake?: string,
+): string | undefined {
+  const value = row[camel] ?? (snake === undefined ? undefined : row[snake]);
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  return value.trim() === '' ? undefined : value;
+}
+
+function contentBlockChrome(
+  eyebrow: string,
+  title?: string,
+  detail?: string,
+): {eyebrow: string; title?: string; detail?: string} {
+  const visibleTitle = title === undefined ? '' : visibleDisplayText(title);
+  const visibleDetail = detail === undefined ? '' : visibleDisplayText(detail);
+  return {
+    eyebrow,
+    ...(visibleTitle === '' ? {} : {title: visibleTitle}),
+    ...(visibleDetail === '' ? {} : {detail: visibleDetail}),
+  };
+}
+
+function agentCompletionEyebrow(status: string): string {
+  const normalized = status.trim().toLowerCase();
+  if (
+    normalized === 'completed' ||
+    normalized === 'succeeded' ||
+    normalized === 'success'
+  ) {
+    return 'Completed';
+  }
+  if (
+    normalized === 'cancelled' ||
+    normalized === 'canceled' ||
+    normalized === 'stopped'
+  ) {
+    return 'Cancelled';
+  }
+  if (
+    normalized === 'timed_out' ||
+    normalized === 'timedout' ||
+    normalized === 'timeout'
+  ) {
+    return 'Timed out';
+  }
+  return 'Failed';
+}
+
+function parseQuestionSelectedLabel(
+  row: Record<string, unknown>,
+): string | undefined {
+  const selectedId = wireString(row, 'selectedOptionId', 'selected_option_id');
+  if (selectedId === undefined) {
+    return undefined;
+  }
+  const rawOptions = row.options;
+  if (!Array.isArray(rawOptions)) {
+    return undefined;
+  }
+  for (const entry of rawOptions) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      continue;
+    }
+    const option = entry as Record<string, unknown>;
+    const optionId = wireString(option, 'optionId', 'option_id');
+    if (optionId !== selectedId) {
+      continue;
+    }
+    return wireString(option, 'label');
+  }
+  return undefined;
+}
+
+function questionHasOptions(row: Record<string, unknown>): boolean {
+  const rawOptions = row.options;
+  if (!Array.isArray(rawOptions)) {
+    return false;
+  }
+  return rawOptions.some(entry => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      return false;
+    }
+    const option = entry as Record<string, unknown>;
+    return (
+      wireString(option, 'optionId', 'option_id') !== undefined &&
+      wireString(option, 'label') !== undefined
+    );
+  });
+}
+
+function parseContentBlock(
+  raw: unknown,
+): {eyebrow: string; title?: string; detail?: string}[] {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return [];
+  }
+  const row = raw as Record<string, unknown>;
+  const type = wireString(row, 'type');
+  const id = wireString(row, 'id');
+  if (type === undefined || id === undefined) {
+    return [];
+  }
+  switch (type) {
+    case 'discoveryCard':
+    case 'discovery_card':
+      return [
+        contentBlockChrome(
+          'Discovery',
+          wireString(row, 'title'),
+          wireString(row, 'summary'),
+        ),
+      ];
+    case 'questionCard':
+    case 'question_card': {
+      const text = wireString(row, 'text');
+      const subject = row.subject;
+      if (
+        wireString(row, 'questionId', 'question_id') === undefined ||
+        text === undefined ||
+        subject === null ||
+        typeof subject !== 'object' ||
+        Array.isArray(subject)
+      ) {
+        return [];
+      }
+      const subjectRow = subject as Record<string, unknown>;
+      if (
+        wireString(subjectRow, 'kind') === undefined ||
+        wireString(subjectRow, 'id') === undefined ||
+        !questionHasOptions(row)
+      ) {
+        return [];
+      }
+      return [
+        contentBlockChrome('Question', text, parseQuestionSelectedLabel(row)),
+      ];
+    }
+    case 'goalLink':
+    case 'goal_link': {
+      const summary = wireString(row, 'summary');
+      if (
+        wireString(row, 'goalId', 'goal_id') === undefined ||
+        summary === undefined
+      ) {
+        return [];
+      }
+      return [contentBlockChrome('Goal', summary)];
+    }
+    case 'memoryLink':
+    case 'memory_link': {
+      const summary = wireString(row, 'summary');
+      if (
+        wireString(row, 'memoryId', 'memory_id') === undefined ||
+        summary === undefined
+      ) {
+        return [];
+      }
+      return [contentBlockChrome('Memory', summary)];
+    }
+    case 'captureLink':
+    case 'capture_link': {
+      const summary = wireString(row, 'summary');
+      if (
+        wireString(row, 'conversationId', 'conversation_id') === undefined ||
+        summary === undefined
+      ) {
+        return [];
+      }
+      return [contentBlockChrome('Conversation', summary)];
+    }
+    case 'conversationLink':
+    case 'conversation_link': {
+      const summary = wireString(row, 'summary');
+      if (
+        wireString(row, 'conversationId', 'conversation_id') === undefined ||
+        summary === undefined
+      ) {
+        return [];
+      }
+      const rows = [contentBlockChrome('Conversation', summary)];
+      const rawItems =
+        row.recommendedActionItems ?? row.recommended_action_items;
+      if (!Array.isArray(rawItems)) {
+        return rows;
+      }
+      for (const entry of rawItems.slice(0, 20)) {
+        if (
+          entry === null ||
+          typeof entry !== 'object' ||
+          Array.isArray(entry)
+        ) {
+          continue;
+        }
+        const description = wireString(
+          entry as Record<string, unknown>,
+          'description',
+        );
+        if (description === undefined) {
+          continue;
+        }
+        rows.push(contentBlockChrome('Recommended next steps', description));
+      }
+      return rows;
+    }
+    case 'agentSpawn':
+    case 'agent_spawn': {
+      if (
+        wireString(row, 'sessionId', 'session_id') === undefined ||
+        wireString(row, 'runId', 'run_id') === undefined
+      ) {
+        return [];
+      }
+      return [
+        contentBlockChrome(
+          'Processing',
+          wireString(row, 'title') ?? '',
+          wireString(row, 'objective') ?? '',
+        ),
+      ];
+    }
+    case 'agentCompletion':
+    case 'agent_completion':
+      return [
+        contentBlockChrome(
+          agentCompletionEyebrow(wireString(row, 'status') ?? 'completed'),
+          wireString(row, 'title') ?? '',
+          wireString(row, 'output') ?? '',
+        ),
+      ];
+    default:
+      return [];
+  }
+}
+
+function parseContentBlocksList(value: unknown): unknown[] | null {
+  if (typeof value === 'string') {
+    try {
+      const decoded: unknown = JSON.parse(value);
+      return Array.isArray(decoded) ? decoded : null;
+    } catch {
+      return null;
+    }
+  }
+  return Array.isArray(value) ? value : null;
+}
+
+function parseOmiChatContentBlocks(
+  row: Record<string, unknown>,
+): {eyebrow: string; title?: string; detail?: string}[] {
+  try {
+    let raw = parseContentBlocksList(row.content_blocks);
+    if (raw === null && typeof row.metadata === 'string') {
+      try {
+        const decoded: unknown = JSON.parse(row.metadata);
+        if (
+          decoded !== null &&
+          typeof decoded === 'object' &&
+          !Array.isArray(decoded)
+        ) {
+          raw = parseContentBlocksList(
+            (decoded as Record<string, unknown>).content_blocks,
+          );
+        }
+      } catch {
+        raw = null;
+      }
+    }
+    if (raw === null) {
+      return [];
+    }
+    return raw.slice(0, 24).flatMap(parseContentBlock);
+  } catch {
+    return [];
+  }
+}
+
 export function parseOmiMessage(value: unknown): ChatMessage {
   const row = object(value);
   const createdAt =
@@ -278,6 +558,7 @@ export function parseOmiMessage(value: unknown): ChatMessage {
   const attachments = parseOmiChatFiles(row.files, row.files_id);
   const chart = parseOmiChatChart(row.chart_data);
   const evidence = parseOmiChatEvidence(row, memories.length > 0);
+  const contentBlocks = parseOmiChatContentBlocks(row);
   const appId = parseOmiChatAppId(row);
   return {
     id: row.id,
@@ -290,6 +571,7 @@ export function parseOmiMessage(value: unknown): ChatMessage {
     ...(attachments.length === 0 ? {} : {attachments}),
     ...(chart === undefined ? {} : {chart}),
     ...(evidence.length === 0 ? {} : {evidence}),
+    ...(contentBlocks.length === 0 ? {} : {contentBlocks}),
     ...(appId === undefined ? {} : {appId}),
   };
 }

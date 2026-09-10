@@ -119,6 +119,30 @@ const ChatMessageRow = memo(function ChatMessageRow({
             </Text>
           </View>
         ))}
+        {!human &&
+          (message.contentBlocks ?? []).map((item, index) => (
+            <View
+              key={`block-${index}`}
+              accessibilityLabel={
+                item.title === undefined
+                  ? item.eyebrow
+                  : `${item.eyebrow}: ${item.title}`
+              }>
+              <Text numberOfLines={1} style={styles.cancelledLabel}>
+                {item.eyebrow}
+              </Text>
+              {item.title !== undefined && (
+                <Text numberOfLines={2} style={styles.cancelledLabel}>
+                  {item.title}
+                </Text>
+              )}
+              {item.detail !== undefined && (
+                <Text numberOfLines={6} style={styles.cancelledLabel}>
+                  {item.detail}
+                </Text>
+              )}
+            </View>
+          ))}
         {message.sender === 'unknown' && (
           <Text style={styles.cancelledLabel}>
             {chatSenderCopy(message.sender)}
