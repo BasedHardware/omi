@@ -16,9 +16,25 @@ actor LocalEmbeddingIndexer {
     runtime.killSwitches.isEnabled && !runtime.killSwitches.isDisabled
   }
 
-  func indexFinalizedSession(sessionId: Int64) async {
+  nonisolated static func scheduleFinalizedSessionIndex(sessionId: Int64) {
+    let owner = RewindCaptureOwnerSnapshot.capture()
+    Task(priority: .background) {
+      guard let owner, owner.isCurrent() else { return }
+      await shared.indexFinalizedSession(sessionId: sessionId, owner: owner)
+    }
+  }
+
+  nonisolated static func scheduleMemoryIndex(id: Int64, content: String) {
+    let owner = RewindCaptureOwnerSnapshot.capture()
+    Task(priority: .background) {
+      guard let owner, owner.isCurrent() else { return }
+      await shared.indexMemory(id: id, content: content, owner: owner)
+    }
+  }
+
+  func indexFinalizedSession(sessionId: Int64, owner: RewindCaptureOwnerSnapshot? = nil) async {
     guard embeddingsAreActive else { return }
-    guard let owner = RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else { return }
+    guard let owner = owner ?? RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else { return }
     do {
       let store = try await RewindDatabase.shared.localEmbeddingStore(owner: owner)
       let authorization = LocalMutationAuthorization { owner.isCurrent() }
@@ -28,9 +44,9 @@ actor LocalEmbeddingIndexer {
     }
   }
 
-  func indexMemory(id: Int64, content: String) async {
+  func indexMemory(id: Int64, content: String, owner: RewindCaptureOwnerSnapshot? = nil) async {
     guard embeddingsAreActive else { return }
-    guard let owner = RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else { return }
+    guard let owner = owner ?? RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else { return }
     do {
       let store = try await RewindDatabase.shared.localEmbeddingStore(owner: owner)
       let authorization = LocalMutationAuthorization { owner.isCurrent() }
