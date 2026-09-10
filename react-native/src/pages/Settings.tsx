@@ -48,6 +48,11 @@ import {
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {loadOmiPeopleNames} from '../legacyOmiPeople';
+import {
+  loadOmiTaskIntegrations,
+  taskIntegrationRowCopy,
+  type OmiTaskIntegration,
+} from '../legacyOmiTaskIntegrations';
 import {loadOmiFairUseStatus} from '../legacyOmiFairUse';
 import {loadOmiDailySummaries} from '../legacyOmiDailySummaries';
 import {loadOmiDailySummarySchedule} from '../legacyOmiDailySummarySchedule';
@@ -184,6 +189,9 @@ export function SettingsPage({
   const [peopleNames, setPeopleNames] = useState<{id: string; name: string}[]>(
     [],
   );
+  const [taskIntegrations, setTaskIntegrations] = useState<
+    OmiTaskIntegration[]
+  >([]);
   const [fairUse, setFairUse] = useState<ReturnType<typeof fairUseCopy>>(null);
   const [dailySummaries, setDailySummaries] = useState<
     ReturnType<typeof dailySummaryCopy>
@@ -254,6 +262,7 @@ export function SettingsPage({
     if (backend === undefined || backend === null) {
       setSnapshot(null);
       setPeopleNames([]);
+      setTaskIntegrations([]);
       setFairUse(null);
       setDailySummaries([]);
       setDailySummarySchedule([]);
@@ -301,6 +310,7 @@ export function SettingsPage({
         // stay retryable instead of stranding the page on Loading forever.
         setSnapshot(null);
         setPeopleNames([]);
+        setTaskIntegrations([]);
         setFairUse(null);
         setDailySummaries([]);
         setDailySummarySchedule([]);
@@ -317,6 +327,7 @@ export function SettingsPage({
       if (!hasSession) {
         setSnapshot(null);
         setPeopleNames([]);
+        setTaskIntegrations([]);
         setFairUse(null);
         setDailySummaries([]);
         setDailySummarySchedule([]);
@@ -332,6 +343,9 @@ export function SettingsPage({
     }
     const peopleTask = loadOmiPeopleNames(backend).catch(
       () => new Map<string, string>(),
+    );
+    const taskIntegrationsTask = loadOmiTaskIntegrations(backend).catch(
+      () => [],
     );
     const fairUseTask = loadOmiFairUseStatus(backend).catch(() => null);
     const dailySummariesTask = loadOmiDailySummaries(backend).catch(() => []);
@@ -364,6 +378,7 @@ export function SettingsPage({
       setPhase('error');
     }
     const names = await peopleTask;
+    const integrations = await taskIntegrationsTask;
     const status = await fairUseTask;
     const summaries = await dailySummariesTask;
     const schedule = await dailySummaryScheduleTask;
@@ -375,6 +390,7 @@ export function SettingsPage({
       return;
     }
     setPeopleNames(peopleNameRows(names));
+    setTaskIntegrations(integrations);
     setFairUse(fairUseCopy(status));
     setDailySummaries(dailySummaryCopy(summaries));
     setDailySummarySchedule(dailySummaryScheduleCopy(schedule));
@@ -565,6 +581,13 @@ export function SettingsPage({
         ))}
         {peopleNames.map(person => (
           <SettingRow copy={person.name} key={person.id} title="People" />
+        ))}
+        {taskIntegrations.map(row => (
+          <SettingRow
+            copy={taskIntegrationRowCopy(row)}
+            key={row.key}
+            title="Task integrations"
+          />
         ))}
         {fairUse?.map((row, index) => (
           <SettingRow

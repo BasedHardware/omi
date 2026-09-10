@@ -1855,3 +1855,42 @@ test('Connectors rows keep GET http images instead of a logo-less catalogue', as
   ).toHaveLength(0);
   expect(tree).not.toContain('Official');
 });
+
+test('Settings names GET task integrations without Connect or a write sheet', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/task-integrations') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          integrations: {
+            todoist: {connected: true, access_token: 'secret-todoist'},
+            asana: {connected: false, access_token: 'secret-asana'},
+            clickup: {connected: true},
+          },
+          default_app: 'todoist',
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Task integrations');
+  expect(tree).toContain('Todoist · Default');
+  expect(tree).toContain('ClickUp');
+  expect(tree).not.toContain('Asana');
+  expect(tree).not.toContain('secret-todoist');
+  expect(tree).not.toContain('Coming Soon');
+  expect(labelsOf(renderer).includes('Connect')).toBe(false);
+  expect(mockBackend.request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/task-integrations',
+  });
+  expect(
+    mockBackend.request.mock.calls.some(call => call[0].method === 'PUT'),
+  ).toBe(false);
+});

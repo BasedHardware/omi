@@ -47,6 +47,11 @@ import {
 } from '../desktopSettingsClient';
 import {omiBackend} from '../omiNative';
 import {loadOmiPeopleNames} from '../legacyOmiPeople';
+import {
+  loadOmiTaskIntegrations,
+  taskIntegrationRowCopy,
+  type OmiTaskIntegration,
+} from '../legacyOmiTaskIntegrations';
 import {loadOmiFairUseStatus} from '../legacyOmiFairUse';
 import {loadOmiDailySummaries} from '../legacyOmiDailySummaries';
 import {loadOmiDailySummarySchedule} from '../legacyOmiDailySummarySchedule';
@@ -254,6 +259,9 @@ export function DesktopSettings({
   const [peopleNames, setPeopleNames] = useState<{id: string; name: string}[]>(
     [],
   );
+  const [taskIntegrations, setTaskIntegrations] = useState<
+    OmiTaskIntegration[]
+  >([]);
   const [fairUse, setFairUse] = useState<ReturnType<typeof fairUseCopy>>(null);
   const [dailySummaries, setDailySummaries] = useState<
     ReturnType<typeof dailySummaryCopy>
@@ -300,6 +308,7 @@ export function DesktopSettings({
     } catch {}
     let nextAccount: AccountSettingsSnapshot | null = null;
     let nextPeople: {id: string; name: string}[] = [];
+    let nextTaskIntegrations: OmiTaskIntegration[] = [];
     let nextFairUse: ReturnType<typeof fairUseCopy> = null;
     let nextDailySummaries: ReturnType<typeof dailySummaryCopy> = [];
     let nextDailySummarySchedule: ReturnType<typeof dailySummaryScheduleCopy> =
@@ -315,6 +324,9 @@ export function DesktopSettings({
     if (backend !== undefined && backend !== null && session === 'ready') {
       const peopleTask = loadOmiPeopleNames(backend).catch(
         () => new Map<string, string>(),
+      );
+      const taskIntegrationsTask = loadOmiTaskIntegrations(backend).catch(
+        () => [],
       );
       const fairUseTask = loadOmiFairUseStatus(backend).catch(() => null);
       const dailySummariesTask = loadOmiDailySummaries(backend).catch(() => []);
@@ -335,6 +347,7 @@ export function DesktopSettings({
         nextAccount = failedAccountSettings(desktopReadErrorCopy(reason));
       }
       nextPeople = peopleNameRows(await peopleTask);
+      nextTaskIntegrations = await taskIntegrationsTask;
       nextFairUse = fairUseCopy(await fairUseTask);
       nextDailySummaries = dailySummaryCopy(await dailySummariesTask);
       nextDailySummarySchedule = dailySummaryScheduleCopy(
@@ -365,6 +378,7 @@ export function DesktopSettings({
     }
     setAccount(nextAccount);
     setPeopleNames(nextPeople);
+    setTaskIntegrations(nextTaskIntegrations);
     setFairUse(nextFairUse);
     setDailySummaries(nextDailySummaries);
     setDailySummarySchedule(nextDailySummarySchedule);
@@ -679,6 +693,13 @@ export function DesktopSettings({
       ))}
       {peopleNames.map(person => (
         <Row copy={person.name} key={person.id} title="People" />
+      ))}
+      {taskIntegrations.map(row => (
+        <Row
+          copy={taskIntegrationRowCopy(row)}
+          key={row.key}
+          title="Task integrations"
+        />
       ))}
       {fairUse?.map((row, index) => (
         <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
