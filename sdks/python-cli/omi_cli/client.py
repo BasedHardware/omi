@@ -184,7 +184,7 @@ class OmiClient:
         raise RuntimeError("unreachable")
 
     def _handle_response(self, response: httpx.Response) -> Any:
-        if response.status_code == 204 or not response.content:
+        if 200 <= response.status_code < 300 and (response.status_code == 204 or not response.content):
             return None
         if 200 <= response.status_code < 300:
             return _safe_parse_json(response)
