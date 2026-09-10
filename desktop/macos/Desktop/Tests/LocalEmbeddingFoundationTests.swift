@@ -207,4 +207,52 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
     XCTAssertTrue(hits.allSatisfy { $0.matchedBy == .keyword })
   }
 
+  func testProbeFailureStaysOnLocalKeywordsWithoutLegacyCall() async throws {
+    let (store, directory) = try fixture()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let engine = UnavailableAssetsEmbeddingEngine()
+    let runtime = LocalEmbeddingRuntime(engines: [engine], defaultEngineID: engine.engineID, record: { _, _ in })
+    let hits = try await ScreenHistorySearchRoute.search(
+      runtime: runtime,
+      local: { selected in
+        XCTAssertNil(selected)
+        return try await LocalHybridSearch(store: store, runtime: runtime, authorization: .unrestricted)
+          .search(query: "budget", engine: selected)
+      },
+      legacy: {
+        XCTFail("assets-unavailable probe reached Gemini route")
+        return [LocalHybridHit]()
+      })
+    XCTAssertEqual(hits.map(\.sourceId), [2, 1])
+    XCTAssertTrue(hits.allSatisfy { $0.matchedBy == .keyword })
+  }
+
+  func testSourceKindFilterKeepsScreenSearchSeparateFromTranscripts() async throws {
+    let (store, directory) = try fixture()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let chunks = TranscriptChunker.chunks(
+      sessionId: 9,
+      segments: (0..<10).map {
+        TranscriptChunker.Segment(text: "budget spoken segment \($0)", order: $0, startedAt: Date())
+      })
+    XCTAssertEqual(chunks.count, 2)
+    XCTAssertEqual(chunks[0].chunkIndex, 0)
+    XCTAssertEqual(chunks[1].chunkIndex, 1)
+    try await store.pool.write { db in
+      try db.execute(sql: "INSERT INTO transcription_sessions(id) VALUES (9)")
+      try db.execute(
+        sql: "INSERT INTO memories(content, deleted, createdAt, sourceApp) VALUES ('budget fact', 0, ?, 'Notes')",
+        arguments: [Date()])
+    }
+    _ = try await store.upsertTranscriptChunks(chunks, authorization: .unrestricted)
+    let search = LocalHybridSearch(store: store, runtime: .makeDefault(), authorization: .unrestricted)
+    let screens = try await search.search(query: "budget", engine: nil, sourceKinds: [.screenshot])
+    XCTAssertTrue(screens.allSatisfy { $0.sourceKind == .screenshot })
+    let transcripts = try await search.search(query: "budget", engine: nil, sourceKinds: [.transcriptChunk])
+    XCTAssertTrue(transcripts.contains { $0.sourceKind == .transcriptChunk })
+    XCTAssertFalse(transcripts.contains { $0.sourceKind == .screenshot })
+    let memories = try await search.search(query: "budget", engine: nil, sourceKinds: [.memory])
+    XCTAssertTrue(memories.contains { $0.sourceKind == .memory })
+    XCTAssertFalse(memories.contains { $0.sourceKind == .screenshot })
+  }
 }

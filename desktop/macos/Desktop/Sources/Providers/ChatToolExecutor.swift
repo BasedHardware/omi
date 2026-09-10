@@ -552,6 +552,11 @@ class ChatToolExecutor {
       if toolCall.name == "get_local_status" {
         return await executeLocalStatus(expectedOwnerID: expectedOwnerID)
       }
+      if toolCall.name == "search_transcripts" {
+        return await ChatLocalHybridTool.execute(
+          toolCall.arguments, runID: originatingRunId, attemptID: originatingAttemptId,
+          expectedOwnerID: expectedOwnerID, sourceKinds: [.transcriptChunk])
+      }
       if toolCall.name == "web_search" {
         return await executeWebSearch(
           toolCall.arguments, expectedOwnerID: expectedOwnerID)
@@ -1824,7 +1829,7 @@ class ChatToolExecutor {
           authorization: LocalMutationAuthorization { owner.isCurrent() })
         let hits = try await search.search(
           query: query, engine: engine, startDate: startDate,
-          endDate: endDate, appFilter: appFilter, limit: limit)
+          endDate: endDate, appFilter: appFilter, limit: limit, sourceKinds: [.screenshot])
         return hits.map {
           ScreenHistorySearchResult(
             screenshotId: $0.sourceId, score: $0.fusedScore,
