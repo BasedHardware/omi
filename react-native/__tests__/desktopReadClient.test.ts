@@ -7,6 +7,7 @@ import {
   conversationRecapTitle,
   conversationDayLabel,
   conversationRecapDateLabel,
+  conversationListNewCopy,
   conversationGroupLabel,
   conversationCaptureCopy,
   conversationStatusCopy,
@@ -2083,6 +2084,44 @@ test('conversation recap date labels keep Today as time and date older days', ()
   expect(conversationRecapDateLabel(null, new Date(0).toISOString(), now)).toBe(
     'Time unavailable',
   );
+});
+
+test('conversation list New copy follows Flutter createdAt/finishedAt age', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  expect(
+    conversationListNewCopy(
+      new Date(now - 30_000).toISOString(),
+      null,
+      now,
+    ),
+  ).toBe('New 🚀');
+  expect(
+    conversationListNewCopy(
+      new Date(now - 90_000).toISOString(),
+      new Date(now - 20_000).toISOString(),
+      now,
+    ),
+  ).toBe('New 🚀');
+  expect(
+    conversationListNewCopy(
+      new Date(now - 90_000).toISOString(),
+      null,
+      now,
+    ),
+  ).toBeNull();
+  expect(
+    conversationListNewCopy(new Date(now).toISOString(), null, now),
+  ).toBeNull();
+  expect(
+    conversationListNewCopy(
+      new Date(now + 5_000).toISOString(),
+      null,
+      now,
+    ),
+  ).toBeNull();
+  expect(
+    conversationListNewCopy(new Date(0).toISOString(), null, now),
+  ).toBeNull();
 });
 
 test('clock labels keep Today as time and date older days', () => {

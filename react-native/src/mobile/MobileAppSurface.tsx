@@ -67,6 +67,7 @@ export type MobileRecap = {
   photoCount?: number;
   emoji?: string | null;
   tag?: string | null;
+  newCopy?: string | null;
 };
 
 export type MobileDeviceState = {
@@ -305,7 +306,7 @@ const RecapCard = memo(function RecapCard({
           Processing
         </Text>
       ) : null}
-      <Text style={styles.recapDate}>{recap.dateLabel}</Text>
+      <Text style={styles.recapDate}>{recap.newCopy ?? recap.dateLabel}</Text>
     </View>
   );
   if (onPress === undefined) {

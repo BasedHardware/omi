@@ -10,6 +10,7 @@ import {
   conversationDisplayTitle,
   conversationHasFinishClock,
   conversationListEmoji,
+  conversationListNewCopy,
   conversationListStatusCopy,
   conversationListTag,
   conversationListUsesListenOverview,
@@ -68,6 +69,11 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
   const photosCopy = conversationDiscardedPhotoCopy(item);
   const tag = conversationListTag(item);
   const listStatusCopy = conversationListStatusCopy(item.status);
+  const newCopy = conversationListNewCopy(
+    item.createdAt,
+    item.finishedAt,
+    Date.now(),
+  );
   return (
     <View style={styles.rowCopy}>
       {emoji !== null ? <Text style={styles.rowTitle}>{emoji}</Text> : null}
@@ -83,7 +89,7 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
         </Text>
       )}
       <Text numberOfLines={1} style={styles.rowMeta}>
-        {[timeLabel(item), item.starred ? 'Starred' : '']
+        {[newCopy ?? timeLabel(item), item.starred ? 'Starred' : '']
           .filter(part => part !== '')
           .join(' · ')}
       </Text>

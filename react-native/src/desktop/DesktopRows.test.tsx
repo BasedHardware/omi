@@ -770,6 +770,45 @@ test('library conversation rows name GET emoji and omit discarded or empty value
   expect(textOf(hidden)).not.toContain('🧠');
 });
 
+test('library conversation rows name Flutter New chrome for a just-created row', () => {
+  const now = Date.now();
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'omi-new',
+    title: 'Morning standup',
+    summary: 'Notes',
+    searchableText: 'Morning standup\nNotes',
+    createdAt: new Date(now - 30_000).toISOString(),
+    updatedAt: new Date(now - 30_000).toISOString(),
+    startedAt: new Date(now - 30_000).toISOString(),
+    finishedAt: null,
+    starred: false,
+    status: 'completed',
+    source: 'omi',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let shown!: ReactTestRenderer.ReactTestRenderer;
+  let hidden!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    shown = ReactTestRenderer.create(<ConversationRow item={item} />);
+    hidden = ReactTestRenderer.create(
+      <ConversationRow
+        item={{
+          ...item,
+          id: 'omi-old',
+          createdAt: '2026-09-07T00:00:00.000Z',
+          finishedAt: '2026-09-07T00:01:00.000Z',
+        }}
+      />,
+    );
+  });
+  expect(textOf(shown)).toContain('New 🚀');
+  expect(textOf(hidden)).not.toContain('New 🚀');
+});
+
 test('library conversation rows name GET category and omit discarded or empty values', () => {
   const item: ConversationProjection = {
     kind: 'conversation',

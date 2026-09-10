@@ -1371,6 +1371,64 @@ test('conversation list names GET emoji and omits it when discarded or empty', (
   expect(textOf(renderer)).not.toContain('\u0085');
 });
 
+test('conversation list names Flutter New chrome for a just-created row', () => {
+  const now = Date.now();
+  const base = {
+    kind: 'conversation' as const,
+    title: 'Morning standup',
+    summary: 'Notes',
+    searchableText: 'Morning standup\nNotes',
+    updatedAt: new Date(now - 30_000).toISOString(),
+    startedAt: new Date(now - 30_000).toISOString(),
+    starred: false,
+    status: 'completed' as const,
+    source: 'omi' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...base,
+                id: 'omi-new',
+                createdAt: new Date(now - 30_000).toISOString(),
+                finishedAt: null,
+              },
+              {
+                ...base,
+                id: 'omi-old',
+                title: 'Older talk',
+                createdAt: '2026-09-07T00:00:00.000Z',
+                finishedAt: '2026-09-07T00:01:00.000Z',
+                startedAt: '2026-09-07T00:00:00.000Z',
+                updatedAt: '2026-09-07T00:01:00.000Z',
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  expect(textOf(renderer)).toContain('New 🚀');
+  expect(textOf(renderer)).toContain('Older talk');
+});
+
 test('conversation list names GET category and omits it when discarded or empty', () => {
   const base = {
     kind: 'conversation' as const,

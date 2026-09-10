@@ -965,6 +965,29 @@ test('Daily Recaps name GET structured.emoji and list tags without inventing def
   expect(renderedText(plain)).not.toContain('✨');
 });
 
+test('Daily Recaps name Flutter New chrome instead of the day clock', () => {
+  const flagged = render({
+    recaps: [
+      {
+        id: 'recap-new',
+        title: 'Product review',
+        dateLabel: 'Yesterday',
+        newCopy: 'New 🚀',
+      },
+    ],
+  });
+  expect(renderedText(flagged)).toContain('New 🚀');
+  expect(renderedText(flagged)).not.toContain('Yesterday');
+
+  const plain = render({
+    recaps: [
+      {id: 'recap-plain-new', title: 'Omi gets simpler', dateLabel: 'Yesterday'},
+    ],
+  });
+  expect(renderedText(plain)).toContain('Yesterday');
+  expect(renderedText(plain)).not.toContain('New 🚀');
+});
+
 test('untitled processing recaps stay visible instead of rendering a blank card', () => {
   const renderer = render({
     recaps: [

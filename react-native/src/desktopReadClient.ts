@@ -288,6 +288,25 @@ export function conversationListTag(item: {
   return conversationListSourceTag(item) ?? conversationListCategory(item);
 }
 
+export function conversationListNewCopy(
+  createdAt: string,
+  finishedAt: string | null,
+  nowEpochMilliseconds: number,
+): string | null {
+  const created = Date.parse(createdAt);
+  const finished =
+    finishedAt === null || finishedAt === undefined
+      ? Number.NaN
+      : Date.parse(finishedAt);
+  const memorized =
+    Number.isFinite(finished) && finished > created ? finished : created;
+  if (!Number.isFinite(memorized) || memorized <= 0) {
+    return null;
+  }
+  const seconds = Math.floor((nowEpochMilliseconds - memorized) / 1000);
+  return seconds > 0 && seconds < 60 ? 'New 🚀' : null;
+}
+
 export function conversationVisibilityCopy(
   visibility: string | null | undefined,
 ): string | null {

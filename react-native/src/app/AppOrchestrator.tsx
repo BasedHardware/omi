@@ -37,6 +37,7 @@ import {
 import {omiBackend} from '../omiNative';
 import {
   conversationListEmoji,
+  conversationListNewCopy,
   conversationListTag,
   conversationRecapDateLabel,
   conversationRecapTitle,
@@ -1087,6 +1088,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               item.status === 'processing' || item.status === 'merging',
             emoji: conversationListEmoji(item),
             tag: conversationListTag(item),
+            newCopy: conversationListNewCopy(
+              item.createdAt,
+              item.finishedAt,
+              recapNow,
+            ),
             title: conversationRecapTitle(item),
           }))
         : [];

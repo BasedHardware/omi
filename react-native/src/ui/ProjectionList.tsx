@@ -12,6 +12,7 @@ import {
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationListEmoji,
+  conversationListNewCopy,
   conversationListStatusCopy,
   conversationListTag,
   conversationListUsesListenOverview,
@@ -98,6 +99,14 @@ export const ProjectionRow = memo(function ProjectionRow({
   const tag = conversation !== null ? conversationListTag(conversation) : null;
   const photosCopy =
     conversation !== null ? conversationDiscardedPhotoCopy(conversation) : null;
+  const newCopy =
+    conversation !== null
+      ? conversationListNewCopy(
+          conversation.createdAt,
+          conversation.finishedAt,
+          Date.now(),
+        )
+      : null;
   const indentPad =
     item.kind === 'task' ? taskIndentPadding(item.indentLevel) : 0;
   const rowPad = spine ? 18 : 16;
@@ -197,7 +206,7 @@ export const ProjectionRow = memo(function ProjectionRow({
       )}
       {item.kind !== 'task' ? (
         <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
-          {projectionClockLabel(item, Date.now())}
+          {newCopy ?? projectionClockLabel(item, Date.now())}
         </Text>
       ) : null}
       {captureCopy !== null ? (
