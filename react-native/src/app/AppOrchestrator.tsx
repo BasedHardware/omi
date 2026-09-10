@@ -37,6 +37,8 @@ import {
 import {omiBackend} from '../omiNative';
 import {
   conversationDayLabel,
+  conversationListEmoji,
+  conversationListTag,
   conversationRecapTitle,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
@@ -1083,6 +1085,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             failed: item.status === 'failed',
             processing:
               item.status === 'processing' || item.status === 'merging',
+            emoji: conversationListEmoji(item),
+            tag: conversationListTag(item),
             title: conversationRecapTitle(item),
           }))
         : [];

@@ -65,6 +65,8 @@ export type MobileRecap = {
   failed?: boolean;
   processing?: boolean;
   photoCount?: number;
+  emoji?: string | null;
+  tag?: string | null;
 };
 
 export type MobileDeviceState = {
@@ -252,6 +254,18 @@ const RecapCard = memo(function RecapCard({
   });
   const card = (
     <View style={styles.recapCard}>
+      {recap.discarded === true ||
+      recap.emoji == null ||
+      recap.emoji === '' ? null : (
+        <Text
+          accessibilityLabel="Conversation emoji"
+          style={styles.recapStar}>
+          {recap.emoji}
+        </Text>
+      )}
+      {recap.tag != null && recap.tag !== '' ? (
+        <Text style={styles.recapStar}>{recap.tag}</Text>
+      ) : null}
       <Text numberOfLines={3} style={styles.recapTitle}>
         {recap.title}
       </Text>

@@ -912,6 +912,59 @@ test('Daily Recaps name processing conversations without Status on every card', 
   expect(renderedText(plain)).not.toContain('Processing');
 });
 
+test('Daily Recaps name GET structured.emoji and list tags without inventing defaults', () => {
+  const flagged = render({
+    recaps: [
+      {
+        id: 'recap-emoji',
+        title: 'Product review',
+        dateLabel: 'Yesterday',
+        emoji: '🚀',
+        tag: 'Productivity',
+      },
+    ],
+  });
+  expect(renderedText(flagged)).toContain('🚀');
+  expect(renderedText(flagged)).toContain('Productivity');
+  expect(
+    flagged.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Conversation emoji' &&
+        node.props.children === '🚀',
+    ).length,
+  ).toBeGreaterThan(0);
+
+  const discarded = render({
+    recaps: [
+      {
+        id: 'recap-discarded-emoji',
+        title: 'Discarded talk',
+        dateLabel: 'Yesterday',
+        discarded: true,
+        emoji: '🧠',
+        tag: 'Screenpipe',
+      },
+    ],
+  });
+  expect(renderedText(discarded)).toContain('Discarded');
+  expect(renderedText(discarded)).toContain('Screenpipe');
+  expect(renderedText(discarded)).not.toContain('🧠');
+  expect(
+    discarded.root.findAll(
+      node => node.props.accessibilityLabel === 'Conversation emoji',
+    ),
+  ).toHaveLength(0);
+
+  const plain = render({
+    recaps: [
+      {id: 'recap-plain-emoji', title: 'Omi gets simpler', dateLabel: 'Yesterday'},
+    ],
+  });
+  expect(renderedText(plain)).not.toContain('🚀');
+  expect(renderedText(plain)).not.toContain('Productivity');
+  expect(renderedText(plain)).not.toContain('✨');
+});
+
 test('untitled processing recaps stay visible instead of rendering a blank card', () => {
   const renderer = render({
     recaps: [
