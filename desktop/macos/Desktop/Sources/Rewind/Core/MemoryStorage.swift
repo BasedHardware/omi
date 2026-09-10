@@ -617,7 +617,7 @@ actor MemoryStorage {
       }
     }
     if recordId > 0, !memory.content.isEmpty {
-      await LocalEmbeddingIndexer.shared.indexMemory(id: recordId, content: memory.content)
+      LocalEmbeddingIndexer.scheduleMemoryIndex(id: recordId, content: memory.content)
     }
     return recordId
   }
@@ -1432,7 +1432,7 @@ actor MemoryStorage {
     log("MemoryStorage: Inserted local memory (id: \(inserted.id ?? -1))")
     HomeKnowledgeCountInvalidation.post()
     if let id = inserted.id {
-      await LocalEmbeddingIndexer.shared.indexMemory(id: id, content: inserted.content)
+      LocalEmbeddingIndexer.scheduleMemoryIndex(id: id, content: inserted.content)
     }
     return inserted
   }
@@ -1739,7 +1739,7 @@ actor MemoryStorage {
         database, sql: "SELECT id FROM memories WHERE backendId = ?", arguments: [backendId])
     }
     if let rowId {
-      await LocalEmbeddingIndexer.shared.indexMemory(id: rowId, content: content)
+      LocalEmbeddingIndexer.scheduleMemoryIndex(id: rowId, content: content)
     }
   }
 

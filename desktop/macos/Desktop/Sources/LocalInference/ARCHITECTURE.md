@@ -60,9 +60,10 @@ Generation has a parallel pair (`OMI_DISABLE_LOCAL_INFERENCE`,
 `LocalEmbeddingStore` owns `local_embeddings`, `transcript_chunks` + FTS5, and
 `memories_fts`. `LocalHybridSearch` filters by `sourceKind` so
 `search_screen_history` stays screen-only. Transcript chunks (window 8 /
-stride 6) and memories are indexed by `LocalEmbeddingIndexer` on session
-finalize / memory insert-or-update, with AC-bounded backfill like OCR
-embeddings.
+stride 6) and memories are indexed by `LocalEmbeddingIndexer`. Session
+finalize and memory insert-or-update capture the owner snapshot, then
+schedule indexing on a background Task — they never await NLCE. Backfill is
+AC-bounded like OCR embeddings.
 
 ## Benchmark
 
