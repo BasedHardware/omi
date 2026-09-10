@@ -24,11 +24,12 @@ type StoredTask = {
 export function parseTaskLimit(
   value: string | null | undefined
 ): number | null {
-  // Align with parseLimit for conversations/memories/chat: invalid values are
-  // rejected by the HTTP layer, not silently clamped to the default.
+  // Match production parsePageQuery: 1-3 digit strings then range 1-100.
   if (value === null || value === undefined) return 25;
-  if (!/^(?:[1-9]|[1-9][0-9]|100)$/.test(value)) return null;
-  return Number(value);
+  if (!/^[0-9]{1,3}$/.test(value)) return null;
+  const limit = Number(value);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) return null;
+  return limit;
 }
 export async function readTasks(
   db: D1Database,

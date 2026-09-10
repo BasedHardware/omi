@@ -197,6 +197,17 @@ export function parseLimit(
   return Number(value);
 }
 
+export function parseEnvelopeLimit(
+  value: string | undefined,
+  omitted = 25
+): number | null {
+  if (value === undefined) return omitted;
+  if (!/^[0-9]{1,3}$/.test(value)) return null;
+  const limit = Number(value);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) return null;
+  return limit;
+}
+
 export function parseOffset(value: string | undefined): number {
   if (value === undefined) return 0;
   const parsed = Number.parseInt(value, 10);
@@ -890,7 +901,7 @@ export async function handleConversations(
   if (query.getAll("limit").length > 1 || query.getAll("cursor").length > 1) {
     return backendError("bad_request", "edit_request", 400);
   }
-  const limit = parseLimit(query.get("limit") ?? undefined, 25);
+  const limit = parseEnvelopeLimit(query.get("limit") ?? undefined);
   const cursor = query.get("cursor") ?? undefined;
   if (limit === null || cursor === "")
     return backendError("bad_request", "edit_request", 400);
@@ -911,7 +922,7 @@ export async function handleMemories(context: CoreContext): Promise<Response> {
   const query = forwardedListQuery(new URL(context.req.url).searchParams);
   if (query === "duplicate")
     return backendError("bad_request", "edit_request", 400);
-  const limit = parseLimit(query.get("limit") ?? undefined);
+  const limit = parseEnvelopeLimit(query.get("limit") ?? undefined);
   const cursor = query.get("cursor") ?? undefined;
   if (limit === null || cursor === "")
     return backendError("bad_request", "edit_request", 400);

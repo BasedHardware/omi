@@ -1884,6 +1884,63 @@ describe("worker request contract", () => {
     expect(envelopeJunk.status).toBe(400);
   });
 
+  test("envelope conversation memory and task limits admit production padded digits", async () => {
+    await insertChatMessage({
+      id: "pad-a",
+      accountId: "test-account",
+      text: "Pad A",
+      createdAt: 1,
+      position: 0,
+      chatSessionId: "pad-a",
+    });
+    await insertChatMessage({
+      id: "pad-b",
+      accountId: "test-account",
+      text: "Pad B",
+      createdAt: 2,
+      position: 0,
+      chatSessionId: "pad-b",
+    });
+    const padded = await fetchWorker("/v1/conversations?limit=01", {
+      headers: authenticatedHeaders,
+    });
+    const baseline = await fetchWorker("/v1/conversations?limit=1", {
+      headers: authenticatedHeaders,
+    });
+    const oversize = await fetchWorker("/v1/conversations?limit=101", {
+      headers: authenticatedHeaders,
+    });
+    const chatPadded = await fetchWorker("/v1/chat-messages?limit=01", {
+      headers: authenticatedHeaders,
+    });
+    expect(padded.status).toBe(200);
+    expect((await padded.json()) as unknown).toEqual(
+      (await baseline.json()) as unknown
+    );
+    expect(oversize.status).toBe(400);
+    expect(chatPadded.status).toBe(400);
+    const memoryPadded = await fetchWorker("/v1/memories?limit=01", {
+      headers: authenticatedHeaders,
+    });
+    const memoryBaseline = await fetchWorker("/v1/memories?limit=1", {
+      headers: authenticatedHeaders,
+    });
+    expect(memoryPadded.status).toBe(503);
+    expect((await memoryPadded.json()) as unknown).toEqual(
+      (await memoryBaseline.json()) as unknown
+    );
+    const taskPadded = await fetchWorker("/v1/tasks?limit=01", {
+      headers: authenticatedHeaders,
+    });
+    const taskBaseline = await fetchWorker("/v1/tasks?limit=1", {
+      headers: authenticatedHeaders,
+    });
+    expect(taskPadded.status).toBe(200);
+    expect((await taskPadded.json()) as unknown).toEqual(
+      (await taskBaseline.json()) as unknown
+    );
+  });
+
   test("memories stay non-retryably unavailable because no store exists", async () => {
     const response = await fetchWorker("/v1/memories?limit=50", {
       headers: authenticatedHeaders,
