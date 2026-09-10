@@ -259,8 +259,8 @@ def save(config: Config) -> None:
                 tomli_w.dump(payload, fh)
             # Atomic rename. The destination inherits the temp's owner-only access.
             os.replace(tmp_path, config.path)
-        except Exception:
-            # Clean up our own temp on serialization or replacement failure.
+        except BaseException:
+            # Clean up our own temp even when serialization/replacement is interrupted.
             # A failed cleanup must not hide the original save error.
             try:
                 os.unlink(tmp_path)
