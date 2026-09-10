@@ -1,16 +1,17 @@
-"""Realtime RNNT capacity qualification for the Parakeet WebSocket API.
+"""Realtime Parakeet TDT v3 streaming ASR capacity qualification.
 
-This is an end-to-end capacity test for ``/v3/stream``.  It sends a public,
-public-domain LibriSpeech test-clean-derived fixture at wall-clock pace, rather
-than replaying bytes as fast as the client can write them.  Each requested
+This is an end-to-end capacity test for ``/v3/stream``.  It sends a public
+LibriSpeech test-clean-derived fixture at wall-clock pace, rather than
+replaying bytes as fast as the client can write them.  Each requested
 level is run concurrently and then drained with the protocol's ``finalize``
 message.  The target level is also sustained for three minutes by repeating
-that same speech fixture, so the result measures a live RNNT workload rather
-than a short burst.
+that same speech fixture, so the result measures a live TDT streaming ASR
+workload rather than a short burst.
 
-The fixture is speech audio, so this test treats a non-empty response as an
-integration/completeness signal.  It does not claim WER or ASR quality; quality
-must be established by separately paired transcription and diarization checks.
+The fixture is English speech audio, so this test treats a non-empty response
+as an integration/completeness signal.  It does not claim WER, multilingual
+accuracy, or ASR quality; those must be established by separately paired
+transcription and diarization checks.
 
 Environment:
   PARAKEET_URL: HTTP base URL (default ``http://127.0.0.1:8080``)
@@ -28,7 +29,7 @@ Environment:
   PARAKEET_STREAM_TIMEOUT_S: per-session timeout (default 180)
   PARAKEET_STREAM_DOWNLOAD_TIMEOUT_S: fixture download timeout (default 60)
   PARAKEET_STREAM_SUSTAIN_S: sustained target duration (default 180)
-  PARAKEET_STREAM_MAX_TEXT_LATENCY_S: p95 text latency gate (default 2 seconds)
+  PARAKEET_STREAM_MAX_TEXT_LATENCY_S: p95 text latency gate (default 4 seconds)
 """
 
 from __future__ import annotations
@@ -70,10 +71,84 @@ CHUNK_MS = int(os.getenv("PARAKEET_STREAM_CHUNK_MS", "100"))
 SESSION_TIMEOUT_S = float(os.getenv("PARAKEET_STREAM_TIMEOUT_S", "180"))
 DOWNLOAD_TIMEOUT_S = float(os.getenv("PARAKEET_STREAM_DOWNLOAD_TIMEOUT_S", "60"))
 SUSTAIN_S = float(os.getenv("PARAKEET_STREAM_SUSTAIN_S", "180"))
-MAX_TEXT_LATENCY_S = float(os.getenv("PARAKEET_STREAM_MAX_TEXT_LATENCY_S", "2.0"))
+# The TDT stream uses 2s chunks with 2s right context.  A 2s end-to-text p95
+# gate leaves no scheduling/inference margin over that context floor, so it
+# would reject healthy streaming output for a structural reason.  Keep the
+# bound explicit and record the raw latency distribution for product review.
+MAX_TEXT_LATENCY_S = float(os.getenv("PARAKEET_STREAM_MAX_TEXT_LATENCY_S", "4.0"))
 LATENCY_GATE_MIN_STREAMS = int(os.getenv("PARAKEET_STREAM_LATENCY_GATE_MIN_STREAMS", "20"))
+EXPECTED_STREAM_MODEL = "nvidia/parakeet-tdt-0.6b-v3"
+EXPECTED_STREAM_BACKEND = "nemo"
+EXPECTED_STREAM_DECODER_FAMILY = "tdt"
+EXPECTED_STREAM_LANGUAGE_SUPPORT = "multilingual"
+EXPECTED_STREAM_MODEL_REVISION = "541d1f99c6b0c3cd0b11a95167540bb8edefd82b"
 SAMPLE_RATE = 16000
 BYTES_PER_SAMPLE = 2
+SILENCE_FRAME_MS = 10
+MAX_PAUSE_MS = 200
+SPEECH_RMS_THRESHOLD = 32.0
+TEXT_SENTINELS = (
+    "he hoped there would be stew",
+    "stuff it into you",
+    "after early nightfall",
+    "hello bertie",
+)
+
+
+def _expected_model_identity() -> Dict[str, str]:
+    return {
+        "stream_model": EXPECTED_STREAM_MODEL,
+        "backend": EXPECTED_STREAM_BACKEND,
+        "decoder_family": EXPECTED_STREAM_DECODER_FAMILY,
+        "language_support": EXPECTED_STREAM_LANGUAGE_SUPPORT,
+        "model_revision": EXPECTED_STREAM_MODEL_REVISION,
+    }
+
+
+def _model_identity_matches(identity: Any) -> bool:
+    return (
+        isinstance(identity, dict)
+        and identity.get("stream_model") == EXPECTED_STREAM_MODEL
+        and identity.get("backend") == EXPECTED_STREAM_BACKEND
+        and identity.get("decoder_family") == EXPECTED_STREAM_DECODER_FAMILY
+        and identity.get("language_support") == EXPECTED_STREAM_LANGUAGE_SUPPORT
+        and identity.get("model_revision") == EXPECTED_STREAM_MODEL_REVISION
+    )
+
+
+def _read_runtime_health() -> Dict[str, Any]:
+    """Read the bounded stream readiness and model identity contract."""
+
+    with urllib.request.urlopen(f"{PARAKEET_URL}/health", timeout=30) as response:
+        payload = json.load(response)
+    if not isinstance(payload, dict):
+        raise ValueError("Parakeet /health response must be a JSON object")
+
+    identity = payload.get("model_identity")
+    components = payload.get("components")
+    health = {
+        "status": payload.get("status"),
+        "ready": payload.get("ready"),
+        "mode": payload.get("mode"),
+        "components": components,
+        "model_identity": identity,
+        "admission": payload.get("admission"),
+    }
+    if payload.get("ready") is not True or payload.get("mode") != "stream":
+        raise ValueError(f"stream service is not ready in stream mode: {health}")
+    if not isinstance(identity, dict):
+        raise ValueError("stream /health omitted model_identity")
+    if not _model_identity_matches(identity):
+        raise ValueError(
+            "stream /health model identity mismatch: " f"expected={_expected_model_identity()} actual={identity}"
+        )
+    if not isinstance(components, dict):
+        raise ValueError("stream /health omitted component readiness")
+    required_components = ("rnnt", "vad", "diarizer")
+    missing_components = [name for name in required_components if components.get(name) is not True]
+    if missing_components:
+        raise ValueError(f"stream /health components are not ready: {missing_components}")
+    return health
 
 
 def _download_fixture() -> Path:
@@ -124,6 +199,71 @@ def _load_pcm(path: Path) -> Tuple[bytes, float, str, str]:
     if peak < 256:
         raise ValueError("stream fixture contains no speech-level signal")
     return pcm, frame_count / SAMPLE_RATE, hashlib.sha256(pcm).hexdigest(), wav_sha256
+
+
+def _trim_long_silence(pcm: bytes, duration_s: float) -> Tuple[bytes, Dict[str, Any]]:
+    """Bound fixture pauses so sustained streams carry speech-level workload.
+
+    The source fixture intentionally has roughly five-second pauses between
+    utterances.  Keep at most 200 ms of every silence run, including at the
+    fixture boundaries, and record the deterministic recipe and resulting
+    digest so the workload remains auditable.
+    """
+
+    samples = memoryview(pcm).cast("h")
+    frame_samples = SAMPLE_RATE * SILENCE_FRAME_MS // 1000
+    max_pause_frames = MAX_PAUSE_MS // SILENCE_FRAME_MS
+    frames: List[Tuple[bytes, bool]] = []
+    active_samples = 0
+    for offset in range(0, len(samples), frame_samples):
+        frame = samples[offset : offset + frame_samples]
+        if not frame:
+            continue
+        rms = math.sqrt(sum(sample * sample for sample in frame) / len(frame))
+        active = rms >= SPEECH_RMS_THRESHOLD
+        if active:
+            active_samples += len(frame)
+        frames.append(
+            (
+                pcm[offset * BYTES_PER_SAMPLE : (offset + len(frame)) * BYTES_PER_SAMPLE],
+                active,
+            )
+        )
+
+    kept: List[bytes] = []
+    index = 0
+    while index < len(frames):
+        active = frames[index][1]
+        end = index + 1
+        while end < len(frames) and frames[end][1] == active:
+            end += 1
+        run = frames[index:end]
+        if active or len(run) <= max_pause_frames:
+            kept.extend(frame for frame, _ in run)
+        else:
+            kept.extend(frame for frame, _ in run[:max_pause_frames])
+        index = end
+
+    workload_pcm = b"".join(kept)
+    workload_duration_s = len(workload_pcm) / (SAMPLE_RATE * BYTES_PER_SAMPLE)
+    metadata = {
+        "recipe": "10ms RMS frames; RMS >= 32 is speech; cap each silence run at 200ms",
+        "frame_ms": SILENCE_FRAME_MS,
+        "max_pause_ms": MAX_PAUSE_MS,
+        "speech_rms_threshold": SPEECH_RMS_THRESHOLD,
+        "source_duration_s": duration_s,
+        "workload_duration_s": workload_duration_s,
+        "active_speech_duration_s": active_samples / SAMPLE_RATE,
+        "speech_duty_cycle": round(active_samples / len(samples), 6) if samples else 0.0,
+        "workload_speech_duty_cycle": (
+            round(active_samples / (len(workload_pcm) // BYTES_PER_SAMPLE), 6) if workload_pcm else 0.0
+        ),
+        "source_pcm_sha256": hashlib.sha256(pcm).hexdigest(),
+        "workload_pcm_sha256": hashlib.sha256(workload_pcm).hexdigest(),
+    }
+    if not workload_pcm or workload_duration_s <= 0:
+        raise ValueError("silence trimming produced an empty workload")
+    return workload_pcm, metadata
 
 
 class _GPUMonitor:
@@ -203,6 +343,10 @@ def _valid_speaker_fields(segments: Sequence[Dict[str, Any]]) -> bool:
     )
 
 
+def _normalized_text(value: str) -> str:
+    return " ".join("".join(character.lower() if character.isalnum() else " " for character in value).split())
+
+
 def _ws_url() -> str:
     parsed = urlparse(PARAKEET_URL)
     scheme = "wss" if parsed.scheme == "https" else "ws"
@@ -221,6 +365,8 @@ def _new_stream_result(stream_id: int) -> Dict[str, Any]:
         "speaker_fields_valid": False,
         "timestamp_valid": True,
         "text_latency_timestamps_valid": True,
+        "text_sentinels": {sentinel: False for sentinel in TEXT_SENTINELS},
+        "text_sentinels_complete": False,
         "first_text_latency_s": None,
         "text_latencies_s": [],
         "error": None,
@@ -237,6 +383,7 @@ async def _run_stream_inner(stream_id: int, pcm: bytes, duration_s: float) -> Di
     ws: Any = None
     receive_task: Optional[asyncio.Task[None]] = None
     audio_start = 0.0
+    transcript_parts: List[str] = []
 
     async def receive_segments() -> None:
         try:
@@ -255,6 +402,7 @@ async def _run_stream_inner(stream_id: int, pcm: bytes, duration_s: float) -> Di
                 text = str(message["text"]).strip()
                 if not text:
                     continue
+                transcript_parts.append(text)
                 segment = {
                     "text_length": len(text),
                     "start": message.get("start"),
@@ -332,6 +480,11 @@ async def _run_stream_inner(stream_id: int, pcm: bytes, duration_s: float) -> Di
     result["speaker_fields_valid"] = _valid_speaker_fields(result["segments"])
     if result["text_latencies_s"]:
         result["first_text_latency_s"] = result["text_latencies_s"][0]
+    normalized_transcript = _normalized_text(" ".join(transcript_parts))
+    result["text_sentinels"] = {
+        sentinel: _normalized_text(sentinel) in normalized_transcript for sentinel in TEXT_SENTINELS
+    }
+    result["text_sentinels_complete"] = all(result["text_sentinels"].values())
     # Avoid carrying raw fixture transcript text into the artifact.
     result["segment_count"] = len(result["segments"])
     return result
@@ -382,6 +535,9 @@ async def _run_level(level: int, pcm: bytes, duration_s: float) -> Dict[str, Any
             if accepted
             else 0.0
         ),
+        "text_sentinel_rate": (
+            sum(1 for stream in accepted if stream["text_sentinels_complete"]) / len(accepted) if accepted else 0.0
+        ),
         "first_text_latency_p50_s": _percentile(
             [stream["first_text_latency_s"] for stream in accepted if stream["first_text_latency_s"] is not None],
             0.50,
@@ -398,7 +554,13 @@ async def _run_level(level: int, pcm: bytes, duration_s: float) -> Dict[str, Any
     }
 
 
-async def _run_benchmark(pcm: bytes, duration_s: float, wav_sha256: str) -> Dict[str, Any]:
+async def _run_benchmark(
+    pcm: bytes,
+    duration_s: float,
+    wav_sha256: str,
+    runtime_health: Dict[str, Any],
+    workload_metadata: Dict[str, Any],
+) -> Dict[str, Any]:
     levels = list(LEVELS)
     if not levels or any(level < 1 for level in levels):
         raise ValueError("PARAKEET_STREAM_LEVELS must contain positive integers")
@@ -467,6 +629,17 @@ async def _run_benchmark(pcm: bytes, duration_s: float, wav_sha256: str) -> Dict
         "endpoint": "/v3/stream",
         "image_ref": IMAGE_REF or None,
         "source_sha": SOURCE_SHA,
+        "runtime_health": runtime_health,
+        "model_identity": runtime_health.get("model_identity"),
+        "expected_model_identity": _expected_model_identity(),
+        "coverage": {
+            "fixture_language": "en",
+            "multilingual_accuracy": "not_qualified",
+            "note": (
+                "This English LibriSpeech test-clean-derived capacity fixture qualifies transport, "
+                "completeness, and capacity only; it cannot qualify multilingual accuracy."
+            ),
+        },
         "gpu": {
             "type": GPU_TYPE,
             "target_streams": TARGET_STREAMS,
@@ -481,9 +654,10 @@ async def _run_benchmark(pcm: bytes, duration_s: float, wav_sha256: str) -> Dict
                 "fixture_manifest": "backend/scripts/stt/modulate_repro/README.md",
                 "wav_sha256": wav_sha256,
             },
-            "sha256_pcm": hashlib.sha256(pcm).hexdigest(),
+            "sha256_pcm": workload_metadata["workload_pcm_sha256"],
             "sample_rate": SAMPLE_RATE,
             "duration_s": duration_s,
+            "workload": workload_metadata,
         },
         "expected_capacity": EXPECTED_CAPACITY,
         "latency_gate": {
@@ -522,7 +696,13 @@ async def _run_benchmark(pcm: bytes, duration_s: float, wav_sha256: str) -> Dict
             and (max(levels) < LATENCY_GATE_MIN_STREAMS or sustained_result["text_latency_gate"]),
             "sustained_capacity_complete": sustained_complete,
             "gpu_memory_observed": all(result["gpu_memory"]["available"] for result in memory_results),
+            "model_identity": _model_identity_matches(runtime_health.get("model_identity")),
             "quality_claim": "not_scored; this artifact covers transport, completeness, and capacity only",
+            "text_sentinel_smoke": all(
+                result["text_sentinel_rate"] == 1.0
+                for result in level_results
+                if result["requested_streams"] in {min(levels), TARGET_STREAMS}
+            ),
         },
     }
 
@@ -536,14 +716,27 @@ def _write_results(report: Dict[str, Any]) -> None:
 
 
 def _run_and_record() -> Dict[str, Any]:
+    runtime_health: Optional[Dict[str, Any]] = None
     try:
+        runtime_health = _read_runtime_health()
         path = _download_fixture()
         pcm, duration_s, digest, wav_sha256 = _load_pcm(path)
+        workload_pcm, workload_metadata = _trim_long_silence(pcm, duration_s)
         print(
-            f"Using public speech fixture {path} ({duration_s:.1f}s, " f"wav_sha256={wav_sha256}, pcm_sha256={digest})",
+            f"Using public speech fixture {path} ({duration_s:.1f}s source, "
+            f"{workload_metadata['workload_duration_s']:.1f}s workload, "
+            f"wav_sha256={wav_sha256}, pcm_sha256={digest})",
             flush=True,
         )
-        return asyncio.run(_run_benchmark(pcm, duration_s, wav_sha256))
+        return asyncio.run(
+            _run_benchmark(
+                workload_pcm,
+                workload_metadata["workload_duration_s"],
+                wav_sha256,
+                runtime_health,
+                workload_metadata,
+            )
+        )
     except Exception as error:
         report = {
             "schema_version": 1,
@@ -551,6 +744,13 @@ def _run_and_record() -> Dict[str, Any]:
             "endpoint": "/v3/stream",
             "image_ref": IMAGE_REF or None,
             "source_sha": SOURCE_SHA,
+            "runtime_health": runtime_health,
+            "model_identity": runtime_health.get("model_identity") if runtime_health else None,
+            "expected_model_identity": _expected_model_identity(),
+            "coverage": {
+                "fixture_language": "en",
+                "multilingual_accuracy": "not_qualified",
+            },
             "gpu": {"type": GPU_TYPE, "target_streams": TARGET_STREAMS},
             "error": f"{type(error).__name__}: {error}",
             "quality_claim": "not_scored; this artifact covers transport, completeness, and capacity only",
@@ -559,16 +759,18 @@ def _run_and_record() -> Dict[str, Any]:
         raise
 
 
-def test_realtime_rnnt_stream_capacity() -> None:
+def test_realtime_tdt_stream_capacity() -> None:
     """Qualify all accepted levels and fail closed on capacity regressions."""
 
     report = _run_and_record()
     _write_results(report)
     qualification = report["qualification"]
+    assert qualification["model_identity"], json.dumps(report.get("runtime_health"), indent=2)
     assert qualification["accepted_levels_complete"], json.dumps(report["levels"], indent=2)
     assert qualification["rejection_probe_enforced"], json.dumps(report["capacity_rejection_probe"], indent=2)
     assert qualification["stream_readiness"], json.dumps(report["levels"], indent=2)
     assert qualification["sustained_capacity_complete"], json.dumps(report["sustained"], indent=2)
+    assert qualification["text_sentinel_smoke"], json.dumps(report["levels"], indent=2)
     assert qualification["gpu_memory_observed"], "nvidia-smi produced no GPU memory samples"
 
 

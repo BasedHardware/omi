@@ -1,4 +1,4 @@
-name: Parakeet GPU Tests (Smoke + DER + WER + Concurrency + RNNT Capacity)
+name: Parakeet GPU Tests (Smoke + DER + WER + Concurrency + TDT ASR Capacity)
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ on:
         type: boolean
         default: false
       stream_capacity:
-        description: 'Expected per-pod RNNT stream capacity for the qualification gate'
+        description: 'Expected per-pod TDT streaming ASR capacity for the qualification gate'
         required: false
         default: '25'
   workflow_call:
@@ -38,7 +38,7 @@ on:
         type: boolean
         default: true
       stream_capacity:
-        description: 'Expected per-pod RNNT stream capacity for the qualification gate'
+        description: 'Expected per-pod TDT streaming ASR capacity for the qualification gate'
         required: false
         type: string
         default: '25'
@@ -86,9 +86,10 @@ jobs:
       id-token: 'write'
 
     runs-on: ubuntu-latest
-    # The Kubernetes test Job is hard bounded to 45 minutes. Keep five minutes
-    # here for log/artifact collection and deletion of the task-owned node pool.
-    timeout-minutes: 60
+    # Source-image builds and model pulls happen before the task-owned GPU Job.
+    # The Job itself remains hard-bounded to 45 minutes below; this outer bound
+    # leaves time for build, log/artifact collection, and the separate cleanup job.
+    timeout-minutes: 120
 
     steps:
       # The NGC NeMo base is large and the existing speech-model build
@@ -179,6 +180,11 @@ jobs:
             DEPLOYED=$(kubectl -n "$NAMESPACE" get deploy dev-omi-parakeet \
               -o jsonpath='{.spec.template.spec.containers[0].image}')
             if [[ "$DEPLOYED" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
+              DEPLOYED_REPOSITORY="${DEPLOYED%@*}"
+              [[ "$DEPLOYED_REPOSITORY" != *:* ]] || {
+                echo "deployed digest image unexpectedly contains a tag or registry port: $DEPLOYED" >&2
+                exit 1
+              }
               echo "image_ref=$DEPLOYED" >> "$GITHUB_OUTPUT"
               echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
               echo "Using deployment's immutable image: $DEPLOYED"
@@ -215,13 +221,19 @@ jobs:
           if [[ -n "$DEPLOYED_IMAGE_REF" ]]; then
             IMAGE_REF="$DEPLOYED_IMAGE_REF"
           else
-            IMAGE="gcr.io/${GCP_PROJECT}/${SERVICE}:${IMAGE_TAG}"
+            IMAGE_REPOSITORY="gcr.io/${GCP_PROJECT}/${SERVICE}"
+            IMAGE="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
             DIGEST=$(gcloud container images describe "$IMAGE" \
               --project "$GCP_PROJECT" --format='value(image_summary.digest)')
             [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
-            IMAGE_REF="${IMAGE}@${DIGEST}"
+            IMAGE_REF="${IMAGE_REPOSITORY}@${DIGEST}"
           fi
           [[ "$IMAGE_REF" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]
+          IMAGE_REPOSITORY="${IMAGE_REF%@*}"
+          [[ "$IMAGE_REPOSITORY" != *:* ]] || {
+            echo "immutable image reference unexpectedly contains a tag or registry port: $IMAGE_REF" >&2
+            exit 1
+          }
           echo "image_ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
           echo "Testing immutable image: $IMAGE_REF"
 
@@ -328,7 +340,50 @@ jobs:
                         set -e
                         echo ""
 
-                        echo "--- Phase 4: DER Regression Gate (synthetic) ---"
+                        echo "--- Phase 4: Realtime TDT ASR Stream Capacity ---"
+                        echo "Starting fresh streaming-only Parakeet server..."
+                        PARAKEET_SERVICE_MODE=stream \
+                        PARAKEET_STREAM_CAPACITY=${STREAM_CAPACITY} \
+                        PARAKEET_STREAM_ALLOCATION_PERCENT=100 \
+                        uvicorn main:app --host 127.0.0.1 --port 8080 --loop uvloop &
+                        STREAM_SERVER_PID=$!
+                        STREAM_HEALTHY=false
+                        for i in $(seq 1 180); do
+                          if python -c "import json, urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8080/health'); body=json.load(r); assert body.get('ready') is True" 2>/dev/null; then
+                            echo "Streaming server ready after ${i}s"
+                            STREAM_HEALTHY=true
+                            break
+                          fi
+                          sleep 1
+                        done
+                        if [ "$STREAM_HEALTHY" != "true" ]; then
+                          echo "Streaming server did not report TDT ASR/VAD/diarizer readiness within 180s"
+                          python -c 'import json, os; from pathlib import Path; p=Path("/tmp/parakeet-gpu-artifacts"); p.mkdir(parents=True, exist_ok=True); (p / "stream-capacity-results.json").write_text(json.dumps({"schema_version": 1, "status": "error", "endpoint": "/v3/stream", "image_ref": os.environ.get("PARAKEET_TEST_IMAGE_REF"), "source_sha": os.environ.get("PARAKEET_TEST_SOURCE_SHA") or None, "expected_model_identity": {"stream_model": "nvidia/parakeet-tdt-0.6b-v3", "backend": "nemo", "decoder_family": "tdt", "language_support": "multilingual", "model_revision": "541d1f99c6b0c3cd0b11a95167540bb8edefd82b"}, "coverage": {"fixture_language": "en", "multilingual_accuracy": "not_qualified"}, "gpu": {"type": "nvidia-l4", "target_streams": 20}, "error": "stream service did not report ready=true for TDT ASR/VAD/diarizer", "qualification": {"stream_readiness": False, "model_identity": False}}, indent=2) + "\n")'
+                          kill $STREAM_SERVER_PID 2>/dev/null || true
+                          wait $STREAM_SERVER_PID 2>/dev/null || true
+                          STREAM_EXIT=1
+                        else
+                          set +e
+                          PARAKEET_URL=http://127.0.0.1:8080 \
+                          PARAKEET_STREAM_EXPECTED_CAPACITY=${STREAM_CAPACITY} \
+                          PARAKEET_STREAM_RESULTS=/tmp/parakeet-gpu-artifacts/stream-capacity-results.json \
+                          python -m pytest tests/container/test_parakeet_stream_capacity.py -v -s \
+                            --tb=short 2>&1
+                          STREAM_EXIT=$?
+                          set -e
+                        fi
+                        echo "--- Stream Capacity Artifact ---"
+                        if [ -f /tmp/parakeet-gpu-artifacts/stream-capacity-results.json ]; then
+                          echo "STREAM_CAPACITY_JSON_BEGIN"
+                          cat /tmp/parakeet-gpu-artifacts/stream-capacity-results.json
+                          echo "STREAM_CAPACITY_JSON_END"
+                        else
+                          echo "Stream capacity artifact was not produced"
+                        fi
+                        kill $STREAM_SERVER_PID 2>/dev/null || true
+                        wait $STREAM_SERVER_PID 2>/dev/null || true
+
+                        echo "--- Phase 5: DER Regression Gate (synthetic) ---"
                         set +e
                         python -m pytest tests/container/test_parakeet_der_gate.py -v -s \
                           --tb=short 2>&1
@@ -336,7 +391,7 @@ jobs:
                         set -e
                         echo ""
 
-                        echo "--- Phase 5: Real-speech DER Benchmark (VoxConverse) ---"
+                        echo "--- Phase 6: Real-speech DER Benchmark (VoxConverse) ---"
                         echo "Starting uvicorn for benchmark..."
                         uvicorn main:app --host 127.0.0.1 --port 8080 --loop uvloop &
                         SERVER_PID=$!
@@ -369,7 +424,7 @@ jobs:
                         fi
                         echo ""
 
-                        echo "--- Phase 6: Concurrency Stress Test ---"
+                        echo "--- Phase 7: Concurrency Stress Test ---"
                         set +e
                         CONCURRENCY_LEVEL=8 CONCURRENCY_ROUNDS=3 \
                         python -m pytest tests/container/test_parakeet_concurrency.py -v -s \
@@ -382,7 +437,7 @@ jobs:
                         fi
                         echo ""
 
-                        echo "--- Phase 7: WER Regression Gate (LibriSpeech) ---"
+                        echo "--- Phase 8: WER Regression Gate (LibriSpeech) ---"
                         set +e
                         WER_REPORT_ONLY=false \
                         python -m pytest tests/container/test_parakeet_wer_gate.py -v -s \
@@ -395,7 +450,7 @@ jobs:
                         fi
                         echo ""
 
-                        echo "--- Phase 8: High-Concurrency Stress Test ---"
+                        echo "--- Phase 9: High-Concurrency Stress Test ---"
                         set +e
                         HIGH_CONCURRENCY_LEVEL=16 HIGH_CONCURRENCY_ROUNDS=5 \
                         python -m pytest tests/container/test_parakeet_high_concurrency.py -v -s \
@@ -403,7 +458,7 @@ jobs:
                         HCONC_EXIT=$?
                         set -e
 
-                        echo "--- Phase 9: VRAM Stress Test ---"
+                        echo "--- Phase 10: VRAM Stress Test ---"
                         set +e
                         python -m pytest tests/container/test_parakeet_vram_stress.py -v -s \
                           --tb=short 2>&1
@@ -421,52 +476,10 @@ jobs:
                         fi
                         echo ""
 
-                        echo "--- Phase 10: Realtime RNNT Stream Capacity ---"
-                        echo "Starting fresh streaming-only Parakeet server..."
-                        PARAKEET_SERVICE_MODE=stream \
-                        PARAKEET_STREAM_CAPACITY=${STREAM_CAPACITY} \
-                        PARAKEET_STREAM_ALLOCATION_PERCENT=100 \
-                        uvicorn main:app --host 127.0.0.1 --port 8080 --loop uvloop &
-                        STREAM_SERVER_PID=$!
-                        STREAM_HEALTHY=false
-                        for i in $(seq 1 180); do
-                          if python -c "import json, urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8080/health'); body=json.load(r); assert body.get('ready') is True" 2>/dev/null; then
-                            echo "Streaming server ready after ${i}s"
-                            STREAM_HEALTHY=true
-                            break
-                          fi
-                          sleep 1
-                        done
-                        if [ "$STREAM_HEALTHY" != "true" ]; then
-                          echo "Streaming server did not report RNNT/VAD/diarizer readiness within 180s"
-                          python -c 'import json, os; from pathlib import Path; p=Path("/tmp/parakeet-gpu-artifacts"); p.mkdir(parents=True, exist_ok=True); (p / "stream-capacity-results.json").write_text(json.dumps({"schema_version": 1, "status": "error", "endpoint": "/v3/stream", "image_ref": os.environ.get("PARAKEET_TEST_IMAGE_REF"), "source_sha": os.environ.get("PARAKEET_TEST_SOURCE_SHA") or None, "gpu": {"type": "nvidia-l4", "target_streams": 20}, "error": "stream service did not report ready=true for RNNT/VAD/diarizer", "qualification": {"stream_readiness": False}}, indent=2) + "\n")'
-                          kill $STREAM_SERVER_PID 2>/dev/null || true
-                          wait $STREAM_SERVER_PID 2>/dev/null || true
-                          STREAM_EXIT=1
-                        else
-                          set +e
-                          PARAKEET_URL=http://127.0.0.1:8080 \
-                          PARAKEET_STREAM_EXPECTED_CAPACITY=${STREAM_CAPACITY} \
-                          PARAKEET_STREAM_RESULTS=/tmp/parakeet-gpu-artifacts/stream-capacity-results.json \
-                          python -m pytest tests/container/test_parakeet_stream_capacity.py -v -s \
-                            --tb=short 2>&1
-                          STREAM_EXIT=$?
-                          set -e
-                        fi
-                        echo "--- Stream Capacity Artifact ---"
-                        if [ -f /tmp/parakeet-gpu-artifacts/stream-capacity-results.json ]; then
-                          echo "STREAM_CAPACITY_JSON_BEGIN"
-                          cat /tmp/parakeet-gpu-artifacts/stream-capacity-results.json
-                          echo "STREAM_CAPACITY_JSON_END"
-                        else
-                          echo "Stream capacity artifact was not produced"
-                        fi
-                        kill $STREAM_SERVER_PID 2>/dev/null || true
-                        wait $STREAM_SERVER_PID 2>/dev/null || true
                         declare -a PHASE_EXITS=(
                           "$CPU_SMOKE_EXIT" "$CONTRACT_EXIT" "$GPU_SMOKE_EXIT"
-                          "$SYNTH_DER_EXIT" "$DER_EXIT" "$CONC_EXIT" "$WER_EXIT"
-                          "$HCONC_EXIT" "$VRAM_EXIT" "$STREAM_EXIT"
+                          "$STREAM_EXIT" "$SYNTH_DER_EXIT" "$DER_EXIT" "$CONC_EXIT"
+                          "$WER_EXIT" "$HCONC_EXIT" "$VRAM_EXIT"
                         )
                         FINAL_EXIT=0
                         for phase_exit in "${PHASE_EXITS[@]}"; do
@@ -488,7 +501,7 @@ jobs:
                       - name: PARAKEET_MODEL
                         value: "nvidia/parakeet-tdt-0.6b-v3"
                       - name: PARAKEET_STREAM_MODEL
-                        value: "nvidia/parakeet-rnnt-1.1b"
+                        value: "nvidia/parakeet-tdt-0.6b-v3"
                       - name: PARAKEET_INFERENCE_MODE
                         value: "nemo"
                       - name: NVIDIA_VISIBLE_DEVICES
