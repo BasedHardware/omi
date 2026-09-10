@@ -232,8 +232,20 @@ test('parseRecordingTranscript keeps GET speaker and is_user on completed segmen
     state: 'completed',
     text: 'Recorded words Later speech',
     segments: [
-      {text: 'Recorded words', speaker: 0, isUser: true},
-      {text: 'Later speech', speaker: 'SPEAKER_01', isUser: false},
+      {
+        text: 'Recorded words',
+        speaker: 0,
+        isUser: true,
+        start: 0,
+        end: 1,
+      },
+      {
+        text: 'Later speech',
+        speaker: 'SPEAKER_01',
+        isUser: false,
+        start: 1,
+        end: 2,
+      },
     ],
   });
 });
@@ -248,6 +260,8 @@ test('a completed transcript names GET speaker instead of a speaker-less paragra
   const renderer = await render('session-one');
   expect(textOf(renderer)).toContain('Speaker 1 · Recorded words');
   expect(textOf(renderer)).toContain('Speaker 2 · Later speech');
+  expect(textOf(renderer)).toContain('00:00:00 - 00:00:01');
+  expect(textOf(renderer)).toContain('00:00:01 - 00:00:02');
   expect(textOf(renderer)).not.toContain('SPEAKER_01');
   expect(textOf(renderer)).not.toContain('The transcript is empty.');
 });
@@ -263,11 +277,11 @@ test('a completed transcript names GET is_user as You', async () => {
   expect(textOf(renderer)).not.toContain('Speaker');
 });
 
-test('a completed transcript without GET speaker stays a joined paragraph', async () => {
+test('a completed transcript without GET speaker stays a joined paragraph when segment clocks overlap', async () => {
   mockRequest.mockResolvedValue(
     response('session-one', 'completed', '', [
-      {start: 0, end: 1, text: 'Recorded words'},
-      {start: 1, end: 2, text: 'Later speech'},
+      {start: 0, end: 3, text: 'Recorded words'},
+      {start: 1, end: 5, text: 'Later speech'},
     ]),
   );
   const renderer = await render('session-one');
@@ -277,6 +291,28 @@ test('a completed transcript without GET speaker stays a joined paragraph', asyn
   expect(joined?.props.selectable).toBe(true);
   expect(textOf(renderer)).not.toContain('Speaker');
   expect(textOf(renderer)).not.toContain('You ·');
+  expect(textOf(renderer)).not.toContain('00:00:00');
+});
+
+test('a completed transcript names GET start and end when windows do not overlap', async () => {
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '', [
+      {start: 0, end: 1, text: 'Recorded words'},
+      {start: 1, end: 2, text: 'Later speech'},
+    ]),
+  );
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain('Recorded words');
+  expect(textOf(renderer)).toContain('Later speech');
+  expect(textOf(renderer)).toContain('00:00:00 - 00:00:01');
+  expect(textOf(renderer)).toContain('00:00:01 - 00:00:02');
+  expect(textOf(renderer)).not.toContain('Speaker');
+  expect(textOf(renderer)).not.toContain('You ·');
+  expect(
+    renderer.root.findAllByType(Text).some(
+      node => node.props.children === 'Recorded words Later speech',
+    ),
+  ).toBe(false);
 });
 
 test('a completed transcript names a NEXT LINE SPEAKER_00 segment as Speaker 1', async () => {
@@ -289,6 +325,22 @@ test('a completed transcript names a NEXT LINE SPEAKER_00 segment as Speaker 1',
   expect(textOf(renderer)).toContain('Speaker 1 · Recorded words');
   expect(textOf(renderer)).not.toContain('SPEAKER_00');
   expect(textOf(renderer)).not.toContain('\u0085');
+});
+
+test('a completed transcript omits GET clocks when a segment is missing start or end', async () => {
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '', [
+      {end: 1, text: 'Recorded words'},
+      {start: 1, end: 2, text: 'Later speech'},
+    ]),
+  );
+  const renderer = await render('session-one');
+  const joined = renderer.root
+    .findAllByType(Text)
+    .find(node => node.props.children === 'Recorded words Later speech');
+  expect(joined?.props.selectable).toBe(true);
+  expect(textOf(renderer)).not.toContain('00:00:00');
+  expect(textOf(renderer)).not.toContain('Speaker');
 });
 
 test('a completed stored text keeps later speech stored on segments', async () => {

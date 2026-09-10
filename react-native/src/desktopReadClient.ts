@@ -146,6 +146,25 @@ export function recordingTranscriptSpeakerCopy(segment: {
   return labeled !== null ? `Speaker ${Number(labeled[1]) + 1}` : trimmed;
 }
 
+export function recordingTranscriptCanDisplaySeconds(
+  segments: readonly {start: number | null; end: number | null}[],
+): boolean {
+  if (segments.length === 0) {
+    return false;
+  }
+  const windows: {start: number; end: number}[] = [];
+  for (const segment of segments) {
+    if (
+      typeof segment.start !== 'number' ||
+      typeof segment.end !== 'number'
+    ) {
+      return false;
+    }
+    windows.push({start: segment.start, end: segment.end});
+  }
+  return legacyTranscriptCanDisplaySeconds(windows);
+}
+
 export function legacyTranscriptCanDisplaySeconds(
   segments: readonly {start: number; end: number}[],
 ): boolean {

@@ -2,6 +2,8 @@ export type RecordingTranscriptSegment = {
   text: string;
   speaker: string | number | null;
   isUser: boolean;
+  start: number | null;
+  end: number | null;
 };
 
 export type RecordingTranscript = {
@@ -46,6 +48,14 @@ function parseWellFormedSegments(
           ? row.speaker
           : null,
       isUser: row.is_user === true,
+      start:
+        typeof row.start === 'number' && Number.isFinite(row.start)
+          ? row.start
+          : null,
+      end:
+        typeof row.end === 'number' && Number.isFinite(row.end)
+          ? row.end
+          : null,
     });
   }
   return parsed;

@@ -1,6 +1,8 @@
 import React from 'react';
 import {ActivityIndicator, Text, View} from 'react-native';
 import {
+  legacyTranscriptTimestampCopy,
+  recordingTranscriptCanDisplaySeconds,
   recordingTranscriptSpeakerCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
@@ -14,9 +16,12 @@ function attributedTranscriptLines(value: RecordingTranscriptValue):
   | {
       speaker: string | null;
       text: string;
+      clock: string | null;
     }[]
   | null {
-  const lines = (value.segments ?? []).flatMap(segment => {
+  const segments = value.segments ?? [];
+  const showClocks = recordingTranscriptCanDisplaySeconds(segments);
+  const lines = segments.flatMap(segment => {
     const text = visibleDisplayText(segment.text);
     if (text === '') {
       return [];
@@ -25,10 +30,16 @@ function attributedTranscriptLines(value: RecordingTranscriptValue):
       {
         speaker: recordingTranscriptSpeakerCopy(segment),
         text,
+        clock:
+          showClocks &&
+          typeof segment.start === 'number' &&
+          typeof segment.end === 'number'
+            ? legacyTranscriptTimestampCopy(segment.start, segment.end)
+            : null,
       },
     ];
   });
-  return lines.some(line => line.speaker !== null) ? lines : null;
+  return lines.some(line => line.speaker !== null) || showClocks ? lines : null;
 }
 
 export function RecordingTranscript({
@@ -87,14 +98,20 @@ export function RecordingTranscript({
               </Text>
             ) : (
               attributed.map((line, index) => (
-                <Text
-                  key={index}
-                  selectable
-                  style={[styles.conversationTranscriptText, ink]}>
-                  {line.speaker === null
-                    ? line.text
-                    : `${line.speaker} · ${line.text}`}
-                </Text>
+                <View key={index} style={styles.conversationDetailFields}>
+                  <Text
+                    selectable
+                    style={[styles.conversationTranscriptText, ink]}>
+                    {line.speaker === null
+                      ? line.text
+                      : `${line.speaker} · ${line.text}`}
+                  </Text>
+                  {line.clock !== null ? (
+                    <Text style={[styles.conversationDetailField, ink]}>
+                      {line.clock}
+                    </Text>
+                  ) : null}
+                </View>
               ))
             )
           ) : (
