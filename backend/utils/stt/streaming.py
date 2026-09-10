@@ -24,7 +24,6 @@ from config.stt_provider_policy import (
     default_models_for_surface,
     modulate_supports_language,
     normalized_stt_language,
-    parakeet_supports_language,
     provider_for_model_token,
     provider_is_enabled,
     requested_stt_language as _requested_stt_language,
