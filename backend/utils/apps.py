@@ -738,7 +738,6 @@ def get_is_user_paid_app(app_id: str, uid: str):
 def is_permit_payment_plan_get(uid: str):
     if is_marketplace_reviewer(uid) or uid in MarketplaceAppReviewUIDs:
         return False
-
     return True
 
 

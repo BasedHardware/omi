@@ -43,3 +43,10 @@ def test_is_marketplace_reviewer_rejects_empty_and_blank() -> None:
     assert is_marketplace_reviewer("", raw=raw) is False
     assert is_marketplace_reviewer("   ", raw=raw) is False
     assert is_marketplace_reviewer(None, raw=raw) is False  # type: ignore[arg-type]
+
+
+def test_is_marketplace_reviewer_empty_uid_with_unset_env_returns_false() -> None:
+    with patch.dict(os.environ, {}, clear=True):
+        assert is_marketplace_reviewer("") is False
+        assert is_marketplace_reviewer("   ") is False
+        assert is_marketplace_reviewer(None) is False  # type: ignore[arg-type]
