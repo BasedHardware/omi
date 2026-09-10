@@ -80,3 +80,53 @@ async def test_execute_tool_redacts_api_key_in_logs(monkeypatch: pytest.MonkeyPa
     logged_msg = mock_logger.info.call_args[0][0]
     assert "secret_key_123" not in logged_msg
     assert "***" in logged_msg
+
+
+@pytest.mark.anyio
+async def test_create_server_legacy_mcp_1_compatibility(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test legacy MCP 1.x initialization path using list_tools and call_tool decorators."""
+    class MockLegacyServer:
+        def __init__(self, name: str):
+            self.name = name
+            self.list_tools_handler = None
+            self.call_tool_handler = None
+
+        def list_tools(self):
+            def decorator(fn):
+                self.list_tools_handler = fn
+                return fn
+            return decorator
+
+        def call_tool(self):
+            def decorator(fn):
+                self.call_tool_handler = fn
+                return fn
+            return decorator
+
+    monkeypatch.setattr("mcp_server_omi.server.Server", MockLegacyServer)
+    server = create_server()
+    assert isinstance(server, MockLegacyServer)
+    assert server.name == "mcp-omi"
+    assert server.list_tools_handler is not None
+    assert server.call_tool_handler is not None
+
+    tools = await server.list_tools_handler()
+    assert len(tools) == 8
+    assert {t.name for t in tools} == {
+        OmiTools.GET_MEMORIES,
+        OmiTools.SEARCH_MEMORIES,
+        OmiTools.CREATE_MEMORY,
+        OmiTools.DELETE_MEMORY,
+        OmiTools.EDIT_MEMORY,
+        OmiTools.GET_CONVERSATIONS,
+        OmiTools.GET_CONVERSATION_BY_ID,
+        OmiTools.SEARCH_CONVERSATIONS,
+    }
+
+    monkeypatch.setattr("mcp_server_omi.server.get_memories", lambda *args, **kwargs: [{"id": "mem_1"}])
+    result = await server.call_tool_handler(
+        OmiTools.GET_MEMORIES,
+        {"api_key": "test_api_key_123", "offset": 0, "limit": 10},
+    )
+    assert len(result) == 1
+    assert "mem_1" in result[0].text
