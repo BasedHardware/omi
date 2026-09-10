@@ -461,6 +461,7 @@ async def _run_stream_inner(stream_id: int, pcm: bytes, duration_s: float) -> Di
     previous_end_s: Optional[float] = None
 
     async def receive_segments() -> None:
+        nonlocal previous_end_s
         try:
             while True:
                 raw = await ws.recv()
