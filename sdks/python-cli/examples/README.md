@@ -7,3 +7,5 @@
 * [`quickstart.ja.md`](quickstart.ja.md) — 日本語クイックスタートガイド (Japanese Quickstart).
 * [`quickstart.es.md`](quickstart.es.md) — primeros pasos con omi-cli en
   español.
+* [`quickstart.sr.md`](quickstart.sr.md) — prvi koraci sa omi-cli na
+  srpskom jeziku.
