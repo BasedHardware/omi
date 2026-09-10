@@ -8,7 +8,7 @@ chat) — only the displayed body is flattened.
 
 import re
 
-_FENCE_RE = re.compile(r'^\s*```.*$', re.MULTILINE)
+_FENCE_RE = re.compile(r'^\s*`{3,}[^`\n]*$', re.MULTILINE)
 _IMAGE_RE = re.compile(r'!\[([^\]]*)\]\([^)]*\)')
 _LINK_RE = re.compile(r'\[([^\]]*)\]\([^)]*\)')
 _HEADING_RE = re.compile(r'^\s{0,3}#{1,6}\s+', re.MULTILINE)

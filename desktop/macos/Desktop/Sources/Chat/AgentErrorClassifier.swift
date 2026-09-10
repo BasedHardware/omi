@@ -124,7 +124,17 @@ enum AgentErrorClassifier {
     // (circuit open, transport failure, upstream timeout) as well as hard
     // rejections, and it does not distinguish them on the wire. Resending is
     // worth one attempt.
-    if lower.contains("upstream provider error") {
+    //
+    // Desktop-backend also answers a coded 503 with an empty body
+    // (`HTTP 503 status code (no body)`). That string never contains
+    // "Upstream provider error", so without a status-shaped rule it fell
+    // through to `unknown` and the generic "Omi couldn't answer this one".
+    if lower.contains("upstream provider error")
+      || lower.range(of: #"\bhttp[\s/]*503\b"#, options: .regularExpression) != nil
+      || lower.range(
+        of: #"\b(?:503\s+status|status(?:\s+code)?\s*[:=]?\s*503)\b"#,
+        options: .regularExpression) != nil
+    {
       return ClassifiedAgentError(
         code: .upstreamProviderFailed,
         userMessage:

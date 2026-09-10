@@ -146,7 +146,7 @@ struct ChatSessionsSidebar: View {
         .scaledFont(size: OmiType.caption)
         .foregroundColor(Ink.secondary)
 
-      TextField("Search chats...", text: $chatProvider.searchQuery)
+      TextField("Search chat", text: $chatProvider.searchQuery)
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.primary)

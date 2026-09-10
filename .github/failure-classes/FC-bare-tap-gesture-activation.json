@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-bare-tap-gesture-activation",
+  "violated_contract": "A custom control's activation must accept the whole physical click, not only the clean-tap subset. A bare tap gesture fails whenever the pointer moves a few points between mouse-down and mouse-up inside the control, so a human click that is not a perfectly still tap reads as dead and the user must click again until one lands (observed live in QA on 2026-09-09: Settings switches reported flaky, 'click repeatedly until one lands'). The same bare gesture produces no accessibility element, so a switch built this way is invisible to assistive tech. On macOS a custom ToggleStyle also owns activation entirely — the framework adds no click handling around makeBody — so the style is the only place this contract can be met.",
+  "canonical_prevention": "Wrap the custom control's visual in a Button (plain button style) that drives the control's state: a button fires on up-inside-bounds however far the pointer wandered within the control and is an accessibility element by construction. Hold it with a synthetic-event harness that mounts the real control and asserts exactly one state write for both a still click and a click that drags inside the bounds, plus a static tripwire that no control style under Sources/Theme activates through a bare tap gesture.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/OmiToggleStyleActivationTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Theme/**"
+  ],
+  "status": "open"
+}
