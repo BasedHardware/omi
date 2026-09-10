@@ -258,18 +258,17 @@ def save(config: Config) -> None:
         try:
             with os.fdopen(fd, "wb") as fh:
                 tomli_w.dump(payload, fh)
+            # Atomic rename. The destination inherits the temp's 0o600 mode.
+            os.replace(tmp_path, config.path)
         except Exception:
-            # Best-effort cleanup if the dump itself failed mid-write.
+            # Best-effort cleanup if the dump or atomic replace failed.
             try:
                 os.unlink(tmp_path)
-            except FileNotFoundError:
+            except OSError:
                 pass
             raise
     finally:
         os.umask(old_umask)
-
-    # Atomic rename. The destination inherits the temp's 0o600 mode.
-    os.replace(tmp_path, config.path)
 
 
 def resolve_profile_name(cli_flag: Optional[str], config: Config) -> str:

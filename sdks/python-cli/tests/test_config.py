@@ -380,3 +380,52 @@ def test_is_authenticated_states() -> None:
     p.id_token = None
     p.refresh_token = "refr..."
     assert p.is_authenticated()
+
+
+def test_save_cleans_up_temp_file_when_replace_fails(config_path: Path, monkeypatch) -> None:
+    config = cfg.load()
+    profile = config.get_profile()
+    profile.auth_method = "api_key"
+    profile.api_key = "omi_dev_sensitive_key"
+    config.set_profile(profile)
+
+    # Initial valid save
+    cfg.save(config)
+    original_bytes = config_path.read_bytes()
+
+    profile.api_key = "omi_dev_new_sensitive_key"
+    config.set_profile(profile)
+
+    def failing_replace(src, dst):
+        raise PermissionError("Access is denied")
+
+    monkeypatch.setattr(os, "replace", failing_replace)
+
+    with pytest.raises(PermissionError, match="Access is denied"):
+        cfg.save(config)
+
+    # No leftover .tmp files should exist in the directory
+    leftover_tmps = list(config_path.parent.glob(config_path.name + ".*.tmp"))
+    assert leftover_tmps == []
+
+    # Original config is preserved
+    assert config_path.read_bytes() == original_bytes
+
+
+def test_save_cleanup_failure_does_not_mask_original_replace_error(config_path: Path, monkeypatch) -> None:
+    config = cfg.load()
+    profile = config.get_profile()
+    profile.api_key = "omi_dev_test"
+    config.set_profile(profile)
+
+    def failing_replace(src, dst):
+        raise PermissionError("Original replace failure")
+
+    def failing_unlink(path):
+        raise OSError("Unlink failure")
+
+    monkeypatch.setattr(os, "replace", failing_replace)
+    monkeypatch.setattr(os, "unlink", failing_unlink)
+
+    with pytest.raises(PermissionError, match="Original replace failure"):
+        cfg.save(config)
