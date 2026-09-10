@@ -256,7 +256,9 @@ def test_backend_unit_ci_runner_stays_in_ci_while_pre_push_keeps_its_budget():
     assert "scripts/run-unit-ci.sh --all" in workflow_text
     assert "backend/scripts/run-unit-ci.sh" not in pre_push
     assert "backend/scripts/needs-typecheck.sh" in pre_push
-    assert '"$SCRIPT_DIR/needs-typecheck.sh" "$2"' in runner
+    # The runner parses its argv into named variables before this call; the
+    # pin is that the changed-files diff still feeds the typecheck boundary.
+    assert '"$SCRIPT_DIR/needs-typecheck.sh" "$changed_files_arg"' in runner
     assert 'PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES:-40' in pre_push
     assert "pre-push is intentionally a bounded local-feedback gate" in pre_push
     assert 'BACKEND_FAST_UNIT_WARN_SECONDS="0.1"' in runner
