@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Indexes screenshots, transcript chunks, and memories into local_embeddings.
 /// Capture never waits on this path. Backfill is AC-bounded like OCR embeddings.
@@ -7,9 +8,20 @@ actor LocalEmbeddingIndexer {
 
   private var isBackfillRunning = false
   private var runtime: LocalEmbeddingRuntime = .makeDefault()
+  private static let detachedWork = DetachedEmbeddingWork()
 
   func setRuntimeForTesting(_ runtime: LocalEmbeddingRuntime) {
     self.runtime = runtime
+  }
+
+  func drainForTesting() async {
+    while true {
+      let tasks = Self.detachedWork.takeAll()
+      if tasks.isEmpty { return }
+      for task in tasks {
+        await task.value
+      }
+    }
   }
 
   private var embeddingsAreActive: Bool {
@@ -18,7 +30,7 @@ actor LocalEmbeddingIndexer {
 
   nonisolated static func scheduleFinalizedSessionIndex(sessionId: Int64) {
     let owner = RewindCaptureOwnerSnapshot.capture()
-    Task(priority: .background) {
+    scheduleDetached {
       guard let owner, owner.isCurrent() else { return }
       await shared.indexFinalizedSession(sessionId: sessionId, owner: owner)
     }
@@ -26,10 +38,19 @@ actor LocalEmbeddingIndexer {
 
   nonisolated static func scheduleMemoryIndex(id: Int64, content: String) {
     let owner = RewindCaptureOwnerSnapshot.capture()
-    Task(priority: .background) {
+    scheduleDetached {
       guard let owner, owner.isCurrent() else { return }
       await shared.indexMemory(id: id, content: content, owner: owner)
     }
+  }
+
+  private nonisolated static func scheduleDetached(_ work: @escaping @Sendable () async -> Void) {
+    let id = UUID()
+    let task = Task(priority: .background) {
+      defer { detachedWork.remove(id) }
+      await work()
+    }
+    detachedWork.add(id, task)
   }
 
   func indexFinalizedSession(sessionId: Int64, owner: RewindCaptureOwnerSnapshot? = nil) async {
@@ -138,6 +159,26 @@ actor LocalEmbeddingIndexer {
           sourceKind: sourceKind, sourceId: item.0, modelID: selected.modelID, text: item.1, vector: vector,
           authorization: authorization)
       }
+    }
+  }
+}
+
+private final class DetachedEmbeddingWork: @unchecked Sendable {
+  private let lock = OSAllocatedUnfairLock(initialState: [UUID: Task<Void, Never>]())
+
+  func add(_ id: UUID, _ task: Task<Void, Never>) {
+    lock.withLock { $0[id] = task }
+  }
+
+  func remove(_ id: UUID) {
+    lock.withLock { $0[id] = nil }
+  }
+
+  func takeAll() -> [Task<Void, Never>] {
+    lock.withLock { tasks in
+      let pending = Array(tasks.values)
+      tasks.removeAll()
+      return pending
     }
   }
 }

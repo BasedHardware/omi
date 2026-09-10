@@ -5,11 +5,21 @@ import XCTest
 
 private actor HangGate {
   private var continuations: [CheckedContinuation<Void, Never>] = []
+  private var released = false
   private(set) var completed = 0
 
   func park() async {
-    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-      continuations.append(continuation)
+    if released { return }
+    await withTaskCancellationHandler {
+      await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        if released {
+          continuation.resume()
+        } else {
+          continuations.append(continuation)
+        }
+      }
+    } onCancel: {
+      Task { await self.resumeAll() }
     }
   }
 
@@ -18,6 +28,7 @@ private actor HangGate {
   }
 
   func resumeAll() {
+    released = true
     let pending = continuations
     continuations.removeAll()
     pending.forEach { $0.resume() }
@@ -33,6 +44,7 @@ private struct HangingEmbeddingEngine: LocalEmbeddingService {
 
   func embed(_ texts: [String], task: LocalEmbeddingTask) async throws -> [[Float]] {
     await gate.park()
+    try Task.checkCancellation()
     await gate.finish()
     return try await HashEmbeddingEngine().embed(texts, task: task)
   }
@@ -50,6 +62,7 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
 
   override func tearDown() async throws {
     await hangingEngine?.gate.resumeAll()
+    await LocalEmbeddingIndexer.shared.drainForTesting()
     hangingEngine = nil
     await LocalEmbeddingIndexer.shared.setRuntimeForTesting(.makeDefault())
     await RewindStorageTestIsolation.tearDown(userDir: userDir)
@@ -64,6 +77,7 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
       LocalEmbeddingProbe(
         appleSilicon: true, assetsAvailable: true, fixtureSucceeded: true, elapsed: .zero, dimension: 8)
     }
+    runtime.embedBudget = .milliseconds(20)
     await LocalEmbeddingIndexer.shared.setRuntimeForTesting(runtime)
 
     let sessionId = try await TranscriptionStorage.shared.startSession(source: "desktop")
@@ -80,5 +94,8 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
     XCTAssertNotNil(inserted.id)
     let completedAfterMemory = await engine.gate.completed
     XCTAssertEqual(completedAfterMemory, 0, "memory insert must not await NLCE")
+
+    await engine.gate.resumeAll()
+    await LocalEmbeddingIndexer.shared.drainForTesting()
   }
 }
