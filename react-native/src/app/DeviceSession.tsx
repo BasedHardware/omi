@@ -1,7 +1,8 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 import {Text, View} from 'react-native';
 import {
   isBluetoothScanAvailable,
+  omiBackend,
   type PlatformNativeSnapshot,
 } from '../omiNative';
 import type {Device} from '../omiNativeTypes';
@@ -9,7 +10,12 @@ import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {bluetoothSessionLabel, emptyDeviceListHint} from './bluetooth';
 import {DeviceControls} from './DeviceControls';
-import {accountFieldCopy, deviceDisplayName} from '../desktopReadClient';
+import {
+  accountFieldCopy,
+  deviceDisplayName,
+  firmwareUpdateCopy,
+} from '../desktopReadClient';
+import {firmwareLatestQuery, loadOmiLatestFirmware} from '../legacyOmiFirmware';
 
 export type DeviceSessionVariant = 'affordance' | 'compact' | 'overview';
 
@@ -125,6 +131,50 @@ export function DeviceSession({
           deviceBusy,
         )
       : null);
+
+  const connectedDevice = devices.find(
+    device => device.connected && !device.connecting,
+  );
+  const firmwareQuery = firmwareLatestQuery(connectedDevice?.information);
+  const [firmwareCopy, setFirmwareCopy] = useState<{
+    latest: string;
+    available: boolean;
+  } | null>(null);
+  useEffect(() => {
+    const backend = omiBackend;
+    if (
+      variant === 'affordance' ||
+      firmwareQuery === null ||
+      backend === undefined ||
+      backend === null
+    ) {
+      setFirmwareCopy(null);
+      return;
+    }
+    let cancelled = false;
+    loadOmiLatestFirmware(backend, firmwareQuery)
+      .then(details => {
+        if (cancelled) {
+          return;
+        }
+        setFirmwareCopy(firmwareUpdateCopy(firmwareQuery.firmware, details));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFirmwareCopy(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    variant,
+    connectedDevice?.id,
+    firmwareQuery?.model,
+    firmwareQuery?.firmware,
+    firmwareQuery?.hardware,
+    firmwareQuery?.manufacturer,
+  ]);
 
   const remembered =
     rememberedDevice && onForgetRemembered ? (
@@ -380,6 +430,20 @@ export function DeviceSession({
           {accountFieldCopy(connected.information?.[field], 'Unavailable')}
         </Text>
       ))}
+      {firmwareCopy !== null ? (
+        <Text selectable style={styles.deviceMeta}>
+          Latest
+          {': '}
+          {firmwareCopy.latest}
+        </Text>
+      ) : null}
+      {firmwareCopy?.available === true ? (
+        <Text
+          accessibilityLabel="Firmware update available"
+          style={styles.deviceMeta}>
+          Available
+        </Text>
+      ) : null}
     </View>
   ) : null;
 

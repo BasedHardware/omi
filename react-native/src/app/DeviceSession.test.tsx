@@ -5,7 +5,12 @@ import type {PlatformNativeSnapshot} from '../omiNative';
 
 jest.mock('../omiNative', () => ({
   isBluetoothScanAvailable: (state?: string) => state === 'poweredOn',
+  omiBackend: {request: jest.fn()},
 }));
+
+const {omiBackend} = jest.requireMock('../omiNative') as {
+  omiBackend: {request: jest.Mock};
+};
 
 test('deviceHasReportedBattery matches Flutter batteryLevel greater than zero', () => {
   expect(deviceHasReportedBattery(undefined)).toBe(false);
@@ -49,6 +54,7 @@ test('connected device details show reported values and truthful unavailable fie
   expect(output).toContain('"Device ID",": ","omi-test"');
   expect(output).toContain('"Serial number",": ","Unavailable"');
   expect(output).toContain('"Hardware",": ","Unavailable"');
+  expect(output).not.toContain('"Latest"');
   expect(output).not.toContain('Unknown');
   await act(async () => {
     renderer.update(
@@ -186,7 +192,109 @@ test('connected device details treat empty information fields as Unavailable', a
   expect(output).toContain('"Serial number",": ","Unavailable"');
   expect(output).toContain('"Device ID",": ","omi-test"');
   expect(output).not.toContain(' \t\n');
+  expect(output).not.toContain('"Latest"');
   await act(async () => renderer.unmount());
+});
+
+test('connected device names GET latest firmware without an OTA control', async () => {
+  omiBackend.request.mockReset();
+  omiBackend.request.mockResolvedValue({
+    id: 'omi-firmware-latest',
+    status: 200,
+    body: JSON.stringify({version: '1.3.0'}),
+  });
+  const snapshot = {
+    bluetooth: 'poweredOn',
+    devices: [
+      {
+        id: 'omi-test',
+        name: 'Omi',
+        connected: true,
+        rssi: -40,
+        information: {
+          model: 'Omi Dev Kit',
+          firmware: '1.2.3',
+          hardware: '1',
+          manufacturer: 'Based Hardware',
+        },
+      },
+    ],
+    connectedDeviceId: 'omi-test',
+    capture: 'idle',
+  } as PlatformNativeSnapshot;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('"Latest",": ","1.3.0"');
+  expect(output).toContain('Firmware update available');
+  expect(output).toContain('Available');
+  expect(output).not.toContain('Install');
+  expect(omiBackend.request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path:
+      '/v2/firmware/latest?device_model=Omi%20Dev%20Kit&firmware_revision=1.2.3&hardware_revision=1&manufacturer_name=Based%20Hardware',
+  });
+  await act(async () => renderer.unmount());
+  omiBackend.request.mockReset();
+  omiBackend.request.mockResolvedValue({
+    id: 'omi-firmware-latest',
+    status: 404,
+    body: null,
+  });
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('"Latest"');
+  await act(async () => renderer.unmount());
+  omiBackend.request.mockReset();
+  omiBackend.request.mockResolvedValue({
+    id: 'omi-firmware-latest',
+    status: 200,
+    body: JSON.stringify({version: '1.3.0', draft: true}),
+  });
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('"Latest"');
+  await act(async () => renderer.unmount());
+  omiBackend.request.mockReset();
 });
 
 test.each(['affordance', 'compact', 'overview'] as const)(

@@ -69,6 +69,7 @@ import {
   usageStatsCopy,
   primaryLanguageCopy,
   peopleNameRows,
+  firmwareUpdateCopy,
   taskDisplaySummary,
   taskDisplayTitle,
   taskGroup,
@@ -890,6 +891,45 @@ test('people name rows keep GET names without empty entries', () => {
     {id: 'person-sam', name: 'Sam'},
   ]);
   expect(peopleNameRows(new Map())).toEqual([]);
+});
+
+test('firmware update copy names GET latest without Available on current or draft', () => {
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: null,
+    }),
+  ).toEqual({latest: '1.3.0', available: true});
+  expect(
+    firmwareUpdateCopy('1.3.0', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: null,
+    }),
+  ).toEqual({latest: '1.3.0', available: false});
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0',
+      draft: true,
+      minVersion: null,
+    }),
+  ).toBeNull();
+  expect(
+    firmwareUpdateCopy('0.9.0', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: '1.0.0',
+    }),
+  ).toEqual({latest: '1.3.0', available: false});
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.2.3-beta',
+      draft: false,
+      minVersion: null,
+    }),
+  ).toEqual({latest: '1.2.3-beta', available: false});
+  expect(firmwareUpdateCopy('1.2.3', null)).toBeNull();
 });
 
 test('developer webhook titles are not raw API keys', () => {

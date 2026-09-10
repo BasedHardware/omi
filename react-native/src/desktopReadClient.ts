@@ -491,6 +491,49 @@ export function peopleNameRows(
   return Array.from(names, ([id, name]) => ({id, name}));
 }
 
+function dottedVersionParts(value: string): number[] | null {
+  const parts = visibleDisplayText(value).split('.');
+  if (parts.length === 0 || parts.some(part => part === '' || !/^[0-9]+$/.test(part))) {
+    return null;
+  }
+  return parts.map(part => Number(part));
+}
+
+function compareDottedVersion(left: number[], right: number[]): number {
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const a = left[index] ?? 0;
+    const b = right[index] ?? 0;
+    if (a !== b) {
+      return a < b ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+export function firmwareUpdateCopy(
+  currentFirmware: string,
+  details: {version: string; draft: boolean; minVersion: string | null} | null,
+): {latest: string; available: boolean} | null {
+  if (details === null || details.draft) {
+    return null;
+  }
+  const latest = visibleDisplayText(details.version);
+  if (latest === '') {
+    return null;
+  }
+  const current = dottedVersionParts(currentFirmware);
+  const newest = dottedVersionParts(latest);
+  const minimum =
+    details.minVersion === null ? null : dottedVersionParts(details.minVersion);
+  const available =
+    current !== null &&
+    newest !== null &&
+    (minimum === null || compareDottedVersion(current, minimum) >= 0) &&
+    compareDottedVersion(newest, current) > 0;
+  return {latest, available};
+}
+
 export function subscriptionStatusCopy(status: string): string {
   return accountWireCopy(status, 'Plan unavailable');
 }
