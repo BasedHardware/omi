@@ -229,7 +229,7 @@ do not hand-edit those paths to match a specific machine.
 - `screen_activity_lossless_sync` enables durable per-row delivery, five-minute `(app, window)` compaction, and bounded embedding recovery. Production-family bundles wait for that PostHog flag; non-production dogfoods it (`OMI_FORCE_LOSSLESS_SCREEN_SYNC=0` off).
 - OCR-bearing rows sync independently from embeddings. Embeddings are an optional later projection and must never gate capture, OCR, or text delivery.
 - Firestore screen-activity timestamps use the lexicographically sortable UTC form `yyyy-MM-dd HH:mm:ss.SSS`. The backend normalizes ISO-8601 input before storage.
-- Local embeddings kill switches and `local_embedding_benchmark`: `Sources/LocalInference/ARCHITECTURE.md`.
+- Local embeddings: [`ARCHITECTURE.md`](Desktop/Sources/LocalInference/ARCHITECTURE.md).
 
 ### Feature-flag authority
 
