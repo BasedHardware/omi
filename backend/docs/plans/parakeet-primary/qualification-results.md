@@ -48,6 +48,22 @@ Repeat with the same immutable corrected image at a ten-stream admission cap and
 
 The revised fleet prescription is 99 warm L4 replicas: `ceil(600 × 1.30 / 8) + 1`. Its maximum is 125 plus one surge GPU. This is still provisional until the matched lower-capacity run passes. At public reference rates it costs approximately $61,691/month for compute alone; the cost review explicitly rejects a savings claim. A merge must not activate an undersized fleet by retaining the old 40-node arithmetic.
 
+## Attempt 4: matched segmentation exposes missing text — rejected
+
+[Run 34461408198](https://github.com/BasedHardware/omi/actions/runs/34461408198) reused the immutable `f8a6a0d3d99d78a55823b68f638813418144d1cd` image above with `PARAKEET_MAX_SPEECH_S=5`, admission cap 10 and target 8. All 32 image/dependency/GPU smoke checks passed; streaming readiness took 53 seconds after those checks.
+
+| Concurrent streams | p95 segment-end lag | p95 first visible text | Clean completion | All four content sentinels |
+| ---: | ---: | ---: | --- | --- |
+| 1 | 0.4094 s | 6.0094 s | Yes | No |
+| 5 | 0.4643 s | 5.9674 s | Yes | No |
+| 8 | 1.7173 s | 6.2383 s | Yes | No |
+| 10 | 1.0357 s | 6.4266 s | Yes | No |
+| 10, sustained 180 s | 1.7875 s | 7.3738 s | Yes | Yes across repeated fixture |
+
+The sustained replay took 182.0745 seconds including final drain, with ten accepted streams and zero transport errors. The overflow probe accepted ten of eleven and rejected one, then drained normally. Nevertheless `qualification_passed=false`: all short runs omitted the known phrase `after early nightfall`. The one-stream result contains no emitted segment for approximately 16.03–21.28 seconds despite speech in that interval. Repetition eventually producing a phrase is not proof that every occurrence survived. This is a correctness failure even though latency and protocol completion pass, and the release gate rejects it. Do not weaken the content check or credit this run as qualified capacity.
+
+The follow-up removes zero-padding from intermediate max-window and VAD drains: those drains now submit only complete chunks, preserving the persistent decoder sample timeline. Final connection flush alone finalizes partial audio. Empty deltas retain pending speech rather than dropping its anchor, and a bounded pending-speech budget closes a stalled stream so the backend can recover through vendors. Regressions assert exact input bytes across drains and bounded retention. A fresh GPU image must verify the content fix before capacity is accepted.
+
 ## Efficiency prescription
 
 The current implementation submits each session's two-second decoder work to one process-wide executor worker; every streaming buffer uses batch size one. The shared NeMo model/decoding computer makes simply raising the executor thread count unsafe without a concurrency proof. The low sampled GPU utilization is consistent with underfeeding and serialized host scheduling, but CPU/throttling and queue measurements are needed to isolate causes.

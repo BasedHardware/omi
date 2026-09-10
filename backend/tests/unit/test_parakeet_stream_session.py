@@ -243,6 +243,47 @@ class TestStreamSessionFeed:
 
             assert mock_trans.called or len(result) > 0
 
+    def test_stalled_decoder_fails_before_pending_speech_grows_unbounded(self):
+        session = sh.StreamSession(sample_rate=16000)
+        session._vad = None
+        with patch.object(sh, "MAX_SPEECH_DURATION_S", 0.2), patch.object(
+            sh, "MAX_PENDING_SPEECH_S", 1.0
+        ), patch.object(session, "_streaming_enabled", return_value=True), patch.object(
+            session, "_drain_streaming_asr", new_callable=AsyncMock
+        ), patch.object(
+            session, "_transcribe_utterance", new_callable=AsyncMock, return_value=[]
+        ):
+            with pytest.raises(RuntimeError, match="pending speech budget"):
+                asyncio.run(session.feed(_make_pcm(2.0)))
+        assert len(session._pending_audio) <= int(1.04 * 16000 * 2)
+
+    def test_max_speech_split_keeps_audio_when_streaming_delta_is_empty(self):
+        """A forced window must not discard audio before the decoder emits a word."""
+        session = sh.StreamSession(sample_rate=16000)
+        session._vad = None
+        segment = {"text": "recovered", "start": 0.0, "end": 1.0, "speaker": "SPEAKER_0"}
+
+        with patch.object(sh, "MAX_SPEECH_DURATION_S", 0.99), patch.object(
+            session, "_streaming_enabled", return_value=True
+        ), patch.object(session, "_drain_streaming_asr", new_callable=AsyncMock) as drain, patch.object(
+            session, "_transcribe_utterance", new_callable=AsyncMock, side_effect=[[], [segment]]
+        ) as transcribe:
+            first = asyncio.run(session.feed(_make_pcm(1.0)))
+
+            assert first == []
+            assert session._pending_audio
+            assert session._speech_start_s is not None
+            assert session._is_speaking is True
+
+            second = asyncio.run(session.feed(_make_pcm(0.032)))
+
+        assert second == [segment]
+        assert transcribe.await_count == 2
+        assert all(call.kwargs.get("pad_partial") is not True for call in drain.await_args_list)
+        assert session._pending_audio == bytearray()
+        assert session._speech_start_s is None
+        assert session._is_speaking is False
+
 
 class TestStreamSessionVADIsolation:
 
@@ -383,6 +424,46 @@ class TestStreamSessionRNNTStreaming:
         assert decoder.calls == [(b"abcd", False), (b"ef", False)]
         assert session._streaming_text == "hello world"
         assert session._asr_audio_buf == bytearray()
+
+    def test_intermediate_drains_preserve_exact_audio_until_final_partial_flush(self):
+        class FixedChunkDecoder:
+            def __init__(self):
+                self.calls = []
+
+            def next_input_bytes(self, bytes_per_sample):
+                assert bytes_per_sample == 2
+                return 4
+
+            def decode_pcm(self, pcm, is_last_chunk=False):
+                self.calls.append((pcm, is_last_chunk))
+                return "text"
+
+        session = sh.StreamSession(sample_rate=16000)
+        decoder = FixedChunkDecoder()
+        session._streaming_decoder = decoder
+        session._asr_audio_buf = bytearray(b"abcdef")
+
+        session._drain_streaming_asr_sync(force=False)
+        assert decoder.calls == [(b"abcd", False)]
+        assert session._asr_audio_buf == bytearray(b"ef")
+
+        session._asr_audio_buf.extend(b"gh")
+        session._drain_streaming_asr_sync(force=False)
+        assert decoder.calls == [(b"abcd", False), (b"efgh", False)]
+        assert session._asr_audio_buf == bytearray()
+
+        session._asr_audio_buf.extend(b"ij")
+        session._pending_audio = bytearray(_make_pcm(1.0))
+        session._speech_start_s = 0.0
+        with patch.object(session, "_streaming_enabled", return_value=True), patch.object(
+            session, "_transcribe_utterance", new_callable=AsyncMock, return_value=[{"text": "text"}]
+        ) as transcribe:
+            result = asyncio.run(session.flush())
+
+        assert decoder.calls == [(b"abcd", False), (b"efgh", False), (b"ij", True)]
+        assert session._asr_audio_buf == bytearray()
+        assert result == [{"text": "text"}]
+        transcribe.assert_awaited_once_with()
 
     def test_fatal_cuda_decode_reports_and_closes_instead_of_falling_back(self):
         class AcceleratorError(RuntimeError):

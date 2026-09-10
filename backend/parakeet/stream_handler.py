@@ -67,6 +67,8 @@ logger = logging.getLogger(__name__)
 SPEECH_THRESHOLD = float(os.getenv("PARAKEET_VAD_THRESHOLD", "0.5"))
 MIN_SPEECH_DURATION_S = float(os.getenv("PARAKEET_MIN_SPEECH_S", "0.5"))
 MAX_SPEECH_DURATION_S = float(os.getenv("PARAKEET_MAX_SPEECH_S", "30.0"))
+# Retained audio must stay bounded if a live decoder stops producing words.
+MAX_PENDING_SPEECH_S = max(60.0, 2 * MAX_SPEECH_DURATION_S)
 AGC_TARGET_PEAK = float(os.getenv("PARAKEET_AGC_TARGET", "0.8"))
 HANGOVER_S = float(os.getenv("PARAKEET_HANGOVER_S", "0.8"))
 CHUNK_SECONDS = float(os.getenv("PARAKEET_CHUNK_S", "2.0"))
@@ -554,7 +556,11 @@ class StreamSession:
                         speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
                         result: List[Dict[str, Any]] = []
                         if speech_dur >= MIN_SPEECH_DURATION_S:
-                            await self._drain_streaming_asr(pad_partial=True)
+                            # Keep the decoder's sample timeline exact while
+                            # the connection is still live. The final flush
+                            # is the only operation allowed to pad/finish a
+                            # partial decoder chunk.
+                            await self._drain_streaming_asr()
                             result = await self._transcribe_utterance(trim_trailing_word=True)
                             segments.extend(result)
                         self._is_speaking = False
@@ -566,13 +572,24 @@ class StreamSession:
             if self._is_speaking:
                 speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
                 if speech_dur >= MAX_SPEECH_DURATION_S:
-                    await self._drain_streaming_asr(pad_partial=True)
+                    # A max-window emission is an intermediate observation,
+                    # not an end-of-stream marker. Do not inject zero padding
+                    # into the persistent NeMo streaming buffer here.
+                    await self._drain_streaming_asr()
                     result = await self._transcribe_utterance(trim_trailing_word=True)
                     segments.extend(result)
-                    self._pending_audio.clear()
-                    self._is_speaking = False
-                    self._speech_start_s = None
+                    if result or not self._streaming_enabled():
+                        # A forced streaming emission can legitimately have no
+                        # complete word yet (or no new decoder delta). Keep the
+                        # pending audio and speech anchor in that case; dropping
+                        # them here loses the text between max-window splits.
+                        self._pending_audio.clear()
+                        self._is_speaking = False
+                        self._speech_start_s = None
                     self._silence_count = 0
+
+            if len(self._pending_audio) > MAX_PENDING_SPEECH_S * self._sr * self._bytes_per_sample:
+                raise RuntimeError("Parakeet stream exceeded its pending speech budget without emitting text")
 
             self._stream_offset_s += chunk_dur
 
@@ -583,7 +600,7 @@ class StreamSession:
             and self._pending_audio
             and self._speech_start_s is not None
         ):
-            await self._drain_streaming_asr(pad_partial=True)
+            await self._drain_streaming_asr()
             result = await self._transcribe_utterance(trim_trailing_word=True)
             if result:
                 segments.extend(result)
