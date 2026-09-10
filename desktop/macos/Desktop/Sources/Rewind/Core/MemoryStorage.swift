@@ -583,7 +583,7 @@ actor MemoryStorage {
   func syncServerMemory(_ memory: ServerMemory) async throws -> Int64 {
     let db = try await ensureInitialized()
 
-    return try await db.write { database -> Int64 in
+    let recordId = try await db.write { database -> Int64 in
       // Check if memory already exists by backendId
       if var existingRecord =
         try MemoryRecord
@@ -616,6 +616,10 @@ actor MemoryStorage {
         }
       }
     }
+    if recordId > 0, !memory.content.isEmpty {
+      await LocalEmbeddingIndexer.shared.indexMemory(id: recordId, content: memory.content)
+    }
+    return recordId
   }
 
   /// Sync multiple ServerMemory objects to local storage (batch upsert)
@@ -1427,6 +1431,9 @@ actor MemoryStorage {
 
     log("MemoryStorage: Inserted local memory (id: \(inserted.id ?? -1))")
     HomeKnowledgeCountInvalidation.post()
+    if let id = inserted.id {
+      await LocalEmbeddingIndexer.shared.indexMemory(id: id, content: inserted.content)
+    }
     return inserted
   }
 
@@ -1723,11 +1730,16 @@ actor MemoryStorage {
   func updateContentByBackendId(_ backendId: String, content: String) async throws {
     let db = try await ensureInitialized()
 
-    try await db.write { database in
+    let rowId = try await db.write { database -> Int64? in
       try database.execute(
         sql: "UPDATE memories SET content = ?, updatedAt = ? WHERE backendId = ?",
         arguments: [content, Date(), backendId]
       )
+      return try Int64.fetchOne(
+        database, sql: "SELECT id FROM memories WHERE backendId = ?", arguments: [backendId])
+    }
+    if let rowId {
+      await LocalEmbeddingIndexer.shared.indexMemory(id: rowId, content: content)
     }
   }
 

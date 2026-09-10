@@ -12,15 +12,23 @@ struct LocalEmbeddingRuntime: Sendable {
   var killSwitches: LocalEmbeddingKillSwitches = .enabled
   var defaultEngineID: String? = nil
   var probeBudget: Duration = .seconds(2)
+  var probeTTL: Duration = .seconds(60)
+  var probeCache: LocalEmbeddingProbeCache = LocalEmbeddingProbeCache()
+  var clock: @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
+  var thermalState: @Sendable () -> ProcessInfo.ThermalState = { ProcessInfo.processInfo.thermalState }
   var probe: @Sendable (any LocalEmbeddingService) async -> LocalEmbeddingProbe = LocalEmbeddingProbe.run
   var record: @Sendable (String, String) -> Void = { from, reason in
     DesktopDiagnosticsManager.shared.recordFallback(
-      area: "local_embeddings", from: from, to: "none", reason: reason, outcome: .degraded)
+      area: "local_embeddings", from: from, to: "keyword", reason: reason, outcome: .degraded)
   }
 
-  /// Intentionally empty until an on-device engine is registered by the next implementation.
+  /// Apple NLCE is the production default. Selection still fail-closes until its probe passes.
+  /// Probe cache and engine are process-wide so chat search pays the 32-token probe once.
   static func makeDefault() -> Self {
-    Self(engines: [], killSwitches: .resolve())
+    let apple = AppleNLContextualEmbeddingEngine.shared
+    return Self(
+      engines: [apple], killSwitches: .resolve(), defaultEngineID: apple.engineID,
+      probeCache: .shared)
   }
 
   func selectEngine() async -> Selection {
@@ -33,9 +41,24 @@ struct LocalEmbeddingRuntime: Sendable {
       record("local_embeddings", "config_incomplete")
       return .none
     }
-    let result = await probe(engine)
+    let key = LocalEmbeddingProbeCache.Key(
+      engineID: engine.engineID,
+      modelID: engine.modelID,
+      thermalState: thermalState().rawValue,
+      disabled: killSwitches.isDisabled,
+      forcedEngine: killSwitches.forcedEngineRaw ?? "")
+    let now = clock()
+    let cached = await probeCache.get(key, ttl: probeTTL, now: now)
+    let result: LocalEmbeddingProbe
+    if let cached {
+      result = cached
+    } else {
+      let probed = await probe(engine)
+      await probeCache.store(key, probe: probed, now: now)
+      result = probed
+    }
     guard !Task.isCancelled, result.permits(engine, budget: probeBudget) else {
-      record("local_embeddings", "capability_mismatch")
+      record("local_embeddings", result.reason.isEmpty ? "capability_mismatch" : result.reason)
       return .none
     }
     return .engine(engine)
