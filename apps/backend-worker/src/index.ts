@@ -9,6 +9,7 @@ import {
 import {
   authorizeV1,
   publicRoutes,
+  requiresV1Authorization,
   safeRoute,
   unmatchedRouteError,
   v1Routes,
@@ -70,8 +71,11 @@ for (const route of publicRoutes) {
 }
 
 app.use("/v1/*", async (context, next) => {
-  const refusal = await authorizeV1(fromHono(context));
-  if (refusal !== null) return refusal;
+  const core = fromHono(context);
+  if (requiresV1Authorization(core)) {
+    const refusal = await authorizeV1(core);
+    if (refusal !== null) return refusal;
+  }
   await next();
 });
 

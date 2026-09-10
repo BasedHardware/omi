@@ -413,6 +413,20 @@ function firebaseUnavailableRetryAfter(
   return undefined;
 }
 
+export function requiresV1Authorization(context: CoreContext): boolean {
+  if (context.req.method !== "GET") return true;
+  let pathname: string;
+  try {
+    pathname = new URL(context.req.url).pathname;
+  } catch {
+    return true;
+  }
+  return (
+    pathname !== "/v1/settings" ||
+    context.req.header("authorization") !== undefined
+  );
+}
+
 export async function authorizeV1(
   context: CoreContext
 ): Promise<Response | null> {
@@ -515,6 +529,9 @@ export async function handleSettings(context: CoreContext): Promise<Response> {
   }
   if (context.req.header("transfer-encoding") !== undefined) {
     return backendError("bad_request", "edit_request", 400);
+  }
+  if (context.req.header("authorization") === undefined) {
+    return json({ identity: null, entitlement: null });
   }
   const db = context.env.DB;
   if (db === undefined)

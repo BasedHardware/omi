@@ -3263,11 +3263,58 @@ describe("settings entitlement admission contract", () => {
     expect(JSON.stringify(await valid.json())).not.toContain("appearance");
   });
 
+  test("Settings GET without a credential is signed-out 200 matching production", async () => {
+    const extra = {
+      error: { code: "bad_request", retryable: false, action: "edit_request" },
+    };
+    const unauthorized = {
+      error: {
+        code: "unauthorized",
+        retryable: false,
+        action: "reauthenticate",
+      },
+    };
+    const absent = await fetchWorker("/v1/settings");
+    expect(absent.status).toBe(200);
+    expect((await absent.json()) as unknown).toEqual({
+      identity: null,
+      entitlement: null,
+    });
+    expect(accountCalls).toEqual([]);
+
+    const query = await fetchWorker("/v1/settings?appearance=dark");
+    expect(query.status).toBe(400);
+    expect((await query.json()) as unknown).toEqual(extra);
+
+    const length = await fetchWorker("/v1/settings", {
+      headers: { "content-length": "1" },
+    });
+    expect(length.status).toBe(400);
+    expect((await length.json()) as unknown).toEqual(extra);
+
+    const transfer = await fetchWorker("/v1/settings", {
+      headers: { "transfer-encoding": "chunked" },
+    });
+    expect(transfer.status).toBe(400);
+    expect((await transfer.json()) as unknown).toEqual(extra);
+
+    for (const value of ["", "Basic nope", "Bearer ", "Bearer invalid"]) {
+      const invalid = await fetchWorker("/v1/settings", {
+        headers: { authorization: value },
+      });
+      expect(invalid.status).toBe(401);
+      expect((await invalid.json()) as unknown).toEqual(unauthorized);
+    }
+    expect(accountCalls).toEqual([]);
+  });
+
   test("Settings GET retryable 503 sends production retry-after", async () => {
     const missingDb = await handleSettings(
       coreContext({
         env: { ...env, DB: undefined } as never,
-        request: new Request("https://worker.test/v1/settings"),
+        request: new Request("https://worker.test/v1/settings", {
+          headers: { authorization: "Bearer test-token" },
+        }),
         routePath: "/v1/settings",
         params: {},
         values: { accountId: "test-account", requestId: "test-request" },

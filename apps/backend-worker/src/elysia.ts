@@ -4,6 +4,7 @@ import {
   authorizeV1,
   coreContext,
   publicRoutes,
+  requiresV1Authorization,
   safeRoute,
   unmatchedRouteError,
   v1Routes,
@@ -70,7 +71,7 @@ function mount(
       values: { requestId },
     });
     try {
-      if (authed) {
+      if (authed && requiresV1Authorization(context)) {
         const refusal = await authorizeV1(context);
         if (refusal !== null) return observed(context, refusal, startedAt);
       }

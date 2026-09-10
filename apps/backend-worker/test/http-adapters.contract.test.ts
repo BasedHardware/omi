@@ -187,6 +187,15 @@ for (const adapter of adapters) {
       });
     });
 
+    test("unsigned settings GET is signed-out 200 matching production", async () => {
+      const response = await adapter.fetch("/v1/settings");
+      expect(response.status).toBe(200);
+      expect((await response.json()) as unknown).toEqual({
+        identity: null,
+        entitlement: null,
+      });
+    });
+
     test("handler failures return a correlated shared error", async () => {
       d1Mock.prepare = () => {
         throw new Error("test database failure");
