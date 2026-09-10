@@ -185,7 +185,15 @@ jobs:
 
       - name: Probe deployed development Pusher finalization semantics
         env:
-          FIREBASE_SIGNER_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+          # The development backend authenticates against PRODUCTION Firebase
+          # (FIREBASE_PROJECT_ID=based-hardware on the dev backend), so the signer must
+          # belong to based-hardware: firebase_release_probe_token.py fails closed when
+          # the credential's project_id differs from --firebase-project. GCP_CREDENTIALS
+          # is the based-hardware-dev deploy identity and can never satisfy that, which is
+          # why this gate had never passed since it shipped. GCP_SERVICE_ACCOUNT is the
+          # based-hardware signer the desktop development lane already mints probe tokens
+          # with (desktop_backend_auto_dev.yml, same environment, same --firebase-project).
+          FIREBASE_SIGNER_CREDENTIALS_B64: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
           umask 077
@@ -194,14 +202,14 @@ jobs:
           signer_file="$(mktemp "$RUNNER_TEMP/omi-pusher-probe-signer.XXXXXX")"
           cleanup() {
             rm -f "$token_file" "$signer_file"
-            unset FIREBASE_SIGNER_CREDENTIALS
+            unset FIREBASE_SIGNER_CREDENTIALS_B64
           }
           trap cleanup EXIT
-          if [[ -z "$FIREBASE_SIGNER_CREDENTIALS" ]]; then
-            echo "Development Pusher semantic probe requires the existing GCP_CREDENTIALS Firebase signer." >&2
+          if [[ -z "$FIREBASE_SIGNER_CREDENTIALS_B64" ]]; then
+            echo "Development Pusher semantic probe requires the GCP_SERVICE_ACCOUNT Firebase signer." >&2
             exit 1
           fi
-          printf '%s' "$FIREBASE_SIGNER_CREDENTIALS" > "$signer_file"
+          printf '%s' "$FIREBASE_SIGNER_CREDENTIALS_B64" | base64 --decode > "$signer_file"
           python3 backend/scripts/firebase_release_probe_token.py \
             --secret-project "${{ vars.GCP_PROJECT_ID }}" \
             --firebase-project based-hardware \
