@@ -632,6 +632,10 @@ class DailySweepAgentMemory(BaseModel):
         default="",
         description="Snake_case standing-attribute name when this memory updates one (the ledger supersedes the old value); empty for one-off facts",
     )
+    duplicate_of: str = Field(
+        default="",
+        description="Ledger memory id from a prior-memory lookup hit this fact merely restates; empty when the fact is new",
+    )
 
 
 class DailySweepTranscriptRequest(BaseModel):
@@ -976,6 +980,7 @@ def _sanitized_daily_sweep_output(
                 basis=memory.basis,
                 about=memory.about,
                 slot=(memory.slot or "").strip()[:64],
+                duplicate_of=(memory.duplicate_of or "").strip(),
             )
         )
         if len(memories) >= max(0, max_candidates):

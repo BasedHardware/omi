@@ -550,7 +550,10 @@ def test_daily_sweep_memory_requires_explicit_subject_and_sanitizer_preserves_it
                 about='Sarah',
                 conversation_ids=['conversation-1'],
                 basis='observed',
+                duplicate_of='mem-existing',
             )
         ]
     )
-    assert _sanitized_daily_sweep_output(output, {'conversation-1'}, 8).memories[0].about == 'Sarah'
+    sanitized = _sanitized_daily_sweep_output(output, {'conversation-1'}, 8)
+    assert sanitized.memories[0].about == 'Sarah'
+    assert sanitized.memories[0].duplicate_of == 'mem-existing'

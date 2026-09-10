@@ -2470,3 +2470,69 @@ def test_completed_day_reader_carries_evidence_and_safe_phase_b_transcript(owner
     if trust != 'unique_owner':
         assert 'Speaker 0:' in rows[0].transcript_text and 'Speaker 1:' in rows[0].transcript_text
         assert 'User:' not in rows[0].transcript_text
+
+
+def test_daily_sweep_ledger_searcher_prefixes_active_memory_ids(monkeypatch):
+    from models.product_memory import MemoryItemStatus
+    from utils.memory.daily_memory_sweep import _daily_sweep_ledger_searcher
+
+    monkeypatch.setattr(
+        'utils.memory.atom_keyword_index.keyword_search_ledger_memory_ids',
+        lambda *_args, **_kwargs: ['mem-gym'],
+    )
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep.read_canonical_memory_item',
+        lambda *_args, **_kwargs: SimpleNamespace(
+            memory_id='mem-gym',
+            content='Dave lifts on Tuesdays',
+            status=MemoryItemStatus.active,
+            slot='gym_schedule',
+        ),
+    )
+    search = _daily_sweep_ledger_searcher('user-1', db_client=object())
+    assert search('gym') == ('[mem-gym] Dave lifts on Tuesdays [slot: gym_schedule]',)
+
+
+def test_completed_day_lookup_duplicate_is_skipped_not_staged_as_sibling(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document('users/user-1/memory_state/apply_control').set(control.model_dump(mode='json'))
+    local_date = date(2026, 8, 23)
+    segments = [TranscriptSegment(text='I lift on Tuesdays.', speaker_id=0, is_user=True, start=0, end=1)]
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
+        lambda *_args, **_kwargs: ((_day_source('conversation-1', 'gym', segments=segments),), 'complete'),
+    )
+    result = produce_completed_day_daily_summary_sources(
+        'user-1',
+        local_date,
+        'UTC',
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name='test', max_candidates=8, max_cost_usd=1.0),
+        agent_runner=lambda *_args, **_kwargs: _agent_output(
+            memories=[
+                SimpleNamespace(
+                    content='Dave lifts on Tuesdays',
+                    conversation_ids=['conversation-1'],
+                    about='user',
+                    basis='observed',
+                    slot='',
+                    duplicate_of='mem-gym',
+                ),
+                SimpleNamespace(
+                    content='Dave now lifts on Fridays too',
+                    conversation_ids=['conversation-1'],
+                    about='user',
+                    basis='decided',
+                    slot='gym_schedule',
+                    duplicate_of='',
+                ),
+            ]
+        ),
+        window_override=completed_local_day_window(local_date, 'UTC'),
+    )
+    assert result.source_status == 'complete'
+    assert len(result.daily_summary) == 1
+    assert result.daily_summary[0].content == 'Dave now lifts on Fridays too'
+    assert result.daily_summary[0].slot == 'gym_schedule'

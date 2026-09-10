@@ -4289,6 +4289,12 @@ def _load_or_stage_daily_summary_candidates(
                 # A memory without provenance into this day's rows is dropped:
                 # candidates may never fabricate source references.
                 continue
+            duplicate_of = str(getattr(memory, "duplicate_of", "") or "").strip()
+            if duplicate_of:
+                # A lookup hit already holds this fact. Skip it here rather
+                # than staging a sibling the occupancy check would have to
+                # catch later — or miss, if the slot/subject keys diverge.
+                continue
             about = " ".join(str(getattr(memory, "about", "") or "").split())
             basis = str(getattr(memory, "basis", "") or "").strip().lower()
             if about.casefold() in {"", "unknown", "unclear", "uncertain"}:
@@ -4466,7 +4472,9 @@ def _daily_sweep_ledger_searcher(uid: str, *, db_client: Any) -> Any:
             if item is None or item.status != MemoryItemStatus.active:
                 continue
             slot_label = f" [slot: {item.slot}]" if getattr(item, "slot", None) else ""
-            results.append(f"{item.content}{slot_label}")
+            memory_id = str(getattr(item, "memory_id", "") or "").strip()
+            prefix = f"[{memory_id}] " if memory_id else ""
+            results.append(f"{prefix}{item.content}{slot_label}")
         return tuple(results)
 
     return search

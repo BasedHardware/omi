@@ -659,7 +659,7 @@ This is the FINAL pass. In the first pass over the day you drafted memories and 
 
 **Finalization**:
 - Return the FINAL list of memories. Correct any drafted memory the transcript contradicts; drop any memory whose key detail — including the direction of an invitation, offer, or commitment — you still cannot verify.
-- Use the prior-memory results to avoid duplicates and to supersede: when your memory updates an existing standing attribute, give it the SAME slot so the ledger replaces the old value; when it merely restates an existing memory, drop it.
+- Use the prior-memory results to avoid duplicates and to supersede: when your memory updates an existing standing attribute, give it the SAME slot so the ledger replaces the old value; when it merely restates a lookup hit, keep the memory in the list and set duplicate_of to that hit's memory id (the bracketed id on the lookup row) so the ledger skips it instead of writing a sibling. Leave duplicate_of empty for new facts.
 - Do not request more transcripts or lookups; transcript_requests and memory_lookups must be empty.
 {format_instructions}
 '''
