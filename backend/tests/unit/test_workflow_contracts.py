@@ -256,7 +256,9 @@ def test_backend_unit_ci_runner_stays_in_ci_while_pre_push_keeps_its_budget():
     assert "scripts/run-unit-ci.sh --all" in workflow_text
     assert "backend/scripts/run-unit-ci.sh" not in pre_push
     assert "backend/scripts/needs-typecheck.sh" in pre_push
-    assert '"$SCRIPT_DIR/needs-typecheck.sh" "$2"' in runner
+    # The runner parses its argv into named variables before this call; the
+    # pin is that the changed-files diff still feeds the typecheck boundary.
+    assert '"$SCRIPT_DIR/needs-typecheck.sh" "$changed_files_arg"' in runner
     assert 'PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES:-40' in pre_push
     assert "pre-push is intentionally a bounded local-feedback gate" in pre_push
     assert 'BACKEND_FAST_UNIT_WARN_SECONDS="0.1"' in runner
@@ -277,6 +279,43 @@ def test_expensive_pr_contracts_cancel_only_superseded_pull_request_runs():
         assert "format('pr-{0}', github.event.pull_request.number)" in workflow
         assert "format('run-{0}', github.run_id)" in workflow
         assert "cancel-in-progress: true" in workflow
+
+
+def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
+    """The suite is per-file pytest process bound; CI fans it out, guarded.
+
+    Measured 2026-09-10 (run 34430370667): 1126 files each in its own pytest
+    session cost 19m18s of a 21m53s run while only two files exceeded 4.5s of
+    test time, and sharing processes across files is blocked by dense
+    sys.modules contamination (see the BACKEND_PYTEST_PARALLEL_SESSION
+    measurement in backend/test.sh). The workflow therefore runs the SAME
+    selection as four parallel shard jobs whose interleaved slices partition
+    the sorted file list exactly (union = full selection), plus a concurrent
+    guardrails job, and publishes the verdict through a literal-named gate so
+    the required check surface never changes. Each shard carries a wall-clock
+    regression budget; duration drift fails the run instead of publishing
+    green.
+    """
+    repo = BACKEND_DIR.parent
+    workflow = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
+    runner = (BACKEND_DIR / "scripts/run-unit-ci.sh").read_text(encoding="utf-8")
+
+    assert "shard: [1, 2, 3, 4]" in workflow
+    assert "--shard 4/${{ matrix.shard }}" in workflow
+    assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "600"' in workflow
+    assert "backend unit shard wall: ${elapsed}s" in workflow
+    # The gate keeps the exact check name and fails closed on any shard or
+    # guardrail result that is not a plain success.
+    assert "name: Backend unit suite" in workflow
+    assert "needs: [backend-unit-shard, backend-unit-guardrails]" in workflow
+    assert 'if [ "$SHARD_RESULT" != "success" ]' in workflow
+    assert 'if [ "$GUARDRAILS_RESULT" != "success" ]' in workflow
+    # The runner slices the deterministic selection round-robin with the
+    # one-based mapping (line i runs in shard ((i - 1) % total) + 1, so
+    # shard labels match the files they carry); `index` is an awk builtin,
+    # so the shard variable must be named anything else.
+    assert "(NR - 1) % total == shard - 1" in runner
+    assert "awk -v index=" not in runner
 
 
 def test_backend_test_runner_defaults_python_to_utf8():
