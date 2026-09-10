@@ -1377,8 +1377,48 @@ test('a day_summary chat message names Day Summary instead of a normal Omi turn'
       return [];
     });
   expect(copies).toContain('Day Summary');
-  expect(copies).toContain('Yesterday you captured two meetings.');
+  expect(copies).toContain('1. Yesterday you captured two meetings');
+  expect(copies).not.toContain('Yesterday you captured two meetings.');
   expect(copies).not.toContain('day_summary');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('a day_summary chat message names GET text as Flutter numbered rows', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-summary-list',
+        text: '1. Alpha. 2. Beta.',
+        sender: 'ai',
+        type: 'day_summary',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Day Summary');
+  expect(copies).toContain('1. Alpha');
+  expect(copies).toContain('2. Beta.');
+  expect(copies).not.toContain('1. Alpha. 2. Beta.');
   act(() => {
     renderer.unmount();
   });

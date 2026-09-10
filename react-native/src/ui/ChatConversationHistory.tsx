@@ -8,6 +8,8 @@ import {
   chatAttachmentThumbnailUrl,
   chatClockLabel,
   chatDaySummaryCopy,
+  chatDaySummaryItems,
+  chatDaySummaryRowCopy,
   chatMemoryCitationCopy,
   chatMessageDisplayText,
   chatSenderCopy,
@@ -96,6 +98,10 @@ export function ChatConversationHistory({
               const sender = chatSenderCopy(message.sender);
               const body = chatMessageDisplayText(message);
               const daySummary = chatDaySummaryCopy(message.type);
+              const summaryItems =
+                daySummary === '' ? [] : chatDaySummaryItems(message.text);
+              const showSummaryItems =
+                daySummary !== '' && message.generationOutcome !== 'failed';
               const appAttribution = human
                 ? ''
                 : chatAppAttributionCopy(message.appName);
@@ -105,11 +111,29 @@ export function ChatConversationHistory({
               });
               return (
                 <View key={message.id}>
-                  <Text
-                    selectable
-                    style={[styles.conversationTranscriptText, ink]}>
-                    {body === '' ? sender : `${sender} · ${body}`}
-                  </Text>
+                  {showSummaryItems ? null : (
+                    <Text
+                      selectable
+                      style={[styles.conversationTranscriptText, ink]}>
+                      {body === '' ? sender : `${sender} · ${body}`}
+                    </Text>
+                  )}
+                  {daySummary !== '' ? (
+                    <Text style={[styles.conversationDetailField, ink]}>
+                      {daySummary}
+                    </Text>
+                  ) : null}
+                  {showSummaryItems
+                    ? summaryItems.map((item, index) => (
+                        <Text
+                          key={`summary-${index}`}
+                          numberOfLines={3}
+                          selectable
+                          style={[styles.conversationTranscriptText, ink]}>
+                          {chatDaySummaryRowCopy(index, item)}
+                        </Text>
+                      ))
+                    : null}
                   {(message.attachments ?? []).flatMap((attachment, index) => {
                     const uri = chatAttachmentThumbnailUrl(attachment);
                     if (uri === null) {
@@ -130,11 +154,6 @@ export function ChatConversationHistory({
                   visibleDisplayText(message.text) !== '' ? (
                     <Text style={[styles.conversationDetailField, ink]}>
                       Response stopped
-                    </Text>
-                  ) : null}
-                  {daySummary !== '' ? (
-                    <Text style={[styles.conversationDetailField, ink]}>
-                      {daySummary}
                     </Text>
                   ) : null}
                   {appAttribution !== '' ? (

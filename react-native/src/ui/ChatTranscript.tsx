@@ -7,6 +7,8 @@ import {
   chatAttachmentThumbnailUrl,
   chatClockLabel,
   chatDaySummaryCopy,
+  chatDaySummaryItems,
+  chatDaySummaryRowCopy,
   chatMemoryCitationCopy,
   chatMessageDisplayText,
   chatSenderCopy,
@@ -52,6 +54,10 @@ const ChatMessageRow = memo(function ChatMessageRow({
   const human = message.sender === 'human';
   const body = chatMessageDisplayText(message);
   const daySummary = chatDaySummaryCopy(message.type);
+  const summaryItems =
+    daySummary === '' ? [] : chatDaySummaryItems(message.text);
+  const showSummaryItems =
+    daySummary !== '' && message.generationOutcome !== 'failed';
   const appAttribution = human ? '' : chatAppAttributionCopy(message.appName);
   const citations = (message.memories ?? []).flatMap(memory => {
     const copy = chatMemoryCitationCopy(memory);
@@ -76,7 +82,8 @@ const ChatMessageRow = memo(function ChatMessageRow({
             : styles.chatMessageColumnDesktop,
           human && styles.chatMessageColumnHuman,
         ]}>
-        {message.generationOutcome === 'failed' || body !== '' ? (
+        {message.generationOutcome === 'failed' ||
+        (!showSummaryItems && body !== '') ? (
           <View
             style={[
               styles.chatBubble,
@@ -91,6 +98,18 @@ const ChatMessageRow = memo(function ChatMessageRow({
             )}
           </View>
         ) : null}
+        {daySummary !== '' && (
+          <Text style={styles.cancelledLabel}>{daySummary}</Text>
+        )}
+        {showSummaryItems &&
+          summaryItems.map((item, index) => (
+            <Text
+              key={`summary-${index}`}
+              numberOfLines={3}
+              style={styles.message}>
+              {chatDaySummaryRowCopy(index, item)}
+            </Text>
+          ))}
         {(message.attachments ?? []).flatMap((attachment, index) => {
           const uri = chatAttachmentThumbnailUrl(attachment);
           if (uri === null) {
@@ -111,9 +130,6 @@ const ChatMessageRow = memo(function ChatMessageRow({
           visibleDisplayText(message.text) !== '' && (
             <Text style={styles.cancelledLabel}>Response stopped</Text>
           )}
-        {daySummary !== '' && (
-          <Text style={styles.cancelledLabel}>{daySummary}</Text>
-        )}
         {appAttribution !== '' && (
           <Text numberOfLines={1} style={styles.cancelledLabel}>
             {appAttribution}

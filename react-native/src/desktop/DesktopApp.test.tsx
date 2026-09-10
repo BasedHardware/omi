@@ -681,7 +681,8 @@ test('desktop chat names GET day_summary instead of a normal Omi turn', () => {
   });
   const copy = renderedText(renderer);
   expect(copy).toContain('Day Summary');
-  expect(copy).toContain('Yesterday you captured two meetings.');
+  expect(copy).toContain('1. Yesterday you captured two meetings');
+  expect(copy).not.toContain('Yesterday you captured two meetings.');
   expect(copy).not.toContain('day_summary');
 });
 

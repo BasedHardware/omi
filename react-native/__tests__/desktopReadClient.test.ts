@@ -32,6 +32,8 @@ import {
   chatAttachmentThumbnailUrl,
   chatSenderCopy,
   chatDaySummaryCopy,
+  chatDaySummaryItems,
+  chatDaySummaryRowCopy,
   chatAppAttributionCopy,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
@@ -1688,6 +1690,25 @@ test('chat day_summary GET type names Day Summary instead of a normal turn', () 
   expect(chatDaySummaryCopy('text')).toBe('');
   expect(chatDaySummaryCopy('unknown')).toBe('');
   expect(chatDaySummaryCopy(undefined)).toBe('');
+});
+
+test('chat day_summary GET text splits like Flutter DaySummaryWidget.splitMessage', () => {
+  expect(chatDaySummaryItems('')).toEqual([]);
+  expect(chatDaySummaryItems('   ')).toEqual([]);
+  expect(chatDaySummaryItems('Yesterday you captured two meetings.')).toEqual([
+    'Yesterday you captured two meetings',
+  ]);
+  expect(chatDaySummaryItems('First thing. Second thing.')).toEqual([
+    'First thing',
+    'Second thing',
+  ]);
+  expect(chatDaySummaryItems('1. Alpha. 2. Beta.')).toEqual([
+    'Alpha',
+    'Beta.',
+  ]);
+  expect(chatDaySummaryItems('1. Alpha\n2. Beta')).toEqual(['Alpha', 'Beta']);
+  expect(chatDaySummaryRowCopy(0, 'Alpha')).toBe('1. Alpha');
+  expect(chatDaySummaryRowCopy(1, 'Beta.')).toBe('2. Beta.');
 });
 
 test('chat app attribution names a resolved GET app and omits empty names', () => {

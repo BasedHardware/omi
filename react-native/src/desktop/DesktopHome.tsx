@@ -16,6 +16,8 @@ import {
   chatAttachmentThumbnailUrl,
   chatClockLabel,
   chatDaySummaryCopy,
+  chatDaySummaryItems,
+  chatDaySummaryRowCopy,
   chatMemoryCitationCopy,
   chatMessageDisplayText,
   chatSenderCopy,
@@ -134,6 +136,11 @@ function AskExchange({
       {messages.map(item => {
         const human = item.sender === 'human';
         const body = chatMessageDisplayText(item, 'Response stopped.');
+        const daySummary = chatDaySummaryCopy(item.type);
+        const summaryItems =
+          daySummary === '' ? [] : chatDaySummaryItems(item.text);
+        const showSummaryItems =
+          daySummary !== '' && item.generationOutcome !== 'failed';
         const appAttribution = human
           ? ''
           : chatAppAttributionCopy(item.appName);
@@ -144,7 +151,19 @@ function AskExchange({
         return (
           <View key={item.id} style={styles.exchangeRow}>
             <Text style={styles.rowMeta}>{chatSenderCopy(item.sender)}</Text>
-            {body === '' ? null : (
+            {daySummary !== '' ? (
+              <Text style={styles.rowMeta}>{daySummary}</Text>
+            ) : null}
+            {showSummaryItems ? (
+              summaryItems.map((itemText, index) => (
+                <Text
+                  key={`summary-${index}`}
+                  numberOfLines={3}
+                  style={styles.rowTitle}>
+                  {chatDaySummaryRowCopy(index, itemText)}
+                </Text>
+              ))
+            ) : body === '' ? null : (
               <Text
                 accessibilityLabel={
                   item.generationOutcome === 'failed'
@@ -174,11 +193,6 @@ function AskExchange({
             {item.generationOutcome === 'cancelled' &&
             visibleDisplayText(item.text) !== '' ? (
               <Text style={styles.rowMeta}>Response stopped</Text>
-            ) : null}
-            {chatDaySummaryCopy(item.type) !== '' ? (
-              <Text style={styles.rowMeta}>
-                {chatDaySummaryCopy(item.type)}
-              </Text>
             ) : null}
             {appAttribution !== '' ? (
               <Text numberOfLines={1} style={styles.rowMeta}>

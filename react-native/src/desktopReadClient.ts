@@ -1361,6 +1361,23 @@ export function chatDaySummaryCopy(
   return type === 'day_summary' ? 'Day Summary' : '';
 }
 
+export function chatDaySummaryItems(text: string): string[] {
+  if (/^\d+\.\s/.test(text)) {
+    return text
+      .replace(/\d+\.\s/g, '')
+      .split(/\n|\.\s/)
+      .filter(item => item.trim() !== '');
+  }
+  return text
+    .split('. ')
+    .map(item => (item.endsWith('.') ? item.slice(0, -1) : item))
+    .filter(item => item.trim() !== '');
+}
+
+export function chatDaySummaryRowCopy(index: number, item: string): string {
+  return `${index + 1}. ${item}`;
+}
+
 export function chatAppAttributionCopy(
   appName: string | undefined,
 ): string {
