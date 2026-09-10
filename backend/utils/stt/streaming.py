@@ -535,19 +535,15 @@ def deepgram_fallback_model(language: Optional[str]) -> Optional[str]:
     return None
 
 
-def parakeet_is_configured_fallback(language: Optional[str]) -> bool:
-    """Return whether Parakeet may take over a session whose earlier providers failed.
-
-    Same contract as ``modulate_is_configured_fallback``, one provider further
-    down the ordered ``STT_SERVICE_MODELS`` preference: the deployment must list
-    Parakeet, the policy must serve it, its endpoint must be configured, and it
-    must support the session's resolved provider language.
-    """
+def parakeet_is_configured_fallback(language: Optional[str], *, base_language: Optional[str] = None) -> bool:
+    """Check configured fallback capability, retaining the original picker language."""
+    requested_language = normalized_stt_language(language) or 'en'
+    capability_language = normalized_stt_language(base_language) or requested_language
     return (
         STTService.parakeet.value in (model.strip() for model in stt_service_models)
         and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.STREAMING)
         and bool(parakeet_stream_api_url())
-        and parakeet_supports_language(STTServingSurface.STREAMING, language or 'en')
+        and _parakeet_supports_language_request(STTServingSurface.STREAMING, capability_language, requested_language)
     )
 
 

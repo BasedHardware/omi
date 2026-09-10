@@ -275,6 +275,10 @@ class ListenReceiver:
 
         keywords = self.host.vocabulary[:100] if self.host.vocabulary else []
         is_multi_channel = getattr(self.host, 'is_multi_channel', False)
+        # ``stt_language`` may be the provider's ``multi`` auto-detection
+        # sentinel. Retain the user's normalized base language for capability
+        # checks on every later fallback leg.
+        base_language = getattr(self.host, 'language', None) or self.host.stt_language
         if is_multi_channel and self.host.stt_service == STTService.parakeet:
             # Selection excludes this combination, but keep the receiver safe
             # for stale/explicit host state too: channel stitching still has no
@@ -413,7 +417,8 @@ class ListenReceiver:
                 connect_deepgram=connect_deepgram_fallback if dg_fallback_model else None,
                 connect_parakeet=(
                     connect_parakeet_fallback
-                    if not is_multi_channel and parakeet_is_configured_fallback(self.host.stt_language)
+                    if not is_multi_channel
+                    and parakeet_is_configured_fallback(self.host.stt_language, base_language=base_language)
                     else None
                 ),
                 exclude=exclude,
@@ -440,7 +445,7 @@ class ListenReceiver:
 
             modulate_fallback_configured = modulate_is_configured_fallback(self.host.stt_language)
             parakeet_fallback_configured = not is_multi_channel and parakeet_is_configured_fallback(
-                self.host.stt_language
+                self.host.stt_language, base_language=base_language
             )
             if not modulate_fallback_configured and not parakeet_fallback_configured:
                 return await connect_deepgram()

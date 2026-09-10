@@ -14,6 +14,23 @@ from routers.listen.receiver import ListenReceiver
 from utils.stt import streaming
 
 
+@pytest.fixture(autouse=True)
+def isolate_provider_circuits(monkeypatch):
+    """Connection failures in one case must not influence another case's routing."""
+    for name in ('_parakeet_circuit', '_deepgram_circuit', '_modulate_circuit', '_soniox_circuit'):
+        original = getattr(streaming, name)
+        monkeypatch.setattr(
+            streaming,
+            name,
+            streaming.ProviderCircuitBreaker(
+                failure_threshold=original._failure_threshold,
+                cooldown_seconds=original._cooldown_seconds,
+                serve_error_cooldown_seconds=original._serve_error_cooldown_seconds,
+                serve_error_successes_to_close=original._serve_error_successes_to_close,
+            ),
+        )
+
+
 def test_parakeet_stream_endpoint_prefers_dedicated_url_over_legacy_url():
     with patch.dict(
         os.environ,
@@ -81,6 +98,48 @@ def test_tdt_v3_multilingual_selection_respects_language_capability_and_failover
         )
 
     assert result == expected
+
+
+@pytest.mark.parametrize('base_language', ['zh', 'ar'])
+@pytest.mark.parametrize('primary_service', [streaming.STTService.modulate, streaming.STTService.deepgram])
+@pytest.mark.asyncio
+async def test_vendor_failures_do_not_route_unsupported_multi_language_to_parakeet(base_language, primary_service):
+    """Keep the original zh/ar capability visible after live selection resolves to ``multi``."""
+    host = SimpleNamespace(
+        state=SimpleNamespace(active=True),
+        language=base_language,
+        stt_service=primary_service,
+        stt_language='multi',
+        stt_model='velma-2' if primary_service == streaming.STTService.modulate else 'nova-3',
+        vocabulary=[],
+        is_multi_channel=False,
+    )
+    receiver = SimpleNamespace(host=host, _stt_failed_providers=set())
+
+    with (
+        patch.object(streaming, 'stt_service_models', ['parakeet', 'modulate-velma-2', 'dg-nova-3']),
+        patch.dict(os.environ, {'HOSTED_PARAKEET_STREAM_API_URL': 'http://stream-parakeet'}),
+        patch.object(
+            receiver_mod,
+            'process_audio_modulate',
+            new=AsyncMock(side_effect=RuntimeError('modulate down')),
+        ),
+        patch.object(
+            receiver_mod,
+            'process_audio_dg',
+            new=AsyncMock(side_effect=RuntimeError('deepgram down')),
+        ),
+        patch.object(receiver_mod, 'deepgram_fallback_model', return_value='nova-3'),
+        patch.object(receiver_mod, 'process_audio_parakeet', new=AsyncMock()) as parakeet,
+        patch.object(streaming, 'record_fallback'),
+        pytest.raises(
+            RuntimeError,
+            match='deepgram down' if primary_service == streaming.STTService.modulate else 'modulate down',
+        ),
+    ):
+        await ListenReceiver._create_stt_socket(receiver, MagicMock(), 16000)
+
+    parakeet.assert_not_awaited()
 
 
 def test_explicit_modulate_preference_survives_new_parakeet_default():
