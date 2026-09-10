@@ -1,11 +1,19 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
-import {DeviceSession, homeConnectionStatus} from './DeviceSession';
+import {DeviceSession, deviceHasReportedBattery, homeConnectionStatus} from './DeviceSession';
 import type {PlatformNativeSnapshot} from '../omiNative';
 
 jest.mock('../omiNative', () => ({
   isBluetoothScanAvailable: (state?: string) => state === 'poweredOn',
 }));
+
+test('deviceHasReportedBattery matches Flutter batteryLevel greater than zero', () => {
+  expect(deviceHasReportedBattery(undefined)).toBe(false);
+  expect(deviceHasReportedBattery(0)).toBe(false);
+  expect(deviceHasReportedBattery(-1)).toBe(false);
+  expect(deviceHasReportedBattery(1)).toBe(true);
+  expect(deviceHasReportedBattery(87)).toBe(true);
+});
 
 test('connected device details show reported values and truthful unavailable fields', async () => {
   const snapshot = {
@@ -54,6 +62,85 @@ test('connected device details show reported values and truthful unavailable fie
     );
   });
   expect(JSON.stringify(renderer.toJSON())).not.toContain('Omi Dev Kit');
+  await act(async () => renderer.unmount());
+});
+
+test('device rows name battery only when the reported level is greater than zero', async () => {
+  const snapshot = (battery?: number) =>
+    ({
+      bluetooth: 'poweredOn',
+      devices: [
+        {
+          id: 'omi-test',
+          name: 'Omi',
+          connected: true,
+          rssi: -40,
+          ...(battery === undefined ? {} : {battery}),
+        },
+      ],
+      connectedDeviceId: 'omi-test',
+      capture: 'idle',
+    }) as PlatformNativeSnapshot;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot(0)}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  expect(
+    renderer.root.findAll(
+      node =>
+        typeof node.props.children === 'string' &&
+        /^\d+%$/.test(node.props.children),
+    ),
+  ).toHaveLength(0);
+  await act(async () => renderer.unmount());
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot()}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  expect(
+    renderer.root.findAll(
+      node =>
+        typeof node.props.children === 'string' &&
+        /^\d+%$/.test(node.props.children),
+    ),
+  ).toHaveLength(0);
+  await act(async () => renderer.unmount());
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot(87)}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  expect(
+    renderer.root.findAll(
+      node =>
+        typeof node.props.children === 'string' &&
+        node.props.children === '87%',
+    ).length,
+  ).toBeGreaterThan(0);
   await act(async () => renderer.unmount());
 });
 

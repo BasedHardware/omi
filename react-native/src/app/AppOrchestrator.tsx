@@ -68,7 +68,7 @@ import {TaskPagination} from '../ui/TaskPagination';
 import {ConnectorsPage} from '../pages/Connectors';
 import {SettingsPage} from '../pages/Settings';
 import {resolveInitialRoute, type Route} from './routes';
-import {DeviceSession, homeConnectionStatus} from './DeviceSession';
+import {DeviceSession, deviceHasReportedBattery, homeConnectionStatus} from './DeviceSession';
 import {bluetoothSessionColor} from './bluetooth';
 import {useDesktopReads} from './useDesktopReads';
 import {useTaskMutations} from './useTaskMutations';
@@ -893,10 +893,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             {homeStatus}
           </Text>
         </View>
-        {connectedDevice?.battery !== undefined && (
+        {deviceHasReportedBattery(connectedDevice?.battery) && (
           <View style={styles.pendantBatteryPill}>
             <Text style={styles.pendantBattery}>
-              {connectedDevice.battery}% battery
+              {`${connectedDevice.battery}% battery`}
             </Text>
           </View>
         )}

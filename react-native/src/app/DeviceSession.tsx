@@ -13,6 +13,12 @@ import {accountFieldCopy, deviceDisplayName} from '../desktopReadClient';
 
 export type DeviceSessionVariant = 'affordance' | 'compact' | 'overview';
 
+export function deviceHasReportedBattery(
+  battery: number | undefined,
+): battery is number {
+  return typeof battery === 'number' && battery > 0;
+}
+
 export function homeConnectionStatus(snapshot: PlatformNativeSnapshot | null): {
   connectedDevice: Device | null;
   label: string;
@@ -342,8 +348,8 @@ export function DeviceSession({
           </Text>
         </View>
       )}
-      {device.battery !== undefined && (
-        <Text style={styles.deviceBattery}>{device.battery}%</Text>
+      {deviceHasReportedBattery(device.battery) && (
+        <Text style={styles.deviceBattery}>{`${device.battery}%`}</Text>
       )}
     </FocusPressable>
   ));
