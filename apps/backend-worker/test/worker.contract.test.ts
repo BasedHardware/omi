@@ -1859,9 +1859,21 @@ describe("worker request contract", () => {
     const extra = await fetchWorker("/v1/memories?limit=1&extra=1", {
       headers: authenticatedHeaders,
     });
+    const baseline = await fetchWorker("/v1/memories?limit=1", {
+      headers: authenticatedHeaders,
+    });
+    const duplicateLimit = await fetchWorker(
+      "/v1/memories?limit=1&limit=2",
+      { headers: authenticatedHeaders }
+    );
     expect(emptyCursor.status).toBe(400);
     expect(invalidLimit.status).toBe(400);
-    expect(extra.status).toBe(400);
+    expect(extra.status).toBe(503);
+    expect(baseline.status).toBe(503);
+    expect((await extra.json()) as unknown).toEqual(
+      (await baseline.json()) as unknown
+    );
+    expect(duplicateLimit.status).toBe(400);
   });
 
   test("tasks validate pagination like conversations", async () => {
@@ -1874,6 +1886,12 @@ describe("worker request contract", () => {
     const extra = await fetchWorker("/v1/tasks?limit=1&extra=1", {
       headers: authenticatedHeaders,
     });
+    const baseline = await fetchWorker("/v1/tasks?limit=1", {
+      headers: authenticatedHeaders,
+    });
+    const duplicateLimit = await fetchWorker("/v1/tasks?limit=1&limit=2", {
+      headers: authenticatedHeaders,
+    });
     const unknownCursor = await fetchWorker("/v1/tasks?cursor=task:missing", {
       headers: authenticatedHeaders,
     });
@@ -1883,7 +1901,12 @@ describe("worker request contract", () => {
     );
     expect(emptyCursor.status).toBe(400);
     expect(invalidLimit.status).toBe(400);
-    expect(extra.status).toBe(400);
+    expect(extra.status).toBe(200);
+    expect(baseline.status).toBe(200);
+    expect((await extra.json()) as unknown).toEqual(
+      (await baseline.json()) as unknown
+    );
+    expect(duplicateLimit.status).toBe(400);
     expect(unknownCursor.status).toBe(400);
     expect(oversizedCursor.status).toBe(400);
     expect((await unknownCursor.json()) as unknown).toEqual({

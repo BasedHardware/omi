@@ -203,6 +203,20 @@ export function parseOffset(value: string | undefined): number | null {
   return Number(value);
 }
 
+function forwardedListQuery(
+  query: URLSearchParams
+): URLSearchParams | "duplicate" {
+  if (query.getAll("limit").length > 1 || query.getAll("cursor").length > 1) {
+    return "duplicate";
+  }
+  const forwarded = new URLSearchParams();
+  const limit = query.get("limit");
+  const cursor = query.get("cursor");
+  if (limit !== null) forwarded.set("limit", limit);
+  if (cursor !== null) forwarded.set("cursor", cursor);
+  return forwarded;
+}
+
 export async function readBoundedJson(
   request: Request,
   maxBytes: number
@@ -888,14 +902,9 @@ export async function handleConversations(
 }
 
 export async function handleMemories(context: CoreContext): Promise<Response> {
-  const query = new URL(context.req.url).searchParams;
-  if (
-    [...query.keys()].some((key) => key !== "limit" && key !== "cursor") ||
-    query.getAll("limit").length > 1 ||
-    query.getAll("cursor").length > 1
-  ) {
+  const query = forwardedListQuery(new URL(context.req.url).searchParams);
+  if (query === "duplicate")
     return backendError("bad_request", "edit_request", 400);
-  }
   const limit = parseLimit(query.get("limit") ?? undefined);
   const cursor = query.get("cursor") ?? undefined;
   if (limit === null || cursor === "")
@@ -937,7 +946,9 @@ export async function handleMemories(context: CoreContext): Promise<Response> {
 }
 
 export async function handleTasks(context: CoreContext): Promise<Response> {
-  const query = new URL(context.req.url).searchParams;
+  const query = forwardedListQuery(new URL(context.req.url).searchParams);
+  if (query === "duplicate")
+    return backendError("bad_request", "edit_request", 400);
   if (context.env.CANONICAL_SERVICE !== undefined) {
     const contractVersion = context.req.header("x-omi-contract-version");
     return requestCanonicalTasks({
@@ -951,13 +962,6 @@ export async function handleTasks(context: CoreContext): Promise<Response> {
       query,
       ...(contractVersion === undefined ? {} : { contractVersion }),
     });
-  }
-  if (
-    [...query.keys()].some((key) => key !== "limit" && key !== "cursor") ||
-    query.getAll("limit").length > 1 ||
-    query.getAll("cursor").length > 1
-  ) {
-    return backendError("bad_request", "edit_request", 400);
   }
   const db = context.env.DB;
   if (db === undefined)
