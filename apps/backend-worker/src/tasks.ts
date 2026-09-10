@@ -36,7 +36,7 @@ export async function readTasks(
   accountId: string,
   limit: number,
   cursor: string | undefined
-): Promise<TaskRead.Page | "unavailable" | "invalid_cursor"> {
+): Promise<TaskRead.Page | "unprojectable" | "invalid_cursor"> {
   if (cursor !== undefined) {
     if (cursor.length < 1 || cursor.length > 1024) return "invalid_cursor";
     const found = await db
@@ -61,7 +61,7 @@ export async function readTasks(
   const items: TaskRead.Item[] = [];
   for (const row of pageRows) {
     const item = toTaskItem(row);
-    if (item === null) return "unavailable";
+    if (item === null) return "unprojectable";
     items.push(item);
   }
   const nextCursor = hasMore ? pageRows[pageRows.length - 1]?.id ?? null : null;

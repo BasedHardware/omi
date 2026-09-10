@@ -1128,8 +1128,8 @@ export async function handleTasks(context: CoreContext): Promise<Response> {
   const page = await readTasks(db, context.get("accountId"), limit, cursor);
   if (page === "invalid_cursor")
     return backendError("bad_request", "edit_request", 400);
-  if (page === "unavailable")
-    return backendError("service_unavailable", "retry", 503, true);
+  if (page === "unprojectable")
+    return json({ error: "internal_server_error" }, 500);
   return json(page);
 }
 

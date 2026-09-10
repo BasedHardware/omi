@@ -1077,13 +1077,10 @@ describe("worker request contract", () => {
     const response = await fetchWorker("/v1/tasks?limit=10", {
       headers: authenticatedHeaders,
     });
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(500);
+    expect(response.headers.get("retry-after")).toBeNull();
     expect((await response.json()) as unknown).toEqual({
-      error: {
-        code: "service_unavailable",
-        retryable: true,
-        action: "retry",
-      },
+      error: "internal_server_error",
     });
   });
 
@@ -1098,13 +1095,10 @@ describe("worker request contract", () => {
     const response = await fetchWorker("/v1/tasks?limit=10", {
       headers: authenticatedHeaders,
     });
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(500);
+    expect(response.headers.get("retry-after")).toBeNull();
     expect((await response.json()) as unknown).toEqual({
-      error: {
-        code: "service_unavailable",
-        retryable: true,
-        action: "retry",
-      },
+      error: "internal_server_error",
     });
   });
 
