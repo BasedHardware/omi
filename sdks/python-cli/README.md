@@ -221,6 +221,7 @@ omi
 │   ├── list [--completed/--open] [--conversation-id ...] [...]
 │   ├── get <id>
 │   ├── create <description> [--due-at ...]
+│   ├── create-batch <file.json>
 │   ├── update <id> [--description ...] [--completed/--open] [--due-at ...]
 │   ├── complete <id>
 │   └── delete <id> [-y]
@@ -247,12 +248,12 @@ omi
     └── delete <id> [-y]
 ```
 
-`conversation from-segments` reads JSON files as UTF-8 (with or without a BOM),
-UTF-16, or UTF-32, independently of the system's default text encoding.
-Both transcript JSON and `local call --args-json` require finite numbers:
-`NaN`, `Infinity`, `-Infinity`, and values outside Python's finite floating-point
-range are rejected before opening an API client. In `--json` mode, these input
-errors are reported as JSON on stderr.
+`conversation from-segments` and `action-item create-batch` read JSON files as
+UTF-8 (with or without a BOM), UTF-16, or UTF-32, independently of the system's
+default text encoding. Both JSON inputs and `local call --args-json` require
+finite numbers: `NaN`, `Infinity`, `-Infinity`, and values outside Python's finite
+floating-point range are rejected before opening an API client. In `--json` mode,
+these input errors are reported as JSON on stderr.
 
 `action-item get` searches successive API pages until it finds the ID or
 reaches the end of the results. It can retrieve items beyond the first 1,000;
