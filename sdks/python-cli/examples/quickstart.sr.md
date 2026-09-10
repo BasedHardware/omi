@@ -64,8 +64,8 @@ uspe, potvrđuje da akreditive rade, iako ne mora da prikaže tvoje ime.
 Konfiguracija se podrazumevano čuva u `~/.omi/config.toml`. Ne deli ovaj
 fajl — može da sadrži tvoje akreditive.
 
-Za automatizaciju možeš koristiti promenljivu okruženja `OMI_API_KEY` umesto
-čuvanja profila:
+Za automatizaciju možeš koristiti promenljivu okruženja `OMI_API_KEY` kada
+aktivni profil nema sačuvan ključ; u suprotnom se koristi ključ iz profila:
 
 ```sh
 export OMI_API_KEY=omi_dev_...
@@ -127,7 +127,8 @@ omi --profile posao memory list
 ```
 
 Ako je ne navedeš, koristi se profil iz promenljive `OMI_PROFILE`, a zatim
-podrazumevani profil `default`. Svi profili se čuvaju u `~/.omi/config.toml`.
+aktivni profil iz konfiguracije (podrazumevano `default`). Svi profili se
+čuvaju u `~/.omi/config.toml`.
 
 ## Izlazni kodovi
 
@@ -136,17 +137,19 @@ Za skripte i automatizaciju definisani su stabilni izlazni kodovi:
 | Kod | Značenje | Detalji |
 | :---: | :--- | :--- |
 | `0` | Uspeh | Komanda je uspešno završena |
-| `1` | Greška u korišćenju | Neispravne opcije, nedostajući argumenti, validacija |
-| `2` | Greška prijave | Nema akreditiva, istekao token ili nedovoljna dozvola |
+| `1` | Greška u korišćenju | Neispravna upotreba koju prijavi sama CLI (na primer, međusobno isključive opcije) |
+| `2` | Greška prijave ili argumenata | Nema akreditiva, istekao token ili nedovoljna dozvola; i greške u argumentima (nepoznata opcija, nedostajući argument, vrednost van opsega) |
 | `3` | Greška servera | 5xx odgovor, prekid veze, mrežni problemi |
 | `4` | Ograničenje brzine | 429 Too Many Requests |
 | `5` | Nije pronađeno | 404 Not Found (traženi ID ne postoji) |
 
-Kodovi `3` i `4` su često prolazni — sačekaj kratko pa pokušaj komandu ponovo.
-CLI automatski ponavlja zahteve koji su ograničeni brzinom (429) i poštuje
-`Retry-After` kada ga server pošalje. Kod `2` obično znači da treba ponovo da
-se prijaviš (`omi auth login`), a kod `5` da traženi ID ne postoji ili nije
-dostupan.
+Kod `4` je često prolazan — sačekaj kratko pa pokušaj ponovo; CLI automatski
+ponavlja zahteve koji su ograničeni brzinom (429) i poštuje `Retry-After` kada
+ga server pošalje. Kod `3` je obično prolazan za operacije čitanja, ali kod
+upisa može da znači da je ishod nepoznat (`outcome unknown`) — server je
+možda već primenio promenu; proveri resurs pre ponovnog pokušaja. Kod `2`
+obično znači da treba ponovo da se prijaviš (`omi auth login`), a kod `5` da
+traženi ID ne postoji ili nije dostupan.
 
 Za ostale komande i napredne opcije pogledaj
 [glavni README na engleskom](../README.md) i `omi --help`.
