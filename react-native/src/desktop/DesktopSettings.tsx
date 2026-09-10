@@ -20,6 +20,7 @@ import {
   subscriptionPlanCopy,
   subscriptionStatusCopy,
   usageStatsCopy,
+  subscriptionPeriodCopy,
   primaryLanguageCopy,
   peopleNameRows,
   fairUseCopy,
@@ -571,6 +572,9 @@ export function DesktopSettings({
         />
       )}
       {usageStatsCopy(account?.usage)?.map(row => (
+        <Row copy={row.copy} key={row.title} title={row.title} />
+      ))}
+      {subscriptionPeriodCopy(account?.subscription)?.map(row => (
         <Row copy={row.copy} key={row.title} title={row.title} />
       ))}
       {primaryLanguageCopy(account?.language, account?.languageNames) !==

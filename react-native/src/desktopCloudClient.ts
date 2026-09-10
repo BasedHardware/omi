@@ -50,6 +50,14 @@ export type CloudSubscription = {
   status: string;
   transcriptionSecondsUsed: number | null;
   transcriptionSecondsLimit: number | null;
+  wordsTranscribedUsed: number | null;
+  wordsTranscribedLimit: number | null;
+  insightsGainedUsed: number | null;
+  insightsGainedLimit: number | null;
+  chatQuotaUsed: number | null;
+  chatQuotaUnit: string | null;
+  chatQuestionsPerMonth: number | null;
+  chatCostUsdPerMonth: number | null;
 };
 
 export type CloudUsageStats = {
@@ -110,6 +118,10 @@ function optionalInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value)
     ? value
     : null;
+}
+
+function optionalFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function parseJson(body: string | null, label: string): unknown {
@@ -367,6 +379,16 @@ export function parseCloudSubscription(
   ) {
     throw new Error(`${label} is malformed`);
   }
+  const rawLimits = subscription.limits;
+  const limits =
+    rawLimits !== undefined &&
+    rawLimits !== null &&
+    typeof rawLimits === 'object' &&
+    !Array.isArray(rawLimits)
+      ? (rawLimits as Record<string, unknown>)
+      : null;
+  const chatQuotaUnit =
+    typeof record.chat_quota_unit === 'string' ? record.chat_quota_unit : null;
   return {
     plan: subscription.plan,
     status: subscription.status,
@@ -376,6 +398,18 @@ export function parseCloudSubscription(
     transcriptionSecondsLimit: optionalInteger(
       record.transcription_seconds_limit,
     ),
+    wordsTranscribedUsed: optionalInteger(record.words_transcribed_used),
+    wordsTranscribedLimit: optionalInteger(record.words_transcribed_limit),
+    insightsGainedUsed: optionalInteger(record.insights_gained_used),
+    insightsGainedLimit: optionalInteger(record.insights_gained_limit),
+    chatQuotaUsed: optionalFiniteNumber(record.chat_quota_used),
+    chatQuotaUnit,
+    chatQuestionsPerMonth:
+      limits === null ? null : optionalInteger(limits.chat_questions_per_month),
+    chatCostUsdPerMonth:
+      limits === null
+        ? null
+        : optionalFiniteNumber(limits.chat_cost_usd_per_month),
   };
 }
 

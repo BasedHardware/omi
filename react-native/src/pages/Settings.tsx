@@ -34,6 +34,7 @@ import {
   subscriptionPlanCopy,
   subscriptionStatusCopy,
   usageStatsCopy,
+  subscriptionPeriodCopy,
   primaryLanguageCopy,
   peopleNameRows,
   fairUseCopy,
@@ -446,6 +447,9 @@ export function SettingsPage({
           />
         )}
         {usageStatsCopy(snapshot.usage)?.map(row => (
+          <SettingRow copy={row.copy} key={row.title} title={row.title} />
+        ))}
+        {subscriptionPeriodCopy(snapshot.subscription)?.map(row => (
           <SettingRow copy={row.copy} key={row.title} title={row.title} />
         ))}
         {primaryLanguageCopy(snapshot.language, snapshot.languageNames) !==

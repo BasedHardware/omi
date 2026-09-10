@@ -469,6 +469,72 @@ export function usageStatsCopy(
   ];
 }
 
+export function subscriptionPeriodCopy(
+  subscription:
+    | {
+        wordsTranscribedUsed: number | null;
+        wordsTranscribedLimit: number | null;
+        insightsGainedUsed: number | null;
+        insightsGainedLimit: number | null;
+        chatQuotaUsed: number | null;
+        chatQuotaUnit: string | null;
+        chatQuestionsPerMonth: number | null;
+        chatCostUsdPerMonth: number | null;
+      }
+    | null
+    | undefined,
+): {title: string; copy: string}[] | null {
+  if (subscription == null) {
+    return null;
+  }
+  const rows: {title: string; copy: string}[] = [];
+  if (
+    typeof subscription.wordsTranscribedUsed === 'number' &&
+    typeof subscription.wordsTranscribedLimit === 'number' &&
+    subscription.wordsTranscribedLimit > 0
+  ) {
+    rows.push({
+      title: 'Words this month',
+      copy: `${subscription.wordsTranscribedUsed} of ${subscription.wordsTranscribedLimit} words used this month`,
+    });
+  }
+  if (
+    typeof subscription.insightsGainedUsed === 'number' &&
+    typeof subscription.insightsGainedLimit === 'number' &&
+    subscription.insightsGainedLimit > 0
+  ) {
+    rows.push({
+      title: 'Insights this month',
+      copy: `${subscription.insightsGainedUsed} of ${subscription.insightsGainedLimit} insights gained this month`,
+    });
+  }
+  const unit = visibleDisplayText(subscription.chatQuotaUnit ?? '');
+  if (unit !== '' && typeof subscription.chatQuotaUsed === 'number') {
+    if (unit === 'cost_usd') {
+      const used = `$${subscription.chatQuotaUsed.toFixed(2)}`;
+      const limit = subscription.chatCostUsdPerMonth;
+      rows.push({
+        title: 'Chat this month',
+        copy:
+          limit !== null && limit > 0
+            ? `${used} of $${limit.toFixed(0)} used this month`
+            : `${used} used this month`,
+      });
+    } else {
+      const used = Math.round(subscription.chatQuotaUsed);
+      const limit = subscription.chatQuestionsPerMonth;
+      rows.push({
+        title: 'Chat this month',
+        copy:
+          limit !== null && limit > 0
+            ? `${used} of ${limit} messages used this month`
+            : `${used} messages used this month`,
+      });
+    }
+  }
+  return rows.length === 0 ? null : rows;
+}
+
 export function primaryLanguageCopy(
   code: string | null | undefined,
   names:

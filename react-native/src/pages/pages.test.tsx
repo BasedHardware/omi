@@ -1209,6 +1209,43 @@ test('Settings names GET usage today without Upgrade', async () => {
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names GET subscription period quotas without Upgrade', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/subscription') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          plan: 'basic',
+          status: 'active',
+          words_transcribed_used: 12,
+          words_transcribed_limit: 10000,
+          insights_gained_used: 3,
+          insights_gained_limit: 500,
+          chat_quota_used: 5,
+          chat_quota_unit: 'messages',
+          subscription: {
+            plan: 'basic',
+            status: 'active',
+            limits: {chat_questions_per_month: 100},
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Words this month');
+  expect(tree).toContain('12 of 10000 words used this month');
+  expect(tree).toContain('Insights this month');
+  expect(tree).toContain('3 of 500 insights gained this month');
+  expect(tree).toContain('Chat this month');
+  expect(tree).toContain('5 of 100 messages used this month');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names GET primary language without a write sheet', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

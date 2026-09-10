@@ -2534,6 +2534,72 @@ test('Settings shows already-loaded transcription seconds on Current plan', asyn
   expect(renderedText(renderer)).not.toContain('Data protection');
 });
 
+test('Settings names GET subscription period quotas without Upgrade', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'basic',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+      wordsTranscribedUsed: 12,
+      wordsTranscribedLimit: 10000,
+      insightsGainedUsed: 3,
+      insightsGainedLimit: 500,
+      chatQuotaUsed: 5,
+      chatQuotaUnit: 'messages',
+      chatQuestionsPerMonth: 100,
+      chatCostUsdPerMonth: null,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Words this month');
+  expect(tree).toContain('12 of 10000 words used this month');
+  expect(tree).toContain('Insights this month');
+  expect(tree).toContain('Chat this month');
+  expect(tree).toContain('5 of 100 messages used this month');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names GET usage today without Upgrade', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;

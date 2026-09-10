@@ -71,6 +71,7 @@ import {
   peopleNameRows,
   firmwareUpdateCopy,
   fairUseCopy,
+  subscriptionPeriodCopy,
   taskDisplaySummary,
   taskDisplayTitle,
   taskGroup,
@@ -2621,6 +2622,12 @@ test('keeps empty subscription plan tokens instead of failing Settings Plan', ()
       status: '',
       transcriptionSecondsUsed: null,
       transcriptionSecondsLimit: null,
+      wordsTranscribedUsed: null,
+      wordsTranscribedLimit: null,
+      insightsGainedUsed: null,
+      insightsGainedLimit: null,
+      chatQuotaUsed: null,
+      chatQuotaUnit: null,
     }),
   );
   expect(
@@ -2632,6 +2639,79 @@ test('keeps empty subscription plan tokens instead of failing Settings Plan', ()
   expect(() =>
     parseCloudSubscription({status: 'active'}, 'Subscription response'),
   ).toThrow('Subscription response is malformed');
+});
+
+test('subscription period copy names GET words insights and chat quotas without Upgrade', () => {
+  expect(
+    subscriptionPeriodCopy({
+      wordsTranscribedUsed: 12,
+      wordsTranscribedLimit: 10000,
+      insightsGainedUsed: 3,
+      insightsGainedLimit: 500,
+      chatQuotaUsed: 5,
+      chatQuotaUnit: 'messages',
+      chatQuestionsPerMonth: 100,
+      chatCostUsdPerMonth: null,
+    }),
+  ).toEqual([
+    {
+      title: 'Words this month',
+      copy: '12 of 10000 words used this month',
+    },
+    {
+      title: 'Insights this month',
+      copy: '3 of 500 insights gained this month',
+    },
+    {
+      title: 'Chat this month',
+      copy: '5 of 100 messages used this month',
+    },
+  ]);
+  expect(
+    subscriptionPeriodCopy({
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: null,
+      insightsGainedLimit: 500,
+      chatQuotaUsed: 1.2,
+      chatQuotaUnit: 'cost_usd',
+      chatQuestionsPerMonth: null,
+      chatCostUsdPerMonth: 20,
+    }),
+  ).toEqual([
+    {title: 'Chat this month', copy: '$1.20 of $20 used this month'},
+  ]);
+  expect(
+    parseCloudSubscription(
+      {
+        plan: 'basic',
+        status: 'active',
+        words_transcribed_used: 12,
+        words_transcribed_limit: 10000,
+        insights_gained_used: 3,
+        insights_gained_limit: 500,
+        chat_quota_used: 5,
+        chat_quota_unit: 'messages',
+        subscription: {
+          plan: 'basic',
+          status: 'active',
+          limits: {chat_questions_per_month: 100},
+        },
+      },
+      'Subscription response',
+    ),
+  ).toEqual(
+    expect.objectContaining({
+      wordsTranscribedUsed: 12,
+      wordsTranscribedLimit: 10000,
+      insightsGainedUsed: 3,
+      insightsGainedLimit: 500,
+      chatQuotaUsed: 5,
+      chatQuotaUnit: 'messages',
+      chatQuestionsPerMonth: 100,
+    }),
+  );
+  expect(subscriptionPeriodCopy(null)).toBeNull();
 });
 
 test('keeps an empty Settings entitlement limitKey instead of failing the page', async () => {
