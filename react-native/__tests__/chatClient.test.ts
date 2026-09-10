@@ -600,6 +600,16 @@ test('maps ratified public recovery without automatically retrying', () => {
   ).toBe('This request cannot be completed.');
   expect(
     chatWriteDoorUnavailable(
+      new ChatBackendError(422, 'validation', false, 'edit_request', null),
+    ),
+  ).toBe(false);
+  expect(
+    chatErrorCopy(
+      new ChatBackendError(422, 'validation', false, 'edit_request', null),
+    ),
+  ).toBe('This request cannot be completed.');
+  expect(
+    chatWriteDoorUnavailable(
       new ChatBackendError(503, 'service_unavailable', true, 'retry', 2),
     ),
   ).toBe(false);

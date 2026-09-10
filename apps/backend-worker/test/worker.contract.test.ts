@@ -3286,6 +3286,86 @@ describe("settings entitlement admission contract", () => {
     expect(accountCalls).toEqual([]);
   });
 
+  test("count, duplicate, mime, and size attachment ids use production validation", async () => {
+    await insertAttachment({
+      id: "att-html",
+      accountId: "test-account",
+      state: "ingested",
+      mimeType: "text/html",
+    });
+    await insertAttachment({
+      id: "att-zero",
+      accountId: "test-account",
+      state: "ingested",
+      sizeBytes: 0,
+    });
+    await insertAttachment({
+      id: "att-dup",
+      accountId: "test-account",
+      state: "ingested",
+    });
+
+    const tooMany = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("attach-count"),
+        attachmentIds: ["a", "b", "c", "d", "e"],
+      }),
+    });
+    const duplicate = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("attach-dup"),
+        attachmentIds: ["att-dup", "att-dup"],
+      }),
+    });
+    const duplicateMissing = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("attach-dup-missing"),
+        attachmentIds: ["missing", "missing"],
+      }),
+    });
+    const mime = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("attach-html"),
+        attachmentIds: ["att-html"],
+      }),
+    });
+    const zero = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("attach-zero"),
+        attachmentIds: ["att-zero"],
+      }),
+    });
+
+    const validation = {
+      error: {
+        code: "validation",
+        retryable: false,
+        action: "edit_request",
+      },
+    };
+    expect(tooMany.status).toBe(422);
+    expect((await tooMany.json()) as unknown).toEqual(validation);
+    expect(duplicate.status).toBe(422);
+    expect((await duplicate.json()) as unknown).toEqual(validation);
+    expect(duplicateMissing.status).toBe(422);
+    expect((await duplicateMissing.json()) as unknown).toEqual(validation);
+    expect(mime.status).toBe(422);
+    expect((await mime.json()) as unknown).toEqual(validation);
+    expect(zero.status).toBe(422);
+    expect((await zero.json()) as unknown).toEqual(validation);
+    expect(accountCalls).toEqual([]);
+  });
+
   test("completed same-account attachments are admitted with real metadata", async () => {
     await insertAttachment({
       id: "att-ready",

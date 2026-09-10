@@ -69,6 +69,7 @@ export type AccountPort = {
     | "entitlement"
     | "attachment_rejected"
     | "attachment_not_found"
+    | "attachment_invalid"
   >;
   cancel(
     accountId: string,
@@ -573,6 +574,8 @@ export async function handleChatCreate(
   );
   if (resolved.kind === "not_found")
     return backendError("not_found", "edit_request", 404);
+  if (resolved.kind === "invalid")
+    return backendError("validation", "edit_request", 422);
   if (resolved.kind === "rejected")
     return backendError("attachment_rejected", "edit_request", 422);
   const accountBackend = account(context);
@@ -589,6 +592,9 @@ export async function handleChatCreate(
   }
   if (admission === "attachment_not_found") {
     return backendError("not_found", "edit_request", 404);
+  }
+  if (admission === "attachment_invalid") {
+    return backendError("validation", "edit_request", 422);
   }
   if (admission === "attachment_rejected") {
     return backendError("attachment_rejected", "edit_request", 422);

@@ -361,6 +361,7 @@ export type BoundChatAttachment = {
 export type AdmitAttachmentsResult =
   | { kind: "ok"; attachments: BoundChatAttachment[] }
   | { kind: "not_found" }
+  | { kind: "invalid" }
   | { kind: "rejected" };
 
 export async function resolveAttachmentsForAdmit(
@@ -372,12 +373,11 @@ export async function resolveAttachmentsForAdmit(
 ): Promise<AdmitAttachmentsResult> {
   if (attachmentIds.length === 0) return { kind: "ok", attachments: [] };
   if (attachmentIds.length > capabilities.maxAttachmentsPerMessage)
-    return { kind: "rejected" };
-  const seen = new Set<string>();
+    return { kind: "invalid" };
+  if (new Set(attachmentIds).size !== attachmentIds.length)
+    return { kind: "invalid" };
   const attachments: BoundChatAttachment[] = [];
   for (const id of attachmentIds) {
-    if (seen.has(id)) return { kind: "rejected" };
-    seen.add(id);
     const row = await readAttachment(db, accountId, id);
     if (row === null) return { kind: "not_found" };
     if (
@@ -385,7 +385,7 @@ export async function resolveAttachmentsForAdmit(
       row.size_bytes <= 0 ||
       row.size_bytes > capabilities.maxAttachmentBytes
     )
-      return { kind: "rejected" };
+      return { kind: "invalid" };
     const replay = row.state === "bound" && row.bound_message_id === messageId;
     const ready = row.state === "ingested" && row.bound_message_id === null;
     if (!replay && !ready) return { kind: "rejected" };

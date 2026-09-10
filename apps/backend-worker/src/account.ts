@@ -41,6 +41,7 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
     | "entitlement"
     | "attachment_rejected"
     | "attachment_not_found"
+    | "attachment_invalid"
   > {
     return this.ctx.blockConcurrencyWhile(async () => {
       const result = await admitMessage(

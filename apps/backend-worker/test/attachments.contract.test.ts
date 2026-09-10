@@ -1288,6 +1288,67 @@ describe("attachment admit bind", () => {
     ).toEqual({ kind: "rejected" });
   });
 
+  test("count, duplicate, mime, and size attachment ids are invalid", async () => {
+    await insertStoredAttachment({
+      id: "att-html",
+      accountId: "test-account",
+      state: "ingested",
+      mimeType: "text/html",
+    });
+    await insertStoredAttachment({
+      id: "att-zero",
+      accountId: "test-account",
+      state: "ingested",
+      sizeBytes: 0,
+    });
+    await insertStoredAttachment({
+      id: "att-dup",
+      accountId: "test-account",
+      state: "ingested",
+    });
+
+    expect(
+      await resolveAttachmentsForAdmit(
+        d1Mock,
+        "test-account",
+        ["a", "b", "c", "d", "e"],
+        "message-count"
+      )
+    ).toEqual({ kind: "invalid" });
+    expect(
+      await resolveAttachmentsForAdmit(
+        d1Mock,
+        "test-account",
+        ["att-dup", "att-dup"],
+        "message-dup"
+      )
+    ).toEqual({ kind: "invalid" });
+    expect(
+      await resolveAttachmentsForAdmit(
+        d1Mock,
+        "test-account",
+        ["missing", "missing"],
+        "message-dup-missing"
+      )
+    ).toEqual({ kind: "invalid" });
+    expect(
+      await resolveAttachmentsForAdmit(
+        d1Mock,
+        "test-account",
+        ["att-html"],
+        "message-html"
+      )
+    ).toEqual({ kind: "invalid" });
+    expect(
+      await resolveAttachmentsForAdmit(
+        d1Mock,
+        "test-account",
+        ["att-zero"],
+        "message-zero"
+      )
+    ).toEqual({ kind: "invalid" });
+  });
+
   test("accepts a completed same-account attachment and binds it", async () => {
     await insertStoredAttachment({
       id: "att-ready",

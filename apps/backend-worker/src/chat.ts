@@ -82,6 +82,7 @@ export async function admitMessage(
   | "entitlement"
   | "attachment_rejected"
   | "attachment_not_found"
+  | "attachment_invalid"
 > {
   const payloadHash = computePayloadHash(input);
   const prior = await db
@@ -131,6 +132,7 @@ export async function admitMessage(
     input.id
   );
   if (resolved.kind === "not_found") return "attachment_not_found";
+  if (resolved.kind === "invalid") return "attachment_invalid";
   if (resolved.kind === "rejected") return "attachment_rejected";
 
   const usedRow = await db
