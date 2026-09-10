@@ -55,6 +55,7 @@ import {
   conversationListCategory,
   conversationListSourceTag,
   conversationListTag,
+  conversationVisibilityCopy,
   parseMemoryText,
   chatClockLabel,
   clockLabel,
@@ -1457,6 +1458,14 @@ test('conversation list source tags name only Flutter GET remaps', () => {
       source: 'omi',
     }),
   ).toBe('Work');
+});
+
+test('conversation visibility copy names GET shared or public and omits private', () => {
+  expect(conversationVisibilityCopy('shared')).toBe('Shared');
+  expect(conversationVisibilityCopy('public')).toBe('Public');
+  expect(conversationVisibilityCopy('private')).toBeNull();
+  expect(conversationVisibilityCopy(' \t\n')).toBeNull();
+  expect(conversationVisibilityCopy(undefined)).toBeNull();
 });
 
 test('conversation day labels prefer startedAt and keep Today/Yesterday/date', () => {

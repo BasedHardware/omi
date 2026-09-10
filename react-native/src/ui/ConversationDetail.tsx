@@ -7,6 +7,7 @@ import {
   conversationDisplayTitle,
   conversationHasFinishClock,
   conversationStatusCopy,
+  conversationVisibilityCopy,
   formatConversationDuration,
   legacyTranscriptCanDisplaySeconds,
   legacyTranscriptTimestampCopy,
@@ -39,6 +40,7 @@ function ConversationClockFields({
 }) {
   const showLocked = locked === true || conversation.locked;
   const captureCopy = conversationCaptureCopy(conversation.capturedAtMs);
+  const visibilityCopy = conversationVisibilityCopy(conversation.visibility);
   return (
     <View style={styles.conversationDetailFields}>
       {captureCopy !== null ? (
@@ -77,6 +79,11 @@ function ConversationClockFields({
       {conversation.discarded ? (
         <Text style={[styles.conversationDetailField, ink]}>Discarded</Text>
       ) : null}
+      {visibilityCopy === null ? null : (
+        <Text style={[styles.conversationDetailField, ink]}>
+          {visibilityCopy}
+        </Text>
+      )}
     </View>
   );
 }

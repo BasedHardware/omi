@@ -707,3 +707,45 @@ test('legacy conversation details name GET app result content', () => {
   );
   expect(discarded).not.toContain('App wrote this recap');
 });
+
+test('conversation details name GET shared or public visibility and omit private', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const shared = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', visibility: 'shared'},
+    }),
+  );
+  expect(shared).toContain('Shared');
+  const published = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', visibility: 'public'},
+    }),
+  );
+  expect(published).toContain('Public');
+  const hidden = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', visibility: 'private'},
+    }),
+  );
+  expect(hidden).not.toContain('Shared');
+  expect(hidden).not.toContain('Public');
+  expect(hidden).not.toContain('Private');
+});

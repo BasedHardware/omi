@@ -251,6 +251,19 @@ export function conversationListTag(item: {
   return conversationListSourceTag(item) ?? conversationListCategory(item);
 }
 
+export function conversationVisibilityCopy(
+  visibility: string | null | undefined,
+): string | null {
+  const value = visibleDisplayText(visibility ?? '');
+  if (value === 'shared') {
+    return 'Shared';
+  }
+  if (value === 'public') {
+    return 'Public';
+  }
+  return null;
+}
+
 export function conversationDiscardedPhotoCopy(item: {
   discarded: boolean;
   photoCount?: number;
