@@ -876,6 +876,13 @@ describe("attachment completion + queue ingest vertical slice", () => {
       "00000000-0000-0000-0000-000000000000"
     );
     expect(response.status).toBe(404);
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "not_found",
+        retryable: false,
+        action: "edit_request",
+      },
+    });
   });
 
   test("missing completion attachments is nested non-retryable without inventing ingest", async () => {
@@ -980,6 +987,13 @@ describe("attachment completion + queue ingest vertical slice", () => {
 
     const response = await completeRoute(staged.attachment.id);
     expect(response.status).toBe(404);
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "not_found",
+        retryable: false,
+        action: "edit_request",
+      },
+    });
     const row = await d1Mock
       .prepare("SELECT state, account_id FROM chat_attachments WHERE id = ?")
       .bind(staged.attachment.id)

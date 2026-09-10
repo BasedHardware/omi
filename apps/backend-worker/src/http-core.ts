@@ -722,7 +722,7 @@ export async function handleAttachmentComplete(
     case "ingested":
       return json({ attachment: outcome.attachment }, 200);
     case "not_found":
-      return backendError("not_found", "refresh_history", 404);
+      return backendError("not_found", "edit_request", 404);
     case "expired":
       return backendError("attachment_expired", "edit_request", 410);
     case "absent":
