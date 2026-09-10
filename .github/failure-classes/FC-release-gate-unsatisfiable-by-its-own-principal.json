@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-release-gate-unsatisfiable-by-its-own-principal",
+  "violated_contract": "A fail-closed gate must be satisfiable by the principal it runs as. When a gate compares a credential's own scope against a target that credential can never belong to -- a signer whose project_id is checked against a foreign --firebase-project, a token checked against an authority it was never issued for -- it cannot pass in any environment. It stops qualifying releases and starts blocking them, and because a permanently red gate is indistinguishable from an ordinary flaky or legitimately failing check, the block is invisible: the release lane simply stays red while merged fixes pile up behind it, live on the tiers that deploy through other lanes and absent on the one it guards.",
+  "canonical_prevention": "Pair a gate's credential with the authority it is checked against at authoring time, and prove the pairing before the gate is allowed to block anything: a new fail-closed gate ships with a test showing an existing principal passes it (AGENTS.md's legacy-principal rule), and the wiring itself is pinned by a check that reads which secret feeds the gate rather than trusting the name. When triaging a red release lane, compare the lane's last green run against the gate's introduction: if the last success predates the gate, the gate has never passed and the defect is the gate, not the code behind it.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/check-release-process-guards.py",
+    ".github/scripts/test_check_release_process_guards.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/workflows/**",
+    ".github/scripts/check-release-process-guards.py",
+    "backend/scripts/firebase_release_probe_token.py"
+  ],
+  "status": "open"
+}
