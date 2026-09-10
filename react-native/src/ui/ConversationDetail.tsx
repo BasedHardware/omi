@@ -221,6 +221,9 @@ function LegacyConversationBody({
   const address = conversation.discarded
     ? ''
     : visibleDisplayText(detail.locationAddress ?? '');
+  const appSummary = conversation.discarded
+    ? ''
+    : visibleDisplayText(detail.appSummary ?? '');
   return (
     <>
       <Text
@@ -237,6 +240,11 @@ function LegacyConversationBody({
           status: conversation.status,
         })}
       </Text>
+      {appSummary === '' ? null : (
+        <Text selectable style={[styles.conversationDetailSummary, ink]}>
+          {appSummary}
+        </Text>
+      )}
       <ConversationClockFields
         conversation={conversation}
         ink={ink}

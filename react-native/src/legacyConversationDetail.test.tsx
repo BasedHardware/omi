@@ -125,6 +125,94 @@ test('keeps GET geolocation address and omits empty or missing locations', async
   ).toBeUndefined();
 });
 
+test('keeps first GET apps_results content and falls back to plugins_results', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      apps_results: [
+        {content: ' \t'},
+        {content: 'App wrote this recap', app_id: 'notes'},
+      ],
+      plugins_results: [{content: 'Legacy plugin recap', plugin_id: 'old'}],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummary,
+  ).toBe('App wrote this recap');
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      plugins_results: [{content: 'Legacy plugin recap'}],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummary,
+  ).toBe('Legacy plugin recap');
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      apps_results: [],
+      plugins_results: [{content: 'Legacy plugin recap'}],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummary,
+  ).toBe('Legacy plugin recap');
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      apps_results: [{content: ' \n'}],
+      plugins_results: [{content: 'Legacy plugin recap'}],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummary,
+  ).toBeUndefined();
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      apps_results: [{content: 'Summary'}],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummary,
+  ).toBeUndefined();
+  mockRequest.mockResolvedValue(response(fixture));
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummary,
+  ).toBeUndefined();
+});
+
+test('fails closed for malformed GET apps_results or plugins_results', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      apps_results: 'not-an-array',
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      apps_results: [{content: 1}],
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      plugins_results: {content: 'Legacy plugin recap'},
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+});
+
 test('fails closed for malformed GET geolocation', async () => {
   mockRequest.mockResolvedValue(
     response({

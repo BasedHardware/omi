@@ -9,6 +9,7 @@ export type LegacyConversationDetail = {
   sections: {heading: string; bodyMarkdown: string}[];
   actionItems: {description: string; completed: boolean}[];
   locationAddress?: string;
+  appSummary?: string;
   transcript:
     | {status: 'unavailable'}
     | {
@@ -57,6 +58,27 @@ function array(value: unknown, limit: number): unknown[] {
     throw new DetailError('invalid');
   }
   return value;
+}
+function firstAppSummary(
+  apps: unknown,
+  plugins: unknown,
+  overview: string,
+): string | undefined {
+  const appRows = apps === undefined || apps === null ? [] : array(apps, 1000);
+  const rows =
+    appRows.length > 0
+      ? appRows
+      : plugins === undefined || plugins === null
+      ? []
+      : array(plugins, 1000);
+  for (const raw of rows) {
+    const row = object(raw);
+    const content = visibleDisplayText(text(row.content, 100000));
+    if (content !== '' && content !== overview) {
+      return content;
+    }
+  }
+  return undefined;
 }
 function locationAddress(value: unknown): string | undefined {
   if (value === undefined || value === null) {
@@ -165,14 +187,21 @@ export async function loadLegacyConversationDetail(
           }),
         };
   const address = locationAddress(value.geolocation);
+  const overview = text(structured.overview);
+  const appSummary = firstAppSummary(
+    value.apps_results,
+    value.plugins_results,
+    visibleDisplayText(overview),
+  );
   return {
     id,
     title: text(structured.title),
-    summary: text(structured.overview),
+    summary: overview,
     locked,
     sections,
     actionItems,
     ...(address === undefined ? {} : {locationAddress: address}),
+    ...(appSummary === undefined ? {} : {appSummary}),
     transcript,
   };
 }

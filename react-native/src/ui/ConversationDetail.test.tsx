@@ -673,3 +673,37 @@ test('legacy conversation details name GET geolocation address', () => {
   );
   expect(discarded).not.toContain('123 Market St, San Francisco');
 });
+
+test('legacy conversation details name GET app result content', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        appSummary: 'App wrote this recap',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('App wrote this recap');
+  const discarded = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', discarded: true},
+    }),
+  );
+  expect(discarded).not.toContain('App wrote this recap');
+});
