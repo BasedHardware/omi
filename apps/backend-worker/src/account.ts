@@ -164,8 +164,9 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
     });
     return new Response(stream, {
       headers: {
-        "cache-control": "no-cache, no-store",
+        "cache-control": "no-store",
         "content-type": "text/event-stream",
+        "x-accel-buffering": "no",
       },
     });
   }
@@ -313,7 +314,7 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
 
   encode(event: GenerationEvent): string {
     const { id: _id, ...frame } = event;
-    return `id: ${event.id}\nevent: ${event.kind}\ndata: ${JSON.stringify(
+    return `event: ${event.kind}\nid: ${event.id}\ndata: ${JSON.stringify(
       frame
     )}\n\n`;
   }
@@ -321,8 +322,9 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
   private sse(events: GenerationEvent[]): Response {
     return new Response(events.map((event) => this.encode(event)).join(""), {
       headers: {
-        "cache-control": "no-cache, no-store",
+        "cache-control": "no-store",
         "content-type": "text/event-stream",
+        "x-accel-buffering": "no",
       },
     });
   }

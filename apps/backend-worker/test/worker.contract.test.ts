@@ -3830,6 +3830,7 @@ describe("ratified generation wire", () => {
     expect(parseChatGenerationEventStream(transcript)).toEqual([
       { kind: "snapshot", text: "hello" },
     ]);
+    expect(transcript.startsWith("event: snapshot\nid: event-1\n")).toBe(true);
     expect(transcript).toContain("event: snapshot\n");
     expect(transcript).not.toContain('"id":"event-1"');
   });
