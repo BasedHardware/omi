@@ -3238,11 +3238,10 @@ test('Settings names GET app changelogs without dismiss or a default icon', asyn
   });
   const tree = renderedText(renderer);
   expect(tree).toContain("What's New in 1.2.0");
-  expect(tree).toContain('Faster sync · Uploads finish sooner.');
+  expect(tree).toContain('🚀 · Faster sync · Uploads finish sooner.');
   expect(tree).toContain('Offline replay');
   expect(tree).not.toContain('Release notes');
   expect(tree).not.toContain('ann-1');
-  expect(tree).not.toContain('🚀');
   expect(tree).not.toContain('✨');
   expect(tree).not.toContain('Dismiss');
   expect(omiBackend.request).toHaveBeenCalledWith({

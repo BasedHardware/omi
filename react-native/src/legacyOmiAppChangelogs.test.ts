@@ -41,7 +41,7 @@ test('parses GET app changelogs without inventing a missing icon', () => {
     {
       key: 'ann-1:0',
       title: "What's New in 1.2.0",
-      copy: 'Faster sync · Uploads finish sooner.',
+      copy: '🚀 · Faster sync · Uploads finish sooner.',
     },
     {
       key: 'ann-1:1',

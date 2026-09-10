@@ -46,11 +46,11 @@ export function appChangelogHeading(version: string): string {
 export function appChangelogRowCopy(
   title: string,
   description: string,
+  icon = '',
 ): string {
-  if (description === '') {
-    return title;
-  }
-  return `${title} · ${description}`;
+  const prefix = visibleDisplayText(icon);
+  const body = description === '' ? title : `${title} · ${description}`;
+  return prefix === '' ? body : `${prefix} · ${body}`;
 }
 
 export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
@@ -97,10 +97,14 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
         change.description === undefined || change.description === null
           ? ''
           : visibleDisplayText(text(change.description, 10000));
+      const icon =
+        change.icon === undefined || change.icon === null
+          ? ''
+          : visibleDisplayText(text(change.icon, 32));
       items.push({
         key: `${id}:${changeIndex}`,
         title: heading,
-        copy: appChangelogRowCopy(title, description),
+        copy: appChangelogRowCopy(title, description, icon),
       });
       changeIndex += 1;
     }
