@@ -25,7 +25,7 @@ test("device capture wire preserves stable UUID and accepts the native indexed b
   expect(parseDeviceSessionUploadAudio({ chunkIndex: 65535, bytesBase64: Buffer.alloc(1048576, 1).toString("base64") }).bytes.length).toBe(1048576);
 });
 test("invalid identities, substituted transcript text and ambiguous audio encoding are refused", () => {
-  for (const value of [{ ...create, captureId: "legacy" }, { ...create, transcript: "invented" }, { ...create, codec: 256 }, { ...create, deviceId: "" }]) {
+  for (const value of [{ ...create, captureId: "legacy" }, { ...create, transcript: "invented" }, { ...create, codec: 256 }, { ...create, deviceId: "" }, { ...create, deviceId: "omi\0device" }, { ...create, deviceName: "Omi\0" }]) {
     expect(() => parseDeviceSessionUploadCreate(value)).toThrow();
   }
   for (const value of [{ chunkIndex: 65536, bytesBase64: "AQ==" }, { chunkIndex: 0, bytesBase64: "AR==" }, { chunkIndex: 0, bytesBase64: "" }, { chunkIndex: 0, bytesBase64: "AQ==", transcript: "invented" }]) {

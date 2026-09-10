@@ -41,6 +41,49 @@ test("recording creation requires a lowercase UUID v4 capture ID", () => {
   }
 });
 
+test("capture create and audio follow production Listen bounded strings", () => {
+  const captureId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  expect(
+    parseDeviceSessionCreate({
+      captureId,
+      deviceId: "pendant\0id",
+      codec: 1,
+    })
+  ).toBeNull();
+  expect(
+    parseDeviceSessionCreate({
+      captureId,
+      deviceId: "pendant",
+      deviceName: "Omi\0",
+      codec: 1,
+    })
+  ).toBeNull();
+  expect(
+    parseDeviceSessionCreate({
+      captureId,
+      deviceId: "pendant",
+      codec: 1,
+    })
+  ).toEqual({
+    captureId,
+    deviceId: "pendant",
+    deviceName: null,
+    codec: 1,
+  });
+  expect(
+    parseDeviceSessionAudio({
+      chunkIndex: 0,
+      bytesBase64: "A".repeat(1_398_105),
+    })
+  ).toBeNull();
+  expect(
+    parseDeviceSessionAudio({
+      chunkIndex: 0,
+      bytesBase64: btoa("\x01\x00\x00payload"),
+    })?.bytes.byteLength
+  ).toBe(10);
+});
+
 beforeAll(async () => {
   void mock.module("cloudflare:workers", () => ({
     DurableObject: class {},
@@ -806,6 +849,14 @@ describe("device session request validators", () => {
     expect(opened.status).toBe(400);
     expect(opened.headers.get("retry-after")).toBeNull();
     expect((await opened.json()) as object).toEqual(invalid);
+    const nulDevice = await fetchWorker("/v1/device-sessions", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({ ...openBody, deviceId: "AA:BB:\0CC:DD:EE:FF" }),
+    });
+    expect(nulDevice.status).toBe(400);
+    expect(nulDevice.headers.get("retry-after")).toBeNull();
+    expect((await nulDevice.json()) as object).toEqual(invalid);
     const malformed = await fetchWorker("/v1/device-sessions", {
       method: "POST",
       headers: authenticatedHeaders,

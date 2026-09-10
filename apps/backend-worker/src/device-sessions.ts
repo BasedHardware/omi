@@ -4,6 +4,7 @@ export const DEVICE_SESSION_CAPABILITIES = {
   maxSessionBytes: 8_388_608,
   maxChunks: 65_536,
   maxChunkBytes: 1_048_576,
+  maxEncodedChunkBytes: 1_398_104,
   maxDeviceIdLength: 128,
   maxDeviceNameLength: 256,
 } as const;
@@ -40,7 +41,10 @@ export type DeviceSessionAudioRequest = {
 
 function isBoundedString(value: unknown, maxLength: number): value is string {
   return (
-    typeof value === "string" && value.length > 0 && value.length <= maxLength
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= maxLength &&
+    !value.includes("\0")
   );
 }
 
@@ -138,7 +142,13 @@ export function parseDeviceSessionAudio(
     chunkIndex >= DEVICE_SESSION_CAPABILITIES.maxChunks
   )
     return null;
-  if (!isBoundedString(item["bytesBase64"], 1_572_864)) return null;
+  if (
+    !isBoundedString(
+      item["bytesBase64"],
+      DEVICE_SESSION_CAPABILITIES.maxEncodedChunkBytes
+    )
+  )
+    return null;
   if ("transcript" in item || "text" in item) return null;
   try {
     const binary = atob(item["bytesBase64"]);
