@@ -74,6 +74,22 @@ def test_quota_gate_uses_incremental_headroom():
         validate_gpu_quota(document, 41)
 
 
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"limit": 160},
+        {"usage": 0},
+        {"limit": "NaN", "usage": 0},
+        {"limit": "Infinity", "usage": 0},
+        {"limit": 160, "usage": "NaN"},
+        {"limit": 160, "usage": -1},
+    ],
+)
+def test_quota_gate_rejects_missing_or_nonfinite_allocation(fields):
+    with pytest.raises(DeploymentError, match="limit/usage"):
+        validate_gpu_quota({"quotas": [{"metric": "NVIDIA_L4_GPUS", **fields}]}, 5)
+
+
 def test_quota_gate_reserves_only_other_pool_growth_after_current_usage():
     document = {"quotas": [{"metric": "NVIDIA_L4_GPUS", "limit": 160, "usage": 4}]}
     # The existing pools reserve 31 at their maxima, but four are already in

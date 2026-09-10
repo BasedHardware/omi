@@ -337,9 +337,12 @@ def validate_gpu_quota(region_document: Mapping[str, Any], required_gpus: int, *
     if l4 is None:
         raise DeploymentError("regional NVIDIA_L4 quota is not visible; refusing to size a GPU fleet")
     try:
-        headroom = float(l4["limit"]) - float(l4.get("usage", 0))
+        limit, usage = float(l4["limit"]), float(l4["usage"])
     except (KeyError, TypeError, ValueError) as exc:
         raise DeploymentError("regional NVIDIA_L4 quota has no numeric limit/usage") from exc
+    if not all(math.isfinite(value) and value >= 0 for value in (limit, usage)):
+        raise DeploymentError("regional NVIDIA_L4 quota requires finite nonnegative limit/usage")
+    headroom = limit - usage
     available = headroom - reserved_gpus
     if available < required_gpus:
         raise DeploymentError(
