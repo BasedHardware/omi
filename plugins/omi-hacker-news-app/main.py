@@ -39,12 +39,13 @@ def _clean_text(value: Optional[str]) -> str:
     if not value:
         return ""
 
-    text = unescape(value)
+    text = value
     text = re.sub(r"</?(p|pre|blockquote|ul|ol|li)[^>]*>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<code[^>]*>", "`", text, flags=re.IGNORECASE)
     text = re.sub(r"</code>", "`", text, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", "", text)
+    text = unescape(text)
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
