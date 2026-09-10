@@ -1843,6 +1843,47 @@ describe("worker request contract", () => {
     });
   });
 
+  test("offset conversation limit junk and oversize match production parseInt clamp with Worker max 100", async () => {
+    for (let index = 0; index < 101; index++) {
+      await insertChatMessage({
+        id: `offset-${String(index).padStart(3, "0")}`,
+        accountId: "test-account",
+        text: `Offset ${index}`,
+        createdAt: 1_000 + index,
+        position: index,
+        chatSessionId: `offset-${String(index).padStart(3, "0")}`,
+      });
+    }
+
+    const junk = await fetchWorker("/v1/conversations?limit=abc&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    const zero = await fetchWorker("/v1/conversations?limit=0&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    const oversize = await fetchWorker("/v1/conversations?limit=101&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    const junkOffset = await fetchWorker(
+      "/v1/conversations?limit=1&offset=foo",
+      { headers: authenticatedHeaders }
+    );
+    const envelopeJunk = await fetchWorker("/v1/conversations?limit=abc", {
+      headers: authenticatedHeaders,
+    });
+    expect(junk.status).toBe(200);
+    expect((await junk.json()) as Array<{ id: string }>).toHaveLength(50);
+    expect(zero.status).toBe(200);
+    expect((await zero.json()) as unknown).toEqual([]);
+    expect(oversize.status).toBe(200);
+    expect((await oversize.json()) as Array<{ id: string }>).toHaveLength(100);
+    expect(junkOffset.status).toBe(200);
+    expect((await junkOffset.json()) as Array<{ id: string }>).toEqual([
+      expect.objectContaining({ id: "chat:offset-100" }),
+    ]);
+    expect(envelopeJunk.status).toBe(400);
+  });
+
   test("memories stay non-retryably unavailable because no store exists", async () => {
     const response = await fetchWorker("/v1/memories?limit=50", {
       headers: authenticatedHeaders,

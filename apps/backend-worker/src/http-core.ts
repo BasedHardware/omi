@@ -197,10 +197,18 @@ export function parseLimit(
   return Number(value);
 }
 
-export function parseOffset(value: string | undefined): number | null {
+export function parseOffset(value: string | undefined): number {
   if (value === undefined) return 0;
-  if (!/^(?:0|[1-9][0-9]{0,8})$/.test(value)) return null;
-  return Number(value);
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return parsed;
+}
+
+function parseOffsetModeLimit(value: string | undefined): number {
+  if (value === undefined) return 50;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return 50;
+  return Math.min(parsed, 100);
 }
 
 function forwardedListQuery(
@@ -867,10 +875,8 @@ export async function handleConversations(
     if (query.getAll("limit").length > 1 || query.getAll("offset").length > 1) {
       return backendError("bad_request", "edit_request", 400);
     }
-    const limit = parseLimit(query.get("limit") ?? undefined);
+    const limit = parseOffsetModeLimit(query.get("limit") ?? undefined);
     const offset = parseOffset(query.get("offset") ?? undefined);
-    if (limit === null || offset === null)
-      return backendError("bad_request", "edit_request", 400);
     const db = context.env.DB;
     if (db === undefined)
       return backendError("service_unavailable", "retry", 503, true);
