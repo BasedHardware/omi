@@ -10062,4 +10062,7 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Die Spracherkennung ist derzeit nicht verfügbar. Prüfe deine Internetverbindung und die Einstellungen zur Spracherkennung auf deinem Gerät und versuche es erneut.';
+
+  @override
+  String get processingTakingLonger => 'Arbeitet noch — das dauert länger als üblich.';
 }

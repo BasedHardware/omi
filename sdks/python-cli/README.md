@@ -62,6 +62,9 @@ omi --json memory list | jq '.[] | {id, content}'
 Pretty output displays returned text literally, including square brackets and
 emoji-like codes such as `:warning:`. Styling applies to the table layout, not
 to the contents of your memories or conversations.
+Tables without predefined columns include fields from every row, in first-seen order.
+
+> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md) or the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md).
 
 ## Auth
 
@@ -247,6 +250,14 @@ omi
 
 `conversation from-segments` reads JSON files as UTF-8 (with or without a BOM),
 UTF-16, or UTF-32, independently of the system's default text encoding.
+Both transcript JSON and `local call --args-json` require finite numbers:
+`NaN`, `Infinity`, `-Infinity`, and values outside Python's finite floating-point
+range are rejected before opening an API client. In `--json` mode, these input
+errors are reported as JSON on stderr.
+
+`action-item get` searches successive API pages until it finds the ID or
+reaches the end of the results. It can retrieve items beyond the first 1,000;
+looking up an older or missing item may require several API requests.
 
 ## Global flags
 
@@ -277,6 +288,9 @@ The CLI is built so an LLM can use it without a wrapper:
 
 * `--json` returns valid JSON to stdout. Nothing else writes to stdout in JSON
   mode (errors go to stderr as `{"error": "...", "detail": "..."}`).
+* Use `omi --json version` for a machine-readable version object
+  (`{"version": "..."}`). `omi version` and the eager `omi --version` flag
+  retain their plain-text output.
 * Stable exit codes (above) let an agent disambiguate retryable vs terminal
   errors.
 * Successful resource `delete --yes` commands preserve the API response in
@@ -304,6 +318,12 @@ The dev API enforces per-policy hourly limits:
 The CLI retries `429` automatically with exponential backoff and honors the
 server's `Retry-After` hint where present. After all retries are exhausted you
 get exit code `4` plus a message telling you how long to wait.
+
+POST and PATCH requests are not automatically replayed after an ambiguous
+transport failure or a server error: the server may already have applied the
+write. These failures return exit code `3` with an `outcome unknown` message.
+Check the resource before trying again. Connection-establishment failures and
+rate-limit responses still retry; read retries are unchanged.
 
 ## Datetime options
 Conversation and action-item datetime options accept ISO timestamps with `Z`

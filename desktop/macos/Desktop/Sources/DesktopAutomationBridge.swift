@@ -1272,7 +1272,14 @@ final class DesktopAutomationActionRegistry {
       name: "memory_log_import_probe",
       summary:
         "Import a ChatGPT/Claude memory-log text through the real connector pipeline and return the outcome message",
-      params: ["source", "text", "fixture"]
+      params: ["source", "text", "fixture"],
+      category: "write",
+      surfaces: ["import_connectors"],
+      safety: "remote_write",
+      sideEffects: [
+        "may call model/backend services",
+        "may save imported memory data",
+      ]
     ) { params in
       guard let raw = params["source"], let source = OnboardingMemoryLogSource(rawValue: raw) else {
         throw DesktopAutomationActionError.invalidParams("source must be chatgpt or claude")
@@ -2282,7 +2289,14 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "clear_owner_surface_state",
       summary: "Clear kernel main_chat turns for the active owner (non-prod continuity harness hygiene)",
-      params: ["chatId"]
+      params: ["chatId"],
+      category: "write",
+      surfaces: ["main_chat"],
+      safety: "remote_write",
+      sideEffects: [
+        "clears the local non-production main-chat projection",
+        "may delete the active owner's main-chat journal turns from the backend",
+      ]
     ) { params in
       guard AppBuild.isNonProduction else {
         return ["error": "clear_owner_surface_state is disabled on production bundles"]
@@ -3773,6 +3787,7 @@ final class DesktopAutomationActionRegistry {
 
     registerNotificationActions()
     registerRatingPromptActions()
+    registerGlassTransparencyActions()
     registerRemotePromptActions()
     registerRealtimeHubActions()
     register(

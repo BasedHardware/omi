@@ -3558,7 +3558,7 @@ class PushToTalkManager: ObservableObject {
       return run
     }
     run.text = text
-    run.completion = voiceTypeSession.deliver(text)
+    run.completion = await voiceTypeSession.deliver(text)
     return run
   }
 
@@ -3676,7 +3676,7 @@ class PushToTalkManager: ObservableObject {
       case .pasted(let delivered):
         self.voiceTypingLastOutcome.delivery = "pasted"
         self.voiceTypingLastOutcome.characters = delivered.count
-      case .copied(let delivered):
+      case .copied(let delivered, _):
         self.voiceTypingLastOutcome.delivery = "copied"
         self.voiceTypingLastOutcome.characters = delivered.count
       case .pasteRequested(let delivered):

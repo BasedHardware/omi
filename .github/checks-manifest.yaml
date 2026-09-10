@@ -9,12 +9,27 @@ checks:
     triggers: ["plugins/composio/**"]
     lanes: ["local", "ci"]
     reason: "#13302: first-person Notion memories were silently dropped because input and keyword case differed; exercise keyword detection and the real extraction route with offline responses"
+  - id: omi-hacker-news-tests
+    command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
+    triggers: ["plugins/omi-hacker-news-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13211: escaped literal angle-bracket text must survive Hacker News provider markup cleaning"
+  - id: usgs-earthquake-tests
+    command: ["python3", "plugins/omi-usgs-earthquake-app/test_main.py"]
+    triggers: ["plugins/omi-usgs-earthquake-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "Parakeet readiness is written by the WebSocket reader and read by PCM submission; execute the in-memory handshake with the race detector"
+  - id: typescript-device-sdk-tests
+    command: ["bun", "test", "sdks/device/typescript"]
+    triggers: ["sdks/device/typescript/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the Noble transport introduced in #10227 passed dashed UUID discovery filters to an undashed-UUID backend; exercise production discovery and audio delivery through a controllable adapter"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
@@ -110,7 +125,7 @@ checks:
     command: ["python3", ".github/scripts/check_release_rings.py"]
     triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/check_release_rings.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "the canonical production backend deploy remains the only release authority"
+    reason: "the canonical production backend release remains the only release authority"
   - id: backend-production-release-vector-guard-tests
     command: ["python3", ".github/scripts/test_check_release_rings.py"]
     triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
@@ -901,6 +916,12 @@ checks:
     triggers: [".github/scripts/check_duplicate_routes.py", ".github/scripts/test_check_duplicate_routes.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "hermetic fixture coverage for the duplicate-route scanner: shadowed duplicate fails with the colliding path, unique routes pass, same path on different apps is not a duplicate, api_route methods expand"
+
+  - id: notion-page-content-tests
+    command: ["python3", "plugins/omi-notion-app/test_main.py"]
+    triggers: ["plugins/omi-notion-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13181 failed content HTTP reads were indistinguishable from empty successful pages; production helper and handler regression"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

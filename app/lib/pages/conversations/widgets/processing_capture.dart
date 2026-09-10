@@ -8,6 +8,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -17,10 +18,12 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/processing_timeout.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 
@@ -878,13 +881,106 @@ Widget getProcessingConversationsWidget(List<ServerConversation> conversations) 
 class ProcessingConversationWidget extends StatefulWidget {
   final ServerConversation conversation;
 
-  const ProcessingConversationWidget({super.key, required this.conversation});
+  /// Optional clock override for tests.
+  final DateTime Function()? now;
+
+  /// Optional reprocess override for tests.
+  final Future<ServerConversation?> Function(String conversationId)? reprocess;
+
+  const ProcessingConversationWidget({super.key, required this.conversation, this.now, this.reprocess});
 
   @override
   State<ProcessingConversationWidget> createState() => _ProcessingConversationWidgetState();
 }
 
 class _ProcessingConversationWidgetState extends State<ProcessingConversationWidget> {
+  Timer? _timeoutTicker;
+  bool _timedOut = false;
+  bool _retrying = false;
+
+  /// Wall-clock when processing is treated as having started for the timeout.
+  /// Prefer [ServerConversation.finishedAt] (capture end ≈ processing start);
+  /// fall back to first paint / retry so long recordings are not instantly flagged.
+  late DateTime _processingStartedAt;
+
+  DateTime get _now => widget.now?.call() ?? DateTime.now();
+
+  DateTime _resolveProcessingStartedAt() {
+    return widget.conversation.finishedAt ?? _now;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _processingStartedAt = _resolveProcessingStartedAt();
+    _refreshTimeout();
+    _timeoutTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      _refreshTimeout();
+    });
+  }
+
+  @override
+  void didUpdateWidget(ProcessingConversationWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.conversation.id != widget.conversation.id) {
+      _processingStartedAt = _resolveProcessingStartedAt();
+      _refreshTimeout();
+      return;
+    }
+    final nextFinishedAt = widget.conversation.finishedAt;
+    if (nextFinishedAt != null && nextFinishedAt != oldWidget.conversation.finishedAt) {
+      _processingStartedAt = nextFinishedAt;
+      _refreshTimeout();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timeoutTicker?.cancel();
+    super.dispose();
+  }
+
+  void _refreshTimeout() {
+    final timedOut = isConversationProcessingTimedOut(
+      conversationId: widget.conversation.id,
+      processingStartedAt: _processingStartedAt,
+      now: _now,
+    );
+    if (timedOut != _timedOut) {
+      setState(() => _timedOut = timedOut);
+    }
+  }
+
+  Future<void> _onRetry() async {
+    if (_retrying || widget.conversation.id == '0') return;
+    setState(() => _retrying = true);
+    try {
+      final reprocess = widget.reprocess ?? reProcessConversationServer;
+      final updated = await reprocess(widget.conversation.id);
+      if (!mounted) return;
+      final provider = context.read<ConversationProvider>();
+      if (updated == null) {
+        AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
+        return;
+      }
+      if (updated.status == ConversationStatus.processing || updated.status == ConversationStatus.merging) {
+        // Fresh attempt — give the new processing pass another full timeout window.
+        _processingStartedAt = _now;
+        _timedOut = false;
+        provider.addProcessingConversation(updated);
+      } else {
+        provider.removeProcessingConversation(widget.conversation.id);
+        provider.upsertConversation(updated);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -944,6 +1040,37 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                   height: 16,
                   decoration: BoxDecoration(color: const Color(0xFF2A2A32), borderRadius: BorderRadius.circular(4)),
                 ),
+                if (_timedOut) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    context.l10n.processingTakingLonger,
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.3),
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: GestureDetector(
+                      onTap: () {}, // absorb so the card's open-on-tap does not fire
+                      child: TextButton(
+                        key: const Key('processing_conversation_retry_button'),
+                        onPressed: _retrying ? null : _onRetry,
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: _retrying
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : Text(context.l10n.retry),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

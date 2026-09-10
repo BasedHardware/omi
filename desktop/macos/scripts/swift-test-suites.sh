@@ -56,6 +56,16 @@ SUITE_BATCH_SIZE="${OMI_SWIFT_TEST_SUITE_BATCH_SIZE:-25}"
 # an execution allowance for each ADDITIONAL suite it carries. The allowance
 # only has to cover run time, not startup.
 SUITE_BATCH_PER_SUITE_SECONDS="${OMI_SWIFT_TEST_SUITE_BATCH_PER_SUITE_SECONDS:-30}"
+# Independent ceiling on a single batch invocation's watchdog budget. The
+# scaled budget grows linearly with the batch (300s + 30s per extra suite), so
+# CI's batch of 100 would budget 3270s — 54.5 minutes inside a 60-minute job,
+# leaving no room for the bisect fallback that a wedged batch needs. A positive
+# value clamps every batch (and bisect half) to at most this many ACTIVE
+# execution seconds (SwiftPM build-lock waits stay exempt, as with the base
+# budget); 0 keeps the uncapped scaled budget, which stays correct for local
+# batch sizes. CI sets this in .github/workflows/desktop-swift-ci.yml — the
+# tests assert the clamp, not the CI value.
+SUITE_BATCH_CEILING_SECONDS="${OMI_SWIFT_TEST_BATCH_CEILING_SECONDS:-0}"
 # A suite killed by a signal writes nothing but SwiftPM's one-line "Exited with
 # unexpected signal code N" into its log — no frames. The system crash reporter
 # holds the backtrace, and on a hosted runner it is discarded with the machine,
@@ -93,6 +103,9 @@ DEFER_SERIAL_ON_PR="${OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL:-0}"
 # 69 invocations); bisection settles the green half in ONE invocation and
 # descends to singles only for the half that is still red.
 FALLBACK_BISECT_MIN="${OMI_SWIFT_TEST_FALLBACK_BISECT_MIN:-16}"
+# PR-lane slow-suite ratchet threshold in seconds of measured XCTest wall
+# time (see the ratchet at the end of the run); 0 disables. Set by CI.
+SLOW_RATCHET_SECONDS="${OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS:-0}"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -317,6 +330,13 @@ run_batch() {
   local log_path="$log_dir/batch-$batch_id.log"
   local timeout_path="$log_dir/batch-$batch_id.timeout"
   local budget=$((SUITE_TIMEOUT_SECONDS + (batch_size - 1) * SUITE_BATCH_PER_SUITE_SECONDS))
+  # The aggregate ceiling bounds the worst case independently of the scaled
+  # formula (see SUITE_BATCH_CEILING_SECONDS above): at CI's batch 100 the
+  # uncapped budget is 54.5 min inside a 60-min job — a wedged batch would
+  # hit the job ceiling before the bisect fallback could ever run.
+  if [ "$SUITE_BATCH_CEILING_SECONDS" -gt 0 ] && [ "$budget" -gt "$SUITE_BATCH_CEILING_SECONDS" ]; then
+    budget="$SUITE_BATCH_CEILING_SECONDS"
+  fi
   local status=0
   local suite
 
@@ -348,48 +368,55 @@ run_batch() {
   # log files — and let those results stand. If none of them reproduces the
   # failure, the batch hit an order dependence between two suites that share a
   # process; the run stays green, matching the isolated verdict, and this line
-  # is the trail back to it. Batches larger than FALLBACK_BISECT_MIN bisect
-  # first: each half re-runs as its own batch (one invocation settles a green
-  # half) and only a still-red half of at most FALLBACK_BISECT_MIN members
-  # descends to isolated singles, up to ISOLATION_PARALLEL at a time on
-  # copy-on-write clones of this worker's scratch (a serial fallback on one
-  # SwiftPM lock cost ~20 min; a straight 50-member parallel fallback cost ~10
-  # min per flaky batch on run 34301327490).
+  # is the trail back to it. A TOP-LEVEL batch larger than FALLBACK_BISECT_MIN
+  # bisects exactly once: each half re-runs as its own batch (one invocation
+  # settles a green half), and a still-red half — like every red sub-batch —
+  # descends straight to isolated singles, up to ISOLATION_PARALLEL at a time
+  # on copy-on-write clones. Deeper bisection is deliberately not attempted:
+  # a wedged co-resident invocation burns its whole scaled budget at EVERY
+  # level (run 34395704115: a 35-suite half hung for its full 1320s budget,
+  # then an 18-suite quarter hung for 810s — ~38 min for one chain, caught
+  # red by the step budget guard), while isolated singles dodge the hang
+  # entirely and are capped by the per-suite budget (300s, 3-way parallel).
   echo "--- BATCH $batch_id exited $status; re-running its ${batch_size} suite(s) in isolation ---"
   echo "batch suites: ${batch_suites[@]}"
   local fallback_dir="$log_dir/.fallback-$batch_id"
   mkdir -p "$fallback_dir"
 
-  if [ "$batch_size" -gt "$FALLBACK_BISECT_MIN" ]; then
-    local mid=$(((batch_size + 1) / 2))
-    local -a left_suites=("${batch_suites[@]:0:$mid}")
-    local -a right_suites=("${batch_suites[@]:$mid}")
-    local -a half_suites=()
-    local half_index half_id half_build half_runtime
-    # Halves run sequentially on their own clones so they cannot contend on
-    # this worker's scratch while the worker may already be running its next
-    # batch. Recursion terminates: each __run_batch invocation re-enters this
-    # same rule with a strictly smaller member count.
-    for half_index in 0 1; do
-      if [ "$half_index" = 0 ]; then
-        half_suites=("${left_suites[@]}")
-      else
-        half_suites=("${right_suites[@]}")
+  case "$batch_id" in
+    *-h*) ;; # a bisect half: fall through to singles below
+    *)
+      if [ "$batch_size" -gt "$FALLBACK_BISECT_MIN" ]; then
+        local mid=$(((batch_size + 1) / 2))
+        local -a left_suites=("${batch_suites[@]:0:$mid}")
+        local -a right_suites=("${batch_suites[@]:$mid}")
+        local -a half_suites=()
+        local half_index half_id half_build half_runtime
+        # Halves run sequentially on their own clones so they cannot contend
+        # on this worker's scratch while the worker may already be running
+        # its next batch.
+        for half_index in 0 1; do
+          if [ "$half_index" = 0 ]; then
+            half_suites=("${left_suites[@]}")
+          else
+            half_suites=("${right_suites[@]}")
+          fi
+          [ "${#half_suites[@]}" -gt 0 ] || continue
+          half_id="$batch_id-h$half_index"
+          half_build="$fallback_dir/$half_id.build"
+          half_runtime="$fallback_dir/$half_id.runtime"
+          if [ "$PREBUILD" = "1" ]; then
+            cp -cR "$build_path" "$half_build"
+          else
+            mkdir -p "$half_build"
+          fi
+          mkdir -p "$half_runtime/home" "$half_runtime/tmp"
+          "$SCRIPT_PATH" __run_batch "$log_dir" "$half_id" "$half_build" "$half_runtime" "${half_suites[@]}" || true
+        done
+        exit 0
       fi
-      [ "${#half_suites[@]}" -gt 0 ] || continue
-      half_id="$batch_id-h$half_index"
-      half_build="$fallback_dir/$half_id.build"
-      half_runtime="$fallback_dir/$half_id.runtime"
-      if [ "$PREBUILD" = "1" ]; then
-        cp -cR "$build_path" "$half_build"
-      else
-        mkdir -p "$half_build"
-      fi
-      mkdir -p "$half_runtime/home" "$half_runtime/tmp"
-      "$SCRIPT_PATH" __run_batch "$log_dir" "$half_id" "$half_build" "$half_runtime" "${half_suites[@]}" || true
-    done
-    exit 0
-  fi
+      ;;
+  esac
 
   printf '%s\n' "${batch_suites[@]}" \
     | xargs -P "$ISOLATION_PARALLEL" -I{} "$SCRIPT_PATH" __isolated_fallback_suite "$log_dir" {} "$build_path" "$fallback_dir"
@@ -519,6 +546,8 @@ if [ "$SUITE_BATCH_SIZE" -lt 1 ]; then
 fi
 [[ "$SUITE_BATCH_PER_SUITE_SECONDS" =~ ^[0-9]+$ ]] \
   || fail "OMI_SWIFT_TEST_SUITE_BATCH_PER_SUITE_SECONDS must be a non-negative integer, got '$SUITE_BATCH_PER_SUITE_SECONDS'"
+[[ "$SUITE_BATCH_CEILING_SECONDS" =~ ^[0-9]+$ ]] \
+  || fail "OMI_SWIFT_TEST_BATCH_CEILING_SECONDS must be a non-negative integer (0 disables the ceiling), got '$SUITE_BATCH_CEILING_SECONDS'"
 case "$TEST_LANE" in
   pr|full) ;;
   *) fail "OMI_SWIFT_TEST_LANE must be 'pr' or 'full', got '$TEST_LANE'" ;;
@@ -530,6 +559,8 @@ if [ "$ISOLATION_PARALLEL" -lt 1 ]; then
 fi
 [[ "$FALLBACK_BISECT_MIN" =~ ^[0-9]+$ ]] \
   || fail "OMI_SWIFT_TEST_FALLBACK_BISECT_MIN must be a non-negative integer, got '$FALLBACK_BISECT_MIN'"
+[[ "$SLOW_RATCHET_SECONDS" =~ ^[0-9]+$ ]] \
+  || fail "OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS must be a non-negative integer, got '$SLOW_RATCHET_SECONDS'"
 case "$DEFER_SERIAL_ON_PR" in
   0|1) ;;
   *) fail "OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL must be 0 or 1, got '$DEFER_SERIAL_ON_PR'" ;;
@@ -877,7 +908,32 @@ if ls "$suite_log_dir"/*.seconds >/dev/null 2>&1; then
   done
 fi
 
-if [ -n "$failed_suites" ]; then
-  echo "FAILED Swift suites:$failed_suites"
+# PR-lane slow-suite ratchet: the fast lane must not silently grow a slow
+# tail. Any executed suite whose measured XCTest wall seconds exceed
+# SLOW_RATCHET_SECONDS and which is not already ratcheted in
+# swift-test-slow-suites.json fails the run — slow-listed suites are exempt
+# even when a diff woke them, because deferral is exactly the slow list's
+# job. Disabled (0) outside the PR lane and for local runs.
+ratchet_offenders=""
+if [ "$TEST_LANE" = "pr" ] && [ "$SLOW_RATCHET_SECONDS" -gt 0 ]; then
+  for seconds_path in "$suite_log_dir"/*.seconds; do
+    [ -e "$seconds_path" ] || continue
+    suite="$(basename "${seconds_path%.seconds}")"
+    is_slow_suite "$suite" && continue
+    suite_seconds="$(cat "$seconds_path")"
+    if awk -v s="$suite_seconds" -v cap="$SLOW_RATCHET_SECONDS" 'BEGIN { exit (s > cap) ? 0 : 1 }'; then
+      ratchet_offenders="$ratchet_offenders $suite=${suite_seconds}s"
+    fi
+  done
+fi
+if [ -n "$ratchet_offenders" ]; then
+  echo "FAILED slow-suite ratchet: PR-lane suites over ${SLOW_RATCHET_SECONDS}s of test time that are not ratcheted in swift-test-slow-suites.json:$ratchet_offenders" >&2
+  echo "Fix the slowness, or defer the suite by adding it to desktop/macos/scripts/swift-test-slow-suites.json with a reason and this run's evidence (it still executes on every main push, the scheduled health run, and manual dispatch, and wakes when its own files or watched subjects change)." >&2
+fi
+
+if [ -n "$failed_suites" ] || [ -n "$ratchet_offenders" ]; then
+  if [ -n "$failed_suites" ]; then
+    echo "FAILED Swift suites:$failed_suites"
+  fi
   exit 1
 fi

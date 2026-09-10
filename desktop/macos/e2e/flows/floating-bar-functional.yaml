@@ -28,6 +28,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarMouseInterception.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarSurfaceFloor.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
@@ -89,6 +90,15 @@ steps:
     name: Assert signed-in launch shows floating bar
     state.expect:
       state.floatingBarVisible: true
+
+  - id: S1b
+    name: Idle island frame satisfies the surface floor for its state
+    bridge.action:
+      name: notch_hover
+      params:
+        action: "state"
+    expect:
+      result.detail.surfaceFloorSatisfied: "true"
 
   - id: S2
     name: Open Ask Omi
