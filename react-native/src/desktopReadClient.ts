@@ -315,6 +315,28 @@ export function conversationDiscardedPhotoCopy(item: {
   return `${count} photos`;
 }
 
+export function conversationPhotoDiscardedCopy(): string {
+  return 'This photo was discarded as it was not significant.';
+}
+
+export function conversationPhotoAnalyzingCopy(): string {
+  return 'Analyzing...';
+}
+
+export function conversationPhotoChrome(photo: {
+  discarded: boolean;
+  description?: string | null;
+}): string | undefined {
+  if (photo.discarded) {
+    return conversationPhotoDiscardedCopy();
+  }
+  if (photo.description === undefined || photo.description === null) {
+    return conversationPhotoAnalyzingCopy();
+  }
+  const caption = visibleDisplayText(photo.description);
+  return caption === '' ? undefined : caption;
+}
+
 export function conversationHasFinishClock(conversation: {
   finishedAt: string | null;
   status: string;

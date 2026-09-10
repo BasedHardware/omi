@@ -1,5 +1,6 @@
 import type {OmiBackend} from './omiNativeTypes';
 import {
+  conversationPhotoChrome,
   transcriptSttProviderCopy,
   visibleDisplayText,
 } from './desktopReadClient';
@@ -206,11 +207,17 @@ function conversationPhotos(value: unknown):
   }
   const captions = rows.flatMap(raw => {
     const photo = object(raw);
+    const discarded =
+      photo.discarded === undefined || photo.discarded === null
+        ? false
+        : boolean(photo.discarded);
     if (photo.description === undefined || photo.description === null) {
-      return [];
+      const copy = conversationPhotoChrome({discarded});
+      return copy === undefined ? [] : [copy];
     }
-    const caption = visibleDisplayText(text(photo.description, 10000));
-    return caption === '' ? [] : [caption];
+    const description = text(photo.description, 10000);
+    const copy = conversationPhotoChrome({discarded, description});
+    return copy === undefined ? [] : [copy];
   });
   return {count: rows.length, captions};
 }

@@ -1,6 +1,10 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {
+  conversationPhotoAnalyzingCopy,
+  conversationPhotoDiscardedCopy,
+} from './desktopReadClient';
+import {
   loadLegacyConversationDetail,
   legacyConversationDetailErrorCopy,
 } from './legacyConversationDetail';
@@ -336,7 +340,7 @@ test('keeps GET photo counts and captions and omits empty lists', async () => {
   expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
     {
       photoCount: 3,
-      photoCaptions: ['Whiteboard notes'],
+      photoCaptions: ['Whiteboard notes', conversationPhotoAnalyzingCopy()],
     },
   );
   mockRequest.mockResolvedValue(
@@ -354,6 +358,30 @@ test('keeps GET photo counts and captions and omits empty lists', async () => {
   expect(missing).not.toHaveProperty('photoCaptions');
 });
 
+test('names GET discarded photos and photos still analyzing', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: [
+        {description: 'Whiteboard notes'},
+        {description: 'ignored caption', discarded: true},
+        {id: 'pending'},
+        {description: '   ', discarded: false},
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      photoCount: 4,
+      photoCaptions: [
+        'Whiteboard notes',
+        conversationPhotoDiscardedCopy(),
+        conversationPhotoAnalyzingCopy(),
+      ],
+    },
+  );
+});
+
 test('fails closed for malformed GET photos', async () => {
   mockRequest.mockResolvedValue(
     response({
@@ -368,6 +396,15 @@ test('fails closed for malformed GET photos', async () => {
     response({
       ...fixture,
       photos: [{description: 1}],
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: [{discarded: 1}],
     }),
   );
   await expect(

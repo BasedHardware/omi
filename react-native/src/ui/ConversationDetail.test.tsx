@@ -1007,6 +1007,43 @@ test('legacy conversation details name GET photo counts and captions', () => {
   expect(copy).toContain('Whiteboard notes');
 });
 
+test('legacy conversation details name GET discarded photos and analyzing captions', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        photoCount: 3,
+        photoCaptions: [
+          'Whiteboard notes',
+          'This photo was discarded as it was not significant.',
+          'Analyzing...',
+        ],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('3 photos');
+  expect(copy).toContain('Whiteboard notes');
+  expect(copy).toContain(
+    'This photo was discarded as it was not significant.',
+  );
+  expect(copy).toContain('Analyzing...');
+});
+
 test('legacy conversation details name GET folder name and omit unresolved folders', () => {
   mockLegacy.mockReturnValue({
     result: {
