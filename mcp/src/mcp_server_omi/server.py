@@ -133,6 +133,18 @@ class SearchConversations(BaseModel):
     end_date: Optional[str] = Field(description="Filter conversations before this date (yyyy-mm-dd).", default=None)
 
 
+def _response_json(response: requests.Response):
+    """Reject failed API calls without exposing query strings or response bodies."""
+    try:
+        response.raise_for_status()
+    except requests.HTTPError:
+        raise requests.HTTPError(
+            f"Omi API request failed (HTTP {response.status_code})",
+            response=response,
+        ) from None
+    return response.json()
+
+
 def _parse_categories(categories, category_cls: type, logger: logging.Logger) -> list:
     if not isinstance(categories, list):
         raise ValueError(f"categories must be a list, got {type(categories)}")
@@ -163,8 +175,7 @@ def get_memories(
             params=params,
             headers={"Authorization": f"Bearer {api_key}"},
         )
-        logger.info(f"get_memories response: {response.json()}")
-        return response.json()
+        return _response_json(response)
     except Exception as e:
         logger.error(f"Error getting memories: {e}")
         raise e
@@ -176,7 +187,7 @@ def create_memory(api_key: str, content: str, category: MemoryCategory) -> dict:
         headers={"Authorization": f"Bearer {api_key}"},
         json={"content": content, "category": category},
     )
-    return response.json()
+    return _response_json(response)
 
 
 def delete_memory(api_key: str, memory_id: str) -> dict:
@@ -184,7 +195,7 @@ def delete_memory(api_key: str, memory_id: str) -> dict:
         f"{base_url}memories/{memory_id}",
         headers={"Authorization": f"Bearer {api_key}"},
     )
-    return response.json()
+    return _response_json(response)
 
 
 def edit_memory(api_key: str, memory_id: str, content: str) -> dict:
@@ -193,7 +204,7 @@ def edit_memory(api_key: str, memory_id: str, content: str) -> dict:
         headers={"Authorization": f"Bearer {api_key}"},
         params={"value": content},
     )
-    return response.json()
+    return _response_json(response)
 
 
 def search_memories(
@@ -208,8 +219,7 @@ def search_memories(
         params={"query": query, "limit": limit},
         headers={"Authorization": f"Bearer {api_key}"},
     )
-    response.raise_for_status()
-    return response.json()
+    return _response_json(response)
 
 
 def get_conversations(
@@ -242,7 +252,7 @@ def get_conversations(
         params=params,
         headers={"Authorization": f"Bearer {api_key}"},
     )
-    return response.json()
+    return _response_json(response)
 
 
 def get_conversation_by_id(api_key: str, conversation_id: str) -> dict:
@@ -250,7 +260,7 @@ def get_conversation_by_id(api_key: str, conversation_id: str) -> dict:
         f"{base_url}conversations/{conversation_id}",
         headers={"Authorization": f"Bearer {api_key}"},
     )
-    return response.json()
+    return _response_json(response)
 
 
 def search_conversations(
@@ -273,8 +283,7 @@ def search_conversations(
         params=params,
         headers={"Authorization": f"Bearer {api_key}"},
     )
-    response.raise_for_status()
-    return response.json()
+    return _response_json(response)
 
 
 async def serve(uid: str | None) -> None:
