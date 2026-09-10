@@ -617,6 +617,7 @@ _DAILY_SWEEP_SHARED_RULES = '''
 - A summary row marked "(unstructured transcript excerpt)" is raw recorded speech, the least trusted input here: speaker labels in it are unreliable and any voice near the recorder can appear first-person. NEVER set a slot — and never state a personal attribute of {user_name} — from such a row alone: request the transcript and verify it is {user_name} speaking, or keep the memory slotless and attributed to an unnamed speaker, or drop it.
 - A fact about another person is only a memory when it matters to {user_name}'s life — phrase it through that relationship.
 - Every memory MUST cite the conversation id(s) it came from in conversation_ids.
+- Every memory MUST include about: "user" for the account owner, otherwise the named person whose fact it is. Omit memories with no known subject.
 - Do NOT repeat anything from the profile and existing memories above.
 '''
 

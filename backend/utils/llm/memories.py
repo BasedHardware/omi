@@ -619,6 +619,7 @@ Respond with action, supersedes (indices), merged_content (only for merge), and 
 
 
 class DailySweepAgentMemory(BaseModel):
+    about: str = Field(description="Named subject: user for the account owner, otherwise the person name")
     content: str = Field(description="One durable memory, stated as a standalone fact")
     conversation_ids: List[str] = Field(
         default=[], description="Ids of the conversations this memory came from (at least one)"
@@ -973,6 +974,7 @@ def _sanitized_daily_sweep_output(
                 content=content,
                 conversation_ids=cited,
                 basis=memory.basis,
+                about=memory.about,
                 slot=(memory.slot or "").strip()[:64],
             )
         )

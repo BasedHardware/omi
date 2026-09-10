@@ -48,6 +48,10 @@ from google.cloud.firestore_v1 import FieldFilter
 from google.cloud import firestore
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
+from utils.conversations.transcript_for_llm import memory_transcript_from_segments
+
+from database.read_boundary import parse_snapshot_or_none
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
 from database.firestore_index_registry import (
@@ -127,7 +131,7 @@ ONBOARDING_PERMANENT_RECEIPT_PREFIX = "onboarding_source_"
 ONBOARDING_SOURCE_RECEIPT_PATH = "daily_memory_sweep_onboarding_sources"
 ONBOARDING_STAGED_CANDIDATE_PATH = "daily_memory_sweep_onboarding_staged"
 DAILY_SUMMARY_STAGED_CANDIDATE_PATH = "daily_memory_sweep_daily_summary_staged"
-DAILY_SUMMARY_STAGE_SCHEMA_VERSION = "daily_memory_sweep_daily_summary_stage.v2"
+DAILY_SUMMARY_STAGE_SCHEMA_VERSION = "daily_memory_sweep_daily_summary_stage.v3"
 MODEL_INVOCATION_PATH = "daily_memory_sweep_model_invocations"
 # This collection is intentionally outside ``users/{uid}``.  Account deletion
 # recursively removes every user subcollection, but an in-flight provider call
@@ -3399,6 +3403,7 @@ class CompletedDayConversationSource:
     summary_text: str
     transcript_text: str
     needs_folder: bool
+    owner_evidence: OwnerAttributionEvidence
 
 
 def _read_completed_day_conversation_sources(
@@ -3464,11 +3469,15 @@ def _read_completed_day_conversation_sources(
         if eligibility != "eligible":
             return (), "incomplete"
         try:
-            prepared = prepare_conversation_for_read(raw, uid)  # pyright: ignore[reportPrivateUsage]
-            conversation = Conversation(**(prepared or {}))
-            # TranscriptSegment.segments_as_string is the canonical textual
-            # rendering.  It ignores photos by construction.
-            transcript = (conversation.get_transcript(include_timestamps=False) or "").strip()
+            conversation = parse_snapshot_or_none(
+                Conversation,
+                snapshot,
+                payload_from_snapshot=lambda _snapshot: prepare_conversation_for_read(raw, uid) or {},
+            )
+            if conversation is None:
+                return (), "incomplete"
+            owner_evidence = OwnerAttributionEvidence.from_segments(conversation.transcript_segments)
+            transcript = memory_transcript_from_segments(conversation.transcript_segments)
             structured = conversation.structured
             title = (getattr(structured, "title", "") or "").strip() if structured else ""
             overview = (getattr(structured, "overview", "") or "").strip() if structured else ""
@@ -3500,6 +3509,7 @@ def _read_completed_day_conversation_sources(
                 conversation_id=conversation_id,
                 summary_text=summary,
                 transcript_text=transcript,
+                owner_evidence=owner_evidence,
                 needs_folder=not (raw.get("folder_id") or "") and isinstance(raw.get("jit_first_open"), Mapping),
             )
         )
@@ -4109,7 +4119,17 @@ def _load_or_stage_daily_summary_candidates(
         {
             "uid": uid,
             "local_date": local_date.isoformat(),
-            "rows": [{"source": row.conversation_id, "text": row.summary_text} for row in conversation_rows],
+            "rows": [
+                {
+                    "source": row.conversation_id,
+                    "text": row.summary_text,
+                    "owner_evidence": {
+                        "trust": row.owner_evidence.trust,
+                        "owner_cluster_id": row.owner_evidence.owner_cluster_id,
+                    },
+                }
+                for row in conversation_rows
+            ],
         },
     )
 
@@ -4227,6 +4247,7 @@ def _load_or_stage_daily_summary_candidates(
     def build_candidate_page() -> Tuple[dict[str, Any], ...]:
         summary_rows = tuple((row.conversation_id, row.summary_text) for row in conversation_rows)
         transcript_lookup = {row.conversation_id: row.transcript_text for row in conversation_rows}
+        owner_lookup = {row.conversation_id: row.owner_evidence for row in conversation_rows}
         needs_folder_ids = tuple(row.conversation_id for row in conversation_rows if row.needs_folder)
         # The server-owned UID must be in the context at the model boundary so
         # GatewayContextChatOpenAI emits X-Omi-User-Uid and feature headers.
@@ -4254,6 +4275,8 @@ def _load_or_stage_daily_summary_candidates(
                 dispatch_evidence=dispatch_evidence,
             )
         candidates: List[DailySweepCandidate] = []
+        dropped_by_basis = 0
+        dropped_subjectless = 0
         for index, memory in enumerate(getattr(output, "memories", ()) or ()):
             content = str(getattr(memory, "content", "") or "").strip()[:MAX_CONTENT_CHARACTERS]
             cited = [
@@ -4261,10 +4284,37 @@ def _load_or_stage_daily_summary_candidates(
                 for conversation_id in (getattr(memory, "conversation_ids", ()) or ())
                 if str(conversation_id) in transcript_lookup
             ]
+            cited = list(dict.fromkeys(cited))[:MAX_SOURCE_REFS]
             if not content or not cited:
                 # A memory without provenance into this day's rows is dropped:
                 # candidates may never fabricate source references.
                 continue
+            about = " ".join(str(getattr(memory, "about", "") or "").split())
+            basis = str(getattr(memory, "basis", "") or "").strip().lower()
+            if about.casefold() in {"", "unknown", "unclear", "uncertain"}:
+                dropped_subjectless += 1
+                continue
+            if basis not in {"decided", "observed"}:
+                dropped_by_basis += 1
+                continue
+            if about.casefold() == "user":
+                if not any(may_attribute_to_owner(owner_lookup[conversation_id]) for conversation_id in cited):
+                    # The model supplied no named alternate subject. Do not
+                    # turn an untrusted user label into a relationship fact.
+                    continue
+                subject_scope = MemorySubjectScope.primary_user
+                subject_entity_id = "user"
+            else:
+                subject_scope = MemorySubjectScope.third_party
+                # A name alone is not a globally resolved contact identity.
+                # Keep it deterministic and local to this source set.
+                subject_entity_id = (
+                    "source:"
+                    + deterministic_contract_id(
+                        "daily-sweep-named-subject",
+                        {"uid": uid, "sources": sorted(set(cited)), "name": about.casefold()},
+                    )[:24]
+                )
             candidates.append(
                 DailySweepCandidate(
                     candidate_id=deterministic_contract_id(
@@ -4284,18 +4334,23 @@ def _load_or_stage_daily_summary_candidates(
                     source_version="daily-memory-agent.v1",
                     source_refs=tuple(f"conversation:{conversation_id}" for conversation_id in cited[:MAX_SOURCE_REFS]),
                     authority=SweepAuthority.sweep_inference,
-                    subject_scope=MemorySubjectScope.primary_user,
-                    subject_entity_id=getattr(memory, "subject_entity_id", None),
+                    subject_scope=subject_scope,
+                    subject_entity_id=subject_entity_id,
                     # A slot names a standing attribute; the canonical occupancy
                     # check turns an occupied-slot add into an amend, which is
                     # how the daily run maintains the rendered profile.
-                    slot=(str(getattr(memory, "slot", "") or "").strip() or None),
+                    slot=(str(getattr(memory, "slot", "") or "").strip() or None) if basis == "decided" else None,
                 )
             )
             if len(candidates) >= max_candidates:
                 break
         if len(candidates) > MAX_CANDIDATES_PER_DAY:
             raise ValueError("daily summary model candidate budget exceeded")
+        logger.info(
+            "daily summary candidate gate dropped_by_basis=%d dropped_subjectless=%d",
+            dropped_by_basis,
+            dropped_subjectless,
+        )
         valid_folder_ids = {folder_id for folder_id, _name in folder_options}
         assignment_rows = [
             {

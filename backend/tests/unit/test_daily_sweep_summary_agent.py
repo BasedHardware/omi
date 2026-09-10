@@ -63,7 +63,7 @@ class _ProviderFailureLlm(_ScriptedLlm):
 def _response(memories=(), transcript_requests=(), folder_assignments=()):
     return json.dumps(
         {
-            "memories": list(memories),
+            "memories": [{"about": "user", "basis": "decided", **memory} for memory in memories],
             "transcript_requests": list(transcript_requests),
             "folder_assignments": list(folder_assignments),
         }
@@ -525,3 +525,22 @@ def test_phase_b_overhead_constant_covers_the_clamped_blocks():
     overhead = daily_sweep_phase_b_overhead_characters(4)
     assert overhead >= DAILY_SWEEP_DRAFT_ROW_LIMIT * DAILY_SWEEP_DRAFT_CONTENT_CHARACTERS
     assert daily_sweep_phase_b_overhead_characters(0) < overhead
+
+
+def test_daily_sweep_memory_requires_explicit_subject_and_sanitizer_preserves_it():
+    from pydantic import ValidationError
+    from utils.llm.memories import DailySweepAgentMemory, DailySweepAgentPassOutput, _sanitized_daily_sweep_output
+
+    with pytest.raises(ValidationError, match='about'):
+        DailySweepAgentMemory(content='A fact', conversation_ids=['conversation-1'], basis='observed')
+    output = DailySweepAgentPassOutput(
+        memories=[
+            DailySweepAgentMemory(
+                content='Sarah lives in Boston',
+                about='Sarah',
+                conversation_ids=['conversation-1'],
+                basis='observed',
+            )
+        ]
+    )
+    assert _sanitized_daily_sweep_output(output, {'conversation-1'}, 8).memories[0].about == 'Sarah'
