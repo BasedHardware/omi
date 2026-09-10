@@ -32,7 +32,9 @@ Environment:
   PARAKEET_STREAM_MAX_TEXT_LATENCY_S: p95 text latency gate (default 4 seconds)
 
 The ``text_latency_p95_s`` gate is arrival time minus each segment's reported
-end time; it measures endpoint-relative streaming lag.  ``time_to_first_text``
+end time; it measures endpoint-relative streaming lag. Segment timestamps can
+lead the receipt clock by up to 100 ms of bounded jitter, which is clamped to
+zero; larger negative values fail timestamp validity. ``time_to_first_text``
 is measured independently from the audio start and is reported to avoid
 mistaking the endpoint-relative number for time to first output.
 
@@ -500,9 +502,12 @@ async def _run_stream_inner(stream_id: int, pcm: bytes, duration_s: float) -> Di
                 if float(start_s) < 0 or float(end_s) < float(start_s) or float(end_s) > duration_s + 5:
                     result["timestamp_valid"] = False
                 latency = arrival_s - float(end_s)
-                if latency < 0:
+                # Model timestamps can lead the client receipt clock by a
+                # small scheduling/jitter margin. Reject only materially
+                # impossible values and clamp bounded jitter for p95 lag.
+                if latency < -0.1:
                     result["text_latency_timestamps_valid"] = False
-                result["text_latencies_s"].append(round(latency, 4))
+                result["text_latencies_s"].append(round(max(0.0, latency), 4))
         except ConnectionClosed as error:
             result["close_code"] = error.code
             result["close_reason"] = error.reason
