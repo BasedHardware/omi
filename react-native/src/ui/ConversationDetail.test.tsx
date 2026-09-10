@@ -812,3 +812,62 @@ test('legacy conversation details name GET photo counts and captions', () => {
   expect(copy).toContain('3 photos');
   expect(copy).toContain('Whiteboard notes');
 });
+
+test('legacy conversation details name GET folder name and omit unresolved folders', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        folderName: 'Work',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {
+        ...conversation,
+        id: 'old-1',
+        folderId: 'folder-work',
+      },
+    }),
+  );
+  expect(copy).toContain('Work');
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const omitted = text(
+    render({
+      apiContract: 'omi',
+      conversation: {
+        ...conversation,
+        id: 'old-1',
+        folderId: 'folder-work',
+      },
+    }),
+  );
+  expect(omitted).not.toContain('No folder');
+  expect(omitted).not.toContain('folder-work');
+});

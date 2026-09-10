@@ -246,6 +246,7 @@ function LegacyConversationBody({
       : calendarStart !== ''
       ? calendarStart
       : calendarEnd;
+  const folderName = visibleDisplayText(detail.folderName ?? '');
   return (
     <>
       <Text
@@ -307,6 +308,9 @@ function LegacyConversationBody({
               </Text>,
             ];
       })}
+      {folderName === '' ? null : (
+        <Text style={[styles.conversationDetailField, ink]}>{folderName}</Text>
+      )}
       {detail.sections.flatMap((section, index) => {
         const heading = visibleDisplayText(section.heading);
         const bodyMarkdown = visibleDisplayText(section.bodyMarkdown);

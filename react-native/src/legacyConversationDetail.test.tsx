@@ -236,6 +236,47 @@ test('fails closed for malformed GET photos', async () => {
   ).rejects.toMatchObject({kind: 'invalid'});
 });
 
+test('names GET folder name when folders resolve and omits otherwise', async () => {
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/folders') {
+      return {
+        id: 'folders',
+        status: 200,
+        body: JSON.stringify([{id: 'folder-work', name: 'Work'}]),
+      };
+    }
+    return response({...fixture, folder_id: 'folder-work'});
+  });
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).folderName,
+  ).toBe('Work');
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/folders') {
+      return {
+        id: 'folders',
+        status: 200,
+        body: JSON.stringify([{id: 'folder-other', name: 'Other'}]),
+      };
+    }
+    return response({...fixture, folder_id: 'folder-work'});
+  });
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).folderName,
+  ).toBeUndefined();
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/folders') {
+      return {id: 'folders', status: 500, body: '[]'};
+    }
+    return response({...fixture, folder_id: 'folder-work'});
+  });
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).folderName,
+  ).toBeUndefined();
+  mockRequest.mockReset().mockResolvedValue(response(fixture));
+  await loadLegacyConversationDetail(backend, fixture.id);
+  expect(mockRequest).toHaveBeenCalledTimes(1);
+});
+
 test('keeps GET geolocation address and omits empty or missing locations', async () => {
   mockRequest.mockResolvedValue(
     response({

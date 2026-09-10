@@ -1,5 +1,6 @@
 import type {OmiBackend} from './omiNativeTypes';
 import {visibleDisplayText} from './desktopReadClient';
+import {loadOmiFolderName} from './legacyOmiFolders';
 
 export type LegacyConversationDetail = {
   id: string;
@@ -18,6 +19,7 @@ export type LegacyConversationDetail = {
   };
   photoCount?: number;
   photoCaptions?: string[];
+  folderName?: string;
   transcript:
     | {status: 'unavailable'}
     | {
@@ -268,6 +270,16 @@ export async function loadLegacyConversationDetail(
     value.plugins_results,
     visibleDisplayText(overview),
   );
+  const folderId =
+    value.folder_id === undefined || value.folder_id === null
+      ? undefined
+      : visibleDisplayText(text(value.folder_id, 256));
+  const folderName =
+    folderId === undefined || folderId === ''
+      ? undefined
+      : await loadOmiFolderName(backend, folderId, signal).catch(
+          () => undefined,
+        );
   return {
     id,
     title: text(structured.title),
@@ -286,6 +298,7 @@ export async function loadLegacyConversationDetail(
             ? {}
             : {photoCaptions: photos.captions}),
         }),
+    ...(folderName === undefined ? {} : {folderName}),
     transcript,
   };
 }
