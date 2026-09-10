@@ -1177,6 +1177,38 @@ test('Settings omits NEXT LINE-only company and job instead of blank rows', asyn
   expect(tree).not.toContain('\u0085');
 });
 
+test('Settings names GET usage today without Upgrade', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/usage?period=today') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          today: {
+            transcription_seconds: 90,
+            words_transcribed: 12,
+            insights_gained: 3,
+            memories_created: 1,
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Listening');
+  expect(tree).toContain('2 minutes');
+  expect(tree).toContain('Understanding');
+  expect(tree).toContain('12 words');
+  expect(tree).toContain('Providing');
+  expect(tree).toContain('3 insights');
+  expect(tree).toContain('Remembering');
+  expect(tree).toContain('1 memories');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings developer webhook URLs omit empty or whitespace values', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

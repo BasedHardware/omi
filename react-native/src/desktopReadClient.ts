@@ -427,6 +427,48 @@ export function subscriptionPlanCopy(plan: string): string {
   return accountWireCopy(plan, 'Plan unavailable');
 }
 
+export function usageStatsCopy(
+  stats:
+    | {
+        transcriptionSeconds: number;
+        wordsTranscribed: number;
+        insightsGained: number;
+        memoriesCreated: number;
+      }
+    | null
+    | undefined,
+): {title: string; copy: string}[] | null {
+  if (stats == null) {
+    return null;
+  }
+  if (
+    stats.transcriptionSeconds === 0 &&
+    stats.wordsTranscribed === 0 &&
+    stats.insightsGained === 0 &&
+    stats.memoriesCreated === 0
+  ) {
+    return null;
+  }
+  return [
+    {
+      title: 'Listening',
+      copy: `${Math.round(stats.transcriptionSeconds / 60)} minutes`,
+    },
+    {
+      title: 'Understanding',
+      copy: `${stats.wordsTranscribed} words`,
+    },
+    {
+      title: 'Providing',
+      copy: `${stats.insightsGained} insights`,
+    },
+    {
+      title: 'Remembering',
+      copy: `${stats.memoriesCreated} memories`,
+    },
+  ];
+}
+
 export function subscriptionStatusCopy(status: string): string {
   return accountWireCopy(status, 'Plan unavailable');
 }

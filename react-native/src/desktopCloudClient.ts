@@ -51,6 +51,13 @@ export type CloudSubscription = {
   transcriptionSecondsLimit: number | null;
 };
 
+export type CloudUsageStats = {
+  transcriptionSeconds: number;
+  wordsTranscribed: number;
+  insightsGained: number;
+  memoriesCreated: number;
+};
+
 export type CloudWebhookStatus = {
   type: string;
   enabled: boolean | null;
@@ -70,6 +77,8 @@ export type AccountSettingsSnapshot = {
   privateCloudSyncError: string | null;
   webhooks: CloudWebhookStatus[] | null;
   webhooksError: string | null;
+  usage: CloudUsageStats | null;
+  usageError: string | null;
 };
 
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -254,6 +263,45 @@ export function parseCloudProfile(value: unknown, label: string): CloudProfile {
   };
 }
 
+function requiredUsageInteger(value: unknown, label: string): number {
+  if (value === undefined) {
+    return 0;
+  }
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
+    return value;
+  }
+  throw new Error(`${label} is malformed`);
+}
+
+export function parseCloudUsage(
+  value: unknown,
+  label: string,
+): CloudUsageStats | null {
+  const record = object(value, label);
+  if (record.today === undefined || record.today === null) {
+    return null;
+  }
+  const today = object(record.today, `${label} today`);
+  return {
+    transcriptionSeconds: requiredUsageInteger(
+      today.transcription_seconds,
+      `${label} transcription_seconds`,
+    ),
+    wordsTranscribed: requiredUsageInteger(
+      today.words_transcribed,
+      `${label} words_transcribed`,
+    ),
+    insightsGained: requiredUsageInteger(
+      today.insights_gained,
+      `${label} insights_gained`,
+    ),
+    memoriesCreated: requiredUsageInteger(
+      today.memories_created,
+      `${label} memories_created`,
+    ),
+  };
+}
+
 export function parseCloudSubscription(
   value: unknown,
   label: string,
@@ -409,6 +457,7 @@ export async function loadAccountSettings(
     training,
     privateCloudSync,
     webhooks,
+    usage,
   ] = await Promise.all([
     readOptional(async () =>
       parseCloudProfile(
@@ -488,6 +537,19 @@ export async function loadAccountSettings(
         'Webhooks response',
       ),
     ),
+    readOptional(async () =>
+      parseCloudUsage(
+        (
+          await cloudRequest(
+            backend,
+            'desktop-usage-read',
+            'GET',
+            '/v1/users/me/usage?period=today',
+          )
+        ).body,
+        'Usage response',
+      ),
+    ),
   ]);
   return {
     profile: profile.value,
@@ -502,6 +564,8 @@ export async function loadAccountSettings(
     privateCloudSyncError: privateCloudSync.error,
     webhooks: webhooks.value,
     webhooksError: webhooks.error,
+    usage: usage.value,
+    usageError: usage.error,
   };
 }
 

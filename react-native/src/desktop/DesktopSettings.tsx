@@ -19,6 +19,7 @@ import {
   accountFieldCopy,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
+  usageStatsCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {
@@ -70,6 +71,8 @@ function failedAccountSettings(error: string): AccountSettingsSnapshot {
     privateCloudSyncError: error,
     webhooks: null,
     webhooksError: error,
+    usage: null,
+    usageError: error,
   };
 }
 
@@ -544,6 +547,9 @@ export function DesktopSettings({
           title="Current plan"
         />
       )}
+      {usageStatsCopy(account?.usage)?.map(row => (
+        <Row copy={row.copy} key={row.title} title={row.title} />
+      ))}
     </>
   );
 

@@ -66,6 +66,7 @@ import {
   projectionTimestamp,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
+  usageStatsCopy,
   taskDisplaySummary,
   taskDisplayTitle,
   taskGroup,
@@ -95,6 +96,7 @@ import {
   parseCloudApps,
   parseCloudProfile,
   parseCloudSubscription,
+  parseCloudUsage,
   parseEnabledAppIds,
   serviceApps,
 } from '../src/desktopCloudClient';
@@ -831,6 +833,31 @@ test('account subscription copy is not a raw wire token', () => {
   expect(dataProtectionCopy('standard')).toBe('Standard');
   expect(dataProtectionCopy('')).toBe('Data protection unavailable');
   expect(dataProtectionCopy('\u0085')).toBe('Data protection unavailable');
+});
+
+test('usage stats copy names GET today counts without Upgrade', () => {
+  expect(
+    usageStatsCopy({
+      transcriptionSeconds: 90,
+      wordsTranscribed: 12,
+      insightsGained: 3,
+      memoriesCreated: 1,
+    }),
+  ).toEqual([
+    {title: 'Listening', copy: '2 minutes'},
+    {title: 'Understanding', copy: '12 words'},
+    {title: 'Providing', copy: '3 insights'},
+    {title: 'Remembering', copy: '1 memories'},
+  ]);
+  expect(
+    usageStatsCopy({
+      transcriptionSeconds: 0,
+      wordsTranscribed: 0,
+      insightsGained: 0,
+      memoriesCreated: 0,
+    }),
+  ).toBeNull();
+  expect(usageStatsCopy(null)).toBeNull();
 });
 
 test('developer webhook titles are not raw API keys', () => {
@@ -2900,6 +2927,68 @@ test('loadAccountSettings keeps failed slices independent', async () => {
   expect(snapshot.trainingOptedIn).toBe(false);
   expect(snapshot.privateCloudSync).toBe(false);
   expect(snapshot.webhooks).toBeNull();
+});
+
+test('loadAccountSettings names GET usage today without inventing zeros', async () => {
+  const backend = backendFor(request => {
+    if (request.path === '/v1/users/me/usage?period=today') {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          today: {
+            transcription_seconds: 90,
+            words_transcribed: 12,
+            insights_gained: 3,
+            memories_created: 1,
+          },
+        }),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {status: 200, body: JSON.stringify({uid: 'user-1'})};
+    }
+    if (request.path === '/v1/users/me/subscription') {
+      return {
+        status: 200,
+        body: JSON.stringify({plan: 'plus', status: 'active'}),
+      };
+    }
+    if (request.path === '/v1/users/store-recording-permission') {
+      return {
+        status: 200,
+        body: JSON.stringify({store_recording_permission: true}),
+      };
+    }
+    if (request.path === '/v1/users/training-data-opt-in') {
+      return {status: 200, body: JSON.stringify({opted_in: false})};
+    }
+    if (request.path === '/v1/users/private-cloud-sync') {
+      return {
+        status: 200,
+        body: JSON.stringify({private_cloud_sync_enabled: false}),
+      };
+    }
+    if (request.path === '/v1/users/developer/webhooks/status') {
+      return {status: 200, body: JSON.stringify({})};
+    }
+    return {status: 404, body: null};
+  });
+  const snapshot = await loadAccountSettings(backend);
+  expect(snapshot.usage).toEqual({
+    transcriptionSeconds: 90,
+    wordsTranscribed: 12,
+    insightsGained: 3,
+    memoriesCreated: 1,
+  });
+  expect(snapshot.usageError).toBeNull();
+  expect(parseCloudUsage({today: null}, 'Usage')).toBeNull();
+  expect(parseCloudUsage({}, 'Usage')).toBeNull();
+  expect(() =>
+    parseCloudUsage(
+      {today: {transcription_seconds: '90'}},
+      'Usage',
+    ),
+  ).toThrow('Usage transcription_seconds is malformed');
 });
 
 test('uses the ratified conversation cursor and preserves its completeness declaration', async () => {

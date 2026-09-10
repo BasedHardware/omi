@@ -33,6 +33,7 @@ import {
   connectionIdentityCopy,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
+  usageStatsCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
@@ -418,6 +419,9 @@ export function SettingsPage({
             title="Plan"
           />
         )}
+        {usageStatsCopy(snapshot.usage)?.map(row => (
+          <SettingRow copy={row.copy} key={row.title} title={row.title} />
+        ))}
         {(onSignOut !== undefined ||
           (omiAuth !== undefined && omiAuth !== null)) && (
           <SettingRow
