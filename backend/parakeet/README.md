@@ -84,3 +84,10 @@ helm upgrade --install parakeet ./backend/charts/parakeet \
 ```
 
 Backend connects via `HOSTED_PARAKEET_API_URL` (cluster-internal service URL). No auth required — service runs behind internal LB only.
+
+## Proposed primary-provider migration
+
+The [Parakeet-primary implementation plan](../docs/plans/parakeet-primary/README.md)
+scopes a dedicated realtime fleet, capacity qualification, vendor fallbacks and
+staged rollout. It is a draft design; it changes no serving defaults and authorizes
+no provisioning or traffic switch.
