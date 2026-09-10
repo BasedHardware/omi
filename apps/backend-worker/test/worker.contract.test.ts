@@ -3366,6 +3366,21 @@ describe("settings entitlement admission contract", () => {
     expect(accountCalls).toEqual([]);
   });
 
+  test("empty text uses production parseCreate instead of envelope validation", async () => {
+    const response = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("empty-text"),
+        text: "",
+      }),
+    });
+    expect(response.status).toBe(201);
+    expect((await response.json()) as { message: { text: string } }).toMatchObject(
+      { message: { text: "" } }
+    );
+  });
+
   test("completed same-account attachments are admitted with real metadata", async () => {
     await insertAttachment({
       id: "att-ready",
@@ -3661,6 +3676,10 @@ describe("chat create wire validator", () => {
     ).toBe(true);
   });
 
+  test("accepts empty text matching production parseCreate", () => {
+    expect(isChatCreate({ ...valid, text: "" })).toBe(true);
+  });
+
   test.each([
     [null],
     [[]],
@@ -3668,7 +3687,7 @@ describe("chat create wire validator", () => {
     [{ ...valid, opId: "" }],
     [{ ...valid, at: -1 }],
     [{ ...valid, at: Number.MAX_SAFE_INTEGER }],
-    [{ ...valid, text: "" }],
+    [{ ...valid, text: "x".repeat(32_769) }],
     [{ ...valid, sender: "ai" }],
     [{ ...valid, journalRevision: 0.5 }],
     [{ ...valid, appId: "" }],
