@@ -533,6 +533,24 @@ export function chatAttachmentCopy(attachment: {
     .join(' · ');
 }
 
+export function chatChartCopy(chart: {
+  title: string;
+  points: readonly {label: string; value: number}[];
+}): string | null {
+  const title = visibleDisplayText(chart.title);
+  const lines = chart.points.flatMap(point => {
+    const label = visibleDisplayText(point.label);
+    if (label === '' || !Number.isFinite(point.value)) {
+      return [];
+    }
+    return [`${label} · ${point.value}`];
+  });
+  if (lines.length === 0) {
+    return null;
+  }
+  return title === '' ? lines.join('\n') : `${title}\n${lines.join('\n')}`;
+}
+
 export function chatMessageDisplayText(
   message: {
     text: string;
@@ -543,6 +561,10 @@ export function chatMessageDisplayText(
       mediaType?: string;
       sizeBytes?: number;
     }[];
+    chart?: {
+      title: string;
+      points: readonly {label: string; value: number}[];
+    };
   },
   cancelledEmptyCopy = 'Response stopped',
 ): string {
@@ -552,19 +574,22 @@ export function chatMessageDisplayText(
       : 'Response failed.';
   }
   const text = visibleDisplayText(message.text);
-  const attachmentLines = (message.attachments ?? []).map(attachment =>
-    chatAttachmentCopy(attachment),
-  );
+  const chartCopy =
+    message.chart === undefined ? null : chatChartCopy(message.chart);
+  const extraLines = [
+    ...(message.attachments ?? []).map(attachment =>
+      chatAttachmentCopy(attachment),
+    ),
+    ...(chartCopy === null ? [] : [chartCopy]),
+  ];
   if (text !== '') {
-    return attachmentLines.length > 0
-      ? `${text}\n${attachmentLines.join('\n')}`
-      : text;
+    return extraLines.length > 0 ? `${text}\n${extraLines.join('\n')}` : text;
   }
   if (message.generationOutcome === 'cancelled') {
     return cancelledEmptyCopy;
   }
-  if (attachmentLines.length > 0) {
-    return attachmentLines.join('\n');
+  if (extraLines.length > 0) {
+    return extraLines.join('\n');
   }
   return 'Message text unavailable';
 }

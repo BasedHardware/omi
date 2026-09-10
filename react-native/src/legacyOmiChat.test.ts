@@ -169,6 +169,81 @@ test('old chat history keeps GET files when files_id is present', () => {
   ).toBeUndefined();
 });
 
+test('old chat history keeps GET chart_data points and omits empty charts', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'chart-1',
+        sender: 'ai',
+        text: 'Here is the trend.',
+        created_at: '2026-09-07T01:02:03Z',
+        chart_data: {
+          chart_type: 'bar',
+          title: 'Talk time',
+          datasets: [
+            {
+              label: 'Minutes',
+              data_points: [
+                {label: 'Mon', value: 12},
+                {label: 'Tue', value: 15},
+              ],
+            },
+          ],
+        },
+      },
+      {
+        id: 'chart-empty',
+        sender: 'ai',
+        text: 'No chart.',
+        created_at: '2026-09-07T01:02:04Z',
+        chart_data: {
+          chart_type: 'line',
+          title: 'Empty',
+          datasets: [{label: 'Minutes', data_points: []}],
+        },
+      },
+      {
+        id: 'chart-untyped',
+        sender: 'ai',
+        text: 'Not a chart.',
+        created_at: '2026-09-07T01:02:05Z',
+        chart_data: {title: 'Nope'},
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'chart-1')?.chart).toEqual({
+    title: 'Talk time',
+    points: [
+      {label: 'Mon', value: 12},
+      {label: 'Tue', value: 15},
+    ],
+  });
+  expect(
+    page.messages.find(row => row.id === 'chart-empty')?.chart,
+  ).toBeUndefined();
+  expect(
+    page.messages.find(row => row.id === 'chart-untyped')?.chart,
+  ).toBeUndefined();
+});
+
+test('old chat history rejects malformed GET chart_data', () => {
+  expect(() =>
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          id: 'bad-chart',
+          sender: 'ai',
+          text: 'broken',
+          created_at: '2026-09-07T01:02:03Z',
+          chart_data: 'not-an-object',
+        },
+      ]),
+      0,
+    ),
+  ).toThrow();
+});
+
 test('old chat history rejects malformed GET files', () => {
   expect(() =>
     parseOmiHistory(

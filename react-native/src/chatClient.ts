@@ -29,6 +29,10 @@ export type ChatMessage = {
   localOnly?: boolean;
   attachments?: ChatMessageAttachment[];
   memories?: {title: string; emoji?: string}[];
+  chart?: {
+    title: string;
+    points: {label: string; value: number}[];
+  };
 };
 
 export type ChatHistoryPage = {

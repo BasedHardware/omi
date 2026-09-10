@@ -93,6 +93,47 @@ function parseOmiChatMemories(
   });
 }
 
+function parseOmiChatChart(
+  value: unknown,
+): {title: string; points: {label: string; value: number}[]} | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const row = object(value);
+  if (
+    (row.chart_type !== 'line' && row.chart_type !== 'bar') ||
+    typeof row.title !== 'string' ||
+    !Array.isArray(row.datasets)
+  ) {
+    return undefined;
+  }
+  if (row.datasets.length === 0) {
+    return undefined;
+  }
+  if (row.datasets.length > 20) {
+    throw new Error('Omi chat chart is malformed');
+  }
+  const dataset = object(row.datasets[0]);
+  if (!Array.isArray(dataset.data_points) || dataset.data_points.length > 200) {
+    throw new Error('Omi chat chart is malformed');
+  }
+  if (dataset.data_points.length === 0) {
+    return undefined;
+  }
+  const points = dataset.data_points.map(raw => {
+    const point = object(raw);
+    if (
+      typeof point.label !== 'string' ||
+      typeof point.value !== 'number' ||
+      !Number.isFinite(point.value)
+    ) {
+      throw new Error('Omi chat chart is malformed');
+    }
+    return {label: point.label, value: point.value};
+  });
+  return {title: row.title, points};
+}
+
 export function parseOmiMessage(value: unknown): ChatMessage {
   const row = object(value);
   const createdAt =
@@ -108,6 +149,7 @@ export function parseOmiMessage(value: unknown): ChatMessage {
   }
   const memories = parseOmiChatMemories(row.memories);
   const attachments = parseOmiChatFiles(row.files, row.files_id);
+  const chart = parseOmiChatChart(row.chart_data);
   return {
     id: row.id,
     text: row.text,
@@ -117,6 +159,7 @@ export function parseOmiMessage(value: unknown): ChatMessage {
     generationOutcome: null,
     ...(memories.length === 0 ? {} : {memories}),
     ...(attachments.length === 0 ? {} : {attachments}),
+    ...(chart === undefined ? {} : {chart}),
   };
 }
 

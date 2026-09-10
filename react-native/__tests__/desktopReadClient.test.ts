@@ -23,6 +23,7 @@ import {
   accountFieldCopy,
   connectionIdentityCopy,
   chatMessageDisplayText,
+  chatChartCopy,
   chatSenderCopy,
   chatDaySummaryCopy,
   desktopBackendConfigurationCopy,
@@ -1069,6 +1070,38 @@ test('empty chat bodies stay visible instead of a blank bubble', () => {
       generationRetryable: true,
     }),
   ).toBe('Response failed. Try again.');
+});
+
+test('chat message copy names GET chart points and omits empty charts', () => {
+  expect(
+    chatChartCopy({
+      title: 'Talk time',
+      points: [
+        {label: 'Mon', value: 12},
+        {label: ' \t', value: 1},
+        {label: 'Tue', value: 15},
+      ],
+    }),
+  ).toBe('Talk time\nMon · 12\nTue · 15');
+  expect(
+    chatMessageDisplayText({
+      text: 'Here is the trend.',
+      generationOutcome: null,
+      chart: {
+        title: 'Talk time',
+        points: [
+          {label: 'Mon', value: 12},
+          {label: 'Tue', value: 15},
+        ],
+      },
+    }),
+  ).toBe('Here is the trend.\nTalk time\nMon · 12\nTue · 15');
+  expect(
+    chatChartCopy({
+      title: 'Talk time',
+      points: [{label: ' \t', value: 12}],
+    }),
+  ).toBeNull();
 });
 
 test('empty chat bodies still show attachment names from history', () => {
