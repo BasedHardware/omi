@@ -59,3 +59,18 @@ struct UnavailableAssetsEmbeddingEngine: LocalEmbeddingService {
     return []
   }
 }
+
+struct FailOnCallEmbeddingEngine: LocalEmbeddingService {
+  let engineID = "fail-on-call"
+  let modelID = "fail-on-call"
+  let dimension = 8
+  let capabilities = LocalEmbeddingCapabilities(assetsAvailable: true, requiresAppleSilicon: false, maxBatchSize: 8)
+  func embed(_ texts: [String], task: LocalEmbeddingTask) async throws -> [[Float]] {
+    XCTFail("opted-out local embeddings must not embed")
+    return []
+  }
+  func prepareAssets() async -> LocalEmbeddingAssetStatus {
+    XCTFail("opted-out local embeddings must not request assets")
+    return .assetsUnavailable
+  }
+}

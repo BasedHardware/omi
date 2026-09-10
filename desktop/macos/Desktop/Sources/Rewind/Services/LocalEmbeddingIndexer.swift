@@ -12,7 +12,12 @@ actor LocalEmbeddingIndexer {
     self.runtime = runtime
   }
 
+  private var embeddingsAreActive: Bool {
+    runtime.killSwitches.isEnabled && !runtime.killSwitches.isDisabled
+  }
+
   func indexFinalizedSession(sessionId: Int64) async {
+    guard embeddingsAreActive else { return }
     guard let owner = RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else { return }
     do {
       let store = try await RewindDatabase.shared.localEmbeddingStore(owner: owner)
@@ -24,6 +29,7 @@ actor LocalEmbeddingIndexer {
   }
 
   func indexMemory(id: Int64, content: String) async {
+    guard embeddingsAreActive else { return }
     guard let owner = RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else { return }
     do {
       let store = try await RewindDatabase.shared.localEmbeddingStore(owner: owner)
@@ -36,6 +42,7 @@ actor LocalEmbeddingIndexer {
   }
 
   func backfillIfNeeded() async {
+    guard embeddingsAreActive else { return }
     guard !isBackfillRunning else { return }
     isBackfillRunning = true
     defer { isBackfillRunning = false }

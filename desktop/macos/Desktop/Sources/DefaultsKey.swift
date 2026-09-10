@@ -156,6 +156,9 @@ enum DefaultsKey: String {
   case disableSystemAudioCapture = "disableSystemAudioCapture"
   /// Local embedding runtime: skip Apple NLCE / hybrid and keep Gemini screen search.
   case disableLocalEmbeddings = "disableLocalEmbeddings"
+  /// Local embedding runtime: opt in to on-device hybrid search. Defaults off on
+  /// production-family bundles and on in non-production; `OMI_LOCAL_EMBEDDINGS` overrides.
+  case localEmbeddingsEnabled = "localEmbeddingsEnabled"
   /// Local embedding runtime: pin an engine id. Unknown ids fail closed to keyword-only.
   case forceLocalEmbeddingEngine = "forceLocalEmbeddingEngine"
 }

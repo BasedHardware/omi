@@ -108,7 +108,8 @@ struct LocalHybridSearch: Sendable {
 }
 
 /// The chat route is selected once. A local query failure must never invoke the legacy closure.
-/// Probe failure (`.none`) stays on local FTS-only. Only the kill switch uses Gemini.
+/// Probe failure (`.none`) stays on local FTS-only. Opt-out and the hard kill (`.disabled`)
+/// keep Gemini.
 enum ScreenHistorySearchRoute {
   static func search<T: Sendable>(
     runtime: LocalEmbeddingRuntime,

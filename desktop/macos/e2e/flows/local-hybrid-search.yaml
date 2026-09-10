@@ -1,7 +1,7 @@
 version: 2
 name: local-hybrid-search
 tier: manual
-description: Headless synthetic local hybrid retrieval benchmark via the automation bridge. Apple NLCE assets are OS-managed; a Mac without them must report local_engine_unavailable (FTS-only) rather than calling Gemini.
+description: Headless synthetic local hybrid retrieval benchmark via the automation bridge. Local embeddings are on by default in non-production; production-family stays on Gemini until localEmbeddingsEnabled / OMI_LOCAL_EMBEDDINGS=1. Apple NLCE assets are OS-managed; a Mac without them (once opted in) must report local_engine_unavailable (FTS-only) rather than calling Gemini.
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/LocalInference/LocalEmbeddingService.swift
