@@ -802,6 +802,44 @@ describe("worker request contract", () => {
       expect(complete.status).toBe(503);
       expect(complete.headers.get("retry-after")).toBe("1");
       expect((await complete.json()) as unknown).toEqual(unavailable);
+      const stage = await handler.fetch(
+        new Request("https://worker.test/v1/chat-attachments", {
+          method: "POST",
+          headers: {
+            authorization: "Bearer firebase-id-token",
+            "content-type": "application/json",
+            "x-omi-client-id": "desktop-client",
+          },
+          body: JSON.stringify({
+            opId: "firebase-outage-stage",
+            displayName: "report.pdf",
+            mimeType: "application/pdf",
+            sizeBytes: 1024,
+          }),
+        }),
+        bindings as never,
+        executionContext as never
+      );
+      expect(stage.status).toBe(503);
+      expect(stage.headers.get("retry-after")).toBe("60");
+      expect((await stage.json()) as unknown).toEqual(unavailable);
+      const attachmentComplete = await handler.fetch(
+        new Request(
+          "https://worker.test/v1/chat-attachments/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/complete",
+          {
+            method: "POST",
+            headers: {
+              authorization: "Bearer firebase-id-token",
+              "x-omi-client-id": "desktop-client",
+            },
+          }
+        ),
+        bindings as never,
+        executionContext as never
+      );
+      expect(attachmentComplete.status).toBe(503);
+      expect(attachmentComplete.headers.get("retry-after")).toBe("60");
+      expect((await attachmentComplete.json()) as unknown).toEqual(unavailable);
       const chatPost = await handler.fetch(
         new Request("https://worker.test/v1/chat-messages", {
           method: "POST",

@@ -420,6 +420,15 @@ function firebaseUnavailableRetryAfter(
   ) {
     return "1";
   }
+  if (method === "POST" && pathname === "/v1/chat-attachments") {
+    return "60";
+  }
+  if (
+    method === "POST" &&
+    /^\/v1\/chat-attachments\/[^/]+\/complete$/.test(pathname)
+  ) {
+    return "60";
+  }
   return undefined;
 }
 
