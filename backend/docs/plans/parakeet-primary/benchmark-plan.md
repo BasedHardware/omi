@@ -68,3 +68,5 @@ One dated aggregate report contains command/config manifests, dataset provenance
 ## Existing harnesses to reuse
 
 Inspect `omi:backend/scripts/stt/u_benchmark_parakeet_prerecorded.py`, `v_benchmark_parakeet_streaming.py`, `w_benchmark_parakeet_multilang.py` and `x_benchmark_parakeet_der.py` before building another runner. Reuse `omi:backend/tests/container/test_parakeet_wer_gate.py`, `test_parakeet_der_gate.py` and concurrency/VRAM tests where their corpus and execution contract fit. These were inventoried, not executed here; inspect endpoints and data dependencies before running them. Add speaker-sample verification (word counts from segment text, expected-text containment, speaker dominance) and sample-rate conversion to the paired suite.
+
+The live capacity matrix also includes a one-stream exact-chunk-boundary finalization probe: append only enough silence to the same speech fixture to reach the next two-second boundary (24 seconds for the current fixture). It remains subject to the same content, latency and final-drain gates and records its own PCM hash. This catches a final right-context tail that a partial-length fixture would miss.

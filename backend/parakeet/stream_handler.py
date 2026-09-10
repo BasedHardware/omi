@@ -502,6 +502,11 @@ class StreamSession:
         self._pending_audio: bytearray = bytearray()
         self._asr_audio_buf: bytearray = bytearray()
         self._streaming_decoder: Any = None
+        self._decoder_has_audio: bool = False
+        self._decoder_finalized: bool = False
+        self._flush_complete: bool = False
+        self._finalization_audio: bytes = b""
+        self._finalization_start_s: Optional[float] = None
         self._streaming_failed: bool = False
         self._streaming_text: str = ""
         self._last_emitted_text: str = ""
@@ -610,14 +615,39 @@ class StreamSession:
         return segments
 
     async def flush(self) -> List[Dict[str, Any]]:
+        if self._flush_complete:
+            return []
+        # feed() works in VAD frames; preserve the final real sub-frame too.
+        if self._pcm_buf:
+            tail = self._normalize_pcm16(bytes(self._pcm_buf))
+            self._pcm_buf.clear()
+            self._asr_audio_buf.extend(tail)
+            if self._speech_start_s is not None:
+                self._pending_audio.extend(tail)
+            elif self._finalization_audio and self._finalization_start_s is not None:
+                tail_end = self._finalization_start_s + len(self._finalization_audio) / (
+                    self._sr * self._bytes_per_sample
+                )
+                if abs(tail_end - self._stream_offset_s) < 1 / self._sr:
+                    self._finalization_audio += tail
+            self._stream_offset_s += len(tail) / (self._sr * self._bytes_per_sample)
         if self._streaming_enabled():
             await self._drain_streaming_asr(force=True)
+            if not self._pending_audio and self._new_streaming_text_since_last_emit():
+                # A trimmed emission may have cleared the pending utterance
+                # while the decoder still held its final word/right context.
+                self._pending_audio.extend(self._finalization_audio)
+                self._speech_start_s = self._finalization_start_s
         if not self._pending_audio or self._speech_start_s is None:
+            self._flush_complete = True
             return []
         speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
         if speech_dur < MIN_SPEECH_DURATION_S:
+            self._flush_complete = True
             return []
-        return await self._transcribe_utterance()
+        result = await self._transcribe_utterance()
+        self._flush_complete = True
+        return result
 
     def cleanup(self) -> None:
         try:
@@ -628,6 +658,8 @@ class StreamSession:
             self._audio_buf.clear()
             self._pending_audio.clear()
             self._asr_audio_buf.clear()
+            self._finalization_audio = b""
+            self._finalization_start_s = None
             self._spk_centroids.clear()
             self._spk_counts.clear()
 
@@ -682,6 +714,8 @@ class StreamSession:
             self._asr_audio_buf.clear()
 
     def _drain_streaming_asr_sync(self, force: bool, pad_partial: bool = False) -> None:
+        if self._decoder_finalized:
+            return
         decoder = self._get_streaming_decoder()
         while True:
             required_bytes = decoder.next_input_bytes(self._bytes_per_sample)
@@ -690,6 +724,7 @@ class StreamSession:
             chunk = bytes(self._asr_audio_buf[:required_bytes])
             del self._asr_audio_buf[:required_bytes]
             self._streaming_text = decoder.decode_pcm(chunk, is_last_chunk=False)
+            self._decoder_has_audio = True
 
         if self._asr_audio_buf:
             if force:
@@ -701,6 +736,13 @@ class StreamSession:
                 chunk = bytes(self._asr_audio_buf) + b'\x00' * (required_bytes - len(self._asr_audio_buf))
                 self._asr_audio_buf.clear()
                 self._streaming_text = decoder.decode_pcm(chunk, is_last_chunk=False)
+        elif force and self._decoder_has_audio:
+            # Exact chunk boundaries still leave real audio in NeMo's right
+            # context. Finalize it once, with end-of-stream silence only here.
+            chunk = bytes(decoder.next_input_bytes(self._bytes_per_sample))
+            self._streaming_text = decoder.decode_pcm(chunk, is_last_chunk=True)
+        if force:
+            self._decoder_finalized = True
 
     def _new_streaming_text_since_last_emit(self) -> str:
         text = (self._streaming_text or "").strip()
@@ -722,7 +764,7 @@ class StreamSession:
 
     async def _transcribe_utterance(self, trim_trailing_word: bool = False) -> List[Dict[str, Any]]:
         speech_pcm = bytes(self._pending_audio)
-        speech_start: float = self._speech_start_s or self._stream_offset_s
+        speech_start: float = self._speech_start_s if self._speech_start_s is not None else self._stream_offset_s
 
         if self._streaming_enabled():
             text = self._new_streaming_text_since_last_emit()
@@ -738,7 +780,13 @@ class StreamSession:
             else:
                 self._last_emitted_text = self._streaming_text.strip()
             dur = len(speech_pcm) / (self._sr * self._bytes_per_sample)
-            return self._build_segments(text, speech_start, dur, speech_pcm)
+            segments = self._build_segments(text, speech_start, dur, speech_pcm)
+            if trim_trailing_word and segments:
+                tail_bytes = int((CHUNK_SECONDS + RIGHT_CONTEXT_SECONDS) * self._sr * self._bytes_per_sample)
+                self._finalization_audio = speech_pcm[-tail_bytes:]
+                tail_duration = len(self._finalization_audio) / (self._sr * self._bytes_per_sample)
+                self._finalization_start_s = speech_start + dur - tail_duration
+            return segments
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(_asr_executor, self._transcribe_pcm, speech_pcm)

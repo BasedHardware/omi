@@ -671,6 +671,16 @@ async def _run_benchmark(
             flush=True,
         )
 
+    # Also finalize at an exact two-second decoder boundary. The ordinary
+    # fixture has a partial final chunk and would miss a lost right-context tail.
+    boundary_duration_s = max(4, math.ceil(duration_s / 2) * 2)
+    boundary_pcm = pcm + bytes(int(boundary_duration_s * SAMPLE_RATE * BYTES_PER_SAMPLE) - len(pcm))
+    print("\n--- exact-chunk-boundary finalization probe (1 stream) ---", flush=True)
+    boundary_result = await _run_level(1, boundary_pcm, boundary_duration_s, cpu_quota)
+    boundary_result["scenario"] = "exact_chunk_boundary_finalization"
+    boundary_result["sha256_pcm"] = hashlib.sha256(boundary_pcm).hexdigest()
+    level_results.append(boundary_result)
+
     sustained_result: Optional[Dict[str, Any]] = None
     if SUSTAIN_S > 0:
         sustained_pcm = pcm * max(1, math.ceil(SUSTAIN_S / duration_s))

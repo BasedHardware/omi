@@ -5,7 +5,7 @@ from contextlib import nullcontext
 import os
 import sys
 import types
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch, AsyncMock, call
 
 import numpy as np
 import pytest
@@ -425,6 +425,56 @@ class TestStreamSessionRNNTStreaming:
         assert session._streaming_text == "hello world"
         assert session._asr_audio_buf == bytearray()
 
+    @pytest.mark.parametrize("real_tail", [b"", b"ef"])
+    def test_flush_emits_trimmed_final_word_and_preserves_real_subframe(self, real_tail):
+        session = sh.StreamSession(sample_rate=16000)
+        decoder = MagicMock()
+        decoder.next_input_bytes.return_value = 4
+        decoder.decode_pcm.return_value = "hello world"
+        session._streaming_decoder = decoder
+        session._decoder_has_audio = True
+        session._streaming_text = "hello world"
+        session._pending_audio = bytearray(_make_pcm(1.0))
+        session._speech_start_s = 0.0
+        session._stream_offset_s = 1.0
+        with patch.object(session, "_streaming_enabled", return_value=True), patch.object(
+            session, "_assign_speaker", return_value="SPEAKER_0"
+        ), patch.object(session, "_normalize_pcm16", side_effect=lambda pcm: pcm):
+            first = asyncio.run(session._transcribe_utterance(trim_trailing_word=True))
+            assert first[0]["text"] == "hello"
+            session._pending_audio.clear()
+            session._speech_start_s = None
+            session._pcm_buf = bytearray(real_tail)
+            final = asyncio.run(session.flush())
+            assert asyncio.run(session.flush()) == []
+        decoder.decode_pcm.assert_called_once_with(real_tail or bytes(4), is_last_chunk=True)
+        assert session._pcm_buf == bytearray()
+        assert final[0]["text"] == "world"
+        assert final[0]["start"] == 0.0
+        assert final[0]["end"] == pytest.approx(1.0 + len(real_tail) / 32000, abs=0.001)
+
+    def test_exact_boundary_flush_releases_right_context_once_without_fabricating_empty_audio(self):
+        decoder = MagicMock()
+        decoder.next_input_bytes.return_value = 4
+        decoder.decode_pcm.return_value = "tail"
+        session = sh.StreamSession(sample_rate=16000)
+        session._streaming_decoder = decoder
+        session._asr_audio_buf = bytearray(b"abcd")
+        session._drain_streaming_asr_sync(force=False)
+        session._drain_streaming_asr_sync(force=True)
+        session._drain_streaming_asr_sync(force=True)
+        assert decoder.decode_pcm.call_args_list == [
+            call(b"abcd", is_last_chunk=False),
+            call(bytes(4), is_last_chunk=True),
+        ]
+
+        empty_decoder = MagicMock()
+        empty_decoder.next_input_bytes.return_value = 4
+        empty = sh.StreamSession(sample_rate=16000)
+        empty._streaming_decoder = empty_decoder
+        empty._drain_streaming_asr_sync(force=True)
+        empty_decoder.decode_pcm.assert_not_called()
+
     def test_intermediate_drains_preserve_exact_audio_until_final_partial_flush(self):
         class FixedChunkDecoder:
             def __init__(self):
@@ -517,10 +567,12 @@ class TestStreamSessionRNNTStreaming:
         assert result == []
         assert not batch_transcribe.called
 
-    def test_streaming_utterance_emits_delta_text(self):
+    @pytest.mark.parametrize("speech_start", [0.0, 2.0])
+    def test_streaming_utterance_emits_delta_text(self, speech_start):
         session = sh.StreamSession(sample_rate=16000)
         session._pending_audio = bytearray(_make_pcm(1.0))
-        session._speech_start_s = 2.0
+        session._speech_start_s = speech_start
+        session._stream_offset_s = 5.0
         session._streaming_text = "hello world"
         session._last_emitted_text = "hello"
 
@@ -530,7 +582,7 @@ class TestStreamSessionRNNTStreaming:
             result = asyncio.run(session._transcribe_utterance())
 
         assert result[0]["text"] == "world"
-        assert result[0]["start"] == 2.0
+        assert result[0]["start"] == speech_start
         assert session._last_emitted_text == "hello world"
 
 
