@@ -102,6 +102,42 @@ Get transcription working in 2 minutes:
 | `getLiveTranscription(device, callback)` | Receive real-time transcription |
 | `getLiveAudio(device, callback)` | Receive audio file URLs |
 
+## Streaming STT (Deepgram)
+
+Transcribe streaming audio with customizable Deepgram model and language options:
+
+```swift
+import omi_lib
+
+// Via OmiSttFactory
+let transcriber = try OmiSttFactory.makeStreaming(
+    engine: .deepgram,
+    deepgramAPIKey: "YOUR_DEEPGRAM_API_KEY",
+    deepgramModel: "nova-2",
+    deepgramLanguage: "es", // e.g. "en-US", "es", "fr", "ja"
+    onTranscript: { text in
+        print("Transcript: \(text)")
+    }
+)
+
+// Or directly with OmiDeepgramTranscriber
+let deepgram = OmiDeepgramTranscriber(
+    apiKey: "YOUR_DEEPGRAM_API_KEY",
+    sampleRate: 16000,
+    model: "nova-2",
+    language: "es",
+    onTranscript: { text in
+        print("Transcript: \(text)")
+    }
+)
+
+// Send PCM audio data
+deepgram.appendPcm(pcmData)
+
+// Disconnect when done
+deepgram.stop()
+```
+
 
 ## Related
 
