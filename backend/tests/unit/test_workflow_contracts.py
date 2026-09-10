@@ -279,6 +279,41 @@ def test_expensive_pr_contracts_cancel_only_superseded_pull_request_runs():
         assert "cancel-in-progress: true" in workflow
 
 
+def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
+    """The suite is per-file pytest process bound; CI fans it out, guarded.
+
+    Measured 2026-09-10 (run 34430370667): 1126 files each in its own pytest
+    session cost 19m18s of a 21m53s run while only two files exceeded 4.5s of
+    test time, and sharing processes across files is blocked by dense
+    sys.modules contamination (see the BACKEND_PYTEST_PARALLEL_SESSION
+    measurement in backend/test.sh). The workflow therefore runs the SAME
+    selection as four parallel shard jobs whose interleaved slices partition
+    the sorted file list exactly (union = full selection), plus a concurrent
+    guardrails job, and publishes the verdict through a literal-named gate so
+    the required check surface never changes. Each shard carries a wall-clock
+    regression budget; duration drift fails the run instead of publishing
+    green.
+    """
+    repo = BACKEND_DIR.parent
+    workflow = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
+    runner = (BACKEND_DIR / "scripts/run-unit-ci.sh").read_text(encoding="utf-8")
+
+    assert "shard: [1, 2, 3, 4]" in workflow
+    assert "--shard 4/${{ matrix.shard }}" in workflow
+    assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "600"' in workflow
+    assert "backend unit shard wall: ${elapsed}s" in workflow
+    # The gate keeps the exact check name and fails closed on any shard or
+    # guardrail result that is not a plain success.
+    assert "name: Backend unit suite" in workflow
+    assert "needs: [backend-unit-shard, backend-unit-guardrails]" in workflow
+    assert 'if [ "$SHARD_RESULT" != "success" ]' in workflow
+    assert 'if [ "$GUARDRAILS_RESULT" != "success" ]' in workflow
+    # The runner slices the deterministic selection round-robin; `index` is
+    # an awk builtin, so the shard variable must be named anything else.
+    assert "NR % total == (shard - 1) % total" in runner
+    assert "awk -v index=" not in runner
+
+
 def test_backend_test_runner_defaults_python_to_utf8():
     runner = (BACKEND_DIR / "test.sh").read_text(encoding="utf-8")
     utf8_export = 'export PYTHONUTF8="${PYTHONUTF8:-1}"'
