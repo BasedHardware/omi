@@ -26,7 +26,7 @@ omi --json memory list --limit 25 | jq '.[] | {id, content, category}'
 | Code | Meaning                                                                 |
 | ---- | ----------------------------------------------------------------------- |
 | `0`  | Success.                                                                |
-| `1`  | Usage error — bad flag, missing arg, validation rejection.              |
+| `1`  | Usage/validation error, or the specific Desktop SQL failure described below. |
 | `2`  | Auth error — no creds, expired token, insufficient scope.               |
 | `3`  | Server error — 5xx after retries exhausted, or connection failure.      |
 | `4`  | Rate limited — 429 after retries exhausted. `detail` includes the wait. |
