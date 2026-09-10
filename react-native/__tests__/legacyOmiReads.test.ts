@@ -51,6 +51,32 @@ test('old conversations keep GET photo counts and omit empty lists', async () =>
   expect(result.items[1]).not.toHaveProperty('photoCount');
 });
 
+test('old conversations keep wire-non-empty category and omit whitespace', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'category-one',
+      structured: {
+        title: 'Real title',
+        overview: 'Actual overview',
+        category: 'work',
+      },
+    },
+    {
+      ...conversation,
+      id: 'category-two',
+      structured: {
+        title: 'Real title',
+        overview: 'Actual overview',
+        category: ' \u0085 ',
+      },
+    },
+  ]);
+  const result = await loadConversations(api);
+  expect(result.items[0]).toMatchObject({category: 'work'});
+  expect(result.items[1]).not.toHaveProperty('category');
+});
+
 test('old conversations keep wire-non-empty emoji and omit whitespace', async () => {
   const {api} = backend([
     {
@@ -90,6 +116,7 @@ test('old bare conversation array preserves nullable metadata and offset paginat
   });
   expect(first.items[0]).not.toHaveProperty('emoji');
   expect(first.items[0]).not.toHaveProperty('photoCount');
+  expect(first.items[0]).not.toHaveProperty('category');
   expect(first.apiContract).toBe('omi');
   expect(first.page).toMatchObject({
     complete: false,

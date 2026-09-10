@@ -610,6 +610,38 @@ test('library conversation rows name GET emoji and omit discarded or empty value
   expect(textOf(hidden)).not.toContain('🧠');
 });
 
+test('library conversation rows name GET category and omit discarded or empty values', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'omi-work',
+    title: 'Morning standup',
+    summary: 'Notes',
+    searchableText: 'Morning standup\nNotes',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+    category: 'work',
+  };
+  let shown!: ReactTestRenderer.ReactTestRenderer;
+  let hidden!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    shown = ReactTestRenderer.create(<ConversationRow item={item} />);
+    hidden = ReactTestRenderer.create(
+      <ConversationRow item={{...item, discarded: true, category: 'work'}} />,
+    );
+  });
+  expect(textOf(shown)).toContain('Work');
+  expect(textOf(hidden)).not.toContain('Work');
+});
+
 test('library conversation rows name discarded GET photo counts', () => {
   const item: ConversationProjection = {
     kind: 'conversation',

@@ -52,6 +52,7 @@ import {
   memoryLedgerPlaybookCopy,
   memoryBaselineCopy,
   memoryCaptureDeviceCopy,
+  conversationListCategory,
   parseMemoryText,
   chatClockLabel,
   clockLabel,
@@ -1407,6 +1408,22 @@ test('conversation capture copy names GET capturedAtMs and never shows 1970', ()
   expect(conversationCaptureCopy(0, now)).not.toContain('1970');
 });
 
+test('conversation list category names GET wire values and omits empty or discarded', () => {
+  expect(conversationListCategory({discarded: false, category: 'work'})).toBe(
+    'Work',
+  );
+  expect(conversationListCategory({discarded: false, category: 'other'})).toBe(
+    'Other',
+  );
+  expect(
+    conversationListCategory({discarded: false, category: ' \t\n'}),
+  ).toBeNull();
+  expect(conversationListCategory({discarded: false})).toBeNull();
+  expect(
+    conversationListCategory({discarded: true, category: 'work'}),
+  ).toBeNull();
+});
+
 test('conversation day labels prefer startedAt and keep Today/Yesterday/date', () => {
   const now = new Date(2026, 7, 14, 12, 0).getTime();
   const older = new Date(2026, 7, 10, 12, 0).toISOString();
@@ -2086,6 +2103,18 @@ test('canonical memories omit Omi ledger chrome even when extra keys are present
   expect(result.items[0]).not.toHaveProperty('ledgerBody');
   expect(result.items[0]).not.toHaveProperty('isBaseline');
   expect(result.items[0]).not.toHaveProperty('captureDeviceLabel');
+});
+
+test('canonical conversations omit Omi category chrome even when extra keys are present', async () => {
+  const result = await loadConversations(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify(
+        conversationPage([{...conversation, category: 'work'}]),
+      ),
+    })),
+  );
+  expect(result.items[0]).not.toHaveProperty('category');
 });
 
 test('still fails closed for empty memory text', async () => {

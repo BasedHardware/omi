@@ -133,6 +133,7 @@ export async function loadOmiConversations(
     const title = text(structured.title, ''),
       summary = text(structured.overview, '');
     const emoji = visibleDisplayText(text(structured.emoji, ''));
+    const category = visibleDisplayText(text(structured.category, ''));
     const createdAt = date(row.created_at);
     if (createdAt === null)
       throw new Error('Omi conversation creation time is malformed');
@@ -162,6 +163,7 @@ export async function loadOmiConversations(
       locked: bool(row.is_locked),
       discarded: bool(row.discarded),
       ...(emoji === '' ? {} : {emoji}),
+      ...(category === '' ? {} : {category}),
       ...(photos === 0 ? {} : {photoCount: photos}),
     };
   });

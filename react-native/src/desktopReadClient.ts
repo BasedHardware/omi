@@ -26,6 +26,7 @@ export type ConversationProjection = {
   discarded: boolean;
   emoji?: string;
   photoCount?: number;
+  category?: string;
 };
 
 export function visibleDisplayText(value: string): string {
@@ -207,6 +208,20 @@ export function conversationListEmoji(item: {
   }
   const emoji = visibleDisplayText(item.emoji ?? '');
   return emoji === '' ? null : emoji;
+}
+
+export function conversationListCategory(item: {
+  discarded: boolean;
+  category?: string | null;
+}): string | null {
+  if (item.discarded) {
+    return null;
+  }
+  const category = visibleDisplayText(item.category ?? '');
+  if (category === '') {
+    return null;
+  }
+  return category.charAt(0).toUpperCase() + category.slice(1);
 }
 
 export function conversationDiscardedPhotoCopy(item: {
