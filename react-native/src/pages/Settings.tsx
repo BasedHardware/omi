@@ -38,11 +38,13 @@ import {
   primaryLanguageCopy,
   peopleNameRows,
   fairUseCopy,
+  dailySummaryCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {loadOmiPeopleNames} from '../legacyOmiPeople';
 import {loadOmiFairUseStatus} from '../legacyOmiFairUse';
+import {loadOmiDailySummaries} from '../legacyOmiDailySummaries';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {parseSoftwarePlane, type SoftwarePlane} from '../v5BackendOrigin';
@@ -174,6 +176,9 @@ export function SettingsPage({
     [],
   );
   const [fairUse, setFairUse] = useState<ReturnType<typeof fairUseCopy>>(null);
+  const [dailySummaries, setDailySummaries] = useState<
+    ReturnType<typeof dailySummaryCopy>
+  >([]);
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
@@ -223,6 +228,7 @@ export function SettingsPage({
       setSnapshot(null);
       setPeopleNames([]);
       setFairUse(null);
+      setDailySummaries([]);
       setError(cloudSessionUnavailableCopy(backend));
       setPhase('error');
       return;
@@ -263,6 +269,7 @@ export function SettingsPage({
         setSnapshot(null);
         setPeopleNames([]);
         setFairUse(null);
+        setDailySummaries([]);
         setError(desktopBackendServiceCopy);
         setSettingsCanRetry(true);
         setPhase('error');
@@ -272,6 +279,7 @@ export function SettingsPage({
         setSnapshot(null);
         setPeopleNames([]);
         setFairUse(null);
+        setDailySummaries([]);
         setError(desktopBackendUnauthorizedCopy);
         setPhase('signed-out');
         return;
@@ -281,6 +289,7 @@ export function SettingsPage({
       () => new Map<string, string>(),
     );
     const fairUseTask = loadOmiFairUseStatus(backend).catch(() => null);
+    const dailySummariesTask = loadOmiDailySummaries(backend).catch(() => []);
     try {
       const account = await loadAccountSettings(backend);
       if (!current()) {
@@ -300,11 +309,13 @@ export function SettingsPage({
     }
     const names = await peopleTask;
     const status = await fairUseTask;
+    const summaries = await dailySummariesTask;
     if (!current()) {
       return;
     }
     setPeopleNames(peopleNameRows(names));
     setFairUse(fairUseCopy(status));
+    setDailySummaries(dailySummaryCopy(summaries));
   }, [browser]);
 
   useEffect(() => {
@@ -466,6 +477,13 @@ export function SettingsPage({
           <SettingRow copy={person.name} key={person.id} title="People" />
         ))}
         {fairUse?.map((row, index) => (
+          <SettingRow
+            copy={row.copy}
+            key={`${row.title}-${index}`}
+            title={row.title}
+          />
+        ))}
+        {dailySummaries.map((row, index) => (
           <SettingRow
             copy={row.copy}
             key={`${row.title}-${index}`}

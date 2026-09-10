@@ -557,6 +557,87 @@ export function peopleNameRows(
   return Array.from(names, ([id, name]) => ({id, name}));
 }
 
+const dailySummaryWeekdays = [
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Sat',
+  'Sun',
+] as const;
+const dailySummaryMonths = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+] as const;
+
+export function dailySummaryDateCopy(
+  date: string,
+  now: Date = new Date(),
+): string {
+  const visible = visibleDisplayText(date);
+  if (visible === '') {
+    return '';
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(visible);
+  if (match === null) {
+    return visible;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return visible;
+  }
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round(
+    (parsed.getTime() - today.getTime()) / 86_400_000,
+  );
+  if (diffDays === 0) {
+    return 'Today';
+  }
+  if (diffDays === -1) {
+    return 'Yesterday';
+  }
+  return `${dailySummaryWeekdays[(parsed.getDay() + 6) % 7]}, ${
+    dailySummaryMonths[month - 1]
+  } ${day}`;
+}
+
+export function dailySummaryCopy(
+  rows: readonly {id: string; date: string; headline: string}[],
+  now: Date = new Date(),
+): {title: string; copy: string}[] {
+  return rows.flatMap(row => {
+    const headline = visibleDisplayText(row.headline);
+    if (headline === '') {
+      return [];
+    }
+    const date = dailySummaryDateCopy(row.date, now);
+    return [
+      {
+        title: 'Daily summary',
+        copy: date === '' ? headline : `${date} · ${headline}`,
+      },
+    ];
+  });
+}
+
 function fairUseStageCopy(stage: string): string | null {
   if (stage === 'warning') {
     return 'Warning';

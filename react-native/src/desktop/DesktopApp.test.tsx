@@ -2875,6 +2875,84 @@ test('Settings names GET fair use without Upgrade or a write sheet', async () =>
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names GET daily summaries without regenerate or a write sheet', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          summaries: [
+            {
+              id: 'sum-1',
+              date: '2026-09-09',
+              headline: 'Met with the team',
+            },
+          ],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Daily summary');
+  expect(tree).toContain('Met with the team');
+  expect(tree).not.toContain('Your Day in Review');
+  expect(tree).not.toContain('sum-1');
+  expect(tree).not.toContain('Regenerate');
+});
+
 test('Settings shows already-loaded company, job, and data protection', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;

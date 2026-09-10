@@ -24,6 +24,7 @@ import {
   primaryLanguageCopy,
   peopleNameRows,
   fairUseCopy,
+  dailySummaryCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {
@@ -42,6 +43,7 @@ import {
 import {omiBackend} from '../omiNative';
 import {loadOmiPeopleNames} from '../legacyOmiPeople';
 import {loadOmiFairUseStatus} from '../legacyOmiFairUse';
+import {loadOmiDailySummaries} from '../legacyOmiDailySummaries';
 import {FocusPressable} from '../ui/Pressable';
 import {
   desktopMotion,
@@ -244,6 +246,9 @@ export function DesktopSettings({
     [],
   );
   const [fairUse, setFairUse] = useState<ReturnType<typeof fairUseCopy>>(null);
+  const [dailySummaries, setDailySummaries] = useState<
+    ReturnType<typeof dailySummaryCopy>
+  >([]);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
     Record<PrivacyWriteKind, boolean>
@@ -269,11 +274,13 @@ export function DesktopSettings({
     let nextAccount: AccountSettingsSnapshot | null = null;
     let nextPeople: {id: string; name: string}[] = [];
     let nextFairUse: ReturnType<typeof fairUseCopy> = null;
+    let nextDailySummaries: ReturnType<typeof dailySummaryCopy> = [];
     if (backend !== undefined && backend !== null && session === 'ready') {
       const peopleTask = loadOmiPeopleNames(backend).catch(
         () => new Map<string, string>(),
       );
       const fairUseTask = loadOmiFairUseStatus(backend).catch(() => null);
+      const dailySummariesTask = loadOmiDailySummaries(backend).catch(() => []);
       try {
         nextAccount = await loadAccountSettings(backend);
       } catch (reason) {
@@ -281,6 +288,7 @@ export function DesktopSettings({
       }
       nextPeople = peopleNameRows(await peopleTask);
       nextFairUse = fairUseCopy(await fairUseTask);
+      nextDailySummaries = dailySummaryCopy(await dailySummariesTask);
     }
     if (seq !== reloadSeqRef.current) {
       return;
@@ -288,6 +296,7 @@ export function DesktopSettings({
     setAccount(nextAccount);
     setPeopleNames(nextPeople);
     setFairUse(nextFairUse);
+    setDailySummaries(nextDailySummaries);
   }, [backend, session]);
 
   useEffect(() => {
@@ -590,6 +599,9 @@ export function DesktopSettings({
         <Row copy={person.name} key={person.id} title="People" />
       ))}
       {fairUse?.map((row, index) => (
+        <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
+      ))}
+      {dailySummaries.map((row, index) => (
         <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
       ))}
     </>

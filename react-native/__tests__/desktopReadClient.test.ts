@@ -72,6 +72,8 @@ import {
   peopleNameRows,
   firmwareUpdateCopy,
   fairUseCopy,
+  dailySummaryDateCopy,
+  dailySummaryCopy,
   subscriptionPeriodCopy,
   taskDisplaySummary,
   taskDisplayTitle,
@@ -945,6 +947,28 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
     {title: 'Weekly Rolling', copy: '0.0h / 10h'},
   ]);
   expect(fairUseCopy(null)).toBeNull();
+});
+
+test('daily summary copy names GET headlines without inventing Your Day in Review', () => {
+  const now = new Date(2026, 8, 10);
+  expect(dailySummaryDateCopy('2026-09-10', now)).toBe('Today');
+  expect(dailySummaryDateCopy('2026-09-09', now)).toBe('Yesterday');
+  expect(dailySummaryDateCopy('2026-09-08', now)).toBe('Tue, Sep 8');
+  expect(dailySummaryDateCopy('not-a-date', now)).toBe('not-a-date');
+  expect(dailySummaryDateCopy('2026-02-31', now)).toBe('2026-02-31');
+  expect(
+    dailySummaryCopy(
+      [
+        {id: 'sum-1', date: '2026-09-10', headline: 'Met with the team'},
+        {id: 'sum-2', date: '', headline: 'Shipped the recap'},
+        {id: 'sum-empty', date: '2026-09-08', headline: ' \t'},
+      ],
+      now,
+    ),
+  ).toEqual([
+    {title: 'Daily summary', copy: 'Today · Met with the team'},
+    {title: 'Daily summary', copy: 'Shipped the recap'},
+  ]);
 });
 
 test('firmware update copy names GET latest without Available on current or draft', () => {

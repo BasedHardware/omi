@@ -1343,6 +1343,36 @@ test('Settings names GET fair use without Upgrade or a write sheet', async () =>
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names GET daily summaries without regenerate or a write sheet', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          summaries: [
+            {
+              id: 'sum-1',
+              date: '2026-09-09',
+              headline: 'Met with the team',
+            },
+            {id: 'sum-empty', date: '2026-09-08', headline: ' \t'},
+          ],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Daily summary');
+  expect(tree).toContain('Met with the team');
+  expect(tree).not.toContain('Your Day in Review');
+  expect(tree).not.toContain('sum-1');
+  expect(tree).not.toContain('Regenerate');
+});
+
 test('Settings developer webhook URLs omit empty or whitespace values', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
