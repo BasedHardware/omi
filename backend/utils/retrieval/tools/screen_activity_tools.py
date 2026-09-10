@@ -373,6 +373,7 @@ def _keyword_screen_matches(
     uid: str, query: str, start_ts: Optional[int], end_ts: Optional[int], limit: int
 ) -> Tuple[List[Dict[str, Any]], int]:
     """Bounded keyword recall; Firestore timestamps use sortable UTC strings."""
+    from database.firestore_index_registry import SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY
     from database.read_boundary import parse_snapshots
     from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -383,8 +384,11 @@ def _keyword_screen_matches(
     start_ms = _normalized_captured_at_ms(start_bound)
     end_ms = _normalized_captured_at_ms(end_bound)
     collection = firestore_db.collection('users').document(uid).collection('screen_activity')
-    scan = collection.where(filter=FieldFilter('timestamp', '>=', start_bound))
-    scan = scan.where(filter=FieldFilter('timestamp', '<=', end_bound))
+    scan = SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY.build(
+        collection,
+        {'start': start_bound, 'end': end_bound},
+        field_filter_factory=FieldFilter,
+    )
     snapshots = list(scan.order_by('timestamp', direction='DESCENDING').limit(500).stream())
     rows = parse_snapshots(
         dict,

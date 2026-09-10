@@ -954,6 +954,20 @@ ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY = FirestoreQuerySpec(
     ),
 )
 
+SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='screen_activity_keyword_timestamp_range',
+    collection_group='screen_activity',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('timestamp', '>=', 'start'),
+        FirestoreQueryFilter('timestamp', '<=', 'end'),
+    ),
+    index_fields=(
+        _desc('timestamp'),
+        _desc('__name__'),
+    ),
+)
+
 ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY = FirestoreQuerySpec(
     identifier='action_items_completion_id_scan',
     collection_group='action_items',
@@ -1374,6 +1388,7 @@ QUERY_SPECS = (
     ENTITY_TIMELINE_CONVERSATIONS_QUERY,
     ENTITY_TIMELINE_MEETINGS_QUERY,
     ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY,
+    SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
     CHAT_FIRST_TRANSIENT_DEAD_LETTER_REPAIR_QUERY,
