@@ -579,7 +579,7 @@ function humanMessage(
   attachments: ChatMessage["attachments"]
 ): ChatMessage {
   return {
-    id: recordId(input.id),
+    id: input.id as ChatMessage["id"],
     text: input.text,
     sender: "human",
     type: input.type ?? "text",

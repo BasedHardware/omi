@@ -133,6 +133,26 @@ describe("ratified /v1/chat-messages route", () => {
     db.close();
   });
 
+  test("POST admission keeps opaque parseCreate ids and long unknown attachments at not-found", async () => {
+    const { db, local } = bootInMemory();
+    const shortId = await post(local, payload("x", 1_786_352_400_002, { id: "x", opId: "op-x" }));
+    const longOp = await post(local, payload("long-opid", 1_786_352_400_003, { opId: "o".repeat(129) }));
+    const maxAt = await post(local, payload("max-at", Number.MAX_SAFE_INTEGER));
+    const longAttachment = await post(local, payload("long-att", 1_786_352_400_004, {
+      attachmentIds: ["a".repeat(129)],
+    }));
+
+    expect(shortId.status).toBe(201);
+    expect((await admissionBody(shortId)).message.id).toBe("x");
+    expect(longOp.status).toBe(201);
+    expect(maxAt.status).toBe(201);
+    expect(longAttachment.status).toBe(404);
+    expect(await longAttachment.json()).toEqual({
+      error: { code: "not_found", retryable: false, action: "edit_request" },
+    });
+    db.close();
+  });
+
   test("history GET filters one optional chatSessionId and keeps unknown keys at 400", async () => {
     expect(parseHistoryQuery(new Request(
       "https://service.example/v1/chat-messages?limit=50&chatSessionId=session-alpha",

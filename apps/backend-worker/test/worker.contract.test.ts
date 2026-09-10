@@ -3377,6 +3377,34 @@ describe("settings entitlement admission contract", () => {
     });
   });
 
+  test("opaque parseCreate ids match production instead of RecordId and length caps", async () => {
+    const shortId = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(chatCreate("x")),
+    });
+    const longAttachment = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("long-att"),
+        attachmentIds: ["a".repeat(129)],
+      }),
+    });
+    expect(shortId.status).toBe(201);
+    expect((await shortId.json()) as { message: { id: string } }).toMatchObject({
+      message: { id: "x" },
+    });
+    expect(longAttachment.status).toBe(404);
+    expect((await longAttachment.json()) as unknown).toEqual({
+      error: {
+        code: "not_found",
+        retryable: false,
+        action: "edit_request",
+      },
+    });
+  });
+
   test("foreign-account attachments are not-found and incomplete stay rejected", async () => {
     await insertAttachment({
       id: "att-foreign",
@@ -3878,13 +3906,28 @@ describe("chat create wire validator", () => {
     ).toBe(true);
   });
 
+  test("accepts production parseCreate opaque id, long opId, long attachment id, and max safe at", () => {
+    expect(isChatCreate({ ...valid, id: "x" })).toBe(true);
+    expect(isChatCreate({ ...valid, opId: "o".repeat(129) })).toBe(true);
+    expect(
+      isChatCreate({ ...valid, messageSource: "s".repeat(129) }),
+    ).toBe(true);
+    expect(
+      isChatCreate({ ...valid, metadata: "m".repeat(16_385) }),
+    ).toBe(true);
+    expect(
+      parseChatCreate({ ...valid, attachmentIds: ["a".repeat(129)] })
+        ?.attachmentIds,
+    ).toEqual(["a".repeat(129)]);
+    expect(isChatCreate({ ...valid, at: Number.MAX_SAFE_INTEGER })).toBe(true);
+  });
+
   test.each([
     [null],
     [[]],
     [{ ...valid, op: "update" }],
     [{ ...valid, opId: "" }],
     [{ ...valid, at: -1 }],
-    [{ ...valid, at: Number.MAX_SAFE_INTEGER }],
     [{ ...valid, extra: true }],
     [{ ...valid, sender: "ai" }],
     [{ ...valid, journalRevision: 0.5 }],

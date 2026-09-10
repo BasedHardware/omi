@@ -87,10 +87,6 @@ const CHAT_CREATE_KEYS = new Set<string>([
   ...CHAT_CREATE_OPTIONAL,
 ]);
 
-function isOptionalBoundedString(value: unknown, maxLength: number): boolean {
-  return typeof value === "string" && value.length <= maxLength;
-}
-
 export function parseChatCreate(value: unknown): ChatCreate | null {
   if (
     value === null ||
@@ -109,11 +105,12 @@ export function parseChatCreate(value: unknown): ChatCreate | null {
   }
   if (
     item["op"] !== "create" ||
-    !isBoundedString(item["opId"], 128) ||
-    !isRecordId(item["id"]) ||
+    typeof item["opId"] !== "string" ||
+    item["opId"].length === 0 ||
+    typeof item["id"] !== "string" ||
+    item["id"].length === 0 ||
     !Number.isSafeInteger(item["at"]) ||
     (item["at"] as number) < 0 ||
-    !Number.isFinite(new Date(item["at"] as number).getTime()) ||
     typeof item["text"] !== "string" ||
     item["sender"] !== "human" ||
     !Number.isSafeInteger(item["journalRevision"]) ||
@@ -135,12 +132,12 @@ export function parseChatCreate(value: unknown): ChatCreate | null {
     ) ||
     !(
       item["messageSource"] === undefined ||
-      isOptionalBoundedString(item["messageSource"], 128)
+      typeof item["messageSource"] === "string"
     ) ||
     !(
       item["metadata"] === undefined ||
       item["metadata"] === null ||
-      isOptionalBoundedString(item["metadata"], 16_384)
+      typeof item["metadata"] === "string"
     )
   ) {
     return null;
@@ -150,8 +147,7 @@ export function parseChatCreate(value: unknown): ChatCreate | null {
     attachmentIds = [];
   } else if (
     Array.isArray(item["attachmentIds"]) &&
-    item["attachmentIds"].length <= 16 &&
-    item["attachmentIds"].every((id) => isBoundedString(id, 128))
+    item["attachmentIds"].every((id) => typeof id === "string" && id.length > 0)
   ) {
     attachmentIds = item["attachmentIds"];
   } else {
@@ -190,16 +186,5 @@ export const isChatCreate = (value: unknown): value is ChatCreate =>
 function isBoundedString(value: unknown, maxLength: number): value is string {
   return (
     typeof value === "string" && value.length > 0 && value.length <= maxLength
-  );
-}
-
-function isRecordId(value: unknown): value is string {
-  if (!isBoundedString(value, 128)) return false;
-  return (
-    /^[a-z]{2,12}(?:-[a-z]{2,12}){2,4}$/.test(value) ||
-    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
-      value
-    ) ||
-    /^[A-Za-z0-9_-]{4,128}$/.test(value)
   );
 }
