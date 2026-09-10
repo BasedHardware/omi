@@ -282,7 +282,8 @@ def test_save_retries_when_unique_temp_name_collides(config_path: Path, monkeypa
     assert reloaded.api_key == "omi_dev_retry"
 
 
-def test_save_cleans_own_temp_when_replace_fails(config_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("failure_type", [PermissionError, KeyboardInterrupt, SystemExit])
+def test_save_cleans_own_temp_when_replace_fails(config_path: Path, monkeypatch, failure_type) -> None:
     config = cfg.load()
     profile = config.get_profile()
     profile.auth_method = "api_key"
@@ -292,7 +293,7 @@ def test_save_cleans_own_temp_when_replace_fails(config_path: Path, monkeypatch)
     other_temp = config_path.with_suffix(".toml.other-writer.tmp")
     other_temp.write_bytes(b"another writer")
     profile.api_key = "omi_dev_replacement"
-    failure = PermissionError("destination is locked")
+    failure = failure_type("replacement interrupted or failed")
     attempted = []
 
     def fail_replace(source, destination):
@@ -302,7 +303,7 @@ def test_save_cleans_own_temp_when_replace_fails(config_path: Path, monkeypatch)
         raise failure
 
     monkeypatch.setattr(cfg.os, "replace", fail_replace)
-    with pytest.raises(PermissionError) as exc:
+    with pytest.raises(failure_type) as exc:
         cfg.save(config)
 
     assert exc.value is failure
@@ -311,10 +312,11 @@ def test_save_cleans_own_temp_when_replace_fails(config_path: Path, monkeypatch)
     assert other_temp.read_bytes() == b"another writer"
 
 
-def test_save_cleanup_failure_preserves_replace_error(config_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("failure_type", [PermissionError, KeyboardInterrupt, SystemExit])
+def test_save_cleanup_failure_preserves_replace_error(config_path: Path, monkeypatch, failure_type) -> None:
     config = cfg.load()
     config.get_profile().api_key = "omi_dev_synthetic"
-    failure = PermissionError("destination is locked")
+    failure = failure_type("replacement interrupted or failed")
     cleanup_attempts = []
 
     def fail_replace(source, destination):
@@ -327,7 +329,7 @@ def test_save_cleanup_failure_preserves_replace_error(config_path: Path, monkeyp
     with monkeypatch.context() as patcher:
         patcher.setattr(cfg.os, "replace", fail_replace)
         patcher.setattr(cfg.os, "unlink", fail_unlink)
-        with pytest.raises(PermissionError) as exc:
+        with pytest.raises(failure_type) as exc:
             cfg.save(config)
 
     assert exc.value is failure
