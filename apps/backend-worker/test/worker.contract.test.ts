@@ -1126,6 +1126,39 @@ describe("worker request contract", () => {
     });
   });
 
+  test("tasks GET store throw is production INTERNAL 500", async () => {
+    const throwingDb = {
+      prepare() {
+        throw new Error("d1 store failed");
+      },
+    };
+    const storeThrow = await handleTasks(
+      coreContext({
+        env: { ...env, DB: throwingDb } as never,
+        request: new Request("https://worker.test/v1/tasks?limit=10"),
+        routePath: "/v1/tasks",
+        params: {},
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(storeThrow.status).toBe(500);
+    expect(storeThrow.headers.get("retry-after")).toBeNull();
+    expect((await storeThrow.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+
+    const throughWorker = await fetchWorker(
+      "/v1/tasks?limit=10",
+      { headers: authenticatedHeaders },
+      { ...env, DB: throwingDb }
+    );
+    expect(throughWorker.status).toBe(500);
+    expect(throughWorker.headers.get("retry-after")).toBeNull();
+    expect((await throughWorker.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+  });
+
   test("conversation and task reads fail closed when D1 is unbound", async () => {
     const missingDb = { ...env, DB: undefined };
     const unavailable = {
