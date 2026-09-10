@@ -43,6 +43,10 @@ struct SettingsSearchItem: Identifiable {
       name: "Reset Window Size", subtitle: "Restore the default window dimensions",
       keywords: ["resize", "window", "default size"], section: .general, icon: "gearshape",
       settingId: "general.fontsize"),
+    SettingsSearchItem(
+      name: "Transparency", subtitle: "How much of the desktop shows through the glass",
+      keywords: ["glass", "transparent", "opacity", "opaque", "blur", "see-through", "translucent"],
+      section: .general, icon: "circle.lefthalf.filled", settingId: "general.transparency"),
 
     // Rewind
     SettingsSearchItem(

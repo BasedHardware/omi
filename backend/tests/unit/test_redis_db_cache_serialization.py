@@ -104,3 +104,18 @@ def test_apps_reviews_batch_round_trip(fake_redis: _FakeRedis) -> None:
         "app-b": {"uid-2": {"rating": 5}},
         "app-missing": {},
     }
+
+
+class _MaxMemoryRedis(_FakeRedis):
+    def set(self, key: str, value: Any, ex: Optional[int] = None) -> None:
+        raise redis_db.redis.exceptions.OutOfMemoryError("command not allowed when used memory > 'maxmemory'.")
+
+
+def test_cache_user_geolocation_fail_open_on_maxmemory(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(redis_db, "r", _MaxMemoryRedis())
+    redis_db.cache_user_geolocation("uid-1", {"latitude": 37.77, "longitude": -122.42})
+
+
+def test_cache_user_name_fail_open_on_maxmemory(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(redis_db, "r", _MaxMemoryRedis())
+    redis_db.cache_user_name("uid-1", "Ada")

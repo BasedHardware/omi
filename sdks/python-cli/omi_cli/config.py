@@ -201,7 +201,27 @@ def load(path: Optional[Path] = None) -> Config:
 
     active = data.get("active_profile", DEFAULT_PROFILE_NAME)
     profiles_data = data.get("profiles", {})
-    profiles = {name: Profile.from_toml_dict(name, raw) for name, raw in profiles_data.items()}
+    
+    # Validate that profiles is a table (dict), not a string or other scalar.
+    if not isinstance(profiles_data, dict):
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"'profiles' must be a table, got {type(profiles_data).__name__}",
+        )
+    
+    # Validate each profile value is a table before constructing Profile objects.
+    profiles = {}
+    for name, raw in profiles_data.items():
+        if not isinstance(raw, dict):
+            return Config(
+                path=p,
+                active_profile=DEFAULT_PROFILE_NAME,
+                profiles={},
+                load_error=f"profile '{name}' must be a table, got {type(raw).__name__}",
+            )
+        profiles[name] = Profile.from_toml_dict(name, raw)
 
     extra = {key: value for key, value in data.items() if key not in {"active_profile", "profiles"}}
     return Config(path=p, active_profile=active, profiles=profiles, extra=extra)
