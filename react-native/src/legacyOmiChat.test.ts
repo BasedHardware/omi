@@ -66,3 +66,56 @@ test('old chat history keeps GET day_summary type instead of dropping it as a no
   );
   expect(page.messages.find(row => row.id === 'text-1')?.type).toBeUndefined();
 });
+
+test('old chat history keeps GET memory citations and omits empty titles', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'cited-1',
+        sender: 'ai',
+        text: 'I found that meeting.',
+        created_at: '2026-09-07T01:02:03Z',
+        memories: [
+          {
+            id: 'conv-1',
+            created_at: '2026-09-06T00:00:00Z',
+            structured: {title: 'Morning standup', emoji: '🚀'},
+          },
+          {
+            id: 'conv-2',
+            created_at: '2026-09-06T00:00:00Z',
+            structured: {title: 'Notes', emoji: ''},
+          },
+          {
+            id: 'conv-3',
+            created_at: '2026-09-06T00:00:00Z',
+            structured: {title: '\u0085', emoji: '🧠'},
+          },
+        ],
+      },
+    ]),
+    0,
+  );
+  expect(page.messages[0].memories).toEqual([
+    {title: 'Morning standup', emoji: '🚀'},
+    {title: 'Notes'},
+    {title: '\u0085', emoji: '🧠'},
+  ]);
+});
+
+test('old chat history rejects malformed GET memories', () => {
+  expect(() =>
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          id: 'cited-1',
+          sender: 'ai',
+          text: 'I found that meeting.',
+          created_at: '2026-09-07T01:02:03Z',
+          memories: [{structured: {title: 'Morning standup'}}],
+        },
+      ]),
+      0,
+    ),
+  ).toThrow();
+});

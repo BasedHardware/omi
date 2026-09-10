@@ -1,11 +1,40 @@
 import {decodeBase64} from './base64';
 import type {ChatHistoryPage, ChatMessage} from './chatClient';
 
-export function parseOmiMessage(value: unknown): ChatMessage {
-  if (value === null || typeof value !== 'object') {
+function object(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Omi chat message is malformed');
   }
-  const row = value as Record<string, unknown>;
+  return value as Record<string, unknown>;
+}
+
+function parseOmiChatMemories(
+  value: unknown,
+): {title: string; emoji?: string}[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value) || value.length > 50) {
+    throw new Error('Omi chat memories are malformed');
+  }
+  return value.map(raw => {
+    const row = object(raw);
+    const structured = object(row.structured);
+    if (
+      typeof structured.title !== 'string' ||
+      typeof structured.emoji !== 'string'
+    ) {
+      throw new Error('Omi chat memories are malformed');
+    }
+    return {
+      title: structured.title,
+      ...(structured.emoji === '' ? {} : {emoji: structured.emoji}),
+    };
+  });
+}
+
+export function parseOmiMessage(value: unknown): ChatMessage {
+  const row = object(value);
   const createdAt =
     typeof row.created_at === 'string' ? Date.parse(row.created_at) : NaN;
   if (
@@ -17,6 +46,7 @@ export function parseOmiMessage(value: unknown): ChatMessage {
   ) {
     throw new Error('Omi chat message is malformed');
   }
+  const memories = parseOmiChatMemories(row.memories);
   return {
     id: row.id,
     text: row.text,
@@ -24,6 +54,7 @@ export function parseOmiMessage(value: unknown): ChatMessage {
     ...(row.type === 'day_summary' ? {type: 'day_summary' as const} : {}),
     createdAt,
     generationOutcome: null,
+    ...(memories.length === 0 ? {} : {memories}),
   };
 }
 

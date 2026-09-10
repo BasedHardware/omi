@@ -4,6 +4,7 @@ import type {ChatMessage} from '../chatClient';
 import {
   chatClockLabel,
   chatDaySummaryCopy,
+  chatMemoryCitationCopy,
   chatMessageDisplayText,
   chatSenderCopy,
   visibleDisplayText,
@@ -47,6 +48,10 @@ const ChatMessageRow = memo(function ChatMessageRow({
   }, [animate, opacity, reduceMotion, translateY]);
   const human = message.sender === 'human';
   const daySummary = chatDaySummaryCopy(message.type);
+  const citations = (message.memories ?? []).flatMap(memory => {
+    const copy = chatMemoryCitationCopy(memory);
+    return copy === null ? [] : [copy];
+  });
   return (
     <Animated.View
       accessibilityLabel={
@@ -90,6 +95,11 @@ const ChatMessageRow = memo(function ChatMessageRow({
         {daySummary !== '' && (
           <Text style={styles.cancelledLabel}>{daySummary}</Text>
         )}
+        {citations.map((copy, index) => (
+          <Text key={index} numberOfLines={1} style={styles.cancelledLabel}>
+            {copy}
+          </Text>
+        ))}
         {message.sender === 'unknown' && (
           <Text style={styles.cancelledLabel}>
             {chatSenderCopy(message.sender)}

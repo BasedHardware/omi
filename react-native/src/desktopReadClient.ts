@@ -533,6 +533,18 @@ export function chatDaySummaryCopy(
   return type === 'day_summary' ? 'Day Summary' : '';
 }
 
+export function chatMemoryCitationCopy(memory: {
+  title: string;
+  emoji?: string | null;
+}): string | null {
+  const title = visibleDisplayText(memory.title);
+  if (title === '') {
+    return null;
+  }
+  const emoji = visibleDisplayText(memory.emoji ?? '');
+  return emoji === '' ? title : `${emoji} ${title}`;
+}
+
 export function memoryDisplayTitle(item: {
   title: string;
   summary: string;

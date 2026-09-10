@@ -1318,6 +1318,49 @@ test('a day_summary chat message names Day Summary instead of a normal Omi turn'
   });
 });
 
+test('a chat message names GET memory citations without inventing a conversation open', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-cited',
+        text: 'I found that meeting.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        memories: [
+          {title: 'Morning standup', emoji: '🚀'},
+          {title: 'Notes'},
+          {title: '\u0085', emoji: '🧠'},
+        ],
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('🚀 Morning standup');
+  expect(copies).toContain('Notes');
+  expect(copies).not.toContain('🧠');
+  expect(copies).not.toContain('\u0085');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('an unknown chat sender says Sender unavailable instead of looking like a quiet AI turn', () => {
   const renderer = render(
     <ChatMessageRow

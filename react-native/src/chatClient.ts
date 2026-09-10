@@ -28,6 +28,7 @@ export type ChatMessage = {
   generationRetryable?: boolean;
   localOnly?: boolean;
   attachments?: ChatMessageAttachment[];
+  memories?: {title: string; emoji?: string}[];
 };
 
 export type ChatHistoryPage = {
