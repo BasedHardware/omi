@@ -197,10 +197,10 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
     description: 'Improve your communication skills',
     icon: MessagesSquare,
     theme: {
-      primary: 'text-yellow-500',
-      secondary: 'text-yellow-400',
-      accent: 'bg-yellow-500/15',
-      background: 'bg-yellow-500/5',
+      primary: 'text-lime-500',
+      secondary: 'text-lime-400',
+      accent: 'bg-lime-500/15',
+      background: 'bg-lime-500/5',
     },
   },
   'emotional-and-mental-support': {
@@ -209,10 +209,10 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
     description: 'Support for emotional and mental health',
     icon: HeartHandshake,
     theme: {
-      primary: 'text-rose-500',
-      secondary: 'text-rose-400',
-      accent: 'bg-rose-500/15',
-      background: 'bg-rose-500/5',
+      primary: 'text-yellow-500',
+      secondary: 'text-yellow-400',
+      accent: 'bg-yellow-500/15',
+      background: 'bg-yellow-500/5',
     },
   },
   'travel-and-exploration': {
@@ -221,10 +221,10 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
     description: 'Explore new places and plan your trips',
     icon: Compass,
     theme: {
-      primary: 'text-lime-500',
-      secondary: 'text-lime-400',
-      accent: 'bg-lime-500/15',
-      background: 'bg-lime-500/5',
+      primary: 'text-red-500',
+      secondary: 'text-red-400',
+      accent: 'bg-red-500/15',
+      background: 'bg-red-500/5',
     },
   },
   other: {

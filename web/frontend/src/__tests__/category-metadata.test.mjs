@@ -18,26 +18,24 @@ import { readFileSync } from 'node:fs';
 const SOURCE = new URL('../app/apps/utils/category.ts', import.meta.url);
 const source = readFileSync(SOURCE, 'utf8');
 
-// Category ids the backend assigns to apps (backend/utils/apps.py category maps)
-// that must not collapse into the General fallback on the marketplace.
-const REQUIRED_CATEGORY_IDS = [
-  'productivity-and-organization',
-  'conversation-analysis',
-  'education-and-learning',
-  'personality-emulation',
-  'utilities-and-tools',
-  'health-and-wellness',
-  'safety-and-security',
-  'news-and-information',
-  'social-and-relationships',
-  'financial',
-  'entertainment-and-fun',
-  'shopping-and-commerce',
-  'integration',
-  'communication-improvement',
-  'emotional-and-mental-support',
-  'travel-and-exploration',
-];
+// Source of truth for category ids: the backend's base category → master
+// category map. Every key there can be assigned to a published app, so every
+// key must resolve to its own marketplace metadata (not the General fallback).
+const BACKEND_APPS = new URL('../../../../backend/utils/apps.py', import.meta.url);
+const backendSource = readFileSync(BACKEND_APPS, 'utf8');
+
+function backendCategoryIds() {
+  const block = backendSource.match(
+    /^_BASE_CATEGORY_MAPPING: Dict\[str, str\] = \{\n([\s\S]*?)^\}/m,
+  );
+  assert.ok(block, 'could not find _BASE_CATEGORY_MAPPING in backend/utils/apps.py');
+  const ids = [...block[1].matchAll(/^\s+'([a-z0-9-]+)': '/gm)].map((m) => m[1]);
+  assert.ok(ids.length >= 10, `unexpectedly few backend category ids: ${ids.length}`);
+  return ids;
+}
+
+// `other` is the General fallback itself and is checked separately below.
+const REQUIRED_CATEGORY_IDS = backendCategoryIds().filter((id) => id !== 'other');
 
 // Added by this fix; existing entries keep their historical hues (ratchet is no-increase).
 const NEW_CATEGORY_IDS = [
@@ -71,6 +69,10 @@ describe('marketplace categoryMetadata (static checker)', () => {
   }
 
   it('keeps the General entry as the fallback for `other` and unknown ids', () => {
+    assert.ok(
+      backendCategoryIds().includes('other'),
+      'backend map should still define other',
+    );
     const other = entryFor('other');
     assert.ok(other);
     assert.equal(field(other, 'displayName'), 'General');
