@@ -46,7 +46,7 @@ C_PREFIX = r"""
 #include <stdio.h>
 
 #define CODEC_OUTPUT_MAX_BYTES 160
-#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define MIN(a, b) ((uint32_t)(a) < (uint32_t)(b) ? (uint32_t)(a) : (uint32_t)(b))
 #define LOG_DBG(...) do {} while (0)
 #define LOG_ERR(...) do {} while (0)
 #define LOG_INF(...) do {} while (0)
@@ -56,7 +56,7 @@ C_PREFIX = r"""
 #define EAGAIN 11
 #define ENOMEM 12
 
-struct bt_conn {};
+struct bt_conn { int placeholder; };
 struct bt_gatt_attr {};
 struct bt_gatt_service { struct bt_gatt_attr attrs[2]; };
 static struct bt_gatt_service audio_service;
@@ -128,8 +128,8 @@ static int check_case(uint16_t mtu, uint32_t size, int transient_failures, uint1
         ok = ok && (accepted == 0) && (calls == 3);
     }
     printf("  [%s] MTU=%3d audio_bytes=%3d retries=%d -> result=%d delivered=%d chunks=%d calls=%d\n",
-           ok ? "PASS" : "FAIL", mtu, size, transient_failures,
-           result, received_size, accepted, calls);
+           ok ? "PASS" : "FAIL", (int)mtu, (int)size, transient_failures,
+           (int)result, received_size, accepted, calls);
     return !ok;
 }
 """
@@ -145,7 +145,7 @@ def generate_c_main() -> str:
 int main(void) {{
     int failed = 0;
 {invocations}
-    printf("\n%d of {total} test cases passed (%d failed)\n", {total} - failed, failed);
+    printf("\\n%d of {total} test cases passed (%d failed)\\n", {total} - failed, failed);
     return failed ? 1 : 0;
 }}
 """
@@ -194,6 +194,7 @@ def run_c_seam(source_path: Path) -> int:
         try:
             subprocess.run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", str(c_file), "-o", str(executable)], check=True, capture_output=True, text=True)
             res = subprocess.run([str(executable)], check=False)
+            assert res.returncode == 0, f"C production seam test failed with exit code {res.returncode}"
             return res.returncode
         except subprocess.CalledProcessError as e:
             print(f"ERROR: C production seam compilation failed:\n{e.stderr}")
