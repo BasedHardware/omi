@@ -1,99 +1,82 @@
-# Snabbstartsguide för omi-cli (Swedish Quickstart)
+# omi-cli Snabbstartsguide (Swedish Quickstart)
 
-Praktisk referensguide för det officiella kommandoradsgränssnittet för Omi (`omi-cli`).
-Detta dokument beskriver installation, autentisering, datahanteringskommandon och automatiseringstekniker för skript och autonoma AI-agenter.
+> En praktisk guide för att interagera med Omi direkt från terminalen — utformad för utvecklare och autonoma AI-agenter.
+
+`omi-cli` är det officiella kommandoradsgränssnittet för utvecklar-API:et till [Omi](https://omi.me). Det ger strukturerad och automatiserbar åtkomst till systemets fyra kärnresurser: minnen (memories), konversationer (conversations), åtgärdspunkter (action items) och mål (goals).
+
+* **PyPI:** [pypi.org/project/omi-cli](https://pypi.org/project/omi-cli/)
+* **Officiell dokumentation:** [docs.omi.me/doc/developer/cli/introduction](https://docs.omi.me/doc/developer/cli/introduction)
+* **Källkod:** [github.com/BasedHardware/omi/tree/main/sdks/python-cli](https://github.com/BasedHardware/omi/tree/main/sdks/python-cli)
 
 ---
 
-## Översikt och Körbar Fil
+## 1. Installation
 
-* **PyPI-paketnamn:** `omi-cli`
-* **Körbart kommando:** `omi`
-
-För att undvika förväxling vid installation och körning:
+Installation via `pipx` rekommenderas för att köra CLI:t i en isolerad miljö och undvika konflikter med systemberoenden.
 
 ```bash
-# Installeras med paketnamnet:
+# Rekommenderat: isolerad miljö med pipx
 pipx install omi-cli
 
-# Körs med det kortare kommandot:
+# Eller standardinstallation med pip
+pip install omi-cli
+```
+
+> **Observera: Paketnamn vs. Kommandonamn**
+> * Paketnamnet på PyPI är **`omi-cli`** (`omi` är ett orelaterat paket).
+> * Kommandot i terminalen är helt enkelt **`omi`**.
+
+Verifiera installationen:
+
+```bash
+omi --version
 omi --help
 ```
 
 ---
 
-## Installation
+## 2. Autentisering (Authentication)
 
-Användning av `pipx` rekommenderas för att köra CLI-verktyget i en isolerad virtuell miljö och undvika beroendekonflikter.
+`omi-cli` stöder två primära autentiseringsmetoder:
 
-### Rekommenderad Metod (`pipx`)
+| Metod | Användningsområde | Kommando |
+| :--- | :--- | :--- |
+| **API-nyckel för utvecklare (`omi_dev_*`)** | Automatisering, CI/CD, headless-servrar, AI-agenter | `omi auth login --api-key` eller miljövariabeln `OMI_API_KEY` |
+| **Webbläsare OAuth (Google/Apple)** | Lokala utvecklingsmaskiner och skrivbord | `omi auth login --browser` (Google) / `--provider apple` |
+
+### Interaktiv inloggning
+Kör kommandot utan flaggor för att välja metod:
 
 ```bash
-pipx install omi-cli
+omi auth login
+# 1) Browser — webbläsarinloggning (standard Google; för Apple använd `--provider apple`)
+# 2) API key — mata in utvecklarnyckel från app.omi.me
 ```
 
-Uppgradera till den senaste versionen:
-
+### Direkt webbläsarinloggning
 ```bash
-pipx upgrade omi-cli
-```
-
-### Alternativ Metod (`pip`)
-
-```bash
-pip install --user omi-cli
-```
-
-Verifiera att installationen fungerar:
-
-```bash
-omi --version
-```
-
----
-
-## Autentisering
-
-CLI stöder tre primära metoder för autentisering: webbläsarinloggning, utvecklar-API-nyckel och miljövariabel.
-
-### 1. Inloggning via Webbläsare (OAuth)
-
-Google används som standard. Om du föredrar Apple-konto anger du `--provider apple`.
-
-```bash
-# Inloggning via Google (standard)
+# Standardinloggning via Google
 omi auth login --browser
 
-# Inloggning via Apple
+# Inloggning via Apple-konto
 omi auth login --browser --provider apple
 ```
 
-### 2. Inloggning med API-nyckel (Headless / CI/CD)
-
-Lämpligt för fjärrservrar, SSH-sessioner och automatiserade distributionsrör:
+### Autentisering med API-nyckel
+Skapa en nyckel på [app.omi.me](https://app.omi.me) under **Developer → API Keys**:
 
 ```bash
+# Spara nyckeln permanent i den lokala profilen (dold interaktiv inmatning)
 omi auth login --api-key
-```
 
-Klistra in din utvecklarnyckel som genererats på [app.omi.me](https://app.omi.me) under **Developer → API Keys**.
-
-### 3. Miljövariabel
-
-För Docker-containrar och automatiserade miljöer utan fillagring:
-
-```bash
+# Eller ange som miljövariabel (perfekt för containers och CI/CD)
+# Obs: om den aktiva profilen redan har en sparad nyckel, kör `omi auth logout` först.
 export OMI_API_KEY="omi_dev_din_hemliga_nyckel"
 ```
 
-> **Obs:** Om din aktiva profil redan har en sparad nyckel, kör först `omi auth logout` så att miljövariabeln ges företräde.
-
-### Kontrollera Autentiseringsstatus
-
-* **Offline-kontroll:**
-  `omi auth status` visar aktiv profil och maskerad nyckel. Utgångsdatum visas endast för OAuth-profiler.
-* **Online-kontroll:**
-  `omi auth whoami` skickar en verifieringsförfrågan till Omi-servern för att bekräfta giltigheten i realtid.
+### Verifiera sessionen
+* `omi auth status`: visar aktiv profil och maskerade uppgifter. Utgångsdatum visas endast för OAuth-profiler (fungerar offline).
+* `omi auth whoami`: skickar en live-förfrågan till Omi-servern för att verifiera giltighet (kräver nätverksåtkomst).
 
 ```bash
 omi auth status
@@ -101,174 +84,177 @@ omi auth whoami
 ```
 
 Avsluta sessionen:
-
 ```bash
 omi auth logout
-# Om OMI_API_KEY är satt i miljön, ta även bort den (Bash/Zsh: `unset OMI_API_KEY`).
+# Om OMI_API_KEY satts som miljövariabel, ta bort den i sessionen (Bash/Zsh: `unset OMI_API_KEY`).
 ```
 
 ---
 
-## Primära Arbetsflöden
+## 3. Kärnkommandon
 
-### Minnen (`omi memory`)
-
-Minnen representerar atomära kontextelement som sparats av Omi.
+### Minnen (Memories)
+Strukturerade kontextuella informationsenheter sparade av Omi:
 
 ```bash
-# Lista de senaste minnena
-omi memory list --limit 10
+# Lista sparade minnen
+omi memory list
 
-# Skapa ett nytt minne manuellt
-omi memory create --text "Projektmöte bokat till tisdag kl. 10:00 med det tekniska teamet."
+# Skapa ett nytt minne (text som positionellt argument)
+omi memory create "Föredrar koncisa tekniska svar med Python-exempel" --category work
 
-# Semantisk sökning bland minnen
-omi memory search "projektmöte"
+# Hämta detaljer om ett specifikt minne
+omi memory get <MINNES_ID>
 ```
 
-### Konversationer (`omi conversation`)
-
-Hantering av inspelade samtal och ljudtranskriptioner.
+### Konversationer (Conversations)
+Ljudhistorik och transkriptioner registrerade av Omi-enheter:
 
 ```bash
-# Lista konversationer
+# Lista de 5 senaste konversationerna
 omi conversation list --limit 5
 
-# Hämta information om en specifik konversation
-omi conversation get conv_123456
+# Visa detaljer och fullständig transkription
+omi conversation get <KONVERSATIONS_ID> --include-transcript
 
-# Exportera fullständig transkription i Markdown-format
-omi conversation export conv_123456 --format markdown > transkription.md
+# Exportera fullständig transkription till JSON-fil
+omi --json conversation get <KONVERSATIONS_ID> --include-transcript > transkription.json
 ```
 
-### Åtgärdspunkter och Uppgifter (`omi action-item`)
-
-Uppgifter som extraherats automatiskt ur konversationer.
+### Åtgärdspunkter (Action Items)
+Uppgifter och att-göra-punkter extraherade automatiskt från samtal:
 
 ```bash
-# Lista väntande uppgifter
-omi action-item list --status pending
+# Lista öppna uppgifter
+omi action-item list --open
 
 # Markera en uppgift som slutförd
-omi action-item update act_789012 --completed
+omi action-item complete <UPPGIFTS_ID>
 ```
 
-### Mål (`omi goal`)
-
-Hantering av personliga och professionella mål.
+### Mål (Goals)
+Framstegsspårning och långsiktiga mål:
 
 ```bash
-# Visa aktiva mål
+# Lista aktiva mål
 omi goal list
 
-# Skapa ett nytt mål
-omi goal create --title "Slutföra flerspråkig dokumentation" --horizon month
-
-# Uppdatera målets framsteg
-omi goal update goal_345678 --progress 75
+# Skapa ett nytt kvantitativt mål (titel som positionellt argument)
+omi goal create "Drick 2 liter vatten per dag" --type numeric --target 2 --unit liters
 ```
 
 ---
 
-## Strukturerad Automatisering (`--json` & `jq`)
+## 4. Automatisering och JSON-utdata (`--json`)
 
-Alla `omi`-kommandon accepterar den globala flaggan `--json`, vilket möjliggör maskinläsbarhet för skript och datapipeliner.
-
-### Filtrera och Extrahera med `jq`
+`omi-cli` är optimerat för automatiserade rörledningar och Unix-verktyg som `jq`. Den globala flaggan `--json` ger ren, strukturerad utdata:
 
 ```bash
-# Extrahera all text från minnen
-omi --json memory list --limit 20 | jq -r '.[].content'
+# Hämta minnen i JSON-format och filtrera fält med jq
+omi --json memory list | jq '.[] | {id, content, category}'
 
-# Filtrera oavslutade uppgifter
-omi --json action-item list | jq '.[] | select(.completed == false) | {id: .id, description: .description}'
+# Extrahera titlar på senaste konversationer
+omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
+
+# Granska rådata för öppna åtgärdspunkter
+omi --json action-item list --open | jq '.'
 ```
 
+> **Viktig syntaxregel:**
+> Flaggan `--json` är ett **globalt alternativ** och måste alltid placeras **före** underkommandot:
+> * Korrekt: `omi --json memory list`
+> * Felaktigt: `omi memory list --json`
+
 ---
 
-## Tabell över Slutkoder (Exit Codes)
+## 5. Slutkoder (Exit Codes)
 
-| Kod | Betydelse | Typisk Orsak |
+Standardiserade slutkoder för tillförlitlig felhantering i skalskript och automatiseringsflöden:
+
+| Slutkod | Betydelse | Beskrivning |
 | :---: | :--- | :--- |
-| `0` | **Framgång (Success)** | Åtgärden slutfördes utan fel. |
-| `1` | **Applikations- / Valideringsfel** | Ogiltiga datavärden eller misslyckad affärslogik; syntaxfel från Click-parsern returnerar kod `2`. |
-| `2` | **Autentiserings- / CLI-syntaxfel** | Saknad inloggning, ogiltig API-nyckel eller ogiltiga kommandoradsflaggor från Click-parsern. |
-| `3` | **Server- / Nätverksfel** | HTTP 5xx-svar, tidsgräns överskriden eller servern kan inte nås. |
-| `4` | **Hastighetsbegränsad (Rate Limited)** | HTTP 429 Too Many Requests — fördröjd återförsökslogik krävs. |
-| `5` | **Hittades Inte (Not Found)** | HTTP 404 Not Found — den begärda resursen existerar inte. |
+| `0` | **Lyckades (Success)** | Kommandot utfördes felfritt. |
+| `1` | **Valideringsfel** | Felaktiga datavärden eller applikationsvalideringsfel; Click-parser syntaxfel returnerar kod `2`. |
+| `2` | **Autentiseringsfel / Click-syntaxfel** | Ingen aktiv session, utgånget token eller ogiltig kommandosyntax. |
+| `3` | **Serverfel / Nätverksfel** | HTTP 5xx-svar, anslutningstimeout eller servern kunde inte nås. |
+| `4` | **Hastighetsbegränsning (Rate Limit)** | HTTP 429 Too Many Requests — vänta innan nytt försök. |
+| `5` | **Hittades inte (Not Found)** | HTTP 404 Not Found — den efterfrågade resursen finns inte. |
 
 ---
 
-## Plattformsoberoende Skript
+## 6. Exempel på skalskript
 
-### Bash / Zsh (Linux & macOS)
-
+### Bash / Zsh (Linux / macOS)
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Kontrollerar Omi-autentisering..."
-if ! omi auth status > /dev/null 2>&1; then
+# Verifiera sessionen via whoami (returnerar kod != 0 vid obehörighet)
+if ! omi auth whoami > /dev/null 2>&1; then
     echo "Fel: Autentisering krävs. Kör 'omi auth login'." >&2
     exit 2
 fi
 
-echo "Skapar ny anteckning..."
-omi memory create --text "Automatisk systemkontroll genomförd utan anmärkning."
+# Hämta öppna uppgifter och bearbeta JSON
+open_items=$(omi --json action-item list --open)
+echo "Hittade uppgifter: $(echo "$open_items" | jq 'length')"
 ```
 
 ### PowerShell (Windows)
-
 ```powershell
-Write-Host "Kontrollerar Omi-autentisering..."
-omi auth status
+# Sätt miljövariabel för sessionen
+$env:OMI_API_KEY = "omi_dev_din_hemliga_nyckel"
+
+# Hämta minnen och konvertera direkt till PowerShell-objekt
+$memories = omi --json memory list | ConvertFrom-Json
+$memories | Select-Object id, content, category
+
+# Kontrollera slutkod
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Autentisering saknas. Kör 'omi auth login'."
-    exit $LASTEXITCODE
-}
-
-Write-Host "Hämtar mål..."
-omi --json goal list | ConvertFrom-Json | ForEach-Object {
-    [PSCustomObject]@{
-        Id = $_.id
-        Titel = $_.title
-        Framsteg = "$($_.progress)%"
-    }
+    Write-Error "Omi-kommandot misslyckades med felkod $LASTEXITCODE."
 }
 ```
 
 ---
 
-## Lokal Omi Desktop API-integration
+## 7. Lokal Desktop API-integration
 
-När Omi Desktop körs lokalt kan CLI interagera direkt med dess lokala kontexttjänster:
+När Omi Desktop körs lokalt kan CLI:t kommunicera direkt utan molnanrop:
 
 ```bash
-# Konfigurera lokal skrivbordsport
-omi local configure --port 8000
+# Konfigurera lokal slutpunkt och token
+export OMI_LOCAL_API_URL="http://127.0.0.1:47778"
+read -r -s -p "Desktop token: " OMI_LOCAL_TOKEN; echo
+export OMI_LOCAL_TOKEN
 
-# Sök efter text på den lokalt sparade skärmen
-omi local search-screen "kvartalsrapport"
+# Kontrollera lokal anslutningsstatus
+omi --json local status
+
+# Sök efter sparad text på skärmen
+omi --json local search-screen "kvartalsrapport" --days 7 --app Safari
 ```
 
 ---
 
-## Hantering av Flera Profiler
+## 8. Profilhantering (Profiles)
 
-Hantera separata profiler (t.ex. privat, arbete och test) med `--profile` eller via `~/.omi/config.toml`:
+Alternativet `--profile` tillåter separation av personliga konton, arbetskonton och testmiljöer. Konfigurationen sparas i `~/.omi/config.toml`:
 
 ```bash
-# Använd en specifik profil
-omi --profile arbete memory list
+# Inloggning till personlig profil
+omi --profile personal auth login
 
-# Använd en testprofil med anpassad API-slutpunkt
-omi --profile staging --api-url https://api-staging.omi.me memory list
+# Inloggning till arbetsprofil
+omi --profile work auth login
+
+# Kör kommando under specifik profil
+omi --profile work memory list
 ```
 
 ---
 
-## Säkerhet och Bästa Praxis
+## 9. Säkerhetsrekommendationer
 
-1. **Nyckelhemlighet:** Spara aldrig API-nycklar eller sessionsuppgifter i publika Git-arkiv.
-2. **Skalsäkerhet:** Undvik att skicka nycklar direkt som kommandoradsargument på delade datorer; föredra interaktiv inmatning eller miljövariabeln `OMI_API_KEY`.
-3. **Filbehörigheter:** På Unix-system rekommenderas att begränsa rättigheterna för katalogen `~/.omi/` (`chmod 700 ~/.omi`).
+* **Checka aldrig in nycklar i Git:** Använd hemlighetshanterare, miljövariabler eller `.env`-filer som uteslutits i `.gitignore`.
+* **Skydda terminalhistorik:** Undvik att skicka nycklar direkt som kommandoradsflaggor på delade system.
+* **Katalogbehörigheter:** På Unix-system, se till att konfigurationsmappen har strikta behörigheter (`chmod 700 ~/.omi`).
