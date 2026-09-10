@@ -66,8 +66,8 @@ omi auth login --browser --provider apple
 Generare la chiave nel pannello di [app.omi.me](https://app.omi.me) sotto **Developer → API Keys**:
 
 ```bash
-# Salvare in modo permanente nel profilo locale (con immissione protetta)
-omi auth login --api-key
+# Salvare nel profilo locale tramite riga di comando
+omi auth login --api-key omi_dev_...
 
 # Oppure impostare come variabile d'ambiente (ideale per container e pipeline CI/CD)
 # Nota: se il profilo locale ha già una chiave memorizzata, eseguire prima `omi auth logout`.
@@ -116,6 +116,9 @@ omi conversation list --limit 5
 
 # Dettagli e trascrizione completa della conversazione
 omi conversation get <CONVERSATION_ID> --include-transcript
+
+# Esportazione della trascrizione completa in formato JSON
+omi --json conversation get <CONVERSATION_ID> --include-transcript > trascrizione.json
 ```
 
 ### Attività e Impegni (Action Items)
