@@ -66,8 +66,8 @@ omi auth login --browser --provider apple
 Genereer uw sleutel in het [app.omi.me](https://app.omi.me)-dashboard onder **Developer → API Keys**:
 
 ```bash
-# Permanent opslaan in het lokale profiel (interactief invoeren om geschiedenis te beschermen)
-omi auth login --api-key
+# Opslaan in het lokale profiel via de opdrachtregel
+omi auth login --api-key omi_dev_...
 
 # Of instellen als omgevingsvariabele (ideaal voor containers en CI/CD)
 # Let op: als het lokale profiel al een opgeslagen sleutel heeft, voer dan eerst `omi auth logout` uit.
@@ -116,6 +116,9 @@ omi conversation list --limit 5
 
 # Gespreksdetails en volledige teksttranscriptie ophalen
 omi conversation get <CONVERSATION_ID> --include-transcript
+
+# Volledige transcriptie exporteren naar een JSON-bestand
+omi --json conversation get <CONVERSATION_ID> --include-transcript > transcriptie.json
 ```
 
 ### Actiepunten en Taken (Action Items)
