@@ -71,6 +71,14 @@ export interface ExecuteAgentRunInput extends KernelSessionResolutionInput {
   mode?: RunMode;
   adapterId?: string;
   cwd?: string;
+  /**
+   * Kernel-populated: the caller's requested cwd, captured by
+   * `inputWithManagedArtifactCwd` before it rewrites `cwd` to a fresh
+   * per-attempt artifact directory. `isBindingCompatible` compares this
+   * instead of `cwd` so two per-attempt directories of the same session
+   * are not treated as different working directories. Callers cannot set it.
+   */
+  requestedCwd?: string;
   model?: string;
   mcpServers?: Record<string, unknown>[];
   maxAttempts?: number;
