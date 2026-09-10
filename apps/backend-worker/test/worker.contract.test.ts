@@ -727,6 +727,17 @@ describe("worker request contract", () => {
       expect(ownership.status).toBe(503);
       expect(ownership.headers.get("retry-after")).toBe("1");
       expect((await ownership.json()) as unknown).toEqual(unavailable);
+      const listed = await handler.fetch(
+        onTheWireRequest("/v1/device-sessions", {
+          authorization: "Bearer firebase-id-token",
+          "x-omi-client-id": "desktop-client",
+        }),
+        bindings as never,
+        executionContext as never
+      );
+      expect(listed.status).toBe(503);
+      expect(listed.headers.get("retry-after")).toBe("1");
+      expect((await listed.json()) as unknown).toEqual(unavailable);
       const open = await handler.fetch(
         new Request("https://worker.test/v1/device-sessions", {
           method: "POST",

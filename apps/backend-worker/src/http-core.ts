@@ -387,6 +387,9 @@ function firebaseUnavailableRetryAfter(
   if (method === "GET" && pathname === "/v1/device-sessions/ownership") {
     return "1";
   }
+  if (method === "GET" && pathname === "/v1/device-sessions") {
+    return "1";
+  }
   if (method === "GET" && /^\/v1\/device-sessions\/[^/]+$/.test(pathname)) {
     return "1";
   }
