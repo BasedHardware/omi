@@ -692,6 +692,29 @@ def _log_gateway_rejection(response: httpx.Response, *, lane_id: str, request_id
     sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
 
 
+_DESKTOP_CHAT_UNAVAILABLE_REASONS = frozenset({'metering_unavailable', 'jit_requires_gateway', 'circuit_open'})
+
+
+def _log_desktop_chat_unavailable(*, reason: str, request_id: str) -> None:
+    """Record why this router returned HTTP 503.
+
+    The 2026-09-09 desktop-chat outage returned 503 in ~105ms with no traceback
+    and no coded reason, so operators could not tell metering, JIT, and circuit
+    open apart. Log one warning with a closed reason plus request_id. Never log
+    request/response bodies, UIDs, or prompts.
+    """
+    if reason not in _DESKTOP_CHAT_UNAVAILABLE_REASONS:
+        reason = 'unknown'
+    event = {
+        'event': 'desktop_chat_unavailable',
+        'message': 'desktop_chat_unavailable',
+        'reason': reason,
+        'request_id': request_id,
+        'severity': 'WARNING',
+    }
+    sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
+
+
 def _thinking_escalation_effort(body: Mapping[str, object]) -> str:
     """Validated Luna reasoning effort for a thinking escalation.
 
@@ -1551,7 +1574,7 @@ def _sse(value: dict[str, object]) -> str:
     return f'data: {json.dumps(value, separators=(",", ":"))}\n\n'
 
 
-async def _meter_server_request(uid: str) -> None:
+async def _meter_server_request(uid: str, *, request_id: str = 'unknown') -> None:
     if get_byok_key('anthropic'):
         return
     try:
@@ -1559,6 +1582,7 @@ async def _meter_server_request(uid: str) -> None:
             critical_executor, redis_db.check_rate_limit, uid, 'desktop_chat', _RATE_LIMIT_PER_MINUTE, 60
         )
     except Exception as exc:
+        _log_desktop_chat_unavailable(reason='metering_unavailable', request_id=request_id)
         raise HTTPException(status_code=503, detail='Chat metering is temporarily unavailable') from exc
     if not allowed:
         raise HTTPException(
@@ -1734,6 +1758,7 @@ async def _chat_completions_unobserved(
     try:
         gateway_mode = should_route_chat_agent_through_gateway() and _uses_managed_chat_agent(body)
         if jit_headers and not gateway_mode:
+            _log_desktop_chat_unavailable(reason='jit_requires_gateway', request_id=request_id)
             raise RuntimeError('JIT qualification requires the managed gateway')
         # A BYOK Anthropic key cannot serve the managed Luna thinking lane, so
         # thinking escalations stay on the gateway instead of falling back to
@@ -1774,7 +1799,7 @@ async def _chat_completions_unobserved(
             public_model, payload = _request(body, web_search_authorization=web_search_authorization)
             gateway_payload = {}
         enforce_desktop_chat_quota(uid, platform=x_app_platform)
-        await _meter_server_request(uid)
+        await _meter_server_request(uid, request_id=request_id)
     except HTTPException:
         raise
     except RuntimeError as exc:
@@ -1817,6 +1842,7 @@ async def _chat_completions_unobserved(
                     lane_id=public_model, outcome='error', reason='circuit_open', request_id=request_id
                 )
                 result_recorded = True
+                _log_desktop_chat_unavailable(reason='circuit_open', request_id=request_id)
                 raise HTTPException(status_code=503, detail='Upstream provider unavailable')
             async with get_llm_gateway_semaphore():
                 response = await get_llm_gateway_client().post(
