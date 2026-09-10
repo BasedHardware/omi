@@ -101,9 +101,37 @@ def _stream_handler_module():
         def __truediv__(self, value):
             return _TorchArray(self.value / value)
 
+    class _VadProbability:
+        def __init__(self, value):
+            self.value = value
+
+        def item(self):
+            return self.value
+
+    class _StatefulFakeVAD:
+        """Small stateful stand-in for Silero's recurrent stream wrapper."""
+
+        def __init__(self):
+            self.state = 0
+            self.reset_calls = 0
+
+        def cpu(self):
+            return self
+
+        def eval(self):
+            return self
+
+        def reset_states(self):
+            self.state = 0
+            self.reset_calls += 1
+
+        def __call__(self, _audio, _sample_rate):
+            self.state += 1
+            return _VadProbability(self.state)
+
     _torch.frombuffer = lambda buffer, dtype: _TorchArray(np.frombuffer(buffer, dtype=dtype))
     _torch.hub = MagicMock()
-    _torch.hub.load.side_effect = RuntimeError("torch hub unavailable in unit tests")
+    _torch.hub.load.return_value = (_StatefulFakeVAD(), object())
 
     _nemo_rnnt_decoding = MagicMock()
     _nemo_rnnt_utils = MagicMock()
@@ -137,6 +165,7 @@ def _stream_handler_module():
         g = globals()
         g["sh"] = sh
         g["speaker_math"] = speaker_math
+        g["StatefulFakeVAD"] = _StatefulFakeVAD
         yield sh
 
 
@@ -212,6 +241,30 @@ class TestStreamSessionFeed:
                 result = asyncio.run(session.feed(silence))
 
             assert mock_trans.called or len(result) > 0
+
+
+class TestStreamSessionVADIsolation:
+
+    def test_25_interleaved_sessions_keep_independent_vad_state(self):
+        # Silero's official wrapper carries recurrent state and exposes
+        # reset_states(): https://github.com/snakers4/silero-vad/blob/master/src/silero_vad/utils_vad.py
+        load_calls = sh._torch.hub.load.call_count
+        sessions = [sh.StreamSession(sample_rate=16000) for _ in range(25)]
+        assert sh._torch.hub.load.call_count == load_calls
+        assert len({id(session._vad) for session in sessions}) == 25
+        assert all(session._vad is not sh._vad_model for session in sessions)
+
+        chunk = b'\x00' * 1024
+        for _ in range(3):
+            for session in sessions:
+                assert session._run_vad(chunk) is True
+
+        assert all(session._vad.state == 3 for session in sessions)
+
+    def test_session_rejects_vad_clone_failure(self):
+        with patch.object(sh, '_get_vad_model', side_effect=RuntimeError('vad clone failed')):
+            with pytest.raises(RuntimeError, match='vad clone failed'):
+                sh.StreamSession(sample_rate=16000)
 
 
 class TestStreamSessionFlush:
@@ -327,11 +380,13 @@ class TestStreamSessionCleanup:
 
     def test_cleanup_clears_all_buffers(self):
         session = sh.StreamSession(sample_rate=16000)
+        session._run_vad(b'\x00' * 1024)
         session._pcm_buf = bytearray(b'\x00' * 1000)
         session._audio_buf = bytearray(b'\x00' * 1000)
         session._pending_audio = bytearray(b'\x00' * 1000)
         session._spk_centroids = [np.zeros((1, 256))]
         session._spk_counts = [1]
+        reset_calls = session._vad.reset_calls
 
         session.cleanup()
 
@@ -339,6 +394,8 @@ class TestStreamSessionCleanup:
         assert len(session._pending_audio) == 0
         assert len(session._spk_centroids) == 0
         assert len(session._spk_counts) == 0
+        assert session._vad.state == 0
+        assert session._vad.reset_calls == reset_calls + 1
 
 
 class TestStreamSessionSpeaker:

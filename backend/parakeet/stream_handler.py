@@ -352,7 +352,18 @@ class _NemoRNNTStreamingDecoder:
             return self._text
 
 
-def _get_vad_model() -> Any:
+def _reset_vad_model_state(model: Any) -> None:
+    """Reset recurrent Silero state before a model is used by one stream."""
+
+    reset_states = getattr(model, "reset_states", None)
+    if not callable(reset_states):
+        raise RuntimeError("Silero VAD model does not expose reset_states()")
+    reset_states()
+
+
+def _load_vad_model_template() -> Any:
+    """Load one CPU Silero template; never return it to a live session."""
+
     global _vad_model
     if _vad_model is not None:
         return _vad_model
@@ -365,12 +376,40 @@ def _get_vad_model() -> Any:
 
         try:
             model, _ = _torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', trust_repo=True)
+            to_cpu = getattr(model, "cpu", None)
+            if callable(to_cpu):
+                model = to_cpu()
+            eval_model = getattr(model, "eval", None)
+            if callable(eval_model):
+                eval_model()
+            _reset_vad_model_state(model)
             _vad_model = model
             logger.info("Silero VAD model loaded")
             return _vad_model
         except Exception as e:
             logger.warning(f"Could not load Silero VAD: {e}")
             return None
+
+
+def _get_vad_model() -> Any:
+    """Return an independent stateful Silero VAD model for one stream.
+
+    The template is loaded once so sessions do not perform network/model IO.
+    Deepcopy is intentionally done while holding the initialization lock: the
+    template is a read-only CPU TorchScript module, while each returned clone
+    owns its recurrent state.
+    """
+
+    template = _load_vad_model_template()
+    if template is None:
+        return None
+    with _vad_lock:
+        try:
+            model = copy.deepcopy(template)
+            _reset_vad_model_state(model)
+            return model
+        except Exception as exc:
+            raise RuntimeError("Could not clone an isolated Silero VAD model for the stream") from exc
 
 
 def warmup_vad(sample_rate: int = 16000) -> bool:
@@ -387,6 +426,11 @@ def warmup_vad(sample_rate: int = 16000) -> bool:
     except Exception as exc:
         logger.warning("Silero VAD warmup failed (exception_type=%s)", type(exc).__name__)
         return False
+    finally:
+        try:
+            _reset_vad_model_state(model)
+        except Exception:
+            logger.debug("Silero VAD warmup state reset failed", exc_info=True)
 
 
 def warmup_diarizer() -> bool:
@@ -457,6 +501,8 @@ class StreamSession:
         self._last_speaker: int = 0
 
         self._vad: Any = _get_vad_model()
+        if self._vad is None:
+            raise RuntimeError("Silero VAD session initialization failed")
 
     @staticmethod
     def _normalize_pcm16(pcm: bytes) -> bytes:
@@ -549,12 +595,16 @@ class StreamSession:
         return await self._transcribe_utterance()
 
     def cleanup(self) -> None:
-        self._pcm_buf.clear()
-        self._audio_buf.clear()
-        self._pending_audio.clear()
-        self._asr_audio_buf.clear()
-        self._spk_centroids.clear()
-        self._spk_counts.clear()
+        try:
+            if self._vad is not None:
+                _reset_vad_model_state(self._vad)
+        finally:
+            self._pcm_buf.clear()
+            self._audio_buf.clear()
+            self._pending_audio.clear()
+            self._asr_audio_buf.clear()
+            self._spk_centroids.clear()
+            self._spk_counts.clear()
 
     def _run_vad(self, chunk: bytes) -> bool:
         if self._vad is None or _torch is None:
