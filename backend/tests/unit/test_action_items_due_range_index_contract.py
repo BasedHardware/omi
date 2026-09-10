@@ -132,3 +132,38 @@ def test_due_range_composites_are_declared_in_the_firestore_index_manifest(monke
             # No equality filter: Firestore's automatic single-field index serves it.
             continue
         assert signature in declared, f'undeclared Firestore composite for {filters}: {signature}'
+
+
+def _record_created_range_queries(monkeypatch, **filters):
+    recorder = _RecordingQuery()
+    monkeypatch.setattr(action_items, 'db', recorder)
+    action_items.get_action_items(
+        'uid-under-test',
+        start_date=BASE,
+        end_date=BASE + timedelta(days=7),
+        limit=50,
+        **filters,
+    )
+    return recorder.queries
+
+
+def test_created_range_read_filters_completed_and_orders_created_at_descending(monkeypatch):
+    (recorded,) = _record_created_range_queries(monkeypatch, completed=False)
+    assert ('where', 'completed', '==') in recorded
+    assert ('order_by', 'created_at', action_items.firestore.Query.DESCENDING) in recorded
+
+
+def test_completed_created_range_composite_is_declared_descending(monkeypatch):
+    """GET /v1/action-items?start_date=...&completed=false orders newest-first.
+
+    The registry used to declare (completed ASC, created_at ASC, __name__ ASC) for this
+    read, which serves only the reverse ordering. Databases that happened to carry an
+    undeclared descending composite masked it; a database provisioned from the manifest
+    alone (the isolated jit-qa database, 2026-09-10) failed every such read with
+    ``FailedPrecondition: 400 The query requires an index``.
+    """
+    declared = _declared_action_item_signatures()
+    for query in _record_created_range_queries(monkeypatch, completed=False):
+        signature = _index_signature(query)
+        assert signature[1] == ('created_at', 'DESCENDING')
+        assert signature in declared, f'undeclared action_items composite: {signature}'
