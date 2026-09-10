@@ -679,6 +679,57 @@ def test_pusher_template_semantics_normalize_kubernetes_probe_defaults_and_quant
     )
 
 
+def test_live_receipt_treats_helm_null_secret_ref_and_empty_pod_security_as_absent(
+    receipt_builder: SimpleNamespace,
+) -> None:
+    expected = {
+        "spec": {
+            "serviceAccountName": "dev-omi-pusher",
+            "containers": [
+                {
+                    "name": "pusher",
+                    "image": f"repo@{DIGEST}",
+                    "env": [
+                        {"name": "MEMORY_ENABLED", "value": "on"},
+                        {
+                            "name": "TYPESENSE_HOST",
+                            "valueFrom": {
+                                "configMapKeyRef": {"name": "dev-omi-backend-config", "key": "TYPESENSE_HOST"},
+                                "secretKeyRef": None,
+                            },
+                        },
+                    ],
+                }
+            ],
+        }
+    }
+    live = {
+        "spec": {
+            "serviceAccountName": "dev-omi-pusher",
+            "securityContext": {},
+            "containers": [
+                {
+                    "name": "pusher",
+                    "image": f"repo@{DIGEST}",
+                    "env": [
+                        {"name": "MEMORY_ENABLED", "value": "on"},
+                        {
+                            "name": "TYPESENSE_HOST",
+                            "valueFrom": {
+                                "configMapKeyRef": {"name": "dev-omi-backend-config", "key": "TYPESENSE_HOST"},
+                            },
+                        },
+                    ],
+                }
+            ],
+        }
+    }
+
+    assert receipt_builder.pod_template_semantic_projection(expected) == (
+        receipt_builder.pod_template_semantic_projection(live)
+    )
+
+
 def test_isolated_canary_render_uses_one_proposed_config_map_for_every_reference(
     receipt_builder: SimpleNamespace,
 ) -> None:
