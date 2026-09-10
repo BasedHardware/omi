@@ -2,6 +2,7 @@ import React, {memo, useEffect, useRef} from 'react';
 import {Animated, Easing, Text, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {
+  chatAppAttributionCopy,
   chatClockLabel,
   chatDaySummaryCopy,
   chatMemoryCitationCopy,
@@ -48,6 +49,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
   }, [animate, opacity, reduceMotion, translateY]);
   const human = message.sender === 'human';
   const daySummary = chatDaySummaryCopy(message.type);
+  const appAttribution = human ? '' : chatAppAttributionCopy(message.appName);
   const citations = (message.memories ?? []).flatMap(memory => {
     const copy = chatMemoryCitationCopy(memory);
     return copy === null ? [] : [copy];
@@ -94,6 +96,11 @@ const ChatMessageRow = memo(function ChatMessageRow({
           )}
         {daySummary !== '' && (
           <Text style={styles.cancelledLabel}>{daySummary}</Text>
+        )}
+        {appAttribution !== '' && (
+          <Text numberOfLines={1} style={styles.cancelledLabel}>
+            {appAttribution}
+          </Text>
         )}
         {citations.map((copy, index) => (
           <Text key={index} numberOfLines={1} style={styles.cancelledLabel}>

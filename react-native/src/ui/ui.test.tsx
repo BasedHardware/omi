@@ -1426,6 +1426,109 @@ test('a chat message names GET evidence without inventing an open action', () =>
   });
 });
 
+test('a chat message names a resolved GET app and omits raw ids', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-app',
+        text: 'Saved your note.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        appId: 'notes',
+        appName: 'Notes',
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Saved your note.');
+  expect(copies).toContain('Notes');
+  expect(copies).not.toContain('notes');
+  const unresolved = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-app-id',
+        text: 'Saved your note.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        appId: 'notes',
+      }}
+      reduceMotion
+    />,
+  );
+  const unresolvedCopies = unresolved.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(unresolvedCopies).not.toContain('notes');
+  const human = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-app-human',
+        text: 'Save this.',
+        sender: 'human',
+        createdAt: Date.now(),
+        generationOutcome: null,
+        appId: 'notes',
+        appName: 'Notes',
+      }}
+      reduceMotion
+    />,
+  );
+  const humanCopies = human.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(humanCopies).toContain('Save this.');
+  expect(humanCopies).not.toContain('Notes');
+  act(() => {
+    renderer.unmount();
+    unresolved.unmount();
+    human.unmount();
+  });
+});
+
 test('an unknown chat sender says Sender unavailable instead of looking like a quiet AI turn', () => {
   const renderer = render(
     <ChatMessageRow

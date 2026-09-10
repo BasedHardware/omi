@@ -27,6 +27,7 @@ import {
   chatChartCopy,
   chatSenderCopy,
   chatDaySummaryCopy,
+  chatAppAttributionCopy,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopBackendForbiddenCopy,
@@ -1377,6 +1378,12 @@ test('chat day_summary GET type names Day Summary instead of a normal turn', () 
   expect(chatDaySummaryCopy('text')).toBe('');
   expect(chatDaySummaryCopy('unknown')).toBe('');
   expect(chatDaySummaryCopy(undefined)).toBe('');
+});
+
+test('chat app attribution names a resolved GET app and omits empty names', () => {
+  expect(chatAppAttributionCopy('Notes')).toBe('Notes');
+  expect(chatAppAttributionCopy(' \t')).toBe('');
+  expect(chatAppAttributionCopy(undefined)).toBe('');
 });
 
 test('empty memory text stays visible instead of a blank row', () => {

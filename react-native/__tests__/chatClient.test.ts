@@ -976,6 +976,67 @@ test('explicit old contract uses real messages history and send stream without c
   });
 });
 
+test('old chat history names resolved GET apps and omits unresolved ids', async () => {
+  const request = jest.fn(async (input: {path: string}) => {
+    if (input.path.startsWith('/v2/messages')) {
+      return {
+        id: 'history',
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'old-ai',
+            text: 'Saved.',
+            sender: 'ai',
+            created_at: '2026-09-07T00:00:01Z',
+            plugin_id: 'notes',
+          },
+          {
+            id: 'old-ghost',
+            text: 'Unknown plugin.',
+            sender: 'ai',
+            created_at: '2026-09-07T00:00:02Z',
+            app_id: 'ghost',
+          },
+        ]),
+      };
+    }
+    if (input.path === '/v1/apps/notes') {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({id: 'notes', name: 'Notes'}),
+      };
+    }
+    return {id: 'app', status: 404, body: '{}'};
+  });
+  const backend = {
+    getApiContract: async () => 'omi',
+    request,
+  } as unknown as OmiBackend;
+  const page = await loadNewestChatHistory(backend);
+  expect(page.messages.find(item => item.id === 'old-ai')).toEqual(
+    expect.objectContaining({appId: 'notes', appName: 'Notes'}),
+  );
+  expect(page.messages.find(item => item.id === 'old-ghost')).toEqual(
+    expect.objectContaining({appId: 'ghost'}),
+  );
+  expect(
+    page.messages.find(item => item.id === 'old-ghost'),
+  ).not.toHaveProperty('appName');
+  expect(request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/apps/notes',
+  });
+  expect(request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/apps/ghost',
+  });
+});
+
 test('old send does not retry non-idempotent failures or infer canonical protocol', async () => {
   const sendOmiChat = jest.fn(async () => ({
     id: 'send',

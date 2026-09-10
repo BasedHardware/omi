@@ -4,7 +4,7 @@ import type {
   ChatMessage,
   ChatMessageAttachment,
 } from './chatClient';
-import {chatEvidenceCopy} from './desktopReadClient';
+import {chatEvidenceCopy, visibleDisplayText} from './desktopReadClient';
 
 function object(value: unknown): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -252,6 +252,15 @@ function parseOmiChatEvidence(
   }
 }
 
+function parseOmiChatAppId(row: Record<string, unknown>): string | undefined {
+  const raw = row.plugin_id ?? row.app_id;
+  if (typeof raw !== 'string') {
+    return undefined;
+  }
+  const id = visibleDisplayText(raw);
+  return id === '' ? undefined : id;
+}
+
 export function parseOmiMessage(value: unknown): ChatMessage {
   const row = object(value);
   const createdAt =
@@ -269,6 +278,7 @@ export function parseOmiMessage(value: unknown): ChatMessage {
   const attachments = parseOmiChatFiles(row.files, row.files_id);
   const chart = parseOmiChatChart(row.chart_data);
   const evidence = parseOmiChatEvidence(row, memories.length > 0);
+  const appId = parseOmiChatAppId(row);
   return {
     id: row.id,
     text: row.text,
@@ -280,6 +290,7 @@ export function parseOmiMessage(value: unknown): ChatMessage {
     ...(attachments.length === 0 ? {} : {attachments}),
     ...(chart === undefined ? {} : {chart}),
     ...(evidence.length === 0 ? {} : {evidence}),
+    ...(appId === undefined ? {} : {appId}),
   };
 }
 

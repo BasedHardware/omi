@@ -924,6 +924,12 @@ export function chatDaySummaryCopy(
   return type === 'day_summary' ? 'Day Summary' : '';
 }
 
+export function chatAppAttributionCopy(
+  appName: string | undefined,
+): string {
+  return appName === undefined ? '' : visibleDisplayText(appName);
+}
+
 export function chatMemoryCitationCopy(memory: {
   title: string;
   emoji?: string | null;

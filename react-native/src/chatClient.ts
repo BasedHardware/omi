@@ -1,3 +1,4 @@
+import {attachOmiChatAppNames} from './legacyOmiApps';
 import {
   omiHistoryOffset,
   parseOmiHistory,
@@ -34,6 +35,8 @@ export type ChatMessage = {
     points: {label: string; value: number}[];
   };
   evidence?: {title: string; detail: string}[];
+  appId?: string;
+  appName?: string;
 };
 
 export type ChatHistoryPage = {
@@ -320,7 +323,11 @@ async function loadOmiHistory(
     path: `/v2/messages?limit=50&offset=${offset}`,
   });
   if (response.status !== 200) throwBackendError(response);
-  return parseOmiHistory(response.body, offset);
+  const page = parseOmiHistory(response.body, offset);
+  return {
+    ...page,
+    messages: await attachOmiChatAppNames(backend, page.messages),
+  };
 }
 
 async function loadChatHistoryPage(
@@ -386,7 +393,8 @@ export async function sendChatMessage(
     const response = await backend.sendOmiChat(human.id, text);
     if (response.status !== 200) throwBackendError(response);
     const assistant = parseOmiChatStream(response.body);
-    return {human, assistant};
+    const [named] = await attachOmiChatAppNames(backend, [assistant]);
+    return {human, assistant: named};
   }
   const id = (localMessage ?? createLocalChatMessage(text, now)).id;
   const response = await backend.request({

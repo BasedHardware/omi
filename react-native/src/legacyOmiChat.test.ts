@@ -330,3 +330,43 @@ test('old chat history rejects malformed GET files', () => {
     ),
   ).toThrow('Omi chat files are malformed');
 });
+
+test('old chat history keeps GET plugin_id over app_id and omits empty ids', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'plugin',
+        sender: 'ai',
+        text: 'Saved.',
+        created_at: '2026-09-07T01:02:03Z',
+        plugin_id: 'notes',
+        app_id: 'ignored',
+      },
+      {
+        id: 'app-only',
+        sender: 'ai',
+        text: 'Logged.',
+        created_at: '2026-09-07T01:02:04Z',
+        app_id: 'logger',
+      },
+      {
+        id: 'empty',
+        sender: 'ai',
+        text: 'Plain.',
+        created_at: '2026-09-07T01:02:05Z',
+        plugin_id: ' \t',
+        app_id: '',
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'plugin')).toEqual(
+    expect.objectContaining({appId: 'notes'}),
+  );
+  expect(page.messages.find(row => row.id === 'app-only')).toEqual(
+    expect.objectContaining({appId: 'logger'}),
+  );
+  expect(page.messages.find(row => row.id === 'empty')).not.toHaveProperty(
+    'appId',
+  );
+});
