@@ -8,9 +8,12 @@ import {
 } from 'react-native';
 import {
   conversationCaptureCopy,
+  conversationDiscardedPhotoCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
+  conversationListEmoji,
   conversationListStatusCopy,
+  conversationListTag,
   conversationListUsesListenOverview,
   conversationRecapTitle,
   conversationHasFinishClock,
@@ -78,6 +81,11 @@ export const ProjectionRow = memo(function ProjectionRow({
     item.kind === 'conversation'
       ? conversationListStatusCopy(item.status)
       : null;
+  const emoji =
+    conversation !== null ? conversationListEmoji(conversation) : null;
+  const tag = conversation !== null ? conversationListTag(conversation) : null;
+  const photosCopy =
+    conversation !== null ? conversationDiscardedPhotoCopy(conversation) : null;
   const indentPad =
     item.kind === 'task' ? taskIndentPadding(item.indentLevel) : 0;
   const rowPad = spine ? 18 : 16;
@@ -128,12 +136,33 @@ export const ProjectionRow = memo(function ProjectionRow({
             Discarded
           </Text>
         ) : null}
+        {photosCopy !== null ? (
+          <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+            {photosCopy}
+          </Text>
+        ) : null}
         {listStatusCopy !== null ? (
           <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
             {listStatusCopy}
           </Text>
         ) : null}
       </View>
+      {emoji !== null ? (
+        <Text
+          accessibilityLabel="Conversation emoji"
+          style={[
+            styles.resultTitle,
+            home && styles.homeCurrentTitle,
+            spine && styles.homeSpineTitle,
+          ]}>
+          {emoji}
+        </Text>
+      ) : null}
+      {tag !== null ? (
+        <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+          {tag}
+        </Text>
+      ) : null}
       <Text
         numberOfLines={listenOverview ? 3 : 2}
         style={[

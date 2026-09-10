@@ -2463,6 +2463,59 @@ test('wide Home search rows keep GET locked and discarded flags instead of title
   expect(plainTree).not.toContain('Discarded');
 });
 
+test('wide Home search and compact Currents name GET emoji tag and discarded photos', () => {
+  const item = {
+    kind: 'conversation' as const,
+    id: 'omi-emoji-home-search',
+    title: 'Morning standup',
+    summary: 'Notes',
+    searchableText: 'Morning standup\nNotes',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:00:20.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: '2026-09-07T12:00:20.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+    emoji: '🚀',
+    category: 'work',
+  };
+  const shown = render(<ProjectionRow item={item} />);
+  const shownTree = JSON.stringify(shown.toJSON());
+  expect(shownTree).toContain('🚀');
+  expect(shownTree).toContain('Work');
+  const currents = render(<ProjectionRow home item={item} />);
+  const currentsTree = JSON.stringify(currents.toJSON());
+  expect(currentsTree).toContain('🚀');
+  expect(currentsTree).toContain('Work');
+  const discarded = render(
+    <ProjectionRow
+      item={{
+        ...item,
+        discarded: true,
+        emoji: '🧠',
+        category: 'work',
+        photoCount: 3,
+      }}
+    />,
+  );
+  const discardedTree = JSON.stringify(discarded.toJSON());
+  expect(discardedTree).toContain('3 photos');
+  expect(discardedTree).not.toContain('🚀');
+  expect(discardedTree).not.toContain('🧠');
+  expect(discardedTree).not.toContain('Work');
+  const screenpipe = render(
+    <ProjectionRow item={{...item, source: 'screenpipe', category: 'work'}} />,
+  );
+  const screenpipeTree = JSON.stringify(screenpipe.toJSON());
+  expect(screenpipeTree).toContain('Screenpipe');
+  expect(screenpipeTree).not.toContain('Work');
+});
+
 test('wide Home search rows keep GET failed status instead of title-only', () => {
   const renderer = render(
     <ProjectionRow
