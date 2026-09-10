@@ -5,9 +5,35 @@ import SwiftUI
 
 @MainActor
 extension AppState {
+  /// Reasons that belong to the free-plan / trial paywall family this file
+  /// guards. Deliberately narrow (an allowlist, not everything): `"realtime"`
+  /// (`RealtimeHubController+SessionDelegate`) reports a real-time
+  /// transcription PROVIDER quota exhaustion (Deepgram/Soniox), a distinct
+  /// axis from the AI chat provider. It must keep surfacing even when Local
+  /// chat is active but no self-hosted backend is configured for voice, so it
+  /// is intentionally excluded here. A future reason not in this set fails
+  /// closed (still shown) rather than silently swallowed.
+  private static let freePlanPaywallReasons: Set<String> = [
+    "trial_expired", "transcription", "ptt", "chat",
+  ]
+
   func triggerUsageLimitPopup(reason: String) {
     // Debug escape hatch for self-test runs that don't want the overage modal in the way.
     if ProcessInfo.processInfo.environment["OMI_SKIP_USAGE_POPUP"] == "1" { return }
+    // Single choke point for every `.showUsageLimitPopup` poster (direct calls
+    // and the notification both land here; see DesktopHomeView's listener).
+    // Every known leaf already checks its own exemption before posting, but a
+    // future caller that forgets to, or a stale cached flag that slips one
+    // through, still lands here, so re-check once, centrally, rather than
+    // trusting every call site forever. BYOK is already covered per-leaf via
+    // `isPaywalled`/`isPaywalledEffective`; the Local-provider check is the
+    // one this file exists to add.
+    if Self.freePlanPaywallReasons.contains(reason),
+      APIKeyService.isByokActive || AIProvider.hasLocalBackendConfigured
+    {
+      log("AppState: usage-limit popup (reason=\(reason)) suppressed: BYOK or Local provider with self-hosted backend configured")
+      return
+    }
     // A modal the user did not ask for, arriving over what they were doing: the same "something
     // just opened" cue the what's-new card gets.
     OmiUISound.play(.reveal)

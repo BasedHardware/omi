@@ -2,6 +2,49 @@ import XCTest
 
 @testable import Omi_Computer
 
+/// Returns a fixed HTTP status for every request, so a test can pin how the
+/// desktop app's tool-call error handling behaves on a specific server
+/// response (here, 402 Payment Required) without a real backend.
+private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
+  private static let lock = NSLock()
+  private nonisolated(unsafe) static var _statusCode = 402
+  private nonisolated(unsafe) static var _requestCount = 0
+
+  static func reset(statusCode: Int = 402) {
+    lock.withLock {
+      _statusCode = statusCode
+      _requestCount = 0
+    }
+  }
+
+  static var requestCount: Int {
+    lock.withLock { _requestCount }
+  }
+
+  override class func canInit(with request: URLRequest) -> Bool { true }
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+  override func startLoading() {
+    let statusCode = Self.lock.withLock {
+      Self._requestCount += 1
+      return Self._statusCode
+    }
+    guard
+      let response = HTTPURLResponse(
+        url: request.url!, statusCode: statusCode, httpVersion: nil,
+        headerFields: ["Content-Type": "application/json"])
+    else {
+      client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+      return
+    }
+    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+    client?.urlProtocol(self, didLoad: Data(#"{"detail":"payment required"}"#.utf8))
+    client?.urlProtocolDidFinishLoading(self)
+  }
+
+  override func stopLoading() {}
+}
+
 /// Free-tier quota exists to meter Omi's cloud model usage. When the Local
 /// provider is active and a feature runs entirely against the user's own
 /// server, it must not be blocked or counted against that quota. These pin
@@ -151,5 +194,146 @@ import XCTest
     UserDefaults.standard.set(
       AIProvider.ConnectorSynthesisMode.off.rawValue, forKey: AIProvider.connectorSynthesisModeKey)
     XCTAssertFalse(AIProvider.shouldSkipConnectorSynthesis())
+  }
+
+  // MARK: - Launch-time race: predicate must not depend on the async model fetch
+
+  /// `hasLocalBackendConfigured`/`isLocalProviderActive` must read true the
+  /// instant `chatBridgeMode` and `localBackendURL` are persisted (both plain
+  /// synchronous `UserDefaults` strings), not after Settings' async
+  /// `{baseURL}/models` fetch resolves and picks a first `localLLMModelID`.
+  /// A fresh launch with a configured local base URL but no model id yet
+  /// (the fetch still in flight) must already be exempt. This pins that no
+  /// site can key its exemption off `localLLMModelID` instead and reintroduce
+  /// a launch-time window where a Local session is wrongly paywalled.
+  func testHasLocalBackendConfiguredTrueBeforeModelIdIsEverFetched() {
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    UserDefaults.standard.set("http://localhost:9999", forKey: AIProvider.localBackendURLKey)
+    UserDefaults.standard.removeObject(forKey: AIProvider.localModelIDKey)
+
+    XCTAssertTrue(AIProvider.isLocalProviderActive)
+    XCTAssertTrue(
+      AIProvider.hasLocalBackendConfigured,
+      "the exemption predicate must not require a model id the async fetch hasn't set yet")
+  }
+
+  // MARK: - Central choke point: AppState.triggerUsageLimitPopup
+
+  /// The reason family this file's central check covers. A cached
+  /// `desktop_isPaywalled` flag left over from before the user switched to
+  /// Local (or before they configured a self-hosted backend) must not raise
+  /// the popup once Local is active with that backend configured. This is
+  /// the single choke point every `.showUsageLimitPopup` poster funnels
+  /// through (directly or via DesktopHomeView's notification listener).
+  func testTriggerUsageLimitPopupSuppressedWhenLocalBackendConfiguredEvenWithCachedTrialExpiredFlag() {
+    UserDefaults.standard.set(true, forKey: paywallKey)
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    UserDefaults.standard.set("http://localhost:9999", forKey: AIProvider.localBackendURLKey)
+
+    let state = AppState()
+    state.triggerUsageLimitPopup(reason: "trial_expired")
+
+    XCTAssertFalse(
+      state.showUsageLimitPopup,
+      "a stale cached trial_expired flag must not raise the popup once Local has a self-hosted backend")
+  }
+
+  /// Regression: the realtime-transcription-PROVIDER quota (Deepgram/Soniox
+  /// exhaustion, `RealtimeHubController+SessionDelegate`) is a distinct axis
+  /// from the AI chat provider and must keep surfacing even when Local chat
+  /// is active with a self-hosted backend configured. This central check
+  /// must never swallow it.
+  func testTriggerUsageLimitPopupStaysForRealtimeReasonEvenWithLocalBackendConfigured() {
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    UserDefaults.standard.set("http://localhost:9999", forKey: AIProvider.localBackendURLKey)
+
+    let state = AppState()
+    state.triggerUsageLimitPopup(reason: "realtime")
+
+    XCTAssertTrue(
+      state.showUsageLimitPopup,
+      "realtime STT-provider quota exhaustion is independent of the AI chat provider")
+  }
+
+  /// Regression: the Omi-billed provider keeps the popup exactly as before.
+  func testTriggerUsageLimitPopupStaysForOmiProviderWithCachedTrialExpiredFlag() {
+    UserDefaults.standard.set(true, forKey: paywallKey)
+    UserDefaults.standard.set("piMono", forKey: bridgeModeKey)
+
+    let state = AppState()
+    state.triggerUsageLimitPopup(reason: "trial_expired")
+
+    XCTAssertTrue(state.showUsageLimitPopup)
+  }
+
+  // MARK: - freemium_threshold_reached (AppState+ListenEvents)
+
+  /// This server-pushed event used to check only transcription BYOK before
+  /// hard-stopping capture and setting the sticky `isPaywalled` flag. It must
+  /// also stand down once Local has a self-hosted backend configured. Voice
+  /// no longer runs through Omi's Deepgram proxy at all in that state, so a
+  /// stale/cached event must not stop transcription or raise the popup.
+  func testFreemiumThresholdEventIgnoredWhenLocalBackendConfigured() {
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    UserDefaults.standard.set("http://localhost:9999", forKey: AIProvider.localBackendURLKey)
+
+    let state = AppState()
+    state.isPaywalled = false
+    state.handleListenEvent(
+      TranscriptionService.ListenEvent(
+        type: "freemium_threshold_reached",
+        raw: ["remaining_seconds": 0]))
+
+    XCTAssertFalse(
+      state.isPaywalled,
+      "Local with a self-hosted backend must not be hard-stopped by a freemium threshold event")
+    XCTAssertFalse(state.showUsageLimitPopup)
+  }
+
+  // MARK: - Tool-call quota during a Local turn degrades gracefully
+
+  /// A backend 402 on a JIT/RAG tool call (memories, conversations, etc.)
+  /// made mid-turn must not fail or block the whole Local chat turn. It must
+  /// degrade to a tool-result error string the model can see and continue
+  /// past. `ChatToolExecutor.execute` is `async -> String` and never throws,
+  /// so completing at all is part of the proof; the rest pins the exact
+  /// degraded shape (`ok:false`, a stable error code) rather than a crash or
+  /// an unhandled/raw transport string reaching the model.
+  func testSearchMemoriesToolDegradesGracefullyOnBackendQuotaErrorDuringLocalTurn() async throws {
+    FixedStatusURLCapture.reset(statusCode: 402)
+    setenv("OMI_PYTHON_API_URL", "http://local-turn-tool-quota-test:9001", 1)
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    let ownerFixture = RuntimeOwnerAuthorityTestFixture()
+    await ownerFixture.establish(authOwnerID: "local-turn-tool-owner")
+    defer {
+      unsetenv("OMI_PYTHON_API_URL")
+      FixedStatusURLCapture.reset(statusCode: 402)
+    }
+
+    do {
+      let configuration = URLSessionConfiguration.ephemeral
+      configuration.protocolClasses = [FixedStatusURLCapture.self]
+      let client = APIClient(session: URLSession(configuration: configuration))
+      await client.setTestAuthHeader("Bearer local-turn-tool-owner-token")
+
+      let result = await ChatToolExecutor.execute(
+        ToolCall(name: "search_memories", arguments: ["query": "coffee"], thoughtSignature: nil),
+        expectedOwnerID: "local-turn-tool-owner",
+        backendAPIClient: client)
+
+      XCTAssertEqual(FixedStatusURLCapture.requestCount, 1)
+      let payload = try XCTUnwrap(
+        try JSONSerialization.jsonObject(with: XCTUnwrap(result.data(using: .utf8))) as? [String: Any],
+        "the degraded result must still be well-formed JSON the tool-result relay can parse: \(result)")
+      XCTAssertEqual(payload["ok"] as? Bool, false)
+      let error = try XCTUnwrap(payload["error"] as? [String: Any])
+      XCTAssertEqual(error["code"] as? String, "backend_tool_unreachable")
+    } catch {
+      await ownerFixture.restore()
+      UserDefaults.standard.removeObject(forKey: bridgeModeKey)
+      throw error
+    }
+    await ownerFixture.restore()
+    UserDefaults.standard.removeObject(forKey: bridgeModeKey)
   }
 }
