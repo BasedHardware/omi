@@ -147,6 +147,7 @@ final class LocalEmbeddingRuntimeTests: XCTestCase {
 @MainActor
 final class LocalEmbeddingOptInTests: XCTestCase {
   override func tearDown() async throws {
+    await LocalEmbeddingIndexer.shared.drainForTesting()
     await LocalEmbeddingIndexer.shared.setRuntimeForTesting(.makeDefault())
   }
 
