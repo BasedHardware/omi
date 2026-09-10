@@ -2261,3 +2261,33 @@ test('wide Home search rows keep GET task indent instead of a flat list', () => 
     ),
   ).toHaveLength(0);
 });
+
+test('wide Home search rows name GET exported platforms and omit missing exports', () => {
+  const item = {
+    kind: 'task' as const,
+    id: 'task-export-home-search',
+    title: 'Call Sam',
+    summary: 'No due date',
+    searchableText: 'Call Sam',
+    completed: false,
+    completedAt: null,
+    dueAt: null,
+    owner: null,
+    source: 'assistant',
+    provenance: [],
+    sortOrder: 1,
+    indentLevel: 0,
+    createdAt: 1785900000,
+    updatedAt: 1785900100,
+    revision: null,
+    exportCopy: 'Exported to Todoist',
+  };
+  const renderer = render(<ProjectionRow item={item} />);
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Exported to Todoist');
+  expect(tree).toContain('Call Sam');
+  const omitted = render(
+    <ProjectionRow item={{...item, id: 'task-plain', exportCopy: undefined}} />,
+  );
+  expect(JSON.stringify(omitted.toJSON())).not.toContain('Exported to');
+});

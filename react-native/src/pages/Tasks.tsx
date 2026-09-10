@@ -243,6 +243,11 @@ export function TasksPage({
                               ? `Completed · ${formatTaskDue(task.dueAt)}`
                               : formatTaskDue(task.dueAt)}
                           </Text>
+                          {task.exportCopy !== undefined ? (
+                            <Text style={styles.taskDue}>
+                              {task.exportCopy}
+                            </Text>
+                          ) : null}
                         </FocusPressable>
                       </View>
                       {selected && writesAvailable && onTaskEdit && (

@@ -51,6 +51,7 @@ export type MobileTask = {
   completed: boolean;
   dueAt?: number | null;
   indentLevel?: number;
+  exportCopy?: string;
 };
 
 export type MobileRecap = {
@@ -208,11 +209,16 @@ const TaskRow = memo(function TaskRow({
             {taskDisplayTitle(task)}
           </Text>
           {showDue ? (
-            <Text style={styles.taskDue}>
-              {task.completed
-                ? `Completed · ${formatTaskDue(task.dueAt ?? null)}`
-                : formatTaskDue(task.dueAt ?? null)}
-            </Text>
+            <>
+              <Text style={styles.taskDue}>
+                {task.completed
+                  ? `Completed · ${formatTaskDue(task.dueAt ?? null)}`
+                  : formatTaskDue(task.dueAt ?? null)}
+              </Text>
+              {visibleDisplayText(task.exportCopy ?? '') !== '' ? (
+                <Text style={styles.taskDue}>{task.exportCopy}</Text>
+              ) : null}
+            </>
           ) : null}
         </View>
       </Pressable>

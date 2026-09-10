@@ -344,6 +344,40 @@ test('task rows keep GET indent instead of a flat list', () => {
   act(() => renderer.unmount());
 });
 
+test('task rows name GET exported platforms and omit missing exports', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        loading={false}
+        outcome={{
+          ...outcome,
+          value: {
+            ...outcome.value,
+            items: [
+              {
+                ...task,
+                id: 'task-exported',
+                title: 'Call Sam',
+                exportCopy: 'Exported to Todoist',
+              },
+              {...task, id: 'task-plain', title: 'Write recap'},
+            ],
+          },
+        }}
+      />,
+    );
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .flatMap(node => node.props.children)
+    .join(' ');
+  expect(copy).toContain('Exported to Todoist');
+  expect(copy).toContain('Call Sam');
+  expect(copy).toContain('Write recap');
+  act(() => renderer.unmount());
+});
+
 test('conflict refresh preserves dirty description while untouched descriptions follow server state', () => {
   const props = {writesAvailable: true, onTaskEdit: jest.fn()};
   const renderer = render(props);

@@ -155,6 +155,11 @@ export const ProjectionRow = memo(function ProjectionRow({
           {synthesis}
         </Text>
       ) : null}
+      {item.kind === 'task' && item.exportCopy !== undefined ? (
+        <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+          {item.exportCopy}
+        </Text>
+      ) : null}
       {conversation !== null && conversationHasFinishClock(conversation) ? (
         <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
           {formatConversationDuration(

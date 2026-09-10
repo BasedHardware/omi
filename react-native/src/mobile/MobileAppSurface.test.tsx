@@ -1183,3 +1183,21 @@ test('compact Home task previews keep GET indent without due copy', () => {
   expect(copy).not.toContain(formatTaskDue(dueAt));
   expect(copy).not.toContain('No due date');
 });
+
+test('compact Tasks tab names GET exported platforms and Home previews omit them', () => {
+  const tasks = [
+    {
+      id: 'task-exported',
+      title: 'Call Sam',
+      completed: false,
+      exportCopy: 'Exported to Todoist',
+    },
+    {id: 'task-plain', title: 'Write recap', completed: false},
+  ];
+  const tab = renderedText(render({activeRoute: 'tasks', tasks}));
+  expect(tab).toContain('Exported to Todoist');
+  expect(tab).toContain('Call Sam');
+  const home = renderedText(render({tasks}));
+  expect(home).toContain('Call Sam');
+  expect(home).not.toContain('Exported to Todoist');
+});

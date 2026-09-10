@@ -305,6 +305,75 @@ test('old empty task descriptions stay searchable instead of failing the page', 
   ]);
 });
 
+test('old tasks name GET exported platforms and omit missing exports', async () => {
+  const {api} = backend({
+    action_items: [
+      {
+        id: 'exported',
+        description: 'Call Sam',
+        completed: false,
+        exported: true,
+        export_platform: 'todoist',
+      },
+      {
+        id: 'pending',
+        description: 'Write recap',
+        completed: false,
+        exported: false,
+        export_platform: 'todoist',
+      },
+      {
+        id: 'blank-platform',
+        description: 'Ship notes',
+        completed: false,
+        exported: true,
+        export_platform: ' \u0085 ',
+      },
+    ],
+    has_more: false,
+  });
+  const result = await loadTasks(api);
+  expect(result.items[0]).toMatchObject({
+    exportCopy: 'Exported to Todoist',
+  });
+  expect(result.items[1]).not.toHaveProperty('exportCopy');
+  expect(result.items[2]).not.toHaveProperty('exportCopy');
+});
+
+test('fails closed for malformed GET task export fields', async () => {
+  await expect(
+    loadTasks(
+      backend({
+        action_items: [
+          {
+            id: 'bad-exported',
+            description: 'Call Sam',
+            completed: false,
+            exported: 'true',
+          },
+        ],
+        has_more: false,
+      }).api,
+    ),
+  ).rejects.toThrow('Omi boolean is malformed');
+  await expect(
+    loadTasks(
+      backend({
+        action_items: [
+          {
+            id: 'bad-platform',
+            description: 'Call Sam',
+            completed: false,
+            exported: true,
+            export_platform: 1,
+          },
+        ],
+        has_more: false,
+      }).api,
+    ),
+  ).rejects.toThrow('Omi text is malformed');
+});
+
 test('old memories use v3 content without manufacturing canonical provenance', async () => {
   const {api, request} = backend([
     {

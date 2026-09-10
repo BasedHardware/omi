@@ -451,6 +451,27 @@ test('Home and Tasks rows keep GET indent instead of a flat list', () => {
   ).toHaveLength(0);
 });
 
+test('Home and Tasks rows name GET exported platforms and omit missing exports', () => {
+  let exported!: ReactTestRenderer.ReactTestRenderer;
+  let omitted!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    exported = ReactTestRenderer.create(
+      <TaskRow
+        item={{
+          ...taskItem(null),
+          title: 'Call Sam',
+          exportCopy: 'Exported to Todoist',
+        }}
+      />,
+    );
+    omitted = ReactTestRenderer.create(
+      <TaskRow item={{...taskItem(null), title: 'Write recap'}} />,
+    );
+  });
+  expect(textOf(exported)).toContain('Exported to Todoist');
+  expect(textOf(omitted)).not.toContain('Exported to');
+});
+
 test('Home and Library rows keep GET capture time instead of started-only', () => {
   const captured = new Date(2025, 7, 10, 12, 0);
   const expected = `Captured (device time) · ${clockLabel(

@@ -728,6 +728,28 @@ export function taskDisplayTitle(item: {title: string}): string {
   return title !== '' ? title : 'Task title unavailable';
 }
 
+const TASK_EXPORT_PLATFORM_COPY: Record<string, string> = {
+  apple_reminders: 'Reminders',
+  asana: 'Asana',
+  clickup: 'ClickUp',
+  google_tasks: 'Google Tasks',
+  todoist: 'Todoist',
+};
+
+export function taskExportCopy(
+  exported: boolean | null | undefined,
+  exportPlatform: string | null | undefined,
+): string | null {
+  if (exported !== true) {
+    return null;
+  }
+  const platform = visibleDisplayText(exportPlatform ?? '');
+  if (platform === '') {
+    return null;
+  }
+  return `Exported to ${TASK_EXPORT_PLATFORM_COPY[platform] ?? platform}`;
+}
+
 export const TASK_INDENT_STEP = 28;
 export const TASK_INDENT_MAX = 3;
 
@@ -815,6 +837,7 @@ export type TaskProjection = {
   createdAt: number | null;
   updatedAt: number | null;
   revision: string | null;
+  exportCopy?: string;
 };
 
 export type TaskGroup = 'Today' | 'Tomorrow' | 'Later';

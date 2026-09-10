@@ -196,6 +196,9 @@ export const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
             ? `Completed · ${formatTaskDue(item.dueAt)}`
             : formatTaskDue(item.dueAt)}
         </Text>
+        {item.exportCopy !== undefined ? (
+          <Text style={styles.rowMeta}>{item.exportCopy}</Text>
+        ) : null}
       </View>
     </View>
   );

@@ -1063,6 +1063,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             id: task.id,
             indentLevel: task.indentLevel,
             title: task.title,
+            ...(task.exportCopy === undefined ? {} : {exportCopy: task.exportCopy}),
           }))
         : [];
     const recapNow = Date.now();

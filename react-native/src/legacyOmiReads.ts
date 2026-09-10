@@ -3,6 +3,7 @@ import {
   conversationDisplayTitle,
   memoryCaptureDeviceCopy,
   taskDisplayTitle,
+  taskExportCopy,
   visibleDisplayText,
   type ConversationProjection,
   type DomainRead,
@@ -236,6 +237,12 @@ export async function loadOmiTasks(
     const evidence = row.provenance ?? [];
     if (!Array.isArray(evidence))
       throw new Error('Omi task provenance is malformed');
+    const exportCopy = taskExportCopy(
+      bool(row.exported, false),
+      row.export_platform === undefined || row.export_platform === null
+        ? undefined
+        : text(row.export_platform),
+    );
     return {
       kind: 'task' as const,
       id: id(row.id),
@@ -257,6 +264,7 @@ export async function loadOmiTasks(
       createdAt: milliseconds(row.created_at),
       updatedAt: milliseconds(row.updated_at),
       revision: null,
+      ...(exportCopy === null ? {} : {exportCopy}),
     };
   });
   return {
