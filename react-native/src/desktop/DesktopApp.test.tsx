@@ -684,6 +684,63 @@ test('desktop chat names GET day_summary instead of a normal Omi turn', () => {
   expect(copy).not.toContain('day_summary');
 });
 
+test('desktop chat names GET content_blocks without inventing write actions', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'blocks-1',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+        appName: 'Notes',
+        memories: [{title: 'Morning standup', emoji: '🚀'}],
+        evidence: [{title: 'Calendar', detail: 'Tuesday agenda'}],
+        contentBlocks: [
+          {
+            eyebrow: 'Discovery',
+            title: 'Quiet mornings',
+            detail: 'You like a slow start.',
+          },
+          {eyebrow: 'Memory', title: 'Prefers concise notes'},
+        ],
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Here is what I found.');
+  expect(copy).toContain('Notes');
+  expect(copy).toContain('🚀 Morning standup');
+  expect(copy).toContain('Calendar');
+  expect(copy).toContain('Tuesday agenda');
+  expect(copy).toContain('Discovery');
+  expect(copy).toContain('Quiet mornings');
+  expect(copy).toContain('You like a slow start.');
+  expect(copy).toContain('Prefers concise notes');
+  expect(copy).not.toContain('Open in Memories');
+  expect(copy).not.toContain('Open conversation');
+  expect(copy).not.toContain('Open in Goals');
+  expect(copy).not.toContain('Show more');
+  const humanOnly = renderDesktop({
+    messages: [
+      {
+        id: 'human-only',
+        text: 'Save this.',
+        sender: 'human',
+        createdAt: Date.parse('2026-09-07T12:01:00.000Z'),
+        generationOutcome: null,
+        appName: 'Notes',
+        contentBlocks: [{eyebrow: 'Discovery', title: 'Quiet mornings'}],
+      },
+    ],
+  });
+  const humanCopy = renderedText(humanOnly);
+  expect(humanCopy).toContain('Save this.');
+  expect(humanCopy).not.toContain('Notes');
+  expect(humanCopy).not.toContain('Discovery');
+  expect(humanCopy).not.toContain('Quiet mornings');
+});
+
 test('desktop chat treats a whitespace-only reply as Message text unavailable', () => {
   const renderer = renderDesktop({
     messages: [

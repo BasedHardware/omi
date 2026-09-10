@@ -10,8 +10,10 @@ import {
 } from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {
+  chatAppAttributionCopy,
   chatClockLabel,
   chatDaySummaryCopy,
+  chatMemoryCitationCopy,
   chatMessageDisplayText,
   chatSenderCopy,
   desktopBackendUnavailableCopy,
@@ -126,30 +128,80 @@ function AskExchange({
           </Text>
         </FocusPressable>
       ) : null}
-      {messages.map(item => (
-        <View key={item.id} style={styles.exchangeRow}>
-          <Text style={styles.rowMeta}>{chatSenderCopy(item.sender)}</Text>
-          <Text
-            accessibilityLabel={
-              item.generationOutcome === 'failed'
-                ? 'Failed response'
-                : undefined
-            }
-            style={styles.rowTitle}>
-            {chatMessageDisplayText(item, 'Response stopped.')}
-          </Text>
-          {item.generationOutcome === 'cancelled' &&
-          visibleDisplayText(item.text) !== '' ? (
-            <Text style={styles.rowMeta}>Response stopped</Text>
-          ) : null}
-          {chatDaySummaryCopy(item.type) !== '' ? (
-            <Text style={styles.rowMeta}>{chatDaySummaryCopy(item.type)}</Text>
-          ) : null}
-          <Text style={styles.rowMeta}>
-            {chatClockLabel(item.createdAt, Date.now()) || 'Time unavailable'}
-          </Text>
-        </View>
-      ))}
+      {messages.map(item => {
+        const human = item.sender === 'human';
+        const appAttribution = human
+          ? ''
+          : chatAppAttributionCopy(item.appName);
+        const citations = (item.memories ?? []).flatMap(memory => {
+          const copy = chatMemoryCitationCopy(memory);
+          return copy === null ? [] : [copy];
+        });
+        return (
+          <View key={item.id} style={styles.exchangeRow}>
+            <Text style={styles.rowMeta}>{chatSenderCopy(item.sender)}</Text>
+            <Text
+              accessibilityLabel={
+                item.generationOutcome === 'failed'
+                  ? 'Failed response'
+                  : undefined
+              }
+              style={styles.rowTitle}>
+              {chatMessageDisplayText(item, 'Response stopped.')}
+            </Text>
+            {item.generationOutcome === 'cancelled' &&
+            visibleDisplayText(item.text) !== '' ? (
+              <Text style={styles.rowMeta}>Response stopped</Text>
+            ) : null}
+            {chatDaySummaryCopy(item.type) !== '' ? (
+              <Text style={styles.rowMeta}>
+                {chatDaySummaryCopy(item.type)}
+              </Text>
+            ) : null}
+            {appAttribution !== '' ? (
+              <Text numberOfLines={1} style={styles.rowMeta}>
+                {appAttribution}
+              </Text>
+            ) : null}
+            {citations.map((copy, index) => (
+              <Text key={index} numberOfLines={1} style={styles.rowMeta}>
+                {copy}
+              </Text>
+            ))}
+            {(item.evidence ?? []).map((ref, index) => (
+              <View key={`evidence-${index}`}>
+                <Text numberOfLines={1} style={styles.rowMeta}>
+                  {ref.title}
+                </Text>
+                <Text numberOfLines={2} style={styles.rowMeta}>
+                  {ref.detail}
+                </Text>
+              </View>
+            ))}
+            {!human &&
+              (item.contentBlocks ?? []).map((block, index) => (
+                <View key={`block-${index}`}>
+                  <Text numberOfLines={1} style={styles.rowMeta}>
+                    {block.eyebrow}
+                  </Text>
+                  {block.title !== undefined ? (
+                    <Text numberOfLines={2} style={styles.rowMeta}>
+                      {block.title}
+                    </Text>
+                  ) : null}
+                  {block.detail !== undefined ? (
+                    <Text numberOfLines={6} style={styles.rowMeta}>
+                      {block.detail}
+                    </Text>
+                  ) : null}
+                </View>
+              ))}
+            <Text style={styles.rowMeta}>
+              {chatClockLabel(item.createdAt, Date.now()) || 'Time unavailable'}
+            </Text>
+          </View>
+        );
+      })}
       {chatBusy ? (
         <ActivityIndicator color={token.color.inkMuted} size="small" />
       ) : null}
