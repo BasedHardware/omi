@@ -217,33 +217,29 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// produces into one check.
   private var surfaceFloorReconcileScheduled = false
   private var isEnforcingSurfaceFloor = false
+  /// A floor check ran while a deferral owned the frame, or while AppKit had
+  /// not yet assigned a screen. Cleared only when that deferral ends and the
+  /// dropped check is requeued — otherwise the bar can settle below the
+  /// surface the live state requires.
+  private var surfaceFloorCheckDropped = false
   var mouseInterceptionReconciler: FloatingBarMouseInterceptionReconciler?
   private var previousVoiceResponseGlowActive = false
-  private var resizeWorkItem: DispatchWorkItem?
+  let frameTransition = FloatingBarFrameTransition()
+  var frameTransitionGeneration: UInt64 { frameTransition.currentGeneration }
   var notchRetractionScheduler: DelayedActionScheduling = TaskDelayedActionScheduler()
   var notchRetractionCancellation: DelayedActionCancellation?
-  var notchRetractionGeneration = 0
-  var notchRevealGeneration = 0
   var notchRevealCancellation: DelayedActionCancellation?
   /// Saved center point from before chat opened, used to restore position on close.
   private var preChatCenter: NSPoint?
-  /// Token incremented each time a windowDidResignKey dismiss animation starts.
-  /// Checked in the completion block so a new PTT query can cancel a stale close.
-  private var resignKeyAnimationToken: Int = 0
-  /// The target origin of an in-progress close/restore animation, set in
-  /// closeAIConversation() and cleared when the animation settles.
-  /// Used by savePreChatCenterIfNeeded() to snap to the correct pill position
-  /// if a new PTT query fires while the restore animation is still running.
-  // Stores the FULL pending restore frame (origin AND size), not just the origin.
-  // The restore origin is computed for the glow-inflated window size; snapping to
-  // it with the bare collapsed size instead drifted the recorded center by one
-  // glow outset (~22pt left / 18pt down) on every rapid re-open cycle.
+  /// Full pending restore frame (origin and size) for an in-progress close.
+  /// The restore origin is computed for the glow-inflated window size; snapping
+  /// to it with the bare collapsed size instead drifted the recorded center by
+  /// one glow outset on every rapid re-open cycle.
   private var pendingRestoreFrame: NSRect?
   /// The idle pill frame captured just before morphing into the active island
   /// on a non-notch display, so the pill returns to the exact same spot.
   private var savedPillFrame: NSRect?
-  var frameAnimationToken: Int = 0
-  private var pendingFrameAnimationTarget: NSRect?
+  private var pendingFrameAnimationTarget: NSRect? { frameTransition.pendingTarget }
   private var startupDisplayRevalidationWorkItems: [DispatchWorkItem] = []
   /// In-process NSMenus (bar context menus, the model picker) render at
   /// .popUpMenu (101); while one is tracking, the bar drops to that level so
@@ -288,21 +284,45 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     Self.screenContainingCursor()
   }
   private var usesVoiceNotchControl: Bool {
-    state.voiceProjection.isListening
+    state.voicePhase.isCapturing
+  }
+  func layoutMetrics(screen: NSScreen? = nil) -> FloatingBarLayout.Metrics {
+    FloatingBarLayout.Metrics(
+      compactSideWidth: Self.notchCompactSideWidth,
+      activeSideWidth: Self.notchActiveSideWidth,
+      voiceSideWidth: Self.notchVoiceSideWidth,
+      thinkingSideWidth: Self.notchThinkingSideWidth,
+      hiddenCenterWidth: screen.map { Self.notchHiddenCenterWidth(for: $0) }
+        ?? notchHiddenCenterWidthForCurrentScreen,
+      chromeHeight: screen.map { Self.notchChromeHeight(for: $0) }
+        ?? notchChromeHeightForCurrentScreen,
+      expandedWidth: Self.notchExpandedWidth,
+      hoverMenuHeight: Self.notchHoverMenuHeight(agentCount: AgentPillsManager.shared.pills.count),
+      minBarSize: Self.minBarSize,
+      voiceBarSize: Self.voiceBarSize
+    )
+  }
+  /// The layout both the window and the SwiftUI view read for lobe/chrome
+  /// widths. Closed surface is the composed authority already used to size
+  /// the panel.
+  func currentLayout(usesNotchIsland: Bool? = nil, screen: NSScreen? = nil) -> FloatingBarLayout {
+    let island = usesNotchIsland ?? notchModeEnabled
+    return FloatingBarLayout.make(
+      phase: state.voicePhase,
+      isChatPresented: state.showingAIConversation || state.hasVisibleConversation,
+      hasAgentPills: !AgentPillsManager.shared.pills.isEmpty,
+      hoverMenuVisible: state.isNotchHoverMenuVisible,
+      metrics: layoutMetrics(screen: screen),
+      closedSurface: closedSurfaceSize(usesNotchIsland: island, screen: screen)
+    )
   }
   private var notchSideWidth: CGFloat {
-    if usesVoiceNotchControl {
-      return Self.notchVoiceSideWidth
-    }
-    if state.showingAIConversation {
-      return AgentPillsManager.shared.pills.isEmpty
-        ? Self.notchCompactSideWidth
-        : Self.notchActiveSideWidth
-    }
-    if AgentPillsManager.shared.pills.isEmpty && !state.isVoicePresentationActive {
-      return Self.notchCompactSideWidth
-    }
-    return Self.notchActiveSideWidth
+    FloatingBarLayout.lobeWidth(
+      phase: state.voicePhase,
+      isChatPresented: state.showingAIConversation || state.hasVisibleConversation,
+      hasAgentPills: !AgentPillsManager.shared.pills.isEmpty,
+      metrics: layoutMetrics()
+    )
   }
   private var notchHiddenCenterWidthForCurrentScreen: CGFloat {
     Self.notchHiddenCenterWidth(for: screenForPlacement)
@@ -544,9 +564,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   override func orderOut(_ sender: Any?) {
-    notchRetractionGeneration &+= 1
     notchRetractionCancellation?.cancel()
     notchRetractionCancellation = nil
+    frameTransition.invalidate()
     cancelInFlightNotchReveal()
     state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
     super.orderOut(sender)
@@ -829,8 +849,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       forName: .floatingBarDragDidStart, object: nil, queue: .main
     ) { [weak self] _ in
       Task { @MainActor in
-        self?.isUserDragging = true
-        self?.state.isDragging = true
+        self?.beginUserDrag()
       }
     }
 
@@ -838,8 +857,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       forName: .floatingBarDragDidEnd, object: nil, queue: .main
     ) { [weak self] _ in
       Task { @MainActor in
-        self?.isUserDragging = false
-        self?.state.isDragging = false
+        self?.endUserDrag()
       }
     }
 
@@ -849,6 +867,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     ) { [weak self] _ in
       Task { @MainActor in
         self?.validatePositionOnScreenChange(reason: "screen_parameters_changed")
+        self?.releaseSurfaceFloorDeferral(reason: "screen_assigned")
         self?.cursorScreenTracker.sync()
       }
     }
@@ -997,8 +1016,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
     return FloatingControlBarGeometry.collapsedSurfaceSize(
       hasMountedNotification: state.currentNotification != nil,
-      isVoiceListening: state.isVoiceListening,
-      isThinking: state.isThinking || state.isVoiceResponseWaiting,
+      phase: state.voicePhase,
       notificationSize: notificationSize,
       listeningSize: listeningSize,
       thinkingSize: thinkingSize,
@@ -1064,12 +1082,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   private func animateGrowOutFromNotch(to targetFrame: NSRect, duration: TimeInterval = 0.16) {
-    resizeWorkItem?.cancel()
-    resizeWorkItem = nil
-    frameAnimationToken += 1
-    let token = frameAnimationToken
-    notchRevealGeneration &+= 1
-    let revealGeneration = notchRevealGeneration
+    frameTransition.cancelScheduled()
+    let token = frameTransition.start(pendingTarget: targetFrame)
     isResizingProgrammatically = true
     alphaValue = 1
     state.notchRevealProgress = 0.001
@@ -1081,13 +1095,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
       guard let self else { return }
-      if self.frameAnimationToken == token {
+      if self.frameTransition.isCurrent(token) {
         self.setFrame(targetFrame, display: true, animate: false)
         self.alphaValue = 1
         self.isResizingProgrammatically = false
+        self.frameTransition.clearPending(if: token)
       }
     }
-    scheduleNotchRevealCompletion(generation: revealGeneration, after: duration)
+    scheduleNotchRevealCompletion(token: token, after: duration)
   }
 
   // MARK: - Automation hover seam (non-production)
@@ -1354,6 +1369,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       state.$currentNotification.map { _ in () }.eraseToAnyPublisher(),
       state.$voiceProjection.map { _ in () }.eraseToAnyPublisher(),
       state.$notchHoverMenuOpen.map { _ in () }.eraseToAnyPublisher(),
+      state.$isHoveringBar.map { _ in () }.eraseToAnyPublisher(),
       state.$showingAIConversation.map { _ in () }.eraseToAnyPublisher(),
       state.$usesNotchIsland.map { _ in () }.eraseToAnyPublisher(),
       AgentPillsManager.shared.$pills.map { _ in () }.eraseToAnyPublisher(),
@@ -1369,7 +1385,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// and every state change calls this; the turn boundary is what makes it
   /// safe — transitions that resize *before* flipping state (chat open, hover
   /// expand) are consistent again by the time the check runs.
-  private func scheduleSurfaceFloorReconcile(reason: String) {
+  func scheduleSurfaceFloorReconcile(reason: String) {
     guard !surfaceFloorReconcileScheduled else { return }
     surfaceFloorReconcileScheduled = true
     DispatchQueue.main.async { [weak self] in
@@ -1412,7 +1428,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       isConversationOpen: state.showingAIConversation,
       isRevealOrRetractInFlight: notchRetractionCancellation != nil || notchRevealCancellation != nil
     )
-    guard deferral == nil else { return false }
+    guard deferral == nil else {
+      surfaceFloorCheckDropped = true
+      return false
+    }
+    // AppKit can report `screen == nil` during display reassignment. Using
+    // `screenForPlacement`'s fallback would move the bar to another display's
+    // top centre. Drop the check and requeue it when a screen is assigned.
+    guard screen != nil else {
+      surfaceFloorCheckDropped = true
+      return false
+    }
 
     let usesNotchIsland = notchModeEnabled
     let floorSize = surfaceFloorWindowSize()
@@ -1589,8 +1615,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   func closeAIConversation(intent: FloatingConversationCloseIntent = .userDismissal) {
     AnalyticsManager.shared.floatingBarAskOmiClosed()
-    resignKeyAnimationToken += 1
-    let closeAnimationToken = resignKeyAnimationToken
 
     if intent.cancelsInFlightWork {
       // Collapsing the chat should not interrupt spoken playback. The voice
@@ -1654,52 +1678,31 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         center: NSPoint(x: frame.midX, y: frame.midY), size: size)
     }
 
-    resizeWorkItem?.cancel()
-    resizeWorkItem = nil
+    frameTransition.cancelScheduled()
     styleMask.remove(.resizable)
     isResizingProgrammatically = true
     // Record the animation target so savePreChatCenterIfNeeded() can snap to it
     // if a new PTT query fires while this restore animation is still running.
     let targetFrame = NSRect(origin: restoreOrigin, size: size)
     pendingRestoreFrame = targetFrame
-    animateFrame(to: targetFrame, duration: Self.askOmiAnimationDuration)
-    preChatCenter = nil
-    DispatchQueue.main.asyncAfter(deadline: .now() + Self.askOmiSettleDelay) { [weak self] in
-      guard let self = self else { return }
-      guard self.resignKeyAnimationToken == closeAnimationToken else { return }
+    animateFrame(to: targetFrame, duration: Self.askOmiAnimationDuration) { [weak self] in
+      guard let self else { return }
       self.isResizingProgrammatically = false
       self.pendingRestoreFrame = nil
-      // Safety net: only snap if no new AI session was opened while the close settled.
-      // Without this guard, a rapid PTT query that fires while close settles gets collapsed
-      // back to the pill position by this stale completion block.
       guard !self.state.showingAIConversation else { return }
-      // A card or voice presentation that surfaced during the settle window
-      // now owns the composed surface; snapping to the precomputed close frame
-      // would crush it (the same substitution the close target above stopped
-      // making). The arrival path already resized correctly.
       let settledSize = self.responseGlowWindowSizeForCurrentScreen(
         forSurfaceSize: self.closedSurfaceSize(usesNotchIsland: self.notchModeEnabled))
       guard NSEqualSizes(size, settledSize) else { return }
       if !NSEqualRects(self.frame, targetFrame) {
         self.setFrame(targetFrame, display: true, animate: false)
       }
-    }
-
-    // Allow hover resizes again after the animation settles.
-    DispatchQueue.main.asyncAfter(deadline: .now() + Self.askOmiSettleDelay) { [weak self] in
-      guard let self = self else { return }
-      guard self.resignKeyAnimationToken == closeAnimationToken else { return }
       self.suppressHoverResize = false
       FloatingControlBarManager.shared.flushQueuedNotificationsIfPossible()
-
-      // If the user has the bar disabled, hide it completely after closing the
-      // AI conversation instead of leaving the compact pill visible — unless a
-      // queued notification was just flushed; hiding now would swallow it, and
-      // its dismissal re-hides the bar anyway.
       if self.shouldOrderOutAfterConversationClose {
         self.orderOut(nil)
       }
     }
+    preChatCenter = nil
   }
 
   private func hideBar() {
@@ -1721,8 +1724,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   func showAIConversation() {
-    resizeWorkItem?.cancel()
-    resizeWorkItem = nil
+    frameTransition.cancelScheduled()
     makeKeyAndOrderFront(nil)
 
     let shouldRestoreVisibleConversation = state.canRestoreVisibleConversation
@@ -1834,15 +1836,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     let heightProgress = targetSize.height > 0 ? startHeight / targetSize.height : 1
     let startProgress = min(1, max(0.001, min(widthProgress, heightProgress)))
 
-    notchRevealGeneration &+= 1
-    let revealGeneration = notchRevealGeneration
+    let token = frameTransition.start()
     state.notchRevealProgress = startProgress
 
     OmiMotion.withGated(.easeOut(duration: duration)) {
       state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
     }
 
-    scheduleNotchRevealCompletion(generation: revealGeneration, after: duration)
+    scheduleNotchRevealCompletion(token: token, after: duration)
   }
 
   func clearVisibleConversationFromUI() {
@@ -1924,8 +1925,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     anchorTop: Bool = false
   ) {
     // Cancel any pending resizeToFixedHeight work item to prevent stale resizes
-    resizeWorkItem?.cancel()
-    resizeWorkItem = nil
+    frameTransition.cancelScheduled()
     updateNotchIslandState()
     applySurfaceLevel()
 
@@ -1967,8 +1967,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     animated: Bool,
     animationDuration: TimeInterval
   ) {
-    resizeWorkItem?.cancel()
-    resizeWorkItem = nil
+    frameTransition.cancelScheduled()
     updateNotchIslandState()
     applySurfaceLevel()
 
@@ -2018,10 +2017,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       } ?? false
 
     if alreadyAtTarget, wasResizable == makeResizable {
-      // Hover / Space / display revalidation often land here. Bumping
-      // frameAnimationToken cancelled in-flight retract/reveal completions
-      // and left the island scaled into the camera housing.
-      pendingFrameAnimationTarget = nil
+      // Hover / Space / display revalidation often land here. Starting a new
+      // frame transition would cancel in-flight retract/reveal completions and
+      // leave the island scaled into the camera housing.
+      frameTransition.dropPendingWithoutInvalidating()
       isResizingProgrammatically = false
       scheduleSurfaceFloorReconcile(reason: "resize_noop")
       return
@@ -2061,14 +2060,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   private func animateFrame(to frame: NSRect, duration: TimeInterval, completion: (() -> Void)? = nil) {
     let completionBox = completion.map { AnimationCompletionBox(value: $0) }
-    frameAnimationToken += 1
-    let token = frameAnimationToken
-    pendingFrameAnimationTarget = frame
+    let token = frameTransition.start(pendingTarget: frame)
 
     // Reduce Motion (or zero duration): land on the final frame directly.
     guard duration > 0, !OmiMotion.reduceMotion else {
       setFrame(frame, display: true, animate: false)
-      pendingFrameAnimationTarget = nil
+      frameTransition.clearPending(if: token)
       completion?()
       return
     }
@@ -2088,9 +2085,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       },
       completionHandler: { [weak self] in
         MainActor.assumeIsolated {
-          guard let self, self.frameAnimationToken == token else { return }
+          guard let self, self.frameTransition.isCurrent(token) else { return }
           self.setFrame(frame, display: true, animate: false)
-          self.pendingFrameAnimationTarget = nil
+          self.frameTransition.clearPending(if: token)
           completionBox?.value()
           // The landed frame is a settle point: the state it was aimed at may
           // have moved on while it animated.
@@ -2100,14 +2097,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   private func resizeToFixedHeight(_ height: CGFloat, animated: Bool = false) {
-    resizeWorkItem?.cancel()
     let width = expandedContentWidth
     let size = NSSize(width: width, height: height)
-    resizeWorkItem = DispatchWorkItem { [weak self] in
+    frameTransition.scheduleOnNextTurn { [weak self] in
       self?.resizeAnchored(to: size, makeResizable: false, animated: animated, anchorTop: true)
-    }
-    if let workItem = resizeWorkItem {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: workItem)
     }
   }
 
@@ -2167,8 +2160,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       resizeForAgentSwitcher(visible: expanded)
       return true
     }
-    resizeWorkItem?.cancel()
-    resizeWorkItem = nil
+    frameTransition.cancelScheduled()
 
     let targetSize = expanded ? FloatingControlBarWindow.expandedBarSize : FloatingControlBarWindow.minBarSize
 
@@ -2203,11 +2195,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       // a flicker loop when hovering from the top or bottom edge.
       doResize()
     } else {
-      // Collapse async to avoid blocking SwiftUI body evaluation during unhover.
-      // Cancellable via resizeWorkItem so rapid hover in/out doesn't queue stale
-      // resizes. (OMI-COMPUTER-1PT)
-      resizeWorkItem = DispatchWorkItem(block: doResize)
-      DispatchQueue.main.async(execute: resizeWorkItem!)
+      // Collapse on the next turn so SwiftUI can finish evaluating unhover.
+      // A later snap/animation through the transition owner cancels this.
+      frameTransition.scheduleOnNextTurn(doResize)
     }
     return true
   }
@@ -2249,8 +2239,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     else { return }
 
     if notchModeEnabled {
-      resizeWorkItem?.cancel()
-      resizeWorkItem = nil
+      frameTransition.cancelScheduled()
       // The collapse lands on the composed closed surface (the guards above
       // exclude voice and cards, so this is the idle lobe today) rather than
       // a bare lobe size derived here.
@@ -2481,14 +2470,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
       return
     }
-    notchRevealCancellation?.cancel()
-    notchRevealGeneration &+= 1
-    let generation = notchRevealGeneration
+    let token = frameTransition.start()
     state.notchRevealProgress = FloatingBarNotchRevealPolicy.retractedProgress
     OmiMotion.withGated(.easeOut(duration: 0.24)) {
       state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
     }
-    scheduleNotchRevealCompletion(generation: generation, after: 0.24)
+    scheduleNotchRevealCompletion(token: token, after: 0.24)
   }
 
   /// Mirror of the reveal: shrink the island back into the camera housing,
@@ -2503,11 +2490,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   private func cancelPendingRetraction() {
-    notchRetractionGeneration &+= 1
     notchRetractionCancellation?.cancel()
     notchRetractionCancellation = nil
+    frameTransition.invalidate()
     cancelInFlightNotchReveal()
     state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
+    releaseSurfaceFloorDeferral(reason: "retract_cancelled")
   }
 
   func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
@@ -2557,12 +2545,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// on the surface the new state implies.
   func resizeToClosedSurface(animated: Bool = true) {
     // A nonanimated landing must win over any in-flight animated resize: the
-    // old animation's completion still holds a matching frameAnimationToken
+    // old animation's completion still holds a matching transition token
     // and would restore its obsolete target after this resize. Invalidate it
     // and drop the pending target so the direct setFrame below is final.
     if !animated {
-      frameAnimationToken += 1
-      pendingFrameAnimationTarget = nil
+      frameTransition.invalidate()
     }
     resizeAnchored(
       to: closedSurfaceSize(usesNotchIsland: notchModeEnabled),
@@ -2856,7 +2843,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     guard isMouseClick else { return }
 
     // Close in-place so the bar collapses smoothly instead of blinking out and back in.
-    resignKeyAnimationToken += 1
+    frameTransition.invalidate()
     closeAIConversation()
   }
 
@@ -2937,6 +2924,30 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     if state.conversationSurface.isResponseLike {
       persistCurrentResponseSurfaceSize()
     }
+    releaseSurfaceFloorDeferral(reason: "user_resize_end")
+  }
+
+  /// Starts a user drag. The floor defers while the pointer owns the frame.
+  func beginUserDrag() {
+    isUserDragging = true
+    state.isDragging = true
+  }
+
+  /// Ends a user drag and requeues any floor check that was dropped while the
+  /// pointer owned the frame.
+  func endUserDrag() {
+    isUserDragging = false
+    state.isDragging = false
+    releaseSurfaceFloorDeferral(reason: "drag_end")
+  }
+
+  /// Requeue a floor check that was dropped because a deferral owned the
+  /// frame. No-op when nothing was dropped, so ordinary drag-end and reveal
+  /// completion do not force an extra resize.
+  func releaseSurfaceFloorDeferral(reason: String) {
+    guard surfaceFloorCheckDropped else { return }
+    surfaceFloorCheckDropped = false
+    scheduleSurfaceFloorReconcile(reason: reason)
   }
 
   private func persistCurrentResponseSurfaceSize() {
@@ -6069,8 +6080,7 @@ extension FloatingControlBarWindow {
   /// Invalidates any in-flight windowDidResignKey dismiss animation so a new PTT
   /// query won't be immediately closed by a stale completion block.
   func cancelPendingDismiss() {
-    resignKeyAnimationToken += 1
-    frameAnimationToken += 1
+    frameTransition.invalidate()
     restoreNotchRevealProgressIfWindowStillVisible()
     if !ShortcutSettings.shared.draggableBarEnabled {
       pendingRestoreFrame = nil

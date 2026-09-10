@@ -503,7 +503,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
   // partially applied voice state.
   @Published private(set) var voiceProjection = VoiceTurnUIProjection.idle
   var isVoiceListening: Bool {
-    voiceProjection.isListening || !voiceProjection.hint.isEmpty
+    voicePhase.isListeningOrHint
   }
   var isVoiceLocked: Bool { voiceProjection.isLocked }
   var voiceTranscript: String { voiceProjection.transcript }
@@ -520,9 +520,14 @@ class FloatingControlBarState: NSObject, ObservableObject {
   var isVoiceResponseGlowActive: Bool {
     isVoiceResponseActive || isVoiceResponseWaiting
   }
+  /// Typed voice phase for sizing. Prefer this over the boolean projections
+  /// when deciding lobe width or which closed surface is showing.
+  var voicePhase: FloatingBarVoicePhase {
+    FloatingBarVoicePhase.from(voiceProjection)
+  }
   /// Any reducer-owned voice phase that reserves the notch surface.
   var isVoicePresentationActive: Bool {
-    isVoiceListening || isThinking || isVoiceResponseGlowActive || !pttHintText.isEmpty
+    voicePhase.reservesSurface
   }
   /// True only when the notch-mode setting is enabled and the current display
   /// exposes a real camera housing safe area. External displays keep old pill UI.

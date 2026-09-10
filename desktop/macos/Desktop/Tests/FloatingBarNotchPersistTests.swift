@@ -20,7 +20,7 @@ final class FloatingBarNotchPersistTests: XCTestCase {
       var staleCompletionCount = 0
       window.beginNotchRetraction { staleCompletionCount += 1 }
       XCTAssertEqual(window.state.notchRevealProgress, FloatingBarNotchRevealPolicy.retractedProgress)
-      window.notchRetractionGeneration &+= 1
+      window.frameTransition.invalidate()
       window.notchRetractionCancellation = nil
 
       XCTAssertTrue(scheduler.fireNext())
@@ -48,7 +48,7 @@ final class FloatingBarNotchPersistTests: XCTestCase {
 
       window.playNotchRevealAnimation()
       window.state.notchRevealProgress = FloatingBarNotchRevealPolicy.retractedProgress
-      window.notchRevealGeneration &+= 1
+      window.frameTransition.invalidate()
       window.notchRevealCancellation = nil
       XCTAssertTrue(scheduler.fireNext())
       XCTAssertEqual(
@@ -90,14 +90,12 @@ final class FloatingBarNotchPersistTests: XCTestCase {
 
       var completionCount = 0
       window.beginNotchRetraction { completionCount += 1 }
-      let token = window.frameAnimationToken
-      let generation = window.notchRetractionGeneration
+      let generation = window.frameTransitionGeneration
       window.normalizeForTemporaryShow()
 
       XCTAssertEqual(
-        window.frameAnimationToken, token,
+        window.frameTransitionGeneration, generation,
         "a no-op resize must not share a cancellation token with retract/reveal")
-      XCTAssertEqual(window.notchRetractionGeneration, generation)
       XCTAssertTrue(scheduler.fireNext())
       XCTAssertEqual(completionCount, 1, "the retract still finishes; hover did not abort it")
     }

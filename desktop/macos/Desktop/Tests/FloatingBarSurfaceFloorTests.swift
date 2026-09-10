@@ -59,26 +59,15 @@ final class FloatingBarSurfaceFloorTests: XCTestCase {
     )
   }
 
+  private func scrunchedFrame(for window: FloatingControlBarWindow) -> NSRect {
+    NSRect(x: window.frame.midX - 60, y: window.frame.maxY - 30, width: 120, height: 30)
+  }
+
   private func presenter(for window: FloatingControlBarWindow) -> FloatingControlBarState.PTTBarPresenter {
     FloatingControlBarState.PTTBarPresenter(
       barState: window.state,
       resizeForPTT: { [weak window] in window?.resizeForPTTState(expanded: $0) }
     )
-  }
-
-  /// A frame smaller than any closed surface, positioned where the island
-  /// hangs: the "regular notch width" a stale path lands on.
-  private func scrunchedFrame(for window: FloatingControlBarWindow) -> NSRect {
-    NSRect(x: window.frame.midX - 60, y: window.frame.maxY - 30, width: 120, height: 30)
-  }
-
-  /// Spins the main run loop until `condition` holds or `passes` turns have
-  /// elapsed. The floor's async triggers hop through `DispatchQueue.main`
-  /// exactly once, so the condition is a signal, not a timing guess.
-  private func drainMainQueue(passes: Int = 20, until condition: () -> Bool) {
-    for _ in 0..<passes where !condition() {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.005))
-    }
   }
 
   // MARK: - The pure policy
@@ -196,7 +185,8 @@ final class FloatingBarSurfaceFloorTests: XCTestCase {
       let required = window.surfaceFloorWindowSize()
       XCTAssertGreaterThan(required.width, idle.width, "the card must require more than the idle lobe")
 
-      drainMainQueue { window.frame.width + 0.5 >= required.width }
+      window.scheduleSurfaceFloorReconcile(reason: "test_state_change")
+      window.settlePendingSurfaceFloorReconcile()
 
       XCTAssertEqual(window.frame.width, required.width, accuracy: 0.5)
       XCTAssertEqual(window.frame.height, required.height, accuracy: 0.5)
@@ -308,6 +298,28 @@ final class FloatingBarSurfaceFloorTests: XCTestCase {
       window.dismissNotification(animated: false)
       XCTAssertEqual(window.surfaceFloorWindowSize(), idle)
       XCTAssertFalse(window.enforceSurfaceFloor(reason: "test"), "the idle frame satisfies the idle floor")
+    }
+  }
+
+  /// A floor check that runs while the user is dragging must not be dropped
+  /// forever. Drag-end requeues the reconcile so the card surface is restored.
+  func testAFloorCheckDroppedDuringDragIsRequeuedWhenTheDragEnds() {
+    withNotchMode {
+      let window = makeWindow()
+      defer { window.close() }
+      window.showNotification(card(), animated: false)
+      let mounted = window.frame
+
+      window.beginUserDrag()
+      window.setFrame(scrunchedFrame(for: window), display: false)
+      XCTAssertFalse(window.enforceSurfaceFloor(reason: "drag"))
+      XCTAssertLessThan(window.frame.width, mounted.width)
+
+      window.endUserDrag()
+      window.settlePendingSurfaceFloorReconcile()
+
+      XCTAssertEqual(window.frame.width, mounted.width, accuracy: 0.5)
+      XCTAssertEqual(window.frame.height, mounted.height, accuracy: 0.5)
     }
   }
 }

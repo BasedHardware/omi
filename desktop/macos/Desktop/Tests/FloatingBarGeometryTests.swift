@@ -67,29 +67,24 @@ final class FloatingBarGeometryTests: XCTestCase {
       NSPoint(x: center.x - 22, y: center.y - 18))
   }
 
-  func testScreenChangeReconcilesTheFloatingBarPresentationAndFrame() throws {
-    // omi-test-quality: source-inspection -- static contract: AppKit delegate callback must retain the reconciliation wiring
-    let source = try String(
-      contentsOf: URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarWindow.swift"),
-      encoding: .utf8
+  func testScreenChangeReconcilesTheFloatingBarPresentationAndFrame() {
+    let window = FloatingControlBarWindow(
+      contentRect: .zero,
+      styleMask: [.borderless, .nonactivatingPanel],
+      backing: .buffered,
+      defer: false
     )
-    guard let methodStart = source.range(of: "func windowDidChangeScreen(_ notification: Notification)") else {
-      return XCTFail("Expected the floating bar to reconcile direct window screen changes")
-    }
-    guard let nextMethod = source.range(of: "func windowDidResignKey", range: methodStart.upperBound..<source.endIndex)
-    else {
-      return XCTFail("Expected windowDidChangeScreen to precede the next window delegate method")
-    }
-
-    let method = String(source[methodStart.lowerBound..<nextMethod.lowerBound])
-    XCTAssertTrue(method.contains("let previousUsesNotchIsland = state.usesNotchIsland"))
-    XCTAssertTrue(method.contains("updateNotchIslandState()"))
-    XCTAssertTrue(method.contains("guard !state.showingAIConversation else { return }"))
-    XCTAssertTrue(method.contains("frameForCurrentState(on: screen, usesNotchIsland: state.usesNotchIsland)"))
-    XCTAssertTrue(method.contains("resizeToFrame("))
+    window.makeKeyAndOrderFront(nil)
+    defer { window.close() }
+    window.settlePendingSurfaceFloorReconcile()
+    let required = window.surfaceFloorWindowSize()
+    window.setFrame(NSRect(x: 10, y: 10, width: 120, height: 30), display: false)
+    window.windowDidChangeScreen(
+      Notification(name: NSWindow.didChangeScreenNotification, object: window))
+    XCTAssertGreaterThanOrEqual(
+      window.frame.width + 0.5, required.width,
+      "a screen change must restore the closed surface, not leave a scrunched frame")
+    XCTAssertGreaterThanOrEqual(window.frame.height + 0.5, required.height)
   }
 
   func testTopCenterExpansionKeepsTopEdgeAndHorizontalCenterFixed() {

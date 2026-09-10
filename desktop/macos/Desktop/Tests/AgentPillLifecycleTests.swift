@@ -2016,13 +2016,12 @@ import XCTest
     let source = try floatingControlBarWindowSource()
 
     XCTAssertTrue(source.contains("private static let frameNoopEpsilon: CGFloat = 0.5"))
-    XCTAssertTrue(source.contains("private var pendingFrameAnimationTarget: NSRect?"))
+    XCTAssertTrue(source.contains("private var pendingFrameAnimationTarget: NSRect? { frameTransition.pendingTarget }"))
     XCTAssertTrue(source.contains("let wasResizable = styleMask.contains(.resizable)"))
     XCTAssertTrue(source.contains("let alreadyAnimatingToTarget =\n      pendingFrameAnimationTarget.map"))
     XCTAssertTrue(source.contains("if alreadyAtTarget, wasResizable == makeResizable"))
     XCTAssertTrue(source.contains("if alreadyAnimatingToTarget, wasResizable == makeResizable"))
-    XCTAssertTrue(source.contains("frameAnimationToken += 1"))
-    XCTAssertTrue(source.contains("pendingFrameAnimationTarget = frame"))
+    XCTAssertTrue(source.contains("frameTransition.start(pendingTarget: frame)"))
     XCTAssertTrue(source.contains("private static func framesEquivalent(_ lhs: NSRect, _ rhs: NSRect) -> Bool"))
   }
 

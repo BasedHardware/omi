@@ -111,21 +111,23 @@ struct FloatingControlBarView: View {
       : FloatingControlBarWindow.pillSurfaceCenterGapWidth
   }
   private var notchSideWidth: CGFloat {
-    if showingNotchVoiceControl {
-      return NotchVoiceControlPresentation.activeSideWidth
-    }
-    if isChatChromePinned {
-      return agentPills.pills.isEmpty
-        ? FloatingControlBarWindow.notchCompactSideWidth
-        : FloatingControlBarWindow.notchActiveSideWidth
-    }
-    if showingNotchThinking {
-      return FloatingControlBarWindow.notchThinkingSideWidth
-    }
-    if agentPills.pills.isEmpty && !state.isVoiceListening {
-      return FloatingControlBarWindow.notchCompactSideWidth
-    }
-    return FloatingControlBarWindow.notchActiveSideWidth
+    FloatingBarLayout.lobeWidth(
+      phase: state.voicePhase,
+      isChatPresented: isChatChromePinned,
+      hasAgentPills: !agentPills.pills.isEmpty,
+      metrics: FloatingBarLayout.Metrics(
+        compactSideWidth: FloatingControlBarWindow.notchCompactSideWidth,
+        activeSideWidth: FloatingControlBarWindow.notchActiveSideWidth,
+        voiceSideWidth: FloatingControlBarWindow.notchVoiceSideWidth,
+        thinkingSideWidth: FloatingControlBarWindow.notchThinkingSideWidth,
+        hiddenCenterWidth: notchHiddenCenterWidth,
+        chromeHeight: 0,
+        expandedWidth: FloatingControlBarWindow.notchExpandedWidth,
+        hoverMenuHeight: notchHoverMenuHeight,
+        minBarSize: .zero,
+        voiceBarSize: .zero
+      )
+    )
   }
   private var notchChromeWidth: CGFloat {
     notchHiddenCenterWidth + notchSideWidth * 2

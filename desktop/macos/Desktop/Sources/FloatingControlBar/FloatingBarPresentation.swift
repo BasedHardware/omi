@@ -44,17 +44,13 @@ extension FloatingControlBarWindow {
   func beginNotchRetraction(then completion: @escaping () -> Void) {
     notchRetractionCancellation?.cancel()
     cancelInFlightNotchReveal()
-    // Cancel in-flight *frame* animations. Retract/reveal use dedicated
-    // generations so a later no-op resize cannot strand the island at 0.01.
-    frameAnimationToken += 1
-    notchRetractionGeneration &+= 1
-    let generation = notchRetractionGeneration
+    let token = frameTransition.start()
     OmiMotion.withGated(.easeIn(duration: 0.18)) {
       state.notchRevealProgress = FloatingBarNotchRevealPolicy.retractedProgress
     }
     notchRetractionCancellation = notchRetractionScheduler.schedule(after: 0.18) { [weak self] in
       guard let self else { return }
-      guard self.notchRetractionGeneration == generation else {
+      guard self.frameTransition.isCurrent(token) else {
         self.restoreNotchRevealProgressIfWindowStillVisible()
         return
       }
@@ -63,6 +59,7 @@ extension FloatingControlBarWindow {
       // reveal (e.g. showTemporarily) — the next reveal re-zeroes it.
       self.state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
       self.notchRetractionCancellation = nil
+      self.releaseSurfaceFloorDeferral(reason: "retract_settled")
     }
   }
 
@@ -76,21 +73,21 @@ extension FloatingControlBarWindow {
     state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
   }
 
-  func scheduleNotchRevealCompletion(generation: Int, after duration: TimeInterval) {
+  func scheduleNotchRevealCompletion(token: FloatingBarFrameTransition.Token, after duration: TimeInterval) {
     notchRevealCancellation?.cancel()
     notchRevealCancellation = notchRetractionScheduler.schedule(after: duration) { [weak self] in
       guard let self else { return }
-      guard self.notchRevealGeneration == generation else {
+      guard self.frameTransition.isCurrent(token) else {
         self.restoreNotchRevealProgressIfWindowStillVisible()
         return
       }
       self.state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
       self.notchRevealCancellation = nil
+      self.releaseSurfaceFloorDeferral(reason: "reveal_settled")
     }
   }
 
   func cancelInFlightNotchReveal() {
-    notchRevealGeneration &+= 1
     notchRevealCancellation?.cancel()
     notchRevealCancellation = nil
   }
