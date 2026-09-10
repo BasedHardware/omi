@@ -533,6 +533,28 @@ export function usageStatsCopy(
   ];
 }
 
+export function usagePeriodStatsCopy(
+  periodTitle: string,
+  stats:
+    | {
+        transcriptionSeconds: number;
+        wordsTranscribed: number;
+        insightsGained: number;
+        memoriesCreated: number;
+      }
+    | null
+    | undefined,
+): {title: string; copy: string}[] | null {
+  const rows = usageStatsCopy(stats);
+  if (rows === null) {
+    return null;
+  }
+  return rows.map(row => ({
+    title: `${periodTitle} · ${row.title}`,
+    copy: row.copy,
+  }));
+}
+
 export function subscriptionPeriodCopy(
   subscription:
     | {

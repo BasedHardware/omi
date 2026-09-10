@@ -35,6 +35,7 @@ import {
   subscriptionPlanCopy,
   subscriptionStatusCopy,
   usageStatsCopy,
+  usagePeriodStatsCopy,
   subscriptionPeriodCopy,
   primaryLanguageCopy,
   peopleNameRows,
@@ -53,6 +54,7 @@ import {
   taskIntegrationRowCopy,
   type OmiTaskIntegration,
 } from '../legacyOmiTaskIntegrations';
+import {loadOmiUsagePeriod, type OmiUsageStats} from '../legacyOmiUsage';
 import {loadOmiFairUseStatus} from '../legacyOmiFairUse';
 import {loadOmiDailySummaries} from '../legacyOmiDailySummaries';
 import {loadOmiDailySummarySchedule} from '../legacyOmiDailySummarySchedule';
@@ -192,6 +194,9 @@ export function SettingsPage({
   const [taskIntegrations, setTaskIntegrations] = useState<
     OmiTaskIntegration[]
   >([]);
+  const [usageMonthly, setUsageMonthly] = useState<OmiUsageStats | null>(null);
+  const [usageYearly, setUsageYearly] = useState<OmiUsageStats | null>(null);
+  const [usageAllTime, setUsageAllTime] = useState<OmiUsageStats | null>(null);
   const [fairUse, setFairUse] = useState<ReturnType<typeof fairUseCopy>>(null);
   const [dailySummaries, setDailySummaries] = useState<
     ReturnType<typeof dailySummaryCopy>
@@ -263,6 +268,9 @@ export function SettingsPage({
       setSnapshot(null);
       setPeopleNames([]);
       setTaskIntegrations([]);
+      setUsageMonthly(null);
+      setUsageYearly(null);
+      setUsageAllTime(null);
       setFairUse(null);
       setDailySummaries([]);
       setDailySummarySchedule([]);
@@ -311,6 +319,9 @@ export function SettingsPage({
         setSnapshot(null);
         setPeopleNames([]);
         setTaskIntegrations([]);
+        setUsageMonthly(null);
+        setUsageYearly(null);
+        setUsageAllTime(null);
         setFairUse(null);
         setDailySummaries([]);
         setDailySummarySchedule([]);
@@ -328,6 +339,9 @@ export function SettingsPage({
         setSnapshot(null);
         setPeopleNames([]);
         setTaskIntegrations([]);
+        setUsageMonthly(null);
+        setUsageYearly(null);
+        setUsageAllTime(null);
         setFairUse(null);
         setDailySummaries([]);
         setDailySummarySchedule([]);
@@ -346,6 +360,15 @@ export function SettingsPage({
     );
     const taskIntegrationsTask = loadOmiTaskIntegrations(backend).catch(
       () => [],
+    );
+    const usageMonthlyTask = loadOmiUsagePeriod(backend, 'monthly').catch(
+      () => null,
+    );
+    const usageYearlyTask = loadOmiUsagePeriod(backend, 'yearly').catch(
+      () => null,
+    );
+    const usageAllTimeTask = loadOmiUsagePeriod(backend, 'all_time').catch(
+      () => null,
     );
     const fairUseTask = loadOmiFairUseStatus(backend).catch(() => null);
     const dailySummariesTask = loadOmiDailySummaries(backend).catch(() => []);
@@ -379,6 +402,9 @@ export function SettingsPage({
     }
     const names = await peopleTask;
     const integrations = await taskIntegrationsTask;
+    const nextUsageMonthly = await usageMonthlyTask;
+    const nextUsageYearly = await usageYearlyTask;
+    const nextUsageAllTime = await usageAllTimeTask;
     const status = await fairUseTask;
     const summaries = await dailySummariesTask;
     const schedule = await dailySummaryScheduleTask;
@@ -391,6 +417,9 @@ export function SettingsPage({
     }
     setPeopleNames(peopleNameRows(names));
     setTaskIntegrations(integrations);
+    setUsageMonthly(nextUsageMonthly);
+    setUsageYearly(nextUsageYearly);
+    setUsageAllTime(nextUsageAllTime);
     setFairUse(fairUseCopy(status));
     setDailySummaries(dailySummaryCopy(summaries));
     setDailySummarySchedule(dailySummaryScheduleCopy(schedule));
@@ -550,6 +579,15 @@ export function SettingsPage({
           />
         )}
         {usageStatsCopy(snapshot.usage)?.map(row => (
+          <SettingRow copy={row.copy} key={row.title} title={row.title} />
+        ))}
+        {usagePeriodStatsCopy('This month', usageMonthly)?.map(row => (
+          <SettingRow copy={row.copy} key={row.title} title={row.title} />
+        ))}
+        {usagePeriodStatsCopy('This year', usageYearly)?.map(row => (
+          <SettingRow copy={row.copy} key={row.title} title={row.title} />
+        ))}
+        {usagePeriodStatsCopy('All time', usageAllTime)?.map(row => (
           <SettingRow copy={row.copy} key={row.title} title={row.title} />
         ))}
         {subscriptionPeriodCopy(snapshot.subscription)?.map(row => (

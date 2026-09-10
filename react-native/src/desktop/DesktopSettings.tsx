@@ -21,6 +21,7 @@ import {
   subscriptionPlanCopy,
   subscriptionStatusCopy,
   usageStatsCopy,
+  usagePeriodStatsCopy,
   subscriptionPeriodCopy,
   primaryLanguageCopy,
   peopleNameRows,
@@ -52,6 +53,7 @@ import {
   taskIntegrationRowCopy,
   type OmiTaskIntegration,
 } from '../legacyOmiTaskIntegrations';
+import {loadOmiUsagePeriod, type OmiUsageStats} from '../legacyOmiUsage';
 import {loadOmiFairUseStatus} from '../legacyOmiFairUse';
 import {loadOmiDailySummaries} from '../legacyOmiDailySummaries';
 import {loadOmiDailySummarySchedule} from '../legacyOmiDailySummarySchedule';
@@ -262,6 +264,9 @@ export function DesktopSettings({
   const [taskIntegrations, setTaskIntegrations] = useState<
     OmiTaskIntegration[]
   >([]);
+  const [usageMonthly, setUsageMonthly] = useState<OmiUsageStats | null>(null);
+  const [usageYearly, setUsageYearly] = useState<OmiUsageStats | null>(null);
+  const [usageAllTime, setUsageAllTime] = useState<OmiUsageStats | null>(null);
   const [fairUse, setFairUse] = useState<ReturnType<typeof fairUseCopy>>(null);
   const [dailySummaries, setDailySummaries] = useState<
     ReturnType<typeof dailySummaryCopy>
@@ -309,6 +314,9 @@ export function DesktopSettings({
     let nextAccount: AccountSettingsSnapshot | null = null;
     let nextPeople: {id: string; name: string}[] = [];
     let nextTaskIntegrations: OmiTaskIntegration[] = [];
+    let nextUsageMonthly: OmiUsageStats | null = null;
+    let nextUsageYearly: OmiUsageStats | null = null;
+    let nextUsageAllTime: OmiUsageStats | null = null;
     let nextFairUse: ReturnType<typeof fairUseCopy> = null;
     let nextDailySummaries: ReturnType<typeof dailySummaryCopy> = [];
     let nextDailySummarySchedule: ReturnType<typeof dailySummaryScheduleCopy> =
@@ -327,6 +335,15 @@ export function DesktopSettings({
       );
       const taskIntegrationsTask = loadOmiTaskIntegrations(backend).catch(
         () => [],
+      );
+      const usageMonthlyTask = loadOmiUsagePeriod(backend, 'monthly').catch(
+        () => null,
+      );
+      const usageYearlyTask = loadOmiUsagePeriod(backend, 'yearly').catch(
+        () => null,
+      );
+      const usageAllTimeTask = loadOmiUsagePeriod(backend, 'all_time').catch(
+        () => null,
       );
       const fairUseTask = loadOmiFairUseStatus(backend).catch(() => null);
       const dailySummariesTask = loadOmiDailySummaries(backend).catch(() => []);
@@ -348,6 +365,9 @@ export function DesktopSettings({
       }
       nextPeople = peopleNameRows(await peopleTask);
       nextTaskIntegrations = await taskIntegrationsTask;
+      nextUsageMonthly = await usageMonthlyTask;
+      nextUsageYearly = await usageYearlyTask;
+      nextUsageAllTime = await usageAllTimeTask;
       nextFairUse = fairUseCopy(await fairUseTask);
       nextDailySummaries = dailySummaryCopy(await dailySummariesTask);
       nextDailySummarySchedule = dailySummaryScheduleCopy(
@@ -379,6 +399,9 @@ export function DesktopSettings({
     setAccount(nextAccount);
     setPeopleNames(nextPeople);
     setTaskIntegrations(nextTaskIntegrations);
+    setUsageMonthly(nextUsageMonthly);
+    setUsageYearly(nextUsageYearly);
+    setUsageAllTime(nextUsageAllTime);
     setFairUse(nextFairUse);
     setDailySummaries(nextDailySummaries);
     setDailySummarySchedule(nextDailySummarySchedule);
@@ -671,6 +694,15 @@ export function DesktopSettings({
         />
       )}
       {usageStatsCopy(account?.usage)?.map(row => (
+        <Row copy={row.copy} key={row.title} title={row.title} />
+      ))}
+      {usagePeriodStatsCopy('This month', usageMonthly)?.map(row => (
+        <Row copy={row.copy} key={row.title} title={row.title} />
+      ))}
+      {usagePeriodStatsCopy('This year', usageYearly)?.map(row => (
+        <Row copy={row.copy} key={row.title} title={row.title} />
+      ))}
+      {usagePeriodStatsCopy('All time', usageAllTime)?.map(row => (
         <Row copy={row.copy} key={row.title} title={row.title} />
       ))}
       {subscriptionPeriodCopy(account?.subscription)?.map(row => (

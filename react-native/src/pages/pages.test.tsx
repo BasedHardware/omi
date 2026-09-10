@@ -1894,3 +1894,86 @@ test('Settings names GET task integrations without Connect or a write sheet', as
     mockBackend.request.mock.calls.some(call => call[0].method === 'PUT'),
   ).toBe(false);
 });
+
+test('Settings names GET usage monthly yearly all-time without Upgrade', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/usage?period=monthly') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          monthly: {
+            transcription_seconds: 180,
+            words_transcribed: 40,
+            insights_gained: 5,
+            memories_created: 2,
+            speech_seconds: 99,
+          },
+        }),
+      };
+    }
+    if (request.path === '/v1/users/me/usage?period=yearly') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          yearly: {
+            transcription_seconds: 0,
+            words_transcribed: 0,
+            insights_gained: 0,
+            memories_created: 0,
+          },
+        }),
+      };
+    }
+    if (request.path === '/v1/users/me/usage?period=all_time') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          all_time: {
+            transcription_seconds: 3600,
+            words_transcribed: 80,
+            insights_gained: 9,
+            memories_created: 4,
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('This month · Listening');
+  expect(tree).toContain('3 minutes');
+  expect(tree).toContain('This month · Understanding');
+  expect(tree).toContain('40 words');
+  expect(tree).toContain('This month · Providing');
+  expect(tree).toContain('5 insights');
+  expect(tree).toContain('This month · Remembering');
+  expect(tree).toContain('2 memories');
+  expect(tree).toContain('All time · Listening');
+  expect(tree).toContain('60 minutes');
+  expect(tree).not.toContain('This year ·');
+  expect(tree).not.toContain('99');
+  expect(tree).not.toContain('Upgrade');
+  expect(mockBackend.request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/users/me/usage?period=monthly',
+  });
+  expect(mockBackend.request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/users/me/usage?period=yearly',
+  });
+  expect(mockBackend.request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/users/me/usage?period=all_time',
+  });
+});
