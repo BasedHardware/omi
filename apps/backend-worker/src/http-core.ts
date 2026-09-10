@@ -63,7 +63,13 @@ export type AccountPort = {
     accountId: string,
     input: ChatCreate,
     chatLimit: number
-  ): Promise<Admission | "conflict" | "entitlement" | "attachment_rejected">;
+  ): Promise<
+    | Admission
+    | "conflict"
+    | "entitlement"
+    | "attachment_rejected"
+    | "attachment_not_found"
+  >;
   cancel(
     accountId: string,
     generationId: string
@@ -565,6 +571,8 @@ export async function handleChatCreate(
     body.attachmentIds,
     body.id
   );
+  if (resolved.kind === "not_found")
+    return backendError("not_found", "edit_request", 404);
   if (resolved.kind === "rejected")
     return backendError("attachment_rejected", "edit_request", 422);
   const accountBackend = account(context);
@@ -578,6 +586,9 @@ export async function handleChatCreate(
   }
   if (admission === "entitlement") {
     return backendError("entitlement", "upgrade", 402);
+  }
+  if (admission === "attachment_not_found") {
+    return backendError("not_found", "edit_request", 404);
   }
   if (admission === "attachment_rejected") {
     return backendError("attachment_rejected", "edit_request", 422);

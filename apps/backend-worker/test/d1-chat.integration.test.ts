@@ -1282,7 +1282,7 @@ describe("D1 chat attachment admit bind", () => {
     });
   });
 
-  test("foreign and incomplete attachments stay rejected", async () => {
+  test("foreign attachments are not-found and incomplete stay rejected", async () => {
     await insertAttachment({
       id: "d1-att-foreign",
       accountId: "other-account",
@@ -1311,10 +1311,10 @@ describe("D1 chat attachment admit bind", () => {
       }),
     });
 
-    expect(foreign.status).toBe(422);
+    expect(foreign.status).toBe(404);
     expect((await foreign.json()) as { error: { code: string } }).toEqual({
       error: {
-        code: "attachment_rejected",
+        code: "not_found",
         retryable: false,
         action: "edit_request",
       },

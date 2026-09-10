@@ -3218,7 +3218,7 @@ describe("settings entitlement admission contract", () => {
     });
   });
 
-  test("unknown attachment ids stay rejected with the existing error shape", async () => {
+  test("unknown attachment ids use production not-found before admission", async () => {
     const response = await fetchWorker("/v1/chat-messages", {
       method: "POST",
       headers: { ...authenticatedHeaders, "content-type": "application/json" },
@@ -3228,17 +3228,17 @@ describe("settings entitlement admission contract", () => {
       }),
     });
 
-    expect(response.status).toBe(422);
+    expect(response.status).toBe(404);
     expect((await response.json()) as unknown).toEqual({
       error: {
-        code: "attachment_rejected",
+        code: "not_found",
         retryable: false,
         action: "edit_request",
       },
     });
   });
 
-  test("foreign-account and incomplete attachments are rejected", async () => {
+  test("foreign-account attachments are not-found and incomplete stay rejected", async () => {
     await insertAttachment({
       id: "att-foreign",
       accountId: "other-account",
@@ -3267,10 +3267,10 @@ describe("settings entitlement admission contract", () => {
       }),
     });
 
-    expect(foreign.status).toBe(422);
+    expect(foreign.status).toBe(404);
     expect((await foreign.json()) as unknown).toEqual({
       error: {
-        code: "attachment_rejected",
+        code: "not_found",
         retryable: false,
         action: "edit_request",
       },

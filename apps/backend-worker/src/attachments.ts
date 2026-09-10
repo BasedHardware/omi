@@ -360,6 +360,7 @@ export type BoundChatAttachment = {
 
 export type AdmitAttachmentsResult =
   | { kind: "ok"; attachments: BoundChatAttachment[] }
+  | { kind: "not_found" }
   | { kind: "rejected" };
 
 export async function resolveAttachmentsForAdmit(
@@ -378,7 +379,7 @@ export async function resolveAttachmentsForAdmit(
     if (seen.has(id)) return { kind: "rejected" };
     seen.add(id);
     const row = await readAttachment(db, accountId, id);
-    if (row === null) return { kind: "rejected" };
+    if (row === null) return { kind: "not_found" };
     if (
       !capabilities.allowedAttachmentMimeTypes.includes(row.media_type) ||
       row.size_bytes <= 0 ||

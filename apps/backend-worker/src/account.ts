@@ -35,7 +35,13 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
     accountId: string,
     input: ChatCreate,
     chatLimit: number | null
-  ): Promise<Admission | "conflict" | "entitlement" | "attachment_rejected"> {
+  ): Promise<
+    | Admission
+    | "conflict"
+    | "entitlement"
+    | "attachment_rejected"
+    | "attachment_not_found"
+  > {
     return this.ctx.blockConcurrencyWhile(async () => {
       const result = await admitMessage(
         this.env.DB,

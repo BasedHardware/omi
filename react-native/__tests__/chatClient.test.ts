@@ -590,6 +590,16 @@ test('maps ratified public recovery without automatically retrying', () => {
   ).toBe(true);
   expect(
     chatWriteDoorUnavailable(
+      new ChatBackendError(404, 'not_found', false, 'edit_request', null),
+    ),
+  ).toBe(false);
+  expect(
+    chatErrorCopy(
+      new ChatBackendError(404, 'not_found', false, 'edit_request', null),
+    ),
+  ).toBe('This request cannot be completed.');
+  expect(
+    chatWriteDoorUnavailable(
       new ChatBackendError(503, 'service_unavailable', true, 'retry', 2),
     ),
   ).toBe(false);

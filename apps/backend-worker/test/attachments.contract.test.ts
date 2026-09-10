@@ -1250,7 +1250,7 @@ describe("attachment admit bind", () => {
     expect(resolved).toEqual({ kind: "ok", attachments: [] });
   });
 
-  test("rejects unknown, foreign, and incomplete attachment ids", async () => {
+  test("unknown and foreign attachment ids are not-found; incomplete stay rejected", async () => {
     await insertStoredAttachment({
       id: "att-foreign",
       accountId: "other-account",
@@ -1269,7 +1269,7 @@ describe("attachment admit bind", () => {
         ["missing-id"],
         "message-missing"
       )
-    ).toEqual({ kind: "rejected" });
+    ).toEqual({ kind: "not_found" });
     expect(
       await resolveAttachmentsForAdmit(
         d1Mock,
@@ -1277,7 +1277,7 @@ describe("attachment admit bind", () => {
         ["att-foreign"],
         "message-foreign"
       )
-    ).toEqual({ kind: "rejected" });
+    ).toEqual({ kind: "not_found" });
     expect(
       await resolveAttachmentsForAdmit(
         d1Mock,

@@ -75,9 +75,9 @@ export function chatWriteDoorUnavailable(error: unknown): boolean {
   }
   return (
     error instanceof ChatBackendError &&
-    (error.status === 404 ||
-      error.backendCode === 'not_found' ||
-      error.backendCode === 'development_backend_unsupported')
+    (error.backendCode === 'development_backend_unsupported' ||
+      ((error.status === 404 || error.backendCode === 'not_found') &&
+        error.action !== 'edit_request'))
   );
 }
 

@@ -76,7 +76,13 @@ export async function admitMessage(
   accountId: string,
   input: ChatCreate,
   chatLimit: number | null
-): Promise<Admission | "conflict" | "entitlement" | "attachment_rejected"> {
+): Promise<
+  | Admission
+  | "conflict"
+  | "entitlement"
+  | "attachment_rejected"
+  | "attachment_not_found"
+> {
   const payloadHash = computePayloadHash(input);
   const prior = await db
     .prepare(
@@ -124,6 +130,7 @@ export async function admitMessage(
     input.attachmentIds,
     input.id
   );
+  if (resolved.kind === "not_found") return "attachment_not_found";
   if (resolved.kind === "rejected") return "attachment_rejected";
 
   const usedRow = await db
