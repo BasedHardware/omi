@@ -7,7 +7,7 @@ import Link from '@tschk/moonshine-next/link';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
 import { TextSwap } from '@/components/ui/TextSwap';
 import { replayErrorShake } from '@/lib/transitionsDev';
 import { isFirebaseAuthConfigured } from '@/lib/firebase';
@@ -75,7 +75,7 @@ export function LoginClient() {
 
   // Track page view
   useEffect(() => {
-    MixpanelManager.pageView('Login');
+    PostHogManager.pageView('Login');
   }, []);
 
   const finishReferral = useCallback(async () => {
@@ -85,7 +85,7 @@ export function LoginClient() {
     referralClaimStarted.current = true;
     try {
       const result = await claimReferralTrial(referralCode, referralEnvironment);
-      MixpanelManager.track('Referral Signup Completed', {
+      PostHogManager.track('Referral Signup Completed', {
         claimed: result.claimed,
       });
       if (!result.claimed) {

@@ -1,0 +1,44 @@
+import posthog from 'posthog-js';
+
+const POSTHOG_KEY =
+  process.env.NEXT_PUBLIC_POSTHOG_KEY ||
+  'phc_xUxO7ovj7ckqMu2GhFltKeNM1EtVOSS6rnVhRH5ClIl';
+const POSTHOG_HOST =
+  process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
+
+let isInitialized = false;
+
+export const PostHogManager = {
+  init() {
+    if (isInitialized || typeof window === 'undefined' || !POSTHOG_KEY) return;
+    posthog.init(POSTHOG_KEY, {
+      api_host: POSTHOG_HOST,
+      capture_pageview: false,
+      persistence: 'localStorage',
+      person_profiles: 'identified_only',
+    });
+    isInitialized = true;
+  },
+  identify(userId: string, properties?: { name?: string; email?: string }) {
+    if (!isInitialized || typeof window === 'undefined') return;
+    const person: Record<string, string> = { Platform: 'web' };
+    if (properties?.name) person.name = properties.name;
+    if (properties?.email) person.email = properties.email;
+    posthog.identify(userId, person);
+  },
+  track(event: string, properties?: Record<string, unknown>) {
+    if (!isInitialized || typeof window === 'undefined') return;
+    posthog.capture(event, properties);
+  },
+  pageView(pageName: string) {
+    this.track(`${pageName} Page Viewed`);
+  },
+  reset() {
+    if (!isInitialized || typeof window === 'undefined') return;
+    posthog.reset();
+  },
+  setUserProperty(key: string, value: unknown) {
+    if (!isInitialized || typeof window === 'undefined') return;
+    posthog.setPersonProperties({ [key]: value });
+  },
+};

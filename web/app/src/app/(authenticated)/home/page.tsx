@@ -2,12 +2,12 @@
 
 import { useEffect } from 'react';
 import { HomePage } from '@/components/home/HomePage';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function Home() {
   useEffect(() => {
-    MixpanelManager.pageView('Home');
+    PostHogManager.pageView('Home');
   }, []);
 
   return <HomePage />;

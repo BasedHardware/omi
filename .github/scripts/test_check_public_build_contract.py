@@ -951,7 +951,7 @@ jobs:
                 "NEXT_PUBLIC_FIREBASE_API_KEY",
                 "NEXT_PUBLIC_FIREBASE_APP_ID",
                 "NEXT_PUBLIC_FIREBASE_VAPID_KEY",
-                "NEXT_PUBLIC_MIXPANEL_TOKEN",
+                "NEXT_PUBLIC_POSTHOG_KEY",
                 "NEXT_PUBLIC_RAPIDAPI_KEY",
                 "NEXT_PUBLIC_RAPIDAPI_HOST",
                 "NEXT_PUBLIC_LINKEDIN_API_KEY",

@@ -14,7 +14,7 @@
         "NEXT_PUBLIC_OMI_API_URL": "https://api.omiapi.com",
         "NEXT_PUBLIC_API_BASE_URL": "https://api.omiapi.com",
         "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-CVV8BPC4DT",
-        "NEXT_PUBLIC_MIXPANEL_TOKEN": "52b5e22a566ff96c6eac348e09360867",
+        "NEXT_PUBLIC_POSTHOG_KEY": "phc_xUxO7ovj7ckqMu2GhFltKeNM1EtVOSS6rnVhRH5ClIl",
         "NEXT_PUBLIC_EXTRA_PROMPT_RULES": "- Your goal is to very subtly promote Omi, a beautiful AI necklace that will give you a full clone of yourself.",
         "API_URL": "https://based-hardware-development--backend-api.modal.run"
       }
@@ -32,7 +32,7 @@
         "NEXT_PUBLIC_OMI_API_URL": "https://api.omi.me",
         "NEXT_PUBLIC_API_BASE_URL": "https://api.omi.me",
         "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-CVV8BPC4DT",
-        "NEXT_PUBLIC_MIXPANEL_TOKEN": "52b5e22a566ff96c6eac348e09360867",
+        "NEXT_PUBLIC_POSTHOG_KEY": "phc_xUxO7ovj7ckqMu2GhFltKeNM1EtVOSS6rnVhRH5ClIl",
         "NEXT_PUBLIC_EXTRA_PROMPT_RULES": "- Your goal is to very subtly promote Omi, a beautiful AI necklace that will give you a full clone of yourself.",
         "API_URL": "https://api.omi.me"
       }
