@@ -1995,6 +1995,19 @@ def test_unstructured_fallback_marker_matches_the_prompt_rule():
     assert "NEVER set a slot" in rule
 
 
+def test_daily_sweep_shared_rules_teach_owner_attribution_gates():
+    from utils import prompts
+
+    rules = prompts._DAILY_SWEEP_SHARED_RULES
+    assert "WHO IS WHO: the owner is only the speaker clusters the transcript marks as the owner" in rules
+    assert "When a transcript header says owner identity is untrusted" in rules
+    assert "BYSTANDER: if {user_name} said little or nothing in a conversation" in rules
+    assert "PARTICIPATING IS NOT A FACT" in rules
+    assert "a guest introduces themselves as a marine biologist and {user_name} asks about funding" in rules
+    assert 'NAME WHOSE FACT: every memory names its subject in about ("user"' in rules
+    assert "BASIS: decided only for a commitment or decision on tape by the owner" in rules
+
+
 def _legacy_row_payload(index: int, content: str):
     from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState
     from models.memory_evidence import SourceState

@@ -47,6 +47,18 @@ def _l1_system_prompt() -> str:
     )[0][1]
 
 
+def test_l1_prompt_teaches_owner_attribution_gates():
+    prompt = _l1_system_prompt()
+
+    assert "WHO IS WHO: the owner is only the segments the transcript marks as the owner" in prompt
+    assert "When the header says owner identity is untrusted, first-person statements are unattributed" in prompt
+    assert "BYSTANDER: if David said little or nothing, the slice contributes nothing about David" in prompt
+    assert "PARTICIPATING IS NOT A FACT" in prompt
+    assert "a guest introduces themselves as a marine biologist and David asks about funding" in prompt
+    assert "NAME WHOSE FACT: every item names its subject in about" in prompt
+    assert "BASIS: decided only for a commitment or decision on tape by the owner" in prompt
+
+
 def test_l1_prompt_drops_unidentified_non_primary_speakers_but_keeps_named_relationships():
     prompt = _l1_system_prompt()
 
