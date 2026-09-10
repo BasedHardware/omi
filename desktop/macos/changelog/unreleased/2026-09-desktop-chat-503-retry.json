@@ -1,3 +1,0 @@
-{
-  "change": "Chat now retries a failed turn on a fresh local agent when the server briefly returns HTTP 503, instead of asking you to send the same message again."
-}
