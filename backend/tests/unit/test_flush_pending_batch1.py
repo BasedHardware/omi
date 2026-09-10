@@ -12,6 +12,7 @@ GREEN after removing line 273.
 
 import asyncio
 import os
+import sys
 from pathlib import Path
 from unittest import TestCase
 from unittest.mock import MagicMock
@@ -68,20 +69,33 @@ def _load_parakeet():
     os.environ.setdefault("PARAKEET_TORCH_COMPILE", "false")
     os.environ.setdefault("PARAKEET_CUDA_GRAPHS", "false")
 
-    fakes = {"torch": _make_torch_fake()}
+    fakes = {
+        "torch": _make_torch_fake(),
+        # These are top-level module names because the Parakeet service is
+        # loaded from its directory. Remove any cached copies before the fresh
+        # load and let stub_modules restore the prior objects afterward.
+        "service_mode": None,
+        "gpu_worker": None,
+        "batch_engine": None,
+    }
     for mod in ["nemo", "nemo.collections", "nemo.collections.asr"]:
         fakes[mod] = MagicMock()
     for mod in ["pyannote", "pyannote.audio", "pyannote.audio.core", "pyannote.audio.core.model"]:
         fakes[mod] = MagicMock()
 
-    with stub_modules(fakes):
-        gpu_worker = load_module_fresh("gpu_worker", str(_PARAKEET_DIR / "gpu_worker.py"))
-        batch_engine = load_module_fresh("batch_engine", str(_PARAKEET_DIR / "batch_engine.py"))
-        BatchEngine = batch_engine.BatchEngine
-        GPUWorker = gpu_worker.GPUWorker
-        WorkItem = gpu_worker.WorkItem
-        WorkType = gpu_worker.WorkType
-        yield
+    parakeet_path = str(_PARAKEET_DIR)
+    sys.path.insert(0, parakeet_path)
+    try:
+        with stub_modules(fakes):
+            gpu_worker = load_module_fresh("gpu_worker", str(_PARAKEET_DIR / "gpu_worker.py"))
+            batch_engine = load_module_fresh("batch_engine", str(_PARAKEET_DIR / "batch_engine.py"))
+            BatchEngine = batch_engine.BatchEngine
+            GPUWorker = gpu_worker.GPUWorker
+            WorkItem = gpu_worker.WorkItem
+            WorkType = gpu_worker.WorkType
+            yield
+    finally:
+        sys.path.remove(parakeet_path)
 
 
 class TestFlushPendingBatch1Regression(TestCase):

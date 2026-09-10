@@ -57,7 +57,7 @@ def test_ptt_never_selects_deepgram_even_when_configured(monkeypatch):
     service, language, model = streaming.get_stt_service_for_language('en', surface=STTServingSurface.PTT)
 
     assert service == streaming.STTService.modulate
-    assert language == 'en'
+    assert language == 'multi'
     assert model == 'velma-2'
 
 

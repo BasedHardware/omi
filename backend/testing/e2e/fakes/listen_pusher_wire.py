@@ -241,6 +241,14 @@ class RejectingParakeetPeer(_LoopbackWebSocketServer):
         raise AssertionError('rejected Parakeet peer must never complete a WebSocket session')
 
 
+class RejectingModulatePeer(RejectingParakeetPeer):
+    """A handshake-rejecting loopback peer with Modulate's WebSocket scheme."""
+
+    @property
+    def api_url(self) -> str:
+        return f'ws://127.0.0.1:{self.port}'
+
+
 class ScriptedModulatePeer(_LoopbackWebSocketServer):
     """Minimal Velma-2 peer that returns one final utterance per audio frame.
 

@@ -104,10 +104,11 @@ class TestLanguageRouting(unittest.TestCase):
 
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_retired_deepgram_config_uses_non_deepgram_default(self):
+    def test_retired_deepgram_config_uses_parakeet_default(self):
         service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
-        self.assertEqual(service, STTService.modulate)
-        self.assertEqual(model, 'velma-2')
+        self.assertEqual(service, STTService.parakeet)
+        self.assertEqual(lang, 'en')
+        self.assertEqual(model, 'parakeet')
 
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
     def test_retired_deepgram_token_is_ignored_before_modulate(self):
@@ -1311,26 +1312,27 @@ class TestPassthroughSkipsRemap(unittest.TestCase):
 class TestLanguageRoutingExtended(unittest.TestCase):
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_retired_config_falls_back_to_the_capable_single_language_provider(self):
+    def test_retired_config_uses_parakeet_for_a_capable_single_language(self):
         service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=False)
-        self.assertEqual(service, STTService.modulate)
+        self.assertEqual(service, STTService.parakeet)
         self.assertEqual(lang, 'fr')
-        self.assertEqual(model, 'velma-2')
+        self.assertEqual(model, 'parakeet')
 
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_retired_config_falls_back_to_the_capable_multilingual_provider(self):
+    def test_retired_config_uses_parakeet_for_a_capable_multilingual_language(self):
         service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=True)
-        self.assertEqual(service, STTService.modulate)
+        self.assertEqual(service, STTService.parakeet)
         self.assertEqual(lang, 'multi')
-        self.assertEqual(model, 'velma-2')
+        self.assertEqual(model, 'parakeet')
 
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_empty_language_defaults_to_english_without_deepgram(self):
+    def test_empty_language_defaults_to_parakeet_english_without_deepgram(self):
         service, lang, model = get_stt_service_for_language('')
-        self.assertEqual(service, STTService.modulate)
+        self.assertEqual(service, STTService.parakeet)
         self.assertEqual(lang, 'en')
+        self.assertEqual(model, 'parakeet')
 
     @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
     def test_locale_code_en_us_routes_to_modulate(self):

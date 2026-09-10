@@ -240,6 +240,7 @@ async def test_bootstrap_records_the_selected_provider_for_fallback_comparison(m
     runtime = object.__new__(ListenSessionRuntime)
     runtime.request = ListenRequest(websocket=SimpleNamespace(), uid='select-user', stt_service='parakeet')
     runtime.use_custom_stt = False
+    runtime.is_multi_channel = False
     runtime.session_id = 'select-session'
     runtime.language = 'en'
 

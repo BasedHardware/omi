@@ -405,7 +405,7 @@ def test_backend_deploy_requires_serving_and_cloud_run_vpc_gates_before_gateway_
     )
     intent_step = workflow[
         workflow.index('- name: Determine whether this deploy requests gateway-first serving') : workflow.index(
-            '- name: Get GKE credentials for gateway serving gate'
+            '- name: Get GKE credentials for capacity and gateway gates'
         )
     ]
     assert "github.event.inputs.deploy_targets == 'all'" not in intent_step
