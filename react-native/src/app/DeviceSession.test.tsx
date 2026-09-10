@@ -20,6 +20,70 @@ test('deviceHasReportedBattery matches Flutter batteryLevel greater than zero', 
   expect(deviceHasReportedBattery(87)).toBe(true);
 });
 
+test('connected device omits serial when it duplicates Device ID', async () => {
+  const snapshot = {
+    bluetooth: 'poweredOn',
+    devices: [
+      {
+        id: 'AA:BB:CC:DD:EE:FF',
+        name: 'Omi',
+        connected: true,
+        rssi: -40,
+        information: {
+          model: 'Omi Dev Kit',
+          firmware: '1.2.3',
+          serial: 'aabbccddeeff',
+        },
+      },
+    ],
+    connectedDeviceId: 'AA:BB:CC:DD:EE:FF',
+    capture: 'idle',
+  } as PlatformNativeSnapshot;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  const duplicate = JSON.stringify(renderer.toJSON());
+  expect(duplicate).toContain('"Device ID",": ","AA:BB:CC:DD:EE:FF"');
+  expect(duplicate).not.toContain('"Serial number"');
+  await act(async () => {
+    renderer.update(
+      <DeviceSession
+        nativeSnapshot={{
+          ...snapshot,
+          devices: [
+            {
+              ...snapshot.devices[0],
+              information: {
+                model: 'Omi Dev Kit',
+                firmware: '1.2.3',
+                serial: 'SN-9911',
+              },
+            },
+          ],
+        }}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  const distinct = JSON.stringify(renderer.toJSON());
+  expect(distinct).toContain('"Serial number",": ","SN-9911"');
+  await act(async () => renderer.unmount());
+});
+
 test('connected device details show reported values and truthful unavailable fields', async () => {
   const snapshot = {
     bluetooth: 'poweredOn',

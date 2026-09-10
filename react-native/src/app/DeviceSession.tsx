@@ -13,7 +13,9 @@ import {DeviceControls} from './DeviceControls';
 import {
   accountFieldCopy,
   deviceDisplayName,
+  deviceSerialMatchesId,
   firmwareUpdateCopy,
+  visibleDisplayText,
 } from '../desktopReadClient';
 import {firmwareLatestQuery, loadOmiLatestFirmware} from '../legacyOmiFirmware';
 
@@ -423,13 +425,23 @@ export function DeviceSession({
           ['manufacturer', 'Manufacturer'],
           ['serial', 'Serial number'],
         ] as const
-      ).map(([field, label]) => (
-        <Text key={field} selectable style={styles.deviceMeta}>
-          {label}
-          {': '}
-          {accountFieldCopy(connected.information?.[field], 'Unavailable')}
-        </Text>
-      ))}
+      ).flatMap(([field, label]) => {
+        if (field === 'serial') {
+          const serial = visibleDisplayText(
+            connected.information?.serial ?? '',
+          );
+          if (serial !== '' && deviceSerialMatchesId(connected.id, serial)) {
+            return [];
+          }
+        }
+        return [
+          <Text key={field} selectable style={styles.deviceMeta}>
+            {label}
+            {': '}
+            {accountFieldCopy(connected.information?.[field], 'Unavailable')}
+          </Text>,
+        ];
+      })}
       {firmwareCopy !== null ? (
         <Text selectable style={styles.deviceMeta}>
           Latest

@@ -457,6 +457,22 @@ export function accountFieldCopy(
   return trimmed !== '' ? trimmed : unset;
 }
 
+export function deviceSerialMatchesId(
+  deviceId: string,
+  serial: string,
+): boolean {
+  const id = visibleDisplayText(deviceId);
+  const copy = visibleDisplayText(serial);
+  if (id === '' || copy === '') {
+    return false;
+  }
+  if (copy === id) {
+    return true;
+  }
+  const normalize = (value: string) => value.replace(/[:\-]/g, '').toUpperCase();
+  return normalize(copy) === normalize(id);
+}
+
 export function connectionIdentityCopy(
   identity: {displayName: string; email: string} | null,
 ): string {
