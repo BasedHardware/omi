@@ -100,8 +100,11 @@ The SDK requires the Opus audio codec library:
     omi-scan --json --timeout 3
     ```
 
-    Each result contains the device `name` and Bluetooth `address`. An empty
-    scan prints `[]`; invalid timeout values are rejected before scanning.
+    Each result contains the device `name` and its Bluetooth `id`. An empty
+    scan prints `[]`; invalid timeout values are rejected before scanning
+    (exit code 2) and a failed scan reports the error on stderr with exit
+    code 1, so `--json` stdout stays parseable. Without `--timeout`, Bleak's
+    own default scan window is used.
   </Step>
   <Step title="Write Your Code">
     ```python
@@ -169,7 +172,7 @@ The SDK requires the Opus audio codec library:
 | Command | Description |
 |---------|-------------|
 | `omi-scan` | Scan for nearby Bluetooth devices |
-| `omi-scan --json --timeout 3` | Print device names and addresses as JSON for scripts |
+| `omi-scan --json --timeout 3` | Print device names and Bluetooth ids as JSON for scripts |
 
 ---
 
