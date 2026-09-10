@@ -1,4 +1,5 @@
 # Dedicated development realtime Parakeet release.
+# The cap 10 / target 8 envelope is provisional pending sustained qualification.
 # Apply after dev_omi_parakeet_values.yaml:
 #   helm upgrade --install dev-omi-parakeet-stream ./backend/charts/parakeet \
 #     -f dev_omi_parakeet_values.yaml -f dev_omi_parakeet_stream_values.yaml
@@ -17,8 +18,10 @@ image:
   requireDigest: true
 
 capacityPlan:
-  peakConcurrentStreams: 10
+  peakConcurrentStreams: 6
   headroomPercent: 30
+  # Keep the one-replica failure reserve in the pilot; the lower qualification
+  # peak preserves the explicit two-pod warm floor at target 8.
   failureReplicas: 1
 
 replicaCount: 2
@@ -63,8 +66,8 @@ autoscaling:
   # Active streams is retained as a direct capacity signal. Demand includes
   # recent admission pressure and is the authoritative scale-up signal once
   # the cluster adapter exposes parakeet_stream_demand.
-  streamsPerPod: 20
-  streamDemandPerPod: 20
+  streamsPerPod: 8
+  streamDemandPerPod: 8
   requestsPerPod: null
   targetGPUUtilization: null
   requestLatencyP99: null

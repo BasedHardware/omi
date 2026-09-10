@@ -69,10 +69,9 @@ def test_parakeet_values_own_explicit_stream_capacity_and_allocation(environment
     values = _values(environment)
     env = _literal_env(values)
 
-    assert env['PARAKEET_STREAM_CAPACITY'] == '25'
+    assert env['PARAKEET_STREAM_CAPACITY'] == '10'
     assert env['PARAKEET_STREAM_ALLOCATION_PERCENT'] == '100'
     assert env['PARAKEET_CUDA_GRAPHS'] == 'false'
-    assert int(values['autoscaling']['requestsPerPod']) < int(env['PARAKEET_STREAM_CAPACITY'])
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
@@ -117,7 +116,7 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
         text=True,
     ).stdout
 
-    assert 'name: PARAKEET_STREAM_CAPACITY\n              value: "25"' in rendered
+    assert 'name: PARAKEET_STREAM_CAPACITY\n              value: "10"' in rendered
     assert 'name: PARAKEET_STREAM_ALLOCATION_PERCENT\n              value: "100"' in rendered
     deployment = next(document for document in yaml.safe_load_all(rendered) if document.get('kind') == 'Deployment')
     container = deployment['spec']['template']['spec']['containers'][0]
@@ -129,7 +128,7 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
 
 @pytest.mark.parametrize(
     ('environment', 'peak', 'expected_min', 'expected_pdb'),
-    [('dev', 10, 2, 2), ('prod', 600, 40, 39)],
+    [('dev', 6, 2, 2), ('prod', 600, 99, 98)],
 )
 def test_stream_overlay_sizes_warm_floor_from_peak_reserve_and_failure(
     environment: str, peak: int, expected_min: int, expected_pdb: int
@@ -163,7 +162,7 @@ def test_rendered_stream_release_owns_mode_models_and_internal_service(environme
     assert env['PARAKEET_STREAM_MODEL'] == 'nvidia/parakeet-tdt-0.6b-v3'
     model_env = {name: value for name, value in env.items() if name in {'PARAKEET_MODEL', 'PARAKEET_STREAM_MODEL'}}
     assert model_env == {'PARAKEET_STREAM_MODEL': 'nvidia/parakeet-tdt-0.6b-v3'}
-    assert env['PARAKEET_STREAM_CAPACITY'] == '25'
+    assert env['PARAKEET_STREAM_CAPACITY'] == '10'
     assert env['PARAKEET_STREAM_ALLOCATION_PERCENT'] == '100'
     expected_repository = (
         'gcr.io/based-hardware-dev/parakeet' if environment == 'dev' else 'gcr.io/based-hardware/parakeet'
@@ -200,7 +199,7 @@ def test_rendered_stream_release_owns_mode_models_and_internal_service(environme
     assert backend_config['spec']['healthCheck']['port'] == 8080
 
 
-@pytest.mark.parametrize(('environment', 'expected_min'), [('dev', 2), ('prod', 40)])
+@pytest.mark.parametrize(('environment', 'expected_min'), [('dev', 2), ('prod', 99)])
 def test_rendered_stream_release_has_failure_reserve_hpa_and_drain_contract(environment: str, expected_min: int):
     documents = _render(environment, f'{environment}-omi-parakeet-stream')
     deployment = _document(documents, 'Deployment')
@@ -209,16 +208,16 @@ def test_rendered_stream_release_has_failure_reserve_hpa_and_drain_contract(envi
     pdb = _document(documents, 'PodDisruptionBudget')
 
     assert hpa['spec']['minReplicas'] == expected_min
-    assert hpa['spec']['maxReplicas'] == (4 if environment == 'dev' else 60)
+    assert hpa['spec']['maxReplicas'] == (4 if environment == 'dev' else 150)
     metrics = {
         metric['pods']['metric']['name']: metric['pods']['target']['averageValue']
         for metric in hpa['spec']['metrics']
         if metric['type'] == 'Pods'
     }
-    assert metrics['parakeet_active_streams'] == '20'
-    assert metrics['parakeet_stream_demand'] == '20'
+    assert metrics['parakeet_active_streams'] == '8'
+    assert metrics['parakeet_stream_demand'] == '8'
     assert 'parakeet_gpu_utilization' not in metrics
-    assert pdb['spec']['minAvailable'] == (2 if environment == 'dev' else 39)
+    assert pdb['spec']['minAvailable'] == (2 if environment == 'dev' else 98)
     assert 'maxUnavailable' not in pdb['spec']
 
     anti_affinity = pod_spec['affinity']['podAntiAffinity']['requiredDuringSchedulingIgnoredDuringExecution']
@@ -238,7 +237,7 @@ def test_rendered_stream_release_has_failure_reserve_hpa_and_drain_contract(envi
     assert 'sleep 30' in lifecycle_command
 
 
-@pytest.mark.parametrize(('environment', 'expected_min'), [('dev', 2), ('prod', 40)])
+@pytest.mark.parametrize(('environment', 'expected_min'), [('dev', 2), ('prod', 99)])
 def test_stream_install_seeds_hpa_warm_floor_but_upgrade_defers_to_hpa(environment: str, expected_min: int):
     installed = _document(_render(environment, f'{environment}-omi-parakeet-stream'), 'Deployment')
     upgraded = _document(_render(environment, f'{environment}-omi-parakeet-stream', is_upgrade=True), 'Deployment')

@@ -23,6 +23,7 @@ def test_release_consumes_same_run_qualified_image_before_deploy(workflow):
     assert 'firestore_readiness' in qualification['needs']
     assert qualification['with']['source_sha'] == '${{ needs.firestore_readiness.outputs.admitted_sha }}'
     assert qualification['with']['build_source'] is True
+    assert qualification['with']['stream_capacity'] == '10'
     deployment = jobs['deploy']
     assert 'parakeet_qualification' in deployment['needs']
     steps = deployment['steps']
@@ -35,6 +36,11 @@ def test_release_consumes_same_run_qualified_image_before_deploy(workflow):
         steps[deploy]['with']['parakeet_qualification_evidence']
         == '${{ steps.parakeet-qualification-evidence.outputs.path }}'
     )
+
+
+def test_listener_release_qualifies_the_next_hard_capacity():
+    qualification = _yaml('.github/workflows/gcp_backend_listen_helm.yml')['jobs']['parakeet_qualification']
+    assert qualification['with']['stream_capacity'] == '10'
 
 
 def test_cloud_run_only_ptt_also_requires_capacity_before_runtime_render():
@@ -122,3 +128,17 @@ def test_gpu_qualification_uses_the_stream_deploy_resource_envelope():
     for environment in ('dev', 'prod'):
         deployed = _yaml(f'backend/charts/parakeet/{environment}_omi_parakeet_stream_values.yaml')['resources']
         assert tested == deployed
+        deployed_env = {
+            item['name']: item['value']
+            for item in _yaml(f'backend/charts/parakeet/{environment}_omi_parakeet_values.yaml')['env']
+            if 'value' in item
+        }
+        tested_env = {item['name']: item['value'] for item in pod['containers'][0]['env'] if 'value' in item}
+        for key in (
+            'PARAKEET_MODEL',
+            'PARAKEET_STREAM_MODEL',
+            'PARAKEET_INFERENCE_MODE',
+            'PARAKEET_MAX_SPEECH_S',
+            'PARAKEET_CUDA_GRAPHS',
+        ):
+            assert tested_env[key] == deployed_env[key], f'{environment}: qualification differs for {key}'

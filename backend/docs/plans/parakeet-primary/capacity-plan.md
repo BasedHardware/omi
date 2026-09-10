@@ -25,22 +25,22 @@ co-location only with an enforceable reservation scheduler and measured benefit.
 
 Let `c` be measured hard admissible live streams/pod while all benchmark gates pass, `q` the operating target below `c`, and `P` the peak eligible single-channel live concurrency for the approved cohort. PTT is sized separately if sharing the realtime pool; add its concurrent resource demand before using this formula.
 
-Provisional `c=25`, `q=20`. Require `q <= 0.8c` and enough measured VRAM/CPU/latency headroom. Adopt lower values if needed; higher values require a new measured capacity report. Then:
+Revised provisional `c=10`, `q=8` after the 20/25-stream trials failed latency. See [measured results](qualification-results.md). Require `q <= 0.8c` and enough measured VRAM/CPU/latency headroom. Adopt lower values if needed; higher values require a new measured capacity report. Then:
 
 `N_peak = max(2, ceil(1.30 × P / q) + 1)`
 
 The extra replica covers one pod loss; the 30% factor covers demand uncertainty. They are intentionally separate. This assumes usable load distribution: per-pod skew must pass the admission/rebalance/fallback tests. With `N` warmed replicas, cohort peak must stay at or below `(N-1)×q/1.30`. Hard admission is still per pod; aggregate spare slots do not ensure a new connection lands on one.
 
-| Illustrative eligible peak P | Warm streaming replicas at q=20 | Interpretation |
+| Illustrative eligible peak P | Warm streaming replicas at q=8 | Interpretation |
 | --- | ---: | --- |
-| 10 | 2 | Initial small pilot |
-| 40 | 4 | Pilot ceiling supports about 46 peak streams with the stated reserve |
-| 100 | 8 | Requires explicit fleet/quota increase |
-| 300 | 21 | Material fleet and cost decision |
-| 600 | 40 | Stress-sizing example, not an observed eligible workload |
+| 10 | 3 | Initial small pilot |
+| 40 | 8 | Beyond the four-pod development ceiling (about 18 peak streams) |
+| 100 | 18 | Requires explicit fleet/quota increase |
+| 300 | 50 | Material fleet and cost decision |
+| 600 | 99 | Stress-sizing example, not an observed eligible workload |
 
-The checked-in production floor is 40 and ceiling is 60. The development
-floor/ceiling is 2/4. Streaming node-pool total capacity must reach 61/5,
+The checked-in production floor is 99 and ceiling is 150. The development
+floor/ceiling is 2/4. Streaming node-pool total capacity must reach 151/5,
 respectively, to accommodate one rolling-update surge node. The 600-stream
 production value is a conservative planning envelope, not a published live
 customer measurement. Measure combined live and PTT pressure before promotion.
@@ -52,7 +52,7 @@ Before fleet purchase/activation, collect a complete 28-day, at-most-one-minute-
 
 ## Autoscaling and infrastructure changes
 
-- Streaming HPA primary: per-pod `parakeet_active_streams`, provisional target 20. Before capacity-dependent routing, require an implemented and verified offered-eligible-load/admission-rejection signal with bounded cardinality, a tested scale-up response, and explicit behavior on metric loss; these are mandatory acceptance criteria. Include this pressure as a separate bounded signal: admitted streams plateau at the cap and can hide demand. Keep GPU/VRAM and latency as guardrails; CPU alone is insufficient. Batch scales against its own queue age/active jobs and completion SLO.
+- Streaming HPA primary: per-pod `parakeet_active_streams`, provisional target 8. Before capacity-dependent routing, require an implemented and verified offered-eligible-load/admission-rejection signal with bounded cardinality, a tested scale-up response, and explicit behavior on metric loss; these are mandatory acceptance criteria. Include this pressure as a separate bounded signal: admitted streams plateau at the cap and can hide demand. Keep GPU/VRAM and latency as guardrails; CPU alone is insufficient. Batch scales against its own queue age/active jobs and completion SLO.
 - The stream overlays allow two additional pods per 60 seconds with no scale-up stabilization delay; the warm floor covers the planning peak while nodes start. Qualify that rate against measured provisioning and arrival bursts. Preserve at least 600-second scale-down stabilization and limit removal to one fully drained pod per interval.
 - Existing HPA/metric plumbing should be extended through the cluster's owning adapter contract. Verify metric values match pod gauges, invalid/missing metrics surface as unhealthy, HPA conditions are healthy and desired replicas are schedulable. Do not deploy a competing cluster-wide adapter as a shortcut.
 - Node-pool capacity must support streaming HPA maximum **plus one surge GPU**, independently of batch reservations. Check regional and per-zone L4 quota, actual stock/reservations, driver compatibility, node labels/taints, IP/CPU/RAM limits and cluster-autoscaler ceilings. Distinguish per-zone min/max settings from total fleet counts. A configured quota is not a promise of available hardware.

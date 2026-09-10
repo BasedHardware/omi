@@ -44,7 +44,7 @@ def test_deploy_qualifies_admitted_source_before_listener_mutation():
     assert qualification["needs"] == "backend_source"
     assert qualification["with"]["source_sha"] == "${{ needs.backend_source.outputs.source_sha }}"
     assert qualification["with"]["build_source"] is True
-    assert qualification["with"]["stream_capacity"] == "25"
+    assert qualification["with"]["stream_capacity"] == "10"
     assert listener["needs"] == ["backend_source", "parakeet_qualification"]
 
     names = [step.get("name") for step in _steps(listener)]

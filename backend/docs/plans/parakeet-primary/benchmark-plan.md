@@ -5,7 +5,7 @@ builds the selected source into an immutable image and runs an isolated dev GPU
 job. `backend/tests/container/test_parakeet_stream_capacity.py` qualifies the
 actual `/v3/stream` protocol at increasing concurrency and tests admission
 rejection above the configured cap. Artifacts record readiness, completion,
-latency and VRAM. A completed run and its digest must be attached to the PR;
+segment-end lag, actual time to first text, CPU quota, GPU utilization and VRAM. The workflow explicitly matches the five-second deployment utterance limit; it must not rely on the runtime default of 30 seconds. A completed run and its digest must be attached to the PR;
 source code for a benchmark is not a measured result.
 
 The stream model is pinned to Hugging Face revision

@@ -29,8 +29,8 @@ REQUIRED_IDENTITY_LABELS = {"alert_identity", "component", "impact"}
 IMPACT_TIERS = {"infrastructure", "product", "user-experience"}
 UNSAFE_ANNOTATION_MARKERS = ("{{", "}}", "$values", "traceback", "stack trace")
 PARAKEET_STREAM_CAPACITY_RULES = {
-    "omi-parakeet-stream-capacity-warning": ("warning", 15),
-    "omi-parakeet-stream-capacity-critical": ("critical", 20),
+    "omi-parakeet-stream-capacity-warning": ("warning", 6),
+    "omi-parakeet-stream-capacity-critical": ("critical", 8),
 }
 PARAKEET_STREAMS_PER_READY_REPLICA = (
     'sum(parakeet_active_streams{container="parakeet", namespace="prod-omi-backend", '
@@ -234,8 +234,8 @@ def test_parakeet_stream_capacity_alerts_link_the_matching_dashboard_and_runbook
     assert panel["targets"][0]["expr"] == PARAKEET_STREAMS_PER_READY_REPLICA
     assert panel["fieldConfig"]["defaults"]["thresholds"]["steps"] == [
         {"color": "green", "value": 0},
-        {"color": "yellow", "value": 15},
-        {"color": "red", "value": 20},
+        {"color": "yellow", "value": 6},
+        {"color": "red", "value": 8},
     ]
 
     for uid, (severity, threshold) in PARAKEET_STREAM_CAPACITY_RULES.items():

@@ -19,7 +19,7 @@ The Parakeet Helm values and `backend/deploy/runtime_env.yaml` explicitly own:
 
 | Setting | Production value | Meaning |
 | --- | --- | --- |
-| `PARAKEET_STREAM_CAPACITY` | `25` | Maximum admitted `/v3/stream` sessions in one Parakeet pod. |
+| `PARAKEET_STREAM_CAPACITY` | `10` | Maximum admitted `/v3/stream` sessions in one Parakeet pod. |
 | `PARAKEET_STREAM_ALLOCATION_PERCENT` | `100` | Percentage of new Parakeet handshakes eligible for admission. |
 
 Both settings are validated at service startup and the server fails to start
@@ -44,8 +44,8 @@ is catching up.
 
 | Alert | Threshold | Duration | Meaning |
 | --- | --- | --- | --- |
-| Warning | 15 active streams per ready replica | 5 minutes | Headroom is reduced; confirm HPA progress and pod readiness. |
-| Critical | 20 active streams per ready replica | 2 minutes | Near the configured 25-stream per-replica hard limit; act after corroborating the dashboard. |
+| Warning | 6 active streams per ready replica | 5 minutes | Headroom is reduced; confirm HPA progress and pod readiness. |
+| Critical | 8 active streams per ready replica | 2 minutes | Near the configured 10-stream per-replica hard limit; act after corroborating the dashboard. |
 
 Missing metrics do not establish health or saturation. Investigate scrape,
 adapter and readiness when the dashboard is empty. The release gate must see
@@ -73,10 +73,10 @@ latency, and queueing provide the user-path corroboration.
 ## Dedicated realtime deployment
 
 Apply the environment's stream overlay after its base Parakeet values. The
-production floor/ceiling is 40/60, and the node pool needs room for 61 GPUs
+production floor/ceiling is 99/150, and the node pool needs room for 151 GPUs
 including rolling surge; development uses 2/4 and five nodes. The deployment
 must verify actual warm replicas and metric availability before routing.
-The target of 20 streams and admission cap of 25 require exact-image GPU
+The target of 8 streams and admission cap of 10 require exact-image GPU
 qualification; desired replicas are not usable capacity.
 
 `parakeet_stream_demand` adds recent `capacity_full` admission decisions to

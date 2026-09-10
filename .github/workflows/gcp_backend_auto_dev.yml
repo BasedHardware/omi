@@ -289,7 +289,7 @@ jobs:
     with:
       source_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
       build_source: true
-      stream_capacity: '25'
+      stream_capacity: '10'
     permissions:
       contents: read
       id-token: write

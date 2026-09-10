@@ -105,7 +105,7 @@ env:
   - name: PARAKEET_MAX_SPEECH_S
     value: "5"
   - name: PARAKEET_STREAM_CAPACITY
-    value: "25"
+    value: "10"
   - name: PARAKEET_STREAM_ALLOCATION_PERCENT
     value: "100"
   - name: PARAKEET_TORCH_COMPILE

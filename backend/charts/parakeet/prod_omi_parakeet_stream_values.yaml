@@ -1,7 +1,8 @@
 # Dedicated production realtime Parakeet release.
-# Apply after prod_omi_parakeet_values.yaml. The 40-pod warm floor is the
-# conservative envelope for 600 eligible peak streams at target 20, with 30%
-# demand reserve and one lost replica: ceil(600*1.30/20)+1 = 40.
+# Apply after prod_omi_parakeet_values.yaml. The cap 10 / target 8 envelope is
+# provisional pending sustained qualification. The 99-pod warm floor is the
+# conservative envelope for 600 eligible peak streams at target 8, with 30%
+# demand reserve and one lost replica: ceil(600*1.30/8)+1 = 99.
 #
 # The load balancer IP is intentionally unset. Deployment automation must
 # reserve/read a regional internal address and pass service.loadBalancerIP; no
@@ -21,7 +22,7 @@ capacityPlan:
   headroomPercent: 30
   failureReplicas: 1
 
-replicaCount: 40
+replicaCount: 99
 
 service:
   type: LoadBalancer
@@ -43,8 +44,8 @@ ingress:
 
 autoscaling:
   enabled: true
-  minReplicas: 40
-  maxReplicas: 60
+  minReplicas: 99
+  maxReplicas: 150
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 0
@@ -63,14 +64,14 @@ autoscaling:
   # Active streams is retained as a direct capacity signal. Demand includes
   # recent admission pressure and is the authoritative scale-up signal once
   # the cluster adapter exposes parakeet_stream_demand.
-  streamsPerPod: 20
-  streamDemandPerPod: 20
+  streamsPerPod: 8
+  streamDemandPerPod: 8
   requestsPerPod: null
   targetGPUUtilization: null
   requestLatencyP99: null
 
 podDisruptionBudget:
-  minAvailable: 39
+  minAvailable: 98
 
 # Budget: curl timeout 5 + preStop wait 30 + uvicorn graceful shutdown 30 +
 # runtime drain/flush 35 + five seconds of margin.

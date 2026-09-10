@@ -8,7 +8,7 @@ Use Parakeet TDT v3 first for single-channel backend live transcription in its 2
 
 Separate realtime and batch GPU fleets. A streaming replica loads one TDT v3 instance, VAD and speaker embedding dependencies without a second batch instance, and cannot accept batch requests. Batch releases cannot accept streaming requests. The image retains a mixed mode for existing standalone installations. The dedicated stream endpoint takes precedence over the historical shared endpoint.
 
-The production streaming manifest specifies 40 warm L4 replicas and a ceiling of 60; development specifies 2–4. One GPU and one process own each pod's admission cap. The production floor covers a planning envelope of 600 concurrent eligible streams, 30% reserve and one node failure at an operating target of 20 streams per pod. The TDT checkpoint and Silero source are pinned for repeatability. The hard cap of 25 and target of 20 remain qualification assumptions until the exact image passes sustained realtime testing. These are not measured throughput results.
+The production streaming manifest specifies 99 warm L4 replicas and a ceiling of 150; development specifies 2–4. One GPU and one process own each pod's admission cap. The production floor covers a planning envelope of 600 concurrent eligible streams, 30% reserve and one node failure at an operating target of 8 streams per pod. The TDT checkpoint and Silero source are pinned for repeatability. The hard cap of 10 and target of 8 remain qualification assumptions until the exact image passes sustained realtime testing. These are not measured throughput results.
 
 ## What ships
 
@@ -32,7 +32,7 @@ Code authorities: [provider policy](../../../config/stt_provider_policy.py), [co
 - [Cost and effort](cost-and-effort.md): first-party prices, utilization sensitivity and remaining qualification work.
 - [Release and recovery](rollout-plan.md): capacity-before-routing ordering and production approval boundary.
 
-Do not claim cost savings from raw model throughput. At the researched public G2 price, 40 continuously warm GPUs cost approximately $24,926/month for compute alone. This can exceed Modulate at modest average occupancy. Review the premium alongside latency, quality and control benefits.
+Do not claim cost savings from raw model throughput. At the researched public G2 price, 99 continuously warm GPUs cost approximately $61,691/month for compute alone. This exceeds Modulate even at the proposed hard per-GPU capacity using public reference rates. The 20/25 assumption failed real load testing; the lower 8/10 prescription prioritizes the requested primary routing with explicit failure reserve. Review the premium alongside latency, quality and control benefits.
 
 ## Acceptance boundary
 

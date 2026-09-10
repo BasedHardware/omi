@@ -96,7 +96,7 @@ per GPU so the per-pod admission cap cannot multiply across workers.
 Backend live/PTT callers prefer `HOSTED_PARAKEET_STREAM_API_URL`; batch callers
 retain `HOSTED_PARAKEET_API_URL`. The dev/prod stream Helm overlays provision
 separate services and scheduling selectors; apply them after the corresponding
-base environment values. Their production warm floor is 40 and maximum is 60,
+base environment values. Their production warm floor is 99 and maximum is 150,
 subject to the [capacity qualification contract](../docs/plans/parakeet-primary/capacity-plan.md).
 Do not apply a primary routing change before the dedicated capacity is ready.
 

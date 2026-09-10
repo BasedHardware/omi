@@ -32,27 +32,20 @@ Only valid when the denominator is positive and fleet size/capacity remain valid
 
 ## Sensitivity at the actual proposed warm floor
 
-The proposed 40 `g2-standard-8` nodes at $0.853624312/node-hour cost
-$24,925.83 per 730-hour month for compute alone. The following calculation adds
+The proposed 99 `g2-standard-8` nodes at $0.853624312/node-hour cost
+$61,691.43 per 730-hour month for compute alone. The following calculation adds
 5% fallback hours at Modulate's $0.06/audio-hour list price, and compares an
 all-Modulate baseline. It excludes networking, storage, extra scaling, operations
 and duplicated retry billing, so candidate totals are lower bounds.
 
-| Average concurrent audio streams | Monthly audio hours | Modulate baseline | 40-node compute + 5% fallback |
+| Average concurrent audio streams | Monthly audio hours | Modulate baseline | 99-node compute + 5% fallback |
 | --- | ---: | ---: | ---: |
-| 50 | 36,500 | $2,190 | $25,035.33 |
-| 100 | 73,000 | $4,380 | $25,144.83 |
-| 300 | 219,000 | $13,140 | $25,582.83 |
-| 600 | 438,000 | $26,280 | $26,239.83 |
+| 50 | 36,500 | $2,190 | $61,800.93 |
+| 100 | 73,000 | $4,380 | $61,910.43 |
+| 300 | 219,000 | $13,140 | $62,348.43 |
+| 600 | 438,000 | $26,280 | $63,005.43 |
 
-At these assumptions, compute plus fallback alone reaches break-even around
-437,295 audio hours/month, or 599 average concurrent streams. That is near the
-entire planning peak envelope, before other costs. A peak is not an average:
-the last row is a utilization sensitivity, not a forecast. This initial capacity
-prescription prioritizes a warm user-serving reserve and should be reviewed as
-a likely cost premium over Modulate. A smaller floor requires measured safe
-per-GPU capacity and demand/startup evidence; do not reduce reserve just to
-produce a favorable spreadsheet.
+The algebraic compute-plus-fallback break-even is about 1,082,306 audio hours/month, or 1,483 average concurrent streams. That lies outside the capacity of a 99-node fleet capped at 10 streams per GPU, so it is not an attainable savings scenario. A peak is not an average: the last row is a utilization sensitivity, not a forecast. This prescription prioritizes the requested Parakeet-primary capacity with reserve and entails a material premium over Modulate. Do not reduce reserve or raise unqualified per-pod limits to make the economics appear favorable.
 
 ## Evidence needed for an investment decision
 
@@ -70,13 +63,13 @@ Use the [capacity prescription](capacity-plan.md) for capacity approval. Google'
 | --- | ---: | --- |
 | 2 replicas | $1,246.29 | Proposed pilot floor; existing batch capacity is additional |
 | 4 replicas | $2,492.58 | Proposed pilot ceiling; transient fifth surge node is additional |
-| 8 replicas | $4,985.17 | Illustrative 100-peak cohort sizing |
-| 21 replicas | $13,086.06 | Illustrative 300-peak cohort sizing |
-| 40 replicas | $24,925.83 | Illustrative 600-peak cohort sizing |
+| 18 replicas | $11,216.62 | Illustrative 100-peak cohort sizing |
+| 50 replicas | $31,157.29 | Illustrative 300-peak cohort sizing |
+| 99 replicas | $61,691.43 | Proposed 600-peak cohort sizing at q=8 |
 
-These are constant-fleet references, not HPA forecasts. Recompute from actual hourly replica counts and incremental batch capacity. At 20 simultaneously productive streams per node, compute alone is $0.04268/audio-hour; at 10 it is $0.08536. Modulate multilingual streaming is $0.06 before optional extras, so low occupancy can erase savings even before redundancy and operating costs. At 25 streams, the compute-only break-even occupancy against $0.06 is 56.9%; relative to a planning target of 20 it is 71.1%. Reserve replicas and idle connected audio alter effective utilization. Billable audio must be reconciled to the invoice's silence/channel rules.
+These are constant-fleet references, not HPA forecasts. Recompute from actual hourly replica counts and incremental batch capacity. At the revised eight-stream operating target, compute alone is $0.10670/audio-hour; even at the ten-stream hard cap it is $0.08536. Both exceed Modulate multilingual streaming's $0.06 before redundancy and operating costs. The old 20/25-stream savings arithmetic is invalid because those levels failed actual latency qualification. Billable audio must still be reconciled to each vendor's silence/channel rules.
 
-For a deliberately conservative example, a 600-peak/300-average workload with 40 nodes kept warm all month consumes 219,000 unique audio hours. At $0.06 the vendor baseline is $13,140; streaming compute alone is $24,925.83, already $11,785.83 higher. This does not rule out a cheaper demand-following fleet or better measured throughput; it rules out claiming savings from a raw per-GPU throughput figure. The prescribed ≥20% fully loaded savings gate must hold after failure reserve, batch separation, fallback and operations, or be replaced by an explicitly approved reliability/control premium.
+For a 600-peak/300-average scenario with 99 warm nodes, monthly unique audio is 219,000 hours. At $0.06 the vendor baseline is $13,140; streaming compute alone is $61,691.43, already $48,551.43 higher. My prescription is to retain the required capacity and expose this premium for review. Do not merge this as a cost-saving migration. If the premium is unacceptable, retain vendor-primary while improving serving efficiency or qualifying a different hardware/runtime combination; do not activate an undersized fleet. The proposed 20% savings gate is not met at these reference rates and must be replaced by an explicitly approved control/reliability tradeoff before production activation.
 
 ## Engineering effort and remaining qualification
 

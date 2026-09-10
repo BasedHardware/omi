@@ -249,7 +249,7 @@ jobs:
       # The reusable job builds an image from this exact source SHA and exposes
       # its immutable digest plus the same-run capacity artifact.
       build_source: true
-      stream_capacity: '25'
+      stream_capacity: '10'
     permissions:
       contents: read
       id-token: write

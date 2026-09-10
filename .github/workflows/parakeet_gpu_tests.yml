@@ -19,7 +19,7 @@ on:
       stream_capacity:
         description: 'Expected per-pod TDT streaming ASR capacity for the qualification gate'
         required: false
-        default: '25'
+        default: '10'
   workflow_call:
     inputs:
       image_tag:
@@ -41,7 +41,7 @@ on:
         description: 'Expected per-pod TDT streaming ASR capacity for the qualification gate'
         required: false
         type: string
-        default: '25'
+        default: '10'
     secrets:
       GCP_CREDENTIALS:
         # The jobs bind the development environment themselves. GitHub does
@@ -243,7 +243,7 @@ jobs:
           REQUESTED_STREAM_CAPACITY: ${{ inputs.stream_capacity }}
         run: |
           set -euo pipefail
-          CAPACITY="${REQUESTED_STREAM_CAPACITY:-25}"
+          CAPACITY="${REQUESTED_STREAM_CAPACITY:-10}"
           [[ "$CAPACITY" =~ ^[1-9][0-9]{0,2}$ ]] || {
             echo "stream_capacity must be a positive integer from 1 to 64" >&2
             exit 1
@@ -517,6 +517,8 @@ jobs:
                         value: "nvidia/parakeet-tdt-0.6b-v3"
                       - name: PARAKEET_INFERENCE_MODE
                         value: "nemo"
+                      - name: PARAKEET_MAX_SPEECH_S
+                        value: "5"
                       - name: NVIDIA_VISIBLE_DEVICES
                         value: "all"
                       - name: PARAKEET_STREAM_CAPACITY

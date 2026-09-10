@@ -42,10 +42,10 @@ def _plan(environment: str = "prod"):
 
 def test_capacity_plan_derives_warm_floor_and_one_surge_node():
     plan = _plan()
-    assert plan.warm_replicas == 40
-    assert plan.max_replicas == 60
-    assert plan.max_nodes == 61
-    assert plan.hard_stream_capacity == 25
+    assert plan.warm_replicas == 99
+    assert plan.max_replicas == 150
+    assert plan.max_nodes == 151
+    assert plan.hard_stream_capacity == 10
     assert plan.service_dns == "http://prod-omi-parakeet-stream.prod-omi-backend.svc.cluster.local:8080"
     assert plan.image_ref.endswith("@sha256:" + "a" * 64)
 
@@ -86,8 +86,8 @@ def test_owned_pool_requires_shape_and_ownership_without_mutation():
                 "omi.dev/managed-by": "parakeet-stream-release",
             },
         },
-        "autoscaling": {"enabled": True, "minNodeCount": 40, "maxNodeCount": 61},
-        "status": {"currentNodeCount": 40},
+        "autoscaling": {"enabled": True, "minNodeCount": 99, "maxNodeCount": 151},
+        "status": {"currentNodeCount": 99},
     }
     original = copy.deepcopy(pool)
     validate_owned_node_pool(pool, plan)
