@@ -1335,8 +1335,18 @@ actor ContextProactivityEngine {
     }
   }
 
+  /// `lastGlobalPresentationAt` defaults to reading `NotificationService.shared`,
+  /// which registers with the real `UNUserNotificationCenter` on first access
+  /// and crashes outside an app bundle (see `ProactiveListenEventTests`'s
+  /// note on the same hazard). Every production call site keeps that default
+  /// untouched; a test that only cares about the other fields (in particular
+  /// the paywall-exemption wiring below) passes `nil` explicitly instead,
+  /// which never evaluates the default expression and so never touches
+  /// `.shared`.
   @MainActor
-  static func liveDeliveryGateInput() -> ContextDeliveryGateInput {
+  static func liveDeliveryGateInput(
+    lastGlobalPresentationAt: Date? = NotificationService.shared.lastProactivePresentationAtForCurrentOwner()
+  ) -> ContextDeliveryGateInput {
     let frequencyLevel = NotificationService.currentFrequencyLevel()
     return ContextDeliveryGateInput(
       masterEnabled: NotificationService.areNotificationsEnabled(),
@@ -1354,7 +1364,7 @@ actor ContextProactivityEngine {
       dailyLimit: ContextDeliveryBudget.dailyLimit(
         frequencyLevel: frequencyLevel,
         planMultiplier: FloatingBarUsageLimiter.proactiveBudgetMultiplier()),
-      lastGlobalPresentationAt: NotificationService.shared.lastProactivePresentationAtForCurrentOwner())
+      lastGlobalPresentationAt: lastGlobalPresentationAt)
   }
 
   static var schema: [String: Any] { schema(allowLookup: false) }

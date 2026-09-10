@@ -3543,12 +3543,16 @@ class PushToTalkManager: ObservableObject {
         let timedOut = (error as? DictationPolisher.PolishError) == .timedOut
         var planGated = false
         if case GeminiClient.GeminiClientError.planGated = error { planGated = true }
+        var localProviderCloudOff = false
+        if case GeminiClient.GeminiClientError.localProviderCloudOff = error { localProviderCloudOff = true }
         log(
           "PushToTalkManager: dictation polish \(timedOut ? "timed out" : "failed") — "
             + "keeping the formatted transcript (\(error.localizedDescription))")
         DesktopDiagnosticsManager.shared.recordFallback(
           area: "voice_typing", from: "llm_polish", to: "local_format",
-          reason: timedOut ? "timeout" : (planGated ? "quota" : "other"), outcome: .degraded)
+          reason: timedOut
+            ? "timeout" : (planGated ? "quota" : (localProviderCloudOff ? "local_provider_cloud_off" : "other")),
+          outcome: .degraded)
       }
       guard isCurrent() else {
         run.abandoned = true

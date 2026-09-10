@@ -474,7 +474,7 @@ actor ProactiveLaneClient {
     // content, so it must not reach Omi's backend for either a text-only or
     // image-bearing prompt while Local is active and the user has not opted
     // cloud-assisted features on.
-    if AIProvider.isLocalProviderActive && !AIProvider.localCloudAssistEnabled {
+    if AIProvider.isLocalProviderFailingClosed {
       throw ProactiveLaneClientError.localProviderCloudOff
     }
     let currentOwner = authorizationSnapshot?.ownerID
@@ -833,7 +833,7 @@ enum ContextProactivityTelemetry {
       "jit_notification_budget", "jit_full_turn_budget", "jit_suppressed",
       "candidate_graduation", "notification_dropped", "jit_execution",
       "http_error", "invalid_structured_output", "invalid_response", "decode",
-      "network", "quota_cooldown", "plan_gated",
+      "network", "quota_cooldown", "plan_gated", "local_provider_cloud_off",
     ])
     let allowedDecisions = Set(["insight", "task_candidate", "focus_nudge", "silence"])
     await MainActor.run {

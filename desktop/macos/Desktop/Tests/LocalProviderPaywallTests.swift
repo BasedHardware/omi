@@ -54,6 +54,8 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
 @MainActor final class LocalProviderPaywallTests: XCTestCase {
   private let paywallKey = "desktop_isPaywalled"
   private let bridgeModeKey = "chatBridgeMode"
+  private let notificationFrequencyKey = "notification_frequency"
+  private let notificationMasterEnabledKey = "notifications_enabled"
 
   override func tearDown() async throws {
     UserDefaults.standard.removeObject(forKey: paywallKey)
@@ -61,6 +63,8 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
     UserDefaults.standard.removeObject(forKey: AIProvider.localBackendURLKey)
     UserDefaults.standard.removeObject(forKey: AIProvider.connectorSynthesisModeKey)
     UserDefaults.standard.removeObject(forKey: AIProvider.cloudAssistModeKey)
+    UserDefaults.standard.removeObject(forKey: notificationFrequencyKey)
+    UserDefaults.standard.removeObject(forKey: notificationMasterEnabledKey)
     for p in BYOKProvider.allCases {
       UserDefaults.standard.removeObject(forKey: p.storageKey)
     }
@@ -132,6 +136,78 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
     XCTAssertFalse(
       AppState.isScreenCaptureExemptFromPaywall,
       "cloud-assist on sends screenshots to Omi's Gemini proxy again, so this must be metered")
+  }
+
+  // MARK: - Context-director delivery gate (ContextProactivityEngine / NotificationService)
+
+  /// Regression for paywall-review.md's blocking item 6: `ContextProactivityEngine`
+  /// and `NotificationService` used to feed the raw BYOK-only `isPaywalledEffective`
+  /// flag into their delivery gate, so a stale `desktop_isPaywalled` flag could
+  /// silently swallow a notification the local model itself produced. Both now
+  /// build their gate input off `!isScreenCaptureExemptFromPaywall`. These pin
+  /// that wiring at its actual production entry points
+  /// (`ContextProactivityEngine.liveDeliveryGateInput()` and
+  /// `NotificationService.contextDirectorGateInput()`), not just the underlying
+  /// flag (already covered above), so a regression in either call site's wiring
+  /// is caught here.
+  func testContextProactivityEngineDeliveryGateExemptsLocalSessionEvenIfPaywalled() {
+    UserDefaults.standard.set(true, forKey: paywallKey)
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    UserDefaults.standard.set(
+      AIProvider.CloudAssistMode.off.rawValue, forKey: AIProvider.cloudAssistModeKey)
+    UserDefaults.standard.set(3, forKey: notificationFrequencyKey)
+    UserDefaults.standard.set(true, forKey: notificationMasterEnabledKey)
+
+    let gate = ContextProactivityEngine.liveDeliveryGateInput(lastGlobalPresentationAt: nil)
+    XCTAssertFalse(
+      gate.paywalled,
+      "a Local session with cloud-assist off must not be swallowed by a stale trial flag")
+    XCTAssertEqual(ContextDeliveryBudget.freeGate(input: gate), .allowed)
+  }
+
+  func testContextProactivityEngineDeliveryGateStaysGatedWhenCloudAssistOn() {
+    UserDefaults.standard.set(true, forKey: paywallKey)
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    UserDefaults.standard.set(
+      AIProvider.CloudAssistMode.cloud.rawValue, forKey: AIProvider.cloudAssistModeKey)
+    UserDefaults.standard.set(3, forKey: notificationFrequencyKey)
+    UserDefaults.standard.set(true, forKey: notificationMasterEnabledKey)
+
+    let gate = ContextProactivityEngine.liveDeliveryGateInput(lastGlobalPresentationAt: nil)
+    XCTAssertTrue(
+      gate.paywalled,
+      "cloud-assist on sends this content to Omi's Gemini proxy again, so it must be metered")
+    XCTAssertEqual(ContextDeliveryBudget.freeGate(input: gate), .paywalled)
+  }
+
+  func testNotificationServiceContextDirectorGateExemptsLocalSessionEvenIfPaywalled() {
+    UserDefaults.standard.set(true, forKey: paywallKey)
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    UserDefaults.standard.set(
+      AIProvider.CloudAssistMode.off.rawValue, forKey: AIProvider.cloudAssistModeKey)
+    UserDefaults.standard.set(3, forKey: notificationFrequencyKey)
+    UserDefaults.standard.set(true, forKey: notificationMasterEnabledKey)
+
+    let gate = NotificationService.contextDirectorGateInput()
+    XCTAssertFalse(
+      gate.paywalled,
+      "a Local session with cloud-assist off must not be swallowed by a stale trial flag")
+    XCTAssertEqual(ContextDeliveryBudget.freeGate(input: gate), .allowed)
+  }
+
+  func testNotificationServiceContextDirectorGateStaysGatedWhenCloudAssistOn() {
+    UserDefaults.standard.set(true, forKey: paywallKey)
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    UserDefaults.standard.set(
+      AIProvider.CloudAssistMode.cloud.rawValue, forKey: AIProvider.cloudAssistModeKey)
+    UserDefaults.standard.set(3, forKey: notificationFrequencyKey)
+    UserDefaults.standard.set(true, forKey: notificationMasterEnabledKey)
+
+    let gate = NotificationService.contextDirectorGateInput()
+    XCTAssertTrue(
+      gate.paywalled,
+      "cloud-assist on sends this content to Omi's Gemini proxy again, so it must be metered")
+    XCTAssertEqual(ContextDeliveryBudget.freeGate(input: gate), .paywalled)
   }
 
   // MARK: - Chat accounting (ChatRunAccountingPolicy)
@@ -253,6 +329,21 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
     XCTAssertEqual(AIProvider.localCloudAssistMode, .off)
   }
 
+  /// A legacy key holding a value that no longer parses as `CloudAssistMode`
+  /// (a stale enum case from a build this device never ran, or corrupted
+  /// defaults) must fail closed to `.off`, and must not persist that fallback
+  /// under the new key: persisting it would freeze out a legitimate future
+  /// migration if the legacy value were ever fixed some other way.
+  func testCloudAssistModeFallsBackToOffOnMalformedLegacyValueWithoutPersisting() {
+    UserDefaults.standard.removeObject(forKey: AIProvider.cloudAssistModeKey)
+    UserDefaults.standard.set("not-a-real-mode", forKey: AIProvider.connectorSynthesisModeKey)
+
+    XCTAssertEqual(AIProvider.localCloudAssistMode, .off)
+    XCTAssertNil(
+      UserDefaults.standard.string(forKey: AIProvider.cloudAssistModeKey),
+      "an unparseable legacy value must never be migrated into the new key")
+  }
+
   /// A never-configured legacy key (fresh install, or a user who never
   /// touched the old connector-synthesis toggle) must resolve to the new
   /// setting's own default, not fail to migrate.
@@ -370,20 +461,32 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   /// Regression: cloud-assist on must let embedding proceed to its normal
   /// network path (which will fail here for lack of a real proxy URL/auth;
   /// the point is only that it is NOT the `localProviderCloudOff` gate).
+  /// Hermetic: registers `FixedStatusURLCapture` process-wide so that if
+  /// `authHeader()` succeeds in this environment and the call actually
+  /// reaches `URLSession.shared`, it is intercepted locally rather than
+  /// dialing out to a real Omi proxy. The stub's fixed JSON body is not a
+  /// valid embedding response either way, so the call still ends in an
+  /// error: the point is only that it is never `.localProviderCloudOff`,
+  /// and never a real network request.
   func testEmbeddingServiceEmbedProceedsPastLocalGateWhenCloudAssistOn() async {
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
     UserDefaults.standard.set(
       AIProvider.CloudAssistMode.cloud.rawValue, forKey: AIProvider.cloudAssistModeKey)
+    FixedStatusURLCapture.reset(statusCode: 200)
+    URLProtocol.registerClass(FixedStatusURLCapture.self)
+    defer { URLProtocol.unregisterClass(FixedStatusURLCapture.self) }
+
     do {
       _ = try await EmbeddingService.shared.embed(text: "test")
-      // A real proxy call could conceivably succeed in some environments; either
-      // outcome is fine as long as it is not the local-provider gate below.
+      // The stub's body never parses as a valid embedding, so success here
+      // would itself be surprising, but is not what this test pins.
     } catch let error as EmbeddingService.EmbeddingError {
       if case .localProviderCloudOff = error {
         XCTFail("cloud-assist on must not hit the Local-provider gate")
       }
     } catch {
-      // Any other failure (network, auth) is expected in a unit test environment.
+      // Any other failure (auth, invalid stubbed response) is expected;
+      // it can no longer be a real network round trip.
     }
   }
 

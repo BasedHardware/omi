@@ -605,7 +605,7 @@ actor GeminiClient {
     // state: the point is that this content (screenshot or prompt text) does
     // not leave the machine unless the user explicitly opted cloud-assisted
     // features on, regardless of what plan they're on.
-    if AIProvider.isLocalProviderActive && !AIProvider.localCloudAssistEnabled {
+    if AIProvider.isLocalProviderFailingClosed {
       throw GeminiClientError.localProviderCloudOff
     }
     try requireManagedProactivity(await ManagedProactivityDecisionSource.current())

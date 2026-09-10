@@ -45,7 +45,7 @@ extension AppState {
     case "chat", "ptt":
       return AIProvider.isLocalProviderActive
     case "screen_capture":
-      return AIProvider.isLocalProviderActive && !AIProvider.localCloudAssistEnabled
+      return AIProvider.isLocalProviderFailingClosed
     case "transcription":
       return AIProvider.isLocalProviderWithSelfHostedBackend
     default:
@@ -121,7 +121,7 @@ extension AppState {
   /// true.
   nonisolated static var isScreenCaptureExemptFromPaywall: Bool {
     if !isPaywalledEffective { return true }
-    return AIProvider.isLocalProviderActive && !AIProvider.localCloudAssistEnabled
+    return AIProvider.isLocalProviderFailingClosed
   }
 
   /// Decision for the resume-on-paywall-clear hook in `fetchTrialMetadata()`.

@@ -1209,23 +1209,31 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
   }
 
+  /// Mirrors `ContextProactivityEngine.liveDeliveryGateInput()`: the same
+  /// paywall-exemption wiring, split out of `contextDirectorMayPresent` so it
+  /// is directly testable without an owner-authorization snapshot. The raw
+  /// BYOK-only `isPaywalledEffective` flag does not know about the Local
+  /// provider and would silently drop a director notification the local
+  /// model itself produced. `static` (no instance state involved) so a test
+  /// can call it without touching `NotificationService.shared`, whose lazy
+  /// init registers with the real `UNUserNotificationCenter` and crashes
+  /// outside an app bundle.
+  static func contextDirectorGateInput() -> ContextDeliveryGateInput {
+    let level = Self.currentFrequencyLevel()
+    return ContextDeliveryGateInput(
+      masterEnabled: Self.areNotificationsEnabled(),
+      frequencyLevel: level,
+      paywalled: !AppState.isScreenCaptureExemptFromPaywall,
+      cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: level)
+    )
+  }
+
   private func contextDirectorMayPresent(
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     now: Date
   ) -> Bool {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
-    let level = Self.currentFrequencyLevel()
-    let gate = ContextDeliveryGateInput(
-      masterEnabled: Self.areNotificationsEnabled(),
-      frequencyLevel: level,
-      // Mirrors `ContextProactivityEngine.liveDeliveryGateInput()`, see its
-      // comment. The raw BYOK-only `isPaywalledEffective` flag does not know
-      // about the Local provider and would silently drop a director
-      // notification the local model itself produced.
-      paywalled: !AppState.isScreenCaptureExemptFromPaywall,
-      cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: level)
-    )
-    guard ContextDeliveryBudget.freeGate(input: gate) == .allowed else { return false }
+    guard ContextDeliveryBudget.freeGate(input: Self.contextDirectorGateInput()) == .allowed else { return false }
     return isProactiveNotificationEligible(
       assistantId: "context-director",
       now: now,
