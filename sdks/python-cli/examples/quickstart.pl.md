@@ -66,8 +66,8 @@ omi auth login --browser --provider apple
 Wygeneruj klucz w panelu [app.omi.me](https://app.omi.me) w sekcji **Developer → API Keys**:
 
 ```bash
-# Zapisanie klucza w lokalnym profilu (bezpieczny monit ukrywający wpisywany tekst)
-omi auth login --api-key
+# Zapisanie w lokalnym profilu za pomocą polecenia
+omi auth login --api-key omi_dev_...
 
 # Lub ustawienie zmiennej środowiskowej (idealne dla kontenerów i potoków CI/CD)
 # Uwaga: jeśli w aktywnym profilu zapisano już klucz, najpierw wykonaj `omi auth logout`.
