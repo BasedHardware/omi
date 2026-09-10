@@ -108,13 +108,13 @@ struct AIProvider: Identifiable {
   /// suggestion, insight extraction from screen and transcripts), dictation
   /// polish, Rewind semantic-search embeddings, and web search are allowed to
   /// send content to Omi's servers and cloud models while the Local provider
-  /// is active. Only meaningful under Local — every other provider already
+  /// is active. Only meaningful under Local: every other provider already
   /// sends this content server-side regardless of this setting.
   static let cloudAssistModeKey = "localCloudAssistMode"
 
   /// Values for `cloudAssistModeKey`.
   enum CloudAssistMode: String {
-    /// Default: none of the covered features run while Local is active — no
+    /// Default: none of the covered features run while Local is active, no
     /// screenshot, transcript, note/event/email text, or search query leaves
     /// the machine for any of them.
     case off
@@ -146,7 +146,7 @@ struct AIProvider: Identifiable {
 
   /// True only when the Local provider is active *and* the user has opted
   /// cloud-assisted features on. Every feature listed on `cloudAssistModeKey`
-  /// gates its own network call on this — false under every other provider
+  /// gates its own network call on this: false under every other provider
   /// (they already send this content server-side unconditionally) and false
   /// under Local until the explicit opt-in.
   static var localCloudAssistEnabled: Bool {
@@ -211,19 +211,19 @@ struct AIProvider: Identifiable {
   /// meter Omi's cloud model should key off this, combined with the
   /// individual feature's own "does this still call Omi's cloud" check
   /// (e.g. connector synthesis, which stays gated unless the user opts into
-  /// `connectorSynthesisMode == .cloud`).
+  /// `localCloudAssistMode == .cloud`, see `localCloudAssistEnabled`).
   static var isLocalProviderActive: Bool {
     resolveBridgeMode() == .local
   }
 
   /// True when the Local provider is active AND a self-hosted backend URL
-  /// (`localBackendURLKey`, Settings' "Local Backend URL") is configured —
+  /// (`localBackendURLKey`, Settings' "Local Backend URL") is configured:
   /// the point at which voice transcription and memory/conversation sync
   /// also leave Omi's cloud proxy path (see `DesktopBackendEnvironment`).
   /// Narrower than `isLocalProviderActive`: a user who only pointed chat at
   /// Local still sends audio to Omi's Deepgram proxy until this is also true.
-  /// The owner runs Local with this deliberately unset — no self-hosted
-  /// backend — which must stay a first-class, fully-supported configuration:
+  /// The owner runs Local with this deliberately unset (no self-hosted
+  /// backend), which must stay a first-class, fully-supported configuration:
   /// chat/PTT/screen-capture exemptions key off `isLocalProviderActive`
   /// alone, and only transcription needs this narrower check.
   static var isLocalProviderWithSelfHostedBackend: Bool {

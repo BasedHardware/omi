@@ -95,13 +95,13 @@ extension PushToTalkManager {
   ///
   /// This is the monthly free-tier question-quota gate (`FloatingBarUsageLimiter`),
   /// independent of the separate trial-expired flag `isPaywalledEffective`
-  /// guards — so the exemption here is BYOK, or the Local provider being
+  /// guards, so the exemption here is BYOK, or the Local provider being
   /// active at all. The quota this gate enforces meters chat *questions*, not
   /// audio capture: a PTT turn's transcription is a separate axis (gated
   /// instead by `isTranscriptionExemptFromPaywall`/`blockIfPaywalled` at
   /// transcription start), and the chat completion it feeds always runs
   /// against the user's own server under Local regardless of whether a
-  /// self-hosted backend is configured for voice — so PTT is exempt the same
+  /// self-hosted backend is configured for voice, so PTT is exempt the same
   /// way a Local-provider chat turn is, with no additional backend-URL
   /// requirement.
   var isPushToTalkUsageLimitBlocked: Bool {

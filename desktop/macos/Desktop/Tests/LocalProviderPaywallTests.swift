@@ -106,7 +106,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
         + "(vision-subagent delegation), so it must not be paywalled")
   }
 
-  /// Regression: every other provider stays on the general paywall check —
+  /// Regression: every other provider stays on the general paywall check:
   /// this branch never claimed to serve screenshots locally.
   func testScreenCaptureStaysGatedForOmiProviderWhenPaywalled() {
     UserDefaults.standard.set(true, forKey: paywallKey)
@@ -123,7 +123,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   /// Once the user opts cloud-assisted features on, screen-capture-driven
   /// proactive features (task/memory/insight/suggestion extraction) go back
   /// to Omi's Gemini proxy, so screen capture is metered again exactly like
-  /// a cloud user — the exemption is `isLocalProviderActive` alone no longer.
+  /// a cloud user: the exemption is `isLocalProviderActive` alone no longer.
   func testScreenCaptureNotExemptWhenLocalProviderActiveButCloudAssistOn() {
     UserDefaults.standard.set(true, forKey: paywallKey)
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
@@ -155,7 +155,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   // MARK: - Push-to-talk
 
   /// This gate (`FloatingBarUsageLimiter`) is independent of the trial-expired
-  /// flag `desktop_isPaywalled` — it is left unset here, matching the actual
+  /// flag `desktop_isPaywalled`; it is left unset here, matching the actual
   /// bug: a user well within their trial can still exhaust the monthly
   /// question quota. PTT is exempt on `isLocalProviderActive` alone: the
   /// quota it enforces meters chat *questions*, and the completion a PTT turn
@@ -174,7 +174,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
 
   /// Local without a self-hosted backend still must not block PTT: the
   /// question-quota this gate enforces is orthogonal to whether voice
-  /// transcription itself is local — that is `isTranscriptionExemptFromPaywall`'s
+  /// transcription itself is local; that is `isTranscriptionExemptFromPaywall`'s
   /// job, checked separately at transcription start. A chat completion fed by
   /// PTT always runs against the user's own server under Local.
   func testPushToTalkExemptForLocalProviderWithoutSelfHostedBackend() throws {
@@ -184,7 +184,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
 
     XCTAssertFalse(
       PushToTalkManager.shared.isPushToTalkUsageLimitBlocked,
-      "the owner runs Local with no self-hosted backend URL configured at all — that must "
+      "the owner runs Local with no self-hosted backend URL configured at all, that must "
         + "be a first-class configuration, and PTT's question quota does not apply to it")
   }
 
@@ -244,7 +244,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   }
 
   /// An existing explicit Off under the legacy key must stay Off after
-  /// migration — the exact regression this key rename must not introduce.
+  /// migration: the exact regression this key rename must not introduce.
   func testCloudAssistModeMigratesExistingOffChoiceFromLegacyConnectorKey() {
     UserDefaults.standard.removeObject(forKey: AIProvider.cloudAssistModeKey)
     UserDefaults.standard.set(
@@ -268,7 +268,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   /// `GeminiClient` is the shared entry point for every proactive assistant
   /// (task/memory/insight/suggestion extraction, goals, dictation polish).
   /// Under Local with cloud-assist off, it must throw before
-  /// `ManagedProactivityDecisionSource.current()` is even consulted — that
+  /// `ManagedProactivityDecisionSource.current()` is even consulted: that
   /// call can itself issue a subscription-refresh network request, so the
   /// gate must sit strictly before it, not just before the eventual HTTP call.
   func testGeminiClientEnforceManagedProactivityThrowsLocalProviderCloudOffBeforeAnyNetworkCall() async {
@@ -306,7 +306,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
 
   /// `ProactiveLaneClient.complete()` is the context-director's own model
   /// call (task/insight/suggestion/resurface decisions from screen and
-  /// transcript content) and must fail closed unconditionally — unlike its
+  /// transcript content) and must fail closed unconditionally: unlike its
   /// pre-existing pixel-only plan gate, this applies to text-only prompts too.
   func testProactiveLaneClientCompleteThrowsLocalProviderCloudOffForTextOnlyPrompt() async {
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
@@ -368,7 +368,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   }
 
   /// Regression: cloud-assist on must let embedding proceed to its normal
-  /// network path (which will fail here for lack of a real proxy URL/auth —
+  /// network path (which will fail here for lack of a real proxy URL/auth;
   /// the point is only that it is NOT the `localProviderCloudOff` gate).
   func testEmbeddingServiceEmbedProceedsPastLocalGateWhenCloudAssistOn() async {
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
@@ -434,7 +434,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   /// backend URL left over from a prior Local session must not exempt an
   /// active Omi/cloud session just because the URL string is still
   /// persisted. `isLocalProviderWithSelfHostedBackend` always chains through
-  /// `isLocalProviderActive` first — pin that here so a future edit cannot
+  /// `isLocalProviderActive` first: pin that here so a future edit cannot
   /// drop that clause without a test failing.
   func testLocalProviderWithSelfHostedBackendFalseWhenConfiguredButOmiProviderActive() {
     UserDefaults.standard.set("piMono", forKey: bridgeModeKey)
@@ -455,7 +455,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   /// the single choke point every `.showUsageLimitPopup` poster funnels
   /// through (directly or via DesktopHomeView's notification listener).
   /// "transcription" is the reason `SystemCaptureControls.setAudioRecording`
-  /// actually posts now (not "trial_expired" — see the regression test below).
+  /// actually posts now (not "trial_expired", see the regression test below).
   func testTriggerUsageLimitPopupSuppressedForTranscriptionWhenLocalBackendConfiguredEvenWithCachedTrialExpiredFlag() {
     UserDefaults.standard.set(true, forKey: paywallKey)
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
@@ -472,7 +472,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
 
   /// Regression: "trial_expired" no longer has a Local-specific poster (both
   /// `SystemCaptureControls` gates now post their own narrower reason), and
-  /// must not get a free pass here just because Local happens to be active —
+  /// must not get a free pass here just because Local happens to be active:
   /// it names genuine Omi-account trial state, which Local does not change.
   func testTriggerUsageLimitPopupStaysForTrialExpiredReasonEvenWithLocalBackendConfigured() {
     UserDefaults.standard.set(true, forKey: paywallKey)
@@ -487,7 +487,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
       "trial_expired must not be silently exempted just because Local is active")
   }
 
-  /// "chat" and "ptt" are exempt on `isLocalProviderActive` alone — no
+  /// "chat" and "ptt" are exempt on `isLocalProviderActive` alone, no
   /// self-hosted backend required, since the completion they feed always
   /// runs against the user's own server under Local.
   func testTriggerUsageLimitPopupSuppressedForChatWhenLocalActiveWithoutBackendConfigured() {
