@@ -3856,7 +3856,6 @@ describe("ratified generation wire", () => {
       error: {
         code: "not_found",
         retryable: false,
-        action: "refresh_history",
       },
     });
     expect(response.headers.get("cache-control")).toBe("no-store");
@@ -3890,7 +3889,6 @@ describe("ratified generation wire", () => {
       error: {
         code: "not_found",
         retryable: false,
-        action: "refresh_history",
       },
     });
   });

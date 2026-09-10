@@ -681,7 +681,7 @@ export async function handleGenerationEvents(
     new Request(target, { headers: context.req.raw.headers })
   );
   if (response.status === 404)
-    return backendError("not_found", "refresh_history", 404);
+    return json({ error: { code: "not_found", retryable: false } }, 404);
   if (lastEventId === "")
     return backendError("bad_request", "edit_request", 400);
   if (response.status === 503) {
