@@ -123,6 +123,16 @@ describe("ratified /v1/chat-messages route", () => {
     db.close();
   });
 
+  test("POST admission keeps text longer than 32768 matching parseCreate", async () => {
+    const { db, local } = bootInMemory();
+    const text = "x".repeat(32_769);
+    const admitted = await post(local, payload("long-text", 1_786_352_400_001, { text }));
+
+    expect(admitted.status).toBe(201);
+    expect((await admissionBody(admitted)).message.text).toBe(text);
+    db.close();
+  });
+
   test("history GET filters one optional chatSessionId and keeps unknown keys at 400", async () => {
     expect(parseHistoryQuery(new Request(
       "https://service.example/v1/chat-messages?limit=50&chatSessionId=session-alpha",

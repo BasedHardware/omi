@@ -115,7 +115,6 @@ export function parseChatCreate(value: unknown): ChatCreate | null {
     (item["at"] as number) < 0 ||
     !Number.isFinite(new Date(item["at"] as number).getTime()) ||
     typeof item["text"] !== "string" ||
-    item["text"].length > 32_768 ||
     item["sender"] !== "human" ||
     !Number.isSafeInteger(item["journalRevision"]) ||
     (item["journalRevision"] as number) < 0 ||

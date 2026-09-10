@@ -3520,6 +3520,22 @@ describe("settings entitlement admission contract", () => {
     );
   });
 
+  test("long text uses production parseCreate instead of a 32768 envelope cap", async () => {
+    const text = "x".repeat(32_769);
+    const response = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("long-text"),
+        text,
+      }),
+    });
+    expect(response.status).toBe(201);
+    expect((await response.json()) as { message: { text: string } }).toMatchObject(
+      { message: { text } }
+    );
+  });
+
   test("omitted attachment ids and extra keys match production parseCreate", async () => {
     const { attachmentIds: _attachmentIds, ...omitted } = chatCreate(
       "omit-attachments",
@@ -3847,6 +3863,10 @@ describe("chat create wire validator", () => {
     expect(isChatCreate({ ...valid, text: "" })).toBe(true);
   });
 
+  test("accepts text longer than 32768 matching production parseCreate", () => {
+    expect(isChatCreate({ ...valid, text: "x".repeat(32_769) })).toBe(true);
+  });
+
   test("omitted attachment ids default to empty matching production parseCreate", () => {
     const { attachmentIds: _attachmentIds, ...omitted } = valid;
     expect(parseChatCreate(omitted)?.attachmentIds).toEqual([]);
@@ -3865,7 +3885,6 @@ describe("chat create wire validator", () => {
     [{ ...valid, opId: "" }],
     [{ ...valid, at: -1 }],
     [{ ...valid, at: Number.MAX_SAFE_INTEGER }],
-    [{ ...valid, text: "x".repeat(32_769) }],
     [{ ...valid, extra: true }],
     [{ ...valid, sender: "ai" }],
     [{ ...valid, journalRevision: 0.5 }],
