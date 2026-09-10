@@ -2643,6 +2643,7 @@ actor RewindDatabase {
     JITTriggerMirrorSchema.registerMigration(on: &migrator)
     KnowledgeLedgerMirrorStagingSchema.registerMigration(on: &migrator)
     Self.registerClientProcessingProjectionMigration(on: &migrator)
+    LocalEmbeddingStore.registerMigration(on: &migrator)
     try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,
