@@ -621,22 +621,28 @@ export async function handleChatHistory(
     return backendError("service_unavailable", "retry", 503, true, {
       "retry-after": "60",
     });
-  const history = await readHistory(
-    db,
-    context.get("accountId"),
-    limit,
-    olderCursor,
-    chatSessionId
-  );
-  if (history === "invalid_cursor")
-    return backendError("bad_request", "refresh_history", 400);
-  if (history === "cursor_expired")
-    return backendError("cursor_expired", "refresh_history", 410);
-  if (history === "unavailable")
+  try {
+    const history = await readHistory(
+      db,
+      context.get("accountId"),
+      limit,
+      olderCursor,
+      chatSessionId
+    );
+    if (history === "invalid_cursor")
+      return backendError("bad_request", "refresh_history", 400);
+    if (history === "cursor_expired")
+      return backendError("cursor_expired", "refresh_history", 410);
+    if (history === "unavailable")
+      return backendError("service_unavailable", "retry", 503, true, {
+        "retry-after": "60",
+      });
+    return json(history);
+  } catch {
     return backendError("service_unavailable", "retry", 503, true, {
       "retry-after": "60",
     });
-  return json(history);
+  }
 }
 
 export async function handleChatCreate(
@@ -656,51 +662,57 @@ export async function handleChatCreate(
     });
   if (body.attachmentIds.length > 0 && context.env.ATTACHMENTS === undefined)
     return backendError("service_unavailable", "none", 503);
-  const resolved = await resolveAttachmentsForAdmit(
-    db,
-    context.get("accountId"),
-    body.attachmentIds,
-    body.id
-  );
-  if (resolved.kind === "not_found")
-    return backendError("not_found", "edit_request", 404);
-  if (resolved.kind === "invalid")
-    return backendError("validation", "edit_request", 422);
-  if (resolved.kind === "rejected")
-    return backendError("attachment_rejected", "edit_request", 422);
-  const accountBackend = account(context);
-  const admission = await accountBackend.admit(
-    context.get("accountId"),
-    body,
-    context.env.STAGING_CHAT_LIMIT
-  );
-  if (admission === "conflict") {
-    return backendError("client_message_id_conflict", "edit_request", 409);
+  try {
+    const resolved = await resolveAttachmentsForAdmit(
+      db,
+      context.get("accountId"),
+      body.attachmentIds,
+      body.id
+    );
+    if (resolved.kind === "not_found")
+      return backendError("not_found", "edit_request", 404);
+    if (resolved.kind === "invalid")
+      return backendError("validation", "edit_request", 422);
+    if (resolved.kind === "rejected")
+      return backendError("attachment_rejected", "edit_request", 422);
+    const accountBackend = account(context);
+    const admission = await accountBackend.admit(
+      context.get("accountId"),
+      body,
+      context.env.STAGING_CHAT_LIMIT
+    );
+    if (admission === "conflict") {
+      return backendError("client_message_id_conflict", "edit_request", 409);
+    }
+    if (admission === "entitlement") {
+      return backendError("entitlement", "upgrade", 402);
+    }
+    if (admission === "attachment_not_found") {
+      return backendError("not_found", "edit_request", 404);
+    }
+    if (admission === "attachment_invalid") {
+      return backendError("validation", "edit_request", 422);
+    }
+    if (admission === "attachment_rejected") {
+      return backendError("attachment_rejected", "edit_request", 422);
+    }
+    console.log(
+      JSON.stringify(
+        generationAdmittedEvent({
+          requestId: context.get("requestId") || "unavailable",
+          generationId: admission.generation.id,
+        })
+      )
+    );
+    return json(
+      { message: admission.message, generation: admission.generation },
+      admission.created ? 201 : 200
+    );
+  } catch {
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "60",
+    });
   }
-  if (admission === "entitlement") {
-    return backendError("entitlement", "upgrade", 402);
-  }
-  if (admission === "attachment_not_found") {
-    return backendError("not_found", "edit_request", 404);
-  }
-  if (admission === "attachment_invalid") {
-    return backendError("validation", "edit_request", 422);
-  }
-  if (admission === "attachment_rejected") {
-    return backendError("attachment_rejected", "edit_request", 422);
-  }
-  console.log(
-    JSON.stringify(
-      generationAdmittedEvent({
-        requestId: context.get("requestId") || "unavailable",
-        generationId: admission.generation.id,
-      })
-    )
-  );
-  return json(
-    { message: admission.message, generation: admission.generation },
-    admission.created ? 201 : 200
-  );
 }
 
 export async function handleGenerationEvents(

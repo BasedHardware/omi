@@ -2745,6 +2745,42 @@ describe("worker request contract", () => {
     expect(invalidCursor.headers.get("retry-after")).toBeNull();
   });
 
+  test("history GET store throw is production chat unavailable", async () => {
+    const throwingDb = {
+      prepare() {
+        throw new Error("d1 store failed");
+      },
+    };
+    const unavailable = {
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    };
+    const storeThrow = await handleChatHistory(
+      coreContext({
+        env: { ...env, DB: throwingDb } as never,
+        request: new Request("https://worker.test/v1/chat-messages?limit=50"),
+        routePath: "/v1/chat-messages",
+        params: {},
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(storeThrow.status).toBe(503);
+    expect(storeThrow.headers.get("retry-after")).toBe("60");
+    expect((await storeThrow.json()) as unknown).toEqual(unavailable);
+
+    const throughWorker = await fetchWorker(
+      "/v1/chat-messages?limit=50",
+      { headers: authenticatedHeaders },
+      { ...env, DB: throwingDb }
+    );
+    expect(throughWorker.status).toBe(503);
+    expect(throughWorker.headers.get("retry-after")).toBe("60");
+    expect((await throughWorker.json()) as unknown).toEqual(unavailable);
+  });
+
   test("chat POST retryable 503 sends production chat retry-after", async () => {
     const missingDb = await handleChatCreate(
       coreContext({
@@ -2768,6 +2804,52 @@ describe("worker request contract", () => {
         action: "retry",
       },
     });
+  });
+
+  test("chat POST store throw is production chat unavailable", async () => {
+    const unavailable = {
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    };
+    const storeThrow = await handleChatCreate(
+      coreContext({
+        env: {
+          ...env,
+          ACCOUNTS: {
+            getByName: () => ({
+              admit: async () => {
+                throw new Error("admit store failed");
+              },
+            }),
+          },
+        } as never,
+        request: new Request("https://worker.test/v1/chat-messages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(chatCreate("store-throw")),
+        }),
+        routePath: "/v1/chat-messages",
+        params: {},
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(storeThrow.status).toBe(503);
+    expect(storeThrow.headers.get("retry-after")).toBe("60");
+    expect((await storeThrow.json()) as unknown).toEqual(unavailable);
+
+    const invalidJson = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: {
+        ...authenticatedHeaders,
+        "content-type": "application/json",
+      },
+      body: "{",
+    });
+    expect(invalidJson.status).toBe(400);
+    expect(invalidJson.headers.get("retry-after")).toBeNull();
   });
 
   test("history GET keeps unknown senders instead of labeling them human", async () => {
