@@ -77,6 +77,24 @@ test('old conversations keep wire-non-empty category and omit whitespace', async
   expect(result.items[1]).not.toHaveProperty('category');
 });
 
+test('old conversations keep GET source wire values', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'source-one',
+      source: 'screenpipe',
+    },
+    {
+      ...conversation,
+      id: 'source-two',
+      source: 'omi',
+    },
+  ]);
+  const result = await loadConversations(api);
+  expect(result.items[0]).toMatchObject({source: 'screenpipe'});
+  expect(result.items[1]).toMatchObject({source: 'omi'});
+});
+
 test('old conversations keep wire-non-empty emoji and omit whitespace', async () => {
   const {api} = backend([
     {

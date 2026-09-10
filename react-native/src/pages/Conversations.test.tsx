@@ -1345,6 +1345,87 @@ test('conversation list names GET category and omits it when discarded or empty'
   expect(textOf(renderer)).not.toContain('work');
 });
 
+test('conversation list names GET source remaps and omits ordinary sources', () => {
+  const base = {
+    kind: 'conversation' as const,
+    title: 'Morning standup',
+    summary: 'Notes',
+    searchableText: 'Morning standup\nNotes',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...base,
+                id: 'omi-screenpipe',
+                source: 'screenpipe',
+                category: 'work',
+              },
+              {
+                ...base,
+                id: 'omi-glass',
+                title: 'Glass talk',
+                source: 'openglass',
+              },
+              {
+                ...base,
+                id: 'omi-sdcard',
+                title: 'Card talk',
+                source: 'sdcard',
+                discarded: true,
+              },
+              {
+                ...base,
+                id: 'omi-rayban',
+                title: 'Ray talk',
+                source: 'rayban_meta',
+              },
+              {
+                ...base,
+                id: 'omi-phone',
+                title: 'Phone talk',
+                source: 'phone',
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Screenpipe');
+  expect(copy).toContain('OmiGlass');
+  expect(copy).toContain('SD Card');
+  expect(copy).toContain('Ray-Ban Meta');
+  expect(copy).not.toContain('Work');
+  expect(copy).not.toContain('phone');
+  expect(copy).not.toContain('omi');
+});
+
 test('conversation list names discarded GET photo counts and omits them otherwise', () => {
   const base = {
     kind: 'conversation' as const,

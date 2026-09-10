@@ -53,6 +53,8 @@ import {
   memoryBaselineCopy,
   memoryCaptureDeviceCopy,
   conversationListCategory,
+  conversationListSourceTag,
+  conversationListTag,
   parseMemoryText,
   chatClockLabel,
   clockLabel,
@@ -1422,6 +1424,39 @@ test('conversation list category names GET wire values and omits empty or discar
   expect(
     conversationListCategory({discarded: true, category: 'work'}),
   ).toBeNull();
+});
+
+test('conversation list source tags name only Flutter GET remaps', () => {
+  expect(conversationListSourceTag({source: 'screenpipe'})).toBe('Screenpipe');
+  expect(conversationListSourceTag({source: 'openglass'})).toBe('OmiGlass');
+  expect(conversationListSourceTag({source: 'sdcard'})).toBe('SD Card');
+  expect(conversationListSourceTag({source: 'rayban_meta'})).toBe(
+    'Ray-Ban Meta',
+  );
+  expect(conversationListSourceTag({source: 'omi'})).toBeNull();
+  expect(conversationListSourceTag({source: 'phone'})).toBeNull();
+  expect(conversationListSourceTag({source: ' \t\n'})).toBeNull();
+  expect(
+    conversationListTag({
+      discarded: false,
+      category: 'work',
+      source: 'screenpipe',
+    }),
+  ).toBe('Screenpipe');
+  expect(
+    conversationListTag({
+      discarded: true,
+      category: 'work',
+      source: 'screenpipe',
+    }),
+  ).toBe('Screenpipe');
+  expect(
+    conversationListTag({
+      discarded: false,
+      category: 'work',
+      source: 'omi',
+    }),
+  ).toBe('Work');
 });
 
 test('conversation day labels prefer startedAt and keep Today/Yesterday/date', () => {

@@ -10,7 +10,7 @@ import {
   conversationDisplayTitle,
   conversationHasFinishClock,
   conversationListEmoji,
-  conversationListCategory,
+  conversationListTag,
   conversationListUsesListenOverview,
   conversationRecapTitle,
   formatConversationDuration,
@@ -60,13 +60,11 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
   const captureCopy = conversationCaptureCopy(item.capturedAtMs);
   const emoji = conversationListEmoji(item);
   const photosCopy = conversationDiscardedPhotoCopy(item);
-  const category = conversationListCategory(item);
+  const tag = conversationListTag(item);
   return (
     <View style={styles.rowCopy}>
       {emoji !== null ? <Text style={styles.rowTitle}>{emoji}</Text> : null}
-      {category !== null ? (
-        <Text style={styles.rowMeta}>{category}</Text>
-      ) : null}
+      {tag !== null ? <Text style={styles.rowMeta}>{tag}</Text> : null}
       <Text numberOfLines={listenOverview ? 3 : 1} style={styles.rowTitle}>
         {listenOverview
           ? conversationRecapTitle(item)

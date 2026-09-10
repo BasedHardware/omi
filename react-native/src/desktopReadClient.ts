@@ -224,6 +224,33 @@ export function conversationListCategory(item: {
   return category.charAt(0).toUpperCase() + category.slice(1);
 }
 
+export function conversationListSourceTag(item: {
+  source?: string | null;
+}): string | null {
+  const source = visibleDisplayText(item.source ?? '');
+  if (source === 'screenpipe') {
+    return 'Screenpipe';
+  }
+  if (source === 'openglass') {
+    return 'OmiGlass';
+  }
+  if (source === 'sdcard') {
+    return 'SD Card';
+  }
+  if (source === 'rayban_meta') {
+    return 'Ray-Ban Meta';
+  }
+  return null;
+}
+
+export function conversationListTag(item: {
+  discarded: boolean;
+  category?: string | null;
+  source?: string | null;
+}): string | null {
+  return conversationListSourceTag(item) ?? conversationListCategory(item);
+}
+
 export function conversationDiscardedPhotoCopy(item: {
   discarded: boolean;
   photoCount?: number;

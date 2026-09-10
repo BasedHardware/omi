@@ -642,6 +642,40 @@ test('library conversation rows name GET category and omit discarded or empty va
   expect(textOf(hidden)).not.toContain('Work');
 });
 
+test('library conversation rows name GET source remaps and omit ordinary sources', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'omi-screenpipe',
+    title: 'Morning standup',
+    summary: 'Notes',
+    searchableText: 'Morning standup\nNotes',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'screenpipe',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+    category: 'work',
+  };
+  let shown!: ReactTestRenderer.ReactTestRenderer;
+  let ordinary!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    shown = ReactTestRenderer.create(<ConversationRow item={item} />);
+    ordinary = ReactTestRenderer.create(
+      <ConversationRow item={{...item, source: 'omi', category: undefined}} />,
+    );
+  });
+  expect(textOf(shown)).toContain('Screenpipe');
+  expect(textOf(shown)).not.toContain('Work');
+  expect(textOf(ordinary)).not.toContain('Screenpipe');
+  expect(textOf(ordinary)).not.toContain('omi');
+});
+
 test('library conversation rows name discarded GET photo counts', () => {
   const item: ConversationProjection = {
     kind: 'conversation',
