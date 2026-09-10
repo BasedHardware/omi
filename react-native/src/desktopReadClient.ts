@@ -1724,24 +1724,41 @@ export type TaskProjection = {
   exportCopy?: string;
 };
 
-export type TaskGroup = 'Today' | 'Tomorrow' | 'Later' | 'Overdue';
+export type TaskGroup =
+  | 'Today'
+  | 'Tomorrow'
+  | 'Later'
+  | 'No Deadline'
+  | 'Overdue';
 
 export function taskGroup(
   dueAt: number | null,
   nowMilliseconds: number,
+  createdAt: number | null = null,
 ): TaskGroup {
-  if (dueAt === null || !Number.isFinite(dueAt) || dueAt <= 0) {
+  if (dueAt !== null && Number.isFinite(dueAt) && dueAt > 0) {
+    const today = Math.floor(nowMilliseconds / 86400000);
+    const dueDay = Math.floor(epochMilliseconds(dueAt) / 86400000);
+    if (dueDay < today) {
+      return 'Overdue';
+    }
+    if (dueDay === today) {
+      return 'Today';
+    }
+    return dueDay === today + 1 ? 'Tomorrow' : 'Later';
+  }
+  if (dueAt !== null) {
     return 'Later';
   }
-  const today = Math.floor(nowMilliseconds / 86400000);
-  const dueDay = Math.floor(epochMilliseconds(dueAt) / 86400000);
-  if (dueDay < today) {
+  if (
+    createdAt !== null &&
+    Number.isFinite(createdAt) &&
+    createdAt > 0 &&
+    epochMilliseconds(createdAt) < nowMilliseconds - 7 * 86400000
+  ) {
     return 'Overdue';
   }
-  if (dueDay === today) {
-    return 'Today';
-  }
-  return dueDay === today + 1 ? 'Tomorrow' : 'Later';
+  return 'No Deadline';
 }
 
 export type DesktopReadProjection =

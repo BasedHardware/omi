@@ -2638,7 +2638,7 @@ test('groups task epochs by deterministic UTC day boundaries', () => {
   expect(taskGroup(Date.UTC(2026, 7, 13, 0, 0), now)).toBe('Overdue');
   expect(taskGroup(Date.UTC(2026, 7, 15, 0, 0), now)).toBe('Tomorrow');
   expect(taskGroup(Date.UTC(2026, 7, 16, 0, 0), now)).toBe('Later');
-  expect(taskGroup(null, now)).toBe('Later');
+  expect(taskGroup(null, now)).toBe('No Deadline');
 });
 
 test('groups past-due task epochs as Overdue matching Flutter tasksOverdue', () => {
@@ -2646,6 +2646,15 @@ test('groups past-due task epochs as Overdue matching Flutter tasksOverdue', () 
   expect(taskGroup(Date.UTC(2026, 7, 13, 23, 59), now)).toBe('Overdue');
   expect(taskGroup(Date.UTC(2026, 7, 14, 0, 0), now)).toBe('Today');
   expect(taskGroup(0, now)).toBe('Later');
+});
+
+test('groups undated GET due_at as No Deadline matching Flutter tasksNoDeadline', () => {
+  const now = Date.UTC(2026, 7, 14, 12, 0);
+  expect(taskGroup(null, now, now)).toBe('No Deadline');
+  expect(taskGroup(null, now, now - 7 * 86400000)).toBe('No Deadline');
+  expect(taskGroup(null, now, now - 7 * 86400000 - 1)).toBe('Overdue');
+  expect(taskGroup(null, now, null)).toBe('No Deadline');
+  expect(taskGroup(0, now, now - 8 * 86400000)).toBe('Later');
 });
 
 test('groups second-scale task dues on the same UTC day as millisecond dues', () => {

@@ -30,7 +30,13 @@ import {
 import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 
-const taskGroups: TaskGroup[] = ['Today', 'Tomorrow', 'Later', 'Overdue'];
+const taskGroups: TaskGroup[] = [
+  'Today',
+  'Tomorrow',
+  'Later',
+  'No Deadline',
+  'Overdue',
+];
 
 export function TasksPage({
   outcome,
@@ -78,7 +84,9 @@ export function TasksPage({
     () =>
       taskGroups.map(label => ({
         label,
-        tasks: filtered.filter(task => taskGroup(task.dueAt, nowMs) === label),
+        tasks: filtered.filter(
+          task => taskGroup(task.dueAt, nowMs, task.createdAt) === label,
+        ),
       })),
     [filtered, nowMs],
   );

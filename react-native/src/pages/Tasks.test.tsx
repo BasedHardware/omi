@@ -768,3 +768,34 @@ test('tasks page names past-due GET due_at as Overdue matching Flutter tasksOver
   expect(copy).not.toContain('Today');
   act(() => renderer.unmount());
 });
+
+test('tasks page names undated GET due_at as No Deadline matching Flutter tasksNoDeadline', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...task,
+                id: 'task-undated',
+                dueAt: null,
+                createdAt: Date.now(),
+              },
+            ],
+            page: outcome.value.page,
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  const copy = taskPageText(renderer);
+  expect(copy).toContain('No Deadline');
+  expect(copy).toContain('Prepare demo');
+  expect(copy).not.toContain('Later');
+  expect(copy).not.toContain('Overdue');
+  act(() => renderer.unmount());
+});
