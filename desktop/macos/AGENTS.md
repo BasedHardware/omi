@@ -230,6 +230,11 @@ do not hand-edit those paths to match a specific machine.
 - OCR-bearing rows sync independently from embeddings. Embeddings are an optional later projection and must never gate capture, OCR, or text delivery.
 - Firestore screen-activity timestamps use the lexicographically sortable UTC form `yyyy-MM-dd HH:mm:ss.SSS`. The backend normalizes ISO-8601 input before storage.
 
+### Local embeddings
+
+- Kill switches: `OMI_DISABLE_LOCAL_EMBEDDINGS=1` / UserDefaults `disableLocalEmbeddings` keeps Gemini screen search. `OMI_FORCE_LOCAL_EMBEDDING_ENGINE=<id>` pins an engine; unknown ids and a failed Apple `NLContextualEmbedding` probe stay keyword-only (never Gemini for a free account). See `LocalInference/ARCHITECTURE.md`.
+- Headless synthetic retrieval metrics: `./scripts/omi-ctl action local_embedding_benchmark` on a non-production bundle. Reports are labeled `synthetic`. Unit proof: `xcrun swift test --package-path Desktop --filter LocalEmbeddingBenchmarkTests`.
+
 ### Feature-flag authority
 
 Bundle vs PostHog vs `runtime_env` is catalogued in [`backend/docs/feature-flag-registry.md`](../../backend/docs/feature-flag-registry.md). Editing that file does not turn a feature on. Do not target Beta vs stable via PostHog person `update_channel`.
