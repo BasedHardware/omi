@@ -176,6 +176,111 @@ def test_the_rebuild_task_stamps_its_id_and_never_overwrites_a_later_rebuilds_st
     assert current == {"status": "running", "rebuild_id": "second"}
 
 
+class _StatusDocumentStore:
+    """The single rebuild-status document as the production fence navigates it."""
+
+    def __init__(self) -> None:
+        self.payload: Dict[str, Any] = {}
+
+    def collection(self, _name: str) -> "_StatusDocumentStore":
+        return self
+
+    def document(self, _name: str) -> "_StatusDocumentStore":
+        return self
+
+    def get(self) -> Any:
+        store = self
+
+        class _Snapshot:
+            exists = bool(store.payload)
+
+            @staticmethod
+            def to_dict() -> Dict[str, Any]:
+                return dict(store.payload)
+
+        return _Snapshot()
+
+    def set(self, data: Dict[str, Any]) -> None:
+        self.payload = dict(data)
+
+
+def _fenced_rebuild_task(monkeypatch) -> _StatusDocumentStore:
+    """The rebuild task wired to the production fence over an in-memory document."""
+    store = _StatusDocumentStore()
+    monkeypatch.setattr(kg_router, "get_firestore_client", lambda: store)
+    monkeypatch.setattr(
+        kg_router, "collect_brain_map_sources", lambda uid, **_kw: SimpleNamespace(payloads=[], counts={})
+    )
+    monkeypatch.setattr(
+        kg_router, "_run_rebuild_knowledge_graph", lambda uid, payloads, user_name: {"nodes": [], "edges": []}
+    )
+    return store
+
+
+def test_a_second_rebuild_reports_its_own_completion_after_the_first_finished(monkeypatch):
+    # The first rebuild completed and its id owns the status document. The next
+    # rebuild must take the document over when it starts: a client waits for the
+    # id of the rebuild *it* started, so a rebuild that cannot claim the
+    # document reports failure to its client no matter how well it ran.
+    store = _fenced_rebuild_task(monkeypatch)
+
+    kg_router._rebuild_graph_task(UID, "Ada", "first")
+    assert store.payload["status"] == "complete"
+    assert store.payload["rebuild_id"] == "first"
+
+    kg_router._rebuild_graph_task(UID, "Ada", "second")
+    assert store.payload["status"] == "complete"
+    assert store.payload["rebuild_id"] == "second"
+
+
+def test_a_new_rebuild_claims_the_status_document_and_finishes_are_fenced(monkeypatch):
+    # The production fence: a rebuild starting always claims the document —
+    # whatever is there is from an earlier rebuild, and a rebuild wedged in
+    # `running` by a crash must not lock every later rebuild out of reporting.
+    # A finish only lands while the document still belongs to that rebuild, so
+    # an earlier rebuild finishing cannot turn a later one's `running` into its
+    # own `complete`.
+    store = _StatusDocumentStore()
+
+    def write(status: str, rebuild_id: str) -> bool:
+        return kg_db.write_knowledge_graph_rebuild_status(
+            UID, {"status": status, "rebuild_id": rebuild_id}, db_client=store, only_for_rebuild_id=rebuild_id
+        )
+
+    assert write("running", "first")
+    assert store.payload["rebuild_id"] == "first"
+
+    # A later rebuild starts while the first is still running: it takes over.
+    assert write("running", "second")
+    assert store.payload["rebuild_id"] == "second"
+
+    # The earlier rebuild finishing must not overwrite the later one's running.
+    assert not write("complete", "first")
+    assert store.payload["status"] == "running"
+    assert store.payload["rebuild_id"] == "second"
+
+    # The later rebuild finishing lands.
+    assert write("complete", "second")
+    assert store.payload["status"] == "complete"
+    assert store.payload["rebuild_id"] == "second"
+
+
+def test_a_new_rebuild_claims_the_status_document_even_when_it_says_complete(monkeypatch):
+    # The sequential case: the document holds a finished rebuild. The next
+    # rebuild's claim must still land — that document describes a rebuild that
+    # is over, not one a client is still waiting on.
+    store = _StatusDocumentStore()
+    assert kg_db.write_knowledge_graph_rebuild_status(
+        UID, {"status": "complete", "rebuild_id": "first"}, db_client=store, only_for_rebuild_id="first"
+    )
+
+    assert kg_db.write_knowledge_graph_rebuild_status(
+        UID, {"status": "running", "rebuild_id": "second"}, db_client=store, only_for_rebuild_id="second"
+    )
+    assert store.payload["status"] == "running"
+    assert store.payload["rebuild_id"] == "second"
+
+
 def test_a_status_store_failure_neither_fails_the_rebuild_nor_the_graph_read(client, monkeypatch, fallbacks):
     # The status document is how a client waits; it is never a reason to lose
     # the rebuild that already ran, nor to fail a read of the graph itself.

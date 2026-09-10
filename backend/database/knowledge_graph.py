@@ -721,11 +721,15 @@ def write_knowledge_graph_rebuild_status(
 ) -> bool:
     """Record where a Brain Map rebuild is, so a client can wait for the one it asked for.
 
-    Every status carries the ``rebuild_id`` of the rebuild that wrote it. With
-    ``only_for_rebuild_id`` the write is skipped, and ``False`` returned, when
-    the document already belongs to a different rebuild: two rebuilds can run
-    at once (the limit is two an hour), and the earlier one finishing must not
-    overwrite the later one's ``running`` with its own ``complete``.
+    Every status carries the ``rebuild_id`` of the rebuild that wrote it. A
+    rebuild starting always claims the document: whatever is there belongs to an
+    earlier rebuild, and the latest rebuild is the one clients wait on. The
+    claim also self-heals a rebuild that crashed leaving ``running`` behind —
+    fenced claims would lock every later rebuild out of reporting. A finish,
+    though, is only written while the document still belongs to that rebuild
+    (pass ``only_for_rebuild_id``): two rebuilds can run at once (the limit is
+    two an hour), and the earlier one finishing must not overwrite the later
+    one's ``running`` with its own ``complete``.
     """
     client = _firestore_client(db_client)
     ref = (
@@ -734,7 +738,7 @@ def write_knowledge_graph_rebuild_status(
         .collection(knowledge_graph_meta_collection)
         .document(KNOWLEDGE_GRAPH_REBUILD_STATUS_DOCUMENT)
     )
-    if only_for_rebuild_id is not None:
+    if only_for_rebuild_id is not None and status.get('status') != 'running':
         snapshot = ref.get()
         current = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
         current_id = current.get('rebuild_id') if isinstance(current, dict) else None
