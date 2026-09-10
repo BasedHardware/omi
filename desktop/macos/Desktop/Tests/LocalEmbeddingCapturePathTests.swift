@@ -8,27 +8,23 @@ private final class HangingEmbeddingEngine: LocalEmbeddingService, @unchecked Se
   let modelID = "hang-v1"
   let dimension = 8
   let capabilities = LocalEmbeddingCapabilities(assetsAvailable: true, requiresAppleSilicon: false, maxBatchSize: 8)
-  private let lock = NSLock()
-  private var continuations: [CheckedContinuation<Void, Never>] = []
+  private let parked = OSAllocatedUnfairLock(initialState: [CheckedContinuation<Void, Never>]())
   private(set) var completed = 0
 
   func embed(_ texts: [String], task: LocalEmbeddingTask) async throws -> [[Float]] {
     await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-      lock.lock()
-      continuations.append(continuation)
-      lock.unlock()
+      parked.withLock { $0.append(continuation) }
     }
-    lock.lock()
     completed += 1
-    lock.unlock()
     return try await HashEmbeddingEngine().embed(texts, task: task)
   }
 
   func resumeAll() {
-    lock.lock()
-    let pending = continuations
-    continuations.removeAll()
-    lock.unlock()
+    let pending = parked.withLock { parked -> [CheckedContinuation<Void, Never>] in
+      let pending = parked
+      parked.removeAll()
+      return pending
+    }
     pending.forEach { $0.resume() }
   }
 }
