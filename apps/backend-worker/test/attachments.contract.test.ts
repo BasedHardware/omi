@@ -828,6 +828,18 @@ describe("attachment staging route fail-closed behavior", () => {
       "image/webp"
     );
   });
+
+  test("capabilities mime types match production CHAT_ALLOWED_ATTACHMENT_MIME_TYPES order", () => {
+    expect(CHAT_CAPABILITIES.allowedAttachmentMimeTypes).toEqual([
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+      "application/pdf",
+      "text/plain",
+      "text/markdown",
+    ]);
+  });
 });
 
 describe("presigned R2 upload contract seam", () => {

@@ -18,8 +18,8 @@ export const CHAT_CAPABILITIES: ChatCapabilitiesWire = {
   maxAttachmentsPerMessage: 4,
   maxAttachmentBytes: 52_428_800,
   allowedAttachmentMimeTypes: [
-    "image/png",
     "image/jpeg",
+    "image/png",
     "image/gif",
     "image/webp",
     "application/pdf",
