@@ -15,6 +15,57 @@ export const ATTACHMENT_CAPABILITIES = {
 
 export type AttachmentCapabilities = typeof ATTACHMENT_CAPABILITIES;
 
+const SNIFFED_ATTACHMENT_MIME_TYPES = new Set(["image/gif", "image/webp"]);
+const SNIFF_PREFIX_BYTES = 16;
+
+function begins(bytes: Uint8Array, magic: readonly number[]): boolean {
+  if (bytes.byteLength < magic.length) return false;
+  return magic.every((value, index) => bytes[index] === value);
+}
+
+function asciiAt(bytes: Uint8Array, offset: number, ascii: string): boolean {
+  if (offset + ascii.length > bytes.byteLength) return false;
+  for (let index = 0; index < ascii.length; index += 1) {
+    if (bytes[offset + index] !== ascii.charCodeAt(index)) return false;
+  }
+  return true;
+}
+
+export function sniffChatAttachmentBinaryMimeType(
+  bytes: Uint8Array
+): string | null {
+  if (begins(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg";
+  if (begins(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
+    return "image/png";
+  }
+  if (asciiAt(bytes, 0, "GIF87a") || asciiAt(bytes, 0, "GIF89a")) {
+    return "image/gif";
+  }
+  if (
+    asciiAt(bytes, 0, "RIFF") &&
+    asciiAt(bytes, 8, "WEBP") &&
+    ["VP8 ", "VP8L", "VP8X"].some((chunk) => asciiAt(bytes, 12, chunk))
+  ) {
+    return "image/webp";
+  }
+  if (asciiAt(bytes, 0, "%PDF-")) return "application/pdf";
+  return null;
+}
+
+async function declaredMimeMatchesObject(
+  r2: R2Bucket,
+  r2Key: string,
+  mimeType: string
+): Promise<boolean> {
+  if (!SNIFFED_ATTACHMENT_MIME_TYPES.has(mimeType)) return true;
+  const object = await r2.get(r2Key, {
+    range: { offset: 0, length: SNIFF_PREFIX_BYTES },
+  });
+  if (object === null) return false;
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  return sniffChatAttachmentBinaryMimeType(bytes) === mimeType;
+}
+
 export type AttachmentStageRequest = {
   opId: string;
   displayName: string;
@@ -657,6 +708,17 @@ export async function completeAttachment(
     );
     return { kind: "mismatch" };
   }
+  if (!(await declaredMimeMatchesObject(r2, row.r2_key, row.media_type))) {
+    await markAttachmentState(
+      db,
+      row.id,
+      accountId,
+      "invalid",
+      now,
+      INGESTIBLE_STATES
+    );
+    return { kind: "mismatch" };
+  }
 
   const marked = await markAttachmentState(
     db,
@@ -735,6 +797,17 @@ export async function consumeAttachmentIngest(
     return { kind: "invalid" };
   }
   if (probe.size !== row.size_bytes || probe.contentType !== row.media_type) {
+    await markAttachmentState(
+      db,
+      row.id,
+      row.account_id,
+      "invalid",
+      now,
+      INGESTIBLE_STATES
+    );
+    return { kind: "invalid" };
+  }
+  if (!(await declaredMimeMatchesObject(r2, row.r2_key, row.media_type))) {
     await markAttachmentState(
       db,
       row.id,

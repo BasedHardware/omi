@@ -9,6 +9,7 @@ import {
   parseAttachmentStageRequest,
   parseSignedUploadConfig,
   resolveAttachmentsForAdmit,
+  sniffChatAttachmentBinaryMimeType,
   stageAttachment,
   type AttachmentIngestMessage,
 } from "../src/attachments";
@@ -37,6 +38,18 @@ const validStageRequest = (opId: string) => ({
   sizeBytes: 1024,
 });
 
+function gifBytes(size = 32): Uint8Array {
+  const bytes = new Uint8Array(size);
+  bytes.set(new TextEncoder().encode("GIF89a"));
+  return bytes;
+}
+
+function jpegBytes(size = 32): Uint8Array {
+  const bytes = new Uint8Array(size);
+  bytes.set([0xff, 0xd8, 0xff]);
+  return bytes;
+}
+
 const sentMessages: unknown[] = [];
 let d1Mock: D1Database;
 let r2Mock: ReturnType<typeof createR2Mock>;
@@ -44,17 +57,28 @@ let r2Mock: ReturnType<typeof createR2Mock>;
 type R2MockObject = {
   size: number;
   contentType: string | undefined;
+  body?: Uint8Array;
 };
 
 function createR2Mock(): R2Bucket & {
   objects: Map<string, R2MockObject>;
-  putObject(key: string, size: number, contentType: string | undefined): void;
+  putObject(
+    key: string,
+    size: number,
+    contentType: string | undefined,
+    body?: Uint8Array
+  ): void;
 } {
   const objects = new Map<string, R2MockObject>();
   const bucket = {
     objects,
-    putObject(key: string, size: number, contentType: string | undefined) {
-      objects.set(key, { size, contentType });
+    putObject(
+      key: string,
+      size: number,
+      contentType: string | undefined,
+      body?: Uint8Array
+    ) {
+      objects.set(key, { size, contentType, body });
     },
     async head(key: string) {
       const obj = objects.get(key);
@@ -65,8 +89,22 @@ function createR2Mock(): R2Bucket & {
         httpMetadata: { contentType: obj.contentType },
       } as never;
     },
-    async get() {
-      throw new Error("R2 get not supported in mock");
+    async get(
+      key: string,
+      options?: { range?: { offset: number; length: number } }
+    ) {
+      const obj = objects.get(key);
+      if (obj === undefined) return null;
+      if (obj.body === undefined) {
+        throw new Error("R2 get not supported in mock");
+      }
+      const offset = options?.range?.offset ?? 0;
+      const length = options?.range?.length ?? obj.body.byteLength;
+      const copy = obj.body.slice(offset, offset + length);
+      return {
+        arrayBuffer: async () =>
+          copy.buffer.slice(copy.byteOffset, copy.byteOffset + copy.byteLength),
+      } as never;
     },
     async put() {
       throw new Error("R2 put not supported in mock");
@@ -146,6 +184,32 @@ describe("attachment staging request validator", () => {
     expect(
       parseAttachmentStageRequest(validStageRequest("op-1"))
     ).not.toBeNull();
+  });
+
+  test("accepts production gif and webp mime types", () => {
+    expect(
+      parseAttachmentStageRequest({
+        ...validStageRequest("op-gif"),
+        mimeType: "image/gif",
+      })
+    ).not.toBeNull();
+    expect(
+      parseAttachmentStageRequest({
+        ...validStageRequest("op-webp"),
+        mimeType: "image/webp",
+      })
+    ).not.toBeNull();
+  });
+
+  test("sniffs GIF and WEBP magics without using declared metadata", () => {
+    expect(sniffChatAttachmentBinaryMimeType(gifBytes())).toBe("image/gif");
+    const webp = new Uint8Array(16);
+    webp.set(new TextEncoder().encode("RIFF"), 0);
+    webp.set(new TextEncoder().encode("WEBP"), 8);
+    webp.set(new TextEncoder().encode("VP8X"), 12);
+    expect(sniffChatAttachmentBinaryMimeType(webp)).toBe("image/webp");
+    expect(sniffChatAttachmentBinaryMimeType(jpegBytes())).toBe("image/jpeg");
+    expect(sniffChatAttachmentBinaryMimeType(new Uint8Array(16))).toBeNull();
   });
 
   test.each([
@@ -644,6 +708,10 @@ describe("attachment staging route fail-closed behavior", () => {
     expect(CHAT_CAPABILITIES.allowedAttachmentMimeTypes).toContain(
       "text/plain"
     );
+    expect(CHAT_CAPABILITIES.allowedAttachmentMimeTypes).toContain("image/gif");
+    expect(CHAT_CAPABILITIES.allowedAttachmentMimeTypes).toContain(
+      "image/webp"
+    );
   });
 });
 
@@ -1023,6 +1091,74 @@ describe("attachment completion + queue ingest vertical slice", () => {
       .first<{ state: string; account_id: string }>();
     expect(row!.account_id).toBe("other-account");
     expect(row!.state).toBe("staged");
+  });
+
+  test("gif complete and ingest require GIF magic instead of declared mime only", async () => {
+    const bytes = gifBytes(32);
+    const staged = await stageAndReturn("op-gif-magic", "image/gif", 32);
+    r2Mock.putObject(staged.upload.key, 32, "image/gif", bytes);
+    const complete = await completeAttachment(
+      d1Mock,
+      r2Mock,
+      env.ATTACHMENT_INGEST,
+      "test-account",
+      staged.attachment.id,
+      Date.now()
+    );
+    expect(complete.kind).toBe("accepted");
+    const ingested = await consumeAttachmentIngest(
+      d1Mock,
+      r2Mock,
+      {
+        attachmentId: staged.attachment.id,
+        accountId: "test-account",
+        r2Key: staged.upload.key,
+        mimeType: "image/gif",
+      },
+      Date.now()
+    );
+    expect(ingested.kind).toBe("ingested");
+    expect(await attachmentState(staged.attachment.id)).toBe("ingested");
+  });
+
+  test("gif complete rejects JPEG bytes staged as image/gif", async () => {
+    const bytes = jpegBytes(32);
+    const staged = await stageAndReturn("op-gif-spoof", "image/gif", 32);
+    r2Mock.putObject(staged.upload.key, 32, "image/gif", bytes);
+    const complete = await completeAttachment(
+      d1Mock,
+      r2Mock,
+      env.ATTACHMENT_INGEST,
+      "test-account",
+      staged.attachment.id,
+      Date.now()
+    );
+    expect(complete.kind).toBe("mismatch");
+    expect(await attachmentState(staged.attachment.id)).toBe("invalid");
+    expect(sentMessages).toHaveLength(0);
+  });
+
+  test("webp ingest rejects GIF bytes staged as image/webp", async () => {
+    const bytes = gifBytes(32);
+    const staged = await stageAndReturn("op-webp-spoof", "image/webp", 32);
+    r2Mock.putObject(staged.upload.key, 32, "image/webp", bytes);
+    await d1Mock
+      .prepare("UPDATE chat_attachments SET state = ? WHERE id = ?")
+      .bind("uploaded", staged.attachment.id)
+      .run();
+    const ingested = await consumeAttachmentIngest(
+      d1Mock,
+      r2Mock,
+      {
+        attachmentId: staged.attachment.id,
+        accountId: "test-account",
+        r2Key: staged.upload.key,
+        mimeType: "image/webp",
+      },
+      Date.now()
+    );
+    expect(ingested.kind).toBe("invalid");
+    expect(await attachmentState(staged.attachment.id)).toBe("invalid");
   });
 });
 

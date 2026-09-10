@@ -20,6 +20,8 @@ export const CHAT_CAPABILITIES: ChatCapabilitiesWire = {
   allowedAttachmentMimeTypes: [
     "image/png",
     "image/jpeg",
+    "image/gif",
+    "image/webp",
     "application/pdf",
     "text/plain",
     "text/markdown",
