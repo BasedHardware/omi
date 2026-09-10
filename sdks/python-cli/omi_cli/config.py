@@ -163,6 +163,23 @@ class Config:
         if self.active_profile == name:
             self.active_profile = DEFAULT_PROFILE_NAME
 
+    def rename_profile(self, old_name: str, new_name: str) -> None:
+        """Rename an existing profile, updating active_profile if needed."""
+        if not new_name or not new_name.strip():
+            raise ValueError("New profile name cannot be blank")
+        clean_new = new_name.strip()
+        if old_name not in self.profiles:
+            raise KeyError(f"No such profile: '{old_name}'")
+        if clean_new == old_name:
+            return
+        if clean_new in self.profiles:
+            raise ValueError(f"Profile '{clean_new}' already exists")
+        profile = self.profiles.pop(old_name)
+        profile.name = clean_new
+        self.profiles[clean_new] = profile
+        if self.active_profile == old_name:
+            self.active_profile = clean_new
+
     def list_profiles(self) -> list[str]:
         return sorted(self.profiles.keys())
 
