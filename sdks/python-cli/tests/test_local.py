@@ -103,6 +103,22 @@ def test_local_call_accepts_args_json(config_path: Path, cli_runner) -> None:
     assert json.loads(result.stdout) == {"ok": True}
 
 
+@pytest.mark.parametrize("json_mode", [False, True])
+def test_local_call_preserves_fields_from_later_result_rows(config_path: Path, cli_runner, json_mode: bool) -> None:
+    _configure_local_profile(config_path)
+    rows = [{"id": "first"}, {"id": "second", "detail": "later-value"}]
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(rows)))
+        result = cli_runner.invoke(app, (["--json"] if json_mode else []) + ["local", "call", "test_tool"])
+
+    assert result.exit_code == 0, result.output
+    if json_mode:
+        assert json.loads(result.stdout) == rows
+    else:
+        assert "detail" in result.stdout
+        assert "later-value" in result.stdout
+
+
 def test_local_call_exits_nonzero_when_api_reports_error(config_path: Path, cli_runner) -> None:
     _configure_local_profile(config_path)
     with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:

@@ -155,6 +155,57 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             with self.subTest(job=job_id, timeout_minutes=timeout_minutes):
                 self.assertIn(f"timeout-minutes: {timeout_minutes}", self.jobs[job_id])
 
+    def test_ci_batch_ceiling_leaves_fallback_headroom(self):
+        """The batch watchdog budget must not crowd out the bisect fallback.
+
+        The scaled batch budget grows linearly with the batch size (per-suite
+        budget + per-extra-suite allowance). At CI's batch size the uncapped
+        budget approaches the job's 60-minute ceiling, so a wedged batch
+        would be killed by the job timeout before its isolation fallback
+        could run. CI must set an independent aggregate ceiling that keeps
+        the worst single-batch watchdog cost well under the job budget.
+        """
+        job = self.jobs["desktop-swift-verify"]
+        self.assertIn('OMI_SWIFT_TEST_SUITE_BATCH_SIZE: "100"', job)
+        match = re.search(
+            r'OMI_SWIFT_TEST_BATCH_CEILING_SECONDS: "(\d+)"', job
+        )
+        if match is None:
+            self.fail(
+                "desktop-swift-verify must set OMI_SWIFT_TEST_BATCH_CEILING_SECONDS "
+                "alongside its batch size"
+            )
+        ceiling = int(match.group(1))
+        timeout_minutes = MACOS_JOB_TIMEOUT_MINUTES["desktop-swift-verify"]
+        timeout_seconds = timeout_minutes * 60
+        # 300s per-suite budget + 30s per additional suite at batch 100.
+        scaled_budget = 300 + 99 * 30
+        self.assertGreater(
+            scaled_budget,
+            timeout_seconds // 2,
+            "this guard lost its premise: the scaled batch budget no longer "
+            "threatens the job ceiling at this batch size",
+        )
+        self.assertGreater(
+            ceiling,
+            0,
+            "a zero ceiling disables the cap and restores the uncapped "
+            "scaled budget as the worst case",
+        )
+        self.assertLess(
+            ceiling,
+            scaled_budget,
+            f"ceiling {ceiling}s never bites: the scaled budget is already "
+            f"{scaled_budget}s",
+        )
+        self.assertLessEqual(
+            ceiling,
+            timeout_seconds // 2,
+            f"ceiling {ceiling}s exceeds half the {timeout_seconds}s job "
+            f"budget; a wedged batch must die with at least half the job "
+            f"left for its bisect fallback",
+        )
+
     def test_no_closed_pull_request_runs_exist(self):
         """No closure run can publish a skipped check onto the merge SHA."""
         workflow = _workflow_text()
@@ -409,14 +460,17 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         saved empty suppressed every later save (run 34295159347). The restore
         must cover the tests lane, an explicit warm-up step builds whatever the
         restore missed BEFORE any consumer runs, and the save immediately
-        follows the warm-up under a fresh -v2 key.
+        follows the warm-up under a fresh -v3 key carrying only the built
+        binaries (the v2 full-tree archives lost eviction races against the
+        lingering 5.3 GB release .build entries and kept re-paying the
+        from-source rebuild).
         """
         job = self.jobs["desktop-swift-verify"]
         self.assertIn(
             "(needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true')",
             job,
         )
-        self.assertIn("desktop-swift-tools-v2-", job)
+        self.assertIn("desktop-swift-tools-v3-", job)
         restore_index = job.index("Restore Swift formatter and linter tools")
         warm_index = job.index("Warm pinned formatter and linter tools")
         save_index = job.index("Save Swift formatter and linter tools after warm-up")
@@ -433,7 +487,10 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         so a PR that edits a deferred suite's own test file still executes it.
         """
         verify_job = self.jobs["desktop-swift-verify"]
-        self.assertIn("OMI_SWIFT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}", verify_job)
+        # The lane comes from the changes job's effective-lane output so the
+        # runner and the step budget share one re-baseline decision.
+        self.assertIn("OMI_SWIFT_TEST_LANE: ${{ needs.changes.outputs.swift_test_effective_lane }}", verify_job)
+        self.assertIn("swift_test_effective_lane", self.jobs["changes"])
         self.assertIn("OMI_SWIFT_TEST_CHANGED_FILES: ${{ needs.changes.outputs.desktop_swift_changed_files }}", verify_job)
         # The serial/solo clusters cost one ~30s invocation per member for
         # sub-second tests, sequentially (24 invocations / 12.9 min measured
@@ -444,6 +501,38 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         # must wake the debug test lane.
         self.assertTrue(resolve_impact(["desktop/macos/scripts/swift-test-slow-suites.json"]).includes("desktop-swift-tests"))
         self.assertTrue(resolve_impact(["desktop/macos/scripts/swift-test-skip-ratchet.py"]).includes("desktop-swift-tests"))
+
+    def test_duration_regression_guards_are_enforced(self):
+        """Desktop Swift CI once drifted silently to 27-42 min suite steps.
+
+        Duration must fail the run, not just appear in logs: the suite and
+        launcher steps carry wall-clock budgets that hard-fail when exceeded,
+        and the PR lane ratchets slow suites so the fast lane cannot silently
+        grow a slow tail. Budgets are generous against every measured
+        legitimate shape (fast lane 15m42s at batch 50, full lane 17m46s at
+        batch 100, serial-woken auth PRs ~24m) and sit far below the
+        regression; they move only through this file's review.
+        """
+        verify_job = self.jobs["desktop-swift-verify"]
+        # Lane-aware through the same effective-lane output: the PR fast
+        # lane carries the tight budget; the full lane legitimately spans
+        # ~28-40m (measured 37m07s on run 34363659680) and carries 2700s
+        # against the 50m+ drift class. Keying on the event type alone made
+        # a re-baselined PR run the full suite against the PR number and
+        # false-red at 2013s vs 1800s (run 34369508858).
+        self.assertIn(
+            "OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ needs.changes.outputs.swift_test_effective_lane == 'pr' && '1800' || '2700' }}",
+            verify_job,
+        )
+        self.assertIn('OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS: "60"', verify_job)
+        self.assertIn('OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS: "360"', verify_job)
+        self.assertIn("swift suite step wall: ${elapsed}s", verify_job)
+        self.assertIn("launcher step wall: ${elapsed}s", verify_job)
+        self.assertIn("over its ${OMI_SWIFT_TEST_STEP_BUDGET_SECONDS}s regression budget", verify_job)
+        self.assertIn("over its ${OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS}s regression budget", verify_job)
+        suite_runner = _suite_runner_text()
+        self.assertIn("FAILED slow-suite ratchet", suite_runner)
+        self.assertIn("SLOW_RATCHET_SECONDS", suite_runner)
 
     def test_changed_file_forwarding_covers_the_deferral_infrastructure(self):
         """The runner can only wake/re-baseline on files CI actually forwards.

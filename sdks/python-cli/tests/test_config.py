@@ -380,3 +380,38 @@ def test_is_authenticated_states() -> None:
     p.id_token = None
     p.refresh_token = "refr..."
     assert p.is_authenticated()
+
+
+# -- Regression tests for non-table profile containers (PR #13349) --
+
+
+def test_profiles_string_value(config_path: Path) -> None:
+    """profiles = 'mistake' should report load error, not crash."""
+    config_path.write_text('profiles = "mistake"\n', encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert "profiles" in config.load_error.lower()
+
+
+def test_profiles_nested_string(config_path: Path) -> None:
+    """[profiles] default = 'mistake' should report load error."""
+    config_path.write_text('[profiles]\ndefault = "mistake"\n', encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert "default" in config.load_error
+
+
+def test_valid_profiles_still_work(config_path: Path) -> None:
+    """Valid profiles should load normally."""
+    config_path.write_text('[profiles.default]\napi_base = "https://api.example.com"\n', encoding="utf-8")
+    config = cfg.load()
+    assert not config.was_load_error
+    assert "default" in config.profiles
+
+
+def test_no_profiles_section(config_path: Path) -> None:
+    """Missing profiles section should load normally."""
+    config_path.write_text('active_profile = "other"\n', encoding="utf-8")
+    config = cfg.load()
+    assert not config.was_load_error
+    assert config.active_profile == "other"
