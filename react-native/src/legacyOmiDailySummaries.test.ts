@@ -12,18 +12,32 @@ test('parses GET daily summary headlines and omits empty headlines', () => {
           id: 'sum-1',
           date: '2026-09-09',
           headline: 'Met with the team',
+          day_emoji: '🎯',
+          stats: {total_conversations: 3, action_items_count: 2},
         },
         {
           id: 'sum-empty',
           date: '2026-09-08',
           headline: ' \t',
         },
-        {id: 'sum-2', headline: 'Shipped the recap'},
+        {
+          id: 'sum-2',
+          headline: 'Shipped the recap',
+          day_emoji: ' \t',
+          stats: {total_conversations: 0, action_items_count: 0},
+        },
       ],
     }),
   );
   expect(rows).toEqual([
-    {id: 'sum-1', date: '2026-09-09', headline: 'Met with the team'},
+    {
+      id: 'sum-1',
+      date: '2026-09-09',
+      headline: 'Met with the team',
+      dayEmoji: '🎯',
+      conversations: 3,
+      actionItems: 2,
+    },
     {id: 'sum-2', date: '', headline: 'Shipped the recap'},
   ]);
 });
@@ -39,8 +53,11 @@ test('fails closed for malformed GET daily summaries', () => {
     parseOmiDailySummaries(
       JSON.stringify({
         summaries: [
-          {id: 'sum-1', headline: 'One'},
-          {id: 'sum-1', headline: 'Dup'},
+          {
+            id: 'sum-1',
+            headline: 'One',
+            stats: {total_conversations: '3'},
+          },
         ],
       }),
     ),

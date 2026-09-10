@@ -1357,6 +1357,8 @@ test('Settings names GET daily summaries without regenerate or a write sheet', a
               id: 'sum-1',
               date: '2026-09-09',
               headline: 'Met with the team',
+              day_emoji: '🎯',
+              stats: {total_conversations: 3, action_items_count: 2},
             },
             {id: 'sum-empty', date: '2026-09-08', headline: ' \t'},
           ],
@@ -1369,7 +1371,11 @@ test('Settings names GET daily summaries without regenerate or a write sheet', a
   const tree = textOf(renderer);
   expect(tree).toContain('Daily summary');
   expect(tree).toContain('Met with the team');
+  expect(tree).toContain('🎯');
+  expect(tree).toContain('3 conversations');
+  expect(tree).toContain('2 action items');
   expect(tree).not.toContain('Your Day in Review');
+  expect(tree).not.toContain('📅');
   expect(tree).not.toContain('sum-1');
   expect(tree).not.toContain('Regenerate');
   expect(tree).not.toContain('Delivery time');

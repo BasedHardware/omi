@@ -619,8 +619,26 @@ export function dailySummaryDateCopy(
   } ${day}`;
 }
 
+function dailySummaryCountCopy(
+  count: number | undefined,
+  singular: string,
+  plural: string,
+): string {
+  if (typeof count !== 'number' || !Number.isInteger(count) || count <= 0) {
+    return '';
+  }
+  return count === 1 ? `1 ${singular}` : `${count} ${plural}`;
+}
+
 export function dailySummaryCopy(
-  rows: readonly {id: string; date: string; headline: string}[],
+  rows: readonly {
+    id: string;
+    date: string;
+    headline: string;
+    dayEmoji?: string;
+    conversations?: number;
+    actionItems?: number;
+  }[],
   now: Date = new Date(),
 ): {title: string; copy: string}[] {
   return rows.flatMap(row => {
@@ -629,10 +647,18 @@ export function dailySummaryCopy(
       return [];
     }
     const date = dailySummaryDateCopy(row.date, now);
+    const dated = date === '' ? headline : `${date} · ${headline}`;
+    const counts = [
+      dailySummaryCountCopy(row.conversations, 'conversation', 'conversations'),
+      dailySummaryCountCopy(row.actionItems, 'action item', 'action items'),
+    ].filter(copy => copy !== '');
+    const withCounts =
+      counts.length === 0 ? dated : `${dated} · ${counts.join(' · ')}`;
+    const emoji = visibleDisplayText(row.dayEmoji ?? '');
     return [
       {
         title: 'Daily summary',
-        copy: date === '' ? headline : `${date} · ${headline}`,
+        copy: emoji === '' ? withCounts : `${emoji} ${withCounts}`,
       },
     ];
   });

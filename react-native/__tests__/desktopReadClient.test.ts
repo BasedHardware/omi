@@ -970,12 +970,24 @@ test('daily summary copy names GET headlines without inventing Your Day in Revie
         {id: 'sum-1', date: '2026-09-10', headline: 'Met with the team'},
         {id: 'sum-2', date: '', headline: 'Shipped the recap'},
         {id: 'sum-empty', date: '2026-09-08', headline: ' \t'},
+        {
+          id: 'sum-stats',
+          date: '2026-09-10',
+          headline: 'Shipped the recap',
+          dayEmoji: '🎯',
+          conversations: 3,
+          actionItems: 1,
+        },
       ],
       now,
     ),
   ).toEqual([
     {title: 'Daily summary', copy: 'Today · Met with the team'},
     {title: 'Daily summary', copy: 'Shipped the recap'},
+    {
+      title: 'Daily summary',
+      copy: '🎯 Today · Shipped the recap · 3 conversations · 1 action item',
+    },
   ]);
 });
 

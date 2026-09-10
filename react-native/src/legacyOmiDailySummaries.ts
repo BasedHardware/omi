@@ -34,7 +34,36 @@ export type OmiDailySummary = {
   id: string;
   date: string;
   headline: string;
+  dayEmoji?: string;
+  conversations?: number;
+  actionItems?: number;
 };
+
+function optionalCount(value: unknown): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new DailySummaryError();
+  }
+  return value === 0 ? undefined : value;
+}
+
+function summaryStats(value: unknown): {
+  conversations?: number;
+  actionItems?: number;
+} {
+  if (value === undefined || value === null) {
+    return {};
+  }
+  const stats = object(value);
+  const conversations = optionalCount(stats.total_conversations);
+  const actionItems = optionalCount(stats.action_items_count);
+  return {
+    ...(conversations === undefined ? {} : {conversations}),
+    ...(actionItems === undefined ? {} : {actionItems}),
+  };
+}
 
 export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
   const row = object(JSON.parse(body));
@@ -65,7 +94,18 @@ export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
       summary.date === undefined || summary.date === null
         ? ''
         : visibleDisplayText(text(summary.date, 32));
-    items.push({id, date, headline});
+    const dayEmoji =
+      summary.day_emoji === undefined || summary.day_emoji === null
+        ? ''
+        : visibleDisplayText(text(summary.day_emoji, 32));
+    const stats = summaryStats(summary.stats);
+    items.push({
+      id,
+      date,
+      headline,
+      ...(dayEmoji === '' ? {} : {dayEmoji}),
+      ...stats,
+    });
   }
   return items;
 }
