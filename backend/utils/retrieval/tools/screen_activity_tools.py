@@ -434,10 +434,24 @@ def _keyword_fallback(
         return None, 0
 
 
+def _parse_csv_tokens(raw: Optional[str]) -> List[str]:
+    """Fail-closed CSV env parsing: whitespace-only and empty tokens are ignored."""
+    if raw is None:
+        return []
+    return [part.strip() for part in raw.split(',') if part.strip()]
+
+
+def _env_flag_enabled(name: str, *, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().casefold() not in {'0', 'false', 'off'}
+
+
 def _screen_vectors_disabled(uid: str) -> bool:
     """Server-owned account opt-out; absent configuration preserves existing accounts."""
-    disabled = {value.strip() for value in os.getenv('SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS', '').split(',')}
-    return uid in disabled or '*' in disabled
+    tokens = _parse_csv_tokens(os.getenv('SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS'))
+    return uid in tokens or '*' in tokens
 
 
 @tool
@@ -495,11 +509,7 @@ def search_screen_activity_tool(
         except ValueError:
             pass
 
-    fallback_enabled = os.getenv('SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED', 'true').strip().lower() not in {
-        '0',
-        'false',
-        'off',
-    }
+    fallback_enabled = _env_flag_enabled('SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED', default=True)
     reason = None
     matches = []
     if _screen_vectors_disabled(uid):
