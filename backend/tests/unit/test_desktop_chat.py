@@ -1925,6 +1925,101 @@ async def test_server_metering_fails_closed_and_byok_bypasses(monkeypatch):
     await desktop_chat._meter_server_request('user')
 
 
+def _desktop_chat_unavailable_events(stdout: str) -> list[dict]:
+    events = []
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(payload, dict) and payload.get('event') == 'desktop_chat_unavailable':
+            events.append(payload)
+    return events
+
+
+@pytest.mark.asyncio
+async def test_desktop_chat_503_logs_coded_reason_without_live_redis(monkeypatch, capsys):
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_chat, 'run_blocking', run_blocking)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
+    monkeypatch.setattr(
+        desktop_chat.redis_db,
+        'check_rate_limit',
+        lambda *_: (_ for _ in ()).throw(RuntimeError('redis down')),
+    )
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat._meter_server_request('user', request_id='req-metering')
+    assert error.value.status_code == 503
+    events = _desktop_chat_unavailable_events(capsys.readouterr().out)
+    assert events == [
+        {
+            'event': 'desktop_chat_unavailable',
+            'message': 'desktop_chat_unavailable',
+            'reason': 'metering_unavailable',
+            'request_id': 'req-metering',
+            'severity': 'WARNING',
+        }
+    ]
+    serialized = json.dumps(events)
+    assert 'redis' not in serialized.lower()
+    assert 'user' not in serialized
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_jit_503_logs_coded_reason(monkeypatch, capsys):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: False)
+    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat.chat_completions(
+            {'messages': [{'role': 'user', 'content': 'hello'}]},
+            uid='user-1',
+            x_app_platform=None,
+            x_omi_chat_contract_version=None,
+            x_omi_request_id='req-jit',
+            x_omi_jit_contract_version='jit-cloud-qa-v1',
+            x_omi_jit_run_id='jit-direct-run',
+            x_omi_jit_max_attempts='3',
+            x_omi_jit_max_output_tokens='2048',
+            x_omi_jit_max_input_tokens='32768',
+            x_omi_jit_max_spend_micro_usd='50000',
+        )
+
+    assert error.value.status_code == 503
+    events = _desktop_chat_unavailable_events(capsys.readouterr().out)
+    assert [(event['reason'], event['request_id']) for event in events] == [('jit_requires_gateway', 'req-jit')]
+
+
+@pytest.mark.asyncio
+async def test_nonstream_circuit_open_logs_coded_503(monkeypatch, capsys):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
+    monkeypatch.setattr(desktop_chat.gateway_circuit, 'allow_request', lambda: False)
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat.chat_completions(
+            {'messages': [{'role': 'user', 'content': 'hello'}]},
+            uid='user-1',
+            x_app_platform=None,
+            x_omi_chat_contract_version=None,
+            x_omi_request_id='req-circuit',
+        )
+
+    assert error.value.status_code == 503
+    events = _desktop_chat_unavailable_events(capsys.readouterr().out)
+    assert [(event['reason'], event['request_id']) for event in events] == [('circuit_open', 'req-circuit')]
+
+
 @pytest.mark.asyncio
 async def test_server_metering_rejects_exhausted_user(monkeypatch):
     async def run_blocking(_, function, *args):
