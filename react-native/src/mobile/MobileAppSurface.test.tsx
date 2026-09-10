@@ -1359,3 +1359,77 @@ test('compact Tasks tab names GET exported platforms and Home previews omit them
   expect(home).toContain('Call Sam');
   expect(home).not.toContain('Exported to Todoist');
 });
+
+test('compact Tasks tab names GET goals without add or a write sheet', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/goals/all') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'goal-read',
+            title: 'Read 20 books',
+            current_value: 3,
+            target_value: 10,
+          },
+          {id: 'goal-empty', title: ' \t', current_value: 1, target_value: 2},
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <MobileAppSurface
+        {...buildProps({
+          activeRoute: 'tasks',
+          backend: {request} as never,
+        })}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Goals');
+  expect(tree).toContain('Read 20 books');
+  expect(tree).toContain('3/10');
+  expect(tree).toContain('Prepare product demo');
+  expect(tree).not.toContain('goal-read');
+  expect(tree).not.toContain('No goals');
+  expect(tree).not.toContain('🎯');
+  expect(tree).not.toContain('Add');
+  expect(request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/goals/all',
+  });
+  expect(request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
+    false,
+  );
+  expect(request.mock.calls.some(call => call[0].path === '/v1/goals')).toBe(
+    false,
+  );
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    home = ReactTestRenderer.create(
+      <MobileAppSurface
+        {...buildProps({
+          backend: {request} as never,
+        })}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const homeTree = renderedText(home);
+  expect(homeTree).toContain('Prepare product demo');
+  expect(homeTree).not.toContain('Goals');
+  expect(homeTree).not.toContain('Read 20 books');
+  expect(homeTree).not.toContain('3/10');
+  act(() => renderer.unmount());
+  act(() => home.unmount());
+});

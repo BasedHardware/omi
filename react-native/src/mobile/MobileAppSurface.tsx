@@ -1,5 +1,5 @@
 import {FocusPressable as Pressable} from '../ui/Pressable';
-import React, {memo, useCallback, useMemo, useState} from 'react';
+import React, {memo, useCallback, useEffect, useMemo, useState} from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -36,6 +36,8 @@ import {
   mobileSpace,
   mobileType,
 } from './mobileTokens';
+import {goalProgressCopy, loadOmiGoals, type OmiGoal} from '../legacyOmiGoals';
+import type {OmiBackend} from '../omiNativeTypes';
 
 export type MobileProjectionStatus =
   | 'ready'
@@ -119,6 +121,7 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   onViewRecaps: () => void;
   onOpenRecap?: (id: string) => void;
   onExpandMindMap: () => void;
+  backend?: OmiBackend | null;
 };
 
 type DashboardRow =
@@ -427,9 +430,32 @@ export function MobileAppSurface({
   mindMapErrorCopy,
   mindMapCoverageCopy,
   onRefresh,
+  backend = null,
 }: MobileAppSurfaceProps): React.JSX.Element {
   const sendDisabled = askUnavailable || visibleDisplayText(askValue) === '';
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [goals, setGoals] = useState<OmiGoal[]>([]);
+  useEffect(() => {
+    if (backend === undefined || backend === null) {
+      setGoals([]);
+      return;
+    }
+    let cancelled = false;
+    loadOmiGoals(backend)
+      .then(rows => {
+        if (!cancelled) {
+          setGoals(rows);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGoals([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [backend]);
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
   const taskFeedback = useMemo(
     () => (
@@ -723,6 +749,21 @@ export function MobileAppSurface({
                 ListHeaderComponent={
                   <>
                     {taskFeedback}
+                    {goals.length > 0 ? (
+                      <View>
+                        <Text style={styles.sectionTitle}>Goals</Text>
+                        {goals.map(goal => (
+                          <View key={goal.id}>
+                            <Text numberOfLines={1} style={styles.taskText}>
+                              {goal.title}
+                            </Text>
+                            <Text style={styles.taskDue}>
+                              {goalProgressCopy(goal.current, goal.target)}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
                     {tasks.length > 0 && taskCoverageCopy ? (
                       <Text style={styles.stateText}>{taskCoverageCopy}</Text>
                     ) : null}

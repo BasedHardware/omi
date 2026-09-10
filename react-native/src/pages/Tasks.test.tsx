@@ -317,7 +317,12 @@ test('task rows keep GET indent instead of a flat list', () => {
           value: {
             ...outcome.value,
             items: [
-              {...task, id: 'task-parent', title: 'Parent task', indentLevel: 0},
+              {
+                ...task,
+                id: 'task-parent',
+                title: 'Parent task',
+                indentLevel: 0,
+              },
               {
                 ...task,
                 id: 'task-child',
@@ -336,9 +341,11 @@ test('task rows keep GET indent instead of a flat list', () => {
   expect(nested.length).toBeGreaterThan(0);
   expect(
     renderer.root.findAll(node =>
-      [node.props.style].flat(Infinity).some(
-        (entry: {paddingLeft?: number} | null) => entry?.paddingLeft === 70,
-      ),
+      [node.props.style]
+        .flat(Infinity)
+        .some(
+          (entry: {paddingLeft?: number} | null) => entry?.paddingLeft === 70,
+        ),
     ).length,
   ).toBeGreaterThan(0);
   act(() => renderer.unmount());
@@ -797,5 +804,89 @@ test('tasks page names undated GET due_at as No Deadline matching Flutter tasksN
   expect(copy).toContain('Prepare demo');
   expect(copy).not.toContain('Later');
   expect(copy).not.toContain('Overdue');
+  act(() => renderer.unmount());
+});
+
+test('tasks page names GET goals without add or a write sheet', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/goals/all') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'goal-read',
+            title: 'Read 20 books',
+            current_value: 3,
+            target_value: 10,
+          },
+          {id: 'goal-empty', title: ' \t', current_value: 1, target_value: 2},
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        backend={{request} as never}
+        outcome={outcome}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = taskPageText(renderer);
+  expect(tree).toContain('Goals');
+  expect(tree).toContain('Read 20 books');
+  expect(tree).toContain('3/10');
+  expect(tree).toContain('Prepare demo');
+  expect(tree).not.toContain('goal-read');
+  expect(tree).not.toContain('No goals');
+  expect(tree).not.toContain('🎯');
+  expect(tree).not.toContain('Add');
+  expect(request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/goals/all',
+  });
+  expect(request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
+    false,
+  );
+  expect(request.mock.calls.some(call => call[0].path === '/v1/goals')).toBe(
+    false,
+  );
+  act(() => renderer.unmount());
+});
+
+test('tasks page omits GET goals on failure rather than inventing No goals', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/goals/all') {
+      return {id: request.id, status: 404, body: null};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {items: [], page: outcome.value.page},
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = taskPageText(renderer);
+  expect(tree).toContain('No tasks yet.');
+  expect(tree).not.toContain('Goals');
+  expect(tree).not.toContain('No goals');
   act(() => renderer.unmount());
 });

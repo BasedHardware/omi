@@ -1,4 +1,4 @@
-import React, {useMemo, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -29,6 +29,8 @@ import {
 } from '../ui/TaskEditor';
 import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
+import {goalProgressCopy, loadOmiGoals, type OmiGoal} from '../legacyOmiGoals';
+import type {OmiBackend} from '../omiNativeTypes';
 
 const taskGroups: TaskGroup[] = [
   'Today',
@@ -51,15 +53,18 @@ export function TasksPage({
   writesAvailable,
   taskNotice = null,
   onRefresh,
+  backend = null,
 }: TaskMutationProps & {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
   taskPagination?: React.ReactNode;
   taskNotice?: string | null;
   onRefresh?: () => void;
+  backend?: OmiBackend | null;
 }) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [goals, setGoals] = useState<OmiGoal[]>([]);
   const nowMs = useRef(Date.now()).current;
   const tasks = useMemo(
     () =>
@@ -92,6 +97,27 @@ export function TasksPage({
   );
   const error = outcome?.status === 'error' ? outcome.error : null;
   const filtering = visibleDisplayText(query) !== '';
+  useEffect(() => {
+    if (backend === undefined || backend === null) {
+      setGoals([]);
+      return;
+    }
+    let cancelled = false;
+    loadOmiGoals(backend)
+      .then(rows => {
+        if (!cancelled) {
+          setGoals(rows);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGoals([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [backend, loading]);
   return (
     <View style={styles.tasksPage}>
       <Text
@@ -119,6 +145,21 @@ export function TasksPage({
         onDismissTaskMutation={onDismissTaskMutation}
         busyTaskId={busyTaskId}
       />
+      {goals.length > 0 ? (
+        <View>
+          <Text style={styles.projectionEmptyTitle}>Goals</Text>
+          {goals.map(goal => (
+            <View key={goal.id}>
+              <Text numberOfLines={1} style={styles.resultTitle}>
+                {goal.title}
+              </Text>
+              <Text style={styles.conversationRowTime}>
+                {goalProgressCopy(goal.current, goal.target)}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
       {onRefresh && error !== desktopBackendUnavailableCopy && (
         <FocusPressable
           accessibilityRole="button"

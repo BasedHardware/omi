@@ -1310,6 +1310,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             ? 'error'
             : projectionStatus
         }
+        backend={omiBackend}
       />
     );
   }
@@ -1715,6 +1716,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                       void refreshReads(false);
                     }}
                     outcome={routeOutcome}
+                    backend={omiBackend}
                   />
                 ) : route === 'Connectors' ? (
                   <ConnectorsPage
