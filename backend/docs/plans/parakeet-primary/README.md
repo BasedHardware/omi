@@ -49,6 +49,6 @@ Keep each implementation PR independently dark and testable. No new CI workflow 
 
 ## Decisions proposed for morning review
 
-Adopt the architecture, English-first eligibility and qualification gates above; fund capacity qualification before routing work; reserve an initial isolated test budget up to $500 after computing the exact resource/run cap. Withhold production allocation and purchases/commitments. The next go/no-go is the measured quality + safe capacity + fully loaded economics packet. A failure there means retain vendor-primary while improving the candidate, not promote it anyway.
+Adopt the architecture, English-first eligibility and qualification gates above; fund capacity qualification before routing work; reserve an initial isolated test budget up to $500 after computing the exact resource/run cap. This proposed budget is not spend authorization; obtain separate approval before paid compute/API execution. Withhold production allocation and purchases/commitments. The next go/no-go is the measured quality + safe capacity + fully loaded economics packet. A failure there means retain vendor-primary while improving the candidate, not promote it anyway.
 
 No live production throughput, invoice amounts, internal service identities or customer recordings are published here. Public scenarios are explicitly illustrative. Operational measurements and negotiated financial inputs stay in the private coordination record; they must be refreshed before execution.

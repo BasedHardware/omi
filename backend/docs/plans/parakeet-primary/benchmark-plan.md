@@ -40,7 +40,7 @@ Run in a dedicated test deployment with test identities and no production data d
 
 Exercise connection refusal, handshake/readiness rejection, timeout, model failure, capacity denial, midstream close, send failure, cancellation, exhausted vendor quota, both fallbacks unavailable, finalize and drain timeout. Include repeated fallback attempts and speaker/timestamp reconciliation across provider boundaries. Establish bounds for retained replay audio and exactly which acknowledged audio can be retried.
 
-Run three repeatable load trials and a 24-hour isolated soak after focused fault tests. Stop on unexpected cost, resource cap breach, data-plane escape or any silent loss. No load/stress tests against production. Public API tests require a bounded funded test account; do not export user recordings to a new provider by assumption.
+Run three repeatable load trials and a 24-hour isolated soak after focused fault tests. Stop on unexpected cost, resource cap breach, data-plane escape or any silent loss. No load/stress tests against production. Paid compute/API execution requires separate approval; the proposed budget and presence of a funded account do not authorize spending. Public API tests require a bounded funded test account; do not export user recordings to a new provider by assumption.
 
 ## Deliverable
 
