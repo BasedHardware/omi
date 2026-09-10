@@ -74,6 +74,9 @@ LEFT_CONTEXT_SECONDS = float(os.getenv("PARAKEET_LEFT_CONTEXT_S", "10.0"))
 RIGHT_CONTEXT_SECONDS = float(os.getenv("PARAKEET_RIGHT_CONTEXT_S", "2.0"))
 SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
 MIN_EMBEDDING_AUDIO_S = 0.5
+# Keep the one-time Torch Hub fetch reproducible across pod restarts. This is
+# the official Silero VAD v6.2.1 tag (commit 7e30209a3e90).
+SILERO_VAD_REPO = "snakers4/silero-vad:7e30209a3e901f9842f81b225f3e93d8199902b1"
 
 
 _vad_model: Any = None
@@ -220,6 +223,11 @@ class _NemoRNNTStreamingDecoder:
                 _cfg_set(decoding_cfg, "greedy.preserve_alignments", False)
                 _cfg_set(decoding_cfg, "fused_batch_size", -1)
                 _cfg_set(decoding_cfg, "beam.return_best_hypothesis", True)
+                # TDT models may carry token-duration computation enabled in
+                # their checkpoint config. Streaming consumers only need
+                # text, and inherited duration state can make chunked
+                # decoding retain stale alignment data across emissions.
+                _cfg_set(decoding_cfg, "tdt_include_token_duration", False)
                 try:
                     _cfg_set(decoding_cfg, "greedy.use_cuda_graph_decoder", False)
                 except Exception:
@@ -375,7 +383,7 @@ def _load_vad_model_template() -> Any:
             return None
 
         try:
-            model, _ = _torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', trust_repo=True)
+            model, _ = _torch.hub.load(repo_or_dir=SILERO_VAD_REPO, model='silero_vad', trust_repo=True)
             to_cpu = getattr(model, "cpu", None)
             if callable(to_cpu):
                 model = to_cpu()
@@ -643,6 +651,12 @@ class StreamSession:
         except Exception as e:
             if report_gpu_inference_error(e):
                 logger.error("RNNT streaming decode hit a fatal CUDA error; closing the stream")
+                raise
+            if _SERVICE_MODE == "stream":
+                # Stream-only pods have no batch engine to complete the
+                # utterance. Let the outer WebSocket handler close promptly so
+                # the backend can fail over to its next provider.
+                logger.error("RNNT streaming decode failed in stream mode; closing the stream")
                 raise
             logger.warning(f"RNNT streaming decode failed, falling back to VAD utterance transcribe: {e}")
             self._streaming_decoder = None

@@ -1,6 +1,7 @@
 """Unit tests for Parakeet StreamSession (VAD + ASR + diarization)."""
 
 import asyncio
+from contextlib import nullcontext
 import os
 import sys
 import types
@@ -297,6 +298,68 @@ class TestStreamSessionFlush:
 
 class TestStreamSessionRNNTStreaming:
 
+    def test_streaming_decoder_disables_inherited_tdt_token_durations(self):
+        inherited_decoding = types.SimpleNamespace(
+            strategy="greedy",
+            tdt_include_token_duration=True,
+            greedy=types.SimpleNamespace(loop_labels=False, preserve_alignments=True),
+            beam=types.SimpleNamespace(return_best_hypothesis=False),
+        )
+
+        class FakeModel:
+            def __init__(self):
+                self.cfg = types.SimpleNamespace(
+                    decoding=inherited_decoding,
+                    preprocessor=types.SimpleNamespace(sample_rate=16000, window_stride=0.01),
+                    encoder=types.SimpleNamespace(att_context_style=None),
+                )
+                self.encoder = types.SimpleNamespace(subsampling_factor=1)
+                self.preprocessor = types.SimpleNamespace(featurizer=types.SimpleNamespace())
+                self.device = "cpu"
+                self.decoding = types.SimpleNamespace(decoding=types.SimpleNamespace(decoding_computer=object()))
+                self.changed_configs = []
+
+            def freeze(self):
+                return None
+
+            def eval(self):
+                return self
+
+            def change_decoding_strategy(self, config):
+                self.changed_configs.append(config)
+
+        class FakeContextSize:
+            def __init__(self, left, chunk, right):
+                self.left = left
+                self.chunk = chunk
+                self.right = right
+
+        class FakeBuffer:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+        model = FakeModel()
+        decoder = sh._NemoRNNTStreamingDecoder(
+            model=model,
+            sample_rate=16000,
+            chunk_seconds=2.0,
+            left_context_seconds=10.0,
+            right_context_seconds=2.0,
+        )
+
+        with patch.object(sh, "_rnnt_model_initialized", False), patch.object(
+            sh, "_open_dict", lambda _config: nullcontext()
+        ), patch.object(sh, "_ContextSize", FakeContextSize), patch.object(
+            sh, "_StreamingBatchedAudioBuffer", FakeBuffer
+        ), patch.object(
+            sh._torch, "float32", object(), create=True
+        ):
+            decoder._ensure_initialized()
+
+        assert len(model.changed_configs) == 1
+        assert model.changed_configs[0].tdt_include_token_duration is False
+        assert inherited_decoding.tdt_include_token_duration is True
+
     def test_drain_streaming_asr_decodes_available_chunks(self):
         class FakeDecoder:
             def __init__(self):
@@ -344,6 +407,20 @@ class TestStreamSessionRNNTStreaming:
             asyncio.run(session._drain_streaming_asr(force=True))
 
         assert session._streaming_failed is True
+
+    def test_nonfatal_decode_error_closes_stream_only_session(self):
+        session = sh.StreamSession(sample_rate=16000)
+        with patch.object(sh, '_SERVICE_MODE', 'stream'), patch.object(
+            session, '_streaming_enabled', return_value=True
+        ), patch.object(
+            session, '_drain_streaming_asr_sync', side_effect=RuntimeError("temporary decode failure")
+        ), patch.object(
+            sh, 'report_gpu_inference_error', return_value=False
+        ):
+            with pytest.raises(RuntimeError, match="temporary decode failure"):
+                asyncio.run(session._drain_streaming_asr(force=True))
+
+        assert session._streaming_failed is False
 
     def test_streaming_utterance_does_not_call_batch_transcribe_when_text_not_ready(self):
         session = sh.StreamSession(sample_rate=16000)
