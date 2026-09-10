@@ -58,6 +58,10 @@ import {
   loadOmiIntegrations,
   type OmiIntegration,
 } from '../legacyOmiIntegrations';
+import {
+  loadOmiAppChangelogs,
+  type OmiAppChangelogRow,
+} from '../legacyOmiAppChangelogs';
 import {loadOmiUsagePeriod, type OmiUsageStats} from '../legacyOmiUsage';
 import {loadOmiFairUseStatus} from '../legacyOmiFairUse';
 import {loadOmiDailySummaries} from '../legacyOmiDailySummaries';
@@ -199,6 +203,7 @@ export function SettingsPage({
     OmiTaskIntegration[]
   >([]);
   const [integrations, setIntegrations] = useState<OmiIntegration[]>([]);
+  const [appChangelogs, setAppChangelogs] = useState<OmiAppChangelogRow[]>([]);
   const [usageMonthly, setUsageMonthly] = useState<OmiUsageStats | null>(null);
   const [usageYearly, setUsageYearly] = useState<OmiUsageStats | null>(null);
   const [usageAllTime, setUsageAllTime] = useState<OmiUsageStats | null>(null);
@@ -274,6 +279,7 @@ export function SettingsPage({
       setPeopleNames([]);
       setTaskIntegrations([]);
       setIntegrations([]);
+      setAppChangelogs([]);
       setUsageMonthly(null);
       setUsageYearly(null);
       setUsageAllTime(null);
@@ -326,6 +332,7 @@ export function SettingsPage({
         setPeopleNames([]);
         setTaskIntegrations([]);
         setIntegrations([]);
+        setAppChangelogs([]);
         setUsageMonthly(null);
         setUsageYearly(null);
         setUsageAllTime(null);
@@ -347,6 +354,7 @@ export function SettingsPage({
         setPeopleNames([]);
         setTaskIntegrations([]);
         setIntegrations([]);
+        setAppChangelogs([]);
         setUsageMonthly(null);
         setUsageYearly(null);
         setUsageAllTime(null);
@@ -370,6 +378,7 @@ export function SettingsPage({
       () => [],
     );
     const integrationsTask = loadOmiIntegrations(backend).catch(() => []);
+    const appChangelogsTask = loadOmiAppChangelogs(backend).catch(() => []);
     const usageMonthlyTask = loadOmiUsagePeriod(backend, 'monthly').catch(
       () => null,
     );
@@ -412,6 +421,7 @@ export function SettingsPage({
     const names = await peopleTask;
     const nextTaskIntegrations = await taskIntegrationsTask;
     const nextIntegrations = await integrationsTask;
+    const nextAppChangelogs = await appChangelogsTask;
     const nextUsageMonthly = await usageMonthlyTask;
     const nextUsageYearly = await usageYearlyTask;
     const nextUsageAllTime = await usageAllTimeTask;
@@ -428,6 +438,7 @@ export function SettingsPage({
     setPeopleNames(peopleNameRows(names));
     setTaskIntegrations(nextTaskIntegrations);
     setIntegrations(nextIntegrations);
+    setAppChangelogs(nextAppChangelogs);
     setUsageMonthly(nextUsageMonthly);
     setUsageYearly(nextUsageYearly);
     setUsageAllTime(nextUsageAllTime);
@@ -668,6 +679,9 @@ export function SettingsPage({
             key={`${row.title}-${index}`}
             title={row.title}
           />
+        ))}
+        {appChangelogs.map(row => (
+          <SettingRow copy={row.copy} key={row.key} title={row.title} />
         ))}
         {(onSignOut !== undefined ||
           (omiAuth !== undefined && omiAuth !== null)) && (

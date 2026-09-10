@@ -1950,6 +1950,58 @@ test('Settings names GET integrations without Connect or a write sheet', async (
   ).toBe(false);
 });
 
+test('Settings names GET app changelogs without dismiss or a default icon', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/announcements/changelogs?limit=5') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'ann-1',
+            type: 'changelog',
+            app_version: '1.2.0',
+            content: {
+              title: 'Release notes',
+              changes: [
+                {
+                  title: 'Faster sync',
+                  description: 'Uploads finish sooner.',
+                  icon: '🚀',
+                },
+                {title: 'Offline replay', description: ''},
+              ],
+            },
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain("What's New in 1.2.0");
+  expect(tree).toContain('Faster sync · Uploads finish sooner.');
+  expect(tree).toContain('Offline replay');
+  expect(tree).not.toContain('Release notes');
+  expect(tree).not.toContain('ann-1');
+  expect(tree).not.toContain('🚀');
+  expect(tree).not.toContain('✨');
+  expect(tree).not.toContain('Dismiss');
+  expect(mockBackend.request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/announcements/changelogs?limit=5',
+  });
+  expect(
+    mockBackend.request.mock.calls.some(
+      call => call[0].method === 'POST' || String(call[0].path).includes('dismiss'),
+    ),
+  ).toBe(false);
+});
+
 test('Settings names GET usage monthly yearly all-time without Upgrade', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
