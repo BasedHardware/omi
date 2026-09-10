@@ -381,3 +381,61 @@ def provider_for_service(service: object) -> str | None:
     if value == 'deepgram':
         return DEEPGRAM_CLOUD_PROVIDER
     return None
+
+
+def requested_stt_language(
+    language: str | None, base_lang: str, *, multi_lang_enabled: bool, surface: STTServingSurface
+) -> str:
+    """Resolve the provider language while retaining PTT's explicit input language.
+
+    Live sessions with multi-language enabled must select a provider's auto-detect
+    mode. PTT follows the same rule; single-language mode keeps the explicit
+    language unless the client itself sends the ``multi`` sentinel.
+    """
+    if base_lang == 'multi' or (
+        surface in (STTServingSurface.STREAMING, STTServingSurface.PTT)
+        and multi_lang_enabled
+        and language
+        and supports_live_multilingual_mode(language)
+    ):
+        return 'multi'
+    return base_lang
+
+
+def parakeet_supports_language_request(surface: STTServingSurface, base_language: str, requested_language: str) -> bool:
+    """Require both auto-detect mode and the user's language to be Parakeet-capable.
+
+    Live multilingual mode resolves a supported language to Parakeet's ``multi``
+    sentinel. Checking only that sentinel would incorrectly route an unsupported
+    language such as Chinese to the multilingual model after normalization.
+    """
+
+    return parakeet_supports_language(surface, requested_language) and parakeet_supports_language(
+        surface, base_language
+    )
+
+
+def models_with_preferred_service(
+    models: list[str] | tuple[str, ...], *, preferred_service: str | None
+) -> tuple[str, ...]:
+    """Honor a recognized client engine preference within the serving policy."""
+    normalized_preference = (preferred_service or '').strip().lower()
+    if normalized_preference not in {
+        PARAKEET_PROVIDER,
+        MODULATE_PROVIDER,
+        'deepgram',
+        SONIOX_PROVIDER,
+    }:
+        return tuple(models)
+
+    def matches(model: str) -> bool:
+        token = model.strip().lower()
+        if normalized_preference == PARAKEET_PROVIDER:
+            return token == PARAKEET_PROVIDER
+        if normalized_preference == MODULATE_PROVIDER:
+            return token == 'modulate-velma-2'
+        if normalized_preference == SONIOX_PROVIDER:
+            return token == SONIOX_PROVIDER
+        return token.startswith('dg-') or token in {'deepgram', 'nova-2', 'nova-3'}
+
+    return tuple(model for model in models if matches(model)) + tuple(model for model in models if not matches(model))

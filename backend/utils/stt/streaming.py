@@ -27,7 +27,9 @@ from config.stt_provider_policy import (
     parakeet_supports_language,
     provider_for_model_token,
     provider_is_enabled,
-    supports_live_multilingual_mode,
+    requested_stt_language as _requested_stt_language,
+    parakeet_supports_language_request as _parakeet_supports_language_request,
+    models_with_preferred_service as _models_with_preferred_service,
 )
 from utils.async_tasks import create_named_task
 from utils.byok import get_byok_key
@@ -559,66 +561,6 @@ def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
     if any(m.strip() for m in stt_service_models):
         return 'configured'
     return 'none'
-
-
-def _requested_stt_language(
-    language: Optional[str], base_lang: str, *, multi_lang_enabled: bool, surface: STTServingSurface
-) -> str:
-    """Resolve the provider language while retaining PTT's explicit input language.
-
-    Live sessions with multi-language enabled must select a provider's auto-detect
-    mode. PTT follows the same rule; single-language mode keeps the explicit
-    language unless the client itself sends the ``multi`` sentinel.
-    """
-    if base_lang == 'multi' or (
-        surface in (STTServingSurface.STREAMING, STTServingSurface.PTT)
-        and multi_lang_enabled
-        and language
-        and supports_live_multilingual_mode(language)
-    ):
-        return 'multi'
-    return base_lang
-
-
-def _parakeet_supports_language_request(
-    surface: STTServingSurface, base_language: str, requested_language: str
-) -> bool:
-    """Require both auto-detect mode and the user's language to be Parakeet-capable.
-
-    Live multilingual mode resolves a supported language to Parakeet's ``multi``
-    sentinel. Checking only that sentinel would incorrectly route an unsupported
-    language such as Chinese to the multilingual model after normalization.
-    """
-
-    return parakeet_supports_language(surface, requested_language) and parakeet_supports_language(
-        surface, base_language
-    )
-
-
-def _models_with_preferred_service(
-    models: List[str] | Tuple[str, ...], *, preferred_service: Optional[str]
-) -> Tuple[str, ...]:
-    """Honor a recognized client engine preference within the serving policy."""
-    normalized_preference = (preferred_service or '').strip().lower()
-    if normalized_preference not in {
-        STTService.parakeet.value,
-        STTService.modulate.value,
-        STTService.deepgram.value,
-        STTService.soniox.value,
-    }:
-        return tuple(models)
-
-    def matches(model: str) -> bool:
-        token = model.strip().lower()
-        if normalized_preference == STTService.parakeet.value:
-            return token == STTService.parakeet.value
-        if normalized_preference == STTService.modulate.value:
-            return token == 'modulate-velma-2'
-        if normalized_preference == STTService.soniox.value:
-            return token == STTService.soniox.value
-        return token.startswith('dg-') or token in {'deepgram', 'nova-2', 'nova-3'}
-
-    return tuple(model for model in models if matches(model)) + tuple(model for model in models if not matches(model))
 
 
 def get_stt_service_for_language(
