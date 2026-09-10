@@ -167,3 +167,24 @@ def test_completed_created_range_composite_is_declared_descending(monkeypatch):
         signature = _index_signature(query)
         assert signature[1] == ('created_at', 'DESCENDING')
         assert signature in declared, f'undeclared action_items composite: {signature}'
+
+
+def test_scores_weekly_count_composite_is_declared_ascending():
+    """``get_scores`` counts completed tasks created in the last week through
+    ``ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY.build`` with no ordering; Firestore serves that
+    aggregation only from the ascending composite, which must stay declared alongside the
+    newest-first list composite (both were missing on the isolated jit-qa database, 2026-09-10).
+    """
+    from database.firestore_index_registry import ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY
+
+    requirement = ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY.index_requirement
+    assert requirement.signature[2] == (
+        ('completed', 'ASCENDING'),
+        ('created_at', 'ASCENDING'),
+        ('__name__', 'ASCENDING'),
+    )
+    declared = {
+        (index['collectionGroup'], index['queryScope'], tuple((f['fieldPath'], f['order']) for f in index['fields']))
+        for index in firebase_index_manifest()['indexes']
+    }
+    assert requirement.signature in declared

@@ -34,6 +34,7 @@ from database.firestore_index_registry import (
     DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY,
     ENTITY_TIMELINE_CONVERSATIONS_QUERY,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
+    INDEX_ONLY_REQUIREMENTS,
     MESSAGES_BY_APP_ORDERED_QUERY,
     MESSAGES_BY_SESSION_ORDERED_QUERY,
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
@@ -76,6 +77,14 @@ class FieldIndexTarget:
         }
 
 
+def _index_only_requirement(identifier: str):
+    """Select a registry composite that no ``FirestoreQuerySpec`` builds (index-only)."""
+    for requirement in INDEX_ONLY_REQUIREMENTS:
+        if requirement.identifier == identifier:
+            return requirement
+    raise KeyError(f"index-only requirement {identifier} is not declared in the registry")
+
+
 TARGET_REQUIREMENTS = (
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY.index_requirement,
     ENTITY_TIMELINE_CONVERSATIONS_QUERY.index_requirement,
@@ -106,6 +115,7 @@ TARGET_REQUIREMENTS = (
     # plan still reported "none missing" (measured 2026-09-10).
     ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY.index_requirement,
     ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY.index_requirement,
+    _index_only_requirement("action_items_completed_created_newest_first"),
 )
 
 # Firestore returns COLLECTION_GROUP_ASC for this query as a single-field
