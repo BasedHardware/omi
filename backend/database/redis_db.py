@@ -396,7 +396,10 @@ def _cache_set_fail_open(key: str, value: Any, ttl: int) -> None:
     try:
         r.set(key, value)
         r.expire(key, ttl)
-    except redis.exceptions.OutOfMemoryError:
+    except Exception as exc:
+        # redis-py types omit ``exceptions``; match the live maxmemory class by name.
+        if type(exc).__name__ != 'OutOfMemoryError':
+            raise
         prefix = key.split(':', 1)[0]
         logger.warning('redis cache write skipped capacity_full prefix=%s', prefix)
         try:
