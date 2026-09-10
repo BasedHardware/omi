@@ -105,3 +105,6 @@ and caches uv's downloads using the plugin requirements.
 The tests exercise personal-keyword detection and the Notion extraction route
 with synthetic responses; no Notion or OMI account is needed. Personal-keyword
 matching is case-insensitive and retains the existing sentence-length filter.
+Formatting replaces complete phrases at word boundaries, so `I liked` is not
+rewritten as `User likesd`. Unsupported forms retain the original text under
+`User note:`; both `my friend` and `my friends` keep their singular/plural form.

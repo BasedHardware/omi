@@ -552,9 +552,10 @@ def format_as_memory(text):
         (r"i hate", "User hates"),
         (r"my favorite", "User's favorite"),
         (r"i have", "User has"),
-        (r"my friend", "User's friend"),
+        (r"my friends?", lambda match: "User's " + match.group(0)[3:].lower()),
     )
     for pattern, replacement in replacements:
+        pattern = rf"\b(?:{pattern})\b"
         if re.search(pattern, text, flags=re.IGNORECASE):
             return re.sub(pattern, replacement, text, flags=re.IGNORECASE)
     return f"User note: {text}"

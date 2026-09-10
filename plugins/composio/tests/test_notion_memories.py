@@ -36,6 +36,20 @@ class NotionMemoryTests(unittest.TestCase):
                 self.assertTrue(self.notion.contains_personal_info(text))
                 self.assertEqual(self.notion.extract_memories_from_text(text), [expected])
 
+    def test_replacements_match_complete_words(self):
+        for text, expected in (
+            ("I liked reading science fiction books as a child", "User note: I liked reading science fiction books as a child"),
+            ("I amassing books for the community library", "User note: I amassing books for the community library"),
+            ("I LIKE reading, though I liked other genres before", "User likes reading, though I liked other genres before"),
+            ("my friends enjoy reading science fiction together", "User's friends enjoy reading science fiction together"),
+            ("MY FRIEND enjoys reading science fiction with me", "User's friend enjoys reading science fiction with me"),
+            ("my friendship with Alex began many years ago", "User note: my friendship with Alex began many years ago"),
+            ("Miami likes warm weather throughout the year", "User note: Miami likes warm weather throughout the year"),
+            ("I don't like crowds at the library on weekends", "User doesn't like crowds at the library on weekends"),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(self.notion.format_as_memory(text), expected)
+
     def test_nonpersonal_and_short_content_remain_excluded(self):
         self.assertEqual(self.notion.extract_memories_from_text(
             "The library opens every morning at nine o'clock"
