@@ -1404,6 +1404,56 @@ describe("worker request contract", () => {
     });
   });
 
+  test("conversations GET store throw is production INTERNAL 500", async () => {
+    const throwingDb = {
+      prepare() {
+        throw new Error("d1 store failed");
+      },
+    };
+    const storeThrow = await handleConversations(
+      coreContext({
+        env: { ...env, DB: throwingDb } as never,
+        request: new Request("https://worker.test/v1/conversations?limit=50"),
+        routePath: "/v1/conversations",
+        params: {},
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(storeThrow.status).toBe(500);
+    expect(storeThrow.headers.get("retry-after")).toBeNull();
+    expect((await storeThrow.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+
+    const offset = await handleConversations(
+      coreContext({
+        env: { ...env, DB: throwingDb } as never,
+        request: new Request(
+          "https://worker.test/v1/conversations?limit=50&offset=0"
+        ),
+        routePath: "/v1/conversations",
+        params: {},
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(offset.status).toBe(500);
+    expect(offset.headers.get("retry-after")).toBeNull();
+    expect((await offset.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+
+    const throughWorker = await fetchWorker(
+      "/v1/conversations?limit=50",
+      { headers: authenticatedHeaders },
+      { ...env, DB: throwingDb }
+    );
+    expect(throughWorker.status).toBe(500);
+    expect(throughWorker.headers.get("retry-after")).toBeNull();
+    expect((await throughWorker.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+  });
+
   test("history GET of listed chat:chat-main includes stored chatSessionId chat-main", async () => {
     await insertChatMessage({
       id: "main-key",

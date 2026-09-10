@@ -205,12 +205,9 @@ for (const adapter of adapters) {
       });
       expect(response.status).toBe(500);
       expect(response.headers.get("x-omi-request-id")).not.toBeNull();
+      expect(response.headers.get("retry-after")).toBeNull();
       expect((await response.json()) as unknown).toEqual({
-        error: {
-          action: "retry",
-          code: "internal_server_error",
-          retryable: true,
-        },
+        error: "internal_server_error",
       });
     });
   });

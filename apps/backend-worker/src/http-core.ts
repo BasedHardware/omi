@@ -5,7 +5,6 @@ import {
   paginateConversations,
   readConversations,
   toLegacyConversation,
-  UnprojectableConversationRecordError,
 } from "./conversations";
 import {
   gatewayConfig,
@@ -1036,10 +1035,8 @@ export async function handleConversations(
           .slice(offset, offset + limit)
           .map((item) => toLegacyConversation(item))
       );
-    } catch (error) {
-      if (error instanceof UnprojectableConversationRecordError)
-        return json({ error: "internal_server_error" }, 500);
-      throw error;
+    } catch {
+      return json({ error: "internal_server_error" }, 500);
     }
   }
   if (query.getAll("limit").length > 1 || query.getAll("cursor").length > 1) {
@@ -1061,10 +1058,8 @@ export async function handleConversations(
     return page === "invalid_cursor"
       ? backendError("bad_request", "edit_request", 400)
       : json(page);
-  } catch (error) {
-    if (error instanceof UnprojectableConversationRecordError)
-      return json({ error: "internal_server_error" }, 500);
-    throw error;
+  } catch {
+    return json({ error: "internal_server_error" }, 500);
   }
 }
 
