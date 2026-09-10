@@ -3,29 +3,38 @@ import XCTest
 
 @testable import Omi_Computer
 
-private final class HangingEmbeddingEngine: LocalEmbeddingService, @unchecked Sendable {
+private actor HangGate {
+  private var continuations: [CheckedContinuation<Void, Never>] = []
+  private(set) var completed = 0
+
+  func park() async {
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      continuations.append(continuation)
+    }
+  }
+
+  func finish() {
+    completed += 1
+  }
+
+  func resumeAll() {
+    let pending = continuations
+    continuations.removeAll()
+    pending.forEach { $0.resume() }
+  }
+}
+
+private struct HangingEmbeddingEngine: LocalEmbeddingService {
   let engineID = "hang"
   let modelID = "hang-v1"
   let dimension = 8
   let capabilities = LocalEmbeddingCapabilities(assetsAvailable: true, requiresAppleSilicon: false, maxBatchSize: 8)
-  private let parked = OSAllocatedUnfairLock(initialState: [CheckedContinuation<Void, Never>]())
-  private(set) var completed = 0
+  let gate = HangGate()
 
   func embed(_ texts: [String], task: LocalEmbeddingTask) async throws -> [[Float]] {
-    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-      parked.withLock { $0.append(continuation) }
-    }
-    completed += 1
+    await gate.park()
+    await gate.finish()
     return try await HashEmbeddingEngine().embed(texts, task: task)
-  }
-
-  func resumeAll() {
-    let pending = parked.withLock { parked -> [CheckedContinuation<Void, Never>] in
-      let pending = parked
-      parked.removeAll()
-      return pending
-    }
-    pending.forEach { $0.resume() }
   }
 }
 
@@ -40,7 +49,7 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
   }
 
   override func tearDown() async throws {
-    hangingEngine?.resumeAll()
+    await hangingEngine?.gate.resumeAll()
     hangingEngine = nil
     await LocalEmbeddingIndexer.shared.setRuntimeForTesting(.makeDefault())
     await RewindStorageTestIsolation.tearDown(userDir: userDir)
@@ -64,11 +73,13 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
     let accepted = try await TranscriptionStorage.shared.markSessionCompleted(
       id: sessionId, backendId: "synthetic-local-embedding-complete")
     XCTAssertTrue(accepted)
-    XCTAssertEqual(engine.completed, 0, "session completion must not await NLCE")
+    let completedAfterSession = await engine.gate.completed
+    XCTAssertEqual(completedAfterSession, 0, "session completion must not await NLCE")
 
     let inserted = try await MemoryStorage.shared.insertLocalMemory(
       MemoryRecord(content: "synthetic memory for local embedding detach"))
     XCTAssertNotNil(inserted.id)
-    XCTAssertEqual(engine.completed, 0, "memory insert must not await NLCE")
+    let completedAfterMemory = await engine.gate.completed
+    XCTAssertEqual(completedAfterMemory, 0, "memory insert must not await NLCE")
   }
 }
