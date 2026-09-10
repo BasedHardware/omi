@@ -11,6 +11,15 @@ and background processing.
 - `process_conversation.py` is the synchronous enrichment coordinator. It
   persists the completed conversation and delegates expensive child work to the
   named executor lanes.
+- `owner_attribution.py` owns typed source-cluster evidence for memory writes.
+  A passive memory may be attributed to the account owner only when the
+  transcript identifies exactly one owner speaker cluster. Segment `is_user`
+  labels and model-authored `about=user` cannot override that evidence, including
+  for quote promotion. Legacy transcripts without cluster IDs fail closed.
+  `transcript_for_llm.memory_transcript_from_segments` is the memory-only
+  renderer: when owner evidence is untrusted it suppresses owner names and
+  prefixes an explicit UNTRUSTED header. Summary and action-item rendering keep
+  their existing presentation.
 - `wake_word.py` owns the pure, end-of-conversation matcher and trusted inline
   prompt marker. It has no realtime state, I/O, or speaker-identity gate. The
   independent invocation classifier lives in `utils/llm/`; task-intelligence

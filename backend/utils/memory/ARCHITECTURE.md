@@ -167,12 +167,41 @@ deliberately absent from vector projection and therefore cannot be recovered
 reliably as vector neighbors.
 
 `decision_path_telemetry.py` emits the stable
-`canonical_memory_decision_path.v1` event for persisted capture and applied or
-blocked promotion routes. Capture events carry conversation source, resolved
-subject attribution, a non-PII classification of model-authored `about`,
-disagreement, and distinct speaker-ID count. Promotion events carry the route,
-stage status, and structured reason fields. Neither event accepts memory or
-transcript text.
+`canonical_memory_decision_path.v1` event for persisted capture, applied or
+blocked promotion routes, and daily-sweep candidate-gate decisions. Capture
+events carry conversation source, resolved subject attribution, a non-PII
+classification of model-authored `about`, disagreement, distinct speaker-ID count,
+and `owner_trust`. Promotion events carry the route, stage status, and
+structured reason fields. Sweep events carry per-day counters
+(`dropped_subjectless`, `dropped_basis_proposed`, `demoted_owner_untrusted`,
+`skipped_duplicate_lookup`) with no memory or transcript text.
+
+## Owner attribution at capture and daily sweep
+
+`utils/conversations/owner_attribution.py` is the typed evidence for whether a
+source may mint an owner-attributed memory. Capture (`process_conversation.py`)
+and the daily sweep share that policy:
+
+- A unique owner speaker cluster is required before `about=user` or
+  `subject_scope=primary_user` is admitted. Ambiguous or absent clustering
+  demotes the claim (`demoted_owner_untrusted` on the sweep path) rather than
+  rewriting it as a third-party fact.
+- Every sweep memory must name a subject in `about`. Subject-less, `unknown`,
+  and `uncertain` rows are omitted (`dropped_subjectless`).
+- `basis` is `decided` only for a commitment or decision on tape by the owner,
+  `proposed` for suggestions or plans without a decision (those are dropped,
+  `dropped_basis_proposed`), and `observed` otherwise. Only `decided` may set a
+  standing-attribute slot.
+- A model mark `duplicate_of` citing a ledger lookup hit skips the candidate
+  instead of staging a sibling (`skipped_duplicate_lookup`). Lookup rows
+  prefix the canonical memory id so the model can cite it.
+- Staged daily-summary pages are `daily_memory_sweep_daily_summary_stage.v3`
+  because they now carry owner evidence and `about`. A reader that finds a
+  foreign-version stage attests it consumed (empty candidates) so the cursor
+  can advance without double-billing the model.
+
+L2 consolidation, the belief model, user-facing summary rendering, and
+speaker-ID synthesis vs real cluster evidence are out of scope for this gate.
 
 ## Search, graph, and derived providers
 
