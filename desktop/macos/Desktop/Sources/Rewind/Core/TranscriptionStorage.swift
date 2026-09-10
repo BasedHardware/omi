@@ -246,7 +246,7 @@ actor TranscriptionStorage {
 
     if result.accepted {
       log("TranscriptionStorage: Completed session \(id) (backendId: \(backendId))")
-      await LocalEmbeddingIndexer.shared.indexFinalizedSession(sessionId: id)
+      LocalEmbeddingIndexer.scheduleFinalizedSessionIndex(sessionId: id)
     }
     if let telemetry = result.telemetry {
       await AnalyticsManager.shared.conversationCreated(
