@@ -13,7 +13,7 @@ import {
 } from "./generation-prompt";
 import {
   CHAT_CAPABILITIES,
-  isChatCreate,
+  parseChatCreate,
   type ChatCreate,
   type ChatMessage,
   type GenerationEvent,
@@ -99,7 +99,11 @@ export async function admitMessage(
     } catch {
       return "conflict";
     }
-    if (!isChatCreate(previous) || computePayloadHash(previous) !== payloadHash)
+    const previousCreate = parseChatCreate(previous);
+    if (
+      previousCreate === null ||
+      computePayloadHash(previousCreate) !== payloadHash
+    )
       return "conflict";
     let message = await readMessage(db, accountId, input.id);
     if (message === null) return "conflict";
@@ -364,8 +368,9 @@ export async function readPendingGeneration(
   if (row === null) return null;
   try {
     const parsed: unknown = JSON.parse(row.payload);
-    if (isChatCreate(parsed)) {
-      return { generationId: row.generationId, input: parsed };
+    const input = parseChatCreate(parsed);
+    if (input !== null) {
+      return { generationId: row.generationId, input };
     }
   } catch {}
   return { generationId: row.generationId, input: "unreadable" };
@@ -650,14 +655,15 @@ function overlayAdmissionPayload(
   } catch {
     return message;
   }
-  if (isChatCreate(parsed)) {
+  const create = parseChatCreate(parsed);
+  if (create !== null) {
     if (message.sender === "human") {
-      return overlayCreateFields(message, parsed);
+      return overlayCreateFields(message, create);
     }
     return {
       ...message,
-      chatSessionId: parsed.chatSessionId ?? null,
-      appId: parsed.appId ?? null,
+      chatSessionId: create.chatSessionId ?? null,
+      appId: create.appId ?? null,
     };
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {

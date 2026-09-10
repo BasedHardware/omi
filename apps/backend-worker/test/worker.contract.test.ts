@@ -20,7 +20,7 @@ import {
   handleSettings,
   handleTasks,
 } from "../src/http-core";
-import { CHAT_CAPABILITIES, isChatCreate } from "../src/wire";
+import { CHAT_CAPABILITIES, isChatCreate, parseChatCreate } from "../src/wire";
 import { createD1Mock } from "./d1-mock";
 
 let handler: typeof import("../src/index")["default"];
@@ -3381,6 +3381,34 @@ describe("settings entitlement admission contract", () => {
     );
   });
 
+  test("omitted attachment ids and extra keys match production parseCreate", async () => {
+    const { attachmentIds: _attachmentIds, ...omitted } = chatCreate(
+      "omit-attachments",
+    );
+    const omittedIds = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(omitted),
+    });
+    const extra = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("extra-key"),
+        extra: true,
+      }),
+    });
+    expect(omittedIds.status).toBe(201);
+    expect(extra.status).toBe(422);
+    expect((await extra.json()) as unknown).toEqual({
+      error: {
+        code: "validation",
+        retryable: false,
+        action: "edit_request",
+      },
+    });
+  });
+
   test("completed same-account attachments are admitted with real metadata", async () => {
     await insertAttachment({
       id: "att-ready",
@@ -3680,6 +3708,17 @@ describe("chat create wire validator", () => {
     expect(isChatCreate({ ...valid, text: "" })).toBe(true);
   });
 
+  test("omitted attachment ids default to empty matching production parseCreate", () => {
+    const { attachmentIds: _attachmentIds, ...omitted } = valid;
+    expect(parseChatCreate(omitted)?.attachmentIds).toEqual([]);
+  });
+
+  test("accepts empty messageSource and metadata matching production parseCreate", () => {
+    expect(
+      isChatCreate({ ...valid, messageSource: "", metadata: "" }),
+    ).toBe(true);
+  });
+
   test.each([
     [null],
     [[]],
@@ -3688,6 +3727,7 @@ describe("chat create wire validator", () => {
     [{ ...valid, at: -1 }],
     [{ ...valid, at: Number.MAX_SAFE_INTEGER }],
     [{ ...valid, text: "x".repeat(32_769) }],
+    [{ ...valid, extra: true }],
     [{ ...valid, sender: "ai" }],
     [{ ...valid, journalRevision: 0.5 }],
     [{ ...valid, appId: "" }],

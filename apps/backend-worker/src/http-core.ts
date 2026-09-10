@@ -51,9 +51,9 @@ import {
 import { parseTaskLimit, readTasks } from "./tasks";
 import {
   backendError,
-  isChatCreate,
   isClientId,
   json,
+  parseChatCreate,
   type ChatCreate,
   withTimeout,
 } from "./wire";
@@ -556,9 +556,8 @@ export async function handleChatCreate(
     return backendError("attachment_too_large", "edit_request", 413);
   if (parsed.kind === "invalid")
     return backendError("bad_request", "edit_request", 400);
-  const body = parsed.value;
-  if (!isChatCreate(body))
-    return backendError("validation", "edit_request", 422);
+  const body = parseChatCreate(parsed.value);
+  if (body === null) return backendError("validation", "edit_request", 422);
   const db = context.env.DB;
   if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true, {
