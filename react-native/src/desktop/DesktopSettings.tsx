@@ -27,6 +27,8 @@ import {
   dailySummaryCopy,
   dailySummaryScheduleCopy,
   mentorNotificationFrequencyCopy,
+  automaticTranslationCopy,
+  customVocabularyCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {
@@ -48,6 +50,7 @@ import {loadOmiFairUseStatus} from '../legacyOmiFairUse';
 import {loadOmiDailySummaries} from '../legacyOmiDailySummaries';
 import {loadOmiDailySummarySchedule} from '../legacyOmiDailySummarySchedule';
 import {loadOmiMentorNotificationSettings} from '../legacyOmiMentorNotifications';
+import {loadOmiTranscriptionPreferences} from '../legacyOmiTranscriptionPreferences';
 import {FocusPressable} from '../ui/Pressable';
 import {
   desktopMotion,
@@ -259,6 +262,12 @@ export function DesktopSettings({
   const [notificationFrequency, setNotificationFrequency] = useState<
     ReturnType<typeof mentorNotificationFrequencyCopy>
   >([]);
+  const [automaticTranslation, setAutomaticTranslation] = useState<
+    ReturnType<typeof automaticTranslationCopy>
+  >([]);
+  const [customVocabulary, setCustomVocabulary] = useState<
+    ReturnType<typeof customVocabularyCopy>
+  >([]);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
     Record<PrivacyWriteKind, boolean>
@@ -290,6 +299,9 @@ export function DesktopSettings({
     let nextNotificationFrequency: ReturnType<
       typeof mentorNotificationFrequencyCopy
     > = [];
+    let nextAutomaticTranslation: ReturnType<typeof automaticTranslationCopy> =
+      [];
+    let nextCustomVocabulary: ReturnType<typeof customVocabularyCopy> = [];
     if (backend !== undefined && backend !== null && session === 'ready') {
       const peopleTask = loadOmiPeopleNames(backend).catch(
         () => new Map<string, string>(),
@@ -300,6 +312,9 @@ export function DesktopSettings({
         backend,
       ).catch(() => null);
       const notificationFrequencyTask = loadOmiMentorNotificationSettings(
+        backend,
+      ).catch(() => null);
+      const transcriptionPreferencesTask = loadOmiTranscriptionPreferences(
         backend,
       ).catch(() => null);
       try {
@@ -316,6 +331,11 @@ export function DesktopSettings({
       nextNotificationFrequency = mentorNotificationFrequencyCopy(
         (await notificationFrequencyTask)?.frequency,
       );
+      const transcription = await transcriptionPreferencesTask;
+      nextAutomaticTranslation = automaticTranslationCopy(
+        transcription?.singleLanguageMode,
+      );
+      nextCustomVocabulary = customVocabularyCopy(transcription?.vocabulary);
     }
     if (seq !== reloadSeqRef.current) {
       return;
@@ -326,6 +346,8 @@ export function DesktopSettings({
     setDailySummaries(nextDailySummaries);
     setDailySummarySchedule(nextDailySummarySchedule);
     setNotificationFrequency(nextNotificationFrequency);
+    setAutomaticTranslation(nextAutomaticTranslation);
+    setCustomVocabulary(nextCustomVocabulary);
   }, [backend, session]);
 
   useEffect(() => {
@@ -624,6 +646,12 @@ export function DesktopSettings({
           title="Primary language"
         />
       ) : null}
+      {automaticTranslation.map((row, index) => (
+        <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
+      ))}
+      {customVocabulary.map((row, index) => (
+        <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
+      ))}
       {peopleNames.map(person => (
         <Row copy={person.name} key={person.id} title="People" />
       ))}

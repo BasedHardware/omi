@@ -1374,6 +1374,8 @@ test('Settings names GET daily summaries without regenerate or a write sheet', a
   expect(tree).not.toContain('Delivery time');
   expect(tree).not.toContain('10:00 PM');
   expect(tree).not.toContain('Notification frequency');
+  expect(tree).not.toContain('Custom vocabulary');
+  expect(tree).not.toContain('Automatic translation');
 });
 
 test('Settings names GET daily-summary-settings without a picker or Flutter defaults', async () => {
@@ -1433,6 +1435,60 @@ test('Settings names GET mentor notification frequency without a purple slider',
   expect(mockBackend.request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
     false,
   );
+});
+
+test('Settings names GET custom vocabulary without add/delete or Flutter false defaults', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/transcription-preferences') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          vocabulary: ['Omi', ' \t', 'Based Hardware'],
+          single_language_mode: true,
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Custom vocabulary');
+  expect(tree).toContain('Omi');
+  expect(tree).toContain('Based Hardware');
+  expect(tree).toContain('Automatic translation');
+  expect(tree).toContain('Off');
+  expect(tree).not.toContain('Detect 10+ languages');
+  expect(tree).not.toContain('Add Words');
+  expect(mockBackend.request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/users/transcription-preferences',
+  });
+  expect(mockBackend.request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
+    false,
+  );
+});
+
+test('Settings omits Automatic translation when GET single_language_mode is missing', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/transcription-preferences') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({vocabulary: ['Omi']}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Custom vocabulary');
+  expect(tree).toContain('Omi');
+  expect(tree).not.toContain('Automatic translation');
 });
 
 test('Settings developer webhook URLs omit empty or whitespace values', async () => {

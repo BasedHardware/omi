@@ -690,6 +690,35 @@ export function mentorNotificationFrequencyCopy(
   ];
 }
 
+export function automaticTranslationCopy(
+  singleLanguageMode: boolean | null | undefined,
+): {title: string; copy: string}[] {
+  if (typeof singleLanguageMode !== 'boolean') {
+    return [];
+  }
+  return [
+    {
+      title: 'Automatic translation',
+      copy: singleLanguageMode ? 'Off' : 'Enabled',
+    },
+  ];
+}
+
+export function customVocabularyCopy(
+  words: readonly string[] | null | undefined,
+): {title: string; copy: string}[] {
+  if (words === null || words === undefined) {
+    return [];
+  }
+  return words.flatMap(word => {
+    const visible = visibleDisplayText(word);
+    if (visible === '') {
+      return [];
+    }
+    return [{title: 'Custom vocabulary', copy: visible}];
+  });
+}
+
 function fairUseStageCopy(stage: string): string | null {
   if (stage === 'warning') {
     return 'Warning';

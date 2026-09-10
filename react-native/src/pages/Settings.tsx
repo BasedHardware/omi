@@ -41,6 +41,8 @@ import {
   dailySummaryCopy,
   dailySummaryScheduleCopy,
   mentorNotificationFrequencyCopy,
+  automaticTranslationCopy,
+  customVocabularyCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
@@ -49,6 +51,7 @@ import {loadOmiFairUseStatus} from '../legacyOmiFairUse';
 import {loadOmiDailySummaries} from '../legacyOmiDailySummaries';
 import {loadOmiDailySummarySchedule} from '../legacyOmiDailySummarySchedule';
 import {loadOmiMentorNotificationSettings} from '../legacyOmiMentorNotifications';
+import {loadOmiTranscriptionPreferences} from '../legacyOmiTranscriptionPreferences';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {parseSoftwarePlane, type SoftwarePlane} from '../v5BackendOrigin';
@@ -189,6 +192,12 @@ export function SettingsPage({
   const [notificationFrequency, setNotificationFrequency] = useState<
     ReturnType<typeof mentorNotificationFrequencyCopy>
   >([]);
+  const [automaticTranslation, setAutomaticTranslation] = useState<
+    ReturnType<typeof automaticTranslationCopy>
+  >([]);
+  const [customVocabulary, setCustomVocabulary] = useState<
+    ReturnType<typeof customVocabularyCopy>
+  >([]);
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
@@ -241,6 +250,8 @@ export function SettingsPage({
       setDailySummaries([]);
       setDailySummarySchedule([]);
       setNotificationFrequency([]);
+      setAutomaticTranslation([]);
+      setCustomVocabulary([]);
       setError(cloudSessionUnavailableCopy(backend));
       setPhase('error');
       return;
@@ -284,6 +295,8 @@ export function SettingsPage({
         setDailySummaries([]);
         setDailySummarySchedule([]);
         setNotificationFrequency([]);
+        setAutomaticTranslation([]);
+        setCustomVocabulary([]);
         setError(desktopBackendServiceCopy);
         setSettingsCanRetry(true);
         setPhase('error');
@@ -296,6 +309,8 @@ export function SettingsPage({
         setDailySummaries([]);
         setDailySummarySchedule([]);
         setNotificationFrequency([]);
+        setAutomaticTranslation([]);
+        setCustomVocabulary([]);
         setError(desktopBackendUnauthorizedCopy);
         setPhase('signed-out');
         return;
@@ -310,6 +325,9 @@ export function SettingsPage({
       () => null,
     );
     const notificationFrequencyTask = loadOmiMentorNotificationSettings(
+      backend,
+    ).catch(() => null);
+    const transcriptionPreferencesTask = loadOmiTranscriptionPreferences(
       backend,
     ).catch(() => null);
     try {
@@ -334,6 +352,7 @@ export function SettingsPage({
     const summaries = await dailySummariesTask;
     const schedule = await dailySummaryScheduleTask;
     const frequency = await notificationFrequencyTask;
+    const transcription = await transcriptionPreferencesTask;
     if (!current()) {
       return;
     }
@@ -344,6 +363,10 @@ export function SettingsPage({
     setNotificationFrequency(
       mentorNotificationFrequencyCopy(frequency?.frequency),
     );
+    setAutomaticTranslation(
+      automaticTranslationCopy(transcription?.singleLanguageMode),
+    );
+    setCustomVocabulary(customVocabularyCopy(transcription?.vocabulary));
   }, [browser]);
 
   useEffect(() => {
@@ -501,6 +524,20 @@ export function SettingsPage({
             title="Primary language"
           />
         ) : null}
+        {automaticTranslation.map((row, index) => (
+          <SettingRow
+            copy={row.copy}
+            key={`${row.title}-${index}`}
+            title={row.title}
+          />
+        ))}
+        {customVocabulary.map((row, index) => (
+          <SettingRow
+            copy={row.copy}
+            key={`${row.title}-${index}`}
+            title={row.title}
+          />
+        ))}
         {peopleNames.map(person => (
           <SettingRow copy={person.name} key={person.id} title="People" />
         ))}

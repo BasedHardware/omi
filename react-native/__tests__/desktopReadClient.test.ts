@@ -77,6 +77,8 @@ import {
   dailySummaryHourCopy,
   dailySummaryScheduleCopy,
   mentorNotificationFrequencyCopy,
+  automaticTranslationCopy,
+  customVocabularyCopy,
   subscriptionPeriodCopy,
   taskDisplaySummary,
   taskDisplayTitle,
@@ -1013,6 +1015,23 @@ test('mentor notification copy names GET frequency without Balanced default', ()
   expect(mentorNotificationFrequencyCopy(6)).toEqual([]);
   expect(mentorNotificationFrequencyCopy(-1)).toEqual([]);
   expect(mentorNotificationFrequencyCopy(null)).toEqual([]);
+});
+
+test('transcription preference copy names GET vocabulary without Flutter false defaults', () => {
+  expect(automaticTranslationCopy(true)).toEqual([
+    {title: 'Automatic translation', copy: 'Off'},
+  ]);
+  expect(automaticTranslationCopy(false)).toEqual([
+    {title: 'Automatic translation', copy: 'Enabled'},
+  ]);
+  expect(automaticTranslationCopy(undefined)).toEqual([]);
+  expect(automaticTranslationCopy(null)).toEqual([]);
+  expect(customVocabularyCopy(['Omi', ' \t', 'Based Hardware'])).toEqual([
+    {title: 'Custom vocabulary', copy: 'Omi'},
+    {title: 'Custom vocabulary', copy: 'Based Hardware'},
+  ]);
+  expect(customVocabularyCopy([])).toEqual([]);
+  expect(customVocabularyCopy(null)).toEqual([]);
 });
 
 test('firmware update copy names GET latest without Available on current or draft', () => {

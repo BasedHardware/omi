@@ -2954,6 +2954,8 @@ test('Settings names GET daily summaries without regenerate or a write sheet', a
   expect(tree).not.toContain('Delivery time');
   expect(tree).not.toContain('10:00 PM');
   expect(tree).not.toContain('Notification frequency');
+  expect(tree).not.toContain('Custom vocabulary');
+  expect(tree).not.toContain('Automatic translation');
 });
 
 test('Settings names GET daily-summary-settings without a picker or Flutter defaults', async () => {
@@ -3096,6 +3098,82 @@ test('Settings names GET mentor notification frequency without a purple slider',
   expect(tree).toContain('Notification frequency');
   expect(tree).toContain('Maximum');
   expect(tree).not.toContain('Balanced');
+  expect(
+    omiBackend.request.mock.calls.some(call => call[0].method === 'PATCH'),
+  ).toBe(false);
+});
+
+test('Settings names GET custom vocabulary without add/delete or Flutter false defaults', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/transcription-preferences') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          vocabulary: ['Omi'],
+          single_language_mode: false,
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Custom vocabulary');
+  expect(tree).toContain('Omi');
+  expect(tree).toContain('Automatic translation');
+  expect(tree).toContain('Enabled');
+  expect(tree).not.toContain('Add Words');
   expect(
     omiBackend.request.mock.calls.some(call => call[0].method === 'PATCH'),
   ).toBe(false);
