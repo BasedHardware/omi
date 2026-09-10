@@ -84,6 +84,36 @@ test('Home currents keep memory citation counts instead of a Memory kind label',
   expect(copy).not.toMatch(/(^| )Memory( |$)/);
 });
 
+test('Home currents name GET locked memories and omit unlocked rows', () => {
+  const item: MemoryProjection = {
+    kind: 'memory',
+    id: 'memory-locked',
+    title: 'A walk.',
+    summary: 'A walk.',
+    searchableText: 'A walk.',
+    citations: [],
+    timestamp: 1_788_492_408,
+    provenance: {
+      label: null,
+      synthesisVersion: null,
+      inputDigest: null,
+      outputDigest: null,
+    },
+    locked: true,
+  };
+  let locked!: ReactTestRenderer.ReactTestRenderer;
+  let open!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    locked = ReactTestRenderer.create(<ReadRow item={item} />);
+    open = ReactTestRenderer.create(
+      <ReadRow item={{...item, id: 'memory-open', locked: undefined}} />,
+    );
+  });
+  expect(textOf(locked)).toContain('Locked');
+  expect(textOf(locked)).not.toContain('Upgrade to unlimited');
+  expect(textOf(open)).not.toContain('Locked');
+});
+
 test('Home currents omit synthesized-memory chrome when GET synthesisVersion is missing', () => {
   const item: MemoryProjection = {
     kind: 'memory',

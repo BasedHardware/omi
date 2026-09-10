@@ -214,6 +214,7 @@ export async function loadOmiMemories(
       ...(playbook === '' ? {} : {ledgerBody: playbook}),
       ...(bool(row.is_baseline) ? {isBaseline: true} : {}),
       ...(captureDeviceLabel === null ? {} : {captureDeviceLabel}),
+      ...(bool(row.is_locked) ? {locked: true} : {}),
     };
   });
   return {apiContract: 'omi', items, page: page(start, items.length)};

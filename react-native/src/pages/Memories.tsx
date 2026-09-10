@@ -20,6 +20,7 @@ import {
   memoryLedgerSlotCopy,
   memoryLedgerPlaybookCopy,
   memoryBaselineCopy,
+  memoryLockedCopy,
   visibleDisplayText,
   type DesktopReadProjection,
   type DomainReadOutcome,
@@ -161,6 +162,7 @@ export function MemoriesPage({
     const slot = memoryLedgerSlotCopy(item);
     const playbook = memoryLedgerPlaybookCopy(item);
     const baseline = memoryBaselineCopy(item);
+    const locked = memoryLockedCopy(item);
     const device = visibleDisplayText(item.captureDeviceLabel ?? '');
     return (
       <View
@@ -188,6 +190,13 @@ export function MemoriesPage({
         ) : null}
         {baseline !== null ? (
           <Text style={styles.memoryProvenance}>{baseline}</Text>
+        ) : null}
+        {locked !== null ? (
+          <Text
+            accessibilityLabel="Locked memory"
+            style={styles.memoryProvenance}>
+            {locked}
+          </Text>
         ) : null}
         {synthesis !== null ? (
           <Text style={styles.memoryProvenance}>{synthesis}</Text>

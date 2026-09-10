@@ -17,6 +17,7 @@ import {
   memoryCitationCopy,
   memoryDisplayTitle,
   memorySynthesisCopy,
+  memoryLockedCopy,
   taskDisplaySummary,
   taskDisplayTitle,
   taskIndentPadding,
@@ -64,6 +65,14 @@ export const ProjectionRow = memo(function ProjectionRow({
       ? conversationCaptureCopy(conversation.capturedAtMs)
       : null;
   const synthesis = item.kind === 'memory' ? memorySynthesisCopy(item) : null;
+  const lockedCopy =
+    item.kind === 'conversation'
+      ? item.locked
+        ? 'Locked'
+        : null
+      : item.kind === 'memory'
+      ? memoryLockedCopy(item)
+      : null;
   const indentPad =
     item.kind === 'task' ? taskIndentPadding(item.indentLevel) : 0;
   const rowPad = spine ? 18 : 16;
@@ -104,9 +113,9 @@ export const ProjectionRow = memo(function ProjectionRow({
             Starred
           </Text>
         )}
-        {item.kind === 'conversation' && item.locked ? (
+        {lockedCopy !== null ? (
           <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
-            Locked
+            {lockedCopy}
           </Text>
         ) : null}
         {item.kind === 'conversation' && item.discarded ? (

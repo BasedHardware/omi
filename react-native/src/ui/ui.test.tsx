@@ -1702,6 +1702,75 @@ test('wide Home search memory rows keep GET synthesized-memory chrome instead of
   expect(tree).toContain('Synthesized memory');
 });
 
+test('wide Home search memory rows name GET locked and omit unlocked rows', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'memory',
+        id: 'memory-locked-home-search',
+        title: 'A walk.',
+        summary: 'A walk.',
+        searchableText: 'A walk.',
+        citations: [],
+        timestamp: 1_788_492_408,
+        provenance: {
+          label: null,
+          synthesisVersion: null,
+          inputDigest: null,
+          outputDigest: null,
+        },
+        locked: true,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Locked');
+  expect(tree).toContain('A walk.');
+  expect(tree).not.toContain('Upgrade to unlimited');
+  const currents = render(
+    <ProjectionRow
+      home
+      item={{
+        kind: 'memory',
+        id: 'memory-locked-home-current',
+        title: 'A walk.',
+        summary: 'A walk.',
+        searchableText: 'A walk.',
+        citations: [],
+        timestamp: 1_788_492_408,
+        provenance: {
+          label: null,
+          synthesisVersion: null,
+          inputDigest: null,
+          outputDigest: null,
+        },
+        locked: true,
+      }}
+    />,
+  );
+  expect(JSON.stringify(currents.toJSON())).toContain('Locked');
+  const omitted = render(
+    <ProjectionRow
+      item={{
+        kind: 'memory',
+        id: 'memory-open-home-search',
+        title: 'A walk.',
+        summary: 'A walk.',
+        searchableText: 'A walk.',
+        citations: [],
+        timestamp: 1_788_492_408,
+        provenance: {
+          label: null,
+          synthesisVersion: null,
+          inputDigest: null,
+          outputDigest: null,
+        },
+      }}
+    />,
+  );
+  expect(JSON.stringify(omitted.toJSON())).not.toContain('Locked');
+});
+
 test('compact Home current memory rows keep GET synthesized-memory chrome', () => {
   const renderer = render(
     <ProjectionRow

@@ -661,3 +661,80 @@ test('Memories rows name GET ledger slot, playbook body, baseline, and known dev
     act(() => view.unmount());
   }
 });
+
+test('Memories rows name GET locked and omit unlocked rows', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...memory('locked'),
+                title: 'Prefers concise recaps.',
+                summary: 'Prefers concise recaps.',
+                searchableText: 'Prefers concise recaps.',
+                locked: true,
+              },
+              {
+                ...memory('open'),
+                title: 'Likes walking.',
+                summary: 'Likes walking.',
+                searchableText: 'Likes walking.',
+              },
+            ],
+            page: page(null),
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    const copy = textOf(view);
+    expect(copy).toContain('Locked');
+    expect(copy).toContain('Prefers concise recaps.');
+    expect(copy).toContain('Likes walking.');
+    expect(copy).not.toContain('Upgrade to unlimited');
+    expect(
+      view.root.findAll(
+        node => node.props.accessibilityLabel === 'Locked memory',
+      ).length,
+    ).toBeGreaterThan(0);
+  } finally {
+    act(() => view.unmount());
+  }
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...memory('open'),
+                title: 'Likes walking.',
+                summary: 'Likes walking.',
+                searchableText: 'Likes walking.',
+              },
+            ],
+            page: page(null),
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    expect(textOf(view)).not.toContain('Locked');
+    expect(
+      view.root.findAll(
+        node => node.props.accessibilityLabel === 'Locked memory',
+      ),
+    ).toHaveLength(0);
+  } finally {
+    act(() => view.unmount());
+  }
+});

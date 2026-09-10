@@ -672,6 +672,10 @@ export function memoryBaselineCopy(item: {
   return item.isBaseline === true ? 'Baseline Memory' : null;
 }
 
+export function memoryLockedCopy(item: {locked?: boolean}): string | null {
+  return item.locked === true ? 'Locked' : null;
+}
+
 export function memoryCaptureDeviceCopy(
   device: string | null | undefined,
 ): string | null {
@@ -818,6 +822,7 @@ export type MemoryProjection = {
   ledgerBody?: string;
   isBaseline?: boolean;
   captureDeviceLabel?: string;
+  locked?: boolean;
 };
 
 export type TaskProjection = {

@@ -253,6 +253,28 @@ test('old memories keep GET ledger slot, playbook body, baseline, and known devi
   expect(result.items[1]).not.toHaveProperty('captureDeviceLabel');
 });
 
+test('old memories name GET locked and omit unlocked rows', async () => {
+  const {api} = backend([
+    {
+      id: 'locked',
+      content: 'Prefers concise recaps.',
+      created_at: '2026-09-07T00:00:00Z',
+      conversation_id: null,
+      is_locked: true,
+    },
+    {
+      id: 'open',
+      content: 'Likes walking.',
+      created_at: '2026-09-07T00:00:00Z',
+      conversation_id: null,
+      is_locked: false,
+    },
+  ]);
+  const result = await loadMemories(api);
+  expect(result.items[0]).toMatchObject({locked: true});
+  expect(result.items[1]).not.toHaveProperty('locked');
+});
+
 test('old memories fail closed for malformed ledger chrome', async () => {
   await expect(
     loadMemories(
@@ -276,6 +298,19 @@ test('old memories fail closed for malformed ledger chrome', async () => {
           created_at: '2026-09-07T00:00:00Z',
           conversation_id: null,
           is_baseline: 'true',
+        },
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi boolean is malformed');
+  await expect(
+    loadMemories(
+      backend([
+        {
+          id: 'bad-locked',
+          content: 'Prefers concise recaps.',
+          created_at: '2026-09-07T00:00:00Z',
+          conversation_id: null,
+          is_locked: 'true',
         },
       ]).api,
     ),
@@ -393,6 +428,7 @@ test('old memories use v3 content without manufacturing canonical provenance', a
     timestamp: 1788739200,
     provenance: {inputDigest: null, outputDigest: null, synthesisVersion: null},
   });
+  expect(result.items[0]).not.toHaveProperty('locked');
   expect(result.page.completenessStatus).toBe('unknown');
 });
 
