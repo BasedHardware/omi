@@ -568,9 +568,9 @@ async def _run_benchmark(
     levels = list(LEVELS)
     if not levels or any(level < 1 for level in levels):
         raise ValueError("PARAKEET_STREAM_LEVELS must contain positive integers")
-    if EXPECTED_CAPACITY < max(levels):
+    if EXPECTED_CAPACITY != max(levels):
         raise ValueError(
-            f"PARAKEET_STREAM_EXPECTED_CAPACITY={EXPECTED_CAPACITY} must cover the highest accepted level {max(levels)}"
+            f"PARAKEET_STREAM_EXPECTED_CAPACITY={EXPECTED_CAPACITY} must equal the highest tested level {max(levels)}"
         )
     if TARGET_STREAMS not in levels:
         raise ValueError(f"PARAKEET_TARGET_STREAMS={TARGET_STREAMS} must be included in PARAKEET_STREAM_LEVELS")
@@ -622,7 +622,7 @@ async def _run_benchmark(
         and sustained_result["speaker_fields_rate"] == 1.0
         and sustained_result["timestamp_valid_rate"] == 1.0
         and sustained_result["text_latency_timestamps_valid_rate"] == 1.0
-        and (max(levels) < LATENCY_GATE_MIN_STREAMS or sustained_result["text_latency_gate"])
+        and sustained_result["text_latency_gate"]
     )
     memory_results = [*level_results, rejection_probe]
     if sustained_result is not None:
@@ -681,7 +681,7 @@ async def _run_benchmark(
                 and result["speaker_fields_rate"] == 1.0
                 and result["timestamp_valid_rate"] == 1.0
                 and result["text_latency_timestamps_valid_rate"] == 1.0
-                and (result["requested_streams"] < LATENCY_GATE_MIN_STREAMS or result["text_latency_gate"])
+                and result["text_latency_gate"]
                 for result in level_results
             ),
             "rejection_probe_enforced": (
@@ -692,12 +692,9 @@ async def _run_benchmark(
             "stream_readiness": all(result["ready_rate"] == 1.0 for result in level_results)
             and sustained_result is not None
             and sustained_result["ready_rate"] == 1.0,
-            "latency_gate": all(
-                result["requested_streams"] < LATENCY_GATE_MIN_STREAMS or result["text_latency_gate"]
-                for result in level_results
-            )
+            "latency_gate": all(result["text_latency_gate"] for result in level_results)
             and sustained_result is not None
-            and (max(levels) < LATENCY_GATE_MIN_STREAMS or sustained_result["text_latency_gate"]),
+            and sustained_result["text_latency_gate"],
             "sustained_capacity_complete": sustained_complete,
             "gpu_memory_observed": all(result["gpu_memory"]["available"] for result in memory_results),
             "model_identity": _model_identity_matches(runtime_health.get("model_identity")),

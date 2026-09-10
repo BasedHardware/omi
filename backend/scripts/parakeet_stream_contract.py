@@ -300,6 +300,48 @@ def validate_capacity_evidence(
         raise DeploymentError("Parakeet qualification evidence has no numeric expected_capacity") from exc
     if measured < required_capacity:
         raise DeploymentError(f"measured stream capacity {measured} is below required {required_capacity}")
+    gpu = evidence.get("gpu")
+    if not isinstance(gpu, dict) or gpu.get("type") != "nvidia-l4":
+        raise DeploymentError("Parakeet qualification evidence was not measured on an NVIDIA L4")
+    latency_gate = evidence.get("latency_gate")
+    if not isinstance(latency_gate, dict):
+        raise DeploymentError("Parakeet qualification evidence has no latency gate")
+    declared_latency = _finite_measurement(latency_gate.get("max_p95_seconds"), field="latency_gate.max_p95_seconds")
+    if declared_latency > 4:
+        raise DeploymentError("Parakeet qualification latency threshold exceeds the 4 second release bound")
+    levels = evidence.get("levels")
+    if not isinstance(levels, list) or not levels or not all(isinstance(level, dict) for level in levels):
+        raise DeploymentError("Parakeet qualification evidence has no measured stream levels")
+    level_requests = [
+        _positive_int(level.get("requested_streams"), field="levels.requested_streams") for level in levels
+    ]
+    highest_level = max(level_requests)
+    if highest_level < required_capacity:
+        raise DeploymentError("Parakeet qualification levels do not cover the required stream capacity")
+    if measured != highest_level:
+        raise DeploymentError("declared stream capacity does not equal the highest measured stream level")
+    for level, requested in zip(levels, level_requests):
+        accepted = _nonnegative_int(level.get("accepted_streams"), field="levels.accepted_streams")
+        if accepted > requested:
+            raise DeploymentError("Parakeet qualification level has an invalid accepted stream count")
+        observed_latency = _finite_measurement(level.get("text_latency_p95_s"), field="levels.text_latency_p95_s")
+        if observed_latency > declared_latency or observed_latency > 4:
+            raise DeploymentError("Parakeet qualification measured text latency exceeds the release bound")
+    sustained = evidence.get("sustained")
+    if not isinstance(sustained, dict):
+        raise DeploymentError("Parakeet qualification evidence has no sustained capacity result")
+    sustained_requested = _positive_int(sustained.get("requested_streams"), field="sustained.requested_streams")
+    sustained_accepted = _nonnegative_int(sustained.get("accepted_streams"), field="sustained.accepted_streams")
+    if sustained_requested < required_capacity or sustained_accepted < required_capacity:
+        raise DeploymentError("sustained qualification did not accept the required stream capacity")
+    sustained_duration = _finite_measurement(
+        sustained.get("audio_duration_s", sustained.get("duration_s")), field="sustained.audio_duration_s"
+    )
+    if sustained_duration < 180:
+        raise DeploymentError("sustained qualification duration is below 180 seconds")
+    sustained_latency = _finite_measurement(sustained.get("text_latency_p95_s"), field="sustained.text_latency_p95_s")
+    if sustained_latency > declared_latency or sustained_latency > 4:
+        raise DeploymentError("sustained qualification measured text latency exceeds the release bound")
     qualification = evidence.get("qualification")
     if not isinstance(qualification, dict):
         raise DeploymentError("Parakeet qualification evidence has no qualification result")
@@ -311,6 +353,7 @@ def validate_capacity_evidence(
         "sustained_capacity_complete",
         "gpu_memory_observed",
         "model_identity",
+        "text_sentinel_smoke",
     )
     if any(qualification.get(flag) is not True for flag in required):
         raise DeploymentError("Parakeet stream qualification did not pass all capacity and GPU checks")
@@ -324,6 +367,18 @@ def validate_tdt_model_identity(identity: object, *, field: str, exact: bool = F
         raise DeploymentError(f"{field} model identity does not identify the expected Parakeet TDT model revision")
     if exact and identity != EXPECTED_STREAM_MODEL_IDENTITY:
         raise DeploymentError(f"{field} model identity contains unexpected fields")
+
+
+def _finite_measurement(value: object, *, field: str) -> float:
+    if isinstance(value, bool):
+        raise DeploymentError(f"{field} must be a finite number")
+    try:
+        parsed = float(cast(Any, value))
+    except (TypeError, ValueError) as exc:
+        raise DeploymentError(f"{field} must be a finite number") from exc
+    if not math.isfinite(parsed) or parsed < 0:
+        raise DeploymentError(f"{field} must be a finite non-negative number")
+    return parsed
 
 
 def _capacity_value(value: object) -> float:

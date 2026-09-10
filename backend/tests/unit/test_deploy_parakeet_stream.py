@@ -134,6 +134,15 @@ def test_qualification_is_bound_to_exact_image_and_hard_capacity():
         "runtime_health": {"model_identity": {**EXPECTED_STREAM_MODEL_IDENTITY, "model_loaded": True}},
         "expected_model_identity": dict(EXPECTED_STREAM_MODEL_IDENTITY),
         "expected_capacity": 25,
+        "gpu": {"type": "nvidia-l4"},
+        "latency_gate": {"max_p95_seconds": 4},
+        "levels": [{"requested_streams": 25, "accepted_streams": 25, "text_latency_p95_s": 1}],
+        "sustained": {
+            "requested_streams": 25,
+            "accepted_streams": 25,
+            "audio_duration_s": 180,
+            "text_latency_p95_s": 1,
+        },
         "qualification": {
             "accepted_levels_complete": True,
             "rejection_probe_enforced": True,
@@ -142,6 +151,7 @@ def test_qualification_is_bound_to_exact_image_and_hard_capacity():
             "sustained_capacity_complete": True,
             "gpu_memory_observed": True,
             "model_identity": True,
+            "text_sentinel_smoke": True,
         },
     }
     validate_capacity_evidence(evidence, image_ref=image_ref, required_capacity=25, source_sha="source-123")
@@ -250,6 +260,21 @@ def _qualified_evidence(plan):
         "runtime_health": {"model_identity": {**EXPECTED_STREAM_MODEL_IDENTITY, "model_loaded": True}},
         "expected_model_identity": dict(EXPECTED_STREAM_MODEL_IDENTITY),
         "expected_capacity": plan.hard_stream_capacity,
+        "gpu": {"type": "nvidia-l4"},
+        "latency_gate": {"max_p95_seconds": 4},
+        "levels": [
+            {
+                "requested_streams": plan.hard_stream_capacity,
+                "accepted_streams": plan.hard_stream_capacity,
+                "text_latency_p95_s": 1,
+            }
+        ],
+        "sustained": {
+            "requested_streams": plan.hard_stream_capacity,
+            "accepted_streams": plan.hard_stream_capacity,
+            "audio_duration_s": 180,
+            "text_latency_p95_s": 1,
+        },
         "qualification": {
             "accepted_levels_complete": True,
             "rejection_probe_enforced": True,
@@ -258,8 +283,41 @@ def _qualified_evidence(plan):
             "sustained_capacity_complete": True,
             "gpu_memory_observed": True,
             "model_identity": True,
+            "text_sentinel_smoke": True,
         },
     }
+
+
+def test_artifact_cannot_claim_capacity_above_highest_measured_level():
+    plan = _plan()
+    evidence = _qualified_evidence(plan)
+    evidence["expected_capacity"] = 64
+    with pytest.raises(DeploymentError, match="highest measured stream level"):
+        validate_capacity_evidence(evidence, image_ref=plan.image_ref, required_capacity=plan.hard_stream_capacity)
+
+
+def test_artifact_requires_at_least_three_minutes_of_sustained_capacity():
+    plan = _plan()
+    evidence = _qualified_evidence(plan)
+    evidence["sustained"]["audio_duration_s"] = 179
+    with pytest.raises(DeploymentError, match="duration"):
+        validate_capacity_evidence(evidence, image_ref=plan.image_ref, required_capacity=plan.hard_stream_capacity)
+
+
+def test_artifact_requires_nvidia_l4_measurement():
+    plan = _plan()
+    evidence = _qualified_evidence(plan)
+    evidence["gpu"]["type"] = "nvidia-a100"
+    with pytest.raises(DeploymentError, match="NVIDIA L4"):
+        validate_capacity_evidence(evidence, image_ref=plan.image_ref, required_capacity=plan.hard_stream_capacity)
+
+
+def test_artifact_requires_text_sentinel_smoke():
+    plan = _plan()
+    evidence = _qualified_evidence(plan)
+    evidence["qualification"]["text_sentinel_smoke"] = False
+    with pytest.raises(DeploymentError, match="qualification"):
+        validate_capacity_evidence(evidence, image_ref=plan.image_ref, required_capacity=plan.hard_stream_capacity)
 
 
 class _ReleaseRunner:
