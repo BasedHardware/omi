@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a live meeting's transcript being silently lost when the recording session was slow to start, so words spoken right after a meeting begins now upload with that meeting"
+}

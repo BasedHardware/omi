@@ -268,6 +268,7 @@ extension AppState {
           let sessionStillCurrent = await MainActor.run { () -> Bool in
             guard self.recordingGeneration == sessionGeneration else { return false }
             self.currentSessionId = sessionId
+            self.flushHeldTranscriptWork(sessionId: sessionId)
             // Start live notes session
             LiveNotesMonitor.shared.startSession(sessionId: sessionId)
             return true
@@ -1389,6 +1390,7 @@ extension AppState {
         let sessionStillCurrent = await MainActor.run { () -> Bool in
           guard self.isTranscribing, self.recordingGeneration == sessionGeneration else { return false }
           self.currentSessionId = sessionId
+          self.flushHeldTranscriptWork(sessionId: sessionId)
           LiveNotesMonitor.shared.startSession(sessionId: sessionId)
           return true
         }
@@ -1541,6 +1543,9 @@ extension AppState {
     LiveNotesMonitor.shared.clear()
     recordingStartTime = nil
     currentSessionId = nil
+    // Work still held for a session that never existed has nowhere to land; the recording
+    // that would have created it is over and it must not leak into the next one.
+    discardHeldTranscriptWork()
     currentClientConversationId = nil
     meetingBoundaryInProgress = false
     pendingMeetingState = nil

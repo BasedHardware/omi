@@ -576,6 +576,18 @@ class AppState: ObservableObject {
   }
 
   var currentSessionId: Int64?
+  /// Transcript storage work that arrived while `currentSessionId` was still nil. The DB
+  /// session is created in a detached task at capture start and at every meeting-boundary
+  /// rotation, so segments and relabels can outrun it — on a real meeting boundary the id
+  /// has landed tens of seconds after capture resumed. Work held here, in arrival order,
+  /// is flushed into the session the moment its id exists instead of being silently lost.
+  /// Owned by the transcript handlers in `AppState+ListenEvents.swift`.
+  enum HeldTranscriptWorkUnit {
+    case segments([TranscriptionService.BackendSegment])
+    case relabels([Int: LocalSpeakerRegistry.Resolution])
+  }
+
+  var heldTranscriptWork: [HeldTranscriptWorkUnit] = []
   /// Serializes segment persistence so a local duplicate replacement cannot race
   /// the original mic segment's upsert in SQLite.
   var transcriptPersistenceTail: Task<Void, Never>?

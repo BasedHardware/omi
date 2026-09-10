@@ -157,9 +157,15 @@ extension AppState {
     // Update published segments for UI (via isolated monitor)
     LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
 
-    // Persist segments to DB for crash safety (upsert by backend segment ID)
-    if let sessionId = currentSessionId, !segmentsToPersist.isEmpty {
-      enqueueTranscriptPersistence(segmentsToPersist, sessionId: sessionId)
+    // Persist segments to DB for crash safety (upsert by backend segment ID). While the
+    // session id has not landed yet, hold the segments for the session instead of dropping
+    // them — they are flushed the moment `currentSessionId` is installed.
+    if !segmentsToPersist.isEmpty {
+      if let sessionId = currentSessionId {
+        enqueueTranscriptPersistence(segmentsToPersist, sessionId: sessionId)
+      } else {
+        holdTranscriptWorkUntilSessionExists(.segments(segmentsToPersist))
+      }
     }
   }
 
@@ -226,15 +232,14 @@ extension AppState {
     if moved > 0 {
       LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
     }
-    guard let sessionId = currentSessionId else { return }
-    enqueueTranscriptStorageWork {
-      do {
-        let rows = try await TranscriptionStorage.shared.relabelSpeakers(sessionId: sessionId, relabels: relabels)
-        log("Transcript [RELABEL] \(rows) stored segments moved in session \(sessionId)")
-      } catch {
-        logError("Transcript [RELABEL] failed to persist speaker relabel", error: error)
-      }
+    guard let sessionId = currentSessionId else {
+      // The session id has not landed yet. The moved bubbles are on screen; hold the
+      // storage-level relabel so it reaches the stored rows in arrival order once the
+      // session exists, instead of being dropped with them.
+      holdTranscriptWorkUntilSessionExists(.relabels(relabels))
+      return
     }
+    enqueueRelabelPersistence(sessionId: sessionId, relabels: relabels)
   }
 
   /// "This is me" on a live bubble: the on-device diarizer makes that speaker the user and
@@ -264,6 +269,60 @@ extension AppState {
     enqueueTranscriptStorageWork { [weak self] in
       await self?.persistBackendSegmentsToStorage(segments, sessionId: sessionId)
     }
+  }
+
+  private func enqueueRelabelPersistence(
+    sessionId: Int64,
+    relabels: [Int: LocalSpeakerRegistry.Resolution]
+  ) {
+    enqueueTranscriptStorageWork {
+      do {
+        let rows = try await TranscriptionStorage.shared.relabelSpeakers(sessionId: sessionId, relabels: relabels)
+        log("Transcript [RELABEL] \(rows) stored segments moved in session \(sessionId)")
+      } catch {
+        logError("Transcript [RELABEL] failed to persist speaker relabel", error: error)
+      }
+    }
+  }
+
+  /// Hold transcript storage work that arrived before the DB session existed, so a segment
+  /// or relabel is never silently dropped for racing the async session creation. Only an
+  /// active recording holds work — one that already stopped will never have a session.
+  private func holdTranscriptWorkUntilSessionExists(_ unit: HeldTranscriptWorkUnit) {
+    guard isTranscribing else { return }
+    heldTranscriptWork.append(unit)
+    switch unit {
+    case .segments(let segments):
+      log("Transcript [HOLD] \(segments.count) segment(s) held until the DB session exists")
+    case .relabels:
+      log("Transcript [HOLD] speaker relabel(s) held until the DB session exists")
+    }
+  }
+
+  /// Flush held transcript work into the freshly created session, preserving arrival order
+  /// so a held relabel still lands after the held segments it renames. Called right after
+  /// `currentSessionId` is installed by the session-creation tasks.
+  func flushHeldTranscriptWork(sessionId: Int64) {
+    guard !heldTranscriptWork.isEmpty else { return }
+    let units = heldTranscriptWork
+    heldTranscriptWork = []
+    for unit in units {
+      switch unit {
+      case .segments(let segments):
+        enqueueTranscriptPersistence(segments, sessionId: sessionId)
+      case .relabels(let relabels):
+        enqueueRelabelPersistence(sessionId: sessionId, relabels: relabels)
+      }
+    }
+    log("Transcript [HOLD] flushed \(units.count) held unit(s) into session \(sessionId)")
+  }
+
+  /// Drop held transcript work when the recording that would have created its session ends
+  /// without one — it has nowhere to land and must not leak into an unrelated recording.
+  func discardHeldTranscriptWork() {
+    guard !heldTranscriptWork.isEmpty else { return }
+    heldTranscriptWork = []
+    log("Transcript [HOLD] discarded held transcript work — no session will exist for it")
   }
 
   /// Serialize transcript storage writes: each unit runs after every earlier one finished.
