@@ -73,6 +73,11 @@ package struct OmiToggleStyle: ToggleStyle {
       }
       .buttonStyle(.plain)
       .accessibilityLabel("Switch")
+      // The element exists (a Button is one by construction) but a switch must also *say* its
+      // state: without a value, assistive tech finds the control yet cannot tell on from off.
+      // The label stays the generic fallback — a style cannot read a string out of
+      // `configuration.label`, and per-feature names belong at the call sites.
+      .accessibilityValue(configuration.isOn ? "on" : "off")
       .omiAnimation(.easeInOut(duration: 0.15), value: configuration.isOn)
     }
   }

@@ -65,11 +65,18 @@ final class OmiToggleStyleActivationTests: XCTestCase {
   func testAClickThatDragsInsideTheSwitchStillWritesTheBindingExactlyOnce() throws {
     let latch = SetCountingLatch(isOn: false)
 
-    // Five points of drag, staying well inside the 36×20 track. A human click that isn't a clean
-    // tap moves about this much; the switch's own width is 36, so the whole sequence stays on it.
+    // Five points of drag, staying well inside the 36×20 track, delivered as a real drag: a
+    // `leftMouseDragged` at each intermediate point between the down and the up, which is the
+    // event stream a physical drag produces — not a relocated click. A human click that isn't a
+    // clean tap moves about this much; the switch's own width is 36, so the whole sequence stays
+    // on it.
     click(
       on: styledToggle(latch),
       down: Self.center,
+      dragThrough: [
+        CGPoint(x: Self.center.x + 2, y: Self.center.y),
+        CGPoint(x: Self.center.x + 4, y: Self.center.y),
+      ],
       up: CGPoint(x: Self.center.x + 5, y: Self.center.y))
 
     XCTAssertEqual(
@@ -139,13 +146,16 @@ final class OmiToggleStyleActivationTests: XCTestCase {
 
   // MARK: - Driving a real click
 
-  /// Dispatches a real `leftMouseDown`/`leftMouseUp` pair into a window hosting `view` — the
-  /// `ShellModalScrimDismissTests` harness. Synthetic clicks rather than calls into the style,
-  /// because the thing under test is whether one physical click activates the control exactly
-  /// once, which is a fact about event/gesture routing, not about any one handler. The host is
-  /// square and the view is pinned to its center, so the SwiftUI center and the AppKit center
-  /// (origin bottom-left) are the same point.
-  private func click(on view: some View, down: CGPoint, up: CGPoint) {
+  /// Dispatches a real `leftMouseDown` / `leftMouseDragged`… / `leftMouseUp` sequence into a
+  /// window hosting `view` — the `ShellModalScrimDismissTests` harness, extended with drag
+  /// events. Synthetic clicks rather than calls into the style, because the thing under test is
+  /// whether one physical click activates the control exactly once, which is a fact about
+  /// event/gesture routing, not about any one handler. `dragThrough` is empty for a clean click
+  /// (down and up at the same point, nothing between); for a dragged click it carries the
+  /// intermediate points a physical drag delivers between down and up. The host is square and
+  /// the view is pinned to its center, so the SwiftUI center and the AppKit center (origin
+  /// bottom-left) are the same point.
+  private func click(on view: some View, down: CGPoint, dragThrough: [CGPoint] = [], up: CGPoint) {
     let size = Self.hostSize
     let host = NSHostingView(rootView: view)
     host.frame = NSRect(origin: .zero, size: size)
@@ -166,11 +176,20 @@ final class OmiToggleStyleActivationTests: XCTestCase {
     let downEvent = NSEvent.mouseEvent(
       with: .leftMouseDown, location: toAppKit(down), modifierFlags: [], timestamp: 0,
       windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1)
+    if let downEvent { window.sendEvent(downEvent) }
+    for (index, point) in dragThrough.enumerated() {
+      if let dragEvent = NSEvent.mouseEvent(
+        with: .leftMouseDragged, location: toAppKit(point), modifierFlags: [], timestamp: 0.005,
+        windowNumber: window.windowNumber, context: nil, eventNumber: 2 + index, clickCount: 1,
+        pressure: 1)
+      {
+        window.sendEvent(dragEvent)
+      }
+    }
     let upEvent = NSEvent.mouseEvent(
       with: .leftMouseUp, location: toAppKit(up), modifierFlags: [], timestamp: 0.01,
-      windowNumber: window.windowNumber, context: nil, eventNumber: 2, clickCount: 1, pressure: 0)
-
-    if let downEvent { window.sendEvent(downEvent) }
+      windowNumber: window.windowNumber, context: nil,
+      eventNumber: 2 + dragThrough.count, clickCount: 1, pressure: 0)
     if let upEvent { window.sendEvent(upEvent) }
   }
 
