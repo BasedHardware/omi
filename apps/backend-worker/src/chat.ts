@@ -44,6 +44,7 @@ export type HistoryResult =
       capabilities: typeof CHAT_CAPABILITIES;
     }
   | "invalid_cursor"
+  | "cursor_expired"
   | "unavailable";
 
 export type SettingsIdentity = {
@@ -199,9 +200,13 @@ export async function readHistory(
   chatSessionId?: string
 ): Promise<HistoryResult> {
   const sessionFilter = chatSessionId ?? null;
-  const boundary =
-    olderCursor === undefined ? null : decodeCursor(olderCursor, sessionFilter);
-  if (olderCursor !== undefined && boundary === null) return "invalid_cursor";
+  let boundary: { createdAt: number; id: string } | null = null;
+  if (olderCursor !== undefined) {
+    const decoded = decodeCursor(olderCursor, sessionFilter);
+    if (decoded.status === "invalid") return "invalid_cursor";
+    if (decoded.status === "expired") return "cursor_expired";
+    boundary = { createdAt: decoded.createdAt, id: decoded.id };
+  }
 
   const result = await db
     .prepare(
@@ -857,13 +862,16 @@ function isTerminal(event: GenerationEvent): boolean {
   );
 }
 
+const CHAT_CURSOR_TTL_SECONDS = 3_600;
+
 function encodeCursor(
   createdAt: number,
   id: string,
   chatSessionId: string | null
 ): string {
+  const expiresAt = Math.floor(Date.now() / 1000) + CHAT_CURSOR_TTL_SECONDS;
   const bytes = new TextEncoder().encode(
-    JSON.stringify({ t: createdAt, i: id, s: chatSessionId })
+    JSON.stringify({ e: expiresAt, i: id, s: chatSessionId, t: createdAt })
   );
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -876,8 +884,11 @@ function encodeCursor(
 function decodeCursor(
   cursor: string,
   chatSessionId: string | null
-): { createdAt: number; id: string } | null {
-  if (!/^[A-Za-z0-9_-]{1,1024}$/.test(cursor)) return null;
+):
+  | { status: "ok"; createdAt: number; id: string }
+  | { status: "expired" }
+  | { status: "invalid" } {
+  if (!/^[A-Za-z0-9_-]{1,1024}$/.test(cursor)) return { status: "invalid" };
   try {
     const standard = cursor.replaceAll("-", "+").replaceAll("_", "/");
     const padded = standard + "=".repeat((4 - (standard.length % 4)) % 4);
@@ -894,11 +905,11 @@ function decodeCursor(
       typeof parsed !== "object" ||
       Array.isArray(parsed)
     ) {
-      return null;
+      return { status: "invalid" };
     }
     const record = parsed as Record<string, unknown>;
     if (
-      Object.keys(record).sort().join(",") !== "i,s,t" ||
+      Object.keys(record).sort().join(",") !== "e,i,s,t" ||
       typeof record.t !== "number" ||
       !Number.isSafeInteger(record.t) ||
       record.t < 0 ||
@@ -906,18 +917,24 @@ function decodeCursor(
       record.i.length < 1 ||
       record.i.length > 256 ||
       !(record.s === null || typeof record.s === "string") ||
-      record.s !== chatSessionId
+      record.s !== chatSessionId ||
+      typeof record.e !== "number" ||
+      !Number.isSafeInteger(record.e) ||
+      record.e < 0
     ) {
-      return null;
+      return { status: "invalid" };
     }
     if (
       typeof record.s === "string" &&
       (record.s.length === 0 || record.s.length > 128)
     ) {
-      return null;
+      return { status: "invalid" };
     }
-    return { createdAt: record.t, id: record.i };
+    if (Math.floor(Date.now() / 1000) >= record.e) {
+      return { status: "expired" };
+    }
+    return { status: "ok", createdAt: record.t, id: record.i };
   } catch {
-    return null;
+    return { status: "invalid" };
   }
 }

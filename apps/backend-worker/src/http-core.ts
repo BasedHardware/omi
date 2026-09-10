@@ -508,6 +508,8 @@ export async function handleChatHistory(
   );
   if (history === "invalid_cursor")
     return backendError("bad_request", "refresh_history", 400);
+  if (history === "cursor_expired")
+    return backendError("cursor_expired", "refresh_history", 410);
   if (history === "unavailable")
     return backendError("service_unavailable", "retry", 503, true, {
       "retry-after": "60",

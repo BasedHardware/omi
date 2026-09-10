@@ -1921,6 +1921,38 @@ describe("worker request contract", () => {
     });
   });
 
+  test("chat history GET maps an expired olderCursor to cursor_expired", async () => {
+    const payload = JSON.stringify({
+      e: 1,
+      i: "expired-msg",
+      s: null,
+      t: 1,
+    });
+    let binary = "";
+    for (const byte of new TextEncoder().encode(payload)) {
+      binary += String.fromCharCode(byte);
+    }
+    const expiredCursor = btoa(binary)
+      .replaceAll("+", "-")
+      .replaceAll("/", "_")
+      .replace(/=+$/, "");
+    const expired = await fetchWorker(
+      `/v1/chat-messages?olderCursor=${expiredCursor}`,
+      {
+        headers: authenticatedHeaders,
+      }
+    );
+    expect(expired.status).toBe(410);
+    expect(expired.headers.get("retry-after")).toBeNull();
+    expect((await expired.json()) as unknown).toEqual({
+      error: {
+        code: "cursor_expired",
+        retryable: false,
+        action: "refresh_history",
+      },
+    });
+  });
+
   test("chat history GET refuses an olderCursor from another session", async () => {
     const insert = async (
       id: string,
