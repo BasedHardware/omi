@@ -15,7 +15,6 @@ final class TranscriptSessionTimingPersistenceTests: XCTestCase {
   private var state: AppState?
 
   override func setUp() async throws {
-    try await super.setUp()
     testUserId = "transcript-session-timing-test-\(UUID().uuidString)"
     await RewindDatabase.shared.close()
     await TranscriptionStorage.shared.invalidateCache()
@@ -44,7 +43,6 @@ final class TranscriptSessionTimingPersistenceTests: XCTestCase {
     if let userDir {
       try? FileManager.default.removeItem(at: userDir)
     }
-    try await super.tearDown()
   }
 
   private func segment(_ text: String, speaker: Int = 0, isUser: Bool = true)
