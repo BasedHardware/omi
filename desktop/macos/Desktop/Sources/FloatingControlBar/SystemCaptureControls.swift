@@ -62,9 +62,13 @@ enum SystemCaptureControls {
       return .disabled
     }
 
+    // Posts its own "screen_capture" reason (not "trial_expired") so the
+    // central `AppState.isUsageLimitExemptLocally` choke point can match this
+    // gate's exemption exactly instead of relying on a shared, less precise
+    // reason string.
     if !AppState.isScreenCaptureExemptFromPaywall {
       NotificationCenter.default.post(
-        name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
+        name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "screen_capture"])
       return .blockedPaywall
     }
 
@@ -90,10 +94,13 @@ enum SystemCaptureControls {
   static func setAudioRecording(_ enabled: Bool) -> SystemCaptureOutcome {
     // Narrower exemption than the general paywall check: also off the hook
     // once transcription is pointed at a self-hosted backend, even without
-    // BYOK (see AppState.isTranscriptionExemptFromPaywall).
+    // BYOK (see AppState.isTranscriptionExemptFromPaywall). Posts its own
+    // "transcription" reason (not "trial_expired") so the central
+    // `AppState.isUsageLimitExemptLocally` choke point can tell this gate
+    // apart from screen capture's and apply the right exemption to each.
     if enabled && !AppState.isTranscriptionExemptFromPaywall {
       NotificationCenter.default.post(
-        name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
+        name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "transcription"])
       return .blockedPaywall
     }
 
