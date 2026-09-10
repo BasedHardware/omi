@@ -9,6 +9,10 @@ ni objetivos.
 
 Requisitos: Python 3.10 o posterior y una cuenta de Omi.
 
+> Nota: en PyPI el paquete se llama **`omi-cli`**, mientras que el comando que se
+> ejecuta después de instalar se llama **`omi`**. En PyPI existe otro paquete, no
+> relacionado, que ocupa el nombre `omi`: no instales ese.
+
 Si tienes `pipx` instalado:
 
 ```sh
