@@ -14,8 +14,9 @@ struct LocalEmbeddingKillSwitches: Sendable, Equatable {
       return value
     }
     return Self(
-      isDisabled: environment["OMI_DISABLE_LOCAL_EMBEDDINGS"] == "1" || defaults.bool(forKey: "disableLocalEmbeddings"),
+      isDisabled: environment["OMI_DISABLE_LOCAL_EMBEDDINGS"] == "1"
+        || defaults.bool(forKey: .disableLocalEmbeddings),
       forcedEngineRaw: trimmed(environment["OMI_FORCE_LOCAL_EMBEDDING_ENGINE"])
-        ?? trimmed(defaults.string(forKey: "forceLocalEmbeddingEngine")))
+        ?? trimmed(defaults.string(forKey: .forceLocalEmbeddingEngine)))
   }
 }
