@@ -411,3 +411,17 @@ def test_keyword_finds_document_written_at_normalized_window_edge(monkeypatch, s
     assert [match['screenshot_id'] for match in matches] == ['edge']
     assert client.screens.filters[0].value == start
     assert client.screens.filters[1].value == edge
+
+
+def test_vector_opt_out_parses_whitespace_without_crash(monkeypatch, sa):
+    monkeypatch.delenv('SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS', raising=False)
+    assert sa._parse_csv_tokens(None) == []
+    assert sa._parse_csv_tokens('  \n\t ') == []
+    assert sa._parse_csv_tokens(' other , u1 \n, ') == ['other', 'u1']
+    assert sa._screen_vectors_disabled('u1') is False
+    monkeypatch.setenv('SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS', '  \n\t ')
+    assert sa._screen_vectors_disabled('u1') is False
+    monkeypatch.setenv('SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS', ' other , u1 \n')
+    assert sa._screen_vectors_disabled('u1') is True
+    monkeypatch.setenv('SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS', ' * ')
+    assert sa._screen_vectors_disabled('anyone') is True
