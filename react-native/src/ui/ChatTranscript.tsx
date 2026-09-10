@@ -100,6 +100,18 @@ const ChatMessageRow = memo(function ChatMessageRow({
             {copy}
           </Text>
         ))}
+        {(message.evidence ?? []).map((item, index) => (
+          <View
+            key={`evidence-${index}`}
+            accessibilityLabel={`${item.title}: ${item.detail}`}>
+            <Text numberOfLines={1} style={styles.cancelledLabel}>
+              {item.title}
+            </Text>
+            <Text numberOfLines={2} style={styles.cancelledLabel}>
+              {item.detail}
+            </Text>
+          </View>
+        ))}
         {message.sender === 'unknown' && (
           <Text style={styles.cancelledLabel}>
             {chatSenderCopy(message.sender)}

@@ -4,6 +4,7 @@ import type {
   ChatMessage,
   ChatMessageAttachment,
 } from './chatClient';
+import {chatEvidenceCopy} from './desktopReadClient';
 
 function object(value: unknown): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -134,6 +135,123 @@ function parseOmiChatChart(
   return {title: row.title, points};
 }
 
+const conversationEvidenceKinds = new Set([
+  'conversation_summary',
+  'conversation_segment',
+]);
+
+function parseOmiChatEvidenceRaw(value: unknown): {
+  kind: string;
+  state: string;
+  title?: string;
+  summary?: string;
+}[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  const envelope = Array.isArray(value)
+    ? {references: value}
+    : value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+  if (envelope === null) {
+    return [];
+  }
+  const schemaRaw =
+    envelope.schema_version ?? envelope.schemaVersion ?? envelope.version;
+  const schemaVersion =
+    schemaRaw === undefined || schemaRaw === null
+      ? 1
+      : typeof schemaRaw === 'number' && Number.isFinite(schemaRaw)
+      ? schemaRaw
+      : typeof schemaRaw === 'string'
+      ? Number.parseInt(schemaRaw, 10)
+      : NaN;
+  const forceUnknown = schemaVersion !== 1;
+  const rawReferences =
+    envelope.references ??
+    envelope.evidence_refs ??
+    envelope.evidence_references;
+  if (!Array.isArray(rawReferences)) {
+    return [];
+  }
+  return rawReferences.slice(0, 24).flatMap(raw => {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      return [];
+    }
+    const row = raw as Record<string, unknown>;
+    const kindRaw = forceUnknown
+      ? 'unknown'
+      : typeof row.kind === 'string'
+      ? row.kind
+      : typeof row.type === 'string'
+      ? row.type
+      : 'unknown';
+    const stateRaw = forceUnknown
+      ? 'unknown'
+      : typeof row.state === 'string'
+      ? row.state
+      : typeof row.status === 'string'
+      ? row.status
+      : 'unknown';
+    const title = typeof row.title === 'string' ? row.title : undefined;
+    const summary =
+      typeof row.summary === 'string'
+        ? row.summary
+        : typeof row.preview === 'string'
+        ? row.preview
+        : undefined;
+    return [
+      {
+        kind: kindRaw.trim().toLowerCase(),
+        state: stateRaw.trim().toLowerCase(),
+        ...(title === undefined ? {} : {title}),
+        ...(summary === undefined ? {} : {summary}),
+      },
+    ];
+  });
+}
+
+function parseOmiChatEvidence(
+  row: Record<string, unknown>,
+  hasMemories: boolean,
+): {title: string; detail: string}[] {
+  try {
+    const direct =
+      row.evidence ??
+      row.evidence_envelope ??
+      row.evidence_refs ??
+      row.evidence_references;
+    let refs = parseOmiChatEvidenceRaw(direct);
+    if (refs.length === 0 && typeof row.metadata === 'string') {
+      try {
+        const decoded: unknown = JSON.parse(row.metadata);
+        if (
+          decoded !== null &&
+          typeof decoded === 'object' &&
+          !Array.isArray(decoded)
+        ) {
+          const metadata = decoded as Record<string, unknown>;
+          refs = parseOmiChatEvidenceRaw(
+            metadata.evidence ??
+              metadata.evidence_envelope ??
+              metadata.evidence_refs ??
+              metadata.evidence_references,
+          );
+        }
+      } catch {
+        refs = [];
+      }
+    }
+    if (hasMemories) {
+      refs = refs.filter(item => !conversationEvidenceKinds.has(item.kind));
+    }
+    return refs.map(chatEvidenceCopy);
+  } catch {
+    return [];
+  }
+}
+
 export function parseOmiMessage(value: unknown): ChatMessage {
   const row = object(value);
   const createdAt =
@@ -150,6 +268,7 @@ export function parseOmiMessage(value: unknown): ChatMessage {
   const memories = parseOmiChatMemories(row.memories);
   const attachments = parseOmiChatFiles(row.files, row.files_id);
   const chart = parseOmiChatChart(row.chart_data);
+  const evidence = parseOmiChatEvidence(row, memories.length > 0);
   return {
     id: row.id,
     text: row.text,
@@ -160,6 +279,7 @@ export function parseOmiMessage(value: unknown): ChatMessage {
     ...(memories.length === 0 ? {} : {memories}),
     ...(attachments.length === 0 ? {} : {attachments}),
     ...(chart === undefined ? {} : {chart}),
+    ...(evidence.length === 0 ? {} : {evidence}),
   };
 }
 

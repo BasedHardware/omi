@@ -33,6 +33,7 @@ export type ChatMessage = {
     title: string;
     points: {label: string; value: number}[];
   };
+  evidence?: {title: string; detail: string}[];
 };
 
 export type ChatHistoryPage = {

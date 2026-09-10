@@ -1361,6 +1361,71 @@ test('a chat message names GET memory citations without inventing a conversation
   });
 });
 
+test('a chat message names GET evidence without inventing an open action', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-evidence',
+        text: 'On that screen.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        evidence: [
+          {title: 'Calendar', detail: 'Tuesday agenda'},
+          {title: 'Screen keyframe', detail: 'Unavailable offline'},
+        ],
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('On that screen.');
+  expect(copies).toContain('Calendar');
+  expect(copies).toContain('Tuesday agenda');
+  expect(copies).toContain('Screen keyframe');
+  expect(copies).toContain('Unavailable offline');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Calendar: Tuesday agenda',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(copies).not.toContain('Open evidence');
+  const omitted = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-plain',
+        text: 'On that screen.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+      }}
+      reduceMotion
+    />,
+  );
+  expect(JSON.stringify(omitted.toJSON())).not.toContain('Tuesday agenda');
+  act(() => {
+    renderer.unmount();
+    omitted.unmount();
+  });
+});
+
 test('an unknown chat sender says Sender unavailable instead of looking like a quiet AI turn', () => {
   const renderer = render(
     <ChatMessageRow

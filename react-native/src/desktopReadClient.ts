@@ -669,6 +669,54 @@ export function chatMemoryCitationCopy(memory: {
   return emoji === '' ? title : `${emoji} ${title}`;
 }
 
+export function chatEvidenceKindCopy(kind: string): string {
+  switch (kind) {
+    case 'conversation_summary':
+      return 'Conversation summary';
+    case 'conversation_segment':
+      return 'Conversation segment';
+    case 'screen':
+      return 'Current screen';
+    case 'keyframe':
+      return 'Screen keyframe';
+    case 'request':
+      return 'Evidence request';
+    default:
+      return 'Evidence';
+  }
+}
+
+export function chatEvidenceStateCopy(state: string): string {
+  switch (state) {
+    case 'available':
+      return 'Available';
+    case 'loading':
+      return 'Loading';
+    case 'offline':
+      return 'Unavailable offline';
+    case 'pruned':
+      return 'No longer available';
+    case 'failed':
+      return 'Failed to load';
+    default:
+      return 'Unavailable';
+  }
+}
+
+export function chatEvidenceCopy(item: {
+  kind: string;
+  state: string;
+  title?: string;
+  summary?: string;
+}): {title: string; detail: string} {
+  const title = visibleDisplayText(item.title ?? '');
+  const summary = visibleDisplayText(item.summary ?? '');
+  return {
+    title: title === '' ? chatEvidenceKindCopy(item.kind) : title,
+    detail: summary === '' ? chatEvidenceStateCopy(item.state) : summary,
+  };
+}
+
 export function memoryDisplayTitle(item: {
   title: string;
   summary: string;

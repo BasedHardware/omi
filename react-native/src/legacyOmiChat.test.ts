@@ -103,6 +103,75 @@ test('old chat history keeps GET memory citations and omits empty titles', () =>
   ]);
 });
 
+test('old chat history names GET evidence and omits conversation refs already cited', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'evidence-1',
+        sender: 'ai',
+        text: 'On that screen.',
+        created_at: '2026-09-07T01:02:03Z',
+        memories: [
+          {
+            id: 'conv-1',
+            created_at: '2026-09-06T00:00:00Z',
+            structured: {title: 'Morning standup', emoji: '🚀'},
+          },
+        ],
+        evidence: {
+          schema_version: 1,
+          references: [
+            {
+              id: 'screen-1',
+              kind: 'screen',
+              state: 'available',
+              title: 'Calendar',
+              summary: 'Tuesday agenda',
+            },
+            {
+              id: 'conv-ref',
+              kind: 'conversation_summary',
+              state: 'available',
+              title: 'Morning standup',
+            },
+          ],
+        },
+      },
+      {
+        id: 'evidence-2',
+        sender: 'ai',
+        text: 'Fallback labels.',
+        created_at: '2026-09-07T01:02:04Z',
+        evidence: [
+          {id: 'key-1', kind: 'keyframe', state: 'offline'},
+          {id: 'bad', kind: 'mystery', state: 'nope'},
+        ],
+      },
+      {
+        id: 'evidence-3',
+        sender: 'ai',
+        text: 'Broken envelope stays text.',
+        created_at: '2026-09-07T01:02:05Z',
+        evidence: 'not-an-object',
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'evidence-1')?.evidence).toEqual([
+    {title: 'Calendar', detail: 'Tuesday agenda'},
+  ]);
+  expect(page.messages.find(row => row.id === 'evidence-2')?.evidence).toEqual([
+    {title: 'Screen keyframe', detail: 'Unavailable offline'},
+    {title: 'Evidence', detail: 'Unavailable'},
+  ]);
+  expect(
+    page.messages.find(row => row.id === 'evidence-3')?.evidence,
+  ).toBeUndefined();
+  expect(page.messages.find(row => row.id === 'evidence-3')?.text).toBe(
+    'Broken envelope stays text.',
+  );
+});
+
 test('old chat history rejects malformed GET memories', () => {
   expect(() =>
     parseOmiHistory(
