@@ -2635,10 +2635,17 @@ test('preserves an incomplete task projection and its reasons', async () => {
 test('groups task epochs by deterministic UTC day boundaries', () => {
   const now = Date.UTC(2026, 7, 14, 23, 30);
   expect(taskGroup(Date.UTC(2026, 7, 14, 0, 0), now)).toBe('Today');
-  expect(taskGroup(Date.UTC(2026, 7, 13, 0, 0), now)).toBe('Today');
+  expect(taskGroup(Date.UTC(2026, 7, 13, 0, 0), now)).toBe('Overdue');
   expect(taskGroup(Date.UTC(2026, 7, 15, 0, 0), now)).toBe('Tomorrow');
   expect(taskGroup(Date.UTC(2026, 7, 16, 0, 0), now)).toBe('Later');
   expect(taskGroup(null, now)).toBe('Later');
+});
+
+test('groups past-due task epochs as Overdue matching Flutter tasksOverdue', () => {
+  const now = Date.UTC(2026, 7, 14, 12, 0);
+  expect(taskGroup(Date.UTC(2026, 7, 13, 23, 59), now)).toBe('Overdue');
+  expect(taskGroup(Date.UTC(2026, 7, 14, 0, 0), now)).toBe('Today');
+  expect(taskGroup(0, now)).toBe('Later');
 });
 
 test('groups second-scale task dues on the same UTC day as millisecond dues', () => {

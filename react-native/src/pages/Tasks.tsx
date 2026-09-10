@@ -30,7 +30,7 @@ import {
 import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 
-const taskGroups: TaskGroup[] = ['Today', 'Tomorrow', 'Later'];
+const taskGroups: TaskGroup[] = ['Today', 'Tomorrow', 'Later', 'Overdue'];
 
 export function TasksPage({
   outcome,

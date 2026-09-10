@@ -1724,7 +1724,7 @@ export type TaskProjection = {
   exportCopy?: string;
 };
 
-export type TaskGroup = 'Today' | 'Tomorrow' | 'Later';
+export type TaskGroup = 'Today' | 'Tomorrow' | 'Later' | 'Overdue';
 
 export function taskGroup(
   dueAt: number | null,
@@ -1735,7 +1735,10 @@ export function taskGroup(
   }
   const today = Math.floor(nowMilliseconds / 86400000);
   const dueDay = Math.floor(epochMilliseconds(dueAt) / 86400000);
-  if (dueDay <= today) {
+  if (dueDay < today) {
+    return 'Overdue';
+  }
+  if (dueDay === today) {
     return 'Today';
   }
   return dueDay === today + 1 ? 'Tomorrow' : 'Later';

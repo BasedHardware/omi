@@ -745,3 +745,26 @@ test('retryable task reads still offer Refresh', () => {
   ).toBeGreaterThan(0);
   act(() => renderer.unmount());
 });
+
+test('tasks page names past-due GET due_at as Overdue matching Flutter tasksOverdue', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [{...task, id: 'task-overdue', dueAt: Date.UTC(2020, 0, 1)}],
+            page: outcome.value.page,
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  const copy = taskPageText(renderer);
+  expect(copy).toContain('Overdue');
+  expect(copy).toContain('Prepare demo');
+  expect(copy).not.toContain('Today');
+  act(() => renderer.unmount());
+});
