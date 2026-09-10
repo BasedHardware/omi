@@ -11,7 +11,6 @@ from database import users as users_db
 from models.memories import Memory, MemoryCategory
 from models.memory_contracts import L1MemoryArchiveClass, MemoryExtractionError
 from models.other import Person
-from utils.conversations.transcript_for_llm import memory_transcript_from_segments
 from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, shared_conversation_cache_supported
 from models.transcript_segment import TranscriptSegment
 from database.users import get_user_language_preference
@@ -152,6 +151,11 @@ def extract_canonical_l1_memory_candidates(
     person_ids = sorted({segment.person_id for segment in segments if segment.person_id})
     people_records = cast(List[Dict[str, Any]], users_db.get_people_by_ids(uid, person_ids)) if person_ids else []
     people = Person.deserialize_many_safe(people_records)
+    # Imported here rather than at module load: the renderer pulls in ``database.auth``,
+    # and ``utils.llm.memories`` must stay importable under the stubbed ``database`` package
+    # the memory-validation unit tests install.
+    from utils.conversations.transcript_for_llm import memory_transcript_from_segments
+
     content = memory_transcript_from_segments(segments, user_name=user_name, people=people)
     if not content or not content.strip():
         return []
