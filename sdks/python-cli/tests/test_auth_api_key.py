@@ -151,6 +151,6 @@ def test_transport_failure_during_login_leaves_saved_config_unchanged(
     before = config_path.read_bytes()
     route = respx_mock.get("/v1/dev/user/memories").mock(side_effect=httpx.ConnectError("Connection unavailable"))
     result = cli_runner.invoke(app, ["auth", "login", "--api-key", "omi_dev_" + "n" * 32])
-    assert result.exit_code != 0
+    assert result.exit_code == 3
     assert route.call_count == 1
     assert config_path.read_bytes() == before
