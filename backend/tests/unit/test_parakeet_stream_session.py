@@ -491,6 +491,25 @@ class TestStreamSessionRNNTStreaming:
         assert session._streaming_text == ""
         assert session._last_emitted_text == ""
 
+    def test_vad_endpoint_assigns_held_word_from_retained_acoustic_tail(self):
+        session = sh.StreamSession(sample_rate=16000)
+        retained_tail = _make_pcm(0.8)
+        endpoint_hangover = b"\x00" * int(0.4 * 16000 * 2)
+        session._finalization_audio = retained_tail
+        session._finalization_start_s = 0.5
+        session._pending_audio = bytearray(endpoint_hangover)
+        session._speech_start_s = 1.3
+        session._streaming_text = "held word"
+
+        with patch.object(session, "_streaming_enabled", return_value=True), patch.object(
+            session, "_assign_speaker", return_value="SPEAKER_0"
+        ) as assign:
+            result = asyncio.run(session._transcribe_utterance())
+
+        assert result[0]["text"] == "held word"
+        assert result[0]["start"] == pytest.approx(0.5)
+        assert assign.call_args.args[0] == retained_tail + endpoint_hangover
+
     def test_exact_boundary_flush_releases_right_context_once_without_fabricating_empty_audio(self):
         decoder = MagicMock()
         decoder.next_input_bytes.return_value = 4

@@ -653,6 +653,10 @@ class StreamSession:
                 # while the decoder still held its final word/right context.
                 self._pending_audio.extend(self._finalization_audio)
                 self._speech_start_s = self._finalization_start_s
+                # The retained tail now belongs to the pending utterance;
+                # avoid prepending it a second time in _transcribe_utterance.
+                self._finalization_audio = b""
+                self._finalization_start_s = None
         if not self._pending_audio or self._speech_start_s is None:
             self._flush_complete = True
             return []
@@ -808,7 +812,19 @@ class StreamSession:
             else:
                 self._last_emitted_text = self._streaming_text.strip()
             dur = len(speech_pcm) / (self._sr * self._bytes_per_sample)
-            segments = self._build_segments(text, speech_start, dur, speech_pcm)
+            # A max-window emission trims the final decoder word and retains
+            # the acoustic tail for the real VAD endpoint. The endpoint's
+            # pending buffer normally contains only hangover silence, so use
+            # the retained tail for speaker assignment and timeline bounds;
+            # otherwise a held word can be attributed from silence (or to a
+            # speaker who starts after the utterance ended).
+            segment_pcm = speech_pcm
+            segment_start = speech_start
+            if not trim_trailing_word and self._finalization_audio and self._finalization_start_s is not None:
+                segment_pcm = self._finalization_audio + speech_pcm
+                segment_start = self._finalization_start_s
+                dur = len(segment_pcm) / (self._sr * self._bytes_per_sample)
+            segments = self._build_segments(text, segment_start, dur, segment_pcm)
             if trim_trailing_word and segments:
                 tail_bytes = int((CHUNK_SECONDS + RIGHT_CONTEXT_SECONDS) * self._sr * self._bytes_per_sample)
                 self._finalization_audio = speech_pcm[-tail_bytes:]
