@@ -1,0 +1,3 @@
+{
+  "change": "The notch now sizes its lobes, chrome, and closed surface from one layout snapshot, and a later animation can no longer leave a stale resize behind"
+}

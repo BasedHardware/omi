@@ -29,6 +29,8 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarMouseInterception.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarSurfaceFloor.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarLayout.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarFrameTransition.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
