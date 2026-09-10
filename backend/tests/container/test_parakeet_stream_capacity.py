@@ -30,6 +30,10 @@ Environment:
   PARAKEET_STREAM_DOWNLOAD_TIMEOUT_S: fixture download timeout (default 60)
   PARAKEET_STREAM_SUSTAIN_S: sustained target duration (default 180)
   PARAKEET_STREAM_MAX_TEXT_LATENCY_S: p95 text latency gate (default 4 seconds)
+
+The stream health response must identify the exact TDT v3 model, NeMo backend,
+multilingual decoder family, and pinned Hugging Face revision before any audio
+is sent.  This English fixture cannot qualify multilingual accuracy.
 """
 
 from __future__ import annotations
