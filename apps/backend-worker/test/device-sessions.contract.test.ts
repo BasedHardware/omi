@@ -667,6 +667,53 @@ describe("device session request validators", () => {
     expect((await late.json()) as object).toEqual(conflict);
   });
 
+  test("illegal capture envelopes use production Listen invalid_request", async () => {
+    const invalid = {
+      error: {
+        code: "invalid_request",
+        retryable: false,
+        action: "edit_request",
+      },
+    };
+    const opened = await fetchWorker("/v1/device-sessions", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({ ...openBody, codec: 256 }),
+    });
+    expect(opened.status).toBe(400);
+    expect(opened.headers.get("retry-after")).toBeNull();
+    expect((await opened.json()) as object).toEqual(invalid);
+    const malformed = await fetchWorker("/v1/device-sessions", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: "{",
+    });
+    expect(malformed.status).toBe(400);
+    expect(malformed.headers.get("retry-after")).toBeNull();
+    expect((await malformed.json()) as object).toEqual(invalid);
+    const session = await fetchWorker("/v1/device-sessions", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify(openBody),
+    });
+    expect(session.status).toBe(201);
+    const created = (await session.json()) as { session: { id: string } };
+    const audio = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/audio`,
+      {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: JSON.stringify({
+          chunkIndex: 0,
+          bytesBase64: btoa(String.fromCharCode(1, 0, 0, 1)),
+        }),
+      }
+    );
+    expect(audio.status).toBe(400);
+    expect(audio.headers.get("retry-after")).toBeNull();
+    expect((await audio.json()) as object).toEqual(invalid);
+  });
+
   test("recording create replay returns the original session and conflicting metadata is refused", async () => {
     const post = (body: unknown) =>
       fetchWorker("/v1/device-sessions", {
@@ -939,7 +986,7 @@ describe("device session ingest", () => {
           }),
         })
       ).status
-    ).toBe(422);
+    ).toBe(400);
     const left = await fetchWorker(
       `/v1/device-sessions/${created.session.id}/audio`,
       {

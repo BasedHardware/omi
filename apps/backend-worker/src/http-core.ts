@@ -747,12 +747,11 @@ export async function handleDeviceSessionOpen(
     });
   if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const parsed = await readBoundedJson(context.req.raw, 65_536);
-  if (parsed.kind === "too_large")
-    return backendError("attachment_too_large", "edit_request", 413);
-  if (parsed.kind === "invalid")
-    return backendError("bad_request", "edit_request", 400);
+  if (parsed.kind === "too_large" || parsed.kind === "invalid")
+    return backendError("invalid_request", "edit_request", 400);
   const request = parseDeviceSessionCreate(parsed.value);
-  if (request === null) return backendError("validation", "edit_request", 422);
+  if (request === null)
+    return backendError("invalid_request", "edit_request", 400);
   const session = await openDeviceSession(
     db,
     context.get("accountId"),
@@ -775,12 +774,11 @@ export async function handleDeviceSessionAudio(
     });
   if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const parsed = await readBoundedJson(context.req.raw, 2_097_152);
-  if (parsed.kind === "too_large")
-    return backendError("attachment_too_large", "edit_request", 413);
-  if (parsed.kind === "invalid")
-    return backendError("bad_request", "edit_request", 400);
+  if (parsed.kind === "too_large" || parsed.kind === "invalid")
+    return backendError("invalid_request", "edit_request", 400);
   const request = parseDeviceSessionAudioBatch(parsed.value);
-  if (request === null) return backendError("validation", "edit_request", 422);
+  if (request === null)
+    return backendError("invalid_request", "edit_request", 400);
   const outcome = await appendDeviceSessionAudioBatch(
     db,
     r2,
@@ -801,7 +799,7 @@ export async function handleDeviceSessionAudio(
     case "conflict":
       return backendError("device_session_conflict", "edit_request", 409);
     case "too_large":
-      return backendError("attachment_too_large", "edit_request", 413);
+      return backendError("invalid_request", "edit_request", 400);
   }
 }
 
