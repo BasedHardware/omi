@@ -80,7 +80,6 @@ SUSTAIN_S = float(os.getenv("PARAKEET_STREAM_SUSTAIN_S", "180"))
 # would reject healthy streaming output for a structural reason.  Keep the
 # bound explicit and record the raw latency distribution for product review.
 MAX_TEXT_LATENCY_S = float(os.getenv("PARAKEET_STREAM_MAX_TEXT_LATENCY_S", "4.0"))
-LATENCY_GATE_MIN_STREAMS = int(os.getenv("PARAKEET_STREAM_LATENCY_GATE_MIN_STREAMS", "20"))
 EXPECTED_STREAM_MODEL = "nvidia/parakeet-tdt-0.6b-v3"
 EXPECTED_STREAM_BACKEND = "nemo"
 EXPECTED_STREAM_DECODER_FAMILY = "tdt"
@@ -665,7 +664,7 @@ async def _run_benchmark(
         },
         "expected_capacity": EXPECTED_CAPACITY,
         "latency_gate": {
-            "min_streams": LATENCY_GATE_MIN_STREAMS,
+            "min_streams": min(levels),
             "max_p95_seconds": MAX_TEXT_LATENCY_S,
         },
         "levels": level_results,
