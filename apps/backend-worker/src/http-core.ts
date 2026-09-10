@@ -573,15 +573,23 @@ export async function handleChatCreate(
 export async function handleGenerationEvents(
   context: CoreContext
 ): Promise<Response> {
+  const lastEventId = context.req.raw.headers.get("last-event-id");
   const generationId = context.req.param("id");
   const target = new URL("https://account.internal/events");
   target.searchParams.set("generationId", generationId);
   const response = await account(context).fetch(
     new Request(target, { headers: context.req.raw.headers })
   );
-  return response.status === 404
-    ? backendError("not_found", "refresh_history", 404)
-    : response;
+  if (response.status === 404)
+    return backendError("not_found", "refresh_history", 404);
+  if (lastEventId === "")
+    return backendError("bad_request", "edit_request", 400);
+  if (response.status === 503) {
+    const headers = new Headers(response.headers);
+    if (!headers.has("retry-after")) headers.set("retry-after", "60");
+    return new Response(response.body, { status: 503, headers });
+  }
+  return response;
 }
 
 export async function handleGenerationCancel(

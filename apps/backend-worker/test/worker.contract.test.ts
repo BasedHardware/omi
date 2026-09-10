@@ -142,12 +142,24 @@ const accountStub = {
     return { ...admission, created: true };
   },
   cancel: async (_accountId: string, _generationId: string) => cancellation,
-  fetch: async (request: Request) =>
-    new URL(request.url).searchParams.get("generationId") === "missing"
-      ? new Response(null, { status: 404 })
-      : new Response(
-          'id: 1\nevent: snapshot\ndata: {"kind":"snapshot","text":""}\n\n'
-        ),
+  fetch: async (request: Request) => {
+    const generationId = new URL(request.url).searchParams.get("generationId");
+    if (generationId === "missing") return new Response(null, { status: 404 });
+    if (generationId === "unreadable-events")
+      return Response.json(
+        {
+          error: {
+            code: "service_unavailable",
+            retryable: true,
+            action: "retry",
+          },
+        },
+        { status: 503, headers: { "cache-control": "no-store" } }
+      );
+    return new Response(
+      'id: 1\nevent: snapshot\ndata: {"kind":"snapshot","text":""}\n\n'
+    );
+  },
 };
 
 const env = {
@@ -3321,6 +3333,56 @@ describe("ratified generation wire", () => {
       },
     });
     expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  test("generation events GET maps an empty Last-Event-ID to edit_request", async () => {
+    const emptyLastEvent = await fetchWorker(
+      "/v1/chat-generations/generation-id/events",
+      {
+        headers: { ...authenticatedHeaders, "last-event-id": "" },
+      }
+    );
+    expect(emptyLastEvent.status).toBe(400);
+    expect(emptyLastEvent.headers.get("retry-after")).toBeNull();
+    expect((await emptyLastEvent.json()) as unknown).toEqual({
+      error: {
+        code: "bad_request",
+        retryable: false,
+        action: "edit_request",
+      },
+    });
+
+    const missingEmptyLastEvent = await fetchWorker(
+      "/v1/chat-generations/missing/events",
+      {
+        headers: { ...authenticatedHeaders, "last-event-id": "" },
+      }
+    );
+    expect(missingEmptyLastEvent.status).toBe(404);
+    expect((await missingEmptyLastEvent.json()) as unknown).toEqual({
+      error: {
+        code: "not_found",
+        retryable: false,
+        action: "refresh_history",
+      },
+    });
+  });
+
+  test("generation events GET retryable 503 sends production chat retry-after", async () => {
+    const unreadable = await fetchWorker(
+      "/v1/chat-generations/unreadable-events/events",
+      { headers: authenticatedHeaders }
+    );
+    expect(unreadable.status).toBe(503);
+    expect(unreadable.headers.get("retry-after")).toBe("60");
+    expect(unreadable.headers.get("cache-control")).toBe("no-store");
+    expect((await unreadable.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
   });
 
   test("resume replays strictly after the cursor and heals terminal reconnects", () => {

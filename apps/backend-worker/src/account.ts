@@ -87,6 +87,17 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
     )
       return new Response(null, { status: 404 });
     const lastEventId = request.headers.get("last-event-id");
+    if (lastEventId === "")
+      return Response.json(
+        {
+          error: {
+            code: "bad_request",
+            retryable: false,
+            action: "edit_request",
+          },
+        },
+        { status: 400, headers: { "cache-control": "no-store" } }
+      );
     const allEvents = await readGenerationEvents(
       this.env.DB,
       accountId,
@@ -101,7 +112,10 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
             action: "retry",
           },
         },
-        { status: 503, headers: { "cache-control": "no-store" } }
+        {
+          status: 503,
+          headers: { "cache-control": "no-store", "retry-after": "60" },
+        }
       );
     const replay = this.selectReplay(allEvents, lastEventId);
     if (replay === "expired")
