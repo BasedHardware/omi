@@ -5296,7 +5296,7 @@ def run_daily_memory_sweep_scheduler(
                 blocked_users += 1
                 completed_uids.append(uid)
                 return ProcessOutcome.ack()
-            if free_tier_memory_suppression_enabled():
+            if free_tier_memory_suppression_enabled(uid):
                 # §1.8: a basic account is not admitted to the sweep at all, so
                 # an account that downgrades stops being swept rather than
                 # having its already-claimed day fail late. Ack like the
