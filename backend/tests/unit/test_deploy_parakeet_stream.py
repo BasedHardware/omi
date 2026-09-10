@@ -24,6 +24,7 @@ from scripts.deploy_parakeet_stream import (
     validate_owned_node_pool,
 )
 from scripts.parakeet_stream_contract import EXPECTED_STREAM_MODEL_IDENTITY
+from scripts.parakeet_stream_contract import l4_pool_reservation, reserved_l4_gpus
 import scripts.deploy_parakeet_stream as deploy_module
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,8 +44,8 @@ def _plan(environment: str = "prod"):
 def test_capacity_plan_derives_warm_floor_and_one_surge_node():
     plan = _plan()
     assert plan.warm_replicas == 99
-    assert plan.max_replicas == 150
-    assert plan.max_nodes == 151
+    assert plan.max_replicas == 125
+    assert plan.max_nodes == 126
     assert plan.hard_stream_capacity == 10
     assert plan.service_dns == "http://prod-omi-parakeet-stream.prod-omi-backend.svc.cluster.local:8080"
     assert plan.image_ref.endswith("@sha256:" + "a" * 64)
@@ -73,6 +74,70 @@ def test_quota_gate_uses_incremental_headroom():
         validate_gpu_quota(document, 41)
 
 
+def test_quota_gate_reserves_only_other_pool_growth_after_current_usage():
+    document = {"quotas": [{"metric": "NVIDIA_L4_GPUS", "limit": 160, "usage": 4}]}
+    # The existing pools reserve 31 at their maxima, but four are already in
+    # quota usage. Only the remaining 27 are added to the quota gate.
+    validate_gpu_quota(document, 126, reserved_gpus=27)
+    with pytest.raises(DeploymentError, match="existing pool reservation"):
+        validate_gpu_quota(document, 130, reserved_gpus=27)
+
+
+def test_l4_reservation_handles_zonal_and_regional_maxima_without_owned_pool_double_count():
+    pools = [
+        {
+            "name": "batch-a",
+            "config": {"accelerators": [{"acceleratorType": "nvidia-l4", "acceleratorCount": 1}]},
+            "locations": ["us-central1-a"],
+            "autoscaling": {"enabled": True, "maxNodeCount": 25},
+            "currentNodeCount": 4,
+        },
+        {
+            "name": "batch-b",
+            "config": {"accelerators": [{"acceleratorType": "nvidia-l4", "acceleratorCount": 1}]},
+            "locations": ["us-central1-a"],
+            "autoscaling": {"enabled": True, "maxNodeCount": 4},
+            "currentNodeCount": 2,
+        },
+        {
+            "name": "regional-per-zone",
+            "config": {"accelerators": [{"acceleratorType": "nvidia-l4", "acceleratorCount": 1}]},
+            "locations": ["us-central1-a", "us-central1-b", "us-central1-c"],
+            "autoscaling": {"enabled": True, "maxNodeCount": 4},
+            "currentNodeCount": 3,
+        },
+        {
+            "name": "regional-total",
+            "config": {"accelerators": [{"acceleratorType": "nvidia-l4", "acceleratorCount": 1}]},
+            "locations": ["us-central1-a", "us-central1-b", "us-central1-c"],
+            "autoscaling": {"enabled": True, "maxNodeCount": 20, "totalMaxNodeCount": 12},
+            "currentNodeCount": 3,
+        },
+        {
+            "name": "prod-omi-parakeet-stream-pool",
+            "config": {"accelerators": [{"acceleratorType": "nvidia-l4", "acceleratorCount": 1}]},
+            "locations": ["us-central1-a"],
+            "autoscaling": {"enabled": True, "maxNodeCount": 126},
+            "currentNodeCount": 99,
+        },
+    ]
+    assert l4_pool_reservation(pools[0], pool_name="batch-a") == 21
+    assert l4_pool_reservation(pools[2], pool_name="regional-per-zone") == 9
+    assert l4_pool_reservation(pools[3], pool_name="regional-total") == 9
+    assert reserved_l4_gpus(pools, owned_pool="prod-omi-parakeet-stream-pool") == 41
+
+
+def test_l4_reservation_rejects_per_location_max_without_locations():
+    pool = {
+        "name": "ambiguous",
+        "config": {"accelerators": [{"acceleratorType": "nvidia-l4", "acceleratorCount": 1}]},
+        "autoscaling": {"enabled": True, "maxNodeCount": 25},
+        "currentNodeCount": 4,
+    }
+    with pytest.raises(DeploymentError, match="node locations"):
+        l4_pool_reservation(pool, pool_name="ambiguous")
+
+
 def test_owned_pool_requires_shape_and_ownership_without_mutation():
     plan = _plan()
     pool = {
@@ -86,7 +151,7 @@ def test_owned_pool_requires_shape_and_ownership_without_mutation():
                 "omi.dev/managed-by": "parakeet-stream-release",
             },
         },
-        "autoscaling": {"enabled": True, "minNodeCount": 99, "maxNodeCount": 151},
+        "autoscaling": {"enabled": True, "minNodeCount": 99, "maxNodeCount": 126},
         "status": {"currentNodeCount": 99},
     }
     original = copy.deepcopy(pool)
@@ -348,6 +413,8 @@ class _ReleaseRunner:
     def __call__(self, command, capture=False):
         command = tuple(command)
         self.calls.append(command)
+        if command[:4] == ("gcloud", "container", "node-pools", "list"):
+            return json.dumps([{"name": self.plan.node_pool}])
         if command[:4] == ("gcloud", "container", "node-pools", "describe"):
             return json.dumps(self.pool)
         if command[:4] == ("gcloud", "compute", "regions", "describe"):
@@ -388,6 +455,8 @@ class _ReleaseRunner:
             )
         if command[:4] == ("kubectl", "-n", self.plan.namespace, "get") and "service" in command:
             return json.dumps({"status": {"loadBalancer": {"ingress": [{"ip": "10.0.0.7"}]}}})
+        if command[:4] == ("kubectl", "get", "nodes", "-l"):
+            return json.dumps({"items": []})
         if command[:3] == ("kubectl", "-n", self.plan.namespace) and "exec" in command:
             if self.legacy_health:
                 return json.dumps({"status": "healthy"})

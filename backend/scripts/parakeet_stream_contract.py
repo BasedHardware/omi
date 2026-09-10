@@ -241,10 +241,87 @@ def build_plan(
     )
 
 
-def validate_gpu_quota(region_document: Mapping[str, Any], required_gpus: int) -> None:
-    """Require regional L4 headroom for only the additional fleet nodes."""
+def _accelerator_entries(document: Mapping[str, Any], *, pool_name: str) -> list[Mapping[str, Any]] | None:
+    raw_config = document.get("config")
+    config: Mapping[str, Any] = raw_config if isinstance(raw_config, dict) else {}
+    if "accelerators" not in config and "accelerator" not in config:
+        return None
+    raw = config.get("accelerators", config.get("accelerator"))
+    if isinstance(raw, dict):
+        raw = [raw]
+    if not isinstance(raw, list) or any(not isinstance(item, dict) for item in raw):
+        raise DeploymentError(f"L4 node pool {pool_name} has an invalid accelerator declaration")
+    return cast(list[Mapping[str, Any]], raw)
+
+
+def l4_pool_reservation(document: Mapping[str, Any], *, pool_name: str = "<unknown>") -> int:
+    """Return a pool's unallocated autoscaling L4 growth, failing closed on ambiguity.
+
+    GKE reports ``maxNodeCount`` per location for regional pools and
+    ``totalMaxNodeCount`` for a pool-wide limit.  Prefer the latter, otherwise
+    multiply the per-location maximum by the distinct node locations.
+    """
+    accelerators = _accelerator_entries(document, pool_name=pool_name)
+    if accelerators is None:
+        return 0
+    l4_count = 0
+    for accelerator in accelerators:
+        accelerator_type = str(accelerator.get("acceleratorType", accelerator.get("type", ""))).rsplit("/", 1)[-1]
+        if accelerator_type != "nvidia-l4":
+            continue
+        raw_count = accelerator.get("acceleratorCount", accelerator.get("count"))
+        l4_count += _positive_int(raw_count, field=f"node pool {pool_name} acceleratorCount")
+    if l4_count == 0:
+        return 0
+
+    raw_autoscaling = document.get("autoscaling")
+    autoscaling: Mapping[str, Any] = raw_autoscaling if isinstance(raw_autoscaling, dict) else {}
+    if autoscaling.get("enabled") is not True:
+        return 0
+    if autoscaling.get("totalMaxNodeCount") is not None:
+        maximum = _positive_int(autoscaling.get("totalMaxNodeCount"), field=f"node pool {pool_name} totalMaxNodeCount")
+    elif autoscaling.get("maxNodeCount") is not None:
+        maximum = _positive_int(autoscaling.get("maxNodeCount"), field=f"node pool {pool_name} maxNodeCount")
+        raw_locations = document.get("locations")
+        if raw_locations is None:
+            raw_config = document.get("config")
+            config: Mapping[str, Any] = raw_config if isinstance(raw_config, dict) else {}
+            raw_locations = config.get("locations", config.get("nodeLocations"))
+        if (
+            not isinstance(raw_locations, list)
+            or not raw_locations
+            or any(not isinstance(location, str) or not location for location in raw_locations)
+        ):
+            raise DeploymentError(f"L4 node pool {pool_name} has per-location maxNodeCount but no node locations")
+        location_count = len(set(raw_locations))
+        if location_count < 1:
+            raise DeploymentError(f"L4 node pool {pool_name} has no distinct node locations")
+        maximum *= location_count
+    else:
+        raise DeploymentError(f"L4 node pool {pool_name} has no autoscaling maximum")
+    current = current_node_count(document)
+    return max(0, maximum * l4_count - current * l4_count)
+
+
+def reserved_l4_gpus(pools: Sequence[Mapping[str, Any]], *, owned_pool: str) -> int:
+    """Sum other cluster pools' L4 reservations, excluding the owned stream pool."""
+    total = 0
+    for pool in pools:
+        pool_name = pool.get("name")
+        if not isinstance(pool_name, str) or not pool_name:
+            raise DeploymentError("node pool inventory contains a pool without a name")
+        if pool_name == owned_pool:
+            continue
+        total += l4_pool_reservation(pool, pool_name=pool_name)
+    return total
+
+
+def validate_gpu_quota(region_document: Mapping[str, Any], required_gpus: int, *, reserved_gpus: int = 0) -> None:
+    """Require regional L4 headroom after existing pool reservations."""
     if required_gpus < 0:
         raise DeploymentError("required GPU count cannot be negative")
+    if reserved_gpus < 0:
+        raise DeploymentError("reserved GPU count cannot be negative")
     quotas = region_document.get("quotas")
     if not isinstance(quotas, list):
         raise DeploymentError("region quota response has no quotas list")
@@ -263,8 +340,13 @@ def validate_gpu_quota(region_document: Mapping[str, Any], required_gpus: int) -
         headroom = float(l4["limit"]) - float(l4.get("usage", 0))
     except (KeyError, TypeError, ValueError) as exc:
         raise DeploymentError("regional NVIDIA_L4 quota has no numeric limit/usage") from exc
-    if headroom < required_gpus:
-        raise DeploymentError(f"regional NVIDIA_L4 quota headroom {headroom:g} is below required {required_gpus} GPUs")
+    available = headroom - reserved_gpus
+    if available < required_gpus:
+        raise DeploymentError(
+            "regional NVIDIA_L4 quota headroom "
+            f"{headroom:g} minus existing pool reservation {reserved_gpus} "
+            f"leaves {available:g}, below required {required_gpus} GPUs"
+        )
 
 
 def validate_capacity_evidence(

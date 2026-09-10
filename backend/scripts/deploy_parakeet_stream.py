@@ -27,6 +27,7 @@ try:
         current_node_count,
         merge_adapter_values,
         promote_qualified_image,
+        reserved_l4_gpus,
         validate_capacity_evidence,
         validate_gpu_quota,
         validate_tdt_model_identity,
@@ -43,6 +44,7 @@ except ImportError:  # Direct invocation from the deployment image.
         current_node_count,
         merge_adapter_values,
         promote_qualified_image,
+        reserved_l4_gpus,
         validate_capacity_evidence,
         validate_gpu_quota,
         validate_tdt_model_identity,
@@ -111,6 +113,60 @@ def _pool_nodes(plan: StreamFleetPlan, runner: CommandRunner) -> int:
     if not isinstance(items, list):
         raise DeploymentError("cluster node listing did not return an items list")
     return len(items)
+
+
+def _other_l4_reservation(*, cluster: str, region: str, project: str, owned_pool: str, runner: CommandRunner) -> int:
+    """Reserve only future growth of existing non-owned L4 pools.
+
+    Quota usage already includes currently allocated GPUs.  Attach the live
+    node count to each listed pool so its autoscaling maximum contributes only
+    the remaining growth and is not double-counted against quota usage.
+    """
+    command = [
+        "gcloud",
+        "container",
+        "node-pools",
+        "list",
+        "--cluster",
+        cluster,
+        "--region",
+        region,
+        "--project",
+        project,
+        "--format=json",
+    ]
+    try:
+        raw_pools = json.loads(runner(command, True))
+    except (json.JSONDecodeError, subprocess.CalledProcessError) as exc:
+        raise DeploymentError("could not read complete cluster node-pool inventory for GPU quota") from exc
+    if not isinstance(raw_pools, list):
+        raise DeploymentError("cluster node-pool inventory is not a list")
+    nodes = _json_command(
+        ["kubectl", "get", "nodes", "-l", "cloud.google.com/gke-accelerator=nvidia-l4", "-o", "json"], runner
+    )
+    raw_items = nodes.get("items")
+    if not isinstance(raw_items, list):
+        raise DeploymentError("L4 node inventory did not return an items list")
+    current_by_pool: dict[str, int] = {}
+    for raw_node in raw_items:
+        node = _mapping(raw_node, field="L4 node")
+        metadata = _mapping(node.get("metadata"), field="L4 node metadata")
+        labels = _mapping(metadata.get("labels"), field="L4 node labels")
+        pool_name = labels.get("cloud.google.com/gke-nodepool")
+        if isinstance(pool_name, str) and pool_name:
+            current_by_pool[pool_name] = current_by_pool.get(pool_name, 0) + 1
+    pools: list[Mapping[str, Any]] = []
+    for raw_pool in raw_pools:
+        pool = _mapping(raw_pool, field="node pool inventory item")
+        pool_name = pool.get("name")
+        if not isinstance(pool_name, str) or not pool_name:
+            raise DeploymentError("node pool inventory contains a pool without a name")
+        if pool_name == owned_pool:
+            continue
+        enriched = dict(pool)
+        enriched["currentNodeCount"] = current_by_pool.get(pool_name, 0)
+        pools.append(enriched)
+    return reserved_l4_gpus(pools, owned_pool=owned_pool)
 
 
 def _verify_warm_fleet_once(
@@ -392,10 +448,14 @@ def deploy_stream_fleet(
         additional_nodes = max(0, plan.max_nodes - current)
         node_location = ""
 
+    other_l4_growth = _other_l4_reservation(
+        cluster=cluster, region=region, project=project, owned_pool=plan.node_pool, runner=runner
+    )
     quota = _json_command(
         ["gcloud", "compute", "regions", "describe", region, "--project", project, "--format=json"], runner
     )
-    validate_gpu_quota(quota, additional_nodes)
+    print(f"Parakeet GPU quota reservation: other_pool_growth={other_l4_growth} stream_growth={additional_nodes}")
+    validate_gpu_quota(quota, additional_nodes, reserved_gpus=other_l4_growth)
     if not existing_pool:
         runner(
             [
