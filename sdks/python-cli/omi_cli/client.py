@@ -34,7 +34,7 @@ from tenacity import (
 
 from omi_cli import __version__
 from omi_cli.config import Profile
-from omi_cli.errors import CliError, RateLimitError, ServerError, from_status
+from omi_cli.errors import CliError, RateLimitError, ServerError, TransportError, from_status
 
 USER_AGENT = f"omi-cli/{__version__} (+https://github.com/BasedHardware/omi)"
 DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
@@ -171,11 +171,11 @@ class OmiClient:
             ):
                 raise _unknown_write_outcome(method) from exc
             if method in {"POST", "PATCH"}:
-                raise ServerError(
+                raise TransportError(
                     message="Connection failed",
                     detail=f"{type(exc).__name__} after {MAX_RETRY_ATTEMPTS} attempts. Check your connection and retry.",
                 ) from exc
-            raise ServerError(
+            raise TransportError(
                 message="Connection failed",
                 detail="Unable to reach the Omi API. Check your network connection or try again shortly.",
             ) from exc
