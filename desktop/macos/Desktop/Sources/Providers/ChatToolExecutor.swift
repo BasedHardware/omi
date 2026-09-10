@@ -1771,12 +1771,33 @@ class ChatToolExecutor {
 
   // MARK: - Semantic Search
 
+  private struct ScreenHistorySearchResult: Sendable {
+    let screenshotId: Int64
+    let score: Double
+    let relevance: String
+    let isLocal: Bool
+  }
+
+  struct SemanticSearchDependencies: Sendable {
+    var runtime: LocalEmbeddingRuntime = .makeDefault()
+    var legacySearch:
+      @Sendable (String, Date, Date, String?, Int) async throws -> [(screenshotId: Int64, similarity: Float)] = {
+        query, start, end, app, topK in
+        try await OCREmbeddingService.shared.searchSimilar(
+          query: query, startDate: start, endDate: end, appFilter: app, topK: topK)
+      }
+    var screenshot: @Sendable (Int64) async throws -> Screenshot? = { id in
+      try await RewindDatabase.shared.getScreenshot(id: id)
+    }
+  }
+
   /// Search screenshots using vector similarity
-  private static func executeSemanticSearch(
+  static func executeSemanticSearch(
     _ args: [String: Any],
     runID: String?,
     attemptID: String?,
-    expectedOwnerID: String?
+    expectedOwnerID: String?,
+    dependencies: SemanticSearchDependencies = SemanticSearchDependencies()
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
     guard let query = args["query"] as? String, !query.isEmpty else {
@@ -1792,16 +1813,34 @@ class ChatToolExecutor {
     let startDate = calendar.date(byAdding: .day, value: -days, to: endDate) ?? endDate
 
     do {
-      let vectorResults = try await OCREmbeddingService.shared.searchSimilar(
-        query: query,
-        startDate: startDate,
-        endDate: endDate,
-        appFilter: appFilter,
-        topK: max(limit * 2, 20)
-      )
+      let runtime = dependencies.runtime
+      let searchResults = try await ScreenHistorySearchRoute.search(runtime: runtime) { engine in
+        guard let owner = RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else {
+          throw LocalMutationAuthorizationError.revoked
+        }
+        let store = try await RewindDatabase.shared.localEmbeddingStore(owner: owner)
+        let search = LocalHybridSearch(
+          store: store, runtime: runtime,
+          authorization: LocalMutationAuthorization { owner.isCurrent() })
+        let hits = try await search.search(
+          query: query, engine: engine, startDate: startDate,
+          endDate: endDate, appFilter: appFilter, limit: limit)
+        return hits.map {
+          ScreenHistorySearchResult(
+            screenshotId: $0.sourceId, score: $0.fusedScore,
+            relevance: "hybrid: \($0.matchedBy.rawValue)", isLocal: true)
+        }
+      } legacy: {
+        let results = try await dependencies.legacySearch(query, startDate, endDate, appFilter, max(limit * 2, 20))
+        return results.map {
+          ScreenHistorySearchResult(
+            screenshotId: $0.screenshotId, score: Double($0.similarity),
+            relevance: "similarity: \(String(format: "%.2f", $0.similarity))", isLocal: false)
+        }
+      }
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
-      log("Tool semantic_search: vector returned \(vectorResults.count) results")
+      log("Tool semantic_search returned \(searchResults.count) candidates")
 
       // Filter by similarity threshold and fetch screenshot details
       let displayTimeZone = TimeZone.current
@@ -1810,12 +1849,12 @@ class ChatToolExecutor {
       var sources = [APIClient.ToolSource]()
       var count = 0
 
-      for result in vectorResults where result.similarity > 0.3 {
+      for result in searchResults where result.isLocal || result.score > Double(Float(0.3)) {
         guard isExpectedOwnerCurrent(expectedOwnerID) else {
           return authorizedOwnerChangedResult()
         }
         guard
-          let screenshot = try? await RewindDatabase.shared.getScreenshot(id: result.screenshotId)
+          let screenshot = try? await dependencies.screenshot(result.screenshotId)
         else {
           continue
         }
@@ -1829,7 +1868,7 @@ class ChatToolExecutor {
         let windowTitle = screenshot.windowTitle ?? ""
         let titlePart = windowTitle.isEmpty ? "" : " - \(windowTitle)"
         lines.append(
-          "\n\(count). [\(dateStr)] \(screenshot.appName)\(titlePart) (screenshot_id: \(result.screenshotId), similarity: \(String(format: "%.2f", result.similarity)))"
+          "\n\(count). [\(dateStr)] \(screenshot.appName)\(titlePart) (screenshot_id: \(result.screenshotId), \(result.relevance))"
         )
 
         // Include OCR text preview (truncated)
