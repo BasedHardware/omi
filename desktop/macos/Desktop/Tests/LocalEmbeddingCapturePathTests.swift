@@ -53,7 +53,6 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
     hangingEngine = nil
     await LocalEmbeddingIndexer.shared.setRuntimeForTesting(.makeDefault())
     await RewindStorageTestIsolation.tearDown(userDir: userDir)
-    try await super.tearDown()
   }
 
   func testSessionAndMemoryCompletionDoNotWaitForEmbedding() async throws {
