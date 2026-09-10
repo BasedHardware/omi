@@ -9,6 +9,11 @@ checks:
     triggers: ["plugins/omi-tfl-app/**"]
     lanes: ["local", "ci"]
     reason: "Exercise transit tool behavior and bounded TfL requests without external services, including missing status and expired predictions"
+  - id: omi-hacker-news-tests
+    command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
+    triggers: ["plugins/omi-hacker-news-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13211: escaped literal angle-bracket text must survive Hacker News provider markup cleaning"
   - id: usgs-earthquake-tests
     command: ["python3", "plugins/omi-usgs-earthquake-app/test_main.py"]
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
@@ -120,7 +125,7 @@ checks:
     command: ["python3", ".github/scripts/check_release_rings.py"]
     triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/check_release_rings.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "the canonical production backend deploy remains the only release authority"
+    reason: "the canonical production backend release remains the only release authority"
   - id: backend-production-release-vector-guard-tests
     command: ["python3", ".github/scripts/test_check_release_rings.py"]
     triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
