@@ -324,6 +324,100 @@ test('fails closed for malformed GET external_data', async () => {
   ).rejects.toMatchObject({kind: 'invalid'});
 });
 
+test('names GET people names on transcript segments and omits unresolved ids', async () => {
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/users/people?include_speech_samples=false') {
+      return {
+        id: 'people',
+        status: 200,
+        body: JSON.stringify([{id: 'person-alex', name: 'Alex Chen'}]),
+      };
+    }
+    return response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          is_user: false,
+          speaker: 'SPEAKER_00',
+          person_id: 'person-alex',
+        },
+      ],
+    });
+  });
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toMatchObject({
+    status: 'loaded',
+    segments: [{personName: 'Alex Chen'}],
+  });
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/users/people?include_speech_samples=false') {
+      return {
+        id: 'people',
+        status: 200,
+        body: JSON.stringify([{id: 'person-other', name: 'Sam'}]),
+      };
+    }
+    return response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          is_user: false,
+          person_id: 'person-alex',
+        },
+      ],
+    });
+  });
+  const unresolved = (
+    await loadLegacyConversationDetail(backend, fixture.id)
+  ).transcript;
+  expect(unresolved).toMatchObject({
+    status: 'loaded',
+    segments: [
+      {
+        text: fixture.transcript_segments[0].text,
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        start: 0.25,
+        end: 4.5,
+      },
+    ],
+  });
+  expect(unresolved.status === 'loaded' ? unresolved.segments[0] : null).not.toHaveProperty(
+    'personName',
+  );
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/users/people?include_speech_samples=false') {
+      return {id: 'people', status: 500, body: '[]'};
+    }
+    return response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          is_user: false,
+          person_id: 'person-alex',
+        },
+      ],
+    });
+  });
+  const failedPeople = (
+    await loadLegacyConversationDetail(backend, fixture.id)
+  ).transcript;
+  expect(failedPeople).toMatchObject({
+    status: 'loaded',
+    segments: [{text: fixture.transcript_segments[0].text}],
+  });
+  expect(
+    failedPeople.status === 'loaded' ? failedPeople.segments[0] : null,
+  ).not.toHaveProperty('personName');
+  mockRequest.mockReset().mockResolvedValue(response(fixture));
+  await loadLegacyConversationDetail(backend, fixture.id);
+  expect(mockRequest).toHaveBeenCalledTimes(1);
+});
+
 test('keeps GET geolocation address and omits empty or missing locations', async () => {
   mockRequest.mockResolvedValue(
     response({

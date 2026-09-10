@@ -1,6 +1,7 @@
 import type {OmiBackend} from './omiNativeTypes';
 import {visibleDisplayText} from './desktopReadClient';
 import {loadOmiFolderName} from './legacyOmiFolders';
+import {loadOmiPeopleNames} from './legacyOmiPeople';
 
 export type LegacyConversationDetail = {
   id: string;
@@ -31,6 +32,7 @@ export type LegacyConversationDetail = {
           isUser: boolean;
           start: number;
           end: number;
+          personName?: string;
         }[];
       };
 };
@@ -261,17 +263,47 @@ export async function loadLegacyConversationDetail(
       ? {status: 'unavailable'}
       : {
           status: 'loaded',
-          segments: array(value.transcript_segments, 20000).map(raw => {
-            const segment = object(raw);
-            return {
-              text: text(segment.text, 100000),
-              speaker:
-                segment.speaker == null ? null : text(segment.speaker, 256),
-              isUser: boolean(segment.is_user),
-              start: finite(segment.start),
-              end: finite(segment.end),
-            };
-          }),
+          segments: await (async () => {
+            const segments = array(value.transcript_segments, 20000).map(
+              raw => {
+                const segment = object(raw);
+                const personId =
+                  segment.person_id === undefined || segment.person_id === null
+                    ? undefined
+                    : visibleDisplayText(text(segment.person_id, 256));
+                return {
+                  text: text(segment.text, 100000),
+                  speaker:
+                    segment.speaker == null ? null : text(segment.speaker, 256),
+                  isUser: boolean(segment.is_user),
+                  start: finite(segment.start),
+                  end: finite(segment.end),
+                  ...(personId === undefined || personId === ''
+                    ? {}
+                    : {personId}),
+                };
+              },
+            );
+            const needsPeople = segments.some(
+              segment => segment.personId !== undefined,
+            );
+            const names = needsPeople
+              ? await loadOmiPeopleNames(backend, signal).catch(
+                  () => new Map<string, string>(),
+                )
+              : new Map<string, string>();
+            return segments.map(segment => {
+              const {personId, ...rest} = segment;
+              const personName =
+                personId === undefined ? undefined : names.get(personId);
+              return {
+                ...rest,
+                ...(personName === undefined || personName === ''
+                  ? {}
+                  : {personName}),
+              };
+            });
+          })(),
         };
   const address = locationAddress(value.geolocation);
   const linkedEvent = calendarEvent(value.calendar_event);
