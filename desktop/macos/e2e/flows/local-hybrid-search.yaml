@@ -15,6 +15,7 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Services/LocalHybridSearch.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/LocalEmbeddingIndexer.swift
   - desktop/macos/Desktop/Sources/Providers/ChatLocalHybridTool.swift
+  - desktop/macos/Desktop/Sources/DefaultsKey.swift
 preconditions:
   - automation_bridge_ready
 

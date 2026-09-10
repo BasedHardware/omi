@@ -6,8 +6,17 @@ enum LocalEmbeddingBenchmark {
   static let reportKind = "local_embedding_benchmark"
   static let reportVersion = 1
 
-  enum Slice: String, Codable, Sendable { case nameHeavy = "name_heavy", paraphrase, dateBounded = "date_bounded" }
-  enum Mode: String, Codable, Sendable { case fts, vector, hybrid, gemini }
+  enum Slice: String, Codable, Sendable {
+    case nameHeavy = "name_heavy"
+    case paraphrase
+    case dateBounded = "date_bounded"
+  }
+  enum Mode: String, Codable, Sendable {
+    case fts
+    case vector
+    case hybrid
+    case gemini
+  }
 
   struct Query: Sendable {
     var slice: Slice

@@ -60,8 +60,8 @@ final class LocalEmbeddingRuntimeTests: XCTestCase {
     let name = "LocalEmbeddingTests.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
     defer { defaults.removePersistentDomain(forName: name) }
-    defaults.set(true, forKey: "disableLocalEmbeddings")
-    defaults.set("defaults-engine", forKey: "forceLocalEmbeddingEngine")
+    defaults.set(true, forKey: .disableLocalEmbeddings)
+    defaults.set("defaults-engine", forKey: .forceLocalEmbeddingEngine)
     let flags = LocalEmbeddingKillSwitches.resolve(
       environment: ["OMI_DISABLE_LOCAL_EMBEDDINGS": "0", "OMI_FORCE_LOCAL_EMBEDDING_ENGINE": " test_hash "],
       defaults: defaults)

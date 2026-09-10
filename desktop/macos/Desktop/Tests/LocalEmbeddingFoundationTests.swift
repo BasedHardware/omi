@@ -135,7 +135,7 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
   func testCompactionSelectsCompletedWinnerIndependentlyOfGemini() async throws {
     let (store, directory) = try fixture()
     defer { try? FileManager.default.removeItem(at: directory) }
-    let cutoff = ISO8601DateFormatter().date(from: "2026-09-09T12:05:00Z")!
+    let cutoff = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-09T12:05:00Z"))
     let before = try store.screenshotsNeedingEmbedding(modelID: "a", olderThan: cutoff.addingTimeInterval(-1))
     XCTAssertTrue(before.isEmpty)
     let winner = try store.screenshotsNeedingEmbedding(modelID: "a", olderThan: cutoff)
