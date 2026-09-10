@@ -135,6 +135,32 @@ export function conversationListStatusCopy(status: string): string | null {
   return null;
 }
 
+const TRANSCRIPT_STT_PROVIDER_COPY: Readonly<Record<string, string>> = {
+  omi: 'Omi',
+  omiParakeet: 'Omi Parakeet',
+  openai: 'OpenAI Whisper',
+  openaiDiarize: 'OpenAI GPT-4o Transcribe Diarize',
+  deepgram: 'Deepgram',
+  deepgramLive: 'Deepgram',
+  falai: 'Fal.AI Wizper',
+  gemini: 'Google Gemini',
+  geminiLive: 'Google Gemini',
+  localWhisper: 'Local Whisper',
+  custom: 'Custom',
+  customLive: 'Custom',
+  onDeviceWhisper: 'On-Device',
+};
+
+export function transcriptSttProviderCopy(
+  value: string | null | undefined,
+): string | undefined {
+  const token = visibleDisplayText(value ?? '');
+  if (token === '') {
+    return undefined;
+  }
+  return TRANSCRIPT_STT_PROVIDER_COPY[token] ?? token;
+}
+
 export function recordingTranscriptSpeakerCopy(segment: {
   isUser?: boolean;
   speaker?: string | number | null;

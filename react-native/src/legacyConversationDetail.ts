@@ -1,5 +1,8 @@
 import type {OmiBackend} from './omiNativeTypes';
-import {visibleDisplayText} from './desktopReadClient';
+import {
+  transcriptSttProviderCopy,
+  visibleDisplayText,
+} from './desktopReadClient';
 import {loadOmiFolderName} from './legacyOmiFolders';
 import {loadOmiPeopleNames} from './legacyOmiPeople';
 import {loadOmiAppNames} from './legacyOmiApps';
@@ -36,6 +39,7 @@ export type LegacyConversationDetail = {
           end: number;
           personName?: string;
           translations?: string[];
+          sttProvider?: string;
         }[];
       };
 };
@@ -302,6 +306,13 @@ export async function loadLegacyConversationDetail(
                     ? undefined
                     : visibleDisplayText(text(segment.person_id, 256));
                 const translations = segmentTranslations(segment.translations);
+                const sttProvider =
+                  segment.stt_provider === undefined ||
+                  segment.stt_provider === null
+                    ? undefined
+                    : transcriptSttProviderCopy(
+                        text(segment.stt_provider, 256),
+                      );
                 return {
                   text: text(segment.text, 100000),
                   speaker:
@@ -313,6 +324,7 @@ export async function loadLegacyConversationDetail(
                     ? {}
                     : {personId}),
                   ...(translations === undefined ? {} : {translations}),
+                  ...(sttProvider === undefined ? {} : {sttProvider}),
                 };
               },
             );

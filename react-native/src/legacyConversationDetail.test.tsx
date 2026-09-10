@@ -200,6 +200,86 @@ test('names GET transcript translations and omits empty or missing lists', async
   });
 });
 
+test('names GET transcript stt_provider without inventing Flutter Omi for unknown', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          stt_provider: 'deepgram',
+        },
+      ],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: fixture.transcript_segments[0].text,
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+        sttProvider: 'Deepgram',
+      },
+    ],
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          stt_provider: 'whisper-cloudflare',
+        },
+      ],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: fixture.transcript_segments[0].text,
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+        sttProvider: 'whisper-cloudflare',
+      },
+    ],
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          stt_provider: ' \t\u0085 ',
+        },
+      ],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: fixture.transcript_segments[0].text,
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+      },
+    ],
+  });
+});
+
 test('fails closed for malformed GET calendar_event', async () => {
   mockRequest.mockResolvedValue(
     response({
@@ -763,6 +843,15 @@ test.each([
       {
         ...fixture.transcript_segments[0],
         translations: 'es',
+      },
+    ],
+  },
+  {
+    ...fixture,
+    transcript_segments: [
+      {
+        ...fixture.transcript_segments[0],
+        stt_provider: 1,
       },
     ],
   },

@@ -423,6 +423,11 @@ function LegacyConversationBody({
                   {clock}
                 </Text>
               ) : null}
+              {segment.sttProvider !== undefined ? (
+                <Text style={[styles.conversationDetailField, ink]}>
+                  {segment.sttProvider}
+                </Text>
+              ) : null}
               {(segment.translations ?? []).flatMap((translation, tIndex) => {
                 const copy = visibleDisplayText(translation);
                 return copy === ''
