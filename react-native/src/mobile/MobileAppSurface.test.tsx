@@ -795,11 +795,57 @@ test('Daily Recaps name locked and discarded conversations without empty badges'
 
   const plain = render({
     recaps: [
-      {id: 'recap-plain-lock', title: 'Omi gets simpler', dateLabel: 'Yesterday'},
+      {
+        id: 'recap-plain-lock',
+        title: 'Omi gets simpler',
+        dateLabel: 'Yesterday',
+      },
     ],
   });
   expect(renderedText(plain)).not.toContain('Locked');
   expect(renderedText(plain)).not.toContain('Discarded');
+});
+
+test('Daily Recaps name discarded photo counts without a photo viewer', () => {
+  const flagged = render({
+    recaps: [
+      {
+        id: 'recap-photos',
+        title: 'Product review',
+        dateLabel: 'Yesterday',
+        discarded: true,
+        photoCount: 3,
+      },
+    ],
+  });
+  expect(renderedText(flagged)).toContain('Discarded');
+  expect(renderedText(flagged)).toContain('3 photos');
+
+  const kept = render({
+    recaps: [
+      {
+        id: 'recap-kept-photos',
+        title: 'Omi gets simpler',
+        dateLabel: 'Yesterday',
+        photoCount: 3,
+      },
+    ],
+  });
+  expect(renderedText(kept)).not.toContain('3 photos');
+  expect(renderedText(kept)).not.toContain('Discarded');
+
+  const empty = render({
+    recaps: [
+      {
+        id: 'recap-discarded-empty',
+        title: 'Omi gets simpler',
+        dateLabel: 'Yesterday',
+        discarded: true,
+      },
+    ],
+  });
+  expect(renderedText(empty)).toContain('Discarded');
+  expect(renderedText(empty)).not.toContain('photos');
 });
 
 test('Daily Recaps name failed conversations without Status on every card', () => {
@@ -824,7 +870,11 @@ test('Daily Recaps name failed conversations without Status on every card', () =
 
   const plain = render({
     recaps: [
-      {id: 'recap-plain-fail', title: 'Omi gets simpler', dateLabel: 'Yesterday'},
+      {
+        id: 'recap-plain-fail',
+        title: 'Omi gets simpler',
+        dateLabel: 'Yesterday',
+      },
     ],
   });
   expect(renderedText(plain)).not.toContain('Failed');
@@ -852,7 +902,11 @@ test('Daily Recaps name processing conversations without Status on every card', 
 
   const plain = render({
     recaps: [
-      {id: 'recap-plain-process', title: 'Omi gets simpler', dateLabel: 'Yesterday'},
+      {
+        id: 'recap-plain-process',
+        title: 'Omi gets simpler',
+        dateLabel: 'Yesterday',
+      },
     ],
   });
   expect(renderedText(plain)).not.toContain('Processing');

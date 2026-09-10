@@ -901,6 +901,7 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(orchestrator).toContain('starred: item.starred');
   expect(orchestrator).toContain('locked: item.locked');
   expect(orchestrator).toContain('discarded: item.discarded');
+  expect(orchestrator).toContain('photoCount: item.photoCount');
   expect(orchestrator).not.toContain('onOpenCalls=');
   expect(orchestrator).toContain('conversationDayLabel(');
   expect(orchestrator).not.toContain("weekday: 'long'");

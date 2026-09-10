@@ -23,6 +23,7 @@ import Phone from 'lucide-react-native/icons/phone';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import Settings from 'lucide-react-native/icons/settings';
 import {
+  conversationDiscardedPhotoCopy,
   desktopBackendUnavailableCopy,
   formatTaskDue,
   taskDisplayTitle,
@@ -63,6 +64,7 @@ export type MobileRecap = {
   discarded?: boolean;
   failed?: boolean;
   processing?: boolean;
+  photoCount?: number;
 };
 
 export type MobileDeviceState = {
@@ -244,6 +246,10 @@ const RecapCard = memo(function RecapCard({
   recap: MobileRecap;
   onPress?: (id: string) => void;
 }) {
+  const photosCopy = conversationDiscardedPhotoCopy({
+    discarded: recap.discarded === true,
+    photoCount: recap.photoCount,
+  });
   const card = (
     <View style={styles.recapCard}>
       <Text numberOfLines={3} style={styles.recapTitle}>
@@ -266,6 +272,11 @@ const RecapCard = memo(function RecapCard({
           accessibilityLabel="Discarded conversation"
           style={styles.recapStar}>
           Discarded
+        </Text>
+      ) : null}
+      {photosCopy !== null ? (
+        <Text accessibilityLabel={photosCopy} style={styles.recapStar}>
+          {photosCopy}
         </Text>
       ) : null}
       {recap.failed === true ? (

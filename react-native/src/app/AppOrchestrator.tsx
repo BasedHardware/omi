@@ -1079,6 +1079,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             starred: item.starred,
             locked: item.locked,
             discarded: item.discarded,
+            photoCount: item.photoCount,
             failed: item.status === 'failed',
             processing:
               item.status === 'processing' || item.status === 'merging',
