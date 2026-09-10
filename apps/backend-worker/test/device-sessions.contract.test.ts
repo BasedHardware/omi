@@ -9,6 +9,7 @@ import {
   handleDeviceSessionAudio,
   handleDeviceSessionComplete,
   handleDeviceSessionOpen,
+  handleDeviceSessionRead,
   handleTranscribe,
   handleTranscription,
 } from "../src/http-core";
@@ -713,10 +714,9 @@ describe("device session request validators", () => {
       },
     };
     const sessionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-    const audio = await fetchWorker(
-      `/v1/device-sessions/${sessionId}/audio`,
-      { headers: authenticatedHeaders }
-    );
+    const audio = await fetchWorker(`/v1/device-sessions/${sessionId}/audio`, {
+      headers: authenticatedHeaders,
+    });
     expect(audio.status).toBe(404);
     expect(audio.headers.get("retry-after")).toBeNull();
     expect((await audio.json()) as object).toEqual(missing);
@@ -741,13 +741,6 @@ describe("device session request validators", () => {
     expect(transcribe.status).toBe(404);
     expect(transcribe.headers.get("retry-after")).toBeNull();
     expect((await transcribe.json()) as object).toEqual(missing);
-    const metadata = await fetchWorker(
-      `/v1/device-sessions/${sessionId}`,
-      { headers: authenticatedHeaders }
-    );
-    expect(metadata.status).toBe(404);
-    expect(metadata.headers.get("retry-after")).toBeNull();
-    expect((await metadata.json()) as object).toEqual(missing);
     const unknown = await fetchWorker("/unknown", {
       headers: authenticatedHeaders,
     });
@@ -757,6 +750,83 @@ describe("device session request validators", () => {
         code: "not_found",
         retryable: false,
         action: "edit_request",
+      },
+    });
+  });
+
+  test("GET session metadata returns the stored session without a capture-ownership receipt", async () => {
+    const opened = await fetchWorker("/v1/device-sessions", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({ ...openBody, capturedAtMs: 1_700_000_000_000 }),
+    });
+    expect(opened.status).toBe(201);
+    const created = (await opened.json()) as {
+      session: Record<string, unknown>;
+    };
+    const metadata = await fetchWorker(
+      `/v1/device-sessions/${created.session.id as string}`,
+      { headers: authenticatedHeaders }
+    );
+    expect(metadata.status).toBe(200);
+    expect(metadata.headers.get("retry-after")).toBeNull();
+    expect((await metadata.json()) as object).toEqual({
+      session: created.session,
+    });
+    const missingR2 = await fetchWorker(
+      `/v1/device-sessions/${created.session.id as string}`,
+      { headers: authenticatedHeaders },
+      { ...env, ATTACHMENTS: undefined }
+    );
+    expect(missingR2.status).toBe(200);
+    expect((await missingR2.json()) as object).toEqual({
+      session: created.session,
+    });
+    const missing = await fetchWorker(
+      "/v1/device-sessions/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      { headers: authenticatedHeaders }
+    );
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get("retry-after")).toBeNull();
+    expect((await missing.json()) as object).toEqual({
+      error: {
+        code: "device_session_not_found",
+        retryable: false,
+        action: "none",
+      },
+    });
+    const grammar = await fetchWorker("/v1/device-sessions/not-a-uuid", {
+      headers: authenticatedHeaders,
+    });
+    expect(grammar.status).toBe(404);
+    expect((await grammar.json()) as object).toEqual({
+      error: {
+        code: "not_found",
+        retryable: false,
+        action: "none",
+      },
+    });
+  });
+
+  test("GET session metadata retryable 503 sends production Listen retry-after", async () => {
+    const missingDb = await handleDeviceSessionRead(
+      coreContext({
+        env: { ...env, DB: undefined } as never,
+        request: new Request(
+          "https://worker.test/v1/device-sessions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        ),
+        routePath: "/v1/device-sessions/:id",
+        params: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(missingDb.status).toBe(503);
+    expect(missingDb.headers.get("retry-after")).toBe("1");
+    expect((await missingDb.json()) as object).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
       },
     });
   });

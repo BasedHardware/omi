@@ -686,6 +686,20 @@ describe("worker request contract", () => {
       expect(transcript.status).toBe(503);
       expect(transcript.headers.get("retry-after")).toBe("1");
       expect((await transcript.json()) as unknown).toEqual(unavailable);
+      const session = await handler.fetch(
+        onTheWireRequest(
+          "/v1/device-sessions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          {
+            authorization: "Bearer firebase-id-token",
+            "x-omi-client-id": "desktop-client",
+          }
+        ),
+        bindings as never,
+        executionContext as never
+      );
+      expect(session.status).toBe(503);
+      expect(session.headers.get("retry-after")).toBe("1");
+      expect((await session.json()) as unknown).toEqual(unavailable);
       const transcribe = await handler.fetch(
         new Request(
           "https://worker.test/v1/device-sessions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/transcribe",

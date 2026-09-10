@@ -540,6 +540,16 @@ export async function completeDeviceSession(
   return { kind: "ok", session: toDeviceSession(updated) };
 }
 
+export async function readDeviceSession(
+  db: D1Database,
+  accountId: string,
+  sessionId: string
+): Promise<DeviceSession | null> {
+  if (!isSessionId(sessionId)) return null;
+  const row = await loadSession(db, accountId, sessionId);
+  return row === null ? null : toDeviceSession(row);
+}
+
 export async function listDeviceSessions(
   db: D1Database,
   accountId: string
@@ -565,7 +575,8 @@ async function loadSession(
   return db
     .prepare(
       `SELECT id, account_id, device_id, device_name, codec, state, r2_prefix,
-              byte_count, chunk_count, started_at, ended_at, created_at, updated_at
+              byte_count, chunk_count, started_at, ended_at, created_at, updated_at,
+              captured_at_ms
        FROM device_sessions
        WHERE id = ? AND account_id = ?`
     )

@@ -37,6 +37,7 @@ import {
   openDeviceSession,
   parseDeviceSessionAudioBatch,
   parseDeviceSessionCreate,
+  readDeviceSession,
 } from "./device-sessions";
 import { type RetrievalEnv } from "./retrieval";
 import { type CanonicalService } from "./canonical-service";
@@ -381,6 +382,12 @@ function firebaseUnavailableRetryAfter(
     return "60";
   }
   if (method === "GET" && pathname === "/v1/device-sessions/ownership") {
+    return "1";
+  }
+  if (
+    method === "GET" &&
+    /^\/v1\/device-sessions\/[^/]+$/.test(pathname)
+  ) {
     return "1";
   }
   if (
@@ -881,6 +888,26 @@ export async function handleDeviceSessionComplete(
     : json({ session: outcome.session });
 }
 
+export async function handleDeviceSessionRead(
+  context: CoreContext
+): Promise<Response> {
+  const pathError = listenSessionPathError(context.req.param("id"));
+  if (pathError !== null) return pathError;
+  const db = context.env.DB;
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "1",
+    });
+  const session = await readDeviceSession(
+    db,
+    context.get("accountId"),
+    context.req.param("id")
+  );
+  return session === null
+    ? backendError("device_session_not_found", "none", 404)
+    : json({ session });
+}
+
 export async function handleDeviceSessionList(
   context: CoreContext
 ): Promise<Response> {
@@ -1057,11 +1084,7 @@ export function unmatchedRouteError(pathname: string): Response {
     /^\/v1\/device-sessions\/[^/]+(?:\/(?:audio|complete|transcribe|transcript))?$/.test(
       pathname
     );
-  return backendError(
-    "not_found",
-    listenPath ? "none" : "edit_request",
-    404
-  );
+  return backendError("not_found", listenPath ? "none" : "edit_request", 404);
 }
 
 export async function handleTranscription(
@@ -1183,6 +1206,11 @@ export const v1Routes: readonly CoreRoute[] = [
     method: "POST",
     path: "/v1/device-sessions/:id/complete",
     handle: handleDeviceSessionComplete,
+  },
+  {
+    method: "GET",
+    path: "/v1/device-sessions/:id",
+    handle: handleDeviceSessionRead,
   },
   {
     method: "GET",
