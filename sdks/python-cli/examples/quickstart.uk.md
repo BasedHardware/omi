@@ -66,8 +66,8 @@ omi auth login --browser --provider apple
 Отримайте ключ на панелі [app.omi.me](https://app.omi.me) у розділі **Developer → API Keys**:
 
 ```bash
-# Зберегти назавжди у локальному профілі (вводьте інтерактивно, щоб захистити історію термінала)
-omi auth login --api-key
+# Зберегти у локальному профілі через параметр команди
+omi auth login --api-key omi_dev_...
 
 # Або встановити як змінну середовища (ідеально для контейнерів та CI/CD)
 # Примітка: якщо у поточному профілі вже збережено ключ, спочатку виконайте `omi auth logout`.
@@ -116,6 +116,9 @@ omi conversation list --limit 5
 
 # Отримати деталі та повну текстову транскрипцію розмови
 omi conversation get <CONVERSATION_ID> --include-transcript
+
+# Експорт повної транскрипції у файл JSON
+omi --json conversation get <CONVERSATION_ID> --include-transcript > transkriptsiya.json
 ```
 
 ### Завдання та дії (Action Items)
