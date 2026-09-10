@@ -10,6 +10,7 @@ import {
   authorizeV1,
   publicRoutes,
   safeRoute,
+  unmatchedRouteError,
   v1Routes,
   type CoreContext,
   type CoreEnv,
@@ -80,7 +81,9 @@ for (const route of v1Routes) {
   );
 }
 
-app.notFound(() => backendError("not_found", "edit_request", 404));
+app.notFound((context) =>
+  unmatchedRouteError(new URL(context.req.url).pathname)
+);
 app.onError((error, context) => {
   logRequestFailed({
     requestId: context.get("requestId") ?? "unavailable",

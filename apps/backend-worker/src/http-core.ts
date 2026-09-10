@@ -1021,6 +1021,20 @@ function listenSessionPathError(sessionId: string): Response | null {
     : backendError("not_found", "none", 404);
 }
 
+export function unmatchedRouteError(pathname: string): Response {
+  const listenPath =
+    pathname === "/v1/device-sessions" ||
+    pathname === "/v1/device-sessions/ownership" ||
+    /^\/v1\/device-sessions\/[^/]+(?:\/(?:audio|complete|transcribe|transcript))?$/.test(
+      pathname
+    );
+  return backendError(
+    "not_found",
+    listenPath ? "none" : "edit_request",
+    404
+  );
+}
+
 export async function handleTranscription(
   context: CoreContext
 ): Promise<Response> {

@@ -5,6 +5,7 @@ import {
   coreContext,
   publicRoutes,
   safeRoute,
+  unmatchedRouteError,
   v1Routes,
   type CoreContext,
   type CoreEnv,
@@ -33,7 +34,7 @@ export function createElysiaApp(env: CoreEnv): Elysia {
     if (code === "NOT_FOUND")
       return observed(
         context,
-        backendError("not_found", "edit_request", 404),
+        unmatchedRouteError(new URL(request.url).pathname),
         Date.now()
       );
     logFailure(context, error);

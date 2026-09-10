@@ -661,6 +661,63 @@ describe("device session request validators", () => {
     }
   });
 
+  test("capture wrong methods use production Listen not_found", async () => {
+    const missing = {
+      error: {
+        code: "not_found",
+        retryable: false,
+        action: "none",
+      },
+    };
+    const sessionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const audio = await fetchWorker(
+      `/v1/device-sessions/${sessionId}/audio`,
+      { headers: authenticatedHeaders }
+    );
+    expect(audio.status).toBe(404);
+    expect(audio.headers.get("retry-after")).toBeNull();
+    expect((await audio.json()) as object).toEqual(missing);
+    const transcript = await fetchWorker(
+      `/v1/device-sessions/${sessionId}/transcript`,
+      { method: "POST", headers: authenticatedHeaders }
+    );
+    expect(transcript.status).toBe(404);
+    expect(transcript.headers.get("retry-after")).toBeNull();
+    expect((await transcript.json()) as object).toEqual(missing);
+    const complete = await fetchWorker(
+      `/v1/device-sessions/${sessionId}/complete`,
+      { headers: authenticatedHeaders }
+    );
+    expect(complete.status).toBe(404);
+    expect(complete.headers.get("retry-after")).toBeNull();
+    expect((await complete.json()) as object).toEqual(missing);
+    const transcribe = await fetchWorker(
+      `/v1/device-sessions/${sessionId}/transcribe`,
+      { headers: authenticatedHeaders }
+    );
+    expect(transcribe.status).toBe(404);
+    expect(transcribe.headers.get("retry-after")).toBeNull();
+    expect((await transcribe.json()) as object).toEqual(missing);
+    const metadata = await fetchWorker(
+      `/v1/device-sessions/${sessionId}`,
+      { headers: authenticatedHeaders }
+    );
+    expect(metadata.status).toBe(404);
+    expect(metadata.headers.get("retry-after")).toBeNull();
+    expect((await metadata.json()) as object).toEqual(missing);
+    const unknown = await fetchWorker("/unknown", {
+      headers: authenticatedHeaders,
+    });
+    expect(unknown.status).toBe(404);
+    expect((await unknown.json()) as object).toEqual({
+      error: {
+        code: "not_found",
+        retryable: false,
+        action: "edit_request",
+      },
+    });
+  });
+
   test("capture write 409s use production Listen device_session_conflict", async () => {
     const conflict = {
       error: {
