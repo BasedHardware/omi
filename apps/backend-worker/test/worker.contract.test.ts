@@ -3311,6 +3311,30 @@ describe("settings entitlement admission contract", () => {
     expect(accountCalls).toEqual([]);
   });
 
+  test("Settings non-GET is production not_found without nested action", async () => {
+    const missing = { error: "not_found" };
+    const unsignedPost = await fetchWorker("/v1/settings", {
+      method: "POST",
+      body: "{}",
+    });
+    const signedPost = await fetchWorker("/v1/settings", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: "{}",
+    });
+    const put = await fetchWorker("/v1/settings", { method: "PUT" });
+    const del = await fetchWorker("/v1/settings", { method: "DELETE" });
+    expect(unsignedPost.status).toBe(404);
+    expect((await unsignedPost.json()) as unknown).toEqual(missing);
+    expect(signedPost.status).toBe(404);
+    expect((await signedPost.json()) as unknown).toEqual(missing);
+    expect(put.status).toBe(404);
+    expect((await put.json()) as unknown).toEqual(missing);
+    expect(del.status).toBe(404);
+    expect((await del.json()) as unknown).toEqual(missing);
+    expect(accountCalls).toEqual([]);
+  });
+
   test("Settings GET retryable 503 sends production retry-after", async () => {
     const missingDb = await handleSettings(
       coreContext({

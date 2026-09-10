@@ -501,12 +501,12 @@ async function resolveV1Account(
 }
 
 export function requiresV1Authorization(context: CoreContext): boolean {
-  if (context.req.method !== "GET") return true;
   try {
-    return new URL(context.req.url).pathname !== "/v1/settings";
+    if (new URL(context.req.url).pathname === "/v1/settings") return false;
   } catch {
     return true;
   }
+  return true;
 }
 
 export async function authorizeV1(
@@ -1107,6 +1107,7 @@ function listenSessionPathError(sessionId: string): Response | null {
 }
 
 export function unmatchedRouteError(pathname: string): Response {
+  if (pathname === "/v1/settings") return json({ error: "not_found" }, 404);
   const listenPath =
     pathname === "/v1/device-sessions" ||
     pathname === "/v1/device-sessions/ownership" ||
