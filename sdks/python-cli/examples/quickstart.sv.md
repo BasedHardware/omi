@@ -66,8 +66,8 @@ omi auth login --browser --provider apple
 Skapa en nyckel på [app.omi.me](https://app.omi.me) under **Developer → API Keys**:
 
 ```bash
-# Spara nyckeln permanent i den lokala profilen (dold interaktiv inmatning)
-omi auth login --api-key
+# Spara i den lokala profilen via kommandot
+omi auth login --api-key omi_dev_...
 
 # Eller ange som miljövariabel (perfekt för containers och CI/CD)
 # Obs: om den aktiva profilen redan har en sparad nyckel, kör `omi auth logout` först.
