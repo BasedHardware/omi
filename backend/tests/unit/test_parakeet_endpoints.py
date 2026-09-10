@@ -685,6 +685,18 @@ class TestParakeetServiceModes:
         app, mod, gpu, _ = _make_app_with_mocks(gpu_ready=True)
         monkeypatch.setattr(mod, "SERVICE_MODE", "stream")
         monkeypatch.setattr(mod, "_stream_components_ready", {"rnnt": True, "vad": True, "diarizer": True})
+        monkeypatch.setattr(
+            mod,
+            "get_stream_model_health",
+            lambda: {
+                "backend": "nemo",
+                "stream_model": "nvidia/parakeet-tdt-0.6b-v3",
+                "decoder_family": "tdt",
+                "language_support": "multilingual",
+                "model_loaded": True,
+                "loaded_decoder_family": "tdt",
+            },
+        )
         mod.stream_admission = mod.StreamAdmissionController(capacity=25, allocation_percent=100)
 
         client = TestClient(app, raise_server_exceptions=False)
@@ -693,6 +705,8 @@ class TestParakeetServiceModes:
         assert response.status_code == 200
         body = response.json()
         assert body["mode"] == "stream"
+        assert body["model_identity"]["backend"] == "nemo"
+        assert body["model_identity"]["stream_model"] == "nvidia/parakeet-tdt-0.6b-v3"
         assert body["components"] == {"rnnt": True, "vad": True, "diarizer": True}
         assert body["admission"] == {"capacity": 25, "active": 0, "draining": False}
         assert gpu.is_ready is True

@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 import soundfile as sf
 import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
-from service_mode import get_service_mode
+from service_mode import get_service_mode, get_stream_model_name
 
 try:
     import nemo.collections.asr as _nemo_asr  # type: ignore[reportMissingImports]  # nemo_toolkit not installed in dev venv
@@ -371,7 +371,7 @@ class GPUWorker:
         device = os.getenv("PARAKEET_DEVICE", "cuda:0")
         do_compile = os.getenv("PARAKEET_TORCH_COMPILE", "false").lower() in ("true", "1", "yes")
         disable_cuda_graphs = os.getenv("PARAKEET_CUDA_GRAPHS", "false").lower() not in ("true", "1", "yes")
-        if not disable_cuda_graphs and os.getenv("PARAKEET_STREAM_MODEL", "").strip():
+        if self._service_mode != "batch" and not disable_cuda_graphs and get_stream_model_name(os.environ):
             raise ValueError("PARAKEET_CUDA_GRAPHS must be false when PARAKEET_STREAM_MODEL is configured")
 
         _torch.backends.cudnn.benchmark = True

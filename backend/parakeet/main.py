@@ -28,6 +28,7 @@ from transcribe import (
     transcribe_file_v2,
     set_gpu_worker,
     INFERENCE_MODE,
+    get_stream_model_health,
     _transcribe_from_gpu_result,  # type: ignore[reportPrivateUsage,reportUnknownVariableType]  # upstream transcribe partially typed
 )
 from stream_handler import StreamSession, warmup_diarizer, warmup_rnnt_decoder, warmup_vad
@@ -548,6 +549,7 @@ async def health_check() -> JSONResponse | Dict[str, Any]:
             "status": "healthy" if ready else "draining" if admission is not None and admission.draining else "loading",
             "ready": ready,
             "mode": SERVICE_MODE,
+            "model_identity": get_stream_model_health(),
             "components": dict(_stream_components_ready),
             "uptime_seconds": round(time.monotonic() - start_time, 1),
             "admission": {
