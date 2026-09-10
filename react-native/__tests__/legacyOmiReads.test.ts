@@ -168,6 +168,75 @@ test('old empty memory content stays searchable instead of a blank row', async (
   });
 });
 
+test('old memories keep GET ledger slot, playbook body, baseline, and known devices', async () => {
+  const {api} = backend([
+    {
+      id: 'ledger',
+      content: 'Prefers concise recaps.',
+      created_at: '2026-09-07T00:00:00Z',
+      conversation_id: null,
+      slot: 'identity.full_name',
+      body: 'Open with the weekly recap.',
+      kind: 'document',
+      ledger_schema_version: 'knowledge_ledger.v1',
+      is_baseline: true,
+      primary_capture_device: 'macos_ab12cd34',
+    },
+    {
+      id: 'omitted',
+      content: 'Likes walking.',
+      created_at: '2026-09-07T00:00:00Z',
+      conversation_id: null,
+      slot: ' \t\n',
+      body: 'Hidden fact body.',
+      kind: 'fact',
+      ledger_schema_version: 'knowledge_ledger.v1',
+      is_baseline: false,
+      primary_capture_device: 'windows_ab12cd34',
+    },
+  ]);
+  const result = await loadMemories(api);
+  expect(result.items[0]).toMatchObject({
+    ledgerSlot: 'identity.full_name',
+    ledgerBody: 'Open with the weekly recap.',
+    isBaseline: true,
+    captureDeviceLabel: 'Mac',
+  });
+  expect(result.items[1]).not.toHaveProperty('ledgerSlot');
+  expect(result.items[1]).not.toHaveProperty('ledgerBody');
+  expect(result.items[1]).not.toHaveProperty('isBaseline');
+  expect(result.items[1]).not.toHaveProperty('captureDeviceLabel');
+});
+
+test('old memories fail closed for malformed ledger chrome', async () => {
+  await expect(
+    loadMemories(
+      backend([
+        {
+          id: 'bad-slot',
+          content: 'Prefers concise recaps.',
+          created_at: '2026-09-07T00:00:00Z',
+          conversation_id: null,
+          slot: 1,
+        },
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi text is malformed');
+  await expect(
+    loadMemories(
+      backend([
+        {
+          id: 'bad-baseline',
+          content: 'Prefers concise recaps.',
+          created_at: '2026-09-07T00:00:00Z',
+          conversation_id: null,
+          is_baseline: 'true',
+        },
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi boolean is malformed');
+});
+
 test('old empty task descriptions stay searchable instead of failing the page', async () => {
   const {api} = backend({
     action_items: [

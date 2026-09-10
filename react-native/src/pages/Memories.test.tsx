@@ -600,3 +600,64 @@ test('Memories rows keep GET timestamps with the same clock as Home', () => {
     act(() => view.unmount());
   }
 });
+
+test('Memories rows name GET ledger slot, playbook body, baseline, and known devices', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...memory('ledger'),
+                title: 'Prefers concise recaps.',
+                summary: 'Prefers concise recaps.',
+                searchableText: 'Prefers concise recaps.',
+                provenance: {
+                  label: null,
+                  synthesisVersion: null,
+                  inputDigest: null,
+                  outputDigest: null,
+                },
+                ledgerSlot: 'identity.full_name',
+                ledgerBody: 'Open with the weekly recap.',
+                isBaseline: true,
+                captureDeviceLabel: 'Mac',
+              },
+              {
+                ...memory('omitted'),
+                title: 'Likes walking.',
+                summary: 'Likes walking.',
+                searchableText: 'Likes walking.',
+                provenance: {
+                  label: null,
+                  synthesisVersion: null,
+                  inputDigest: null,
+                  outputDigest: null,
+                },
+              },
+            ],
+            page: page(null),
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    const copy = textOf(view);
+    expect(copy).toContain('identity.full_name');
+    expect(copy).toContain('Open with the weekly recap.');
+    expect(copy).toContain('Baseline Memory');
+    expect(copy).toContain('Mac');
+    expect(
+      view.root.findAll(
+        node => node.type === Text && node.props.children === 'Baseline Memory',
+      ),
+    ).toHaveLength(1);
+  } finally {
+    act(() => view.unmount());
+  }
+});

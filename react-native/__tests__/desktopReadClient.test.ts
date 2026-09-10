@@ -48,6 +48,10 @@ import {
   memoryDisplayTitle,
   memoryCitationCopy,
   memorySynthesisCopy,
+  memoryLedgerSlotCopy,
+  memoryLedgerPlaybookCopy,
+  memoryBaselineCopy,
+  memoryCaptureDeviceCopy,
   parseMemoryText,
   chatClockLabel,
   clockLabel,
@@ -1223,6 +1227,28 @@ test('memory citation copy matches the citation count', () => {
   );
 });
 
+test('Omi memory ledger chrome names GET slot, playbook body, baseline, and known devices', () => {
+  expect(memoryLedgerSlotCopy({})).toBeNull();
+  expect(memoryLedgerSlotCopy({ledgerSlot: ' \t\n'})).toBeNull();
+  expect(memoryLedgerSlotCopy({ledgerSlot: 'identity.full_name'})).toBe(
+    'identity.full_name',
+  );
+  expect(memoryLedgerPlaybookCopy({})).toBeNull();
+  expect(memoryLedgerPlaybookCopy({ledgerBody: '\u0085'})).toBeNull();
+  expect(
+    memoryLedgerPlaybookCopy({ledgerBody: 'Open with the weekly recap.'}),
+  ).toBe('Open with the weekly recap.');
+  expect(memoryBaselineCopy({})).toBeNull();
+  expect(memoryBaselineCopy({isBaseline: false})).toBeNull();
+  expect(memoryBaselineCopy({isBaseline: true})).toBe('Baseline Memory');
+  expect(memoryCaptureDeviceCopy(null)).toBeNull();
+  expect(memoryCaptureDeviceCopy(' \t')).toBeNull();
+  expect(memoryCaptureDeviceCopy('windows_ab12cd34')).toBeNull();
+  expect(memoryCaptureDeviceCopy('macos_ab12cd34')).toBe('Mac');
+  expect(memoryCaptureDeviceCopy('ios_ab12cd34')).toBe('iPhone');
+  expect(memoryCaptureDeviceCopy('android_ab12cd34')).toBe('Android');
+});
+
 test('task due copy uses a calendar date instead of a raw epoch', () => {
   const secondScaleDue = 1786000000;
   const millisecondDue = Date.UTC(2026, 8, 8);
@@ -2016,6 +2042,38 @@ test('keeps ratified memories that omit citations and provenance', async () => {
       }),
     }),
   ]);
+  expect(result.items[0]).not.toHaveProperty('ledgerSlot');
+  expect(result.items[0]).not.toHaveProperty('ledgerBody');
+  expect(result.items[0]).not.toHaveProperty('isBaseline');
+  expect(result.items[0]).not.toHaveProperty('captureDeviceLabel');
+});
+
+test('canonical memories omit Omi ledger chrome even when extra keys are present', async () => {
+  const result = await loadMemories(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify(
+        page(
+          [
+            {
+              ...memory,
+              slot: 'identity.full_name',
+              body: 'Open with the weekly recap.',
+              kind: 'document',
+              ledger_schema_version: 'knowledge_ledger.v1',
+              is_baseline: true,
+              primary_capture_device: 'macos_ab12cd34',
+            },
+          ],
+          'recall-completeness-v1',
+        ),
+      ),
+    })),
+  );
+  expect(result.items[0]).not.toHaveProperty('ledgerSlot');
+  expect(result.items[0]).not.toHaveProperty('ledgerBody');
+  expect(result.items[0]).not.toHaveProperty('isBaseline');
+  expect(result.items[0]).not.toHaveProperty('captureDeviceLabel');
 });
 
 test('still fails closed for empty memory text', async () => {

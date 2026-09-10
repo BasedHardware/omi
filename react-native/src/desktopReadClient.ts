@@ -156,10 +156,7 @@ export function recordingTranscriptCanDisplaySeconds(
   }
   const windows: {start: number; end: number}[] = [];
   for (const segment of segments) {
-    if (
-      typeof segment.start !== 'number' ||
-      typeof segment.end !== 'number'
-    ) {
+    if (typeof segment.start !== 'number' || typeof segment.end !== 'number') {
       return false;
     }
     windows.push({start: segment.start, end: segment.end});
@@ -575,6 +572,45 @@ export function memorySynthesisCopy(item: {
   return version !== '' ? 'Synthesized memory' : null;
 }
 
+export function memoryLedgerSlotCopy(item: {
+  ledgerSlot?: string | null;
+}): string | null {
+  const slot = visibleDisplayText(item.ledgerSlot ?? '');
+  return slot === '' ? null : slot;
+}
+
+export function memoryLedgerPlaybookCopy(item: {
+  ledgerBody?: string | null;
+}): string | null {
+  const body = visibleDisplayText(item.ledgerBody ?? '');
+  return body === '' ? null : body;
+}
+
+export function memoryBaselineCopy(item: {
+  isBaseline?: boolean;
+}): string | null {
+  return item.isBaseline === true ? 'Baseline Memory' : null;
+}
+
+export function memoryCaptureDeviceCopy(
+  device: string | null | undefined,
+): string | null {
+  const raw = visibleDisplayText(device ?? '');
+  if (raw === '') {
+    return null;
+  }
+  switch (raw.split('_')[0]) {
+    case 'macos':
+      return 'Mac';
+    case 'ios':
+      return 'iPhone';
+    case 'android':
+      return 'Android';
+    default:
+      return null;
+  }
+}
+
 export function epochMilliseconds(value: number): number {
   return value > 100_000_000_000 ? value : value * 1000;
 }
@@ -676,6 +712,10 @@ export type MemoryProjection = {
     inputDigest: string | null;
     outputDigest: string | null;
   };
+  ledgerSlot?: string;
+  ledgerBody?: string;
+  isBaseline?: boolean;
+  captureDeviceLabel?: string;
 };
 
 export type TaskProjection = {

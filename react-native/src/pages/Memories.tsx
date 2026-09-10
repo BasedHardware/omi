@@ -17,6 +17,9 @@ import {
   memoryDisplayTitle,
   memoryCitationCopy,
   memorySynthesisCopy,
+  memoryLedgerSlotCopy,
+  memoryLedgerPlaybookCopy,
+  memoryBaselineCopy,
   visibleDisplayText,
   type DesktopReadProjection,
   type DomainReadOutcome,
@@ -155,6 +158,10 @@ export function MemoriesPage({
   };
   const renderItem = useCallback(({item}: {item: MemoryProjection}) => {
     const synthesis = memorySynthesisCopy(item);
+    const slot = memoryLedgerSlotCopy(item);
+    const playbook = memoryLedgerPlaybookCopy(item);
+    const baseline = memoryBaselineCopy(item);
+    const device = visibleDisplayText(item.captureDeviceLabel ?? '');
     return (
       <View
         accessibilityLabel={`Memory: ${memoryDisplayBody(item)}`}
@@ -168,6 +175,20 @@ export function MemoriesPage({
           </Text>
         </View>
         <Text style={styles.memoryBody}>{memoryDisplayBody(item)}</Text>
+        {slot !== null ? (
+          <Text style={styles.memoryProvenance}>{slot}</Text>
+        ) : null}
+        {playbook !== null ? (
+          <Text numberOfLines={3} style={styles.memoryProvenance}>
+            {playbook}
+          </Text>
+        ) : null}
+        {device !== '' ? (
+          <Text style={styles.memoryProvenance}>{device}</Text>
+        ) : null}
+        {baseline !== null ? (
+          <Text style={styles.memoryProvenance}>{baseline}</Text>
+        ) : null}
         {synthesis !== null ? (
           <Text style={styles.memoryProvenance}>{synthesis}</Text>
         ) : null}

@@ -1,6 +1,7 @@
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
+  memoryCaptureDeviceCopy,
   taskDisplayTitle,
   visibleDisplayText,
   type ConversationProjection,
@@ -179,6 +180,19 @@ export async function loadOmiMemories(
       created = milliseconds(row.created_at);
     const conversation =
       row.conversation_id == null ? null : id(row.conversation_id);
+    const ledgerSlot = visibleDisplayText(text(row.slot, ''));
+    const ledgerKind = visibleDisplayText(text(row.kind, ''));
+    const ledgerSchema = visibleDisplayText(
+      text(row.ledger_schema_version, ''),
+    );
+    const ledgerBody = visibleDisplayText(text(row.body, ''));
+    const playbook =
+      ledgerSchema === 'knowledge_ledger.v1' && ledgerKind === 'document'
+        ? ledgerBody
+        : '';
+    const captureDeviceLabel = memoryCaptureDeviceCopy(
+      text(row.primary_capture_device, ''),
+    );
     return {
       kind: 'memory' as const,
       id: id(row.id),
@@ -193,6 +207,10 @@ export async function loadOmiMemories(
         inputDigest: null,
         outputDigest: null,
       },
+      ...(ledgerSlot === '' ? {} : {ledgerSlot}),
+      ...(playbook === '' ? {} : {ledgerBody: playbook}),
+      ...(bool(row.is_baseline) ? {isBaseline: true} : {}),
+      ...(captureDeviceLabel === null ? {} : {captureDeviceLabel}),
     };
   });
   return {apiContract: 'omi', items, page: page(start, items.length)};
