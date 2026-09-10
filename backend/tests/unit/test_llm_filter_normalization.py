@@ -41,7 +41,7 @@ def stored_items(monkeypatch):
 
 
 def test_extracted_metadata_survives_redis_error(monkeypatch) -> None:
-    import redis.exceptions
+    import redis
     from database import redis_db
 
     def fake_get_llm(feature):
@@ -54,7 +54,7 @@ def test_extracted_metadata_survives_redis_error(monkeypatch) -> None:
         return FakeLLM(response)
 
     def boom(*_a, **_k):
-        raise redis.exceptions.RedisError('OOM')
+        raise redis.exceptions.RedisError('OOM')  # type: ignore[attr-defined]
 
     monkeypatch.setattr(chat, 'get_llm', fake_get_llm)
     monkeypatch.setattr(redis_db, '_filter_category_scripts', boom)

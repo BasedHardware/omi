@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-import redis.exceptions
+import redis
 
 from database import redis_db
 
@@ -104,7 +104,7 @@ def test_redis_error_fail_open_no_uncapped_write(fake_r, monkeypatch) -> None:
     recorded = []
 
     def boom(*_a, **_k):
-        raise redis.exceptions.RedisError('OOM')
+        raise redis.exceptions.RedisError('OOM')  # type: ignore[attr-defined]
 
     monkeypatch.setattr(redis_db, '_filter_category_scripts', boom)
     monkeypatch.setattr(

@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 
 import redis
 import logging
-from redis.exceptions import RedisError
 
 from database.api_key_metadata import (
     DEV_API_KEY_AUTH_CONTEXT_VERSION,
@@ -604,9 +603,15 @@ _filter_admit_script = None
 
 def _filter_category_scripts() -> tuple[Any, Any]:
     global _filter_trim_script, _filter_admit_script
-    if _filter_trim_script is None:
-        _filter_trim_script = r.register_script(_FILTER_TRIM_LUA)
-        _filter_admit_script = r.register_script(_FILTER_ADMIT_LUA)
+    if _filter_trim_script is None or _filter_admit_script is None:
+        # Register into locals first; publish the globals only after both
+        # registrations succeed so a concurrent caller can never observe a
+        # half-initialized pair (which would raise TypeError outside the
+        # RedisError handler in add_filter_category_item).
+        trim = r.register_script(_FILTER_TRIM_LUA)
+        admit = r.register_script(_FILTER_ADMIT_LUA)
+        _filter_trim_script = trim
+        _filter_admit_script = admit
     return _filter_trim_script, _filter_admit_script
 
 
@@ -642,7 +647,7 @@ def add_filter_category_item(uid: str, category: str, item: str) -> None:
             logger.info('filter_category_trim removed=%s after=%s', removed_n, after_n)
         if after_n < FILTER_CATEGORY_CAP:
             admit(keys=[key], args=[item, FILTER_CATEGORY_CAP])
-    except RedisError:
+    except redis.exceptions.RedisError:  # type: ignore[attr-defined]
         try:
             from utils.observability.fallback import record_fallback
 
