@@ -12,6 +12,7 @@ import {
 import Search from 'lucide-react-native/icons/search';
 import {
   conversationCaptureCopy,
+  conversationDiscardedPhotoCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationHasFinishClock,
@@ -46,6 +47,7 @@ const ConversationRow = memo(function ConversationRow({
   const listenOverview = conversationListUsesListenOverview(item);
   const captureCopy = conversationCaptureCopy(item.capturedAtMs);
   const emoji = conversationListEmoji(item);
+  const photosCopy = conversationDiscardedPhotoCopy(item);
   return (
     <FocusPressable
       accessibilityLabel={`Open conversation ${conversationRecapTitle(item)}`}
@@ -83,6 +85,13 @@ const ConversationRow = memo(function ConversationRow({
             accessibilityLabel="Discarded conversation"
             style={styles.conversationRowTime}>
             Discarded
+          </Text>
+        ) : null}
+        {photosCopy !== null ? (
+          <Text
+            accessibilityLabel={photosCopy}
+            style={styles.conversationRowTime}>
+            {photosCopy}
           </Text>
         ) : null}
         {item.status === 'failed' ? (

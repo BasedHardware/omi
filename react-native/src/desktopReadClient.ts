@@ -25,6 +25,7 @@ export type ConversationProjection = {
   locked: boolean;
   discarded: boolean;
   emoji?: string;
+  photoCount?: number;
 };
 
 export function visibleDisplayText(value: string): string {
@@ -209,6 +210,20 @@ export function conversationListEmoji(item: {
   }
   const emoji = visibleDisplayText(item.emoji ?? '');
   return emoji === '' ? null : emoji;
+}
+
+export function conversationDiscardedPhotoCopy(item: {
+  discarded: boolean;
+  photoCount?: number;
+}): string | null {
+  if (!item.discarded) {
+    return null;
+  }
+  const count = item.photoCount;
+  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count <= 0) {
+    return null;
+  }
+  return `${count} photos`;
 }
 
 export function conversationHasFinishClock(conversation: {

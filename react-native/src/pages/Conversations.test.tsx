@@ -1286,3 +1286,54 @@ test('conversation list names GET emoji and omits it when discarded or empty', (
   expect(textOf(renderer)).not.toContain('🧠');
   expect(textOf(renderer)).not.toContain('\u0085');
 });
+
+test('conversation list names discarded GET photo counts and omits them otherwise', () => {
+  const base = {
+    kind: 'conversation' as const,
+    title: 'Morning standup',
+    summary: 'Notes',
+    searchableText: 'Morning standup\nNotes',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...base,
+                id: 'omi-photos',
+                discarded: true,
+                photoCount: 2,
+              },
+              {...base, id: 'omi-kept', photoCount: 3},
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  expect(textOf(renderer)).toContain('2 photos');
+  expect(textOf(renderer)).not.toContain('3 photos');
+});

@@ -110,6 +110,15 @@ function page(
       : ['The Omi API does not provide snapshot completeness for this list.'],
   };
 }
+function photoCount(value: unknown): number {
+  if (value === undefined || value === null) {
+    return 0;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error('Omi photos are malformed');
+  }
+  return value.length;
+}
 export async function loadOmiConversations(
   read: Read,
   cursor: string | null,
@@ -130,6 +139,7 @@ export async function loadOmiConversations(
     if (!['private', 'public', 'shared'].includes(visibility))
       throw new Error('Omi visibility is malformed');
     const status = text(row.status, 'completed');
+    const photos = photoCount(row.photos);
     return {
       kind: 'conversation' as const,
       id: id(row.id),
@@ -151,6 +161,7 @@ export async function loadOmiConversations(
       locked: bool(row.is_locked),
       discarded: bool(row.discarded),
       ...(emoji === '' ? {} : {emoji}),
+      ...(photos === 0 ? {} : {photoCount: photos}),
     };
   });
   return {apiContract: 'omi', items, page: page(start, items.length)};

@@ -33,6 +33,24 @@ const conversation = {
   folder_id: null,
 };
 
+test('old conversations keep GET photo counts and omit empty lists', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'photos-one',
+      photos: [{id: 'one'}, {id: 'two'}],
+    },
+    {
+      ...conversation,
+      id: 'photos-two',
+      photos: [],
+    },
+  ]);
+  const result = await loadConversations(api);
+  expect(result.items[0]).toMatchObject({photoCount: 2});
+  expect(result.items[1]).not.toHaveProperty('photoCount');
+});
+
 test('old conversations keep wire-non-empty emoji and omit whitespace', async () => {
   const {api} = backend([
     {
@@ -71,6 +89,7 @@ test('old bare conversation array preserves nullable metadata and offset paginat
     startedAt: null,
   });
   expect(first.items[0]).not.toHaveProperty('emoji');
+  expect(first.items[0]).not.toHaveProperty('photoCount');
   expect(first.apiContract).toBe('omi');
   expect(first.page).toMatchObject({
     complete: false,
@@ -254,6 +273,11 @@ test.each([
     'conversation date',
     loadConversations,
     [{...conversation, created_at: 'bad'}],
+  ],
+  [
+    'conversation photos',
+    loadConversations,
+    [{...conversation, photos: 'nope'}],
   ],
   ['memory content', loadMemories, [{id: 'fact', content: 42}]],
   [

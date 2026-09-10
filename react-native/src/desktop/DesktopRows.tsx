@@ -5,6 +5,7 @@ import MessageCircle from 'lucide-react-native/icons/message-circle';
 import Sparkles from 'lucide-react-native/icons/sparkles';
 import {
   conversationCaptureCopy,
+  conversationDiscardedPhotoCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationHasFinishClock,
@@ -57,6 +58,7 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
   const listenOverview = conversationListUsesListenOverview(item);
   const captureCopy = conversationCaptureCopy(item.capturedAtMs);
   const emoji = conversationListEmoji(item);
+  const photosCopy = conversationDiscardedPhotoCopy(item);
   return (
     <View style={styles.rowCopy}>
       {emoji !== null ? <Text style={styles.rowTitle}>{emoji}</Text> : null}
@@ -88,6 +90,9 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
             .filter(part => part !== '')
             .join(' · ')}
         </Text>
+      ) : null}
+      {photosCopy !== null ? (
+        <Text style={styles.rowMeta}>{photosCopy}</Text>
       ) : null}
       {conversationHasFinishClock(item) ? (
         <Text style={styles.rowMeta}>
