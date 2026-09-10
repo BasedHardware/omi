@@ -130,6 +130,7 @@ function AskExchange({
       ) : null}
       {messages.map(item => {
         const human = item.sender === 'human';
+        const body = chatMessageDisplayText(item, 'Response stopped.');
         const appAttribution = human
           ? ''
           : chatAppAttributionCopy(item.appName);
@@ -140,15 +141,17 @@ function AskExchange({
         return (
           <View key={item.id} style={styles.exchangeRow}>
             <Text style={styles.rowMeta}>{chatSenderCopy(item.sender)}</Text>
-            <Text
-              accessibilityLabel={
-                item.generationOutcome === 'failed'
-                  ? 'Failed response'
-                  : undefined
-              }
-              style={styles.rowTitle}>
-              {chatMessageDisplayText(item, 'Response stopped.')}
-            </Text>
+            {body === '' ? null : (
+              <Text
+                accessibilityLabel={
+                  item.generationOutcome === 'failed'
+                    ? 'Failed response'
+                    : undefined
+                }
+                style={styles.rowTitle}>
+                {body}
+              </Text>
+            )}
             {item.generationOutcome === 'cancelled' &&
             visibleDisplayText(item.text) !== '' ? (
               <Text style={styles.rowMeta}>Response stopped</Text>

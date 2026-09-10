@@ -1635,6 +1635,76 @@ test('a chat message names GET content_blocks without inventing write actions', 
   });
 });
 
+test('an empty chat bubble names GET content_block fallbacks instead of Message text unavailable', () => {
+  const fallback = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-fallback',
+        text: 'Tool - Search - Found two notes',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+      }}
+      reduceMotion
+    />,
+  );
+  const fallbackCopies = fallback.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(fallbackCopies).toContain('Tool - Search - Found two notes');
+  expect(fallbackCopies).not.toContain('Message text unavailable');
+  const chrome = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-fallback-chrome',
+        text: '',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        contentBlocks: [{eyebrow: 'Discovery', title: 'Quiet mornings'}],
+      }}
+      reduceMotion
+    />,
+  );
+  const chromeCopies = chrome.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(chromeCopies).toContain('Discovery');
+  expect(chromeCopies).toContain('Quiet mornings');
+  expect(chromeCopies).not.toContain('Message text unavailable');
+  expect(chromeCopies).not.toContain('Show more');
+  act(() => {
+    fallback.unmount();
+    chrome.unmount();
+  });
+});
+
 test('an unknown chat sender says Sender unavailable instead of looking like a quiet AI turn', () => {
   const renderer = render(
     <ChatMessageRow

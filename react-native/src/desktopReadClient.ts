@@ -1287,6 +1287,11 @@ export function chatMessageDisplayText(
       title: string;
       points: readonly {label: string; value: number}[];
     };
+    contentBlocks?: readonly {
+      eyebrow: string;
+      title?: string;
+      detail?: string;
+    }[];
   },
   cancelledEmptyCopy = 'Response stopped',
 ): string {
@@ -1312,6 +1317,9 @@ export function chatMessageDisplayText(
   }
   if (extraLines.length > 0) {
     return extraLines.join('\n');
+  }
+  if ((message.contentBlocks ?? []).length > 0) {
+    return '';
   }
   return 'Message text unavailable';
 }

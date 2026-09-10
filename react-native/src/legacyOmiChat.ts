@@ -287,6 +287,53 @@ function contentBlockChrome(
   };
 }
 
+function labelledFallback(
+  label: string,
+  details: (string | undefined)[],
+): string {
+  const unique: string[] = [];
+  for (const detail of details) {
+    if (detail === undefined || unique.includes(detail)) {
+      continue;
+    }
+    unique.push(detail);
+  }
+  return unique.length === 0 ? label : `${label} - ${unique.join(' - ')}`;
+}
+
+function contentBlockFallbackLine(raw: unknown): string | null {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null;
+  }
+  const row = raw as Record<string, unknown>;
+  const type = wireString(row, 'type');
+  if (type === undefined) {
+    return null;
+  }
+  switch (type) {
+    case 'text': {
+      const text = wireString(row, 'text');
+      return text === undefined ? 'Message' : text;
+    }
+    case 'toolCall':
+    case 'tool_call':
+      return labelledFallback('Tool', [
+        wireString(row, 'name'),
+        wireString(row, 'output'),
+        wireString(row, 'inputSummary', 'input_summary'),
+      ]);
+    case 'thinking':
+      return labelledFallback('Thinking', [wireString(row, 'text')]);
+    case 'citation':
+      return labelledFallback('Source', [
+        wireString(row, 'title'),
+        wireString(row, 'preview'),
+      ]);
+    default:
+      return null;
+  }
+}
+
 function memoryReviewCategoryLabel(
   category: string | undefined,
 ): string | undefined {
@@ -558,9 +605,9 @@ function parseContentBlocksList(value: unknown): unknown[] | null {
   return Array.isArray(value) ? value : null;
 }
 
-function parseOmiChatContentBlocks(
+function parseOmiChatContentBlocksRaw(
   row: Record<string, unknown>,
-): {eyebrow: string; title?: string; detail?: string}[] {
+): unknown[] | null {
   try {
     let raw = parseContentBlocksList(row.content_blocks);
     if (raw === null && typeof row.metadata === 'string') {
@@ -579,12 +626,39 @@ function parseOmiChatContentBlocks(
         raw = null;
       }
     }
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
+function parseOmiChatContentBlocks(
+  row: Record<string, unknown>,
+): {eyebrow: string; title?: string; detail?: string}[] {
+  try {
+    const raw = parseOmiChatContentBlocksRaw(row);
     if (raw === null) {
       return [];
     }
     return raw.slice(0, 24).flatMap(parseContentBlock);
   } catch {
     return [];
+  }
+}
+
+function parseOmiChatFallbackText(row: Record<string, unknown>): string {
+  try {
+    const raw = parseOmiChatContentBlocksRaw(row);
+    if (raw === null) {
+      return '';
+    }
+    return raw
+      .slice(0, 24)
+      .map(contentBlockFallbackLine)
+      .filter((line): line is string => line !== null && line !== '')
+      .join('\n');
+  } catch {
+    return '';
   }
 }
 
@@ -607,9 +681,11 @@ export function parseOmiMessage(value: unknown): ChatMessage {
   const evidence = parseOmiChatEvidence(row, memories.length > 0);
   const contentBlocks = parseOmiChatContentBlocks(row);
   const appId = parseOmiChatAppId(row);
+  const fallbackText =
+    visibleDisplayText(row.text) === '' ? parseOmiChatFallbackText(row) : '';
   return {
     id: row.id,
-    text: row.text,
+    text: fallbackText === '' ? row.text : fallbackText,
     sender: row.sender,
     ...(row.type === 'day_summary' ? {type: 'day_summary' as const} : {}),
     createdAt,

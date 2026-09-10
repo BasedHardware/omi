@@ -1453,6 +1453,19 @@ test('empty chat bodies stay visible instead of a blank bubble', () => {
   expect(
     chatMessageDisplayText({
       text: '',
+      generationOutcome: 'completed',
+      contentBlocks: [{eyebrow: 'Discovery', title: 'Quiet mornings'}],
+    }),
+  ).toBe('');
+  expect(
+    chatMessageDisplayText({
+      text: 'Tool - Search',
+      generationOutcome: 'completed',
+    }),
+  ).toBe('Tool - Search');
+  expect(
+    chatMessageDisplayText({
+      text: '',
       generationOutcome: 'cancelled',
     }),
   ).toBe('Response stopped');

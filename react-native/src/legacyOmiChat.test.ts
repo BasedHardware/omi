@@ -525,6 +525,97 @@ test('old chat history names GET content_blocks without inventing writes', () =>
   ).toEqual([{eyebrow: 'Conversation', title: 'Kitchen capture'}]);
 });
 
+test('old chat history names empty-text GET tool thinking and citation fallbacks', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'fallback-1',
+        sender: 'ai',
+        text: '',
+        created_at: '2026-09-07T01:02:03Z',
+        content_blocks: [
+          {
+            type: 'tool_call',
+            id: 'tool-1',
+            name: 'Search',
+            output: 'Found two notes',
+            input_summary: 'standup recap',
+          },
+          {
+            type: 'thinking',
+            id: 'think-1',
+            text: 'Need the agenda first',
+          },
+          {
+            type: 'citation',
+            id: 'cite-1',
+            title: 'Standup notes',
+            preview: 'Ship the recap today',
+          },
+          {
+            type: 'discoveryCard',
+            id: 'd1',
+            title: 'Quiet mornings',
+            summary: 'You like a slow start.',
+          },
+          {
+            type: 'task_card',
+            id: 't1',
+            task_id: 'task-1',
+          },
+        ],
+      },
+      {
+        id: 'fallback-kept',
+        sender: 'ai',
+        text: 'Here is what I found.',
+        created_at: '2026-09-07T01:02:04Z',
+        content_blocks: [
+          {
+            type: 'toolCall',
+            id: 'tool-2',
+            name: 'Search',
+            output: 'Should stay omitted',
+          },
+        ],
+      },
+      {
+        id: 'fallback-empty-tool',
+        sender: 'ai',
+        text: ' \t',
+        created_at: '2026-09-07T01:02:05Z',
+        content_blocks: [{type: 'thinking', id: 'think-empty'}],
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'fallback-1')?.text).toBe(
+    'Tool - Search - Found two notes - standup recap\nThinking - Need the agenda first\nSource - Standup notes - Ship the recap today',
+  );
+  expect(
+    page.messages.find(row => row.id === 'fallback-1')?.contentBlocks,
+  ).toEqual([
+    {
+      eyebrow: 'Discovery',
+      title: 'Quiet mornings',
+      detail: 'You like a slow start.',
+    },
+  ]);
+  expect(page.messages.find(row => row.id === 'fallback-kept')?.text).toBe(
+    'Here is what I found.',
+  );
+  expect(
+    page.messages.find(row => row.id === 'fallback-kept')?.contentBlocks,
+  ).toBeUndefined();
+  expect(
+    page.messages.find(row => row.id === 'fallback-empty-tool')?.text,
+  ).toBe('Thinking');
+  const copy = JSON.stringify(page.messages);
+  expect(copy).not.toContain('Should stay omitted');
+  expect(copy).not.toContain('task-1');
+  expect(copy).not.toContain('Show more');
+});
+
 test('old chat history names GET memory review cards without inventing writes', () => {
   const page = parseOmiHistory(
     JSON.stringify([

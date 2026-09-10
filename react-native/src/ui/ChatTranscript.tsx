@@ -48,6 +48,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
     ]).start();
   }, [animate, opacity, reduceMotion, translateY]);
   const human = message.sender === 'human';
+  const body = chatMessageDisplayText(message);
   const daySummary = chatDaySummaryCopy(message.type);
   const appAttribution = human ? '' : chatAppAttributionCopy(message.appName);
   const citations = (message.memories ?? []).flatMap(memory => {
@@ -73,23 +74,21 @@ const ChatMessageRow = memo(function ChatMessageRow({
             : styles.chatMessageColumnDesktop,
           human && styles.chatMessageColumnHuman,
         ]}>
-        <View
-          style={[
-            styles.chatBubble,
-            human ? styles.chatBubbleHuman : styles.chatBubbleAi,
-            message.generationOutcome === 'cancelled' &&
-              styles.cancelledMessage,
-          ]}>
-          {message.generationOutcome === 'failed' ? (
-            <Text style={styles.failedLabel}>
-              {chatMessageDisplayText(message)}
-            </Text>
-          ) : (
-            <Text style={styles.message}>
-              {chatMessageDisplayText(message)}
-            </Text>
-          )}
-        </View>
+        {message.generationOutcome === 'failed' || body !== '' ? (
+          <View
+            style={[
+              styles.chatBubble,
+              human ? styles.chatBubbleHuman : styles.chatBubbleAi,
+              message.generationOutcome === 'cancelled' &&
+                styles.cancelledMessage,
+            ]}>
+            {message.generationOutcome === 'failed' ? (
+              <Text style={styles.failedLabel}>{body}</Text>
+            ) : (
+              <Text style={styles.message}>{body}</Text>
+            )}
+          </View>
+        ) : null}
         {message.generationOutcome === 'cancelled' &&
           visibleDisplayText(message.text) !== '' && (
             <Text style={styles.cancelledLabel}>Response stopped</Text>

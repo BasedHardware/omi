@@ -106,7 +106,7 @@ export function ChatConversationHistory({
                   <Text
                     selectable
                     style={[styles.conversationTranscriptText, ink]}>
-                    {`${sender} · ${body}`}
+                    {body === '' ? sender : `${sender} · ${body}`}
                   </Text>
                   {message.generationOutcome === 'cancelled' &&
                   visibleDisplayText(message.text) !== '' ? (
