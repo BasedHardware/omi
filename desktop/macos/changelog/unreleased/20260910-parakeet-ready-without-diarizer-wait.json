@@ -1,0 +1,3 @@
+{
+  "change": "Fixed on-device transcription staying silent for up to 20 seconds at the start of every capture session while speaker-recognition models warmed up"
+}

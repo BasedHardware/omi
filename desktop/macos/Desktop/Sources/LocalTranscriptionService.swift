@@ -60,9 +60,6 @@ final class LocalTranscriptionService: @unchecked Sendable {
   private var fallbackResolution: LocalSpeakerRegistry.Resolution {
     LocalSpeakerRegistry.Resolution(speakerId: isUser ? 0 : 1, isUser: isUser)
   }
-  /// Longest the first window waits for the speaker models once Parakeet is ready. Past it,
-  /// windows go out with lane labels and pick up real speaker ids when the models arrive.
-  private let diarizerReadyGraceSeconds = 20.0
   private let sampleRate = 16000
   /// Longest stretch transcribed at once. A window also closes early when the speaker
   /// pauses — see `silenceTailSeconds` — so this is the ceiling, not the cadence.
@@ -125,12 +122,6 @@ final class LocalTranscriptionService: @unchecked Sendable {
 
     Task { [weak self] in
       guard let self else { return }
-      // Speaker models load alongside Parakeet (both are cached after the first run).
-      let diarizer = self.speakerDiarizer
-      let diarizerLoad = Task<Void, Never> {
-        guard let diarizer else { return }
-        await diarizer.prepare()
-      }
       do {
         // Test hook: force a model-load failure to exercise the cloud fallback path.
         // Toggle with env OMI_FORCE_PARAKEET_FAIL=1 or `defaults write <bundle> forceParakeetFail -bool true`.
@@ -144,10 +135,15 @@ final class LocalTranscriptionService: @unchecked Sendable {
         // v2 = English-only (better recall); v3 = 25 European languages.
         let version: AsrModelVersion = self.language.hasPrefix("en") ? .v2 : .v3
         let started = Date()
-        let models = try await AsrModels.downloadAndLoad(version: version)
-        let manager = AsrManager()
-        try await manager.loadModels(models)
-        await Self.wait(for: diarizerLoad, upTo: self.diarizerReadyGraceSeconds)
+        let diarizer = self.speakerDiarizer
+        let manager = try await Self.loadASRManagerWithSpeakerWarmup(
+          loadASR: {
+            let models = try await AsrModels.downloadAndLoad(version: version)
+            let manager = AsrManager()
+            try await manager.loadModels(models)
+            return manager
+          },
+          warmSpeakerModels: { await diarizer?.prepare() })
         self.lock.withLock {
           self.asrManager = manager
           self.isReady = true
@@ -341,15 +337,21 @@ final class LocalTranscriptionService: @unchecked Sendable {
     }
   }
 
-  /// Await `task` for at most `seconds`; the task keeps running if the deadline passes.
-  private static func wait(for task: Task<Void, Never>, upTo seconds: Double) async {
-    let deadline = Task { try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) }
-    await withTaskGroup(of: Void.self) { group in
-      group.addTask { await task.value }
-      group.addTask { await deadline.value }
-      await group.next()
-      group.cancelAll()
-    }
+  /// Load the Parakeet ASR manager and warm the shared speaker models alongside.
+  ///
+  /// Warmup runs concurrently and never gates the returned readiness: windows transcribed
+  /// before the diarizer is ready go out with lane labels (mic = "You", system = Speaker 1)
+  /// and are moved by registry relabels once real speaker ids arrive. Readiness once awaited
+  /// this warmup behind a "grace" deadline — but `withTaskGroup` implicitly awaits an
+  /// unfinished `Task.value` child, and `Task.value` ignores cancellation, so the deadline
+  /// could not fire: readiness blocked for exactly as long as the speaker models took, and
+  /// QA measured ~20s of silent transcript at every capture-session start on a warm cache.
+  static func loadASRManagerWithSpeakerWarmup<Model: Sendable>(
+    loadASR: @escaping @Sendable () async throws -> Model,
+    warmSpeakerModels: @escaping @Sendable () async -> Void
+  ) async throws -> Model {
+    _ = Task { await warmSpeakerModels() }
+    return try await loadASR()
   }
 
   static func rms(_ samples: ArraySlice<Float>) -> Float {
