@@ -5,9 +5,12 @@ import os
 import contextvars
 from pathlib import Path
 from types import ModuleType
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
+
+from database.screen_activity import normalize_screen_activity_timestamp
 
 from testing.import_isolation import load_module_fresh, stub_modules
 
@@ -35,7 +38,7 @@ def sa():
         "utils.llm": _pkg("utils.llm"),
         "utils.retrieval": _pkg("utils.retrieval"),
         "utils.retrieval.tools": _pkg("utils.retrieval.tools"),
-        "database.screen_activity": _leaf("database.screen_activity", []),
+        "database.screen_activity": _leaf("database.screen_activity", ["normalize_screen_activity_timestamp"]),
         "database.vector_db": _leaf("database.vector_db", []),
         "database.notifications": _leaf("database.notifications", ["get_user_time_zone"]),
         "database._client": _leaf("database._client", ["db"]),
@@ -47,6 +50,7 @@ def sa():
             "utils.retrieval.tools.screen_activity_tools",
             os.path.join(str(_BACKEND), "utils", "retrieval", "tools", "screen_activity_tools.py"),
         )
+        module.screen_activity_db.normalize_screen_activity_timestamp = normalize_screen_activity_timestamp
         yield module
 
 
@@ -379,3 +383,31 @@ def test_keyword_fallback_records_provider_switch(monkeypatch, sa):
         outcome='degraded',
         log=sa.logger,
     )
+
+
+def test_keyword_finds_document_written_at_normalized_window_edge(monkeypatch, sa):
+    end = datetime(2026, 9, 10, 0, 0, 0, tzinfo=timezone.utc)
+    edge = normalize_screen_activity_timestamp(end, end_of_second=True)
+    start = normalize_screen_activity_timestamp(end.replace(day=3))
+    assert edge == '2026-09-10 00:00:00.999'
+    _keyword_setup(monkeypatch, sa)
+    client = sa.firestore_db
+    client.screens._rows = {
+        'edge': {
+            'timestamp': edge,
+            'ocrText': 'budget review',
+            'windowTitle': 'Plan',
+            'appName': 'Editor',
+        },
+        'before': {
+            'timestamp': '2026-09-02 23:59:59.999',
+            'ocrText': 'budget review',
+            'windowTitle': 'Plan',
+            'appName': 'Editor',
+        },
+    }
+    matches, scanned = sa._keyword_screen_matches('u1', 'budget', None, int(end.timestamp()), 10)
+    assert scanned == 1
+    assert [match['screenshot_id'] for match in matches] == ['edge']
+    assert client.screens.filters[0].value == start
+    assert client.screens.filters[1].value == edge

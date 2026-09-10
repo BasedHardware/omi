@@ -378,9 +378,13 @@ def _keyword_screen_matches(
 
     end = datetime.fromtimestamp(end_ts, timezone.utc) if end_ts is not None else datetime.now(timezone.utc)
     start = datetime.fromtimestamp(start_ts, timezone.utc) if start_ts is not None else end - timedelta(days=7)
+    start_bound = screen_activity_db.normalize_screen_activity_timestamp(start)
+    end_bound = screen_activity_db.normalize_screen_activity_timestamp(end, end_of_second=True)
+    start_ms = _normalized_captured_at_ms(start_bound)
+    end_ms = _normalized_captured_at_ms(end_bound)
     collection = firestore_db.collection('users').document(uid).collection('screen_activity')
-    scan = collection.where(filter=FieldFilter('timestamp', '>=', start.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]))
-    scan = scan.where(filter=FieldFilter('timestamp', '<=', end.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]))
+    scan = collection.where(filter=FieldFilter('timestamp', '>=', start_bound))
+    scan = scan.where(filter=FieldFilter('timestamp', '<=', end_bound))
     snapshots = list(scan.order_by('timestamp', direction='DESCENDING').limit(500).stream())
     rows = parse_snapshots(
         dict,
@@ -392,7 +396,9 @@ def _keyword_screen_matches(
     for row in rows:
         sid = _validated_screen_evidence_id(row.get('_document_id'))
         timestamp = _normalized_captured_at_ms(row.get('timestamp'))
-        if sid is None or timestamp is None or not start.timestamp() * 1000 <= timestamp <= end.timestamp() * 1000:
+        if sid is None or timestamp is None or start_ms is None or end_ms is None:
+            continue
+        if not start_ms <= timestamp <= end_ms:
             continue
         text = ' '.join(
             value for key in ('ocrText', 'windowTitle', 'appName') if isinstance(value := row.get(key), str)
