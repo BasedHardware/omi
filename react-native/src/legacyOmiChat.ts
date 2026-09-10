@@ -287,6 +287,50 @@ function contentBlockChrome(
   };
 }
 
+function memoryReviewCategoryLabel(
+  category: string | undefined,
+): string | undefined {
+  if (category === undefined) {
+    return undefined;
+  }
+  const normalized = visibleDisplayText(category).replace(/_/g, ' ');
+  if (normalized === '') {
+    return undefined;
+  }
+  return normalized[0].toUpperCase() + normalized.slice(1);
+}
+
+function parseMemoryReviewItems(
+  value: unknown,
+): {eyebrow: string; title?: string; detail?: string}[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const rows: {eyebrow: string; title?: string; detail?: string}[] = [];
+  for (const entry of value) {
+    if (rows.length === 3) {
+      break;
+    }
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      continue;
+    }
+    const item = entry as Record<string, unknown>;
+    const memoryId = wireString(item, 'memoryId', 'memory_id');
+    const content = wireString(item, 'content');
+    if (memoryId === undefined || content === undefined) {
+      continue;
+    }
+    rows.push(
+      contentBlockChrome(
+        'Things I learned today',
+        content,
+        memoryReviewCategoryLabel(wireString(item, 'category')),
+      ),
+    );
+  }
+  return rows;
+}
+
 function agentCompletionEyebrow(status: string): string {
   const normalized = status.trim().toLowerCase();
   if (
@@ -494,6 +538,9 @@ function parseContentBlock(
           wireString(row, 'output') ?? '',
         ),
       ];
+    case 'memoryReviewCard':
+    case 'memory_review_card':
+      return parseMemoryReviewItems(row.items);
     default:
       return [];
   }

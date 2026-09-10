@@ -524,3 +524,119 @@ test('old chat history names GET content_blocks without inventing writes', () =>
     page.messages.find(row => row.id === 'blocks-metadata')?.contentBlocks,
   ).toEqual([{eyebrow: 'Conversation', title: 'Kitchen capture'}]);
 });
+
+test('old chat history names GET memory review cards without inventing writes', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'review-1',
+        sender: 'ai',
+        text: 'Here is what I learned.',
+        created_at: '2026-09-07T01:02:03Z',
+        content_blocks: [
+          {
+            type: 'memory_review_card',
+            id: 'learned-1',
+            summary_id: 'sum-1',
+            date: '2026-09-07',
+            items: [
+              {
+                memory_id: 'mem-work',
+                content: 'Prefers morning standups',
+                category: 'work',
+              },
+              {
+                memoryId: 'mem-empty',
+                content: ' \t',
+                category: 'interesting',
+              },
+              {
+                memory_id: 'mem-core',
+                content: 'Lives in San Francisco',
+                category: 'core_memory',
+              },
+              {
+                memory_id: 'mem-plain',
+                content: 'Drinks tea',
+              },
+              {
+                memory_id: 'mem-fourth',
+                content: 'Should not appear',
+                category: 'work',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'review-camel',
+        sender: 'ai',
+        text: 'Also learned.',
+        created_at: '2026-09-07T01:02:04Z',
+        content_blocks: [
+          {
+            type: 'memoryReviewCard',
+            id: 'learned-2',
+            items: [
+              {
+                memoryId: 'mem-2',
+                content: 'Uses a standing desk',
+                category: 'interesting',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'review-empty',
+        sender: 'ai',
+        text: 'No learned rows.',
+        created_at: '2026-09-07T01:02:05Z',
+        content_blocks: [
+          {
+            type: 'memory_review_card',
+            id: 'learned-empty',
+            items: [{memory_id: 'mem-blank', content: '  '}],
+          },
+        ],
+      },
+    ]),
+    0,
+  );
+  expect(
+    page.messages.find(row => row.id === 'review-1')?.contentBlocks,
+  ).toEqual([
+    {
+      eyebrow: 'Things I learned today',
+      title: 'Prefers morning standups',
+      detail: 'Work',
+    },
+    {
+      eyebrow: 'Things I learned today',
+      title: 'Lives in San Francisco',
+      detail: 'Core memory',
+    },
+    {eyebrow: 'Things I learned today', title: 'Drinks tea'},
+  ]);
+  expect(
+    page.messages.find(row => row.id === 'review-camel')?.contentBlocks,
+  ).toEqual([
+    {
+      eyebrow: 'Things I learned today',
+      title: 'Uses a standing desk',
+      detail: 'Interesting',
+    },
+  ]);
+  expect(
+    page.messages.find(row => row.id === 'review-empty')?.contentBlocks,
+  ).toBeUndefined();
+  expect(page.messages.find(row => row.id === 'review-empty')?.text).toBe(
+    'No learned rows.',
+  );
+  const copy = JSON.stringify(page.messages);
+  expect(copy).not.toContain('✓ Right');
+  expect(copy).not.toContain('✗ Wrong');
+  expect(copy).not.toContain("'Fix'");
+  expect(copy).not.toContain('mem-work');
+  expect(copy).not.toContain('Should not appear');
+});
