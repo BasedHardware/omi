@@ -1895,6 +1895,61 @@ test('Settings names GET task integrations without Connect or a write sheet', as
   ).toBe(false);
 });
 
+test('Settings names GET integrations without Connect or a write sheet', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/integrations/gmail') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({app_key: 'gmail', connected: true}),
+      };
+    }
+    if (request.path === '/v1/integrations/google_calendar') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({app_key: 'google_calendar', connected: false}),
+      };
+    }
+    if (request.path === '/v1/integrations/apple_health') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({app_key: 'apple_health', connected: true}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Integrations');
+  expect(tree).toContain('Gmail');
+  expect(tree).toContain('Apple Health');
+  expect(tree).not.toContain('Google Calendar');
+  expect(tree).not.toContain('Coming Soon');
+  expect(tree).not.toContain('Disconnect');
+  expect(tree).not.toContain('Create your own');
+  expect(labelsOf(renderer).includes('Connect')).toBe(false);
+  expect(mockBackend.request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/integrations/gmail',
+  });
+  expect(
+    mockBackend.request.mock.calls.some(
+      call => call[0].method === 'PUT' || call[0].method === 'DELETE',
+    ),
+  ).toBe(false);
+  expect(
+    mockBackend.request.mock.calls.some(
+      call =>
+        typeof call[0].path === 'string' && call[0].path.includes('oauth-url'),
+    ),
+  ).toBe(false);
+});
+
 test('Settings names GET usage monthly yearly all-time without Upgrade', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

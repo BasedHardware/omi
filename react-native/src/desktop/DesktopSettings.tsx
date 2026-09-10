@@ -53,6 +53,10 @@ import {
   taskIntegrationRowCopy,
   type OmiTaskIntegration,
 } from '../legacyOmiTaskIntegrations';
+import {
+  loadOmiIntegrations,
+  type OmiIntegration,
+} from '../legacyOmiIntegrations';
 import {loadOmiUsagePeriod, type OmiUsageStats} from '../legacyOmiUsage';
 import {loadOmiFairUseStatus} from '../legacyOmiFairUse';
 import {loadOmiDailySummaries} from '../legacyOmiDailySummaries';
@@ -264,6 +268,7 @@ export function DesktopSettings({
   const [taskIntegrations, setTaskIntegrations] = useState<
     OmiTaskIntegration[]
   >([]);
+  const [integrations, setIntegrations] = useState<OmiIntegration[]>([]);
   const [usageMonthly, setUsageMonthly] = useState<OmiUsageStats | null>(null);
   const [usageYearly, setUsageYearly] = useState<OmiUsageStats | null>(null);
   const [usageAllTime, setUsageAllTime] = useState<OmiUsageStats | null>(null);
@@ -314,6 +319,7 @@ export function DesktopSettings({
     let nextAccount: AccountSettingsSnapshot | null = null;
     let nextPeople: {id: string; name: string}[] = [];
     let nextTaskIntegrations: OmiTaskIntegration[] = [];
+    let nextIntegrations: OmiIntegration[] = [];
     let nextUsageMonthly: OmiUsageStats | null = null;
     let nextUsageYearly: OmiUsageStats | null = null;
     let nextUsageAllTime: OmiUsageStats | null = null;
@@ -336,6 +342,7 @@ export function DesktopSettings({
       const taskIntegrationsTask = loadOmiTaskIntegrations(backend).catch(
         () => [],
       );
+      const integrationsTask = loadOmiIntegrations(backend).catch(() => []);
       const usageMonthlyTask = loadOmiUsagePeriod(backend, 'monthly').catch(
         () => null,
       );
@@ -365,6 +372,7 @@ export function DesktopSettings({
       }
       nextPeople = peopleNameRows(await peopleTask);
       nextTaskIntegrations = await taskIntegrationsTask;
+      nextIntegrations = await integrationsTask;
       nextUsageMonthly = await usageMonthlyTask;
       nextUsageYearly = await usageYearlyTask;
       nextUsageAllTime = await usageAllTimeTask;
@@ -399,6 +407,7 @@ export function DesktopSettings({
     setAccount(nextAccount);
     setPeopleNames(nextPeople);
     setTaskIntegrations(nextTaskIntegrations);
+    setIntegrations(nextIntegrations);
     setUsageMonthly(nextUsageMonthly);
     setUsageYearly(nextUsageYearly);
     setUsageAllTime(nextUsageAllTime);
@@ -732,6 +741,9 @@ export function DesktopSettings({
           key={row.key}
           title="Task integrations"
         />
+      ))}
+      {integrations.map(row => (
+        <Row copy={row.name} key={row.key} title="Integrations" />
       ))}
       {fairUse?.map((row, index) => (
         <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
