@@ -1209,6 +1209,34 @@ test('Settings names GET usage today without Upgrade', async () => {
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names GET primary language without a write sheet', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/language') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({language: 'en'}),
+      };
+    }
+    if (request.path === '/v1/users/available-languages') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          languages: [{code: 'en', name: 'English'}],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Primary language');
+  expect(tree).toContain('English');
+  expect(tree).not.toContain('Not set');
+});
+
 test('Settings developer webhook URLs omit empty or whitespace values', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

@@ -67,6 +67,7 @@ import {
   subscriptionPlanCopy,
   subscriptionStatusCopy,
   usageStatsCopy,
+  primaryLanguageCopy,
   taskDisplaySummary,
   taskDisplayTitle,
   taskGroup,
@@ -97,6 +98,8 @@ import {
   parseCloudProfile,
   parseCloudSubscription,
   parseCloudUsage,
+  parseCloudLanguage,
+  parseCloudLanguageNames,
   parseEnabledAppIds,
   serviceApps,
 } from '../src/desktopCloudClient';
@@ -858,6 +861,19 @@ test('usage stats copy names GET today counts without Upgrade', () => {
     }),
   ).toBeNull();
   expect(usageStatsCopy(null)).toBeNull();
+});
+
+test('primary language copy names GET language without Not set', () => {
+  expect(
+    primaryLanguageCopy('en', [
+      {code: 'en', name: 'English'},
+      {code: 'es', name: 'Spanish'},
+    ]),
+  ).toBe('English');
+  expect(primaryLanguageCopy('en', null)).toBe('en');
+  expect(primaryLanguageCopy('', [{code: 'en', name: 'English'}])).toBeNull();
+  expect(primaryLanguageCopy(null, [{code: 'en', name: 'English'}])).toBeNull();
+  expect(primaryLanguageCopy('\u0085', [{code: 'en', name: 'English'}])).toBeNull();
 });
 
 test('developer webhook titles are not raw API keys', () => {
@@ -2989,6 +3005,68 @@ test('loadAccountSettings names GET usage today without inventing zeros', async 
       'Usage',
     ),
   ).toThrow('Usage transcription_seconds is malformed');
+});
+
+test('loadAccountSettings names GET primary language without inventing Not set', async () => {
+  const backend = backendFor(request => {
+    if (request.path === '/v1/users/language') {
+      return {status: 200, body: JSON.stringify({language: 'en'})};
+    }
+    if (request.path === '/v1/users/available-languages') {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          languages: [
+            {code: 'en', name: 'English'},
+            {code: 'es', name: 'Spanish'},
+          ],
+        }),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {status: 200, body: JSON.stringify({uid: 'user-1'})};
+    }
+    if (request.path === '/v1/users/me/subscription') {
+      return {
+        status: 200,
+        body: JSON.stringify({plan: 'plus', status: 'active'}),
+      };
+    }
+    if (request.path === '/v1/users/store-recording-permission') {
+      return {
+        status: 200,
+        body: JSON.stringify({store_recording_permission: true}),
+      };
+    }
+    if (request.path === '/v1/users/training-data-opt-in') {
+      return {status: 200, body: JSON.stringify({opted_in: false})};
+    }
+    if (request.path === '/v1/users/private-cloud-sync') {
+      return {
+        status: 200,
+        body: JSON.stringify({private_cloud_sync_enabled: false}),
+      };
+    }
+    if (request.path === '/v1/users/developer/webhooks/status') {
+      return {status: 200, body: JSON.stringify({})};
+    }
+    if (request.path === '/v1/users/me/usage?period=today') {
+      return {status: 200, body: JSON.stringify({})};
+    }
+    return {status: 404, body: null};
+  });
+  const snapshot = await loadAccountSettings(backend);
+  expect(snapshot.language).toBe('en');
+  expect(snapshot.languageNames).toEqual([
+    {code: 'en', name: 'English'},
+    {code: 'es', name: 'Spanish'},
+  ]);
+  expect(parseCloudLanguage({language: null}, 'Language')).toBeNull();
+  expect(parseCloudLanguage({language: ''}, 'Language')).toBeNull();
+  expect(parseCloudLanguageNames({languages: []}, 'Languages')).toBeNull();
+  expect(() => parseCloudLanguage({language: 1}, 'Language')).toThrow(
+    'Language language is malformed',
+  );
 });
 
 test('uses the ratified conversation cursor and preserves its completeness declaration', async () => {

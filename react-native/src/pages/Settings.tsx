@@ -34,6 +34,7 @@ import {
   subscriptionPlanCopy,
   subscriptionStatusCopy,
   usageStatsCopy,
+  primaryLanguageCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
@@ -422,6 +423,16 @@ export function SettingsPage({
         {usageStatsCopy(snapshot.usage)?.map(row => (
           <SettingRow copy={row.copy} key={row.title} title={row.title} />
         ))}
+        {primaryLanguageCopy(snapshot.language, snapshot.languageNames) !==
+        null ? (
+          <SettingRow
+            copy={
+              primaryLanguageCopy(snapshot.language, snapshot.languageNames) ??
+              ''
+            }
+            title="Primary language"
+          />
+        ) : null}
         {(onSignOut !== undefined ||
           (omiAuth !== undefined && omiAuth !== null)) && (
           <SettingRow

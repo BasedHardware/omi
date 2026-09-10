@@ -7,6 +7,7 @@ import {
   desktopBackendUnauthorizedCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
+  visibleDisplayText,
 } from './desktopReadClient';
 
 export type CloudApp = {
@@ -58,6 +59,11 @@ export type CloudUsageStats = {
   memoriesCreated: number;
 };
 
+export type CloudLanguageOption = {
+  code: string;
+  name: string;
+};
+
 export type CloudWebhookStatus = {
   type: string;
   enabled: boolean | null;
@@ -79,6 +85,10 @@ export type AccountSettingsSnapshot = {
   webhooksError: string | null;
   usage: CloudUsageStats | null;
   usageError: string | null;
+  language: string | null;
+  languageError: string | null;
+  languageNames: CloudLanguageOption[] | null;
+  languageNamesError: string | null;
 };
 
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -273,6 +283,46 @@ function requiredUsageInteger(value: unknown, label: string): number {
   throw new Error(`${label} is malformed`);
 }
 
+export function parseCloudLanguage(
+  value: unknown,
+  label: string,
+): string | null {
+  const record = object(value, label);
+  if (record.language === undefined || record.language === null) {
+    return null;
+  }
+  if (typeof record.language !== 'string') {
+    throw new Error(`${label} language is malformed`);
+  }
+  const language = visibleDisplayText(record.language);
+  return language === '' ? null : language;
+}
+
+export function parseCloudLanguageNames(
+  value: unknown,
+  label: string,
+): CloudLanguageOption[] | null {
+  const record = object(value, label);
+  if (!Array.isArray(record.languages)) {
+    throw new Error(`${label} languages is malformed`);
+  }
+  if (record.languages.length === 0) {
+    return null;
+  }
+  return record.languages.map((item, index) => {
+    const entry = object(item, `${label} languages[${index}]`);
+    if (typeof entry.code !== 'string' || typeof entry.name !== 'string') {
+      throw new Error(`${label} languages[${index}] is malformed`);
+    }
+    const code = visibleDisplayText(entry.code);
+    const name = visibleDisplayText(entry.name);
+    if (code === '' || name === '') {
+      throw new Error(`${label} languages[${index}] is malformed`);
+    }
+    return {code, name};
+  });
+}
+
 export function parseCloudUsage(
   value: unknown,
   label: string,
@@ -458,6 +508,8 @@ export async function loadAccountSettings(
     privateCloudSync,
     webhooks,
     usage,
+    language,
+    languageNames,
   ] = await Promise.all([
     readOptional(async () =>
       parseCloudProfile(
@@ -550,6 +602,32 @@ export async function loadAccountSettings(
         'Usage response',
       ),
     ),
+    readOptional(async () =>
+      parseCloudLanguage(
+        (
+          await cloudRequest(
+            backend,
+            'desktop-language-read',
+            'GET',
+            '/v1/users/language',
+          )
+        ).body,
+        'Language response',
+      ),
+    ),
+    readOptional(async () =>
+      parseCloudLanguageNames(
+        (
+          await cloudRequest(
+            backend,
+            'desktop-language-names-read',
+            'GET',
+            '/v1/users/available-languages',
+          )
+        ).body,
+        'Available languages response',
+      ),
+    ),
   ]);
   return {
     profile: profile.value,
@@ -566,6 +644,10 @@ export async function loadAccountSettings(
     webhooksError: webhooks.error,
     usage: usage.value,
     usageError: usage.error,
+    language: language.value,
+    languageError: language.error,
+    languageNames: languageNames.value,
+    languageNamesError: languageNames.error,
   };
 }
 

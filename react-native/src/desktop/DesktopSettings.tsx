@@ -20,6 +20,7 @@ import {
   subscriptionPlanCopy,
   subscriptionStatusCopy,
   usageStatsCopy,
+  primaryLanguageCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {
@@ -73,6 +74,10 @@ function failedAccountSettings(error: string): AccountSettingsSnapshot {
     webhooksError: error,
     usage: null,
     usageError: error,
+    language: null,
+    languageError: error,
+    languageNames: null,
+    languageNamesError: error,
   };
 }
 
@@ -550,6 +555,15 @@ export function DesktopSettings({
       {usageStatsCopy(account?.usage)?.map(row => (
         <Row copy={row.copy} key={row.title} title={row.title} />
       ))}
+      {primaryLanguageCopy(account?.language, account?.languageNames) !==
+      null ? (
+        <Row
+          copy={
+            primaryLanguageCopy(account?.language, account?.languageNames) ?? ''
+          }
+          title="Primary language"
+        />
+      ) : null}
     </>
   );
 

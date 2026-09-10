@@ -469,6 +469,22 @@ export function usageStatsCopy(
   ];
 }
 
+export function primaryLanguageCopy(
+  code: string | null | undefined,
+  names:
+    | ReadonlyArray<{code: string; name: string}>
+    | null
+    | undefined,
+): string | null {
+  const language = visibleDisplayText(code ?? '');
+  if (language === '') {
+    return null;
+  }
+  const name = names?.find(item => item.code === language)?.name;
+  const visibleName = visibleDisplayText(name ?? '');
+  return visibleName === '' ? language : visibleName;
+}
+
 export function subscriptionStatusCopy(status: string): string {
   return accountWireCopy(status, 'Plan unavailable');
 }
