@@ -2879,6 +2879,38 @@ describe("worker request contract", () => {
     ]);
   });
 
+  test("history GET keeps an opaque parseCreate id when payload JSON is unreadable", async () => {
+    await insertChatMessage({
+      id: "readable-human",
+      accountId: "test-account",
+      text: "hello from you",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+      )
+      .bind("x", "test-account", "opaque beside unreadable json", 2, 2, "{broken")
+      .run();
+
+    const response = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(200);
+    expect(
+      (
+        (await response.json()) as {
+          messages: Array<{ id: string; text: string }>;
+        }
+      ).messages.map((message) => ({ id: message.id, text: message.text })),
+    ).toEqual([
+      { id: "readable-human", text: "hello from you" },
+      { id: "x", text: "opaque beside unreadable json" },
+    ]);
+  });
+
   test("history GET keeps bound attachments when payload JSON is unreadable", async () => {
     await insertChatMessage({
       id: "readable-human",

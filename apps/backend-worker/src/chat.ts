@@ -767,15 +767,15 @@ function parseStoredMessage(
       }
     } catch {}
   }
+  const rawId = row.id.startsWith("generation:")
+    ? row.id.slice("generation:".length)
+    : row.id;
   let id: ChatMessage["id"];
   try {
-    id = recordId(
-      row.id.startsWith("generation:")
-        ? row.id.slice("generation:".length)
-        : row.id
-    );
+    id = recordId(rawId);
   } catch {
-    return null;
+    if (rawId.length === 0) return null;
+    id = rawId as ChatMessage["id"];
   }
   const base = {
     id,
