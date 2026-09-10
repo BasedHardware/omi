@@ -1355,10 +1355,36 @@ export function chatSenderCopy(sender: 'human' | 'ai' | 'unknown'): string {
   return 'Sender unavailable';
 }
 
+export function chatDaySummaryDateCopy(createdAt: number): string {
+  const timestampMs = epochMilliseconds(createdAt);
+  if (!Number.isFinite(timestampMs) || timestampMs <= 0) {
+    return '';
+  }
+  const date = new Date(timestampMs);
+  const month = visibleDisplayText(
+    date.toLocaleDateString(undefined, {month: 'short'}),
+  );
+  const day = visibleDisplayText(
+    date.toLocaleDateString(undefined, {day: '2-digit'}),
+  );
+  if (month === '' || day === '') {
+    return '';
+  }
+  return `${month}, ${day}`;
+}
+
 export function chatDaySummaryCopy(
   type: 'text' | 'day_summary' | 'unknown' | undefined,
+  createdAt?: number,
 ): string {
-  return type === 'day_summary' ? 'Day Summary' : '';
+  if (type !== 'day_summary') {
+    return '';
+  }
+  if (createdAt === undefined) {
+    return 'Day Summary';
+  }
+  const dateCopy = chatDaySummaryDateCopy(createdAt);
+  return dateCopy === '' ? 'Day Summary' : `Day Summary ~ ${dateCopy}`;
 }
 
 export function chatDaySummaryItems(text: string): string[] {

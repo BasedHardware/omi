@@ -2,9 +2,10 @@ import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Text} from 'react-native';
 import type {NativeHttpResponse} from './omiNativeTypes';
-import type {
-  ConversationProjection,
-  DomainReadOutcome,
+import {
+  chatDaySummaryCopy,
+  type ConversationProjection,
+  type DomainReadOutcome,
 } from './desktopReadClient';
 import {ChatBackendError} from './chatClient';
 
@@ -889,7 +890,13 @@ test('conversation-detail history names GET day_summary instead of a normal Omi 
       .props.onPress(),
   );
   const tree = textOf(renderer);
-  expect(tree).toContain('Day Summary');
+  expect(tree).toContain(
+    chatDaySummaryCopy(
+      'day_summary',
+      Date.parse('2026-09-07T12:00:00.000Z'),
+    ),
+  );
+  expect(tree).not.toContain('📅');
   expect(tree).toContain('1. Yesterday you captured two meetings');
   expect(tree).not.toContain('Omi · Yesterday you captured two meetings.');
   expect(tree).toContain('You · hello');

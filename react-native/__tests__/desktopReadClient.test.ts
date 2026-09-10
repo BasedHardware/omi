@@ -32,6 +32,7 @@ import {
   chatAttachmentThumbnailUrl,
   chatSenderCopy,
   chatDaySummaryCopy,
+  chatDaySummaryDateCopy,
   chatDaySummaryItems,
   chatDaySummaryRowCopy,
   chatAppAttributionCopy,
@@ -1690,6 +1691,22 @@ test('chat day_summary GET type names Day Summary instead of a normal turn', () 
   expect(chatDaySummaryCopy('text')).toBe('');
   expect(chatDaySummaryCopy('unknown')).toBe('');
   expect(chatDaySummaryCopy(undefined)).toBe('');
+});
+
+test('chat day_summary GET createdAt names Flutter MMM, dd without inventing 📅', () => {
+  const createdAt = Date.parse('2026-09-07T12:00:00.000Z');
+  expect(chatDaySummaryDateCopy(0)).toBe('');
+  expect(chatDaySummaryDateCopy(-1)).toBe('');
+  expect(chatDaySummaryCopy('day_summary', 0)).toBe('Day Summary');
+  expect(chatDaySummaryCopy('day_summary', -1)).toBe('Day Summary');
+  expect(chatDaySummaryDateCopy(createdAt)).toMatch(/^[A-Za-z]{3}, \d{2}$/);
+  expect(chatDaySummaryDateCopy(createdAt)).not.toContain('📅');
+  expect(chatDaySummaryDateCopy(createdAt)).not.toContain('1970');
+  expect(chatDaySummaryCopy('day_summary', createdAt)).toBe(
+    `Day Summary ~ ${chatDaySummaryDateCopy(createdAt)}`,
+  );
+  expect(chatDaySummaryCopy('day_summary', createdAt)).not.toContain('📅');
+  expect(chatDaySummaryCopy('day_summary', createdAt)).not.toContain('1970');
 });
 
 test('chat day_summary GET text splits like Flutter DaySummaryWidget.splitMessage', () => {

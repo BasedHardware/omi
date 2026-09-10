@@ -6,6 +6,7 @@ import {ScrollView, Text, TextInput} from 'react-native';
 import {DesktopApp} from './DesktopApp';
 import {TaskPagination} from '../ui/TaskPagination';
 import {
+  chatDaySummaryCopy,
   desktopAccountSettingUnavailableCopy,
   desktopAppsUnavailableCopy,
   desktopBackendUnavailableCopy,
@@ -680,7 +681,13 @@ test('desktop chat names GET day_summary instead of a normal Omi turn', () => {
     ],
   });
   const copy = renderedText(renderer);
-  expect(copy).toContain('Day Summary');
+  expect(copy).toContain(
+    chatDaySummaryCopy(
+      'day_summary',
+      Date.parse('2026-09-07T12:00:00.000Z'),
+    ),
+  );
+  expect(copy).not.toContain('📅');
   expect(copy).toContain('1. Yesterday you captured two meetings');
   expect(copy).not.toContain('Yesterday you captured two meetings.');
   expect(copy).not.toContain('day_summary');

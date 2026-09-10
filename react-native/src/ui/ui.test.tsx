@@ -90,7 +90,11 @@ import {Field} from './Field';
 import {Icon} from './Icon';
 import {FocusPressable} from './Pressable';
 import {ProjectionRow} from './ProjectionList';
-import {clockLabel, projectionClockLabel} from '../desktopReadClient';
+import {
+  chatDaySummaryCopy,
+  clockLabel,
+  projectionClockLabel,
+} from '../desktopReadClient';
 import {tokens} from './tokens';
 import {Onboarding} from './Onboarding';
 import {
@@ -1347,6 +1351,7 @@ test('a cancelled chat message with text still says Response stopped', () => {
 });
 
 test('a day_summary chat message names Day Summary instead of a normal Omi turn', () => {
+  const createdAt = Date.parse('2026-09-07T12:00:00.000Z');
   const renderer = render(
     <ChatMessageRow
       animate={false}
@@ -1356,7 +1361,7 @@ test('a day_summary chat message names Day Summary instead of a normal Omi turn'
         text: 'Yesterday you captured two meetings.',
         sender: 'ai',
         type: 'day_summary',
-        createdAt: Date.now(),
+        createdAt,
         generationOutcome: 'completed',
       }}
       reduceMotion
@@ -1376,7 +1381,8 @@ test('a day_summary chat message names Day Summary instead of a normal Omi turn'
       }
       return [];
     });
-  expect(copies).toContain('Day Summary');
+  expect(copies).toContain(chatDaySummaryCopy('day_summary', createdAt));
+  expect(copies).not.toContain('📅');
   expect(copies).toContain('1. Yesterday you captured two meetings');
   expect(copies).not.toContain('Yesterday you captured two meetings.');
   expect(copies).not.toContain('day_summary');
@@ -1386,6 +1392,7 @@ test('a day_summary chat message names Day Summary instead of a normal Omi turn'
 });
 
 test('a day_summary chat message names GET text as Flutter numbered rows', () => {
+  const createdAt = Date.parse('2026-09-07T12:00:00.000Z');
   const renderer = render(
     <ChatMessageRow
       animate={false}
@@ -1395,7 +1402,7 @@ test('a day_summary chat message names GET text as Flutter numbered rows', () =>
         text: '1. Alpha. 2. Beta.',
         sender: 'ai',
         type: 'day_summary',
-        createdAt: Date.now(),
+        createdAt,
         generationOutcome: 'completed',
       }}
       reduceMotion
@@ -1415,7 +1422,8 @@ test('a day_summary chat message names GET text as Flutter numbered rows', () =>
       }
       return [];
     });
-  expect(copies).toContain('Day Summary');
+  expect(copies).toContain(chatDaySummaryCopy('day_summary', createdAt));
+  expect(copies).not.toContain('📅');
   expect(copies).toContain('1. Alpha');
   expect(copies).toContain('2. Beta.');
   expect(copies).not.toContain('1. Alpha. 2. Beta.');

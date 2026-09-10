@@ -53,7 +53,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
   }, [animate, opacity, reduceMotion, translateY]);
   const human = message.sender === 'human';
   const body = chatMessageDisplayText(message);
-  const daySummary = chatDaySummaryCopy(message.type);
+  const daySummary = chatDaySummaryCopy(message.type, message.createdAt);
   const summaryItems =
     daySummary === '' ? [] : chatDaySummaryItems(message.text);
   const showSummaryItems =

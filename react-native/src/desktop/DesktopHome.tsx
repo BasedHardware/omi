@@ -136,7 +136,7 @@ function AskExchange({
       {messages.map(item => {
         const human = item.sender === 'human';
         const body = chatMessageDisplayText(item, 'Response stopped.');
-        const daySummary = chatDaySummaryCopy(item.type);
+        const daySummary = chatDaySummaryCopy(item.type, item.createdAt);
         const summaryItems =
           daySummary === '' ? [] : chatDaySummaryItems(item.text);
         const showSummaryItems =
