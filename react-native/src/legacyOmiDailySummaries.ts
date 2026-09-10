@@ -37,6 +37,9 @@ export type OmiDailySummary = {
   dayEmoji?: string;
   conversations?: number;
   actionItems?: number;
+  durationMinutes?: number;
+  watchingMinutes?: number;
+  proactiveMoments?: number;
 };
 
 function optionalCount(value: unknown): number | undefined {
@@ -52,6 +55,9 @@ function optionalCount(value: unknown): number | undefined {
 function summaryStats(value: unknown): {
   conversations?: number;
   actionItems?: number;
+  durationMinutes?: number;
+  watchingMinutes?: number;
+  proactiveMoments?: number;
 } {
   if (value === undefined || value === null) {
     return {};
@@ -59,9 +65,15 @@ function summaryStats(value: unknown): {
   const stats = object(value);
   const conversations = optionalCount(stats.total_conversations);
   const actionItems = optionalCount(stats.action_items_count);
+  const durationMinutes = optionalCount(stats.total_duration_minutes);
+  const watchingMinutes = optionalCount(stats.watching_minutes);
+  const proactiveMoments = optionalCount(stats.proactive_moments);
   return {
     ...(conversations === undefined ? {} : {conversations}),
     ...(actionItems === undefined ? {} : {actionItems}),
+    ...(durationMinutes === undefined ? {} : {durationMinutes}),
+    ...(watchingMinutes === undefined ? {} : {watchingMinutes}),
+    ...(proactiveMoments === undefined ? {} : {proactiveMoments}),
   };
 }
 

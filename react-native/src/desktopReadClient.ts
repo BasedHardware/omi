@@ -630,6 +630,18 @@ function dailySummaryCountCopy(
   return count === 1 ? `1 ${singular}` : `${count} ${plural}`;
 }
 
+export function dailySummaryDurationCopy(minutes: number | undefined): string {
+  if (typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes <= 0) {
+    return '';
+  }
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  const hours = Math.trunc(minutes / 60);
+  const remaining = minutes % 60;
+  return remaining > 0 ? `${hours}h ${remaining}m` : `${hours}h`;
+}
+
 export function dailySummaryCopy(
   rows: readonly {
     id: string;
@@ -638,6 +650,9 @@ export function dailySummaryCopy(
     dayEmoji?: string;
     conversations?: number;
     actionItems?: number;
+    durationMinutes?: number;
+    watchingMinutes?: number;
+    proactiveMoments?: number;
   }[],
   now: Date = new Date(),
 ): {title: string; copy: string}[] {
@@ -648,9 +663,17 @@ export function dailySummaryCopy(
     }
     const date = dailySummaryDateCopy(row.date, now);
     const dated = date === '' ? headline : `${date} · ${headline}`;
+    const watching = dailySummaryDurationCopy(row.watchingMinutes);
     const counts = [
       dailySummaryCountCopy(row.conversations, 'conversation', 'conversations'),
+      dailySummaryDurationCopy(row.durationMinutes),
       dailySummaryCountCopy(row.actionItems, 'action item', 'action items'),
+      watching === '' ? '' : `${watching} watching`,
+      dailySummaryCountCopy(
+        row.proactiveMoments,
+        'proactive moment',
+        'proactive moments',
+      ),
     ].filter(copy => copy !== '');
     const withCounts =
       counts.length === 0 ? dated : `${dated} · ${counts.join(' · ')}`;

@@ -13,7 +13,13 @@ test('parses GET daily summary headlines and omits empty headlines', () => {
           date: '2026-09-09',
           headline: 'Met with the team',
           day_emoji: '🎯',
-          stats: {total_conversations: 3, action_items_count: 2},
+          stats: {
+            total_conversations: 3,
+            action_items_count: 2,
+            total_duration_minutes: 90,
+            watching_minutes: 10,
+            proactive_moments: 1,
+          },
         },
         {
           id: 'sum-empty',
@@ -24,7 +30,13 @@ test('parses GET daily summary headlines and omits empty headlines', () => {
           id: 'sum-2',
           headline: 'Shipped the recap',
           day_emoji: ' \t',
-          stats: {total_conversations: 0, action_items_count: 0},
+          stats: {
+            total_conversations: 0,
+            action_items_count: 0,
+            total_duration_minutes: 0,
+            watching_minutes: 0,
+            proactive_moments: 0,
+          },
         },
       ],
     }),
@@ -37,6 +49,9 @@ test('parses GET daily summary headlines and omits empty headlines', () => {
       dayEmoji: '🎯',
       conversations: 3,
       actionItems: 2,
+      durationMinutes: 90,
+      watchingMinutes: 10,
+      proactiveMoments: 1,
     },
     {id: 'sum-2', date: '', headline: 'Shipped the recap'},
   ]);
@@ -57,6 +72,45 @@ test('fails closed for malformed GET daily summaries', () => {
             id: 'sum-1',
             headline: 'One',
             stats: {total_conversations: '3'},
+          },
+        ],
+      }),
+    ),
+  ).toThrow();
+  expect(() =>
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            headline: 'One',
+            stats: {total_duration_minutes: 1.5},
+          },
+        ],
+      }),
+    ),
+  ).toThrow();
+  expect(() =>
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            headline: 'One',
+            stats: {watching_minutes: -1},
+          },
+        ],
+      }),
+    ),
+  ).toThrow();
+  expect(() =>
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-1',
+            headline: 'One',
+            stats: {proactive_moments: '1'},
           },
         ],
       }),

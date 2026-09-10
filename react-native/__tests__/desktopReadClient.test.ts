@@ -77,6 +77,7 @@ import {
   fairUseCopy,
   dailySummaryDateCopy,
   dailySummaryCopy,
+  dailySummaryDurationCopy,
   dailySummaryHourCopy,
   dailySummaryScheduleCopy,
   mentorNotificationFrequencyCopy,
@@ -977,6 +978,9 @@ test('daily summary copy names GET headlines without inventing Your Day in Revie
           dayEmoji: '🎯',
           conversations: 3,
           actionItems: 1,
+          durationMinutes: 90,
+          watchingMinutes: 10,
+          proactiveMoments: 1,
         },
       ],
       now,
@@ -986,9 +990,13 @@ test('daily summary copy names GET headlines without inventing Your Day in Revie
     {title: 'Daily summary', copy: 'Shipped the recap'},
     {
       title: 'Daily summary',
-      copy: '🎯 Today · Shipped the recap · 3 conversations · 1 action item',
+      copy: '🎯 Today · Shipped the recap · 3 conversations · 1h 30m · 1 action item · 10m watching · 1 proactive moment',
     },
   ]);
+  expect(dailySummaryDurationCopy(45)).toBe('45m');
+  expect(dailySummaryDurationCopy(60)).toBe('1h');
+  expect(dailySummaryDurationCopy(90)).toBe('1h 30m');
+  expect(dailySummaryDurationCopy(0)).toBe('');
 });
 
 test('daily summary schedule copy names GET hour without Flutter 10:00 PM default', () => {
