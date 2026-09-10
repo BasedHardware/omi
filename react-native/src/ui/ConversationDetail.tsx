@@ -194,6 +194,13 @@ function LegacyConversationBody({
     );
   }
   const detail = result.value;
+  const actionItems = (detail.actionItems ?? []).flatMap(item => {
+    const description = visibleDisplayText(item.description);
+    if (description === '') {
+      return [];
+    }
+    return [{...item, description}];
+  });
   const showLegacyClocks =
     detail.transcript.status === 'loaded' &&
     legacyTranscriptCanDisplaySeconds(detail.transcript.segments);
@@ -255,6 +262,25 @@ function LegacyConversationBody({
           </View>,
         ];
       })}
+      {actionItems.length > 0 ? (
+        <>
+          <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
+            Action Items
+          </Text>
+          {actionItems.map((item, index) => (
+            <View key={index} style={styles.conversationDetailFields}>
+              <Text selectable style={[styles.conversationTranscriptText, ink]}>
+                {item.description}
+              </Text>
+              {item.completed ? (
+                <Text style={[styles.conversationDetailField, ink]}>
+                  Completed
+                </Text>
+              ) : null}
+            </View>
+          ))}
+        </>
+      ) : null}
       <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
         Transcript
       </Text>

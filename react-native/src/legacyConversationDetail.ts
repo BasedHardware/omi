@@ -6,6 +6,7 @@ export type LegacyConversationDetail = {
   summary: string;
   locked: boolean;
   sections: {heading: string; bodyMarkdown: string}[];
+  actionItems: {description: string; completed: boolean}[];
   transcript:
     | {status: 'unavailable'}
     | {
@@ -112,6 +113,25 @@ export async function loadLegacyConversationDetail(
       bodyMarkdown: text(section.body_markdown),
     };
   });
+  const actionItems = array(
+    structured.action_items ?? structured.actionItems ?? [],
+    1000,
+  ).flatMap(raw => {
+    if (typeof raw === 'string') {
+      return [{description: raw, completed: false}];
+    }
+    const item = object(raw);
+    if (item.deleted === undefined ? false : boolean(item.deleted)) {
+      return [];
+    }
+    return [
+      {
+        description: text(item.description, 10000),
+        completed:
+          item.completed === undefined ? false : boolean(item.completed),
+      },
+    ];
+  });
   // Old list responses omit transcripts; even detail can redact locked data.
   // Only an explicit unlocked array establishes an empty or loaded transcript.
   const transcript: LegacyConversationDetail['transcript'] =
@@ -137,6 +157,7 @@ export async function loadLegacyConversationDetail(
     summary: text(structured.overview),
     locked,
     sections,
+    actionItems,
     transcript,
   };
 }

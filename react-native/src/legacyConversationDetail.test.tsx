@@ -85,6 +85,7 @@ test('uses the actual old detail wire and retains full notes and transcript', as
   expect(value.sections).toEqual([
     {heading: 'Notes', bodyMarkdown: 'Full notes'},
   ]);
+  expect(value.actionItems).toEqual([]);
   expect(value.transcript).toEqual({
     status: 'loaded',
     segments: [
@@ -97,6 +98,43 @@ test('uses the actual old detail wire and retains full notes and transcript', as
       },
     ],
   });
+});
+
+test('keeps GET action items and drops deleted rows', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        action_items: [
+          {description: 'Call Alex', completed: true},
+          {description: 'Deleted task', completed: false, deleted: true},
+          'Plain reminder',
+        ],
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).actionItems,
+  ).toEqual([
+    {description: 'Call Alex', completed: true},
+    {description: 'Plain reminder', completed: false},
+  ]);
+});
+
+test('keeps camelCase GET actionItems', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        actionItems: [{description: 'Send notes', completed: false}],
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).actionItems,
+  ).toEqual([{description: 'Send notes', completed: false}]);
 });
 
 test.each([undefined, null])(
@@ -144,6 +182,13 @@ test.each([
     structured: {
       ...fixture.structured,
       sections: [{heading: 'Notes', body_markdown: 5}],
+    },
+  },
+  {
+    ...fixture,
+    structured: {
+      ...fixture.structured,
+      action_items: [{description: 'Call Alex', completed: 'false'}],
     },
   },
 ])(

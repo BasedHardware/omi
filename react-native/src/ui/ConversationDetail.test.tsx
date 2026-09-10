@@ -575,3 +575,67 @@ test('legacy in-progress chats omit Finished like canonical detail', () => {
   expect(copy).not.toContain('Duration unavailable');
   expect(copy).not.toContain('in_progress');
 });
+
+test('legacy conversation details name GET action items without a write toggle', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [
+          {description: 'Call Alex', completed: true},
+          {description: 'Send notes', completed: false},
+        ],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {
+        ...conversation,
+        id: 'old-1',
+        status: 'in_progress',
+      },
+    }),
+  );
+  expect(copy).toContain('Action Items');
+  expect(copy).toContain('Call Alex');
+  expect(copy).toContain('Send notes');
+  expect(copy).toContain('Completed');
+  expect(copy).not.toContain('in_progress');
+});
+
+test('legacy conversation details omit empty or whitespace action items', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [{description: '\u0085', completed: false}],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).not.toContain('Action Items');
+  expect(copy).not.toContain('\u0085');
+});
