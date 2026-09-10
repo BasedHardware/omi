@@ -237,6 +237,23 @@ describe("registered canonical routes", () => {
     expect(d1Reads).toBe(0);
   });
 
+  test("canonical memory INTERNAL 500 is not rewritten to retryable projection_unavailable", async () => {
+    const response = await request("/v1/memories", {
+      async fetch() {
+        return new Response('{"error":"internal_server_error"}', {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+    expect(response.status).toBe(500);
+    expect(response.headers.get("retry-after")).toBeNull();
+    expect((await response.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+    expect(d1Reads).toBe(0);
+  });
+
   test("unreadable canonical task pages are non-retryable and never fall back to D1", async () => {
     const response = await request("/v1/tasks", {
       async fetch() {

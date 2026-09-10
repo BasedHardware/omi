@@ -9,7 +9,8 @@ export type CanonicalMemoryResult =
   | { kind: "denied"; status: 400 | 401 | 403 }
   | { kind: "unavailable" }
   | { kind: "unbound" }
-  | { kind: "unreadable" };
+  | { kind: "unreadable" }
+  | { kind: "internal" };
 
 export async function readCanonicalMemoryPage(
   input: Omit<CanonicalServiceRequest, "path" | "method" | "body">
@@ -38,6 +39,9 @@ export async function readCanonicalMemoryPage(
     (status === 403 && text === '{"error":"forbidden"}')
   ) {
     return { kind: "denied", status: status as 400 | 401 | 403 };
+  }
+  if (status === 500 && text === '{"error":"internal_server_error"}') {
+    return { kind: "internal" };
   }
   return { kind: "unavailable" };
 }

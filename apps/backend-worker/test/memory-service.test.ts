@@ -179,6 +179,12 @@ describe("canonical memory service boundary", () => {
       });
     }
     expect(
+      await readCanonicalMemoryPage({
+        service: serviceReturning('{"error":"internal_server_error"}', 500),
+        caller,
+      })
+    ).toEqual({ kind: "internal" });
+    expect(
       await readCanonicalMemoryPage({ service: undefined, caller })
     ).toEqual({ kind: "unbound" });
     expect(

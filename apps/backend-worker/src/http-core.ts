@@ -1096,6 +1096,8 @@ export async function handleMemories(context: CoreContext): Promise<Response> {
   if (result.kind === "unbound" || result.kind === "unreadable") {
     return backendError("projection_unavailable", "none", 503);
   }
+  if (result.kind === "internal")
+    return json({ error: "internal_server_error" }, 500);
   return backendError("projection_unavailable", "retry", 503, true);
 }
 
