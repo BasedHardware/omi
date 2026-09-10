@@ -36,10 +36,12 @@ import {
   usageStatsCopy,
   primaryLanguageCopy,
   peopleNameRows,
+  fairUseCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {loadOmiPeopleNames} from '../legacyOmiPeople';
+import {loadOmiFairUseStatus} from '../legacyOmiFairUse';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {parseSoftwarePlane, type SoftwarePlane} from '../v5BackendOrigin';
@@ -170,6 +172,7 @@ export function SettingsPage({
   const [peopleNames, setPeopleNames] = useState<{id: string; name: string}[]>(
     [],
   );
+  const [fairUse, setFairUse] = useState<ReturnType<typeof fairUseCopy>>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
@@ -218,6 +221,7 @@ export function SettingsPage({
     if (backend === undefined || backend === null) {
       setSnapshot(null);
       setPeopleNames([]);
+      setFairUse(null);
       setError(cloudSessionUnavailableCopy(backend));
       setPhase('error');
       return;
@@ -257,6 +261,7 @@ export function SettingsPage({
         // stay retryable instead of stranding the page on Loading forever.
         setSnapshot(null);
         setPeopleNames([]);
+        setFairUse(null);
         setError(desktopBackendServiceCopy);
         setSettingsCanRetry(true);
         setPhase('error');
@@ -265,6 +270,7 @@ export function SettingsPage({
       if (!hasSession) {
         setSnapshot(null);
         setPeopleNames([]);
+        setFairUse(null);
         setError(desktopBackendUnauthorizedCopy);
         setPhase('signed-out');
         return;
@@ -273,6 +279,7 @@ export function SettingsPage({
     const peopleTask = loadOmiPeopleNames(backend).catch(
       () => new Map<string, string>(),
     );
+    const fairUseTask = loadOmiFairUseStatus(backend).catch(() => null);
     try {
       const account = await loadAccountSettings(backend);
       if (!current()) {
@@ -291,10 +298,12 @@ export function SettingsPage({
       setPhase('error');
     }
     const names = await peopleTask;
+    const status = await fairUseTask;
     if (!current()) {
       return;
     }
     setPeopleNames(peopleNameRows(names));
+    setFairUse(fairUseCopy(status));
   }, [browser]);
 
   useEffect(() => {
@@ -451,6 +460,13 @@ export function SettingsPage({
         ) : null}
         {peopleNames.map(person => (
           <SettingRow copy={person.name} key={person.id} title="People" />
+        ))}
+        {fairUse?.map((row, index) => (
+          <SettingRow
+            copy={row.copy}
+            key={`${row.title}-${index}`}
+            title={row.title}
+          />
         ))}
         {(onSignOut !== undefined ||
           (omiAuth !== undefined && omiAuth !== null)) && (

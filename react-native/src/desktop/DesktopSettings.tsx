@@ -22,6 +22,7 @@ import {
   usageStatsCopy,
   primaryLanguageCopy,
   peopleNameRows,
+  fairUseCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {
@@ -39,6 +40,7 @@ import {
 } from '../desktopSettingsClient';
 import {omiBackend} from '../omiNative';
 import {loadOmiPeopleNames} from '../legacyOmiPeople';
+import {loadOmiFairUseStatus} from '../legacyOmiFairUse';
 import {FocusPressable} from '../ui/Pressable';
 import {
   desktopMotion,
@@ -240,6 +242,7 @@ export function DesktopSettings({
   const [peopleNames, setPeopleNames] = useState<{id: string; name: string}[]>(
     [],
   );
+  const [fairUse, setFairUse] = useState<ReturnType<typeof fairUseCopy>>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
     Record<PrivacyWriteKind, boolean>
@@ -264,22 +267,26 @@ export function DesktopSettings({
     } catch {}
     let nextAccount: AccountSettingsSnapshot | null = null;
     let nextPeople: {id: string; name: string}[] = [];
+    let nextFairUse: ReturnType<typeof fairUseCopy> = null;
     if (backend !== undefined && backend !== null && session === 'ready') {
       const peopleTask = loadOmiPeopleNames(backend).catch(
         () => new Map<string, string>(),
       );
+      const fairUseTask = loadOmiFairUseStatus(backend).catch(() => null);
       try {
         nextAccount = await loadAccountSettings(backend);
       } catch (reason) {
         nextAccount = failedAccountSettings(desktopReadErrorCopy(reason));
       }
       nextPeople = peopleNameRows(await peopleTask);
+      nextFairUse = fairUseCopy(await fairUseTask);
     }
     if (seq !== reloadSeqRef.current) {
       return;
     }
     setAccount(nextAccount);
     setPeopleNames(nextPeople);
+    setFairUse(nextFairUse);
   }, [backend, session]);
 
   useEffect(() => {
@@ -577,6 +584,9 @@ export function DesktopSettings({
       ) : null}
       {peopleNames.map(person => (
         <Row copy={person.name} key={person.id} title="People" />
+      ))}
+      {fairUse?.map((row, index) => (
+        <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
       ))}
     </>
   );

@@ -1260,6 +1260,52 @@ test('Settings names GET people without a write sheet', async () => {
   expect(tree).not.toContain('person-empty');
 });
 
+test('Settings names GET fair use without Upgrade or a write sheet', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/fair-use/status') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          stage: 'restrict',
+          case_ref: 'FU-1',
+          message: 'Usage is restricted.',
+          speech_hours_today: 2.4,
+          speech_hours_3day: 8.1,
+          speech_hours_weekly: 11,
+          limits: {
+            daily_hours: 2,
+            three_day_hours: 8,
+            weekly_hours: 10,
+          },
+          usage_pct: {daily: 120, three_day: 101, weekly: 110},
+          dg_budget: {
+            daily_limit_ms: 1800000,
+            used_ms: 1800000,
+            remaining_ms: 0,
+            exhausted: true,
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Fair Use');
+  expect(tree).toContain('Restricted');
+  expect(tree).toContain('FU-1');
+  expect(tree).toContain('2.4h / 2h');
+  expect(tree).toContain('3-Day Rolling');
+  expect(tree).toContain('Weekly Rolling');
+  expect(tree).toContain('Usage is restricted.');
+  expect(tree).toContain('Daily transcription');
+  expect(tree).toContain('30m / 30m');
+  expect(tree).toContain('Daily transcription limit reached');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings developer webhook URLs omit empty or whitespace values', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

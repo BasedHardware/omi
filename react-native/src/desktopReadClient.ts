@@ -491,6 +491,89 @@ export function peopleNameRows(
   return Array.from(names, ([id, name]) => ({id, name}));
 }
 
+function fairUseStageCopy(stage: string): string | null {
+  if (stage === 'warning') {
+    return 'Warning';
+  }
+  if (stage === 'throttle') {
+    return 'Throttled';
+  }
+  if (stage === 'restrict') {
+    return 'Restricted';
+  }
+  return null;
+}
+
+function fairUseHoursCopy(hours: number, limit: number): string {
+  return `${hours.toFixed(1)}h / ${limit.toFixed(0)}h`;
+}
+
+export function fairUseCopy(
+  status:
+    | {
+        stage: string;
+        caseRef: string;
+        message: string;
+        speechHoursToday: number;
+        speechHours3day: number;
+        speechHoursWeekly: number;
+        dailyHours: number;
+        threeDayHours: number;
+        weeklyHours: number;
+        dailyLimitMs: number;
+        usedMs: number;
+        exhausted: boolean;
+      }
+    | null
+    | undefined,
+): {title: string; copy: string}[] | null {
+  if (status == null) {
+    return null;
+  }
+  const rows: {title: string; copy: string}[] = [];
+  const stage = fairUseStageCopy(status.stage);
+  if (stage !== null) {
+    const caseRef = visibleDisplayText(status.caseRef);
+    rows.push({
+      title: 'Fair Use',
+      copy: caseRef === '' ? stage : `${stage} · ${caseRef}`,
+    });
+  }
+  rows.push(
+    {
+      title: 'Today',
+      copy: fairUseHoursCopy(status.speechHoursToday, status.dailyHours),
+    },
+    {
+      title: '3-Day Rolling',
+      copy: fairUseHoursCopy(status.speechHours3day, status.threeDayHours),
+    },
+    {
+      title: 'Weekly Rolling',
+      copy: fairUseHoursCopy(status.speechHoursWeekly, status.weeklyHours),
+    },
+  );
+  const message = visibleDisplayText(status.message);
+  if (message !== '') {
+    rows.push({title: 'Fair Use', copy: message});
+  }
+  if (status.stage === 'restrict' && status.dailyLimitMs > 0) {
+    rows.push({
+      title: 'Daily transcription',
+      copy: `${Math.round(status.usedMs / 60000)}m / ${Math.round(
+        status.dailyLimitMs / 60000,
+      )}m`,
+    });
+    if (status.exhausted) {
+      rows.push({
+        title: 'Daily transcription',
+        copy: 'Daily transcription limit reached',
+      });
+    }
+  }
+  return rows;
+}
+
 function dottedVersionParts(value: string): number[] | null {
   const parts = visibleDisplayText(value).split('.');
   if (parts.length === 0 || parts.some(part => part === '' || !/^[0-9]+$/.test(part))) {

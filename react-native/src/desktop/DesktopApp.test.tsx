@@ -255,6 +255,10 @@ afterEach(() => {
   act(() => {
     renderers.splice(0).forEach(renderer => renderer.unmount());
   });
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  omiBackend.request.mockReset();
 });
 
 function renderDesktop(
@@ -2686,10 +2690,15 @@ test('Settings names GET people without a write sheet', async () => {
     languageNames: null,
     languageNamesError: null,
   });
-  omiBackend.request.mockResolvedValueOnce({
-    id: 'omi-people',
-    status: 200,
-    body: JSON.stringify([{id: 'person-alex', name: 'Alex Chen'}]),
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/people?include_speech_samples=false') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([{id: 'person-alex', name: 'Alex Chen'}]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
   });
   const renderer = renderDesktop();
   await act(async () => {
@@ -2708,6 +2717,96 @@ test('Settings names GET people without a write sheet', async () => {
   expect(tree).toContain('People');
   expect(tree).toContain('Alex Chen');
   expect(tree).not.toContain('person-alex');
+});
+
+test('Settings names GET fair use without Upgrade or a write sheet', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/fair-use/status') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          stage: 'restrict',
+          case_ref: 'FU-1',
+          message: 'Usage is restricted.',
+          speech_hours_today: 2.4,
+          speech_hours_3day: 8.1,
+          speech_hours_weekly: 11,
+          limits: {
+            daily_hours: 2,
+            three_day_hours: 8,
+            weekly_hours: 10,
+          },
+          usage_pct: {daily: 120, three_day: 101, weekly: 110},
+          dg_budget: {
+            daily_limit_ms: 1800000,
+            used_ms: 1800000,
+            remaining_ms: 0,
+            exhausted: true,
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Fair Use');
+  expect(tree).toContain('Restricted');
+  expect(tree).toContain('FU-1');
+  expect(tree).toContain('2.4h / 2h');
+  expect(tree).toContain('Daily transcription limit reached');
+  expect(tree).not.toContain('Upgrade');
 });
 
 test('Settings shows already-loaded company, job, and data protection', async () => {

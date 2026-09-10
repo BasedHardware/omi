@@ -70,6 +70,7 @@ import {
   primaryLanguageCopy,
   peopleNameRows,
   firmwareUpdateCopy,
+  fairUseCopy,
   taskDisplaySummary,
   taskDisplayTitle,
   taskGroup,
@@ -891,6 +892,57 @@ test('people name rows keep GET names without empty entries', () => {
     {id: 'person-sam', name: 'Sam'},
   ]);
   expect(peopleNameRows(new Map())).toEqual([]);
+});
+
+test('fair use copy names GET stage hours and restrict budget without Upgrade', () => {
+  expect(
+    fairUseCopy({
+      stage: 'restrict',
+      caseRef: 'FU-1',
+      message: 'Usage is restricted.',
+      speechHoursToday: 2.4,
+      speechHours3day: 8.1,
+      speechHoursWeekly: 11,
+      dailyHours: 2,
+      threeDayHours: 8,
+      weeklyHours: 10,
+      dailyLimitMs: 1_800_000,
+      usedMs: 1_800_000,
+      exhausted: true,
+    }),
+  ).toEqual([
+    {title: 'Fair Use', copy: 'Restricted · FU-1'},
+    {title: 'Today', copy: '2.4h / 2h'},
+    {title: '3-Day Rolling', copy: '8.1h / 8h'},
+    {title: 'Weekly Rolling', copy: '11.0h / 10h'},
+    {title: 'Fair Use', copy: 'Usage is restricted.'},
+    {title: 'Daily transcription', copy: '30m / 30m'},
+    {
+      title: 'Daily transcription',
+      copy: 'Daily transcription limit reached',
+    },
+  ]);
+  expect(
+    fairUseCopy({
+      stage: 'none',
+      caseRef: '',
+      message: ' \t',
+      speechHoursToday: 0,
+      speechHours3day: 0,
+      speechHoursWeekly: 0,
+      dailyHours: 2,
+      threeDayHours: 8,
+      weeklyHours: 10,
+      dailyLimitMs: 1_800_000,
+      usedMs: 0,
+      exhausted: false,
+    }),
+  ).toEqual([
+    {title: 'Today', copy: '0.0h / 2h'},
+    {title: '3-Day Rolling', copy: '0.0h / 8h'},
+    {title: 'Weekly Rolling', copy: '0.0h / 10h'},
+  ]);
+  expect(fairUseCopy(null)).toBeNull();
 });
 
 test('firmware update copy names GET latest without Available on current or draft', () => {
