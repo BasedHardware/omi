@@ -14,11 +14,26 @@ test('parses GET developer keys and omits empty names and full secrets', () => {
           name: 'Local',
           key_prefix: 'omi_sk_ab',
           key: 'omi_sk_abcdef_secret',
+          created_at: '2026-09-09T12:00:00.000Z',
         },
         {id: 'key-empty', name: ' \t', key_prefix: 'omi_sk_cd'},
+        {
+          id: 'key-undated',
+          name: 'Legacy',
+          key_prefix: 'omi_sk_ef',
+          created_at: 'not-a-date',
+        },
       ]),
     ),
-  ).toEqual([{id: 'key-1', name: 'Local', keyPrefix: 'omi_sk_ab'}]);
+  ).toEqual([
+    {
+      id: 'key-1',
+      name: 'Local',
+      keyPrefix: 'omi_sk_ab',
+      createdAtMs: Date.parse('2026-09-09T12:00:00.000Z'),
+    },
+    {id: 'key-undated', name: 'Legacy', keyPrefix: 'omi_sk_ef'},
+  ]);
 });
 
 test('fails closed for malformed GET developer keys', () => {

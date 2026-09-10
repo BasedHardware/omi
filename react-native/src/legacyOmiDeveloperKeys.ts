@@ -32,7 +32,23 @@ export type OmiDeveloperKey = {
   id: string;
   name: string;
   keyPrefix: string;
+  createdAtMs?: number;
 };
+
+function createdAtMs(value: unknown): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const raw = visibleDisplayText(text(value, 100));
+  if (raw === '') {
+    return undefined;
+  }
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+  return parsed;
+}
 
 export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
   const rows = array(JSON.parse(body), 1000);
@@ -53,7 +69,13 @@ export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
       continue;
     }
     const keyPrefix = visibleDisplayText(text(row.key_prefix, 256));
-    keys.push({id, name, keyPrefix});
+    const created = createdAtMs(row.created_at);
+    keys.push({
+      id,
+      name,
+      keyPrefix,
+      ...(created === undefined ? {} : {createdAtMs: created}),
+    });
   }
   return keys;
 }

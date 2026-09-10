@@ -886,20 +886,39 @@ export function developerWebhookRowCopy(webhook: {
     .join(' · ');
 }
 
+export function developerKeyCreatedCopy(createdAtMs: number): string {
+  if (!Number.isFinite(createdAtMs) || createdAtMs <= 0) {
+    return '';
+  }
+  return visibleDisplayText(
+    new Date(createdAtMs).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }),
+  );
+}
+
 export function developerKeyRowCopy(key: {
   name: string;
   keyPrefix: string;
+  createdAtMs?: number;
 }): string {
   const name = visibleDisplayText(key.name);
   if (name === '') {
     return '';
   }
   const prefix = visibleDisplayText(key.keyPrefix);
-  return prefix === '' ? name : `${name} · ${prefix}`;
+  const created =
+    typeof key.createdAtMs === 'number'
+      ? developerKeyCreatedCopy(key.createdAtMs)
+      : '';
+  const labeled = prefix === '' ? name : `${name} · ${prefix}`;
+  return created === '' ? labeled : `${labeled} · ${created}`;
 }
 
 export function developerKeysCopy(
-  keys: readonly {name: string; keyPrefix: string}[],
+  keys: readonly {name: string; keyPrefix: string; createdAtMs?: number}[],
   title: string,
 ): {title: string; copy: string}[] {
   return keys.flatMap(key => {

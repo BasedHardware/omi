@@ -27,6 +27,7 @@ jest.mock('../omiNative', () => ({
 
 const {ConnectorsPage} = require('./Connectors');
 const {SettingsPage} = require('./Settings');
+const {developerKeyCreatedCopy} = require('../desktopReadClient');
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -1532,6 +1533,7 @@ test('Settings names GET developer and MCP keys without revoke or a full secret'
             name: 'Local',
             key_prefix: 'omi_sk_ab',
             key: 'omi_sk_abcdef_secret',
+            created_at: '2026-09-09T12:00:00.000Z',
           },
         ]),
       };
@@ -1541,7 +1543,12 @@ test('Settings names GET developer and MCP keys without revoke or a full secret'
         id: request.id,
         status: 200,
         body: JSON.stringify([
-          {id: 'mcp-1', name: 'Cursor', key_prefix: 'omi_mcp_cd'},
+          {
+            id: 'mcp-1',
+            name: 'Cursor',
+            key_prefix: 'omi_mcp_cd',
+            created_at: '2026-09-09T12:00:00.000Z',
+          },
         ]),
       };
     }
@@ -1554,10 +1561,14 @@ test('Settings names GET developer and MCP keys without revoke or a full secret'
       .props.onPress();
   });
   const tree = textOf(renderer);
+  const created = developerKeyCreatedCopy(
+    Date.parse('2026-09-09T12:00:00.000Z'),
+  );
   expect(tree).toContain('Developer key');
-  expect(tree).toContain('Local · omi_sk_ab');
+  expect(tree).toContain(`Local · omi_sk_ab · ${created}`);
   expect(tree).toContain('MCP key');
   expect(tree).toContain('Cursor · omi_mcp_cd');
+  expect(tree).not.toContain(`Cursor · omi_mcp_cd · ${created}`);
   expect(tree).not.toContain('omi_sk_abcdef_secret');
   expect(tree).not.toContain('Revoke');
   expect(tree).not.toContain('Create');

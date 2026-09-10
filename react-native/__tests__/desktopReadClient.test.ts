@@ -14,6 +14,7 @@ import {
   developerWebhookRowCopy,
   developerWebhookStatusCopy,
   developerWebhookTypeCopy,
+  developerKeyCreatedCopy,
   developerKeyRowCopy,
   developerKeysCopy,
   appCategoryCopy,
@@ -1089,20 +1090,23 @@ test('developer webhook titles are not raw API keys', () => {
 });
 
 test('developer key copy names GET name and prefix without a full secret', () => {
+  const createdAtMs = Date.parse('2026-09-09T12:00:00.000Z');
+  const created = developerKeyCreatedCopy(createdAtMs);
   expect(
     developerKeysCopy(
       [
-        {name: 'Local', keyPrefix: 'omi_sk_ab'},
-        {name: ' \t', keyPrefix: 'omi_sk_cd'},
+        {name: 'Local', keyPrefix: 'omi_sk_ab', createdAtMs},
+        {name: ' \t', keyPrefix: 'omi_sk_cd', createdAtMs},
         {name: 'Cursor', keyPrefix: ''},
       ],
       'Developer key',
     ),
   ).toEqual([
-    {title: 'Developer key', copy: 'Local · omi_sk_ab'},
+    {title: 'Developer key', copy: `Local · omi_sk_ab · ${created}`},
     {title: 'Developer key', copy: 'Cursor'},
   ]);
   expect(developerKeyRowCopy({name: '', keyPrefix: 'omi_sk_ab'})).toBe('');
+  expect(developerKeyCreatedCopy(0)).toBe('');
 });
 
 test('developer webhook status copy does not say unknown for a missing enablement bit', () => {

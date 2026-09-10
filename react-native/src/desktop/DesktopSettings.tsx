@@ -352,7 +352,13 @@ export function DesktopSettings({
         await developerKeysTask,
         'Developer key',
       );
-      nextMcpKeys = developerKeysCopy(await mcpKeysTask, 'MCP key');
+      nextMcpKeys = developerKeysCopy(
+        (await mcpKeysTask).map(key => ({
+          name: key.name,
+          keyPrefix: key.keyPrefix,
+        })),
+        'MCP key',
+      );
     }
     if (seq !== reloadSeqRef.current) {
       return;

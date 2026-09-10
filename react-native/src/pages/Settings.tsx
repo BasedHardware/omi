@@ -386,7 +386,12 @@ export function SettingsPage({
     );
     setCustomVocabulary(customVocabularyCopy(transcription?.vocabulary));
     setDeveloperKeys(developerKeysCopy(nextDeveloperKeys, 'Developer key'));
-    setMcpKeys(developerKeysCopy(nextMcpKeys, 'MCP key'));
+    setMcpKeys(
+      developerKeysCopy(
+        nextMcpKeys.map(key => ({name: key.name, keyPrefix: key.keyPrefix})),
+        'MCP key',
+      ),
+    );
   }, [browser]);
 
   useEffect(() => {
