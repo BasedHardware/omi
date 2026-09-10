@@ -279,6 +279,55 @@ describe("canonical task authority delegation", () => {
     expect(await response.text()).toBe('{"error":"internal_server_error"}');
   });
 
+  test("canonical GET INTERNAL 500 is not rewritten to retryable unavailable", async () => {
+    const response = await requestCanonicalTasks({
+      service: {
+        async fetch() {
+          return new Response('{"error":"internal_server_error"}', {
+            status: 500,
+            headers: {
+              "content-type": "application/json",
+              "retry-after": "60",
+            },
+          });
+        },
+      },
+      caller: {
+        accountId: "firebase:alice",
+        authorization: `Bearer ${aliceToken}`,
+        stagingApiToken: "test-staging",
+      },
+      method: "GET",
+      query: new URLSearchParams(),
+    });
+    expect(response.status).toBe(500);
+    expect(response.headers.get("retry-after")).toBeNull();
+    expect(await response.text()).toBe('{"error":"internal_server_error"}');
+  });
+
+  test("canonical POST INTERNAL 500 is not rewritten to control_unavailable", async () => {
+    const response = await requestCanonicalTasks({
+      service: {
+        async fetch() {
+          return new Response('{"error":"internal_server_error"}', {
+            status: 500,
+            headers: { "content-type": "application/json" },
+          });
+        },
+      },
+      caller: {
+        accountId: "firebase:alice",
+        authorization: `Bearer ${aliceToken}`,
+        stagingApiToken: "test-staging",
+      },
+      method: "POST",
+      body: envelope("a", 7, { op: "create", record_id: "task-1", content }),
+    });
+    expect(response.status).toBe(500);
+    expect(response.headers.get("retry-after")).toBeNull();
+    expect(await response.text()).toBe('{"error":"internal_server_error"}');
+  });
+
   test.each([
     { status: 200, body: '{"success":true}' },
     {

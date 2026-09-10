@@ -55,6 +55,11 @@ export async function requestCanonicalTasks(
     return canonicalTasksUnavailable(request.method);
   const response = result.response;
   const body = await response.text();
+  if (response.status === 500 && body === '{"error":"internal_server_error"}') {
+    const headers = new Headers(response.headers);
+    headers.delete("retry-after");
+    return new Response(body, { status: 500, headers });
+  }
   let valid = false;
   if (request.method === "GET") {
     if (response.status === 200) {
