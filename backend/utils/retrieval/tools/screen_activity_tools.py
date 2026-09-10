@@ -531,9 +531,11 @@ def search_screen_activity_tool(
             except Exception:
                 reason = 'provider_5xx'
 
+    # Pinecone metadata is external input: keep the runtime shape check even though the
+    # provider signature promises dicts, so a malformed hit never reaches the Firestore lookup.
     valid_matches = [
         m
-        for m in (matches or [])
+        for m in cast(List[Any], matches or [])
         if isinstance(m, dict) and _validated_screen_evidence_id(m.get('screenshot_id')) is not None
     ]
     if not valid_matches:
