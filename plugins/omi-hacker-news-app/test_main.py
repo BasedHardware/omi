@@ -71,7 +71,7 @@ class CleanTextTests(unittest.TestCase):
 
     def test_removes_real_markup_but_preserves_code_text(self):
         raw = "<p>Hello &amp; goodbye</p><p><code>&lt;vector&gt;</code><br>next</p>"
-        self.assertEqual(app._clean_text(raw), "Hello & goodbye\n`<vector>`\nnext")
+        self.assertEqual(app._clean_text(raw), "Hello & goodbye\n\n`<vector>`\nnext")
 
 
 class DiscussionHandlerTests(unittest.IsolatedAsyncioTestCase):
