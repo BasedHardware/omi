@@ -154,9 +154,12 @@ repetă automat cererile limitate (429) și respectă `Retry-After` când
 serverul îl trimite. Codul `3` este de obicei tranzitoriu pentru operațiile de
 citire, dar la scriere poate însemna că rezultatul este necunoscut (`outcome
 unknown`) — este posibil ca serverul să fi aplicat deja modificarea; verifică
-resursa înainte de a reîncerca. Codul `2` înseamnă de obicei că trebuie să te
-autentifici din nou (`omi auth login`), iar codul `5` că ID-ul cerut nu
-există sau nu este disponibil.
+resursa înainte de a reîncerca. Codul `2` are două cauze frecvente: dacă
+mesajul de eroare indică o problemă de autentificare (lipsesc acreditările sau
+tokenul a expirat), rulează din nou `omi auth login`; dacă indică o eroare de
+argumente (opțiune necunoscută, argument lipsă, valoare în afara intervalului),
+corectează comanda. Codul `5` înseamnă că ID-ul cerut nu există sau nu este
+disponibil.
 
 Pentru restul comenzilor și opțiunile avansate, vezi
 [README-ul principal în engleză](../README.md) și `omi --help`.
