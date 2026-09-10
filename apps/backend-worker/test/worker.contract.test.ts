@@ -423,9 +423,12 @@ describe("worker request contract", () => {
     console.error = (...args: unknown[]) => messages.push(args);
     try {
       const response = await handler.fetch(
-        new Request("https://worker.test/v1/settings?private=must-not-appear", {
-          headers: authenticatedHeaders,
-        }),
+        new Request(
+          "https://worker.test/v1/chat-messages?private=must-not-appear",
+          {
+            headers: authenticatedHeaders,
+          }
+        ),
         { ...env, API_TOKEN: "" } as never,
         executionContext as never
       );
@@ -495,11 +498,7 @@ describe("worker request contract", () => {
 
       expect(response.status).toBe(401);
       expect((await response.json()) as unknown).toEqual({
-        error: {
-          code: "unauthorized",
-          retryable: false,
-          action: "reauthenticate",
-        },
+        error: "unauthorized",
       });
       // The account must never be resolved: refusal precedes storage access.
       expect(accountCalls).toEqual([]);
@@ -3260,9 +3259,7 @@ describe("worker request contract", () => {
 
 describe("settings entitlement admission contract", () => {
   test("Settings rejects every query and does not add shell-local appearance", async () => {
-    const extra = {
-      error: { code: "bad_request", retryable: false, action: "edit_request" },
-    };
+    const extra = { error: "bad_request" };
     for (const query of ["?unknown=1", "?x=1&x=2", "?appearance=dark"]) {
       const response = await fetchWorker(`/v1/settings${query}`, {
         headers: authenticatedHeaders,
@@ -3278,16 +3275,8 @@ describe("settings entitlement admission contract", () => {
   });
 
   test("Settings GET without a credential is signed-out 200 matching production", async () => {
-    const extra = {
-      error: { code: "bad_request", retryable: false, action: "edit_request" },
-    };
-    const unauthorized = {
-      error: {
-        code: "unauthorized",
-        retryable: false,
-        action: "reauthenticate",
-      },
-    };
+    const extra = { error: "bad_request" };
+    const unauthorized = { error: "unauthorized" };
     const absent = await fetchWorker("/v1/settings");
     expect(absent.status).toBe(200);
     expect((await absent.json()) as unknown).toEqual({
@@ -3327,7 +3316,10 @@ describe("settings entitlement admission contract", () => {
       coreContext({
         env: { ...env, DB: undefined } as never,
         request: new Request("https://worker.test/v1/settings", {
-          headers: { authorization: "Bearer test-token" },
+          headers: {
+            authorization: "Bearer test-token",
+            "x-omi-client-id": "test-account",
+          },
         }),
         routePath: "/v1/settings",
         params: {},

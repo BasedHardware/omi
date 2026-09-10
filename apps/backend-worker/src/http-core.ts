@@ -171,6 +171,10 @@ export function constantTimeEqual(
 }
 
 export function configurationReady(env: CoreEnv): boolean {
+  return credentialsReady(env) && env.DB !== undefined;
+}
+
+function credentialsReady(env: CoreEnv): boolean {
   const base =
     typeof env.API_TOKEN === "string" &&
     env.API_TOKEN.length > 0 &&
@@ -182,7 +186,6 @@ export function configurationReady(env: CoreEnv): boolean {
     env.STAGING_CHAT_LIMIT >= 0 &&
     env.ACCOUNTS !== undefined &&
     env.AI !== undefined &&
-    env.DB !== undefined &&
     observabilityConfigured(env);
   if (!base) return false;
   if (gatewayModeEnabled(env)) return gatewayConfig(env) !== null;
@@ -384,10 +387,7 @@ function firebaseUnavailableRetryAfter(
   if (method === "GET" && pathname === "/v1/device-sessions/ownership") {
     return "1";
   }
-  if (
-    method === "GET" &&
-    /^\/v1\/device-sessions\/[^/]+$/.test(pathname)
-  ) {
+  if (method === "GET" && /^\/v1\/device-sessions\/[^/]+$/.test(pathname)) {
     return "1";
   }
   if (
@@ -420,23 +420,16 @@ function firebaseUnavailableRetryAfter(
   return undefined;
 }
 
-export function requiresV1Authorization(context: CoreContext): boolean {
-  if (context.req.method !== "GET") return true;
-  let pathname: string;
-  try {
-    pathname = new URL(context.req.url).pathname;
-  } catch {
-    return true;
-  }
-  return (
-    pathname !== "/v1/settings" ||
-    context.req.header("authorization") !== undefined
-  );
-}
+type ResolvedV1Account =
+  | { readonly kind: "account"; readonly accountId: string }
+  | { readonly kind: "unauthorized" }
+  | { readonly kind: "bad_request" }
+  | { readonly kind: "unavailable"; readonly retryAfter: string | undefined };
 
-export async function authorizeV1(
-  context: CoreContext
-): Promise<Response | null> {
+async function resolveV1Account(
+  context: CoreContext,
+  requireDatabase = true
+): Promise<ResolvedV1Account> {
   // Authorization is gated on the SAME readiness predicate `/ready` reports,
   // because a readiness signal is not an enforcement point: Cloudflare routes
   // request traffic regardless of what `/ready` returns, so a deployment whose
@@ -447,7 +440,11 @@ export async function authorizeV1(
   // returns true and authenticates an anonymous caller. Wrangler does not fail
   // a deploy when a secret referenced solely in code is unset, so this is a
   // reachable configuration, not a hypothetical one. Refuse before comparing.
-  if (!configurationReady(context.env)) {
+  if (
+    !(requireDatabase
+      ? configurationReady(context.env)
+      : credentialsReady(context.env))
+  ) {
     // Operator-visible, client-opaque: the caller still gets the ordinary
     // refusal, so a misconfigured deployment is not advertised over the wire.
     console.error(
@@ -458,11 +455,11 @@ export async function authorizeV1(
         })
       )
     );
-    return backendError("unauthorized", "reauthenticate", 401);
+    return { kind: "unauthorized" };
   }
   const authorization = context.req.header("authorization");
   if (authorization === undefined || !authorization.startsWith("Bearer ")) {
-    return backendError("unauthorized", "reauthenticate", 401);
+    return { kind: "unauthorized" };
   }
   const supplied = new TextEncoder().encode(
     authorization.slice("Bearer ".length)
@@ -479,35 +476,60 @@ export async function authorizeV1(
       !isClientId(clientId) ||
       clientId.startsWith("firebase:")
     ) {
-      return backendError("bad_request", "edit_request", 400);
+      return { kind: "bad_request" };
     }
-    context.set("accountId", clientId);
-    return null;
+    return { kind: "account", accountId: clientId };
   }
   const firebaseApiKey = context.env.FIREBASE_API_KEY;
   if (typeof firebaseApiKey !== "string" || firebaseApiKey.length === 0)
-    return backendError("unauthorized", "reauthenticate", 401);
+    return { kind: "unauthorized" };
   const accountId = await firebaseAccountId(
     authorization.slice("Bearer ".length),
     firebaseApiKey
   );
   if (accountId === "unavailable") {
-    const retryAfter = firebaseUnavailableRetryAfter(
-      context.req.method,
-      context.req.url
-    );
-    return backendError(
-      "service_unavailable",
-      "retry",
-      503,
-      true,
-      retryAfter === undefined ? undefined : { "retry-after": retryAfter }
-    );
+    return {
+      kind: "unavailable",
+      retryAfter: firebaseUnavailableRetryAfter(
+        context.req.method,
+        context.req.url
+      ),
+    };
   }
-  if (accountId === "invalid")
+  if (accountId === "invalid") return { kind: "unauthorized" };
+  return { kind: "account", accountId };
+}
+
+export function requiresV1Authorization(context: CoreContext): boolean {
+  if (context.req.method !== "GET") return true;
+  try {
+    return new URL(context.req.url).pathname !== "/v1/settings";
+  } catch {
+    return true;
+  }
+}
+
+export async function authorizeV1(
+  context: CoreContext
+): Promise<Response | null> {
+  const resolved = await resolveV1Account(context);
+  if (resolved.kind === "account") {
+    context.set("accountId", resolved.accountId);
+    return null;
+  }
+  if (resolved.kind === "unauthorized")
     return backendError("unauthorized", "reauthenticate", 401);
-  context.set("accountId", accountId);
-  return null;
+  if (resolved.kind === "bad_request")
+    return backendError("bad_request", "edit_request", 400);
+  return backendError(
+    "service_unavailable",
+    "retry",
+    503,
+    true,
+    resolved.retryAfter === undefined
+      ? undefined
+      : { "retry-after": resolved.retryAfter }
+  );
 }
 
 export function handleHealth(context: CoreContext): Response {
@@ -528,29 +550,40 @@ export function handleReady(context: CoreContext): Response {
 export async function handleSettings(context: CoreContext): Promise<Response> {
   const url = new URL(context.req.url);
   if ([...url.searchParams].length > 0) {
-    return backendError("bad_request", "edit_request", 400);
+    return json({ error: "bad_request" }, 400);
   }
   const contentLength = context.req.header("content-length");
   if (contentLength !== undefined && contentLength !== "0") {
-    return backendError("bad_request", "edit_request", 400);
+    return json({ error: "bad_request" }, 400);
   }
   if (context.req.header("transfer-encoding") !== undefined) {
-    return backendError("bad_request", "edit_request", 400);
+    return json({ error: "bad_request" }, 400);
   }
   if (context.req.header("authorization") === undefined) {
     return json({ identity: null, entitlement: null });
   }
+  const resolved = await resolveV1Account(context, false);
+  if (resolved.kind === "unauthorized")
+    return json({ error: "unauthorized" }, 401);
+  if (resolved.kind === "bad_request")
+    return json({ error: "bad_request" }, 400);
+  if (resolved.kind === "unavailable")
+    return backendError(
+      "service_unavailable",
+      "retry",
+      503,
+      true,
+      resolved.retryAfter === undefined
+        ? undefined
+        : { "retry-after": resolved.retryAfter }
+    );
   const db = context.env.DB;
   if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true, {
       "retry-after": "60",
     });
   return json(
-    await readSettings(
-      db,
-      context.get("accountId"),
-      context.env.STAGING_CHAT_LIMIT
-    )
+    await readSettings(db, resolved.accountId, context.env.STAGING_CHAT_LIMIT)
   );
 }
 

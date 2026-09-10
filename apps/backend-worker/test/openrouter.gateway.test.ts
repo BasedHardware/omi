@@ -386,9 +386,9 @@ describe("openrouter gateway fail-closed validation", () => {
       { headers: authenticatedHeaders }
     );
     expect(response.status).toBe(401);
-    const body = (await response.json()) as Record<string, unknown>;
-    const error = body["error"] as Record<string, unknown>;
-    expect(error["code"]).toBe("unauthorized");
+    expect((await response.json()) as unknown).toEqual({
+      error: "unauthorized",
+    });
   });
 
   test("worker /ready stays 200 when gateway mode is disabled even without gateway config", async () => {
