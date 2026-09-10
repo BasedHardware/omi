@@ -774,6 +774,7 @@ test('legacy conversation details name GET app result content', () => {
         sections: [],
         actionItems: [],
         appSummary: 'App wrote this recap',
+        appSummaryName: 'Notes',
         transcript: {status: 'loaded', segments: []},
       },
     },
@@ -786,6 +787,8 @@ test('legacy conversation details name GET app result content', () => {
     }),
   );
   expect(copy).toContain('App wrote this recap');
+  expect(copy).toContain('Notes');
+  expect(copy).not.toContain('Unknown App');
   const discarded = text(
     render({
       apiContract: 'omi',
@@ -793,6 +796,7 @@ test('legacy conversation details name GET app result content', () => {
     }),
   );
   expect(discarded).not.toContain('App wrote this recap');
+  expect(discarded).not.toContain('Notes');
 });
 
 test('conversation details name GET shared or public visibility and omit private', () => {

@@ -2,6 +2,7 @@ import type {OmiBackend} from './omiNativeTypes';
 import {visibleDisplayText} from './desktopReadClient';
 import {loadOmiFolderName} from './legacyOmiFolders';
 import {loadOmiPeopleNames} from './legacyOmiPeople';
+import {loadOmiAppNames} from './legacyOmiApps';
 
 export type LegacyConversationDetail = {
   id: string;
@@ -12,6 +13,7 @@ export type LegacyConversationDetail = {
   actionItems: {description: string; completed: boolean}[];
   locationAddress?: string;
   appSummary?: string;
+  appSummaryName?: string;
   calendarEvent?: {
     title?: string;
     attendees: string[];
@@ -72,11 +74,20 @@ function array(value: unknown, limit: number): unknown[] {
   }
   return value;
 }
+function appResultId(row: Record<string, unknown>): string | undefined {
+  const raw = row.plugin_id ?? row.app_id;
+  if (typeof raw !== 'string') {
+    return undefined;
+  }
+  const id = visibleDisplayText(raw);
+  return id === '' ? undefined : id;
+}
+
 function firstAppSummary(
   apps: unknown,
   plugins: unknown,
   overview: string,
-): string | undefined {
+): {content: string; appId?: string} | undefined {
   const appRows = apps === undefined || apps === null ? [] : array(apps, 1000);
   const rows =
     appRows.length > 0
@@ -88,7 +99,8 @@ function firstAppSummary(
     const row = object(raw);
     const content = visibleDisplayText(text(row.content, 100000));
     if (content !== '' && content !== overview) {
-      return content;
+      const appId = appResultId(row);
+      return appId === undefined ? {content} : {content, appId};
     }
   }
   return undefined;
@@ -310,11 +322,20 @@ export async function loadLegacyConversationDetail(
   const photos = conversationPhotos(value.photos);
   const integrationText = externalText(value.external_data);
   const overview = text(structured.overview);
-  const appSummary = firstAppSummary(
+  const appRecap = firstAppSummary(
     value.apps_results,
     value.plugins_results,
     visibleDisplayText(overview),
   );
+  const appSummary = appRecap?.content;
+  const appSummaryName =
+    appRecap?.appId === undefined
+      ? undefined
+      : (
+          await loadOmiAppNames(backend, [appRecap.appId]).catch(
+            () => new Map<string, string>(),
+          )
+        ).get(appRecap.appId);
   const folderId =
     value.folder_id === undefined || value.folder_id === null
       ? undefined
@@ -334,6 +355,9 @@ export async function loadLegacyConversationDetail(
     actionItems,
     ...(address === undefined ? {} : {locationAddress: address}),
     ...(appSummary === undefined ? {} : {appSummary}),
+    ...(appSummaryName === undefined || appSummaryName === ''
+      ? {}
+      : {appSummaryName}),
     ...(linkedEvent === undefined ? {} : {calendarEvent: linkedEvent}),
     ...(photos === undefined
       ? {}

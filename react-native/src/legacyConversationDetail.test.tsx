@@ -501,6 +501,72 @@ test('keeps first GET apps_results content and falls back to plugins_results', a
   ).toBeUndefined();
 });
 
+test('names GET apps_results app when catalog resolves and omits Unknown App', async () => {
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/apps/notes') {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({id: 'notes', name: 'Notes'}),
+      };
+    }
+    return response({
+      ...fixture,
+      apps_results: [
+        {
+          content: 'App wrote this recap',
+          plugin_id: 'notes',
+          app_id: 'other',
+        },
+      ],
+    });
+  });
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({
+      appSummary: 'App wrote this recap',
+      appSummaryName: 'Notes',
+    }),
+  );
+  expect(mockRequest).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/apps/notes',
+  });
+  expect(mockRequest.mock.calls.some(call => call[0].path === '/v1/apps/other')).toBe(
+    false,
+  );
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/apps/notes') {
+      return {id: 'app', status: 404, body: '{}'};
+    }
+    return response({
+      ...fixture,
+      apps_results: [{content: 'App wrote this recap', app_id: 'notes'}],
+    });
+  });
+  const unresolved = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(unresolved.appSummary).toBe('App wrote this recap');
+  expect(unresolved.appSummaryName).toBeUndefined();
+  mockRequest.mockImplementation(async () =>
+    response({
+      ...fixture,
+      apps_results: [{content: 'App wrote this recap', app_id: 1}],
+    }),
+  );
+  const malformedId = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(malformedId.appSummary).toBe('App wrote this recap');
+  expect(malformedId.appSummaryName).toBeUndefined();
+  mockRequest.mockReset().mockResolvedValue(
+    response({
+      ...fixture,
+      apps_results: [{content: 'App wrote this recap'}],
+    }),
+  );
+  await loadLegacyConversationDetail(backend, fixture.id);
+  expect(mockRequest).toHaveBeenCalledTimes(1);
+});
+
 test('fails closed for malformed GET apps_results or plugins_results', async () => {
   mockRequest.mockResolvedValue(
     response({

@@ -241,6 +241,9 @@ function LegacyConversationBody({
   const appSummary = conversation.discarded
     ? ''
     : visibleDisplayText(detail.appSummary ?? '');
+  const appSummaryName = conversation.discarded
+    ? ''
+    : visibleDisplayText(detail.appSummaryName ?? '');
   const calendarTitle = visibleDisplayText(detail.calendarEvent?.title ?? '');
   const calendarAttendees = (detail.calendarEvent?.attendees ?? [])
     .map(name => visibleDisplayText(name))
@@ -279,6 +282,11 @@ function LegacyConversationBody({
           status: conversation.status,
         })}
       </Text>
+      {appSummaryName === '' ? null : (
+        <Text style={[styles.conversationDetailField, ink]}>
+          {appSummaryName}
+        </Text>
+      )}
       {appSummary === '' ? null : (
         <Text selectable style={[styles.conversationDetailSummary, ink]}>
           {appSummary}
