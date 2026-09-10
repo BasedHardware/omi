@@ -107,11 +107,11 @@ lifecycle:
 
 resources:
   requests:
-    cpu: 2
+    cpu: 4
     memory: 8Gi
     nvidia.com/gpu: 1
   limits:
-    cpu: 3
+    cpu: 6
     memory: 20Gi
     nvidia.com/gpu: 1
 

@@ -55,3 +55,15 @@ def test_gpu_cleanup_is_independent_of_timed_out_test_job():
     assert cleanup['environment'] == 'development'
     assert cleanup['timeout-minutes'] <= 15
     assert jobs['gpu-tests']['environment'] == 'development'
+
+
+def test_gpu_qualification_uses_the_stream_deploy_resource_envelope():
+    """Measured CPU-bound stream capacity must correspond to the deployed pod budget."""
+    steps = _yaml('.github/workflows/parakeet_gpu_tests.yml')['jobs']['gpu-tests']['steps']
+    script = next(step['run'] for step in steps if step.get('name') == 'Create GPU test job')
+    template = 'apiVersion:' + script.split('\napiVersion:', 1)[1].split('\nJOBEOF', 1)[0]
+    pod = yaml.safe_load(template)['spec']['template']['spec']
+    tested = pod['containers'][0]['resources']
+    for environment in ('dev', 'prod'):
+        deployed = _yaml(f'backend/charts/parakeet/{environment}_omi_parakeet_stream_values.yaml')['resources']
+        assert tested == deployed

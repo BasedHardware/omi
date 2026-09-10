@@ -31,6 +31,11 @@ Environment:
   PARAKEET_STREAM_SUSTAIN_S: sustained target duration (default 180)
   PARAKEET_STREAM_MAX_TEXT_LATENCY_S: p95 text latency gate (default 4 seconds)
 
+The ``text_latency_p95_s`` gate is arrival time minus each segment's reported
+end time; it measures endpoint-relative streaming lag.  ``time_to_first_text``
+is measured independently from the audio start and is reported to avoid
+mistaking the endpoint-relative number for time to first output.
+
 The stream health response must identify the exact TDT v3 model, NeMo backend,
 multilingual decoder family, and pinned Hugging Face revision before any audio
 is sent.  This English fixture cannot qualify multilingual accuracy.
@@ -293,7 +298,7 @@ class _GPUMonitor:
                 output = subprocess.check_output(
                     [
                         "nvidia-smi",
-                        "--query-gpu=memory.used,memory.total",
+                        "--query-gpu=memory.used,memory.total,utilization.gpu",
                         "--format=csv,noheader,nounits",
                     ],
                     stderr=subprocess.DEVNULL,
@@ -301,16 +306,21 @@ class _GPUMonitor:
                     text=True,
                 ).strip()
                 first_row = output.splitlines()[0]
-                used, total = (float(value.strip()) for value in first_row.split(",", 1))
+                values = [value.strip() for value in first_row.split(",")]
+                used, total = (float(value) for value in values[:2])
+                gpu_utilization = None
+                if len(values) >= 3 and values[2] not in {"[N/A]", "N/A"}:
+                    gpu_utilization = float(values[2])
                 if total > 0:
-                    self.samples.append(
-                        {
-                            "time_s": time.monotonic(),
-                            "used_mib": used,
-                            "total_mib": total,
-                            "used_pct": used / total * 100,
-                        }
-                    )
+                    sample = {
+                        "time_s": time.monotonic(),
+                        "used_mib": used,
+                        "total_mib": total,
+                        "used_pct": used / total * 100,
+                    }
+                    if gpu_utilization is not None and math.isfinite(gpu_utilization):
+                        sample["gpu_utilization_pct"] = gpu_utilization
+                    self.samples.append(sample)
             except (OSError, ValueError, subprocess.SubprocessError, IndexError):
                 pass
             self._stop.wait(1.0)
@@ -324,7 +334,63 @@ class _GPUMonitor:
             "peak_used_mib": max(sample["used_mib"] for sample in self.samples),
             "peak_used_pct": max(sample["used_pct"] for sample in self.samples),
             "total_mib": self.samples[0]["total_mib"],
+            "gpu_utilization": self._utilization_summary(),
         }
+
+    def _utilization_summary(self) -> Dict[str, Any]:
+        values = [sample["gpu_utilization_pct"] for sample in self.samples if "gpu_utilization_pct" in sample]
+        if not values:
+            return {"available": False, "sample_count": 0}
+        return {
+            "available": True,
+            "sample_count": len(values),
+            "peak_pct": max(values),
+            "average_pct": round(sum(values) / len(values), 4),
+        }
+
+
+def _read_cpu_quota() -> Dict[str, Any]:
+    """Record the cgroup CPU quota that bounded this qualification process."""
+
+    quota_path = Path("/sys/fs/cgroup/cpu.max")
+    try:
+        raw = quota_path.read_text().strip()
+        quota, period = raw.split()
+        period_us = int(period)
+        if period_us <= 0:
+            raise ValueError("CPU quota period must be positive")
+        unlimited = quota == "max"
+        quota_us = None if unlimited else int(quota)
+        if quota_us is not None and quota_us < 0:
+            raise ValueError("CPU quota must be non-negative")
+        quota_cpus = None if unlimited else round(quota_us / period_us, 4)
+        return {
+            "available": True,
+            "source": str(quota_path),
+            "raw": raw,
+            "quota_us": quota_us,
+            "period_us": period_us,
+            "quota_cpus": quota_cpus,
+            "unlimited": unlimited,
+        }
+    except (OSError, ValueError) as error:
+        return {
+            "available": False,
+            "source": str(quota_path),
+            "error": f"{type(error).__name__}: {error}",
+        }
+
+
+def _cpu_allocation(level: int, cpu_quota: Dict[str, Any]) -> Dict[str, Any]:
+    quota_cpus = cpu_quota.get("quota_cpus")
+    streams_per_cpu = None
+    if isinstance(quota_cpus, (int, float)) and quota_cpus > 0:
+        streams_per_cpu = round(level / quota_cpus, 4)
+    return {
+        "requested_streams": level,
+        "quota_cpus": quota_cpus,
+        "streams_per_quota_cpu": streams_per_cpu,
+    }
 
 
 def _percentile(values: Sequence[float], percentile: float) -> Optional[float]:
@@ -370,7 +436,10 @@ def _new_stream_result(stream_id: int) -> Dict[str, Any]:
         "text_latency_timestamps_valid": True,
         "text_sentinels": {sentinel: False for sentinel in TEXT_SENTINELS},
         "text_sentinels_complete": False,
-        "first_text_latency_s": None,
+        # Endpoint-relative latency is retained separately from true time to
+        # first text.  The former is the 4s streaming responsiveness gate.
+        "first_endpoint_latency_s": None,
+        "time_to_first_text_s": None,
         "text_latencies_s": [],
         "error": None,
         "close_code": None,
@@ -405,6 +474,8 @@ async def _run_stream_inner(stream_id: int, pcm: bytes, duration_s: float) -> Di
                 text = str(message["text"]).strip()
                 if not text:
                     continue
+                if result["time_to_first_text_s"] is None:
+                    result["time_to_first_text_s"] = round(arrival_s, 4)
                 transcript_parts.append(text)
                 segment = {
                     "text_length": len(text),
@@ -482,7 +553,7 @@ async def _run_stream_inner(stream_id: int, pcm: bytes, duration_s: float) -> Di
     result["nonempty_text"] = bool(result["segments"])
     result["speaker_fields_valid"] = _valid_speaker_fields(result["segments"])
     if result["text_latencies_s"]:
-        result["first_text_latency_s"] = result["text_latencies_s"][0]
+        result["first_endpoint_latency_s"] = result["text_latencies_s"][0]
     normalized_transcript = _normalized_text(" ".join(transcript_parts))
     result["text_sentinels"] = {
         sentinel: _normalized_text(sentinel) in normalized_transcript for sentinel in TEXT_SENTINELS
@@ -505,8 +576,15 @@ async def _run_stream(stream_id: int, pcm: bytes, duration_s: float) -> Dict[str
         return result
 
 
-async def _run_level(level: int, pcm: bytes, duration_s: float) -> Dict[str, Any]:
+async def _run_level(
+    level: int,
+    pcm: bytes,
+    duration_s: float,
+    cpu_quota: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     monitor = _GPUMonitor()
+    if cpu_quota is None:
+        cpu_quota = _read_cpu_quota()
     monitor.start()
     started = time.monotonic()
     try:
@@ -520,6 +598,12 @@ async def _run_level(level: int, pcm: bytes, duration_s: float) -> Dict[str, Any
     speaker_valid = [stream for stream in accepted if stream["speaker_fields_valid"]]
     latencies = [latency for stream in accepted for latency in stream["text_latencies_s"]]
     text_latency_p95 = _percentile(latencies, 0.95)
+    first_endpoint_latencies = [
+        stream["first_endpoint_latency_s"] for stream in accepted if stream["first_endpoint_latency_s"] is not None
+    ]
+    first_text_times = [
+        stream["time_to_first_text_s"] for stream in accepted if stream["time_to_first_text_s"] is not None
+    ]
     return {
         "requested_streams": level,
         "audio_duration_s": duration_s,
@@ -541,18 +625,15 @@ async def _run_level(level: int, pcm: bytes, duration_s: float) -> Dict[str, Any
         "text_sentinel_rate": (
             sum(1 for stream in accepted if stream["text_sentinels_complete"]) / len(accepted) if accepted else 0.0
         ),
-        "first_text_latency_p50_s": _percentile(
-            [stream["first_text_latency_s"] for stream in accepted if stream["first_text_latency_s"] is not None],
-            0.50,
-        ),
-        "first_text_latency_p95_s": _percentile(
-            [stream["first_text_latency_s"] for stream in accepted if stream["first_text_latency_s"] is not None],
-            0.95,
-        ),
+        "first_endpoint_latency_p50_s": _percentile(first_endpoint_latencies, 0.50),
+        "first_endpoint_latency_p95_s": _percentile(first_endpoint_latencies, 0.95),
+        "time_to_first_text_p50_s": _percentile(first_text_times, 0.50),
+        "time_to_first_text_p95_s": _percentile(first_text_times, 0.95),
         "text_latency_p95_s": text_latency_p95,
         "text_latency_gate": (text_latency_p95 is not None and text_latency_p95 <= MAX_TEXT_LATENCY_S),
         "elapsed_s": round(time.monotonic() - started, 4),
         "gpu_memory": monitor.summary(),
+        "cpu_allocation": _cpu_allocation(level, cpu_quota),
         "streams": streams,
     }
 
@@ -576,10 +657,11 @@ async def _run_benchmark(
     if not 180.0 <= SUSTAIN_S <= 300.0:
         raise ValueError("PARAKEET_STREAM_SUSTAIN_S must be between 180 and 300 seconds")
 
+    cpu_quota = _read_cpu_quota()
     level_results = []
     for level in levels:
         print(f"\n--- realtime stream level {level} ---", flush=True)
-        level_result = await _run_level(level, pcm, duration_s)
+        level_result = await _run_level(level, pcm, duration_s, cpu_quota)
         level_results.append(level_result)
         print(
             f"accepted={level_result['accepted_streams']}/{level} "
@@ -593,7 +675,7 @@ async def _run_benchmark(
     if SUSTAIN_S > 0:
         sustained_pcm = pcm * max(1, math.ceil(SUSTAIN_S / duration_s))
         sustained_pcm = sustained_pcm[: int(SUSTAIN_S * SAMPLE_RATE * BYTES_PER_SAMPLE)]
-        sustained_result = await _run_level(max(levels), sustained_pcm, SUSTAIN_S)
+        sustained_result = await _run_level(max(levels), sustained_pcm, SUSTAIN_S, cpu_quota)
         print(
             f"\n--- sustained realtime stream level {max(levels)} for {SUSTAIN_S:.0f}s ---\n"
             f"accepted={sustained_result['accepted_streams']}/{max(levels)} "
@@ -605,7 +687,7 @@ async def _run_benchmark(
 
     probe_level = EXPECTED_CAPACITY + 1
     print(f"\n--- capacity rejection probe {probe_level} ---", flush=True)
-    rejection_probe = await _run_level(probe_level, pcm, duration_s)
+    rejection_probe = await _run_level(probe_level, pcm, duration_s, cpu_quota)
     print(
         f"accepted={rejection_probe['accepted_streams']}/{probe_level} "
         f"rejected={rejection_probe['rejected_streams']}",
@@ -626,7 +708,7 @@ async def _run_benchmark(
     memory_results = [*level_results, rejection_probe]
     if sustained_result is not None:
         memory_results.append(sustained_result)
-    return {
+    report = {
         "schema_version": 1,
         "status": "ok",
         "endpoint": "/v3/stream",
@@ -648,6 +730,14 @@ async def _run_benchmark(
             "target_streams": TARGET_STREAMS,
             "hard_capacity_streams": EXPECTED_CAPACITY,
         },
+        "cpu_quota": cpu_quota,
+        "workload_cpu_allocation": {
+            "target_streams": TARGET_STREAMS,
+            "hard_capacity_streams": EXPECTED_CAPACITY,
+            "levels": [result["cpu_allocation"] for result in level_results],
+            "sustained": sustained_result["cpu_allocation"] if sustained_result else None,
+            "capacity_rejection_probe": rejection_probe["cpu_allocation"],
+        },
         "audio": {
             "source_url": AUDIO_URL,
             "path": str(AUDIO_PATH),
@@ -666,6 +756,8 @@ async def _run_benchmark(
         "latency_gate": {
             "min_streams": min(levels),
             "max_p95_seconds": MAX_TEXT_LATENCY_S,
+            "metric": "segment_arrival_s - segment_end_s",
+            "time_to_first_text_metric": "first_text_arrival_s - audio_start_s",
         },
         "levels": level_results,
         "sustained": sustained_result,
@@ -705,6 +797,10 @@ async def _run_benchmark(
             ),
         },
     }
+    report["qualification_passed"] = all(
+        value is True for value in report["qualification"].values() if isinstance(value, bool)
+    )
+    return report
 
 
 def _write_results(report: Dict[str, Any]) -> None:
@@ -753,6 +849,7 @@ def _run_and_record() -> Dict[str, Any]:
             },
             "gpu": {"type": GPU_TYPE, "target_streams": TARGET_STREAMS},
             "error": f"{type(error).__name__}: {error}",
+            "qualification_passed": False,
             "quality_claim": "not_scored; this artifact covers transport, completeness, and capacity only",
         }
         _write_results(report)
@@ -777,5 +874,5 @@ def test_realtime_tdt_stream_capacity() -> None:
 if __name__ == "__main__":
     report = _run_and_record()
     _write_results(report)
-    if not all(report["qualification"].values()):
+    if not report.get("qualification_passed", False):
         raise SystemExit(1)

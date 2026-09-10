@@ -171,6 +171,9 @@ def test_rendered_stream_release_owns_mode_models_and_internal_service(environme
     assert container['image'] == f'{expected_repository}@sha256:{"a" * 64}'
     assert container['readinessProbe']['httpGet']['path'] == '/health'
     assert container['readinessProbe']['failureThreshold'] == 1
+    assert container['resources']['requests']['cpu'] == 4
+    assert container['resources']['limits']['cpu'] == 6
+    assert container['resources']['limits']['memory'] == '20Gi'
     assert container['resources']['requests']['nvidia.com/gpu'] == 1
     assert deployment['spec']['strategy']['rollingUpdate'] == {'maxUnavailable': 0, 'maxSurge': 1}
 

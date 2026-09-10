@@ -522,11 +522,11 @@ jobs:
                         value: "20"
                     resources:
                       requests:
-                        cpu: 1
+                        cpu: 4
                         memory: 8Gi
                         nvidia.com/gpu: 1
                       limits:
-                        cpu: 2
+                        cpu: 6
                         memory: 20Gi
                         nvidia.com/gpu: 1
                 affinity:

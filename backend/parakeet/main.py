@@ -466,6 +466,7 @@ async def stream_transcribe(
     session: Optional[StreamSession] = None
     active_gauge_owned = False
     t0 = time.monotonic()
+    normal_completion = False
     try:
         session = StreamSession(sample_rate=sample_rate, vad_threshold=vad_threshold, hangover_s=hangover_s)
         ACTIVE_STREAMS.inc()
@@ -477,12 +478,19 @@ async def stream_transcribe(
             except asyncio.TimeoutError:
                 continue
 
+            if msg.get("type") == "websocket.disconnect":
+                # Starlette delivers a disconnect as a terminal receive
+                # message. Do not call receive() again: doing so raises
+                # RuntimeError and can turn a normal client close into a
+                # server-side stream error during capacity tests and drain.
+                break
             if "bytes" in msg:
                 segments = cast(List[Any], await session.feed(msg["bytes"]))
                 for seg in segments:
                     await websocket.send_json(seg)
             elif "text" in msg:
                 if msg["text"] == "finalize":
+                    normal_completion = True
                     break
     except WebSocketDisconnect:
         pass
@@ -493,6 +501,7 @@ async def stream_transcribe(
         except Exception:
             pass
     finally:
+        flush_complete = False
         try:
             if session is not None:
                 final_segments = cast(
@@ -504,9 +513,19 @@ async def stream_transcribe(
                         await websocket.send_json(seg)
                     except Exception:
                         break
+                else:
+                    flush_complete = True
         except Exception as e:
             logger.error(f"v3/stream flush error: {e}")
         finally:
+            if normal_completion and flush_complete:
+                try:
+                    await websocket.close(code=1000, reason="stream_complete")
+                except Exception:
+                    # The peer may already have closed after receiving the
+                    # final segment. Cleanup and admission release must still
+                    # run in that case.
+                    logger.debug("v3/stream normal close skipped", exc_info=True)
             try:
                 if session is not None:
                     session.cleanup()

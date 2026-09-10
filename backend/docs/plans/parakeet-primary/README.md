@@ -27,6 +27,7 @@ Code authorities: [provider policy](../../../config/stt_provider_policy.py), [co
 ## Review packet
 
 - [Capacity](capacity-plan.md): replica arithmetic, GPU pool limits, metrics, readiness and failure assumptions.
+- [Measured results](qualification-results.md): rejected first run, runtime fixes and qualification limits.
 - [Benchmark](benchmark-plan.md): executable capacity test and broader quality evidence required for promotion.
 - [Cost and effort](cost-and-effort.md): first-party prices, utilization sensitivity and remaining qualification work.
 - [Release and recovery](rollout-plan.md): capacity-before-routing ordering and production approval boundary.

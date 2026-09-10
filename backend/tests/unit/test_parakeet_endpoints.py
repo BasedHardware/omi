@@ -252,6 +252,65 @@ class TestStreamAdmissionEndpoint:
         lease.release.assert_called_once_with()
         session.cleanup.assert_called_once_with()
 
+    def test_finalize_flushes_then_closes_with_normal_code(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        lease = MagicMock()
+        mod.stream_admission = MagicMock()
+        mod.stream_admission.try_acquire.return_value = SimpleNamespace(lease=lease, reason='admitted')
+        session = MagicMock()
+        session.flush = AsyncMock(return_value=[])
+        session.cleanup = MagicMock()
+
+        with patch.object(mod, 'StreamSession', return_value=session):
+            client = TestClient(app, raise_server_exceptions=False)
+            with client.websocket_connect('/v3/stream') as websocket:
+                assert websocket.receive_json() == {'type': 'ready'}
+                websocket.send_text('finalize')
+                with pytest.raises(WebSocketDisconnect) as exc_info:
+                    websocket.receive_json()
+
+        assert exc_info.value.code == 1000
+        session.flush.assert_awaited_once_with()
+        session.cleanup.assert_called_once_with()
+        lease.release.assert_called_once_with()
+
+    def test_disconnect_message_ends_receive_loop_without_a_second_receive(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        lease = MagicMock()
+        mod.stream_admission = MagicMock()
+        mod.stream_admission.try_acquire.return_value = SimpleNamespace(lease=lease, reason='admitted')
+        session = MagicMock()
+        session.flush = AsyncMock(return_value=[])
+        session.cleanup = MagicMock()
+
+        class DisconnectWebSocket:
+            def __init__(self):
+                self.receive_calls = 0
+
+            async def accept(self):
+                return None
+
+            async def receive(self):
+                self.receive_calls += 1
+                if self.receive_calls > 1:
+                    raise AssertionError('receive called after disconnect')
+                return {'type': 'websocket.disconnect', 'code': 1000}
+
+            async def send_json(self, _message):
+                return None
+
+            async def close(self, **_kwargs):
+                return None
+
+        websocket = DisconnectWebSocket()
+        with patch.object(mod, 'StreamSession', return_value=session):
+            asyncio.run(mod.stream_transcribe(websocket, sample_rate=16000, vad_threshold=None, hangover_s=None))
+
+        assert websocket.receive_calls == 1
+        session.flush.assert_awaited_once_with()
+        session.cleanup.assert_called_once_with()
+        lease.release.assert_called_once_with()
+
 
 class TestV1TranscribeEndpoint:
 
