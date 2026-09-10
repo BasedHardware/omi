@@ -12,6 +12,14 @@ final class ChatRedoTests: XCTestCase {
     ChatMessage(id: id, text: text, sender: sender)
   }
 
+  private func proactiveNotification(_ id: String, _ text: String) -> ChatMessage {
+    ChatMessage(
+      id: id,
+      clientTurnId: ChatContinuityInvariants.proactiveNotificationContinuityKey(
+        id: UUID(), kind: .insight),
+      text: text, sender: .ai)
+  }
+
   // MARK: - Which question a row re-asks
 
   func testRedoAsksTheQuestionDirectlyAboveTheAnswer() {
@@ -67,6 +75,20 @@ final class ChatRedoTests: XCTestCase {
     XCTAssertNil(ChatRedoTarget.question(forMessageID: "a1", in: messages))
   }
 
+  /// A proactive notification is unprompted even when a user turn precedes it:
+  /// it gets no question, so no Redo, while the ordinary answer below it keeps
+  /// the question it really came from.
+  func testProactiveNotificationUnderAUserTurnGetsNoRedo() {
+    let messages = [
+      msg("u1", "what changed today?", .user),
+      proactiveNotification("n1", "you have a meeting in five minutes"),
+      msg("a1", "three things changed", .ai),
+    ]
+    XCTAssertNil(ChatRedoTarget.question(forMessageID: "n1", in: messages))
+    XCTAssertNil(ChatRedoTarget.questionsByAnswerID(in: messages)["n1"])
+    XCTAssertEqual(ChatRedoTarget.questionsByAnswerID(in: messages)["a1"], "what changed today?")
+  }
+
   /// The transcript body resolves every row at once rather than walking the
   /// history per row (a streamed token re-evaluates that body). The batch has
   /// to answer exactly what the per-row walk answers, including the rows that
@@ -75,6 +97,7 @@ final class ChatRedoTests: XCTestCase {
     let messages = [
       msg("a0", "you have a meeting in five minutes", .ai),
       msg("u1", "first question", .user),
+      proactiveNotification("n1", "your focus block ends soon"),
       msg("a1", "first answer", .ai),
       msg("a1b", "still the first question's answer", .ai),
       msg("u2", "   \n ", .user),
@@ -91,6 +114,7 @@ final class ChatRedoTests: XCTestCase {
     }
     XCTAssertEqual(batch["a3"], "third question")
     XCTAssertNil(batch["a0"])
+    XCTAssertNil(batch["n1"])
     XCTAssertNil(batch["a2"])
   }
 
@@ -158,6 +182,20 @@ final class ChatRedoTests: XCTestCase {
       [
         "q", "first answer",
       ])
+  }
+
+  /// The same failure with the notice persisted ON the assistant row
+  /// (`applyTurnFailureMarker`): the error text is not an answer, so it must
+  /// not take the replaced answer's slot — the original answer stays standing.
+  func testFailedRedoWithErrorNoticeLeavesTheOriginalAnswerStanding() {
+    let base = [msg("u1", "q", .user), msg("a1", "first answer", .ai)]
+    var turn = redoTurn("n1", replacing: "a1", question: "q", answer: "unused")
+    turn[1].text = "The answer didn't come back. Try again."
+    turn[1].journalStatus = .failed
+
+    XCTAssertEqual(
+      ChatRedoDisplayProjection.project(base + turn).map(\.text),
+      ["q", "first answer"])
   }
 
   /// The answer being replaced can be older than the mounted window. Hiding the

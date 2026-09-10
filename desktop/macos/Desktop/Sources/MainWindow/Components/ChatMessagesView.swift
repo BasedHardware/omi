@@ -392,9 +392,12 @@ private let chatRowViewportStep: CGFloat = 48
 /// question the moment the reader scrolls back and redoes an older answer.
 /// Pure so the walk is testable without mounting a transcript.
 enum ChatRedoTarget {
+  /// A proactive notification is unprompted even when a user turn sits above
+  /// it: no question produced it, so Redo would re-ask nothing.
   static func question(forMessageID id: String, in messages: [ChatMessage]) -> String? {
     guard let index = messages.firstIndex(where: { $0.id == id }),
-      messages[index].sender == .ai
+      messages[index].sender == .ai,
+      !ChatContinuityInvariants.isProactiveNotification(messages[index])
     else { return nil }
     for candidate in messages[..<index].reversed() where candidate.sender == .user {
       let question = candidate.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -417,7 +420,13 @@ enum ChatRedoTarget {
         let question = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
         nearestQuestionAbove = question.isEmpty ? nil : question
       case .ai:
-        if let nearestQuestionAbove { questions[message.id] = nearestQuestionAbove }
+        // A proactive notification never takes the question above it, but it
+        // also leaves that question standing for the ordinary rows below.
+        if !ChatContinuityInvariants.isProactiveNotification(message),
+          let nearestQuestionAbove
+        {
+          questions[message.id] = nearestQuestionAbove
+        }
       }
     }
     return questions

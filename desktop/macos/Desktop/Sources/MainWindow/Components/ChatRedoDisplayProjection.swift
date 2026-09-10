@@ -49,9 +49,11 @@ enum ChatRedoDisplayProjection {
     }
 
     /// The newest answer standing in for each original slot. Later rows win, so
-    /// redoing three times shows the third answer.
+    /// redoing three times shows the third answer. A failed redo's assistant row
+    /// carries the failure notice, not an answer — admitting it here would draw
+    /// the error text over the answer it tried to replace.
     var replacement: [String: ChatMessage] = [:]
-    for message in messages where message.sender == .ai {
+    for message in messages where message.sender == .ai && message.journalStatus != .failed {
       guard let slot = originalSlot(for: message.id) else { continue }
       replacement[slot] = message
     }
