@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { baseRunInput, createKernelHarness, FakeRuntimeAdapter } from "./kernel-fakes.js";
+import { OmiArtifactStorage } from "../src/runtime/artifact-storage.js";
 
 const createdDirs: string[] = [];
 
@@ -300,6 +301,98 @@ describe("AgentRuntimeKernel adapter binding resolution", () => {
     expect(adapter.stopped).toBe(0);
     expect(store.getRow("SELECT status FROM adapter_bindings").status).toBe("active");
     expect(store.allRows("SELECT type FROM events WHERE type = 'worker.recycled'")).toHaveLength(0);
+    store.close();
+  });
+
+  // `inputWithManagedArtifactCwd` rewrites a coordinator run's cwd to a fresh
+  // per-attempt artifact directory whenever the caller supplies none (and
+  // always for leaf runs). Comparing those rewritten directories verbatim in
+  // `isBindingCompatible` made every binding incompatible with its own
+  // successor, so the pi-mono delta context cursor (`contextDeliveryByBinding`)
+  // was destroyed on every single turn. Measured 2026-09-10.
+  it("reuses a binding across two coordinator runs on the artifact-managed cwd, enabling delta context delivery", async () => {
+    const artifactRoot = mkdtempSync(join(tmpdir(), "omi-agent-artifacts-"));
+    createdDirs.push(artifactRoot);
+    const artifactStorage = new OmiArtifactStorage({ rootDir: artifactRoot });
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 4, artifactStorage);
+
+    await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-delta-1",
+      cwd: undefined,
+    });
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-delta-2",
+      cwd: undefined,
+    });
+
+    expect(result.terminalStatus).toBe("succeeded");
+    // Same binding id reused: one open, one resume -- not two opens.
+    expect(adapter.opened).toHaveLength(1);
+    expect(adapter.resumed).toHaveLength(1);
+    expect(
+      store.allRows("SELECT payload_json FROM events WHERE type = 'binding.stale'")
+        .map((row) => JSON.parse(row.payload_json as string))
+        .filter((payload) => payload.reason === "binding_context_changed"),
+    ).toHaveLength(0);
+    const secondAttempt = adapter.executed[1];
+    const secondPromptText = secondAttempt?.prompt
+      .map((block) => (block.type === "text" ? block.text : ""))
+      .join("\n");
+    expect(secondPromptText).toContain("delivery=delta");
+    store.close();
+  });
+
+  // `executeAcceptedRun` pins `cwd` to the session's `defaultCwd` on every run
+  // (kernel-core.ts:1134) -- an existing session's later run cannot override it
+  // by passing a different `cwd`, so a caller-side "different project
+  // directory" cannot be exercised through two `executeRun` calls on the same
+  // session. Simulate the case `isBindingCompatible` must still reject --
+  // a binding whose stamped `requestedCwd` genuinely differs from what this
+  // attempt requests -- by mutating the persisted binding directly, the same
+  // technique "treats null cwd bindings as compatible" above uses.
+  it("still replaces the binding when its persisted requestedCwd genuinely differs from what this attempt requests", async () => {
+    const artifactRoot = mkdtempSync(join(tmpdir(), "omi-agent-artifacts-"));
+    createdDirs.push(artifactRoot);
+    const artifactStorage = new OmiArtifactStorage({ rootDir: artifactRoot });
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 4, artifactStorage);
+
+    await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-cwd-1",
+      cwd: undefined,
+    });
+    const bindingRow = store.getRow("SELECT binding_id, metadata_json FROM adapter_bindings");
+    const metadata = JSON.parse(bindingRow.metadata_json as string);
+    expect(metadata.requestedCwd).toBe(artifactRoot);
+    metadata.requestedCwd = join(artifactRoot, "a-different-requested-cwd");
+    store.execute("UPDATE adapter_bindings SET metadata_json = ? WHERE binding_id = ?", [
+      JSON.stringify(metadata),
+      bindingRow.binding_id,
+    ]);
+
+    await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-cwd-2",
+      cwd: undefined,
+    });
+
+    expect(adapter.opened).toHaveLength(2);
+    expect(adapter.resumed).toHaveLength(0);
+    expect(
+      store.allRows("SELECT payload_json FROM events WHERE type = 'binding.stale'")
+        .map((row) => JSON.parse(row.payload_json as string))
+        .filter((payload) => payload.reason === "binding_context_changed"),
+    ).toHaveLength(1);
     store.close();
   });
 });

@@ -1975,10 +1975,33 @@ export class KernelCore {
     if (binding.profileGeneration !== input.session.executionProfileGeneration) {
       return false;
     }
+    const metadata = parseJsonObject(binding.metadataJson);
     const requestedCwd = input.input.cwd ?? input.session.defaultCwd ?? process.cwd();
-    const bindingCwd = binding.cwd ?? process.cwd();
-    if (bindingCwd !== requestedCwd) {
-      return false;
+    // `inputWithManagedArtifactCwd` rewrites the cwd of every leaf run (and any
+    // non-leaf run with no caller cwd, or the artifact root) to a fresh
+    // per-attempt artifact directory before this input reaches us. Comparing
+    // those rewritten directories verbatim made every binding incompatible
+    // with its own successor (each attempt gets a new directory), so the
+    // binding was replaced, and its delta-context cursor destroyed, on every
+    // single turn (measured 2026-09-10: `binding.stale` with reason
+    // `binding_context_changed` fired before every desktop chat follow-up).
+    // `metadata.requestedCwd`, stamped at open/resume time, is the
+    // caller-facing cwd from before that rewrite; comparing it instead treats
+    // same-session per-attempt directories as equivalent, while a genuinely
+    // different caller-supplied cwd (e.g. a project directory) still fails
+    // this comparison and replaces the binding as before. Bindings created by
+    // older code have no `requestedCwd` in their metadata, so they fall back
+    // to the historical raw-cwd comparison.
+    if (typeof metadata.requestedCwd === "string") {
+      const effectiveRequestedCwd = input.input.requestedCwd ?? requestedCwd;
+      if (metadata.requestedCwd !== effectiveRequestedCwd) {
+        return false;
+      }
+    } else {
+      const bindingCwd = binding.cwd ?? process.cwd();
+      if (bindingCwd !== requestedCwd) {
+        return false;
+      }
     }
     if (input.input.model !== undefined && binding.modelId !== input.input.model) {
       return false;
@@ -1988,7 +2011,6 @@ export class KernelCore {
     if (binding.systemPromptHash !== null && binding.systemPromptHash !== requestedSystemPromptHash) {
       return false;
     }
-    const metadata = parseJsonObject(binding.metadataJson);
     const effectiveMcpServers = input.adapter?.effectiveMcpServers
       ? input.adapter.effectiveMcpServers(input.input.mcpServers ?? [])
       : input.input.mcpServers ?? [];
@@ -2277,7 +2299,11 @@ export class KernelCore {
       runId,
       attemptId,
     });
-    return { ...input, cwd };
+    // Stamp the caller-facing cwd from before this rewrite (or the artifact
+    // root, when no caller cwd was requested) so `isBindingCompatible` can
+    // compare what was actually requested instead of two different
+    // per-attempt artifact directories that can never equal each other.
+    return { ...input, cwd, requestedCwd: requestedCwd ?? this.artifactStorage.rootDir };
   }
 
   protected finishAttemptAndRun(input: {
