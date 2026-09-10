@@ -1,7 +1,14 @@
+export type RecordingTranscriptSegment = {
+  text: string;
+  speaker: string | number | null;
+  isUser: boolean;
+};
+
 export type RecordingTranscript = {
   sessionId: string;
   state: 'queued' | 'running' | 'completed' | 'failed';
   text: string | null;
+  segments: RecordingTranscriptSegment[];
   errorCode: string | null;
   discardedLeadingPackets: number;
 };
@@ -10,11 +17,13 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function joinWellFormedSegmentTexts(segments: unknown[]): string | null {
+function parseWellFormedSegments(
+  segments: unknown[],
+): RecordingTranscriptSegment[] | null {
   if (segments.length === 0) {
-    return null;
+    return [];
   }
-  const parts: string[] = [];
+  const parsed: RecordingTranscriptSegment[] = [];
   for (const segment of segments) {
     if (
       segment === null ||
@@ -23,25 +32,35 @@ function joinWellFormedSegmentTexts(segments: unknown[]): string | null {
     ) {
       return null;
     }
-    const text = (segment as {text?: unknown}).text;
-    if (text === undefined || text === null) {
-      parts.push('');
-      continue;
-    }
-    if (typeof text !== 'string') {
+    const row = segment as Record<string, unknown>;
+    const text = row.text;
+    if (text !== undefined && text !== null && typeof text !== 'string') {
       return null;
     }
-    parts.push(text);
+    parsed.push({
+      text: typeof text === 'string' ? text : '',
+      speaker:
+        typeof row.speaker === 'number' && Number.isSafeInteger(row.speaker)
+          ? row.speaker
+          : typeof row.speaker === 'string'
+          ? row.speaker
+          : null,
+      isUser: row.is_user === true,
+    });
   }
-  return parts.join(' ');
+  return parsed;
 }
 
 function recordingTranscriptSpeech(
   storedText: string | null,
-  segments: unknown[],
+  segments: RecordingTranscriptSegment[] | null,
 ): string | null {
-  const joined = joinWellFormedSegmentTexts(segments);
-  return joined === null ? storedText : joined;
+  if (segments === null) {
+    return storedText;
+  }
+  return segments.length === 0
+    ? storedText
+    : segments.map(segment => segment.text).join(' ');
 }
 
 export function parseRecordingTranscript(
@@ -74,16 +93,18 @@ export function parseRecordingTranscript(
     ) {
       return null;
     }
+    const segments =
+      value.state === 'completed'
+        ? parseWellFormedSegments(value.segments)
+        : [];
     return {
       sessionId,
       state: value.state as RecordingTranscript['state'],
       text:
         value.state === 'completed'
-          ? recordingTranscriptSpeech(
-              value.text as string | null,
-              value.segments,
-            )
+          ? recordingTranscriptSpeech(value.text as string | null, segments)
           : null,
+      segments: segments ?? [],
       errorCode: value.errorCode as string | null,
       discardedLeadingPackets: value.discardedLeadingPackets as number,
     };

@@ -1,10 +1,35 @@
 import React from 'react';
 import {ActivityIndicator, Text, View} from 'react-native';
-import {visibleDisplayText} from '../desktopReadClient';
+import {
+  recordingTranscriptSpeakerCopy,
+  visibleDisplayText,
+} from '../desktopReadClient';
+import type {RecordingTranscript as RecordingTranscriptValue} from '../recordingTranscriptContract';
 import {useRecordingTranscript} from '../recordingTranscript';
 import {desktopTokens} from '../desktop/tokens';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
+
+function attributedTranscriptLines(value: RecordingTranscriptValue):
+  | {
+      speaker: string | null;
+      text: string;
+    }[]
+  | null {
+  const lines = (value.segments ?? []).flatMap(segment => {
+    const text = visibleDisplayText(segment.text);
+    if (text === '') {
+      return [];
+    }
+    return [
+      {
+        speaker: recordingTranscriptSpeakerCopy(segment),
+        text,
+      },
+    ];
+  });
+  return lines.some(line => line.speaker !== null) ? lines : null;
+}
 
 export function RecordingTranscript({
   sessionId,
@@ -20,6 +45,10 @@ export function RecordingTranscript({
   const completedText =
     result.status === 'loaded' && result.value.state === 'completed'
       ? visibleDisplayText(result.value.text ?? '')
+      : null;
+  const attributed =
+    result.status === 'loaded' && result.value.state === 'completed'
+      ? attributedTranscriptLines(result.value)
       : null;
   return (
     <View style={styles.conversationDetailFields}>
@@ -51,9 +80,30 @@ export function RecordingTranscript({
               decoded.
             </Text>
           )}
-          <Text selectable style={[styles.conversationTranscriptText, ink]}>
-            {completedText === '' ? 'The transcript is empty.' : completedText}
-          </Text>
+          {attributed !== null ? (
+            attributed.length === 0 ? (
+              <Text style={[styles.conversationTranscriptText, ink]}>
+                The transcript is empty.
+              </Text>
+            ) : (
+              attributed.map((line, index) => (
+                <Text
+                  key={index}
+                  selectable
+                  style={[styles.conversationTranscriptText, ink]}>
+                  {line.speaker === null
+                    ? line.text
+                    : `${line.speaker} · ${line.text}`}
+                </Text>
+              ))
+            )
+          ) : (
+            <Text selectable style={[styles.conversationTranscriptText, ink]}>
+              {completedText === ''
+                ? 'The transcript is empty.'
+                : completedText}
+            </Text>
+          )}
         </>
       ) : (
         <Text

@@ -219,6 +219,78 @@ test('parseRecordingTranscript hides leftover speech when state is not completed
   });
 });
 
+test('parseRecordingTranscript keeps GET speaker and is_user on completed segments', () => {
+  expect(
+    parseRecordingTranscript(
+      response('session-one', 'completed', '', [
+        {start: 0, end: 1, text: 'Recorded words', speaker: 0, is_user: true},
+        {start: 1, end: 2, text: 'Later speech', speaker: 'SPEAKER_01'},
+      ]).body,
+      'session-one',
+    ),
+  ).toMatchObject({
+    state: 'completed',
+    text: 'Recorded words Later speech',
+    segments: [
+      {text: 'Recorded words', speaker: 0, isUser: true},
+      {text: 'Later speech', speaker: 'SPEAKER_01', isUser: false},
+    ],
+  });
+});
+
+test('a completed transcript names GET speaker instead of a speaker-less paragraph', async () => {
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '', [
+      {start: 0, end: 1, text: 'Recorded words', speaker: 0},
+      {start: 1, end: 2, text: 'Later speech', speaker: 'SPEAKER_01'},
+    ]),
+  );
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain('Speaker 1 · Recorded words');
+  expect(textOf(renderer)).toContain('Speaker 2 · Later speech');
+  expect(textOf(renderer)).not.toContain('SPEAKER_01');
+  expect(textOf(renderer)).not.toContain('The transcript is empty.');
+});
+
+test('a completed transcript names GET is_user as You', async () => {
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '', [
+      {start: 0, end: 1, text: 'Recorded words', is_user: true},
+    ]),
+  );
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain('You · Recorded words');
+  expect(textOf(renderer)).not.toContain('Speaker');
+});
+
+test('a completed transcript without GET speaker stays a joined paragraph', async () => {
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '', [
+      {start: 0, end: 1, text: 'Recorded words'},
+      {start: 1, end: 2, text: 'Later speech'},
+    ]),
+  );
+  const renderer = await render('session-one');
+  const joined = renderer.root
+    .findAllByType(Text)
+    .find(node => node.props.children === 'Recorded words Later speech');
+  expect(joined?.props.selectable).toBe(true);
+  expect(textOf(renderer)).not.toContain('Speaker');
+  expect(textOf(renderer)).not.toContain('You ·');
+});
+
+test('a completed transcript names a NEXT LINE SPEAKER_00 segment as Speaker 1', async () => {
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '', [
+      {start: 0, end: 1, text: 'Recorded words', speaker: '\u0085SPEAKER_00'},
+    ]),
+  );
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain('Speaker 1 · Recorded words');
+  expect(textOf(renderer)).not.toContain('SPEAKER_00');
+  expect(textOf(renderer)).not.toContain('\u0085');
+});
+
 test('a completed stored text keeps later speech stored on segments', async () => {
   mockRequest.mockResolvedValue(
     response('session-one', 'completed', 'Stored speech', [

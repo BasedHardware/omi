@@ -121,6 +121,31 @@ export function conversationStatusCopy(status: string): string {
   return trimmed === '' ? 'Status unavailable' : trimmed;
 }
 
+export function recordingTranscriptSpeakerCopy(segment: {
+  isUser?: boolean;
+  speaker?: string | number | null;
+}): string | null {
+  if (segment.isUser === true) {
+    return 'You';
+  }
+  if (
+    typeof segment.speaker === 'number' &&
+    Number.isSafeInteger(segment.speaker) &&
+    segment.speaker >= 0
+  ) {
+    return `Speaker ${segment.speaker + 1}`;
+  }
+  if (typeof segment.speaker !== 'string') {
+    return null;
+  }
+  const trimmed = visibleDisplayText(segment.speaker);
+  if (trimmed === '') {
+    return null;
+  }
+  const labeled = /^SPEAKER_(\d+)$/.exec(trimmed);
+  return labeled !== null ? `Speaker ${Number(labeled[1]) + 1}` : trimmed;
+}
+
 export function conversationHasFinishClock(conversation: {
   finishedAt: string | null;
   status: string;
