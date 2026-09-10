@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 import redis
 import logging
+from redis.exceptions import RedisError
 
 from database.api_key_metadata import (
     DEV_API_KEY_AUTH_CONTEXT_VERSION,
@@ -641,7 +642,7 @@ def add_filter_category_item(uid: str, category: str, item: str) -> None:
             logger.info('filter_category_trim removed=%s after=%s', removed_n, after_n)
         if after_n < FILTER_CATEGORY_CAP:
             admit(keys=[key], args=[item, FILTER_CATEGORY_CAP])
-    except redis.exceptions.RedisError:
+    except RedisError:
         try:
             from utils.observability.fallback import record_fallback
 
