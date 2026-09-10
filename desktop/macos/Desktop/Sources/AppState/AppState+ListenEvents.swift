@@ -499,8 +499,13 @@ extension AppState {
       // BYOK users must never be paywalled. The backend exempts them, but a
       // heartbeat/Firestore lag can briefly let this event slip through right
       // after activation — ignore it so we don't kill a BYOK user's capture.
-      if APIKeyService.hasTranscriptionBYOK {
-        log("Paywall: ignoring freemium threshold — BYOK active locally")
+      // Same reasoning applies to the Local provider once a self-hosted
+      // backend URL is configured (Settings' "Local Backend URL"): voice
+      // transcription no longer runs through Omi's Deepgram proxy at all, so
+      // a stale/cached freemium event must not stop it or raise the popup.
+      // See `AppState.isTranscriptionExemptFromPaywall`.
+      if APIKeyService.hasTranscriptionBYOK || AIProvider.hasLocalBackendConfigured {
+        log("Paywall: ignoring freemium threshold: BYOK or Local backend active locally")
         if isPaywalled { isPaywalled = false }
         break
       }
