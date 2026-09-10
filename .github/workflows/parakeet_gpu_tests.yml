@@ -252,8 +252,21 @@ jobs:
             echo "stream_capacity must be no greater than 64" >&2
             exit 1
           }
+          TARGET_STREAMS=$(( CAPACITY * 80 / 100 ))
+          (( TARGET_STREAMS < 1 )) && TARGET_STREAMS=1
+          STREAM_LEVELS="$({
+            for LEVEL in 1 5 10 20 25 "$TARGET_STREAMS" "$CAPACITY"; do
+              if (( LEVEL <= CAPACITY )); then
+                echo "$LEVEL"
+              fi
+            done
+          } | sort -n -u | paste -sd, -)"
+          test -n "$STREAM_LEVELS"
           echo "stream_capacity=$CAPACITY" >> "$GITHUB_OUTPUT"
+          echo "stream_levels=$STREAM_LEVELS" >> "$GITHUB_OUTPUT"
+          echo "target_streams=$TARGET_STREAMS" >> "$GITHUB_OUTPUT"
           echo "Using expected stream capacity: $CAPACITY"
+          echo "Using stream levels: $STREAM_LEVELS (target: $TARGET_STREAMS)"
 
       - name: Create task-owned GPU node pool
         run: |
@@ -284,7 +297,7 @@ jobs:
           # envsubst receives the exact allowlist; keep it single-quoted so
           # this runner does not expand the Job template before Kubernetes sees it.
           # shellcheck disable=SC2016
-          cat <<'JOBEOF' | envsubst '$JOB_NAME $NAMESPACE $IMAGE_REF $RUN_ID $STREAM_CAPACITY $SOURCE_SHA' | kubectl apply -f -
+          cat <<'JOBEOF' | envsubst '$JOB_NAME $NAMESPACE $IMAGE_REF $RUN_ID $STREAM_CAPACITY $STREAM_LEVELS $TARGET_STREAMS $SOURCE_SHA' | kubectl apply -f -
           apiVersion: batch/v1
           kind: Job
           metadata:
@@ -510,6 +523,10 @@ jobs:
                         value: "${STREAM_CAPACITY}"
                       - name: PARAKEET_STREAM_ALLOCATION_PERCENT
                         value: "100"
+                      - name: PARAKEET_STREAM_LEVELS
+                        value: "${STREAM_LEVELS}"
+                      - name: PARAKEET_TARGET_STREAMS
+                        value: "${TARGET_STREAMS}"
                       - name: PARAKEET_CUDA_GRAPHS
                         value: "false"
                       - name: PARAKEET_TEST_IMAGE_REF
@@ -518,8 +535,6 @@ jobs:
                         value: "${SOURCE_SHA}"
                       - name: PARAKEET_GPU_TYPE
                         value: "nvidia-l4"
-                      - name: PARAKEET_TARGET_STREAMS
-                        value: "20"
                     resources:
                       requests:
                         cpu: 4
@@ -552,6 +567,8 @@ jobs:
           SOURCE_SHA: ${{ steps.tag.outputs.source_sha }}
           RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
           STREAM_CAPACITY: ${{ steps.capacity.outputs.stream_capacity }}
+          STREAM_LEVELS: ${{ steps.capacity.outputs.stream_levels }}
+          TARGET_STREAMS: ${{ steps.capacity.outputs.target_streams }}
 
       # Without this gate an unschedulable pod (no free nvidia.com/gpu on the
       # parakeet node pool) sits Pending until activeDeadlineSeconds expires,
