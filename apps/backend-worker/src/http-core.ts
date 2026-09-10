@@ -988,14 +988,18 @@ export async function handleDeviceSessionRead(
 export async function handleDeviceSessionList(
   context: CoreContext
 ): Promise<Response> {
-  const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
   if (db === undefined)
-    return backendError("service_unavailable", "retry", 503, true);
-  if (r2 === undefined) return backendError("service_unavailable", "none", 503);
-  return json({
-    sessions: await listDeviceSessions(db, context.get("accountId")),
-  });
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "1",
+    });
+  try {
+    return json({
+      sessions: await listDeviceSessions(db, context.get("accountId")),
+    });
+  } catch {
+    return listenRetryableUnavailable();
+  }
 }
 
 export async function handleConversations(

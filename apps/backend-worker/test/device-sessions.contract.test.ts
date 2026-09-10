@@ -10,6 +10,7 @@ import {
   handleDeviceSessionComplete,
   handleDeviceSessionOpen,
   handleDeviceSessionRead,
+  handleDeviceSessionList,
   handleTranscribe,
   handleTranscription,
 } from "../src/http-core";
@@ -913,6 +914,13 @@ describe("device session request validators", () => {
     expect((await missingR2.json()) as object).toEqual({
       session: created.session,
     });
+    const listed = await fetchWorker("/v1/device-sessions", {
+      headers: authenticatedHeaders,
+    });
+    expect(listed.status).toBe(200);
+    expect((await listed.json()) as object).toEqual({
+      sessions: [created.session],
+    });
     const missing = await fetchWorker(
       "/v1/device-sessions/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       { headers: authenticatedHeaders }
@@ -962,6 +970,49 @@ describe("device session request validators", () => {
     });
   });
 
+  test("LIST session metadata is the same D1 projection as GET without object storage", async () => {
+    const throwingDb = {
+      prepare() {
+        throw new Error("d1 store failed");
+      },
+    };
+    const retryable = {
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    };
+    const account = {
+      accountId: "test-account",
+      requestId: "test-request",
+    };
+    const missingDb = await handleDeviceSessionList(
+      coreContext({
+        env: { ...env, DB: undefined } as never,
+        request: new Request("https://worker.test/v1/device-sessions"),
+        routePath: "/v1/device-sessions",
+        params: {},
+        values: account,
+      })
+    );
+    expect(missingDb.status).toBe(503);
+    expect(missingDb.headers.get("retry-after")).toBe("1");
+    expect((await missingDb.json()) as object).toEqual(retryable);
+    const storeThrow = await handleDeviceSessionList(
+      coreContext({
+        env: { ...env, DB: throwingDb } as never,
+        request: new Request("https://worker.test/v1/device-sessions"),
+        routePath: "/v1/device-sessions",
+        params: {},
+        values: account,
+      })
+    );
+    expect(storeThrow.status).toBe(503);
+    expect(storeThrow.headers.get("retry-after")).toBe("1");
+    expect((await storeThrow.json()) as object).toEqual(retryable);
+  });
+
   test("open and complete persist session rows without object storage matching production Listen", async () => {
     const missingR2 = { ...env, ATTACHMENTS: undefined };
     const opened = await fetchWorker(
@@ -997,6 +1048,15 @@ describe("device session request validators", () => {
     expect(completed.headers.get("retry-after")).toBeNull();
     expect((await completed.json()) as object).toMatchObject({
       session: { id: created.session.id, state: "complete" },
+    });
+    const listed = await fetchWorker(
+      "/v1/device-sessions",
+      { headers: authenticatedHeaders },
+      missingR2
+    );
+    expect(listed.status).toBe(200);
+    expect((await listed.json()) as object).toMatchObject({
+      sessions: [{ id: created.session.id, state: "complete" }],
     });
     const audio = await fetchWorker(
       `/v1/device-sessions/${created.session.id as string}/audio`,
@@ -1360,13 +1420,9 @@ describe("device session ingest", () => {
       { headers: authenticatedHeaders },
       { ...env, ATTACHMENTS: undefined }
     );
-    expect(missingR2List.status).toBe(503);
-    expect((await missingR2List.json()) as object).toEqual({
-      error: {
-        code: "service_unavailable",
-        retryable: false,
-        action: "none",
-      },
+    expect(missingR2List.status).toBe(200);
+    expect((await missingR2List.json()) as object).toMatchObject({
+      sessions: [{ id: created.session.id }],
     });
 
     const missingDb = await fetchWorker(

@@ -557,7 +557,8 @@ export async function listDeviceSessions(
   const result = await db
     .prepare(
       `SELECT id, account_id, device_id, device_name, codec, state, r2_prefix,
-              byte_count, chunk_count, started_at, ended_at, created_at, updated_at
+              byte_count, chunk_count, started_at, ended_at, created_at, updated_at,
+              captured_at_ms
        FROM device_sessions
        WHERE account_id = ?
        ORDER BY started_at DESC, id DESC`
