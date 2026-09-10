@@ -3,8 +3,10 @@ import {ActivityIndicator, Text, View} from 'react-native';
 import {chatHistoryHasOlder} from '../chatClient';
 import {useChatConversationHistory} from '../chatConversationHistory';
 import {
+  chatAppAttributionCopy,
   chatClockLabel,
   chatDaySummaryCopy,
+  chatMemoryCitationCopy,
   chatMessageDisplayText,
   chatSenderCopy,
   visibleDisplayText,
@@ -88,9 +90,17 @@ export function ChatConversationHistory({
             )
           ) : (
             result.messages.map(message => {
+              const human = message.sender === 'human';
               const sender = chatSenderCopy(message.sender);
               const body = chatMessageDisplayText(message);
               const daySummary = chatDaySummaryCopy(message.type);
+              const appAttribution = human
+                ? ''
+                : chatAppAttributionCopy(message.appName);
+              const citations = (message.memories ?? []).flatMap(memory => {
+                const copy = chatMemoryCitationCopy(memory);
+                return copy === null ? [] : [copy];
+              });
               return (
                 <View key={message.id}>
                   <Text
@@ -109,6 +119,59 @@ export function ChatConversationHistory({
                       {daySummary}
                     </Text>
                   ) : null}
+                  {appAttribution !== '' ? (
+                    <Text
+                      numberOfLines={1}
+                      style={[styles.conversationDetailField, ink]}>
+                      {appAttribution}
+                    </Text>
+                  ) : null}
+                  {citations.map((copy, index) => (
+                    <Text
+                      key={index}
+                      numberOfLines={1}
+                      style={[styles.conversationDetailField, ink]}>
+                      {copy}
+                    </Text>
+                  ))}
+                  {(message.evidence ?? []).map((item, index) => (
+                    <View key={`evidence-${index}`}>
+                      <Text
+                        numberOfLines={1}
+                        style={[styles.conversationDetailField, ink]}>
+                        {item.title}
+                      </Text>
+                      <Text
+                        numberOfLines={2}
+                        style={[styles.conversationDetailField, ink]}>
+                        {item.detail}
+                      </Text>
+                    </View>
+                  ))}
+                  {!human &&
+                    (message.contentBlocks ?? []).map((item, index) => (
+                      <View key={`block-${index}`}>
+                        <Text
+                          numberOfLines={1}
+                          style={[styles.conversationDetailField, ink]}>
+                          {item.eyebrow}
+                        </Text>
+                        {item.title !== undefined ? (
+                          <Text
+                            numberOfLines={2}
+                            style={[styles.conversationDetailField, ink]}>
+                            {item.title}
+                          </Text>
+                        ) : null}
+                        {item.detail !== undefined ? (
+                          <Text
+                            numberOfLines={6}
+                            style={[styles.conversationDetailField, ink]}>
+                            {item.detail}
+                          </Text>
+                        ) : null}
+                      </View>
+                    ))}
                   <Text style={[styles.conversationDetailField, ink]}>
                     {chatClockLabel(message.createdAt, Date.now()) ||
                       'Time unavailable'}

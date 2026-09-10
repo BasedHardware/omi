@@ -95,6 +95,109 @@ test('canonical recording and named chat reuse their existing detail readers', (
   expect(mockLegacy).not.toHaveBeenCalled();
 });
 
+test('conversation-detail history names GET content_blocks without inventing write actions', () => {
+  mockChat.mockReturnValue({
+    result: {
+      status: 'loaded',
+      messages: [
+        {
+          id: 'ai-1',
+          sender: 'ai',
+          text: 'Here is what I found.',
+          createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+          generationOutcome: 'completed',
+          appName: 'Notes',
+          memories: [{title: 'Morning standup', emoji: '🚀'}],
+          evidence: [{title: 'Calendar', detail: 'Tuesday agenda'}],
+          contentBlocks: [
+            {
+              eyebrow: 'Discovery',
+              title: 'Quiet mornings',
+              detail: 'You like a slow start.',
+            },
+            {eyebrow: 'Memory', title: 'Prefers concise notes'},
+          ],
+        },
+        {
+          id: 'human-1',
+          sender: 'human',
+          text: 'Save this.',
+          createdAt: Date.parse('2026-09-07T12:01:00.000Z'),
+          generationOutcome: null,
+          appName: 'Notes',
+          contentBlocks: [{eyebrow: 'Discovery', title: 'Quiet mornings'}],
+        },
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    },
+    reload: jest.fn(),
+    loadingOlder: false,
+    loadOlder: jest.fn(),
+    olderNotice: null,
+    olderRetryable: true,
+  });
+  const view = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+  });
+  const tree = text(view);
+  expect(tree).toContain('Here is what I found.');
+  expect(tree).toContain('Notes');
+  expect(tree).toContain('🚀 Morning standup');
+  expect(tree).toContain('Calendar');
+  expect(tree).toContain('Tuesday agenda');
+  expect(tree).toContain('Discovery');
+  expect(tree).toContain('Quiet mornings');
+  expect(tree).toContain('You like a slow start.');
+  expect(tree).toContain('Prefers concise notes');
+  expect(tree).toContain('Save this.');
+  expect(tree).not.toContain('Open in Memories');
+  expect(tree).not.toContain('Open conversation');
+  expect(tree).not.toContain('Open in Goals');
+  expect(tree).not.toContain('Show more');
+  mockChat.mockReturnValue({
+    result: {
+      status: 'loaded',
+      messages: [
+        {
+          id: 'human-only',
+          sender: 'human',
+          text: 'Save this.',
+          createdAt: Date.parse('2026-09-07T12:01:00.000Z'),
+          generationOutcome: null,
+          appName: 'Notes',
+          contentBlocks: [{eyebrow: 'Discovery', title: 'Quiet mornings'}],
+        },
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    },
+    reload: jest.fn(),
+    loadingOlder: false,
+    loadOlder: jest.fn(),
+    olderNotice: null,
+    olderRetryable: true,
+  });
+  const human = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+  });
+  const humanTree = text(human);
+  expect(humanTree).toContain('Save this.');
+  expect(humanTree).not.toContain('Notes');
+  expect(humanTree).not.toContain('Discovery');
+  expect(humanTree).not.toContain('Quiet mornings');
+});
+
 test('canonical listen rows do not invent a transcript producer', () => {
   const view = render({
     conversation: {...conversation, id: 'listen:one', source: 'listen'},
