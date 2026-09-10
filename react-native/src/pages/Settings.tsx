@@ -69,6 +69,11 @@ import {loadOmiDailySummarySchedule} from '../legacyOmiDailySummarySchedule';
 import {loadOmiMentorNotificationSettings} from '../legacyOmiMentorNotifications';
 import {loadOmiTranscriptionPreferences} from '../legacyOmiTranscriptionPreferences';
 import {loadOmiDevApiKeys, loadOmiMcpApiKeys} from '../legacyOmiDeveloperKeys';
+import {
+  importJobsCopy,
+  loadOmiImportJobs,
+  type OmiImportJobRow,
+} from '../legacyOmiImportJobs';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {parseSoftwarePlane, type SoftwarePlane} from '../v5BackendOrigin';
@@ -229,6 +234,7 @@ export function SettingsPage({
   const [mcpKeys, setMcpKeys] = useState<ReturnType<typeof developerKeysCopy>>(
     [],
   );
+  const [importJobs, setImportJobs] = useState<OmiImportJobRow[]>([]);
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
@@ -291,6 +297,7 @@ export function SettingsPage({
       setCustomVocabulary([]);
       setDeveloperKeys([]);
       setMcpKeys([]);
+      setImportJobs([]);
       setError(cloudSessionUnavailableCopy(backend));
       setPhase('error');
       return;
@@ -344,6 +351,7 @@ export function SettingsPage({
         setCustomVocabulary([]);
         setDeveloperKeys([]);
         setMcpKeys([]);
+        setImportJobs([]);
         setError(desktopBackendServiceCopy);
         setSettingsCanRetry(true);
         setPhase('error');
@@ -366,6 +374,7 @@ export function SettingsPage({
         setCustomVocabulary([]);
         setDeveloperKeys([]);
         setMcpKeys([]);
+        setImportJobs([]);
         setError(desktopBackendUnauthorizedCopy);
         setPhase('signed-out');
         return;
@@ -401,6 +410,7 @@ export function SettingsPage({
     ).catch(() => null);
     const developerKeysTask = loadOmiDevApiKeys(backend).catch(() => []);
     const mcpKeysTask = loadOmiMcpApiKeys(backend).catch(() => []);
+    const importJobsTask = loadOmiImportJobs(backend).catch(() => []);
     try {
       const account = await loadAccountSettings(backend);
       if (!current()) {
@@ -432,6 +442,7 @@ export function SettingsPage({
     const transcription = await transcriptionPreferencesTask;
     const nextDeveloperKeys = await developerKeysTask;
     const nextMcpKeys = await mcpKeysTask;
+    const nextImportJobs = await importJobsTask;
     if (!current()) {
       return;
     }
@@ -459,6 +470,7 @@ export function SettingsPage({
         'MCP key',
       ),
     );
+    setImportJobs(importJobsCopy(nextImportJobs));
   }, [browser]);
 
   useEffect(() => {
@@ -846,6 +858,9 @@ export function SettingsPage({
             key={`mcp-key-${index}`}
             title={row.title}
           />
+        ))}
+        {importJobs.map(row => (
+          <SettingRow copy={row.copy} key={row.key} title={row.title} />
         ))}
       </>
     );

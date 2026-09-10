@@ -68,6 +68,11 @@ import {loadOmiDailySummarySchedule} from '../legacyOmiDailySummarySchedule';
 import {loadOmiMentorNotificationSettings} from '../legacyOmiMentorNotifications';
 import {loadOmiTranscriptionPreferences} from '../legacyOmiTranscriptionPreferences';
 import {loadOmiDevApiKeys, loadOmiMcpApiKeys} from '../legacyOmiDeveloperKeys';
+import {
+  importJobsCopy,
+  loadOmiImportJobs,
+  type OmiImportJobRow,
+} from '../legacyOmiImportJobs';
 import {FocusPressable} from '../ui/Pressable';
 import {
   desktopMotion,
@@ -299,6 +304,7 @@ export function DesktopSettings({
   const [mcpKeys, setMcpKeys] = useState<ReturnType<typeof developerKeysCopy>>(
     [],
   );
+  const [importJobs, setImportJobs] = useState<OmiImportJobRow[]>([]);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
     Record<PrivacyWriteKind, boolean>
@@ -341,6 +347,7 @@ export function DesktopSettings({
     let nextCustomVocabulary: ReturnType<typeof customVocabularyCopy> = [];
     let nextDeveloperKeys: ReturnType<typeof developerKeysCopy> = [];
     let nextMcpKeys: ReturnType<typeof developerKeysCopy> = [];
+    let nextImportJobs: OmiImportJobRow[] = [];
     if (backend !== undefined && backend !== null && session === 'ready') {
       const peopleTask = loadOmiPeopleNames(backend).catch(
         () => new Map<string, string>(),
@@ -372,6 +379,7 @@ export function DesktopSettings({
       ).catch(() => null);
       const developerKeysTask = loadOmiDevApiKeys(backend).catch(() => []);
       const mcpKeysTask = loadOmiMcpApiKeys(backend).catch(() => []);
+      const importJobsTask = loadOmiImportJobs(backend).catch(() => []);
       try {
         nextAccount = await loadAccountSettings(backend);
       } catch (reason) {
@@ -408,6 +416,7 @@ export function DesktopSettings({
         })),
         'MCP key',
       );
+      nextImportJobs = importJobsCopy(await importJobsTask);
     }
     if (seq !== reloadSeqRef.current) {
       return;
@@ -428,6 +437,7 @@ export function DesktopSettings({
     setCustomVocabulary(nextCustomVocabulary);
     setDeveloperKeys(nextDeveloperKeys);
     setMcpKeys(nextMcpKeys);
+    setImportJobs(nextImportJobs);
   }, [backend, session]);
 
   useEffect(() => {
@@ -985,6 +995,9 @@ export function DesktopSettings({
       ))}
       {mcpKeys.map((row, index) => (
         <Row copy={row.copy} key={`mcp-key-${index}`} title={row.title} />
+      ))}
+      {importJobs.map(row => (
+        <Row copy={row.copy} key={row.key} title={row.title} />
       ))}
     </>
   );

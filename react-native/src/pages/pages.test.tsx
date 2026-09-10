@@ -1632,6 +1632,74 @@ test('Settings names GET developer and MCP keys without revoke or a full secret'
   ).toBe(false);
 });
 
+test('Settings names GET import jobs without Start import or Limitless', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/import/jobs?limit=50') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            job_id: 'job-1',
+            status: 'completed',
+            conversations_created: 3,
+            conversations_skipped: 2,
+          },
+          {
+            job_id: 'job-2',
+            status: 'processing',
+            processed_files: 3,
+            total_files: 10,
+          },
+          {
+            job_id: 'job-3',
+            status: 'failed',
+            error: 'Zip could not be read.',
+          },
+          {job_id: 'job-4', status: 'queued'},
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Import Data');
+  expect(tree).toContain('Completed · 3 conversations · 2 skipped');
+  expect(tree).toContain('Processing · 3/10');
+  expect(tree).toContain('Failed · Zip could not be read.');
+  expect(tree).toContain('queued');
+  expect(tree).not.toContain('job-1');
+  expect(tree).not.toContain('Pending');
+  expect(tree).not.toContain('No imports yet');
+  expect(tree).not.toContain('Limitless');
+  expect(tree).not.toContain('Coming Soon');
+  expect(tree).not.toContain('Delete Imported Data');
+  expect(tree).not.toContain('less than a minute');
+  expect(mockBackend.request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/import/jobs?limit=50',
+  });
+  expect(
+    mockBackend.request.mock.calls.some(
+      call => call[0].method === 'POST' || call[0].method === 'DELETE',
+    ),
+  ).toBe(false);
+  expect(
+    mockBackend.request.mock.calls.some(call =>
+      String(call[0].path).includes('limitless'),
+    ),
+  ).toBe(false);
+});
+
 test('Apps category labels are not raw wire tokens', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
