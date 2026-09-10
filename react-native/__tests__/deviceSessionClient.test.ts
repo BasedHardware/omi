@@ -504,3 +504,46 @@ test.each([null, -1, 0.5, Infinity, 8640000000000001, '1000'])(
     ).rejects.toThrow();
   },
 );
+
+test('an out-of-range session startedAt cannot be accepted', async () => {
+  const input = {
+    captureId: '11111111-2222-4333-8444-555555555555',
+    deviceId: 'omi-1',
+    deviceName: 'Omi',
+    codec: 21,
+  };
+  await expect(
+    openDeviceSession(
+      backend(() => ({
+        status: 200,
+        body: JSON.stringify({
+          session: session({startedAt: 8_640_000_000_000_001}),
+        }),
+      })),
+      input,
+    ),
+  ).rejects.toThrow('Device session response is incomplete');
+});
+
+test('an out-of-range session endedAt cannot be accepted', async () => {
+  const input = {
+    captureId: '11111111-2222-4333-8444-555555555555',
+    deviceId: 'omi-1',
+    deviceName: 'Omi',
+    codec: 21,
+  };
+  await expect(
+    openDeviceSession(
+      backend(() => ({
+        status: 200,
+        body: JSON.stringify({
+          session: session({
+            state: 'complete',
+            endedAt: 8_640_000_000_000_001,
+          }),
+        }),
+      })),
+      input,
+    ),
+  ).rejects.toThrow('Device session response is incomplete');
+});

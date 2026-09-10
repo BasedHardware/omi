@@ -1,5 +1,8 @@
 import {encodeBase64} from './base64';
-import {isOptionalCaptureTimestamp} from './captureTimestamp';
+import {
+  isCaptureTimestamp,
+  isOptionalCaptureTimestamp,
+} from './captureTimestamp';
 import type {NativeHttpResponse, OmiBackend} from './omiNativeTypes';
 import {
   parseRecordingTranscript,
@@ -67,10 +70,8 @@ function parseSession(value: unknown): DeviceSessionRecord {
     (item.byteCount as number) < 0 ||
     !Number.isSafeInteger(item.chunkCount) ||
     (item.chunkCount as number) < 0 ||
-    !Number.isSafeInteger(item.startedAt) ||
-    (item.startedAt as number) < 0 ||
-    (item.endedAt !== null &&
-      (!Number.isSafeInteger(item.endedAt) || (item.endedAt as number) < 0))
+    !isCaptureTimestamp(item.startedAt) ||
+    (item.endedAt !== null && !isCaptureTimestamp(item.endedAt))
   ) {
     throw new Error('Device session response is incomplete');
   }
