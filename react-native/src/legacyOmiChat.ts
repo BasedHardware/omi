@@ -1,11 +1,71 @@
 import {decodeBase64} from './base64';
-import type {ChatHistoryPage, ChatMessage} from './chatClient';
+import type {
+  ChatHistoryPage,
+  ChatMessage,
+  ChatMessageAttachment,
+} from './chatClient';
 
 function object(value: unknown): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Omi chat message is malformed');
   }
   return value as Record<string, unknown>;
+}
+
+function parseOmiChatFiles(
+  files: unknown,
+  filesId: unknown,
+): ChatMessageAttachment[] {
+  if (files === undefined || files === null) {
+    if (filesId === undefined || filesId === null) {
+      return [];
+    }
+    if (
+      !Array.isArray(filesId) ||
+      filesId.length > 50 ||
+      !filesId.every(id => typeof id === 'string')
+    ) {
+      throw new Error('Omi chat files are malformed');
+    }
+    return [];
+  }
+  if (!Array.isArray(files) || files.length > 50) {
+    throw new Error('Omi chat files are malformed');
+  }
+  const ids =
+    filesId === undefined || filesId === null
+      ? []
+      : Array.isArray(filesId) &&
+        filesId.length <= 50 &&
+        filesId.every(id => typeof id === 'string')
+      ? filesId
+      : null;
+  if (ids === null) {
+    throw new Error('Omi chat files are malformed');
+  }
+  if (files.length === 0 || ids.length === 0) {
+    return [];
+  }
+  return files.map(raw => {
+    const row = object(raw);
+    const createdAt =
+      typeof row.created_at === 'string' ? Date.parse(row.created_at) : NaN;
+    if (
+      typeof row.id !== 'string' ||
+      row.id.length === 0 ||
+      typeof row.name !== 'string' ||
+      typeof row.mime_type !== 'string' ||
+      typeof row.openai_file_id !== 'string' ||
+      !Number.isFinite(createdAt)
+    ) {
+      throw new Error('Omi chat files are malformed');
+    }
+    return {
+      id: row.id,
+      displayName: row.name,
+      mediaType: row.mime_type,
+    };
+  });
 }
 
 function parseOmiChatMemories(
@@ -47,6 +107,7 @@ export function parseOmiMessage(value: unknown): ChatMessage {
     throw new Error('Omi chat message is malformed');
   }
   const memories = parseOmiChatMemories(row.memories);
+  const attachments = parseOmiChatFiles(row.files, row.files_id);
   return {
     id: row.id,
     text: row.text,
@@ -55,6 +116,7 @@ export function parseOmiMessage(value: unknown): ChatMessage {
     createdAt,
     generationOutcome: null,
     ...(memories.length === 0 ? {} : {memories}),
+    ...(attachments.length === 0 ? {} : {attachments}),
   };
 }
 

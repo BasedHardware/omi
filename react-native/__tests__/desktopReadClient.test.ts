@@ -1127,6 +1127,18 @@ test('empty chat bodies still show attachment names from history', () => {
   ).toBe('notes.txt · Text · 12 B');
   expect(
     chatMessageDisplayText({
+      text: 'Here is the note.',
+      generationOutcome: null,
+      attachments: [
+        {
+          displayName: 'notes.txt',
+          mediaType: 'text/plain',
+        },
+      ],
+    }),
+  ).toBe('Here is the note.\nnotes.txt · Text');
+  expect(
+    chatMessageDisplayText({
       text: '  Hello  ',
       generationOutcome: null,
       attachments: [

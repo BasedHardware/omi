@@ -119,3 +119,70 @@ test('old chat history rejects malformed GET memories', () => {
     ),
   ).toThrow();
 });
+
+test('old chat history keeps GET files when files_id is present', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'file-1',
+        sender: 'human',
+        text: 'Here is the note.',
+        created_at: '2026-09-07T01:02:03Z',
+        files_id: ['att-notes'],
+        files: [
+          {
+            id: 'att-notes',
+            name: 'notes.txt',
+            mime_type: 'text/plain',
+            openai_file_id: 'file-abc',
+            created_at: '2026-09-07T01:00:00Z',
+          },
+        ],
+      },
+      {
+        id: 'file-hidden',
+        sender: 'ai',
+        text: 'No ids.',
+        created_at: '2026-09-07T01:02:04Z',
+        files: [
+          {
+            id: 'att-hidden',
+            name: 'hidden.txt',
+            mime_type: 'text/plain',
+            openai_file_id: 'file-hidden',
+            created_at: '2026-09-07T01:00:00Z',
+          },
+        ],
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'file-1')?.attachments).toEqual([
+    {
+      id: 'att-notes',
+      displayName: 'notes.txt',
+      mediaType: 'text/plain',
+    },
+  ]);
+  expect(
+    page.messages.find(row => row.id === 'file-hidden')?.attachments,
+  ).toBeUndefined();
+});
+
+test('old chat history rejects malformed GET files', () => {
+  expect(() =>
+    parseOmiHistory(
+      JSON.stringify([
+        {
+          id: 'bad-file',
+          sender: 'ai',
+          text: 'broken',
+          created_at: '2026-09-07T01:02:03Z',
+          files_id: ['att-notes'],
+          files: [{id: 'att-notes', name: 1, mime_type: 'text/plain'}],
+        },
+      ]),
+      0,
+    ),
+  ).toThrow('Omi chat files are malformed');
+});
