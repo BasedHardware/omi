@@ -269,6 +269,11 @@ package enum VoiceTurnTerminalReason: String, Equatable, Sendable, CaseIterable 
   /// `tooShort`, which blames the user for latency they did not cause.
   case captureNotReady = "capture_not_ready"
   case transcriptionFailed = "transcription_failed"
+  /// Omi's transcription endpoint refused a batch (PTT) request because the
+  /// account's transcription plan limit is exhausted (HTTP 402). Distinct
+  /// from `transcriptionFailed` so the user is told it is a plan limit, not
+  /// a generic AI-service failure, and so it is never told to just retry.
+  case transcriptionPlanLimit = "transcription_plan_limit"
   case providerFailed = "provider_failed"
   /// The turn was recorded with no network path and was not a dictation:
   /// nothing offline can answer it. Distinct from `providerFailed`, which
@@ -368,6 +373,8 @@ package enum VoiceTurnUICopy {
       return "Microphone wasn't ready — retrying, hold again"
     case .transcriptionFailed:
       return "Couldn't transcribe that — try again"
+    case .transcriptionPlanLimit:
+      return "Transcription is over your plan's limit. Check Settings → Plan and Usage."
     case .journalFailed:
       return "Couldn't save that reply — try again"
     case .providerFailed, .providerNoResponse, .deferredCommitTimeout:

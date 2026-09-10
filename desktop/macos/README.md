@@ -21,6 +21,8 @@ Chat runs through one of three providers, chosen in Settings > AI Provider:
 
   A single Settings field, **Cloud-assisted features** (off by default), gates everything under Local that would otherwise still call a cloud model: connector synthesis (Apple Notes, Calendar, Gmail, AI-profile), proactive assistants and live notes (task/memory/suggestion/insight extraction from screen and transcripts), dictation polish, Rewind semantic-search embeddings, and web search. All of these fail closed under Local until you opt in (a clear log line or tool-result message, never a silent no-op or a retry loop) and are metered exactly like a cloud user once you do. An existing pre-unification "Connector synthesis" choice migrates forward automatically the first time it's read.
 
+  Named dev bundles (`OMI_APP_NAME=omi-*`) keep their Local provider selection across `./run.sh` relaunches: the settings seed (`scripts/omi-settings-seed.sh`) never mirrors the AI Provider choice over a bundle already set to Local, because Local's endpoint keys (`localLLMBaseURL` and friends) are bundle-local and would otherwise be left pointing nowhere.
+
 ## Development
 
 Requires macOS 14.0+, Python 3.11 with uv, and code signing with an Apple Developer ID.
