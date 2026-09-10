@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from database.firestore_index_registry import (
+    ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY,
+    ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
     CURRENT_CHAT_SESSION_ORDERED_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY,
@@ -97,6 +99,13 @@ TARGET_REQUIREMENTS = (
     CURRENT_CHAT_SESSION_ORDERED_QUERY.index_requirement,
     MESSAGES_BY_APP_ORDERED_QUERY.index_requirement,
     MESSAGES_BY_SESSION_ORDERED_QUERY.index_requirement,
+    # The named QA app's signed-in startup reads its task dashboard and scores
+    # through GET /v1/action-items (due-date and created-date ranges with the
+    # ``completed`` equality) and GET /v1/scores. Without these two composites
+    # every such read returned 500 on the isolated database while the JIT
+    # plan still reported "none missing" (measured 2026-09-10).
+    ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY.index_requirement,
+    ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY.index_requirement,
 )
 
 # Firestore returns COLLECTION_GROUP_ASC for this query as a single-field

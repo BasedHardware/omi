@@ -1027,7 +1027,13 @@ ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY = FirestoreQuerySpec(
         FirestoreQueryFilter('created_at', '<', 'end'),
         FirestoreQueryFilter('completed', '==', 'completed'),
     ),
-    index_fields=(_asc('completed'), _asc('created_at'), _asc('__name__')),
+    # ``get_action_items`` orders a created-date range newest-first
+    # (``_apply_action_item_date_filters``), so the composite must be declared
+    # descending. The ascending declaration only worked where an undeclared
+    # descending index already existed; a database provisioned from this
+    # manifest alone failed GET /v1/action-items?start_date=... with
+    # FailedPrecondition (measured on the isolated jit-qa database, 2026-09-10).
+    index_fields=(_asc('completed'), _desc('created_at'), _desc('__name__')),
 )
 
 CHAT_FIRST_DEFERRALS_DUE_QUERY = FirestoreQuerySpec(
