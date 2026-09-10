@@ -148,8 +148,11 @@ ponavlja zahteve koji su ograničeni brzinom (429) i poštuje `Retry-After` kada
 ga server pošalje. Kod `3` je obično prolazan za operacije čitanja, ali kod
 upisa može da znači da je ishod nepoznat (`outcome unknown`) — server je
 možda već primenio promenu; proveri resurs pre ponovnog pokušaja. Kod `2`
-obično znači da treba ponovo da se prijaviš (`omi auth login`), a kod `5` da
-traženi ID ne postoji ili nije dostupan.
+ima dva česta uzroka: ako poruka o grešci ukazuje na problem sa prijavom
+(nedostaju akreditive ili je token istekao), pokreni ponovo `omi auth login`;
+ako ukazuje na grešku u argumentima (nepoznata opcija, nedostajući argument,
+vrednost van opsega), ispravi komandu. Kod `5` znači da traženi ID ne postoji
+ili nije dostupan.
 
 Za ostale komande i napredne opcije pogledaj
 [glavni README na engleskom](../README.md) i `omi --help`.
