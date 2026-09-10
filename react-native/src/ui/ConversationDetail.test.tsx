@@ -749,3 +749,37 @@ test('conversation details name GET shared or public visibility and omit private
   expect(hidden).not.toContain('Public');
   expect(hidden).not.toContain('Private');
 });
+
+test('legacy conversation details name GET calendar event title and attendees', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        calendarEvent: {
+          title: 'Standup',
+          attendees: ['Alex Chen', 'sam@example.com'],
+          startCopy: '3:00 PM',
+          endCopy: '4:00 PM',
+        },
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('Standup');
+  expect(copy).toContain('Alex Chen, sam@example.com');
+  expect(copy).toContain('3:00 PM – 4:00 PM');
+});

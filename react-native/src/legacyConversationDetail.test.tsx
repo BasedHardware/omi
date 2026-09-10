@@ -100,6 +100,91 @@ test('uses the actual old detail wire and retains full notes and transcript', as
   });
 });
 
+test('keeps GET calendar event title and attendees and omits missing events', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-1',
+        title: 'Standup',
+        attendees: ['Alex Chen', ' \t', 'sam@example.com'],
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+      },
+    }),
+  );
+  const linked = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(linked.calendarEvent).toMatchObject({
+    title: 'Standup',
+    attendees: ['Alex Chen', 'sam@example.com'],
+  });
+  expect(linked.calendarEvent?.startCopy).toEqual(expect.any(String));
+  expect(linked.calendarEvent?.startCopy).not.toBe('');
+  expect(linked.calendarEvent?.endCopy).toEqual(expect.any(String));
+  expect(linked.calendarEvent?.endCopy).not.toBe('');
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-2',
+        title: ' \n',
+        attendees: [],
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+      },
+    }),
+  );
+  const untitled = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(untitled.calendarEvent).not.toHaveProperty('title');
+  expect(untitled.calendarEvent?.attendees).toEqual([]);
+  mockRequest.mockResolvedValue(response(fixture));
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).calendarEvent,
+  ).toBeUndefined();
+});
+
+test('fails closed for malformed GET calendar_event', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: 'not-an-object',
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-1',
+        title: 'Standup',
+        attendees: 'Alex',
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-1',
+        title: 'Standup',
+        attendees: [],
+        start_time: 'not-a-date',
+        end_time: '2026-09-10T16:00:00.000Z',
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+});
+
 test('keeps GET geolocation address and omits empty or missing locations', async () => {
   mockRequest.mockResolvedValue(
     response({

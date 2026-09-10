@@ -231,6 +231,21 @@ function LegacyConversationBody({
   const appSummary = conversation.discarded
     ? ''
     : visibleDisplayText(detail.appSummary ?? '');
+  const calendarTitle = visibleDisplayText(detail.calendarEvent?.title ?? '');
+  const calendarAttendees = (detail.calendarEvent?.attendees ?? [])
+    .map(name => visibleDisplayText(name))
+    .filter(name => name !== '')
+    .join(', ');
+  const calendarStart = visibleDisplayText(
+    detail.calendarEvent?.startCopy ?? '',
+  );
+  const calendarEnd = visibleDisplayText(detail.calendarEvent?.endCopy ?? '');
+  const calendarTimes =
+    calendarStart !== '' && calendarEnd !== ''
+      ? `${calendarStart} – ${calendarEnd}`
+      : calendarStart !== ''
+      ? calendarStart
+      : calendarEnd;
   return (
     <>
       <Text
@@ -259,6 +274,21 @@ function LegacyConversationBody({
       />
       {address === '' ? null : (
         <Text style={[styles.conversationDetailField, ink]}>{address}</Text>
+      )}
+      {calendarTitle === '' ? null : (
+        <Text style={[styles.conversationDetailField, ink]}>
+          {calendarTitle}
+        </Text>
+      )}
+      {calendarTimes === '' ? null : (
+        <Text style={[styles.conversationDetailField, ink]}>
+          {calendarTimes}
+        </Text>
+      )}
+      {calendarAttendees === '' ? null : (
+        <Text style={[styles.conversationDetailField, ink]}>
+          {calendarAttendees}
+        </Text>
       )}
       {detail.sections.flatMap((section, index) => {
         const heading = visibleDisplayText(section.heading);

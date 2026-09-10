@@ -10,6 +10,12 @@ export type LegacyConversationDetail = {
   actionItems: {description: string; completed: boolean}[];
   locationAddress?: string;
   appSummary?: string;
+  calendarEvent?: {
+    title?: string;
+    attendees: string[];
+    startCopy?: string;
+    endCopy?: string;
+  };
   transcript:
     | {status: 'unavailable'}
     | {
@@ -90,6 +96,48 @@ function locationAddress(value: unknown): string | undefined {
   }
   const address = visibleDisplayText(text(geo.address, 10000));
   return address === '' ? undefined : address;
+}
+function calendarEventTimeCopy(value: unknown): string {
+  const parsed = Date.parse(text(value, 100));
+  if (!Number.isFinite(parsed)) {
+    throw new DetailError('invalid');
+  }
+  return visibleDisplayText(
+    new Date(parsed).toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    }),
+  );
+}
+function calendarEvent(
+  value: unknown,
+): LegacyConversationDetail['calendarEvent'] {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const event = object(value);
+  text(event.event_id, 10000);
+  const title = visibleDisplayText(text(event.title, 10000));
+  const startCopy = calendarEventTimeCopy(event.start_time);
+  const endCopy = calendarEventTimeCopy(event.end_time);
+  const attendees = array(event.attendees ?? [], 1000).flatMap(raw => {
+    const name = visibleDisplayText(text(raw, 10000));
+    return name === '' ? [] : [name];
+  });
+  if (
+    title === '' &&
+    attendees.length === 0 &&
+    startCopy === '' &&
+    endCopy === ''
+  ) {
+    return undefined;
+  }
+  return {
+    ...(title === '' ? {} : {title}),
+    attendees,
+    ...(startCopy === '' ? {} : {startCopy}),
+    ...(endCopy === '' ? {} : {endCopy}),
+  };
 }
 
 export async function loadLegacyConversationDetail(
@@ -187,6 +235,7 @@ export async function loadLegacyConversationDetail(
           }),
         };
   const address = locationAddress(value.geolocation);
+  const linkedEvent = calendarEvent(value.calendar_event);
   const overview = text(structured.overview);
   const appSummary = firstAppSummary(
     value.apps_results,
@@ -202,6 +251,7 @@ export async function loadLegacyConversationDetail(
     actionItems,
     ...(address === undefined ? {} : {locationAddress: address}),
     ...(appSummary === undefined ? {} : {appSummary}),
+    ...(linkedEvent === undefined ? {} : {calendarEvent: linkedEvent}),
     transcript,
   };
 }
