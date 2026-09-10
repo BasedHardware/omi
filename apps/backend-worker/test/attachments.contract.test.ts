@@ -537,6 +537,99 @@ describe("attachment staging route fail-closed behavior", () => {
     expect((await missingDbComplete.json()) as object).toEqual(retryable);
   });
 
+  test("attachment stage and complete store throw is production chat unavailable", async () => {
+    const throwingDb = {
+      prepare() {
+        throw new Error("d1 store failed");
+      },
+    };
+    const retryable = {
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    };
+    const storeEnv = { ...env, DB: throwingDb } as never;
+    const account = {
+      accountId: "test-account",
+      requestId: "test-request",
+    };
+    const storeThrowStage = await handleAttachmentStage(
+      coreContext({
+        env: storeEnv,
+        request: new Request("https://worker.test/v1/chat-attachments", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(validStageRequest("op-store-throw")),
+        }),
+        routePath: "/v1/chat-attachments",
+        params: {},
+        values: account,
+      })
+    );
+    expect(storeThrowStage.status).toBe(503);
+    expect(storeThrowStage.headers.get("retry-after")).toBe("60");
+    expect((await storeThrowStage.json()) as object).toEqual(retryable);
+    const storeThrowComplete = await handleAttachmentComplete(
+      coreContext({
+        env: storeEnv,
+        request: new Request(
+          "https://worker.test/v1/chat-attachments/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/complete",
+          { method: "POST" }
+        ),
+        routePath: "/v1/chat-attachments/:id/complete",
+        params: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+        values: account,
+      })
+    );
+    expect(storeThrowComplete.status).toBe(503);
+    expect(storeThrowComplete.headers.get("retry-after")).toBe("60");
+    expect((await storeThrowComplete.json()) as object).toEqual(retryable);
+    const malformed = await handleAttachmentStage(
+      coreContext({
+        env: storeEnv,
+        request: new Request("https://worker.test/v1/chat-attachments", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{",
+        }),
+        routePath: "/v1/chat-attachments",
+        params: {},
+        values: account,
+      })
+    );
+    expect(malformed.status).toBe(400);
+    expect(malformed.headers.get("retry-after")).toBeNull();
+    const { R2_ACCESS_KEY_ID: _omit, ...envWithoutSecret } = {
+      ...env,
+      DB: throwingDb,
+    };
+    void _omit;
+    const missingSigning = await handleAttachmentStage(
+      coreContext({
+        env: envWithoutSecret as never,
+        request: new Request("https://worker.test/v1/chat-attachments", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(validStageRequest("op-store-throw-signing")),
+        }),
+        routePath: "/v1/chat-attachments",
+        params: {},
+        values: account,
+      })
+    );
+    expect(missingSigning.status).toBe(503);
+    expect(missingSigning.headers.get("retry-after")).toBeNull();
+    expect((await missingSigning.json()) as object).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
+  });
+
   test("stages successfully when Queue binding is absent and sends no queue message (no queue send at staging)", async () => {
     const response = await handler.fetch(
       new Request("https://worker.test/v1/chat-attachments", {

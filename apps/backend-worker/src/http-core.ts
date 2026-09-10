@@ -778,18 +778,24 @@ export async function handleAttachmentStage(
   const signedConfig = parseSignedUploadConfig(context.env);
   if (signedConfig === null)
     return backendError("service_unavailable", "none", 503);
-  const signer = makeR2UploadUrlSigner(signedConfig);
-  const result = await stageAttachment(
-    db,
-    context.get("accountId"),
-    request,
-    ATTACHMENT_CAPABILITIES,
-    "attachments",
-    signer
-  );
-  if (result.kind === "conflict")
-    return backendError("attachment_rejected", "edit_request", 409);
-  return json(result.response, result.created ? 201 : 200);
+  try {
+    const signer = makeR2UploadUrlSigner(signedConfig);
+    const result = await stageAttachment(
+      db,
+      context.get("accountId"),
+      request,
+      ATTACHMENT_CAPABILITIES,
+      "attachments",
+      signer
+    );
+    if (result.kind === "conflict")
+      return backendError("attachment_rejected", "edit_request", 409);
+    return json(result.response, result.created ? 201 : 200);
+  } catch {
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "60",
+    });
+  }
 }
 
 export async function handleAttachmentComplete(
@@ -811,31 +817,41 @@ export async function handleAttachmentComplete(
     )
   )
     return backendError("bad_request", "edit_request", 400);
-  const outcome = await completeAttachment(
-    db,
-    r2,
-    ingest,
-    context.get("accountId"),
-    attachmentId,
-    Date.now()
-  );
-  switch (outcome.kind) {
-    case "accepted":
-      return json({ attachment: outcome.attachment }, 202);
-    case "queued":
-      return json({ attachment: outcome.attachment }, 202);
-    case "ingested":
-      return json({ attachment: outcome.attachment }, 200);
-    case "not_found":
-      return backendError("not_found", "edit_request", 404);
-    case "expired":
-      return backendError("attachment_expired", "edit_request", 410);
-    case "absent":
-      return backendError("attachment_not_uploaded", "retry", 422, true);
-    case "mismatch":
-      return backendError("attachment_metadata_mismatch", "edit_request", 422);
-    case "conflict":
-      return backendError("attachment_rejected", "edit_request", 409);
+  try {
+    const outcome = await completeAttachment(
+      db,
+      r2,
+      ingest,
+      context.get("accountId"),
+      attachmentId,
+      Date.now()
+    );
+    switch (outcome.kind) {
+      case "accepted":
+        return json({ attachment: outcome.attachment }, 202);
+      case "queued":
+        return json({ attachment: outcome.attachment }, 202);
+      case "ingested":
+        return json({ attachment: outcome.attachment }, 200);
+      case "not_found":
+        return backendError("not_found", "edit_request", 404);
+      case "expired":
+        return backendError("attachment_expired", "edit_request", 410);
+      case "absent":
+        return backendError("attachment_not_uploaded", "retry", 422, true);
+      case "mismatch":
+        return backendError(
+          "attachment_metadata_mismatch",
+          "edit_request",
+          422
+        );
+      case "conflict":
+        return backendError("attachment_rejected", "edit_request", 409);
+    }
+  } catch {
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "60",
+    });
   }
 }
 
