@@ -797,13 +797,11 @@ export async function handleAttachmentComplete(
 export async function handleDeviceSessionOpen(
   context: CoreContext
 ): Promise<Response> {
-  const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
   if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true, {
       "retry-after": "1",
     });
-  if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const parsed = await readBoundedJson(context.req.raw, 65_536);
   if (parsed.kind === "too_large" || parsed.kind === "invalid")
     return backendError("invalid_request", "edit_request", 400);
@@ -868,13 +866,11 @@ export async function handleDeviceSessionComplete(
 ): Promise<Response> {
   const pathError = listenSessionPathError(context.req.param("id"));
   if (pathError !== null) return pathError;
-  const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
   if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true, {
       "retry-after": "1",
     });
-  if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const outcome = await completeDeviceSession(
     db,
     context.get("accountId"),

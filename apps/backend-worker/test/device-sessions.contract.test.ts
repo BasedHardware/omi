@@ -831,6 +831,64 @@ describe("device session request validators", () => {
     });
   });
 
+  test("open and complete persist session rows without object storage matching production Listen", async () => {
+    const missingR2 = { ...env, ATTACHMENTS: undefined };
+    const opened = await fetchWorker(
+      "/v1/device-sessions",
+      {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: JSON.stringify(openBody),
+      },
+      missingR2
+    );
+    expect(opened.status).toBe(201);
+    expect(opened.headers.get("retry-after")).toBeNull();
+    const created = (await opened.json()) as {
+      session: Record<string, unknown>;
+    };
+    expect(created.session.state).toBe("open");
+    const metadata = await fetchWorker(
+      `/v1/device-sessions/${created.session.id as string}`,
+      { headers: authenticatedHeaders },
+      missingR2
+    );
+    expect(metadata.status).toBe(200);
+    expect((await metadata.json()) as object).toEqual({
+      session: created.session,
+    });
+    const completed = await fetchWorker(
+      `/v1/device-sessions/${created.session.id as string}/complete`,
+      { method: "POST", headers: authenticatedHeaders },
+      missingR2
+    );
+    expect(completed.status).toBe(200);
+    expect(completed.headers.get("retry-after")).toBeNull();
+    expect((await completed.json()) as object).toMatchObject({
+      session: { id: created.session.id, state: "complete" },
+    });
+    const audio = await fetchWorker(
+      `/v1/device-sessions/${created.session.id as string}/audio`,
+      {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: JSON.stringify({
+          chunks: [{ chunkIndex: 0, bytesBase64: btoa("abc") }],
+        }),
+      },
+      missingR2
+    );
+    expect(audio.status).toBe(503);
+    expect(audio.headers.get("retry-after")).toBeNull();
+    expect((await audio.json()) as object).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
+  });
+
   test("capture write 409s use production Listen device_session_conflict", async () => {
     const conflict = {
       error: {
@@ -1131,17 +1189,10 @@ describe("device session ingest", () => {
       },
       { ...env, ATTACHMENTS: undefined }
     );
-    expect(missingR2.status).toBe(503);
+    expect(missingR2.status).toBe(201);
     expect(missingR2.headers.get("retry-after")).toBeNull();
-    const missingR2Body = (await missingR2.json()) as {
-      error: { code: string; retryable: boolean; action: string };
-    };
-    expect(missingR2Body).toEqual({
-      error: {
-        code: "service_unavailable",
-        retryable: false,
-        action: "none",
-      },
+    expect((await missingR2.json()) as object).toEqual({
+      session: created.session,
     });
     const missingR2Audio = await fetchWorker(
       `/v1/device-sessions/${created.session.id}/audio`,
@@ -1168,13 +1219,10 @@ describe("device session ingest", () => {
       { method: "POST", headers: authenticatedHeaders },
       { ...env, ATTACHMENTS: undefined }
     );
-    expect(missingR2Complete.status).toBe(503);
-    expect((await missingR2Complete.json()) as object).toEqual({
-      error: {
-        code: "service_unavailable",
-        retryable: false,
-        action: "none",
-      },
+    expect(missingR2Complete.status).toBe(200);
+    expect(missingR2Complete.headers.get("retry-after")).toBeNull();
+    expect((await missingR2Complete.json()) as object).toMatchObject({
+      session: { id: created.session.id, state: "complete" },
     });
     const missingR2List = await fetchWorker(
       "/v1/device-sessions",
