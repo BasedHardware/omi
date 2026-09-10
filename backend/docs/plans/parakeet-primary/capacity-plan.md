@@ -1,6 +1,6 @@
 # Capacity scaling prescription
 
-Draft, 2026-09-10. No values in this plan have been applied. Numbers marked provisional are qualification targets, not certified capacity.
+Draft, 2026-09-10. No values in this plan have been applied. The exact-source run now passes the bounded one-L4 capacity gate; fleet values still require release-time readiness and failure testing, not just desired replica counts.
 
 ## Fleet ownership
 
@@ -25,7 +25,7 @@ co-location only with an enforceable reservation scheduler and measured benefit.
 
 Let `c` be measured hard admissible live streams/pod while all benchmark gates pass, `q` the operating target below `c`, and `P` the peak eligible single-channel live concurrency for the approved cohort. PTT is sized separately if sharing the realtime pool; add its concurrent resource demand before using this formula.
 
-Revised provisional `c=10`, `q=8` after the 20/25-stream trials failed latency. See [measured results](qualification-results.md). Require `q <= 0.8c` and enough measured VRAM/CPU/latency headroom. Adopt lower values if needed; higher values require a new measured capacity report. Then:
+Adopt `c=10`, `q=8` after the 20/25-stream trials failed latency and the exact-source run 34526605301 passed at the lower cap. See [measured results](qualification-results.md). Require `q <= 0.8c` and enough measured VRAM/CPU/latency headroom. Adopt lower values if needed; higher values require a new measured capacity report. Then:
 
 `N_peak = max(2, ceil(1.30 × P / q) + 1)`
 

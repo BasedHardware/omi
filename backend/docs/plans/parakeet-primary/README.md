@@ -1,6 +1,6 @@
 # Parakeet-primary transcription
 
-Implementation and research record, 2026-09-10. This PR changes executable routing, serving, capacity and release configuration. It is a draft pending integrated qualification; no production deployment has been performed by this task.
+Implementation and research record, 2026-09-10. This PR changes executable routing, serving, capacity and release configuration. The exact-source integrated qualification now passes, but the PR remains a draft for review; no production deployment has been performed by this task.
 
 ## Decision
 
@@ -10,7 +10,7 @@ Automatic multilingual selection means detection within [the model’s supported
 
 Separate realtime and batch GPU fleets. A streaming replica loads one TDT v3 instance, VAD and speaker embedding dependencies without a second batch instance, and cannot accept batch requests. Batch releases cannot accept streaming requests. The image retains a mixed mode for existing standalone installations. The dedicated stream endpoint takes precedence over the historical shared endpoint.
 
-The production streaming manifest specifies 99 warm L4 replicas and a ceiling of 125; development specifies 2–4. One GPU and one process own each pod's admission cap. The production floor covers a planning envelope of 600 concurrent eligible streams, 30% reserve and one node failure at an operating target of 8 streams per pod. The TDT checkpoint and Silero source are pinned for repeatability. The hard cap of 10 and target of 8 remain qualification assumptions until the exact image passes sustained realtime testing. These are not measured throughput results.
+The production streaming manifest specifies 99 warm L4 replicas and a ceiling of 125; development specifies 2–4. One GPU and one process own each pod's admission cap. The production floor covers a planning envelope of 600 concurrent eligible streams, 30% reserve and one node failure at an operating target of 8 streams per pod. The TDT checkpoint and Silero source are pinned for repeatability. The hard cap of 10 and target of 8 now have a passing exact-source sustained realtime artifact, but remain bounded one-L4 measurements rather than whole-fleet reliability or multilingual-quality evidence.
 
 ## What ships
 
@@ -29,7 +29,7 @@ Code authorities: [provider policy](../../../config/stt_provider_policy.py), [co
 ## Review packet
 
 - [Capacity](capacity-plan.md): replica arithmetic, GPU pool limits, metrics, readiness and failure assumptions.
-- [Measured results](qualification-results.md): rejected first run, runtime fixes and qualification limits.
+- [Measured results](qualification-results.md): rejected runs, runtime fixes and the passing exact-source qualification artifact.
 - [Benchmark](benchmark-plan.md): executable capacity test and broader quality evidence required for promotion.
 - [Cost and effort](cost-and-effort.md): first-party prices, utilization sensitivity and remaining qualification work.
 - [Release and recovery](rollout-plan.md): capacity-before-routing ordering and production approval boundary.

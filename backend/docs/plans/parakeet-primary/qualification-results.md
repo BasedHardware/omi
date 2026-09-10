@@ -74,6 +74,27 @@ The workflow still reported `qualification_passed=false` because its timestamp-v
 
 All nine non-streaming phases again passed (57 tests; DER 32.9%, WER 13.0%, both within existing gates). Cleanup succeeded and the task-owned GPU pool and Job were absent afterward. This attempt is retained as a rejected harness run, not as release qualification.
 
+## Attempt 6: invalid harness run
+
+[Run 34519596599](https://github.com/BasedHardware/omi/actions/runs/34519596599) built source `2f3f708e53a91701a3e715f35baea8f080c160a2` as `gcr.io/based-hardware-dev/parakeet@sha256:12473642e25d77f17547d4c992f806536ca5951f53d4752948e96e0bcdff8ac4` and matched the cap-10 deployment settings. The streaming receiver helper raised `UnboundLocalError` for its timestamp-order state before content or transport results could be evaluated. Non-stream phases that ran passed and cleanup succeeded. This run is invalid evidence and is not counted.
+
+## Attempt 7: exact-source qualification passed
+
+[Run 34526605301](https://github.com/BasedHardware/omi/actions/runs/34526605301) built the current source `cf055da5307b368a61a3405bbdc9d27d95575ebd` and tested the immutable image `gcr.io/based-hardware-dev/parakeet@sha256:7021f89f415d81a1703685e1557c352fbb9b23c23408b9e9ff6e753960653791` on an isolated `g2-standard-8` L4. It matched deployment's five-second maximum speech window, six-CPU quota, TDT model identity and admission cap 10.
+
+| Scenario | Accepted / requested | Final drain | Text + sentinels | p95 segment-end lag |
+| --- | ---: | --- | --- | ---: |
+| Burst level 1 | 1 / 1 | Pass | 100% / 100% | 0.340 s |
+| Burst level 5 | 5 / 5 | Pass | 100% / 100% | 0.410 s |
+| Burst level 8 | 8 / 8 | Pass | 100% / 100% | 1.019 s |
+| Burst level 10 | 10 / 10 | Pass | 100% / 100% | 0.996 s |
+| Exact two-second boundary | 1 / 1 | Pass | 100% / 100% | 0.094 s |
+| Sustained level 10, 180 s | 10 / 10 | Pass | 100% / 100% | 1.527 s |
+
+The capacity rejection probe accepted 10 of 11 streams and rejected the eleventh with WebSocket code 1013 (`capacity_full`). Stream timestamps were monotonic and within the bounded jitter gate. Peak streaming memory was 1,658 MiB on a 23,034 MiB L4. GPU smoke, dependency contracts, synthetic and 15-clip VoxConverse DER, LibriSpeech WER, high-concurrency and VRAM stress phases also passed; aggregate DER was 32.9% against the 40% gate and aggregate WER 13.0% against the 15% gate. These are transport, completeness and capacity measurements, not multilingual or whole-fleet reliability certification. Cleanup completed and the task-owned GPU pool and Job were absent afterward.
+
+This is the first passing capacity artifact for the current source and fixes the prior decoder ownership, exact-boundary, monotonic timestamp and bounded-jitter failures. Keep the fleet rollout gated on the release checks and staged traffic plan below; do not treat one L4's 10-stream result as a 99.9% whole-fleet guarantee.
+
 ## Efficiency prescription
 
 The current implementation submits each session's two-second decoder work to one process-wide executor worker; every streaming buffer uses batch size one. The shared NeMo model/decoding computer makes simply raising the executor thread count unsafe without a concurrency proof. The low sampled GPU utilization is consistent with underfeeding and serialized host scheduling, but CPU/throttling and queue measurements are needed to isolate causes.
