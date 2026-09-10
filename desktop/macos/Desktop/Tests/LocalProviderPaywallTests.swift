@@ -100,6 +100,22 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
     XCTAssertFalse(AIProvider.isLocalProviderActive)
   }
 
+  // MARK: - AIProvider.voiceProviderResponseDeadline
+
+  func testLocalVoiceProviderResponseDeadlineIsOneHundredEightySeconds() {
+    XCTAssertEqual(AIProvider.localVoiceProviderResponseDeadline, 180)
+  }
+
+  func testVoiceProviderResponseDeadlineIsOverrideForLocalProvider() {
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    XCTAssertEqual(AIProvider.voiceProviderResponseDeadline, 180)
+  }
+
+  func testVoiceProviderResponseDeadlineIsNilForOmiProvider() {
+    UserDefaults.standard.set("piMono", forKey: bridgeModeKey)
+    XCTAssertNil(AIProvider.voiceProviderResponseDeadline)
+  }
+
   // MARK: - Screen capture / screenshot interpretation
 
   func testScreenCaptureExemptWhenLocalProviderActiveEvenIfPaywalled() {
