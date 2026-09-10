@@ -732,7 +732,7 @@ export async function handleDeviceSessionAudio(
     case "unavailable":
       return backendError("service_unavailable", "retry", 503, true);
     case "not_found":
-      return backendError("not_found", "refresh_history", 404);
+      return backendError("device_session_not_found", "none", 404);
     case "conflict":
       return backendError("conflict", "edit_request", 409);
     case "too_large":
@@ -757,7 +757,7 @@ export async function handleDeviceSessionComplete(
   if (outcome.kind === "conflict")
     return backendError("conflict", "edit_request", 409);
   return outcome.kind === "not_found"
-    ? backendError("not_found", "refresh_history", 404)
+    ? backendError("device_session_not_found", "none", 404)
     : json({ session: outcome.session });
 }
 
@@ -957,7 +957,8 @@ export async function handleTranscription(
     context.get("accountId"),
     context.req.param("id")
   );
-  if (row === null) return backendError("not_found", "refresh_history", 404);
+  if (row === null)
+    return backendError("device_session_not_found", "none", 404);
   const transcription = projectDeviceTranscription(row);
   if (transcription === null)
     return backendError("service_unavailable", "none", 503);
@@ -980,7 +981,7 @@ export async function handleTranscribe(
     .bind(sessionId, accountId)
     .first<{ state: string }>();
   if (session === null)
-    return backendError("not_found", "refresh_history", 404);
+    return backendError("device_session_not_found", "none", 404);
   if (session.state !== "complete")
     return backendError("conflict", "retry", 409);
   await processDeviceTranscriptions(

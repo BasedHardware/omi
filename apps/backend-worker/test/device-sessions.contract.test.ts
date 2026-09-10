@@ -416,6 +416,53 @@ describe("device session request validators", () => {
     });
   });
 
+  test("missing device session 404s use production Listen device_session_not_found", async () => {
+    const missingId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const missing = {
+      error: {
+        code: "device_session_not_found",
+        retryable: false,
+        action: "none",
+      },
+    };
+    const transcript = await fetchWorker(
+      `/v1/device-sessions/${missingId}/transcript`,
+      { headers: authenticatedHeaders }
+    );
+    expect(transcript.status).toBe(404);
+    expect(transcript.headers.get("retry-after")).toBeNull();
+    expect((await transcript.json()) as object).toEqual(missing);
+    const transcribe = await fetchWorker(
+      `/v1/device-sessions/${missingId}/transcribe`,
+      { method: "POST", headers: authenticatedHeaders }
+    );
+    expect(transcribe.status).toBe(404);
+    expect(transcribe.headers.get("retry-after")).toBeNull();
+    expect((await transcribe.json()) as object).toEqual(missing);
+    const audio = await fetchWorker(`/v1/device-sessions/${missingId}/audio`, {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({
+        chunks: [
+          {
+            chunkIndex: 0,
+            bytesBase64: btoa(String.fromCharCode(0, 0, 0, 128, 129)),
+          },
+        ],
+      }),
+    });
+    expect(audio.status).toBe(404);
+    expect(audio.headers.get("retry-after")).toBeNull();
+    expect((await audio.json()) as object).toEqual(missing);
+    const complete = await fetchWorker(
+      `/v1/device-sessions/${missingId}/complete`,
+      { method: "POST", headers: authenticatedHeaders }
+    );
+    expect(complete.status).toBe(404);
+    expect(complete.headers.get("retry-after")).toBeNull();
+    expect((await complete.json()) as object).toEqual(missing);
+  });
+
   test("recording create replay returns the original session and conflicting metadata is refused", async () => {
     const post = (body: unknown) =>
       fetchWorker("/v1/device-sessions", {
