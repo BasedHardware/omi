@@ -1,3 +1,4 @@
+import VoiceTurnDomain
 import XCTest
 
 @testable import Omi_Computer
@@ -8,6 +9,7 @@ import XCTest
 @MainActor
 final class VoiceTypingSilentModeTests: XCTestCase {
   private static let defaultsKey = DefaultsKey.shortcutSilentTypeEnabled.rawValue
+  private static let managerSourceName = "PushToTalkManager.swift"
   private var savedSetting: Bool?
   private var hadSavedSetting = false
 
@@ -90,7 +92,7 @@ final class VoiceTypingSilentModeTests: XCTestCase {
       ).journalsExchange)
   }
 
-  func testTogglingSilentTypePersistsAcrossLaunches() {
+  func testTogglingSilentTypePersistsAcrossLaunches() throws {
     ShortcutSettings.shared.silentTypeEnabled = true
     XCTAssertTrue(
       UserDefaults.standard.bool(forKey: Self.defaultsKey),
@@ -102,6 +104,147 @@ final class VoiceTypingSilentModeTests: XCTestCase {
 
     ShortcutSettings.shared.silentTypeEnabled = false
     XCTAssertFalse(UserDefaults.standard.bool(forKey: Self.defaultsKey))
+
+    // The writes above only exercise the `didSet` writer in this process. A
+    // relaunch restores the toggle through the launch read, so prove that read
+    // against a fresh defaults domain, the way a fresh settings instance sees it.
+    let launchDomain = "omi-silent-type-relaunch-\(UUID().uuidString)"
+    let launchDefaults = try XCTUnwrap(UserDefaults(suiteName: launchDomain))
+    defer { launchDefaults.removePersistentDomain(forName: launchDomain) }
+    XCTAssertFalse(
+      ShortcutSettings.persistedSilentTypeEnabled(from: launchDefaults),
+      "an absent key reads false — Silent Type ships off for a fresh install")
+    launchDefaults.set(true, forKey: Self.defaultsKey)
+    let restored = ShortcutSettings.persistedSilentTypeEnabled(from: launchDefaults)
+    XCTAssertTrue(
+      restored,
+      "the launch read must restore exactly what the toggle persisted")
+    XCTAssertFalse(
+      VoiceTypingChatRecordPolicy.decide(silentTypeEnabled: restored).journalsExchange,
+      "the restored toggle keeps the dictation out of the chat transcript")
+  }
+
+  /// The race this closes. Suppression used to latch only in the delivery
+  /// close path, so a realtime provider failure while the dictation was still
+  /// finalizing reached `captureInterruptedTurnPayloadIfNeeded` with no
+  /// suppression receipt — and recovery journaled the very text the user asked
+  /// to keep out of the chat. The turn now names itself as suppressed at its
+  /// start, before anything can fail mid-turn.
+  func testProviderFailureDuringFinalizationKeepsASilentTypeDictationOutOfRecovery() {
+    ShortcutSettings.shared.silentTypeEnabled = true
+    let hub = RealtimeHubController.shared
+    let coordinator = VoiceTurnCoordinator.shared
+    PushToTalkManager.shared.cleanup()
+    let turnID = coordinator.begin(intent: .hold, ownerID: "silent-type-race-owner")
+    defer {
+      hub.turnTranscript = ""
+      hub.turnIdempotencyKey = ""
+      hub.journalSuppressedContinuityKey = nil
+      coordinator.reset()
+    }
+    coordinator.publish(.selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
+
+    // Mid-finalization: the provider has already streamed the dictation back
+    // as this turn's transcript, nothing has been delivered yet, and no
+    // persistence receipt exists — then the socket fails.
+    hub.turnIdempotencyKey = RealtimeHubController.voiceContinuityKey(for: turnID)
+    hub.turnTranscript = "type hello from the privacy race"
+    hub.journalSuppressedContinuityKey = nil
+
+    // Turn start, not delivery, latches the suppression.
+    PushToTalkManager.shared.latchSilentTypeForTurnStart(turnID: turnID)
+
+    XCTAssertNil(
+      hub.captureInterruptedTurnPayloadIfNeeded(),
+      "a provider failure during finalization must not hand a Silent Type "
+        + "dictation's transcript to interrupted-turn recovery")
+    XCTAssertEqual(
+      hub.journalSuppressedContinuityKey,
+      RealtimeHubController.voiceContinuityKey(for: turnID),
+      "the suppression receipt must stay standing for the whole turn")
+  }
+
+  /// With the toggle off the latch is inert: the turn keeps the recovery that
+  /// provider-failure continuity depends on, byte-identical to the journaled
+  /// behavior Silent Type opted out of.
+  func testTurnStartLatchIsInertWhileSilentTypeIsOff() {
+    ShortcutSettings.shared.silentTypeEnabled = false
+    let hub = RealtimeHubController.shared
+    let coordinator = VoiceTurnCoordinator.shared
+    PushToTalkManager.shared.cleanup()
+    let turnID = coordinator.begin(intent: .hold, ownerID: "journaled-turn-owner")
+    defer {
+      hub.turnTranscript = ""
+      hub.turnIdempotencyKey = ""
+      hub.journalSuppressedContinuityKey = nil
+      coordinator.reset()
+    }
+    coordinator.publish(.selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
+    hub.turnIdempotencyKey = RealtimeHubController.voiceContinuityKey(for: turnID)
+    hub.turnTranscript = "what is on my calendar tomorrow"
+    hub.journalSuppressedContinuityKey = nil
+
+    PushToTalkManager.shared.latchSilentTypeForTurnStart(turnID: turnID)
+
+    XCTAssertNil(
+      hub.journalSuppressedContinuityKey,
+      "a journaled turn must not carry a suppression receipt")
+    XCTAssertNotNil(
+      hub.captureInterruptedTurnPayloadIfNeeded(),
+      "with Silent Type off a failed turn keeps its provider-failure recovery")
+  }
+
+  /// The toggle is read once, at turn start. A flip mid-turn must not split the
+  /// turn: one that began with Silent Type off keeps journaling semantics, and
+  /// one that began with it on stays suppressed.
+  func testMidTurnToggleFlipDoesNotSplitTheTurn() {
+    let hub = RealtimeHubController.shared
+    let coordinator = VoiceTurnCoordinator.shared
+    PushToTalkManager.shared.cleanup()
+    let offThenOnTurn = coordinator.begin(intent: .hold, ownerID: "mid-turn-flip-owner")
+    defer {
+      hub.turnTranscript = ""
+      hub.turnIdempotencyKey = ""
+      hub.journalSuppressedContinuityKey = nil
+      coordinator.reset()
+    }
+    coordinator.publish(.selectRoute(turnID: offThenOnTurn, route: .hub(sessionID: nil)))
+    hub.turnIdempotencyKey = RealtimeHubController.voiceContinuityKey(for: offThenOnTurn)
+    hub.turnTranscript = "type a note about the flip"
+    hub.journalSuppressedContinuityKey = nil
+
+    ShortcutSettings.shared.silentTypeEnabled = false
+    PushToTalkManager.shared.latchSilentTypeForTurnStart(turnID: offThenOnTurn)
+    ShortcutSettings.shared.silentTypeEnabled = true
+
+    XCTAssertNil(
+      hub.journalSuppressedContinuityKey,
+      "a turn that started with Silent Type off is not suppressed by a mid-turn flip on")
+  }
+
+  /// The latch is only as good as its wiring: both physical turn starts must
+  /// arm it, and the delivery close path must decide with the latched value
+  /// rather than a fresh read.
+  func testTurnStartsLatchTheSuppressionAndDeliveryDecidesWithTheLatch() throws {
+    let testFile = URL(fileURLWithPath: #filePath)
+    // omi-test-quality: source-inspection -- static contract: both turn starts must arm the Silent Type latch, delivery decides with the latched value
+    let source = try String(
+      contentsOf:
+        testFile
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("Sources/FloatingControlBar")
+        .appendingPathComponent(Self.managerSourceName),
+      encoding: .utf8)
+    XCTAssertEqual(
+      source.components(
+        separatedBy: "latchSilentTypeForTurnStart(turnID: currentVoiceTurnID)"
+      ).count - 1,
+      2,
+      "hold and locked turn starts must both latch Silent Type at the turn's start")
+    XCTAssertTrue(
+      source.contains("silentTypeEnabled: voiceTypingSilentTypeEnabled"),
+      "the delivery close path must decide with the turn-start latch, not a fresh read")
   }
 
   func testSilentTypeIsSearchableFromTheTranscriptionTab() {

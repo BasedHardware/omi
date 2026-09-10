@@ -379,6 +379,15 @@ class ShortcutSettings: ObservableObject {
     didSet { UserDefaults.standard.set(silentTypeEnabled, forKey: .shortcutSilentTypeEnabled) }
   }
 
+  /// The persisted read behind `silentTypeEnabled`'s initial value — what a
+  /// fresh process restores at launch. Split out of `private init` so a test
+  /// can exercise the decode itself: a same-process write followed by a read
+  /// only exercises the `didSet` writer, never this restore path. Absent key
+  /// reads false — Silent Type ships off.
+  static func persistedSilentTypeEnabled(from defaults: UserDefaults = .standard) -> Bool {
+    defaults.object(forKey: .shortcutSilentTypeEnabled) as? Bool ?? false
+  }
+
   /// Empty means Automatic. A non-empty value is a stable CoreAudio device UID
   /// selected specifically for push-to-talk, independent of the macOS default input.
   /// The one microphone choice, shared by transcription and push-to-talk.
@@ -643,8 +652,7 @@ class ShortcutSettings: ObservableObject {
     self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
     self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
     self.pttMuteSystemAudio = UserDefaults.standard.object(forKey: "shortcut_pttMuteSystemAudio") as? Bool ?? true
-    self.silentTypeEnabled =
-      UserDefaults.standard.object(forKey: .shortcutSilentTypeEnabled) as? Bool ?? false
+    self.silentTypeEnabled = Self.persistedSilentTypeEnabled()
     self.pttInputDeviceUID = UserDefaults.standard.string(forKey: .shortcutPTTInputDeviceUID) ?? ""
     self.selectedModel = ModelQoS.Claude.sanitizedSelection(
       UserDefaults.standard.string(forKey: "shortcut_selectedModel")
