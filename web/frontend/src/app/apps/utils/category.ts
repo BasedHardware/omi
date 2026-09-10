@@ -12,6 +12,9 @@ import {
   Gamepad2,
   ShoppingBag,
   Globe,
+  MessagesSquare,
+  HeartHandshake,
+  Compass,
   Sparkles,
   type LucideIcon,
 } from 'lucide-react';
@@ -186,6 +189,42 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
       secondary: 'text-cyan-400',
       accent: 'bg-cyan-500/15',
       background: 'bg-cyan-500/5',
+    },
+  },
+  'communication-improvement': {
+    id: 'communication-improvement',
+    displayName: 'Communication',
+    description: 'Improve your communication skills',
+    icon: MessagesSquare,
+    theme: {
+      primary: 'text-yellow-500',
+      secondary: 'text-yellow-400',
+      accent: 'bg-yellow-500/15',
+      background: 'bg-yellow-500/5',
+    },
+  },
+  'emotional-and-mental-support': {
+    id: 'emotional-and-mental-support',
+    displayName: 'Mental Wellness',
+    description: 'Support for emotional and mental health',
+    icon: HeartHandshake,
+    theme: {
+      primary: 'text-rose-500',
+      secondary: 'text-rose-400',
+      accent: 'bg-rose-500/15',
+      background: 'bg-rose-500/5',
+    },
+  },
+  'travel-and-exploration': {
+    id: 'travel-and-exploration',
+    displayName: 'Travel & Exploration',
+    description: 'Explore new places and plan your trips',
+    icon: Compass,
+    theme: {
+      primary: 'text-lime-500',
+      secondary: 'text-lime-400',
+      accent: 'bg-lime-500/15',
+      background: 'bg-lime-500/5',
     },
   },
   other: {
