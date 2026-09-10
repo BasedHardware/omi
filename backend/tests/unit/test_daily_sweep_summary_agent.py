@@ -480,6 +480,16 @@ def test_phase_prompts_share_a_cacheable_prefix():
     # summaries — the bulk of the tokens.
     assert common["summaries_block"] in shared
     assert len(shared) >= phase_a.find(common["summaries_block"]) + len(common["summaries_block"])
+    # Attribution rules live in the shared prefix, not a phase tail, so the
+    # second pass reuses the cached tokens and cannot forget WHO/BYSTANDER.
+    for pin in (
+        "WHO IS WHO: the owner is only the speaker clusters the transcript marks as the owner",
+        "BYSTANDER: if Dave said little or nothing in a conversation",
+        "PARTICIPATING IS NOT A FACT",
+        'NAME WHOSE FACT: every memory names its subject in about ("user"',
+        "BASIS: decided only for a commitment or decision on tape by the owner",
+    ):
+        assert pin in shared
 
 
 def test_untrusted_text_cannot_close_prompt_fences_and_phase_b_inputs_are_clamped():
