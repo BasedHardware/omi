@@ -1,0 +1,3 @@
+{
+  "change": "Fixed task Undo showing a restored task under a deleted identity until refresh"
+}
