@@ -871,3 +871,56 @@ test('legacy conversation details name GET folder name and omit unresolved folde
   expect(omitted).not.toContain('No folder');
   expect(omitted).not.toContain('folder-work');
 });
+
+test('legacy conversation details name GET external_data text when the transcript is empty', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        externalText: 'Imported Slack thread',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('Imported Slack thread');
+  expect(copy).not.toContain('The transcript is empty.');
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        externalText: 'Imported Slack thread',
+        photoCount: 2,
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const withPhotos = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(withPhotos).not.toContain('Imported Slack thread');
+});

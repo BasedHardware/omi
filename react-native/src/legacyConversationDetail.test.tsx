@@ -277,6 +277,53 @@ test('names GET folder name when folders resolve and omits otherwise', async () 
   expect(mockRequest).toHaveBeenCalledTimes(1);
 });
 
+test('keeps GET external_data text and omits empty or missing integration copy', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [],
+      external_data: {text: 'Imported Slack thread'},
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).externalText,
+  ).toBe('Imported Slack thread');
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      external_data: {text: ' \t\n'},
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).externalText,
+  ).toBeUndefined();
+  mockRequest.mockResolvedValue(response(fixture));
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).externalText,
+  ).toBeUndefined();
+});
+
+test('fails closed for malformed GET external_data', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      external_data: 'not-an-object',
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      external_data: {text: 1},
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+});
+
 test('keeps GET geolocation address and omits empty or missing locations', async () => {
   mockRequest.mockResolvedValue(
     response({

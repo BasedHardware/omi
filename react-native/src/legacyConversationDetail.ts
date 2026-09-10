@@ -20,6 +20,7 @@ export type LegacyConversationDetail = {
   photoCount?: number;
   photoCaptions?: string[];
   folderName?: string;
+  externalText?: string;
   transcript:
     | {status: 'unavailable'}
     | {
@@ -100,6 +101,17 @@ function locationAddress(value: unknown): string | undefined {
   }
   const address = visibleDisplayText(text(geo.address, 10000));
   return address === '' ? undefined : address;
+}
+function externalText(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const data = object(value);
+  if (data.text === undefined || data.text === null) {
+    return undefined;
+  }
+  const copy = visibleDisplayText(text(data.text, 100000));
+  return copy === '' ? undefined : copy;
 }
 function calendarEventTimeCopy(value: unknown): string {
   const parsed = Date.parse(text(value, 100));
@@ -264,6 +276,7 @@ export async function loadLegacyConversationDetail(
   const address = locationAddress(value.geolocation);
   const linkedEvent = calendarEvent(value.calendar_event);
   const photos = conversationPhotos(value.photos);
+  const integrationText = externalText(value.external_data);
   const overview = text(structured.overview);
   const appSummary = firstAppSummary(
     value.apps_results,
@@ -299,6 +312,7 @@ export async function loadLegacyConversationDetail(
             : {photoCaptions: photos.captions}),
         }),
     ...(folderName === undefined ? {} : {folderName}),
+    ...(integrationText === undefined ? {} : {externalText: integrationText}),
     transcript,
   };
 }

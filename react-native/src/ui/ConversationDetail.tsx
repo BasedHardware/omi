@@ -247,6 +247,12 @@ function LegacyConversationBody({
       ? calendarStart
       : calendarEnd;
   const folderName = visibleDisplayText(detail.folderName ?? '');
+  const externalText = visibleDisplayText(detail.externalText ?? '');
+  const showExternalTranscript =
+    externalText !== '' &&
+    (detail.photoCount === undefined || detail.photoCount <= 0) &&
+    (detail.transcript.status === 'unavailable' ||
+      transcriptSegments.length === 0);
   return (
     <>
       <Text
@@ -356,11 +362,15 @@ function LegacyConversationBody({
       <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
         Transcript
       </Text>
-      {detail.transcript.status === 'unavailable' ? (
+      {detail.transcript.status === 'unavailable' && !showExternalTranscript ? (
         <Text style={[styles.conversationDetailSummary, ink]}>
           {detail.locked
             ? 'This conversation is locked. Transcript unavailable.'
             : 'Transcript unavailable for this conversation.'}
+        </Text>
+      ) : showExternalTranscript ? (
+        <Text selectable style={[styles.conversationTranscriptText, ink]}>
+          {externalText}
         </Text>
       ) : transcriptSegments.length === 0 ? (
         <Text style={[styles.conversationDetailSummary, ink]}>
