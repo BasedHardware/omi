@@ -4054,6 +4054,16 @@ test('Settings names GET developer and MCP keys without revoke or a full secret'
             key_prefix: 'omi_sk_ab',
             key: 'omi_sk_abcdef_secret',
             created_at: '2026-09-09T12:00:00.000Z',
+            scopes: [
+              'conversations:read',
+              'conversations:write',
+              'memories:read',
+              'memories:write',
+              'action_items:read',
+              'action_items:write',
+              'goals:read',
+              'goals:write',
+            ],
           },
         ]),
       };
@@ -4068,6 +4078,16 @@ test('Settings names GET developer and MCP keys without revoke or a full secret'
             name: 'Cursor',
             key_prefix: 'omi_mcp_cd',
             created_at: '2026-09-09T12:00:00.000Z',
+            scopes: [
+              'conversations:read',
+              'conversations:write',
+              'memories:read',
+              'memories:write',
+              'action_items:read',
+              'action_items:write',
+              'goals:read',
+              'goals:write',
+            ],
           },
         ]),
       };
@@ -4092,10 +4112,12 @@ test('Settings names GET developer and MCP keys without revoke or a full secret'
     Date.parse('2026-09-09T12:00:00.000Z'),
   );
   expect(tree).toContain('Developer key');
-  expect(tree).toContain(`Local · omi_sk_ab · ${created}`);
+  expect(tree).toContain(`Local · omi_sk_ab · ${created} · Full Access`);
   expect(tree).toContain('MCP key');
   expect(tree).toContain('Cursor · omi_mcp_cd');
   expect(tree).not.toContain(`Cursor · omi_mcp_cd · ${created}`);
+  expect(tree).not.toContain('Cursor · omi_mcp_cd · Full Access');
+  expect(tree).not.toContain('Read Only');
   expect(tree).not.toContain('omi_sk_abcdef_secret');
   expect(tree).not.toContain('Revoke');
   expect(

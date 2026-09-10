@@ -16,6 +16,7 @@ import {
   developerWebhookTypeCopy,
   developerKeyCreatedCopy,
   developerKeyRowCopy,
+  developerKeyScopeCopy,
   developerKeysCopy,
   appCategoryCopy,
   appDisplaySource,
@@ -1118,15 +1119,60 @@ test('developer key copy names GET name and prefix without a full secret', () =>
         {name: 'Local', keyPrefix: 'omi_sk_ab', createdAtMs},
         {name: ' \t', keyPrefix: 'omi_sk_cd', createdAtMs},
         {name: 'Cursor', keyPrefix: ''},
+        {
+          name: 'Scoped',
+          keyPrefix: 'omi_sk_gh',
+          createdAtMs,
+          scopes: [
+            'conversations:read',
+            'conversations:write',
+            'memories:read',
+            'memories:write',
+            'action_items:read',
+            'action_items:write',
+            'goals:read',
+            'goals:write',
+          ],
+        },
       ],
       'Developer key',
     ),
   ).toEqual([
     {title: 'Developer key', copy: `Local · omi_sk_ab · ${created}`},
     {title: 'Developer key', copy: 'Cursor'},
+    {
+      title: 'Developer key',
+      copy: `Scoped · omi_sk_gh · ${created} · Full Access`,
+    },
   ]);
   expect(developerKeyRowCopy({name: '', keyPrefix: 'omi_sk_ab'})).toBe('');
   expect(developerKeyCreatedCopy(0)).toBe('');
+  expect(developerKeyScopeCopy(undefined)).toBe('');
+  expect(developerKeyScopeCopy([])).toBe('');
+  expect(
+    developerKeyScopeCopy([
+      'conversations:read',
+      'memories:read',
+      'action_items:read',
+      'goals:read',
+    ]),
+  ).toBe('Read');
+  expect(developerKeyScopeCopy(['conversations:write'])).toBe('Write');
+  expect(
+    developerKeyScopeCopy(['conversations:read', 'conversations:write']),
+  ).toBe('Read · Write');
+  expect(
+    developerKeyScopeCopy([
+      'conversations:read',
+      'memories:read',
+      'action_items:read',
+      'goals:read',
+      'conversations:read',
+      'memories:read',
+      'action_items:read',
+      'goals:read',
+    ]),
+  ).toBe('Read');
 });
 
 test('developer webhook status copy does not say unknown for a missing enablement bit', () => {

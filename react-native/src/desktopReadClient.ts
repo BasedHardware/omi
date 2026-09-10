@@ -948,10 +948,27 @@ export function developerKeyCreatedCopy(createdAtMs: number): string {
   );
 }
 
+export function developerKeyScopeCopy(
+  scopes: readonly string[] | undefined,
+): string {
+  if (scopes === undefined || scopes.length === 0) {
+    return '';
+  }
+  const hasRead = scopes.some(scope => scope.endsWith(':read'));
+  const hasWrite = scopes.some(scope => scope.endsWith(':write'));
+  if (hasRead && hasWrite && scopes.length === 8) {
+    return 'Full Access';
+  }
+  return [hasRead ? 'Read' : '', hasWrite ? 'Write' : '']
+    .filter(copy => copy !== '')
+    .join(' · ');
+}
+
 export function developerKeyRowCopy(key: {
   name: string;
   keyPrefix: string;
   createdAtMs?: number;
+  scopes?: readonly string[];
 }): string {
   const name = visibleDisplayText(key.name);
   if (name === '') {
@@ -963,11 +980,17 @@ export function developerKeyRowCopy(key: {
       ? developerKeyCreatedCopy(key.createdAtMs)
       : '';
   const labeled = prefix === '' ? name : `${name} · ${prefix}`;
-  return created === '' ? labeled : `${labeled} · ${created}`;
+  const scope = developerKeyScopeCopy(key.scopes);
+  return [labeled, created, scope].filter(copy => copy !== '').join(' · ');
 }
 
 export function developerKeysCopy(
-  keys: readonly {name: string; keyPrefix: string; createdAtMs?: number}[],
+  keys: readonly {
+    name: string;
+    keyPrefix: string;
+    createdAtMs?: number;
+    scopes?: readonly string[];
+  }[],
   title: string,
 ): {title: string; copy: string}[] {
   return keys.flatMap(key => {

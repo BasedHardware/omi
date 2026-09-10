@@ -15,6 +15,16 @@ test('parses GET developer keys and omits empty names and full secrets', () => {
           key_prefix: 'omi_sk_ab',
           key: 'omi_sk_abcdef_secret',
           created_at: '2026-09-09T12:00:00.000Z',
+          scopes: [
+            'conversations:read',
+            'conversations:write',
+            'memories:read',
+            'memories:write',
+            'action_items:read',
+            'action_items:write',
+            'goals:read',
+            'goals:write',
+          ],
         },
         {id: 'key-empty', name: ' \t', key_prefix: 'omi_sk_cd'},
         {
@@ -22,6 +32,7 @@ test('parses GET developer keys and omits empty names and full secrets', () => {
           name: 'Legacy',
           key_prefix: 'omi_sk_ef',
           created_at: 'not-a-date',
+          scopes: [],
         },
       ]),
     ),
@@ -31,6 +42,16 @@ test('parses GET developer keys and omits empty names and full secrets', () => {
       name: 'Local',
       keyPrefix: 'omi_sk_ab',
       createdAtMs: Date.parse('2026-09-09T12:00:00.000Z'),
+      scopes: [
+        'conversations:read',
+        'conversations:write',
+        'memories:read',
+        'memories:write',
+        'action_items:read',
+        'action_items:write',
+        'goals:read',
+        'goals:write',
+      ],
     },
     {id: 'key-undated', name: 'Legacy', keyPrefix: 'omi_sk_ef'},
   ]);
@@ -48,6 +69,20 @@ test('fails closed for malformed GET developer keys', () => {
       JSON.stringify([
         {id: 'key-1', name: 'One', key_prefix: 'omi_sk_a'},
         {id: 'key-1', name: 'Dup', key_prefix: 'omi_sk_b'},
+      ]),
+    ),
+  ).toThrow();
+  expect(() =>
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {id: 'key-1', name: 'Local', key_prefix: 'omi_sk_a', scopes: 'read'},
+      ]),
+    ),
+  ).toThrow();
+  expect(() =>
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {id: 'key-1', name: 'Local', key_prefix: 'omi_sk_a', scopes: [1]},
       ]),
     ),
   ).toThrow();

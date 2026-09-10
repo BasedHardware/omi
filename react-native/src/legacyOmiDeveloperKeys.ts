@@ -33,6 +33,7 @@ export type OmiDeveloperKey = {
   name: string;
   keyPrefix: string;
   createdAtMs?: number;
+  scopes?: string[];
 };
 
 function createdAtMs(value: unknown): number | undefined {
@@ -48,6 +49,22 @@ function createdAtMs(value: unknown): number | undefined {
     return undefined;
   }
   return parsed;
+}
+
+function optionalScopes(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const rows = array(value, 32);
+  const scopes: string[] = [];
+  for (const raw of rows) {
+    const scope = visibleDisplayText(text(raw, 256));
+    if (scope === '') {
+      continue;
+    }
+    scopes.push(scope);
+  }
+  return scopes.length === 0 ? undefined : scopes;
 }
 
 export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
@@ -70,11 +87,13 @@ export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
     }
     const keyPrefix = visibleDisplayText(text(row.key_prefix, 256));
     const created = createdAtMs(row.created_at);
+    const scopes = optionalScopes(row.scopes);
     keys.push({
       id,
       name,
       keyPrefix,
       ...(created === undefined ? {} : {createdAtMs: created}),
+      ...(scopes === undefined ? {} : {scopes}),
     });
   }
   return keys;
