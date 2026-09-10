@@ -423,6 +423,25 @@ function LegacyConversationBody({
                   {clock}
                 </Text>
               ) : null}
+              {(segment.translations ?? []).flatMap((translation, tIndex) => {
+                const copy = visibleDisplayText(translation);
+                return copy === ''
+                  ? []
+                  : [
+                      <Text
+                        key={`translation-${index}-${tIndex}`}
+                        style={[styles.conversationDetailField, ink]}>
+                        {copy}
+                      </Text>,
+                    ];
+              })}
+              {(segment.translations ?? []).some(
+                translation => visibleDisplayText(translation) !== '',
+              ) ? (
+                <Text style={[styles.conversationDetailField, ink]}>
+                  translated by omi
+                </Text>
+              ) : null}
             </View>
           );
         })

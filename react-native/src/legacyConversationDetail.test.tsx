@@ -143,6 +143,63 @@ test('keeps GET calendar event title and attendees and omits missing events', as
   ).toBeUndefined();
 });
 
+test('names GET transcript translations and omits empty or missing lists', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          translations: [
+            {lang: 'es', text: 'Hola alli'},
+            {lang: 'fr', text: ' \t'},
+          ],
+        },
+      ],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: fixture.transcript_segments[0].text,
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+        translations: ['Hola alli'],
+      },
+    ],
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          translations: [],
+        },
+      ],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: fixture.transcript_segments[0].text,
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+      },
+    ],
+  });
+});
+
 test('fails closed for malformed GET calendar_event', async () => {
   mockRequest.mockResolvedValue(
     response({
@@ -196,10 +253,12 @@ test('keeps GET photo counts and captions and omits empty lists', async () => {
       ],
     }),
   );
-  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
-    photoCount: 3,
-    photoCaptions: ['Whiteboard notes'],
-  });
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      photoCount: 3,
+      photoCaptions: ['Whiteboard notes'],
+    },
+  );
   mockRequest.mockResolvedValue(
     response({
       ...fixture,
@@ -370,9 +429,8 @@ test('names GET people names on transcript segments and omits unresolved ids', a
       ],
     });
   });
-  const unresolved = (
-    await loadLegacyConversationDetail(backend, fixture.id)
-  ).transcript;
+  const unresolved = (await loadLegacyConversationDetail(backend, fixture.id))
+    .transcript;
   expect(unresolved).toMatchObject({
     status: 'loaded',
     segments: [
@@ -385,9 +443,9 @@ test('names GET people names on transcript segments and omits unresolved ids', a
       },
     ],
   });
-  expect(unresolved.status === 'loaded' ? unresolved.segments[0] : null).not.toHaveProperty(
-    'personName',
-  );
+  expect(
+    unresolved.status === 'loaded' ? unresolved.segments[0] : null,
+  ).not.toHaveProperty('personName');
   mockRequest.mockImplementation(async (request: {path?: string}) => {
     if (request.path === '/v1/users/people?include_speech_samples=false') {
       return {id: 'people', status: 500, body: '[]'};
@@ -403,9 +461,8 @@ test('names GET people names on transcript segments and omits unresolved ids', a
       ],
     });
   });
-  const failedPeople = (
-    await loadLegacyConversationDetail(backend, fixture.id)
-  ).transcript;
+  const failedPeople = (await loadLegacyConversationDetail(backend, fixture.id))
+    .transcript;
   expect(failedPeople).toMatchObject({
     status: 'loaded',
     segments: [{text: fixture.transcript_segments[0].text}],
@@ -533,9 +590,9 @@ test('names GET apps_results app when catalog resolves and omits Unknown App', a
     expectedApiContract: 'omi',
     path: '/v1/apps/notes',
   });
-  expect(mockRequest.mock.calls.some(call => call[0].path === '/v1/apps/other')).toBe(
-    false,
-  );
+  expect(
+    mockRequest.mock.calls.some(call => call[0].path === '/v1/apps/other'),
+  ).toBe(false);
   mockRequest.mockImplementation(async (request: {path?: string}) => {
     if (request.path === '/v1/apps/notes') {
       return {id: 'app', status: 404, body: '{}'};
@@ -690,6 +747,24 @@ test.each([
   {
     ...fixture,
     transcript_segments: [{...fixture.transcript_segments[0], is_user: null}],
+  },
+  {
+    ...fixture,
+    transcript_segments: [
+      {
+        ...fixture.transcript_segments[0],
+        translations: [{text: 'Hola'}],
+      },
+    ],
+  },
+  {
+    ...fixture,
+    transcript_segments: [
+      {
+        ...fixture.transcript_segments[0],
+        translations: 'es',
+      },
+    ],
   },
   {
     ...fixture,

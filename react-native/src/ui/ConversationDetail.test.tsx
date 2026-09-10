@@ -1158,3 +1158,43 @@ test('legacy conversation details name GET people names on transcript speakers',
   expect(copy).not.toContain('Speaker 1');
   expect(copy).not.toContain('person-alex');
 });
+
+test('legacy conversation details name GET transcript translations without a notice dialog', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'Hello there',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              start: 0,
+              end: 1,
+              translations: ['Hola alli'],
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('Hello there');
+  expect(copy).toContain('Hola alli');
+  expect(copy).toContain('translated by omi');
+});

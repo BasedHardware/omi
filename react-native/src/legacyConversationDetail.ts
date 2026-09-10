@@ -35,6 +35,7 @@ export type LegacyConversationDetail = {
           start: number;
           end: number;
           personName?: string;
+          translations?: string[];
         }[];
       };
 };
@@ -169,6 +170,23 @@ function calendarEvent(
     ...(endCopy === '' ? {} : {endCopy}),
   };
 }
+function segmentTranslations(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const rows = array(value, 32);
+  const translations: string[] = [];
+  for (const raw of rows) {
+    const row = object(raw);
+    text(row.lang, 32);
+    const copy = visibleDisplayText(text(row.text, 100000));
+    if (copy !== '') {
+      translations.push(copy);
+    }
+  }
+  return translations.length === 0 ? undefined : translations;
+}
+
 function conversationPhotos(value: unknown):
   | {
       count: number;
@@ -283,6 +301,7 @@ export async function loadLegacyConversationDetail(
                   segment.person_id === undefined || segment.person_id === null
                     ? undefined
                     : visibleDisplayText(text(segment.person_id, 256));
+                const translations = segmentTranslations(segment.translations);
                 return {
                   text: text(segment.text, 100000),
                   speaker:
@@ -293,6 +312,7 @@ export async function loadLegacyConversationDetail(
                   ...(personId === undefined || personId === ''
                     ? {}
                     : {personId}),
+                  ...(translations === undefined ? {} : {translations}),
                 };
               },
             );
