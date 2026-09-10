@@ -23,7 +23,7 @@ export const LEGACY_UUID_PATTERN =
  * (Found by the first store integration test: every real server row was
  * being dropped as unparseable.)
  */
-export const LEGACY_OPAQUE_PATTERN = /^[A-Za-z0-9_-]{4,128}$/;
+export const LEGACY_OPAQUE_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 declare const RecordIdBrand: unique symbol;
 

@@ -142,6 +142,65 @@ test('keeps unknown chat senders instead of failing history', async () => {
   ]);
 });
 
+test('keeps opaque parseCreate ids of length 1 instead of failing history', async () => {
+  const human = {
+    id: 'human-1',
+    text: 'saved prompt',
+    sender: 'human' as const,
+    createdAt: 100,
+    generationOutcome: null,
+  };
+  const backendFor = (body: string): OmiBackend => ({
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 200,
+      body,
+    }),
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  });
+
+  await expect(
+    loadChatHistory(
+      backendFor(
+        JSON.stringify({
+          messages: [
+            wireMessage(human),
+            {
+              ...wireMessage(human),
+              id: 'x',
+              text: 'opaque parseCreate',
+            },
+          ],
+          page: {olderCursor: null, hasOlder: false},
+          capabilities,
+        }),
+      ),
+    ),
+  ).resolves.toEqual([
+    expect.objectContaining({id: 'human-1', text: 'saved prompt'}),
+    expect.objectContaining({id: 'x', text: 'opaque parseCreate'}),
+  ]);
+  await expect(
+    loadChatHistory(
+      backendFor(
+        JSON.stringify({
+          messages: [
+            wireMessage(human),
+            {
+              ...wireMessage(human),
+              id: '',
+              text: 'empty id',
+            },
+          ],
+          page: {olderCursor: null, hasOlder: false},
+          capabilities,
+        }),
+      ),
+    ),
+  ).rejects.toThrow('malformed');
+});
+
 test('keeps GET chat day_summary type instead of dropping it as a normal turn', async () => {
   const summary = {
     id: 'summary-1',
