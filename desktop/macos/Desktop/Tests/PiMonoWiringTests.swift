@@ -183,7 +183,7 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertFalse(AIProvider.shouldSkipConnectorSynthesis())
 
     // Omi AI (any non-local provider): always sends, regardless of the
-    // cloud-assist setting — the setting is meaningless off Local.
+    // cloud-assist setting: the setting is meaningless off Local.
     UserDefaults.standard.set(ChatProvider.BridgeMode.piMono.rawValue, forKey: bridgeModeKey)
     UserDefaults.standard.set(AIProvider.CloudAssistMode.off.rawValue, forKey: cloudAssistModeKey)
     XCTAssertFalse(AIProvider.shouldSkipConnectorSynthesis())

@@ -223,7 +223,7 @@ actor GeminiClient {
     case planGated
     /// The Local provider is active and the user has not opted cloud-assisted
     /// features on (`AIProvider.localCloudAssistEnabled`). Thrown before any
-    /// network call — never a server response — so screenshot/transcript
+    /// network call, never a server response, so screenshot/transcript
     /// content for this call never leaves the machine. Non-retryable, same
     /// family as `planGated`: both are a product-level "this call may not
     /// happen" answer, not a transient failure.

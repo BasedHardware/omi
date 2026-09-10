@@ -26,19 +26,19 @@ extension AppState {
   /// - `"chat"`/`"ptt"`: the completion itself always runs against the
   ///   user's own server under Local (`AIProvider.currentProviderMode`
   ///   never routes text to Omi regardless of the cloud-assist setting), so
-  ///   the free-tier question quota does not apply — `isLocalProviderActive`
+  ///   the free-tier question quota does not apply: `isLocalProviderActive`
   ///   alone is enough.
   /// - `"screen_capture"`: matches `isScreenCaptureExemptFromPaywall`'s
   ///   Local-specific clause exactly, so this backstop can never disagree
   ///   with the leaf gate it backstops (see `isScreenCaptureExemptFromPaywall`'s
   ///   doc comment for why cloud-assist re-introduces metering here).
   /// - `"transcription"`: voice never runs through the local text model
-  ///   alone — only a configured self-hosted backend takes it off Omi's
+  ///   alone, only a configured self-hosted backend takes it off Omi's
   ///   Deepgram proxy, so this needs `isLocalProviderWithSelfHostedBackend`.
   /// - anything else (including `"trial_expired"`, `"realtime"`): no Local
-  ///   exemption. `"trial_expired"` no longer has a Local-specific poster —
-  ///   both `SystemCaptureControls` gates now post their own narrower reason
-  ///   — so a caller that still posts it is asking about genuine Omi-account
+  ///   exemption. `"trial_expired"` no longer has a Local-specific poster:
+  ///   both `SystemCaptureControls` gates now post their own narrower reason,
+  ///   so a caller that still posts it is asking about genuine Omi-account
   ///   trial state, which Local does not change.
   nonisolated static func isUsageLimitExemptLocally(reason: String) -> Bool {
     switch reason {
@@ -114,7 +114,7 @@ extension AppState {
   /// delegation (see `ChatProvider.visionSubagentInstruction`) already routes
   /// that through the local provider's own model/subagent instead. Screen
   /// capture itself (the macOS frame grab) never leaves the device under any
-  /// provider — but the proactive assistants and live notes that consume it
+  /// provider, but the proactive assistants and live notes that consume it
   /// (task/memory/insight/suggestion extraction) go back to Omi's Gemini
   /// proxy the moment the user opts cloud-assist on, so this is metered again
   /// exactly like a cloud user once `AIProvider.localCloudAssistEnabled` is

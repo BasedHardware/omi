@@ -143,7 +143,7 @@ enum ProactiveLaneClientError: LocalizedError {
   case planGated
   /// The Local provider is active and the user has not opted cloud-assisted
   /// features on (`AIProvider.localCloudAssistEnabled`). Thrown before any
-  /// network call — this lane's `complete()` is the context-director
+  /// network call: this lane's `complete()` is the context-director
   /// completion (task/insight/suggestion decisions from screen + transcript
   /// content), a cloud-model call regardless of whether the payload carries
   /// pixels, so unlike `planGated` this applies to text-only completions too.

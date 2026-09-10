@@ -399,7 +399,7 @@ actor EmbeddingService {
     case serverError(statusCode: Int, body: String)
     /// The Local provider is active and the user has not opted cloud-assisted
     /// features on (`AIProvider.localCloudAssistEnabled`). Thrown before any
-    /// network call, from `embed`/`embedBatch` — no text ever leaves the
+    /// network call, from `embed`/`embedBatch`: no text ever leaves the
     /// machine for embedding. Same family as a 402/`product_gate`: callers
     /// that already treat `isExpectedBackendState` as a quiet, expected
     /// backend-limit state (Rewind's backfill and search paths) degrade the

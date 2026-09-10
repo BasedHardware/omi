@@ -1218,7 +1218,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let gate = ContextDeliveryGateInput(
       masterEnabled: Self.areNotificationsEnabled(),
       frequencyLevel: level,
-      // Mirrors `ContextProactivityEngine.liveDeliveryGateInput()` — see its
+      // Mirrors `ContextProactivityEngine.liveDeliveryGateInput()`, see its
       // comment. The raw BYOK-only `isPaywalledEffective` flag does not know
       // about the Local provider and would silently drop a director
       // notification the local model itself produced.
