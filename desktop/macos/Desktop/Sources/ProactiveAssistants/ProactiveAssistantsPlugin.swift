@@ -291,13 +291,17 @@ public class ProactiveAssistantsPlugin: NSObject {
     // `AppState.isScreenCaptureExemptFromPaywall`) — so both bypass this gate
     // even if the flag is transiently stale.
     if !AppState.isScreenCaptureExemptFromPaywall {
-      log("Paywall: refusing startMonitoring (trial expired)")
+      log("Paywall: refusing startMonitoring (screen capture paywalled)")
+      // Same reason `SystemCaptureControls.setScreenCapture` posts — this is
+      // the same gate, reached from a different entry point (auto-restart,
+      // paywall-clear resume) — so the central choke point applies the same
+      // exemption either way.
       NotificationCenter.default.post(
         name: .showUsageLimitPopup,
         object: nil,
-        userInfo: ["reason": "trial_expired"]
+        userInfo: ["reason": "screen_capture"]
       )
-      completion(false, "trial_expired")
+      completion(false, "screen_capture")
       return
     }
 

@@ -370,8 +370,8 @@ struct SettingsContentView: View {
   @AppStorage(AIProvider.localModelIDKey) var localLLMModelID: String = AIProvider.defaultLocalModelID
   @AppStorage(AIProvider.localVisionModelIDKey) var localLLMVisionModelID: String = ""
   @AppStorage(AIProvider.localBackendURLKey) var localBackendURL: String = ""
-  @AppStorage(AIProvider.connectorSynthesisModeKey) var connectorSynthesisMode: String =
-    AIProvider.ConnectorSynthesisMode.off.rawValue
+  @AppStorage(AIProvider.cloudAssistModeKey) var localCloudAssistMode: String =
+    AIProvider.CloudAssistMode.off.rawValue
   @State var localModelOptions: [String] = []
   @State var isFetchingLocalModels = false
   @State var localModelsFetchFailed = false

@@ -1218,7 +1218,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let gate = ContextDeliveryGateInput(
       masterEnabled: Self.areNotificationsEnabled(),
       frequencyLevel: level,
-      paywalled: AppState.isPaywalledEffective,
+      // Mirrors `ContextProactivityEngine.liveDeliveryGateInput()` — see its
+      // comment. The raw BYOK-only `isPaywalledEffective` flag does not know
+      // about the Local provider and would silently drop a director
+      // notification the local model itself produced.
+      paywalled: !AppState.isScreenCaptureExemptFromPaywall,
       cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: level)
     )
     guard ContextDeliveryBudget.freeGate(input: gate) == .allowed else { return false }

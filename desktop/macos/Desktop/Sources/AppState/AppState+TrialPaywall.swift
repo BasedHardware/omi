@@ -14,8 +14,44 @@ extension AppState {
   /// is intentionally excluded here. A future reason not in this set fails
   /// closed (still shown) rather than silently swallowed.
   private static let freePlanPaywallReasons: Set<String> = [
-    "trial_expired", "transcription", "ptt", "chat",
+    "trial_expired", "transcription", "ptt", "chat", "screen_capture",
   ]
+
+  /// Reason-aware Local-provider exemption, shared by the central
+  /// `triggerUsageLimitPopup` choke point and every leaf gate that needs the
+  /// same answer for the same reason. Free-tier quota exists to meter Omi's
+  /// cloud model usage; a reason names WHICH feature is asking, so each one
+  /// gets exactly the exemption its own model/network path earns:
+  ///
+  /// - `"chat"`/`"ptt"`: the completion itself always runs against the
+  ///   user's own server under Local (`AIProvider.currentProviderMode`
+  ///   never routes text to Omi regardless of the cloud-assist setting), so
+  ///   the free-tier question quota does not apply — `isLocalProviderActive`
+  ///   alone is enough.
+  /// - `"screen_capture"`: matches `isScreenCaptureExemptFromPaywall`'s
+  ///   Local-specific clause exactly, so this backstop can never disagree
+  ///   with the leaf gate it backstops (see `isScreenCaptureExemptFromPaywall`'s
+  ///   doc comment for why cloud-assist re-introduces metering here).
+  /// - `"transcription"`: voice never runs through the local text model
+  ///   alone — only a configured self-hosted backend takes it off Omi's
+  ///   Deepgram proxy, so this needs `isLocalProviderWithSelfHostedBackend`.
+  /// - anything else (including `"trial_expired"`, `"realtime"`): no Local
+  ///   exemption. `"trial_expired"` no longer has a Local-specific poster —
+  ///   both `SystemCaptureControls` gates now post their own narrower reason
+  ///   — so a caller that still posts it is asking about genuine Omi-account
+  ///   trial state, which Local does not change.
+  nonisolated static func isUsageLimitExemptLocally(reason: String) -> Bool {
+    switch reason {
+    case "chat", "ptt":
+      return AIProvider.isLocalProviderActive
+    case "screen_capture":
+      return AIProvider.isLocalProviderActive && !AIProvider.localCloudAssistEnabled
+    case "transcription":
+      return AIProvider.isLocalProviderWithSelfHostedBackend
+    default:
+      return false
+    }
+  }
 
   func triggerUsageLimitPopup(reason: String) {
     // Debug escape hatch for self-test runs that don't want the overage modal in the way.
@@ -29,9 +65,9 @@ extension AppState {
     // `isPaywalled`/`isPaywalledEffective`; the Local-provider check is the
     // one this file exists to add.
     if Self.freePlanPaywallReasons.contains(reason),
-      APIKeyService.isByokActive || AIProvider.hasLocalBackendConfigured
+      APIKeyService.isByokActive || AppState.isUsageLimitExemptLocally(reason: reason)
     {
-      log("AppState: usage-limit popup (reason=\(reason)) suppressed: BYOK or Local provider with self-hosted backend configured")
+      log("AppState: usage-limit popup (reason=\(reason)) suppressed: BYOK or Local-provider exemption for this reason")
       return
     }
     // A modal the user did not ask for, arriving over what they were doing: the same "something
@@ -58,29 +94,34 @@ extension AppState {
   /// True when transcription specifically is exempt from the paywall — either
   /// the general BYOK exemption above, or because the local provider is
   /// active with a self-hosted backend configured (Settings' "Local Backend
-  /// URL", see `AIProvider.hasLocalBackendConfigured`), which routes voice
-  /// transcription away from Omi's Deepgram proxy entirely. Distinct from
-  /// `isScreenCaptureExemptFromPaywall`: transcription needs the extra
-  /// backend-URL check because the Local provider alone only covers text and
-  /// (via the vision subagent) screenshots, not the separate voice pipeline.
+  /// URL", see `AIProvider.isLocalProviderWithSelfHostedBackend`), which
+  /// routes voice transcription away from Omi's Deepgram proxy entirely.
+  /// Distinct from `isScreenCaptureExemptFromPaywall`: transcription needs the
+  /// extra backend-URL check because the Local provider alone only covers
+  /// text and (via the vision subagent) screenshots, not the separate voice
+  /// pipeline.
   nonisolated static var isTranscriptionExemptFromPaywall: Bool {
     if !isPaywalledEffective { return true }
-    return AIProvider.hasLocalBackendConfigured
+    return AIProvider.isLocalProviderWithSelfHostedBackend
   }
 
   /// True when screen capture / screenshot interpretation is exempt from the
   /// paywall — either the general BYOK exemption above, or because the Local
-  /// provider is the active chat/agent provider. Unlike
-  /// `isTranscriptionExemptFromPaywall`, this needs no additional
-  /// self-hosted-backend check: screen capture's only cloud dependency was
+  /// provider is active AND the user has not opted cloud-assisted features
+  /// on. Unlike `isTranscriptionExemptFromPaywall`, this needs no
+  /// self-hosted-backend check: screen capture's own cloud dependency was
   /// Omi's Gemini proxy for interpreting the image, and the vision-subagent
   /// delegation (see `ChatProvider.visionSubagentInstruction`) already routes
   /// that through the local provider's own model/subagent instead. Screen
   /// capture itself (the macOS frame grab) never leaves the device under any
-  /// provider.
+  /// provider — but the proactive assistants and live notes that consume it
+  /// (task/memory/insight/suggestion extraction) go back to Omi's Gemini
+  /// proxy the moment the user opts cloud-assist on, so this is metered again
+  /// exactly like a cloud user once `AIProvider.localCloudAssistEnabled` is
+  /// true.
   nonisolated static var isScreenCaptureExemptFromPaywall: Bool {
     if !isPaywalledEffective { return true }
-    return AIProvider.isLocalProviderActive
+    return AIProvider.isLocalProviderActive && !AIProvider.localCloudAssistEnabled
   }
 
   /// Decision for the resume-on-paywall-clear hook in `fetchTrialMetadata()`.

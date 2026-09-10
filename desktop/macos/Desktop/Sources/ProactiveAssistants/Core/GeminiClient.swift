@@ -221,6 +221,13 @@ actor GeminiClient {
     /// Identified basic + non-BYOK, or a typed 402 `plan_gated` from the proxy.
     /// Non-retryable. Distinct from chat-quota 402 (`error` field).
     case planGated
+    /// The Local provider is active and the user has not opted cloud-assisted
+    /// features on (`AIProvider.localCloudAssistEnabled`). Thrown before any
+    /// network call — never a server response — so screenshot/transcript
+    /// content for this call never leaves the machine. Non-retryable, same
+    /// family as `planGated`: both are a product-level "this call may not
+    /// happen" answer, not a transient failure.
+    case localProviderCloudOff
 
     /// The raw API message for internal logging (not shown to user).
     var internalMessage: String? {
@@ -246,7 +253,7 @@ actor GeminiClient {
           || lower.contains("internal error")
       case .networkError:
         return true
-      case .invalidResponse, .missingAPIKey, .planGated:
+      case .invalidResponse, .missingAPIKey, .planGated, .localProviderCloudOff:
         return false
       }
     }
@@ -262,7 +269,7 @@ actor GeminiClient {
         // A transport error after dispatch is ambiguous. Only a typed backend
         // response may authorize replay.
         return false
-      case .invalidResponse, .missingAPIKey, .planGated:
+      case .invalidResponse, .missingAPIKey, .planGated, .localProviderCloudOff:
         return false
       }
     }
@@ -281,7 +288,7 @@ actor GeminiClient {
           || lower.contains("usage limit")
           || lower.contains("quota exceeded")
           || lower.contains("http 402")
-      case .missingAPIKey, .planGated:
+      case .missingAPIKey, .planGated, .localProviderCloudOff:
         return true
       case .networkError, .invalidResponse:
         return false
@@ -300,6 +307,8 @@ actor GeminiClient {
         return Self.userFacingMessage(for: message)
       case .planGated:
         return "AI features require an active plan or BYOK keys."
+      case .localProviderCloudOff:
+        return "This feature is off under the Local provider. Enable Cloud-assisted features in Settings > AI Provider to turn it on."
       }
     }
 
@@ -560,7 +569,7 @@ actor GeminiClient {
           return "provider_5xx"
         }
         return "other"
-      case .invalidResponse, .missingAPIKey, .planGated:
+      case .invalidResponse, .missingAPIKey, .planGated, .localProviderCloudOff:
         return "other"
       }
     }
@@ -589,6 +598,16 @@ actor GeminiClient {
   }
 
   static func enforceManagedProactivity() async throws {
+    // Local-provider fail-closed gate, checked before `ManagedProactivityDecisionSource.current()`
+    // (which itself may issue a subscription-refresh network call) so an
+    // opted-out Local session never makes ANY network call for this feature,
+    // not even the entitlement lookup. Independent of subscription/BYOK
+    // state: the point is that this content (screenshot or prompt text) does
+    // not leave the machine unless the user explicitly opted cloud-assisted
+    // features on, regardless of what plan they're on.
+    if AIProvider.isLocalProviderActive && !AIProvider.localCloudAssistEnabled {
+      throw GeminiClientError.localProviderCloudOff
+    }
     try requireManagedProactivity(await ManagedProactivityDecisionSource.current())
   }
 

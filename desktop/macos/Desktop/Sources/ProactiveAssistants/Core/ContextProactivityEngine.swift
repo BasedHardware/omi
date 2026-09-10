@@ -1341,7 +1341,15 @@ actor ContextProactivityEngine {
     return ContextDeliveryGateInput(
       masterEnabled: NotificationService.areNotificationsEnabled(),
       frequencyLevel: frequencyLevel,
-      paywalled: AppState.isPaywalledEffective,
+      // `!isScreenCaptureExemptFromPaywall` (not the raw `isPaywalledEffective`
+      // flag): this director is the same screen-capture-driven proactive
+      // pipeline `SystemCaptureControls`/`ProactiveAssistantsPlugin` gate —
+      // its content generation is exempt from the cloud paywall on exactly
+      // the same terms (Local active, cloud-assist off) and metered again the
+      // same way once cloud-assist is on. Using the raw BYOK-only flag here
+      // let a stale `desktop_isPaywalled` silently swallow a notification
+      // generated entirely by the local model, with no popup shown.
+      paywalled: !AppState.isScreenCaptureExemptFromPaywall,
       cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: frequencyLevel),
       dailyLimit: ContextDeliveryBudget.dailyLimit(
         frequencyLevel: frequencyLevel,

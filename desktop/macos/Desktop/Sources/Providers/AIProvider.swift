@@ -95,38 +95,73 @@ struct AIProvider: Identifiable {
   /// normal cloud/dev resolution", same opt-in framing as the two keys above.
   static let localBackendURLKey = "localBackendURL"
 
-  /// UserDefaults key for whether background connector synthesis (Apple
-  /// Notes, Calendar, and Gmail memory synthesis, plus AI-profile synthesis)
-  /// is allowed to call Omi's cloud synthesis endpoint while the Local
-  /// provider is active. Only meaningful under Local — every other provider
-  /// already synthesizes server-side regardless of this setting.
+  /// Pre-unification key: connector synthesis (Apple Notes/Calendar/Gmail +
+  /// AI-profile) used to have its own standalone on/off toggle before it was
+  /// folded into `cloudAssistModeKey` below. Read once, by
+  /// `localCloudAssistMode`, to migrate an existing explicit choice forward;
+  /// never written to again after that.
   static let connectorSynthesisModeKey = "localConnectorSynthesisMode"
 
-  /// Values for `connectorSynthesisModeKey`.
-  enum ConnectorSynthesisMode: String {
-    /// Default: Notes/Calendar/Gmail memory synthesis and AI-profile
-    /// synthesis do not run while Local is active — no formatted note,
-    /// event, or email text leaves the machine.
+  /// UserDefaults key for the single Local-provider "Cloud-assisted
+  /// features" setting: whether connector synthesis (Notes/Calendar/Gmail/
+  /// AI-profile), proactive assistants and live notes (memory, task,
+  /// suggestion, insight extraction from screen and transcripts), dictation
+  /// polish, Rewind semantic-search embeddings, and web search are allowed to
+  /// send content to Omi's servers and cloud models while the Local provider
+  /// is active. Only meaningful under Local — every other provider already
+  /// sends this content server-side regardless of this setting.
+  static let cloudAssistModeKey = "localCloudAssistMode"
+
+  /// Values for `cloudAssistModeKey`.
+  enum CloudAssistMode: String {
+    /// Default: none of the covered features run while Local is active — no
+    /// screenshot, transcript, note/event/email text, or search query leaves
+    /// the machine for any of them.
     case off
-    /// Opt-in: the same formatted text sent under any other provider is
-    /// sent to Omi's servers and processed by a cloud model.
+    /// Opt-in: the same content sent under any other provider is sent to
+    /// Omi's servers and processed by a cloud model, metered like a cloud
+    /// user for each feature it touches.
     case cloud
   }
 
-  /// The persisted connector-synthesis choice, defaulting to `.off`.
-  static var connectorSynthesisMode: ConnectorSynthesisMode {
-    let raw =
-      UserDefaults.standard.string(forKey: connectorSynthesisModeKey) ?? ConnectorSynthesisMode.off.rawValue
-    return ConnectorSynthesisMode(rawValue: raw) ?? .off
+  /// The persisted cloud-assist choice, defaulting to `.off`. Migrates the
+  /// pre-unification `connectorSynthesisModeKey` forward exactly once: if the
+  /// new key has never been set but the old one was, the old value becomes
+  /// the new key's value (an existing explicit Off stays Off, an existing
+  /// Cloud opt-in carries forward too) so a user's prior choice is never
+  /// silently reset by this rename.
+  static var localCloudAssistMode: CloudAssistMode {
+    let defaults = UserDefaults.standard
+    if let raw = defaults.string(forKey: cloudAssistModeKey) {
+      return CloudAssistMode(rawValue: raw) ?? .off
+    }
+    if let legacyRaw = defaults.string(forKey: connectorSynthesisModeKey),
+      let migrated = CloudAssistMode(rawValue: legacyRaw)
+    {
+      defaults.set(migrated.rawValue, forKey: cloudAssistModeKey)
+      return migrated
+    }
+    return .off
+  }
+
+  /// True only when the Local provider is active *and* the user has opted
+  /// cloud-assisted features on. Every feature listed on `cloudAssistModeKey`
+  /// gates its own network call on this — false under every other provider
+  /// (they already send this content server-side unconditionally) and false
+  /// under Local until the explicit opt-in.
+  static var localCloudAssistEnabled: Bool {
+    isLocalProviderActive && localCloudAssistMode == .cloud
   }
 
   /// Whether a connector-synthesis call site (Apple Notes, Calendar, Gmail
   /// memory synthesis, or AI-profile synthesis) should skip its network call
   /// entirely. True only when the Local provider is active *and* the user
-  /// has not opted into sending that data to Omi's cloud; every other
-  /// provider is unaffected.
+  /// has not opted into cloud-assisted features; every other provider is
+  /// unaffected. Thin wrapper over `localCloudAssistEnabled` kept so its four
+  /// call sites (AppleNotesReaderService, CalendarReaderService,
+  /// GmailReaderService, AIUserProfileService) read naturally at the call site.
   static func shouldSkipConnectorSynthesis() -> Bool {
-    resolveBridgeMode() == .local && connectorSynthesisMode == .off
+    isLocalProviderActive && !localCloudAssistEnabled
   }
 
   /// Default local endpoint — localhost, matching LM Studio's default port.
@@ -187,7 +222,11 @@ struct AIProvider: Identifiable {
   /// also leave Omi's cloud proxy path (see `DesktopBackendEnvironment`).
   /// Narrower than `isLocalProviderActive`: a user who only pointed chat at
   /// Local still sends audio to Omi's Deepgram proxy until this is also true.
-  static var hasLocalBackendConfigured: Bool {
+  /// The owner runs Local with this deliberately unset — no self-hosted
+  /// backend — which must stay a first-class, fully-supported configuration:
+  /// chat/PTT/screen-capture exemptions key off `isLocalProviderActive`
+  /// alone, and only transcription needs this narrower check.
+  static var isLocalProviderWithSelfHostedBackend: Bool {
     isLocalProviderActive && !(UserDefaults.standard.string(forKey: localBackendURLKey) ?? "").isEmpty
   }
 

@@ -307,27 +307,37 @@ extension SettingsContentView {
       }
 
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-        Text("Connector synthesis")
+        Text("Cloud-assisted features")
           .scaledFont(size: OmiType.caption, weight: .medium)
           .foregroundColor(Ink.secondary)
 
-        Picker("", selection: $connectorSynthesisMode) {
-          Text("Off").tag(AIProvider.ConnectorSynthesisMode.off.rawValue)
-          Text("Send to Omi cloud").tag(AIProvider.ConnectorSynthesisMode.cloud.rawValue)
+        Picker("", selection: $localCloudAssistMode) {
+          Text("Off").tag(AIProvider.CloudAssistMode.off.rawValue)
+          Text("Send to Omi cloud").tag(AIProvider.CloudAssistMode.cloud.rawValue)
         }
         .pickerStyle(.menu)
         .labelsHidden()
+        .onAppear {
+          // Force the migrated value to be read (and, if migrating, written)
+          // through AIProvider's lazy one-time migration before this picker
+          // renders, so an existing pre-unification connector-synthesis
+          // choice is reflected here immediately rather than only after some
+          // other call site happens to read it first.
+          localCloudAssistMode = AIProvider.localCloudAssistMode.rawValue
+        }
 
         Text(
-          "Off (default): Apple Notes, Calendar, and Gmail memory synthesis, and AI-profile synthesis, do not run under the Local provider."
+          "Off (default): connector synthesis (Notes, Calendar, Gmail, AI profile), proactive assistants and live notes (memory, task, suggestion, and insight extraction from screen and transcripts), dictation polish, Rewind semantic-search embeddings, and web search do not run under the Local provider."
         )
         .scaledFont(size: OmiType.caption)
         .foregroundColor(Ink.secondary)
 
-        if connectorSynthesisMode == AIProvider.ConnectorSynthesisMode.cloud.rawValue {
-          Text("Formatted note, event, and email text will be sent to Omi's servers and processed by a cloud model.")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
+        if localCloudAssistMode == AIProvider.CloudAssistMode.cloud.rawValue {
+          Text(
+            "That content goes to Omi's servers and cloud models, and counts against your plan the same as it would on any other provider."
+          )
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
         }
       }
 

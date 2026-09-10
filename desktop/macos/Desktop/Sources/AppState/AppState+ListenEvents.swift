@@ -504,7 +504,7 @@ extension AppState {
       // transcription no longer runs through Omi's Deepgram proxy at all, so
       // a stale/cached freemium event must not stop it or raise the popup.
       // See `AppState.isTranscriptionExemptFromPaywall`.
-      if APIKeyService.hasTranscriptionBYOK || AIProvider.hasLocalBackendConfigured {
+      if APIKeyService.hasTranscriptionBYOK || AIProvider.isLocalProviderWithSelfHostedBackend {
         log("Paywall: ignoring freemium threshold: BYOK or Local backend active locally")
         if isPaywalled { isPaywalled = false }
         break
