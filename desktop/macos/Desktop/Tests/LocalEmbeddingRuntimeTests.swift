@@ -9,6 +9,12 @@ private final class ProbeCallCounter: @unchecked Sendable {
   func increment() { count += 1 }
 }
 
+private final class TimeoutReasonBox: @unchecked Sendable {
+  private var reasons: [String] = []
+  func append(_ reason: String) { reasons.append(reason) }
+  func snapshot() -> [String] { reasons }
+}
+
 @MainActor
 final class LocalEmbeddingRuntimeTests: XCTestCase {
   func testRuntimeFailClosedProbeAndDisabledState() async throws {
@@ -44,6 +50,25 @@ final class LocalEmbeddingRuntimeTests: XCTestCase {
         appleSilicon: true, assetsAvailable: true, fixtureSucceeded: true, elapsed: .zero, dimension: 8)
     }
     guard case .disabled = await runtime.selectEngine() else { return XCTFail("kill switch ignored") }
+  }
+
+  func testEmbedTimeoutRecordsEngineTimeoutAndReturnsNil() async {
+    let engine = NeverReturningEmbeddingEngine()
+    let reasons = TimeoutReasonBox()
+    var runtime = LocalEmbeddingRuntime(
+      engines: [engine], defaultEngineID: engine.engineID,
+      record: { _, reason in reasons.append(reason) })
+    runtime.embedBudget = .milliseconds(20)
+    let vectors = await runtime.embed(["synthetic timeout query"], task: .document, using: engine)
+    XCTAssertNil(vectors)
+    XCTAssertEqual(reasons.snapshot(), ["engine_timeout"])
+  }
+
+  func testProbeTimeoutReportsEngineTimeoutWithoutPermitting() async {
+    let engine = NeverReturningEmbeddingEngine()
+    let probe = await LocalEmbeddingProbe.run(engine, budget: .milliseconds(20))
+    XCTAssertEqual(probe.reason, "engine_timeout")
+    XCTAssertFalse(probe.permits(engine, budget: .seconds(2)))
   }
 
   func testDisabledAndUnknownEngineNeverReachInjectedHTTPClient() async {

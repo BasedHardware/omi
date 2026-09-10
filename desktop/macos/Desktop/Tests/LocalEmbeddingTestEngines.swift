@@ -74,3 +74,46 @@ struct FailOnCallEmbeddingEngine: LocalEmbeddingService {
     return .assetsUnavailable
   }
 }
+
+/// Parks until the calling Task is cancelled so timeout tests can observe `engine_timeout`.
+struct NeverReturningEmbeddingEngine: LocalEmbeddingService {
+  let engineID = "never-return"
+  let modelID = "never-return"
+  let dimension = 8
+  let capabilities = LocalEmbeddingCapabilities(assetsAvailable: true, requiresAppleSilicon: false, maxBatchSize: 8)
+
+  func embed(_ texts: [String], task: LocalEmbeddingTask) async throws -> [[Float]] {
+    try await Self.parkUntilCancelled()
+    throw CancellationError()
+  }
+
+  private static func parkUntilCancelled() async throws {
+    let box = CancellationResumeBox()
+    try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+        box.park(continuation)
+      }
+    } onCancel: {
+      box.resume()
+    }
+  }
+}
+
+private final class CancellationResumeBox: @unchecked Sendable {
+  private var continuation: CheckedContinuation<Void, Error>?
+  private let lock = NSLock()
+
+  func park(_ continuation: CheckedContinuation<Void, Error>) {
+    lock.lock()
+    self.continuation = continuation
+    lock.unlock()
+  }
+
+  func resume() {
+    lock.lock()
+    let pending = continuation
+    continuation = nil
+    lock.unlock()
+    pending?.resume(throwing: CancellationError())
+  }
+}

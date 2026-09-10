@@ -12,11 +12,14 @@ struct LocalEmbeddingRuntime: Sendable {
   var killSwitches: LocalEmbeddingKillSwitches = .enabled
   var defaultEngineID: String? = nil
   var probeBudget: Duration = .seconds(2)
+  var embedBudget: Duration = .seconds(30)
   var probeTTL: Duration = .seconds(60)
   var probeCache: LocalEmbeddingProbeCache = LocalEmbeddingProbeCache()
   var clock: @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
   var thermalState: @Sendable () -> ProcessInfo.ThermalState = { ProcessInfo.processInfo.thermalState }
-  var probe: @Sendable (any LocalEmbeddingService) async -> LocalEmbeddingProbe = LocalEmbeddingProbe.run
+  var probe: @Sendable (any LocalEmbeddingService) async -> LocalEmbeddingProbe = {
+    await LocalEmbeddingProbe.run($0)
+  }
   var record: @Sendable (String, String) -> Void = { from, reason in
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "local_embeddings", from: from, to: "keyword", reason: reason, outcome: .degraded)
@@ -76,11 +79,18 @@ struct LocalEmbeddingRuntime: Sendable {
       guard texts.count <= engine.capabilities.maxBatchSize else {
         throw LocalInferenceError.invalidResponse("invalid local vector shape")
       }
-      let vectors = try await engine.embed(texts, task: task)
+      let vectors = try await LocalEmbeddingCallBound.run(embedBudget) {
+        try await engine.embed(texts, task: task)
+      }
       guard !Task.isCancelled, vectors.count == texts.count,
         vectors.allSatisfy({ LocalEmbeddingProbe.valid($0, dimension: engine.dimension) })
       else { throw LocalInferenceError.invalidResponse("invalid local vector shape") }
       return vectors
+    } catch is LocalEmbeddingTimeoutError {
+      record("local_embeddings", "engine_timeout")
+      return nil
+    } catch is CancellationError {
+      return nil
     } catch {
       record("local_embeddings", "engine_failed")
       return nil
