@@ -41,11 +41,53 @@ test('parses GET latest firmware and omits empty or draft versions', () => {
   expect(parseOmiLatestFirmware(JSON.stringify({}))).toBeNull();
 });
 
+test('parses GET latest firmware changelog and omits production empty-string default', () => {
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({
+        version: '1.3.0',
+        changelog: ['Fixed BLE reconnect', '  ', 'Battery improvements'],
+      }),
+    ),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+    changelog: ['Fixed BLE reconnect', 'Battery improvements'],
+  });
+  expect(
+    parseOmiLatestFirmware(JSON.stringify({version: '1.3.0', changelog: ''})),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+  });
+  expect(
+    parseOmiLatestFirmware(JSON.stringify({version: '1.3.0', changelog: []})),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+  });
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({version: '1.3.0', changelog: [' \t']}),
+    ),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+  });
+});
+
 test('fails closed for malformed GET latest firmware', () => {
   expect(() => parseOmiLatestFirmware(JSON.stringify([]))).toThrow();
   expect(() => parseOmiLatestFirmware(JSON.stringify({version: 1}))).toThrow();
   expect(() =>
     parseOmiLatestFirmware(JSON.stringify({version: '1.3.0', draft: 'yes'})),
+  ).toThrow();
+  expect(() =>
+    parseOmiLatestFirmware(JSON.stringify({version: '1.3.0', changelog: [1]})),
   ).toThrow();
 });
 

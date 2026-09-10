@@ -1142,6 +1142,26 @@ test('firmware update copy names GET latest without Available on current or draf
     }),
   ).toEqual({latest: '1.2.3-beta', available: false});
   expect(firmwareUpdateCopy('1.2.3', null)).toBeNull();
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: null,
+      changelog: ['Fixed BLE reconnect', '  ', 'Battery improvements'],
+    }),
+  ).toEqual({
+    latest: '1.3.0',
+    available: true,
+    changelog: ['Fixed BLE reconnect', 'Battery improvements'],
+  });
+  expect(
+    firmwareUpdateCopy('1.2.3', {
+      version: '1.3.0',
+      draft: true,
+      minVersion: null,
+      changelog: ['Fixed BLE reconnect'],
+    }),
+  ).toBeNull();
 });
 
 test('developer webhook titles are not raw API keys', () => {

@@ -141,6 +141,7 @@ export function DeviceSession({
   const [firmwareCopy, setFirmwareCopy] = useState<{
     latest: string;
     available: boolean;
+    changelog?: string[];
   } | null>(null);
   useEffect(() => {
     const backend = omiBackend;
@@ -456,6 +457,13 @@ export function DeviceSession({
           Available
         </Text>
       ) : null}
+      {(firmwareCopy?.changelog ?? []).map((line, index) => (
+        <Text key={`changelog-${index}`} selectable style={styles.deviceMeta}>
+          What's New
+          {': '}
+          {line}
+        </Text>
+      ))}
     </View>
   ) : null;
 

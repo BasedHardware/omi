@@ -265,7 +265,10 @@ test('connected device names GET latest firmware without an OTA control', async 
   omiBackend.request.mockResolvedValue({
     id: 'omi-firmware-latest',
     status: 200,
-    body: JSON.stringify({version: '1.3.0'}),
+    body: JSON.stringify({
+      version: '1.3.0',
+      changelog: ['Fixed BLE reconnect', '  ', 'Battery improvements'],
+    }),
   });
   const snapshot = {
     bluetooth: 'poweredOn',
@@ -305,6 +308,8 @@ test('connected device names GET latest firmware without an OTA control', async 
   expect(output).toContain('"Latest",": ","1.3.0"');
   expect(output).toContain('Firmware update available');
   expect(output).toContain('Available');
+  expect(output).toContain('"What\'s New",": ","Fixed BLE reconnect"');
+  expect(output).toContain('"What\'s New",": ","Battery improvements"');
   expect(output).not.toContain('Install');
   expect(omiBackend.request).toHaveBeenCalledWith({
     id: expect.any(String),
@@ -335,6 +340,7 @@ test('connected device names GET latest firmware without an OTA control', async 
     await Promise.resolve();
   });
   expect(JSON.stringify(renderer.toJSON())).not.toContain('"Latest"');
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('"What\'s New"');
   await act(async () => renderer.unmount());
   omiBackend.request.mockReset();
   omiBackend.request.mockResolvedValue({
@@ -357,6 +363,7 @@ test('connected device names GET latest firmware without an OTA control', async 
     await Promise.resolve();
   });
   expect(JSON.stringify(renderer.toJSON())).not.toContain('"Latest"');
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('"What\'s New"');
   await act(async () => renderer.unmount());
   omiBackend.request.mockReset();
 });

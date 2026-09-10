@@ -14,6 +14,38 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function text(value: unknown, limit: number): string {
+  if (typeof value !== 'string' || value.length > limit) {
+    throw new FirmwareError();
+  }
+  return value;
+}
+
+function array(value: unknown, limit: number): unknown[] {
+  if (!Array.isArray(value) || value.length > limit) {
+    throw new FirmwareError();
+  }
+  return value;
+}
+
+function firmwareChangelog(value: unknown): string[] | undefined {
+  if (value === undefined || value === null || typeof value === 'string') {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const rows = array(value, 32);
+  const changelog: string[] = [];
+  for (const raw of rows) {
+    const copy = visibleDisplayText(text(raw, 10000));
+    if (copy !== '') {
+      changelog.push(copy);
+    }
+  }
+  return changelog.length === 0 ? undefined : changelog;
+}
+
 export type FirmwareLatestQuery = {
   model: string;
   firmware: string;
@@ -25,6 +57,7 @@ export type FirmwareLatestDetails = {
   version: string;
   draft: boolean;
   minVersion: string | null;
+  changelog?: string[];
 };
 
 export function firmwareLatestQuery(information?: {
@@ -77,10 +110,12 @@ export function parseOmiLatestFirmware(
     typeof record.min_version === 'string'
       ? visibleDisplayText(record.min_version)
       : '';
+  const changelog = firmwareChangelog(record.changelog);
   return {
     version,
     draft,
     minVersion: minVersion === '' ? null : minVersion,
+    ...(changelog === undefined ? {} : {changelog}),
   };
 }
 

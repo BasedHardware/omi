@@ -968,8 +968,13 @@ function compareDottedVersion(left: number[], right: number[]): number {
 
 export function firmwareUpdateCopy(
   currentFirmware: string,
-  details: {version: string; draft: boolean; minVersion: string | null} | null,
-): {latest: string; available: boolean} | null {
+  details: {
+    version: string;
+    draft: boolean;
+    minVersion: string | null;
+    changelog?: readonly string[];
+  } | null,
+): {latest: string; available: boolean; changelog?: string[]} | null {
   if (details === null || details.draft) {
     return null;
   }
@@ -986,7 +991,15 @@ export function firmwareUpdateCopy(
     newest !== null &&
     (minimum === null || compareDottedVersion(current, minimum) >= 0) &&
     compareDottedVersion(newest, current) > 0;
-  return {latest, available};
+  const changelog = (details.changelog ?? []).flatMap(item => {
+    const copy = visibleDisplayText(item);
+    return copy === '' ? [] : [copy];
+  });
+  return {
+    latest,
+    available,
+    ...(changelog.length === 0 ? {} : {changelog}),
+  };
 }
 
 export function subscriptionStatusCopy(status: string): string {
