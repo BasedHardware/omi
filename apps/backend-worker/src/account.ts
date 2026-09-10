@@ -23,6 +23,7 @@ import {
   composeGenerationPrompt,
   isVisibleGenerationText,
 } from "./generation-prompt";
+import { openLiveGenerationSse } from "./generation-sse";
 import type { ChatCreate, GenerationEvent } from "./wire";
 
 export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
@@ -139,29 +140,19 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
     const existing = replay;
     if (existing.some((event) => this.isTerminal(event)))
       return this.sse(existing);
-    const encoder = new TextEncoder();
-    let listener: ((event: GenerationEvent) => void) | undefined;
-    const stream = new ReadableStream<Uint8Array>({
-      start: (controller) => {
-        for (const event of existing)
-          controller.enqueue(encoder.encode(this.encode(event)));
-        listener = (event) => {
-          try {
-            controller.enqueue(encoder.encode(this.encode(event)));
-            if (this.isTerminal(event)) controller.close();
-          } catch {
-            this.waiters.get(generationId)?.delete(listener!);
-          }
-        };
+    const stream = openLiveGenerationSse(
+      (event) => this.encode(event),
+      existing,
+      (listener) => {
         const listeners = this.waiters.get(generationId) ?? new Set();
         listeners.add(listener);
         this.waiters.set(generationId, listeners);
-      },
-      cancel: () => {
-        if (listener !== undefined)
+        return () => {
           this.waiters.get(generationId)?.delete(listener);
+        };
       },
-    });
+      (event) => this.isTerminal(event)
+    );
     return new Response(stream, {
       headers: {
         "cache-control": "no-store",
