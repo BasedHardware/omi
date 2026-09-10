@@ -521,6 +521,7 @@ def main() -> int:
     errors.extend(check_python_cli_release_version_source())
     errors.extend(check_react_native_release_tags())
     errors.extend(check_firmware_release_metadata())
+    errors.extend(check_firebase_probe_signer_identity())
 
     if errors:
         for error in errors:
@@ -529,6 +530,51 @@ def main() -> int:
 
     print("release process guard checks passed")
     return 0
+
+
+def check_firebase_probe_signer_identity() -> list[str]:
+    """A release probe must sign with a credential that belongs to the Firebase auth project.
+
+    `firebase_release_probe_token.py` fails closed when the signer credential's `project_id`
+    differs from `--firebase-project`, and every environment's `GCP_CREDENTIALS` is that
+    environment's own deploy identity (`based-hardware-dev` in development). Wiring the two
+    together produces a gate that can never pass in any environment.
+
+    That shipped: `7883c816db` added the development Pusher semantic probe with
+    `FIREBASE_SIGNER_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}` and
+    `--firebase-project based-hardware`. It failed `signer_credentials/project_mismatch` on
+    every run from the day it landed, blocking the Pusher dev qualification -- and therefore
+    every production Pusher release -- for ten days, which stranded the #12663 custom-STT
+    revert on a stale tier while ~3.5k conversations a day silently lost their summaries.
+    `secrets.GCP_SERVICE_ACCOUNT` is the based-hardware signer the desktop development lane
+    already mints probe tokens with; that is the credential a probe signer must come from.
+    """
+
+    errors: list[str] = []
+    workflows = sorted((ROOT / ".github/workflows").glob("*.yml"))
+    for workflow in workflows:
+        text = workflow.read_text(encoding="utf-8")
+        relative = workflow.relative_to(ROOT)
+        for name, secret in re.findall(
+            r"^\s*([A-Za-z0-9_]*SIGNER[A-Za-z0-9_]*)\s*:\s*\$\{\{\s*secrets\.([A-Za-z0-9_]+)\s*\}\}",
+            text,
+            re.MULTILINE,
+        ):
+            if secret == "GCP_SERVICE_ACCOUNT":
+                continue
+            errors.append(
+                f"{relative}: {name} is fed from secrets.{secret}; a Firebase probe signer must come "
+                "from secrets.GCP_SERVICE_ACCOUNT, which belongs to the based-hardware auth project. "
+                "A per-environment deploy identity fails signer_credentials/project_mismatch on every run."
+            )
+        if "firebase_release_probe_token.py" not in text or "--signer-credentials-file" not in text:
+            continue
+        if "secrets.GCP_SERVICE_ACCOUNT" not in text:
+            errors.append(
+                f"{relative}: mints a Firebase probe token from a signer credentials file but never reads "
+                "secrets.GCP_SERVICE_ACCOUNT; the signer must belong to the --firebase-project it signs for."
+            )
+    return errors
 
 
 def check_desktop_codemagic_release() -> list[str]:

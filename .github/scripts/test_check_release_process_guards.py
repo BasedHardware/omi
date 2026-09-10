@@ -984,3 +984,57 @@ def test_desktop_promotion_guard_rejects_reintroduced_qualification_trigger(tmp_
     promotion.write_text(original + "\nqualification_run_id: 1\n", encoding="utf-8")
     errors = GUARDS.check_desktop_promotion_independent_of_qualification()
     assert any("still depends on qualification" in error for error in errors), errors
+
+
+def _workflow_tree(tmp_path: Path, monkeypatch, body: str) -> list[str]:
+    """Run the signer guard against a single synthetic workflow."""
+    workflows = tmp_path / ".github/workflows"
+    workflows.mkdir(parents=True, exist_ok=True)
+    (workflows / "probe.yml").write_text(body, encoding="utf-8")
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+    return GUARDS.check_firebase_probe_signer_identity()
+
+
+_PROBE_STEP = """jobs:
+  deploy:
+    environment: development
+    steps:
+      - name: Probe
+        env:
+          FIREBASE_SIGNER_CREDENTIALS_B64: ${{{{ secrets.{secret} }}}}
+        run: |
+          printf '%s' "$FIREBASE_SIGNER_CREDENTIALS_B64" | base64 --decode > "$signer_file"
+          python3 backend/scripts/firebase_release_probe_token.py \\
+            --firebase-project based-hardware \\
+            --signer-credentials-file "$signer_file" \\
+            --token-output "$token_file"
+"""
+
+
+def test_probe_signer_from_the_environment_deploy_identity_is_rejected(tmp_path, monkeypatch):
+    """The exact wiring 7883c816db shipped: a based-hardware-dev identity signing for
+    based-hardware. It failed signer_credentials/project_mismatch on every run for ten days
+    and blocked every production Pusher release behind it."""
+    errors = _workflow_tree(tmp_path, monkeypatch, _PROBE_STEP.format(secret="GCP_CREDENTIALS"))
+
+    assert any("GCP_CREDENTIALS" in error and "GCP_SERVICE_ACCOUNT" in error for error in errors), errors
+
+
+def test_probe_signer_from_the_firebase_project_signer_is_accepted(tmp_path, monkeypatch):
+    """The wiring the desktop development lane already mints probe tokens with."""
+    assert _workflow_tree(tmp_path, monkeypatch, _PROBE_STEP.format(secret="GCP_SERVICE_ACCOUNT")) == []
+
+
+def test_probe_with_a_signer_file_must_name_the_firebase_signer_secret(tmp_path, monkeypatch):
+    """A signer file assembled without the based-hardware secret cannot satisfy the probe."""
+    body = _PROBE_STEP.format(secret="GCP_SERVICE_ACCOUNT").replace(
+        "FIREBASE_SIGNER_CREDENTIALS_B64: ${{ secrets.GCP_SERVICE_ACCOUNT }}",
+        "OTHER_INPUT: ${{ secrets.DOCKER_PAT }}",
+    )
+    errors = _workflow_tree(tmp_path, monkeypatch, body)
+
+    assert any("never reads secrets.GCP_SERVICE_ACCOUNT" in error for error in errors), errors
+
+
+def test_live_workflows_satisfy_the_probe_signer_contract():
+    assert GUARDS.check_firebase_probe_signer_identity() == []
