@@ -48,3 +48,14 @@ struct FailingQueryEmbeddingEngine: LocalEmbeddingService {
     return try await base.embed(texts, task: task)
   }
 }
+
+struct UnavailableAssetsEmbeddingEngine: LocalEmbeddingService {
+  let engineID = "assets-missing"
+  let modelID = "assets-missing"
+  let dimension = 8
+  let capabilities = LocalEmbeddingCapabilities(assetsAvailable: false, requiresAppleSilicon: false, maxBatchSize: 8)
+  func embed(_ texts: [String], task: LocalEmbeddingTask) async throws -> [[Float]] {
+    XCTFail("assets-unavailable engine must not embed")
+    return []
+  }
+}

@@ -2,7 +2,8 @@ import CryptoKit
 import Foundation
 @preconcurrency import GRDB
 
-// Source metadata remains authoritative in its source table. Only screenshots are searchable today.
+// Source metadata remains authoritative in its source table.
+// Hybrid search filters by sourceKind so screen search never mixes in transcripts or memories.
 enum LocalEmbeddingSourceKind: String, Sendable {
   case screenshot
   case transcriptChunk = "transcript_chunk"
@@ -57,6 +58,78 @@ struct LocalEmbeddingStore: Sendable {
           END;
           """)
     }
+    migrator.registerMigration("createTranscriptChunksAndMemoriesFTS") { db in
+      if try db.tableExists("transcription_sessions") == false {
+        try db.create(table: "transcription_sessions") { t in
+          t.autoIncrementedPrimaryKey("id")
+        }
+      }
+      if try db.tableExists("memories") == false {
+        try db.create(table: "memories") { t in
+          t.autoIncrementedPrimaryKey("id")
+          t.column("content", .text).notNull().defaults(to: "")
+          t.column("deleted", .boolean).notNull().defaults(to: false)
+          t.column("createdAt", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+          t.column("sourceApp", .text)
+        }
+      }
+      try db.execute(
+        sql: """
+          CREATE TABLE transcript_chunks (
+            id INTEGER PRIMARY KEY,
+            sessionId INTEGER NOT NULL REFERENCES transcription_sessions(id) ON DELETE CASCADE,
+            chunkIndex INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            textSha256 TEXT NOT NULL,
+            startedAt DATETIME NOT NULL,
+            UNIQUE(sessionId, chunkIndex)
+          );
+          CREATE INDEX transcript_chunks_session ON transcript_chunks(sessionId, chunkIndex);
+          CREATE VIRTUAL TABLE transcript_chunks_fts USING fts5(
+            text, content='transcript_chunks', content_rowid='id'
+          );
+          CREATE TRIGGER transcript_chunks_ai AFTER INSERT ON transcript_chunks BEGIN
+            INSERT INTO transcript_chunks_fts(rowid, text) VALUES (new.id, new.text);
+          END;
+          CREATE TRIGGER transcript_chunks_ad AFTER DELETE ON transcript_chunks BEGIN
+            INSERT INTO transcript_chunks_fts(transcript_chunks_fts, rowid, text)
+            VALUES ('delete', old.id, old.text);
+          END;
+          CREATE TRIGGER transcript_chunks_au AFTER UPDATE OF text ON transcript_chunks BEGIN
+            INSERT INTO transcript_chunks_fts(transcript_chunks_fts, rowid, text)
+            VALUES ('delete', old.id, old.text);
+            INSERT INTO transcript_chunks_fts(rowid, text) VALUES (new.id, new.text);
+          END;
+          CREATE TRIGGER local_embeddings_transcript_delete AFTER DELETE ON transcript_chunks BEGIN
+            DELETE FROM local_embeddings WHERE sourceKind = 'transcript_chunk' AND sourceId = old.id;
+          END;
+          CREATE TRIGGER local_embeddings_transcript_text_update AFTER UPDATE OF text, textSha256 ON transcript_chunks BEGIN
+            DELETE FROM local_embeddings WHERE sourceKind = 'transcript_chunk' AND sourceId = old.id;
+          END;
+          CREATE VIRTUAL TABLE memories_fts USING fts5(
+            content, content='memories', content_rowid='id'
+          );
+          CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
+            INSERT INTO memories_fts(rowid, content) VALUES (new.id, new.content);
+          END;
+          CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
+            INSERT INTO memories_fts(memories_fts, rowid, content)
+            VALUES ('delete', old.id, old.content);
+          END;
+          CREATE TRIGGER memories_au AFTER UPDATE OF content ON memories BEGIN
+            INSERT INTO memories_fts(memories_fts, rowid, content)
+            VALUES ('delete', old.id, old.content);
+            INSERT INTO memories_fts(rowid, content) VALUES (new.id, new.content);
+          END;
+          CREATE TRIGGER local_embeddings_memory_delete AFTER DELETE ON memories BEGIN
+            DELETE FROM local_embeddings WHERE sourceKind = 'memory' AND sourceId = old.id;
+          END;
+          CREATE TRIGGER local_embeddings_memory_text_update AFTER UPDATE OF content ON memories BEGIN
+            DELETE FROM local_embeddings WHERE sourceKind = 'memory' AND sourceId = old.id;
+          END;
+          INSERT INTO memories_fts(memories_fts) VALUES('rebuild');
+          """)
+    }
   }
 
   static func textHash(_ text: String) -> String {
@@ -85,6 +158,19 @@ struct LocalEmbeddingStore: Sendable {
             id: sourceId, ocrText: ocrText,
             appName: row["appName"], windowTitle: row["windowTitle"])
           guard current.text == text else { throw LocalEmbeddingStoreError.sourceChanged }
+        } else if sourceKind == .transcriptChunk {
+          guard
+            let current = try String.fetchOne(
+              db, sql: "SELECT text FROM transcript_chunks WHERE id = ?", arguments: [sourceId]),
+            current == text
+          else { throw LocalEmbeddingStoreError.sourceChanged }
+        } else if sourceKind == .memory {
+          guard
+            let current = try String.fetchOne(
+              db, sql: "SELECT content FROM memories WHERE id = ? AND COALESCE(deleted, 0) = 0", arguments: [sourceId]
+            ),
+            current == text
+          else { throw LocalEmbeddingStoreError.sourceChanged }
         }
         try db.execute(
           sql: """
@@ -124,41 +210,125 @@ struct LocalEmbeddingStore: Sendable {
     }
   }
 
-  func keywordCandidates(query: String, startDate: Date?, endDate: Date?, appFilter: String?) throws
-    -> [LocalEmbeddingCandidate]
-  {
+  func keywordCandidates(
+    query: String, startDate: Date?, endDate: Date?, appFilter: String?,
+    sourceKinds: Set<LocalEmbeddingSourceKind> = [.screenshot]
+  ) throws -> [LocalEmbeddingCandidate] {
     let tokens = query.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).prefix(64)
-    guard !tokens.isEmpty else { return [] }
+    guard !tokens.isEmpty, !sourceKinds.isEmpty else { return [] }
     let match = tokens.map { "\"\($0)\"" }.joined(separator: " AND ")
-    return try pool.read { db in
-      var sql = """
-        SELECT s.id, s.timestamp, s.appName FROM screenshots s
-        JOIN screenshots_fts ON s.id = screenshots_fts.rowid WHERE screenshots_fts MATCH ?
-        """
-      var args: [DatabaseValueConvertible] = [match]
-      Self.filter(&sql, &args, startDate: startDate, endDate: endDate, appFilter: appFilter)
-      sql += " ORDER BY bm25(screenshots_fts), s.timestamp DESC, s.id DESC LIMIT 50"
-      return try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args)).map(Self.candidate)
+    var candidates: [LocalEmbeddingCandidate] = []
+    try pool.read { db in
+      if sourceKinds.contains(.screenshot) {
+        var sql = """
+          SELECT s.id, s.timestamp, s.appName FROM screenshots s
+          JOIN screenshots_fts ON s.id = screenshots_fts.rowid WHERE screenshots_fts MATCH ?
+          """
+        var args: [DatabaseValueConvertible] = [match]
+        Self.filter(
+          &sql, &args, alias: "s", timestamp: "timestamp", app: "appName", startDate: startDate, endDate: endDate,
+          appFilter: appFilter)
+        sql += " ORDER BY bm25(screenshots_fts), s.timestamp DESC, s.id DESC LIMIT 50"
+        candidates.append(
+          contentsOf: try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args)).map {
+            Self.candidate($0, kind: .screenshot)
+          })
+      }
+      if sourceKinds.contains(.transcriptChunk) {
+        var sql = """
+          SELECT t.id, t.startedAt AS timestamp, 'Transcript' AS appName FROM transcript_chunks t
+          JOIN transcript_chunks_fts ON t.id = transcript_chunks_fts.rowid WHERE transcript_chunks_fts MATCH ?
+          """
+        var args: [DatabaseValueConvertible] = [match]
+        Self.filter(
+          &sql, &args, alias: "t", timestamp: "startedAt", app: nil, startDate: startDate, endDate: endDate,
+          appFilter: nil)
+        sql += " ORDER BY bm25(transcript_chunks_fts), t.startedAt DESC, t.id DESC LIMIT 50"
+        candidates.append(
+          contentsOf: try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args)).map {
+            Self.candidate($0, kind: .transcriptChunk)
+          })
+      }
+      if sourceKinds.contains(.memory) {
+        var sql = """
+          SELECT m.id, m.createdAt AS timestamp, COALESCE(m.sourceApp, 'Memory') AS appName FROM memories m
+          JOIN memories_fts ON m.id = memories_fts.rowid
+          WHERE COALESCE(m.deleted, 0) = 0 AND memories_fts MATCH ?
+          """
+        var args: [DatabaseValueConvertible] = [match]
+        Self.filter(
+          &sql, &args, alias: "m", timestamp: "createdAt", app: "sourceApp", startDate: startDate, endDate: endDate,
+          appFilter: appFilter)
+        sql += " ORDER BY bm25(memories_fts), m.createdAt DESC, m.id DESC LIMIT 50"
+        candidates.append(
+          contentsOf: try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args)).map {
+            Self.candidate($0, kind: .memory)
+          })
+      }
     }
+    return Array(
+      candidates.sorted {
+        $0.capturedAt == $1.capturedAt ? $0.sourceId > $1.sourceId : $0.capturedAt > $1.capturedAt
+      }.prefix(50))
   }
 
   func readBatch(
     modelID: String, dimension: Int, startDate: Date?, endDate: Date?, appFilter: String?,
-    limit: Int = 5000, offset: Int = 0
+    limit: Int = 5000, offset: Int = 0, sourceKinds: Set<LocalEmbeddingSourceKind> = [.screenshot]
   ) throws -> [LocalEmbeddingCandidate] {
-    try pool.read { db in
-      var sql = """
-        SELECT s.id, s.timestamp, s.appName, e.vector FROM local_embeddings e
-        JOIN screenshots s ON e.sourceKind = 'screenshot' AND s.id = e.sourceId
-        WHERE e.modelId = ? AND e.dimension = ?
-        """
-      var args: [DatabaseValueConvertible] = [modelID, dimension]
-      Self.filter(&sql, &args, startDate: startDate, endDate: endDate, appFilter: appFilter)
-      sql += " ORDER BY s.timestamp DESC, s.id DESC LIMIT ? OFFSET ?"
+    guard !sourceKinds.isEmpty else { return [] }
+    return try pool.read { db in
+      var parts: [String] = []
+      var args: [DatabaseValueConvertible] = []
+      if sourceKinds.contains(.screenshot) {
+        var sql = """
+          SELECT s.id, s.timestamp, s.appName, e.vector, e.sourceKind FROM local_embeddings e
+          JOIN screenshots s ON e.sourceKind = 'screenshot' AND s.id = e.sourceId
+          WHERE e.modelId = ? AND e.dimension = ?
+          """
+        args.append(modelID)
+        args.append(dimension)
+        Self.filter(
+          &sql, &args, alias: "s", timestamp: "timestamp", app: "appName", startDate: startDate, endDate: endDate,
+          appFilter: appFilter)
+        parts.append(sql)
+      }
+      if sourceKinds.contains(.transcriptChunk) {
+        var sql = """
+          SELECT t.id, t.startedAt AS timestamp, 'Transcript' AS appName, e.vector, e.sourceKind FROM local_embeddings e
+          JOIN transcript_chunks t ON e.sourceKind = 'transcript_chunk' AND t.id = e.sourceId
+          WHERE e.modelId = ? AND e.dimension = ?
+          """
+        args.append(modelID)
+        args.append(dimension)
+        Self.filter(
+          &sql, &args, alias: "t", timestamp: "startedAt", app: nil, startDate: startDate, endDate: endDate,
+          appFilter: nil)
+        parts.append(sql)
+      }
+      if sourceKinds.contains(.memory) {
+        var sql = """
+          SELECT m.id, m.createdAt AS timestamp, COALESCE(m.sourceApp, 'Memory') AS appName, e.vector, e.sourceKind
+          FROM local_embeddings e
+          JOIN memories m ON e.sourceKind = 'memory' AND m.id = e.sourceId
+          WHERE e.modelId = ? AND e.dimension = ? AND COALESCE(m.deleted, 0) = 0
+          """
+        args.append(modelID)
+        args.append(dimension)
+        Self.filter(
+          &sql, &args, alias: "m", timestamp: "createdAt", app: "sourceApp", startDate: startDate, endDate: endDate,
+          appFilter: appFilter)
+        parts.append(sql)
+      }
+      guard !parts.isEmpty else { return [] }
+      let sql =
+        parts.map { "SELECT * FROM (\( $0 ))" }.joined(separator: " UNION ALL ")
+        + " ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?"
       args.append(max(0, min(limit, 5000)))
       args.append(max(0, offset))
       return try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args)).map { row in
-        var value = Self.candidate(row)
+        let kind = LocalEmbeddingSourceKind(rawValue: row["sourceKind"]) ?? .screenshot
+        var value = Self.candidate(row, kind: kind)
         let data: Data = row["vector"]
         if data.count == dimension * MemoryLayout<Float>.size {
           value.vector = data.withUnsafeBytes { raw in
@@ -170,25 +340,113 @@ struct LocalEmbeddingStore: Sendable {
     }
   }
 
-  private static func candidate(_ row: Row) -> LocalEmbeddingCandidate {
+  func upsertTranscriptChunks(_ chunks: [TranscriptChunkRecord], authorization: LocalMutationAuthorization)
+    async throws -> [TranscriptChunkRecord]
+  {
+    try await authorization.withCommitLeaseSuppressingSupersededResult {
+      try await pool.write { db in
+        try authorization.require()
+        var stored: [TranscriptChunkRecord] = []
+        stored.reserveCapacity(chunks.count)
+        for chunk in chunks {
+          try db.execute(
+            sql: """
+              INSERT INTO transcript_chunks(sessionId, chunkIndex, text, textSha256, startedAt)
+              VALUES (?, ?, ?, ?, ?)
+              ON CONFLICT(sessionId, chunkIndex) DO UPDATE SET
+                text = excluded.text, textSha256 = excluded.textSha256, startedAt = excluded.startedAt
+              """,
+            arguments: [
+              chunk.sessionId, chunk.chunkIndex, chunk.text, chunk.textSha256, chunk.startedAt,
+            ])
+          let id = try Int64.fetchOne(
+            db,
+            sql: "SELECT id FROM transcript_chunks WHERE sessionId = ? AND chunkIndex = ?",
+            arguments: [chunk.sessionId, chunk.chunkIndex])
+          stored.append(
+            TranscriptChunkRecord(
+              id: id, sessionId: chunk.sessionId, chunkIndex: chunk.chunkIndex,
+              text: chunk.text, textSha256: chunk.textSha256, startedAt: chunk.startedAt))
+        }
+        try authorization.require()
+        return stored
+      }
+    }
+  }
+
+  func sessionsNeedingTranscriptChunks(limit: Int = 20) throws -> [Int64] {
+    try pool.read { db in
+      try Int64.fetchAll(
+        db,
+        sql: """
+          SELECT s.id FROM transcription_sessions s
+          WHERE EXISTS (SELECT 1 FROM transcription_segments g WHERE g.sessionId = s.id)
+            AND NOT EXISTS (SELECT 1 FROM transcript_chunks c WHERE c.sessionId = s.id)
+          ORDER BY s.id DESC LIMIT ?
+          """,
+        arguments: [max(0, min(limit, 50))])
+    }
+  }
+
+  func memoriesNeedingEmbedding(modelID: String, limit: Int = 100) throws -> [(id: Int64, content: String)] {
+    try pool.read { db in
+      try Row.fetchAll(
+        db,
+        sql: """
+          SELECT id, content FROM memories
+          WHERE COALESCE(deleted, 0) = 0 AND LENGTH(content) > 0 AND NOT EXISTS (
+            SELECT 1 FROM local_embeddings e WHERE e.sourceKind = 'memory'
+              AND e.sourceId = memories.id AND e.modelId = ?)
+          ORDER BY id DESC LIMIT ?
+          """,
+        arguments: [modelID, max(0, min(limit, 200))]
+      ).compactMap { row in
+        guard let id: Int64 = row["id"], let content: String = row["content"] else { return nil }
+        return (id, content)
+      }
+    }
+  }
+
+  func transcriptChunksNeedingEmbedding(modelID: String, limit: Int = 100) throws -> [TranscriptChunkRecord] {
+    try pool.read { db in
+      try Row.fetchAll(
+        db,
+        sql: """
+          SELECT id, sessionId, chunkIndex, text, textSha256, startedAt FROM transcript_chunks
+          WHERE NOT EXISTS (
+            SELECT 1 FROM local_embeddings e WHERE e.sourceKind = 'transcript_chunk'
+              AND e.sourceId = transcript_chunks.id AND e.modelId = ?)
+          ORDER BY id DESC LIMIT ?
+          """,
+        arguments: [modelID, max(0, min(limit, 200))]
+      ).map {
+        TranscriptChunkRecord(
+          id: $0["id"], sessionId: $0["sessionId"], chunkIndex: $0["chunkIndex"],
+          text: $0["text"], textSha256: $0["textSha256"], startedAt: $0["startedAt"])
+      }
+    }
+  }
+
+  private static func candidate(_ row: Row, kind: LocalEmbeddingSourceKind) -> LocalEmbeddingCandidate {
     LocalEmbeddingCandidate(
-      sourceKind: .screenshot, sourceId: row["id"], capturedAt: row["timestamp"], appName: row["appName"])
+      sourceKind: kind, sourceId: row["id"], capturedAt: row["timestamp"], appName: row["appName"])
   }
 
   private static func filter(
     _ sql: inout String, _ args: inout [DatabaseValueConvertible],
+    alias: String, timestamp: String, app: String?,
     startDate: Date?, endDate: Date?, appFilter: String?
   ) {
     if let startDate {
-      sql += " AND s.timestamp >= ?"
+      sql += " AND \(alias).\(timestamp) >= ?"
       args.append(startDate)
     }
     if let endDate {
-      sql += " AND s.timestamp <= ?"
+      sql += " AND \(alias).\(timestamp) <= ?"
       args.append(endDate)
     }
-    if let appFilter {
-      sql += " AND s.appName = ?"
+    if let appFilter, let app {
+      sql += " AND \(alias).\(app) = ?"
       args.append(appFilter)
     }
   }

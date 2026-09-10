@@ -20,11 +20,12 @@ struct LocalHybridSearch: Sendable {
   func search(
     query: String, engine: (any LocalEmbeddingService)?, startDate: Date? = nil,
     endDate: Date? = nil, appFilter: String? = nil, limit: Int = 50,
-    maxScannedEmbeddings: Int = 20_000
+    maxScannedEmbeddings: Int = 20_000,
+    sourceKinds: Set<LocalEmbeddingSourceKind> = [.screenshot]
   ) async throws -> [LocalHybridHit] {
     try authorization.require()
     let keywords = try store.keywordCandidates(
-      query: query, startDate: startDate, endDate: endDate, appFilter: appFilter)
+      query: query, startDate: startDate, endDate: endDate, appFilter: appFilter, sourceKinds: sourceKinds)
     var vectors: [(candidate: LocalEmbeddingCandidate, score: Float)] = []
     if let engine, let queryVector = await runtime.embed([query], task: .query, using: engine)?.first {
       var scanned = 0
@@ -35,7 +36,7 @@ struct LocalHybridSearch: Sendable {
         let batch = try store.readBatch(
           modelID: engine.modelID, dimension: engine.dimension,
           startDate: startDate, endDate: endDate, appFilter: appFilter,
-          limit: min(5000, budget - scanned), offset: scanned)
+          limit: min(5000, budget - scanned), offset: scanned, sourceKinds: sourceKinds)
         if batch.isEmpty { break }
         scanned += batch.count
         for candidate in batch {
@@ -107,15 +108,17 @@ struct LocalHybridSearch: Sendable {
 }
 
 /// The chat route is selected once. A local query failure must never invoke the legacy closure.
+/// Probe failure (`.none`) stays on local FTS-only. Only the kill switch uses Gemini.
 enum ScreenHistorySearchRoute {
   static func search<T: Sendable>(
     runtime: LocalEmbeddingRuntime,
-    local: @Sendable (any LocalEmbeddingService) async throws -> T,
+    local: @Sendable ((any LocalEmbeddingService)?) async throws -> T,
     legacy: @Sendable () async throws -> T
   ) async throws -> T {
     switch await runtime.selectEngine() {
     case .engine(let engine): return try await local(engine)
-    case .none, .disabled: return try await legacy()
+    case .none: return try await local(nil)
+    case .disabled: return try await legacy()
     }
   }
 }

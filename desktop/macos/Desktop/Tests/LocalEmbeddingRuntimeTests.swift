@@ -3,6 +3,12 @@ import XCTest
 
 @testable import Omi_Computer
 
+private final class ProbeCallCounter: @unchecked Sendable {
+  var count = 0
+  var thermal = ProcessInfo.ThermalState.nominal
+  func increment() { count += 1 }
+}
+
 @MainActor
 final class LocalEmbeddingRuntimeTests: XCTestCase {
   func testRuntimeFailClosedProbeAndDisabledState() async throws {
@@ -17,6 +23,7 @@ final class LocalEmbeddingRuntimeTests: XCTestCase {
       LocalEmbeddingProbe(
         appleSilicon: true, assetsAvailable: true, fixtureSucceeded: true, elapsed: .seconds(3), dimension: 8)
     }
+    await runtime.probeCache.invalidate()
     guard case .none = await runtime.selectEngine() else { return XCTFail("over-budget probe accepted") }
     for result in [
       LocalEmbeddingProbe(
@@ -27,6 +34,7 @@ final class LocalEmbeddingRuntimeTests: XCTestCase {
         appleSilicon: true, assetsAvailable: true, fixtureSucceeded: false, elapsed: .zero, dimension: 8),
     ] {
       runtime.probe = { _ in result }
+      await runtime.probeCache.invalidate()
       guard case .none = await runtime.selectEngine() else { return XCTFail("failed readiness gate accepted") }
     }
     runtime.killSwitches = LocalEmbeddingKillSwitches(isDisabled: true, forcedEngineRaw: nil)
@@ -61,5 +69,52 @@ final class LocalEmbeddingRuntimeTests: XCTestCase {
     XCTAssertEqual(flags.forcedEngineRaw, "test_hash")
     XCTAssertEqual(
       LocalEmbeddingKillSwitches.resolve(environment: [:], defaults: defaults).forcedEngineRaw, "defaults-engine")
+  }
+
+  func testCachedProbeFailureIsReprobedAfterInvalidation() async {
+    let engine = HashEmbeddingEngine()
+    let cache = LocalEmbeddingProbeCache()
+    let probes = ProbeCallCounter()
+    var runtime = LocalEmbeddingRuntime(
+      engines: [engine], defaultEngineID: engine.engineID, probeCache: cache, record: { _, _ in })
+    runtime.probe = { _ in
+      probes.increment()
+      return LocalEmbeddingProbe(
+        appleSilicon: true, assetsAvailable: false, fixtureSucceeded: false, elapsed: .zero, dimension: 0,
+        reason: "assets_unavailable")
+    }
+    guard case .none = await runtime.selectEngine() else { return XCTFail("failed probe selected") }
+    XCTAssertEqual(probes.count, 1)
+    guard case .none = await runtime.selectEngine() else { return XCTFail("cached failure selected") }
+    XCTAssertEqual(probes.count, 1, "cached failure must not re-probe")
+    await cache.invalidate()
+    guard case .none = await runtime.selectEngine() else { return XCTFail("invalidated cache skipped probe") }
+    XCTAssertEqual(probes.count, 2)
+  }
+
+  func testThermalStateChangeBypassesCachedProbe() async {
+    let engine = HashEmbeddingEngine()
+    let probes = ProbeCallCounter()
+    var runtime = LocalEmbeddingRuntime(
+      engines: [engine], defaultEngineID: engine.engineID, record: { _, _ in })
+    runtime.thermalState = { probes.thermal }
+    runtime.probe = { _ in
+      probes.increment()
+      return LocalEmbeddingProbe(
+        appleSilicon: true, assetsAvailable: false, fixtureSucceeded: false, elapsed: .zero, dimension: 0,
+        reason: "assets_unavailable")
+    }
+    _ = await runtime.selectEngine()
+    probes.thermal = .serious
+    _ = await runtime.selectEngine()
+    XCTAssertEqual(probes.count, 2)
+  }
+
+  func testProbeReportsAssetsUnavailableWithoutFailing() async {
+    let engine = UnavailableAssetsEmbeddingEngine()
+    let probe = await LocalEmbeddingProbe.run(engine)
+    XCTAssertEqual(probe.reason, LocalEmbeddingAssetStatus.assetsUnavailable.rawValue)
+    XCTAssertFalse(probe.assetsAvailable)
+    XCTAssertFalse(probe.permits(engine, budget: .seconds(2)))
   }
 }
