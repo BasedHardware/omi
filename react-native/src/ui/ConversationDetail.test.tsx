@@ -639,3 +639,37 @@ test('legacy conversation details omit empty or whitespace action items', () => 
   expect(copy).not.toContain('Action Items');
   expect(copy).not.toContain('\u0085');
 });
+
+test('legacy conversation details name GET geolocation address', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        locationAddress: '123 Market St, San Francisco',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('123 Market St, San Francisco');
+  const discarded = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', discarded: true},
+    }),
+  );
+  expect(discarded).not.toContain('123 Market St, San Francisco');
+});

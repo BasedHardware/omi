@@ -1,4 +1,5 @@
 import type {OmiBackend} from './omiNativeTypes';
+import {visibleDisplayText} from './desktopReadClient';
 
 export type LegacyConversationDetail = {
   id: string;
@@ -7,6 +8,7 @@ export type LegacyConversationDetail = {
   locked: boolean;
   sections: {heading: string; bodyMarkdown: string}[];
   actionItems: {description: string; completed: boolean}[];
+  locationAddress?: string;
   transcript:
     | {status: 'unavailable'}
     | {
@@ -55,6 +57,17 @@ function array(value: unknown, limit: number): unknown[] {
     throw new DetailError('invalid');
   }
   return value;
+}
+function locationAddress(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const geo = object(value);
+  if (geo.address === undefined || geo.address === null) {
+    return undefined;
+  }
+  const address = visibleDisplayText(text(geo.address, 10000));
+  return address === '' ? undefined : address;
 }
 
 export async function loadLegacyConversationDetail(
@@ -151,6 +164,7 @@ export async function loadLegacyConversationDetail(
             };
           }),
         };
+  const address = locationAddress(value.geolocation);
   return {
     id,
     title: text(structured.title),
@@ -158,6 +172,7 @@ export async function loadLegacyConversationDetail(
     locked,
     sections,
     actionItems,
+    ...(address === undefined ? {} : {locationAddress: address}),
     transcript,
   };
 }

@@ -100,6 +100,52 @@ test('uses the actual old detail wire and retains full notes and transcript', as
   });
 });
 
+test('keeps GET geolocation address and omits empty or missing locations', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {address: '123 Market St, San Francisco'},
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).locationAddress,
+  ).toBe('123 Market St, San Francisco');
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {address: ' \t\n'},
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).locationAddress,
+  ).toBeUndefined();
+  mockRequest.mockResolvedValue(response(fixture));
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).locationAddress,
+  ).toBeUndefined();
+});
+
+test('fails closed for malformed GET geolocation', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: 'not-an-object',
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {address: 1},
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+});
+
 test('keeps GET action items and drops deleted rows', async () => {
   mockRequest.mockResolvedValue(
     response({

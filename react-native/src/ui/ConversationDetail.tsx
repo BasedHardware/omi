@@ -218,6 +218,9 @@ function LegacyConversationBody({
           return [{...segment, text, speaker: speaker === '' ? null : speaker}];
         })
       : [];
+  const address = conversation.discarded
+    ? ''
+    : visibleDisplayText(detail.locationAddress ?? '');
   return (
     <>
       <Text
@@ -239,6 +242,9 @@ function LegacyConversationBody({
         ink={ink}
         locked={detail.locked}
       />
+      {address === '' ? null : (
+        <Text style={[styles.conversationDetailField, ink]}>{address}</Text>
+      )}
       {detail.sections.flatMap((section, index) => {
         const heading = visibleDisplayText(section.heading);
         const bodyMarkdown = visibleDisplayText(section.bodyMarkdown);
