@@ -123,7 +123,6 @@ final class LocalEmbeddingRuntimeTests: XCTestCase {
 final class LocalEmbeddingOptInTests: XCTestCase {
   override func tearDown() async throws {
     await LocalEmbeddingIndexer.shared.setRuntimeForTesting(.makeDefault())
-    try await super.tearDown()
   }
 
   func testProductionFamilyDefaultDisablesEngineAndIndexer() async throws {
