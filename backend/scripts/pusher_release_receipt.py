@@ -142,6 +142,15 @@ def rendered_chart_documents(
     return documents
 
 
+def _drop_null_fields(value: Any) -> Any:
+    """Drop YAML nulls so Helm `secretKeyRef: null` matches the API-omitted key."""
+    if isinstance(value, dict):
+        return {key: _drop_null_fields(item) for key, item in value.items() if item is not None}
+    if isinstance(value, list):
+        return [_drop_null_fields(item) for item in value]
+    return value
+
+
 def pod_template_semantic_projection(template: dict[str, Any]) -> dict[str, Any]:
     """Project capability-relevant PodTemplate fields without API defaults."""
     spec = template.get("spec") if isinstance(template.get("spec"), dict) else {}
@@ -185,7 +194,8 @@ def pod_template_semantic_projection(template: dict[str, Any]) -> dict[str, Any]
     )
     projected_container = {field: copy.deepcopy(container[field]) for field in container_fields if field in container}
     projected_container["env"] = sorted(
-        (copy.deepcopy(item) for item in env if isinstance(item, dict)), key=lambda item: str(item.get("name", ""))
+        (_drop_null_fields(copy.deepcopy(item)) for item in env if isinstance(item, dict)),
+        key=lambda item: str(item.get("name", "")),
     )
     for probe_name in ("livenessProbe", "readinessProbe", "startupProbe"):
         probe = projected_container.get(probe_name)
@@ -206,9 +216,12 @@ def pod_template_semantic_projection(template: dict[str, Any]) -> dict[str, Any]
                 for resource_name in ("cpu", "memory"):
                     if resource_name in values:
                         values[resource_name] = _normalize_resource_quantity(resource_name, values[resource_name])
+    pod = {field: copy.deepcopy(spec[field]) for field in pod_fields if field in spec}
+    if pod.get("securityContext") == {}:
+        pod.pop("securityContext")
     return {
         "container": projected_container,
-        "pod": {field: copy.deepcopy(spec[field]) for field in pod_fields if field in spec},
+        "pod": pod,
     }
 
 
