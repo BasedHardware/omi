@@ -1,18 +1,6 @@
 """REST helpers must not return unsuccessful HTTP responses as tool results."""
 
 import logging
-import sys
-from unittest.mock import MagicMock
-
-if "mcp" not in sys.modules:
-    mcp = MagicMock()
-    mcp_server = MagicMock()
-    mcp_stdio = MagicMock()
-    mcp_types = MagicMock()
-    sys.modules["mcp"] = mcp
-    sys.modules["mcp.server"] = mcp_server
-    sys.modules["mcp.server.stdio"] = mcp_stdio
-    sys.modules["mcp.types"] = mcp_types
 
 import pytest
 import requests
