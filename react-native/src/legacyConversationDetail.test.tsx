@@ -681,7 +681,11 @@ test('names GET apps_results app when catalog resolves and omits Unknown App', a
       return {
         id: 'app',
         status: 200,
-        body: JSON.stringify({id: 'notes', name: 'Notes'}),
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          description: 'Saves notes from calls',
+        }),
       };
     }
     return response({
@@ -699,6 +703,7 @@ test('names GET apps_results app when catalog resolves and omits Unknown App', a
     expect.objectContaining({
       appSummary: 'App wrote this recap',
       appSummaryName: 'Notes',
+      appSummaryDescription: 'Saves notes from calls',
     }),
   );
   expect(mockRequest).toHaveBeenCalledWith({
@@ -722,6 +727,7 @@ test('names GET apps_results app when catalog resolves and omits Unknown App', a
   const unresolved = await loadLegacyConversationDetail(backend, fixture.id);
   expect(unresolved.appSummary).toBe('App wrote this recap');
   expect(unresolved.appSummaryName).toBeUndefined();
+  expect(unresolved.appSummaryDescription).toBeUndefined();
   mockRequest.mockImplementation(async () =>
     response({
       ...fixture,

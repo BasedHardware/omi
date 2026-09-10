@@ -6,7 +6,7 @@ import {
 } from './desktopReadClient';
 import {loadOmiFolderName} from './legacyOmiFolders';
 import {loadOmiPeopleNames} from './legacyOmiPeople';
-import {loadOmiAppNames} from './legacyOmiApps';
+import {loadOmiApps, type OmiAppChrome} from './legacyOmiApps';
 
 export type LegacyConversationDetail = {
   id: string;
@@ -18,6 +18,7 @@ export type LegacyConversationDetail = {
   locationAddress?: string;
   appSummary?: string;
   appSummaryName?: string;
+  appSummaryDescription?: string;
   calendarEvent?: {
     title?: string;
     attendees: string[];
@@ -367,14 +368,16 @@ export async function loadLegacyConversationDetail(
     visibleDisplayText(overview),
   );
   const appSummary = appRecap?.content;
-  const appSummaryName =
+  const appChrome =
     appRecap?.appId === undefined
       ? undefined
       : (
-          await loadOmiAppNames(backend, [appRecap.appId]).catch(
-            () => new Map<string, string>(),
+          await loadOmiApps(backend, [appRecap.appId]).catch(
+            () => new Map<string, OmiAppChrome>(),
           )
         ).get(appRecap.appId);
+  const appSummaryName = appChrome?.name;
+  const appSummaryDescription = appChrome?.description;
   const folderId =
     value.folder_id === undefined || value.folder_id === null
       ? undefined
@@ -397,6 +400,9 @@ export async function loadLegacyConversationDetail(
     ...(appSummaryName === undefined || appSummaryName === ''
       ? {}
       : {appSummaryName}),
+    ...(appSummaryDescription === undefined || appSummaryDescription === ''
+      ? {}
+      : {appSummaryDescription}),
     ...(linkedEvent === undefined ? {} : {calendarEvent: linkedEvent}),
     ...(photos === undefined
       ? {}

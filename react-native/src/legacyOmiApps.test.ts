@@ -1,35 +1,57 @@
-import {
-  attachOmiChatAppNames,
-  loadOmiAppNames,
-  parseOmiAppName,
-} from './legacyOmiApps';
+import {attachOmiChatAppNames, loadOmiApps, parseOmiApp} from './legacyOmiApps';
 import type {OmiBackend} from './omiNativeTypes';
 
-test('parses GET app name and omits empty or deleted apps', () => {
+test('parses GET app name and description and omits empty or deleted apps', () => {
   expect(
-    parseOmiAppName(JSON.stringify({id: 'notes', name: 'Notes'}), 'notes'),
-  ).toBe('Notes');
+    parseOmiApp(
+      JSON.stringify({
+        id: 'notes',
+        name: 'Notes',
+        description: 'Saves notes from calls',
+      }),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes', description: 'Saves notes from calls'});
+  expect(
+    parseOmiApp(
+      JSON.stringify({id: 'notes', name: 'Notes', description: ' \t'}),
+      'notes',
+    ),
+  ).toEqual({name: 'Notes'});
+  expect(
+    parseOmiApp(JSON.stringify({id: 'notes', name: 'Notes'}), 'notes'),
+  ).toEqual({name: 'Notes'});
   expect(() =>
-    parseOmiAppName(JSON.stringify({id: 'notes', name: ' \t'}), 'notes'),
+    parseOmiApp(JSON.stringify({id: 'notes', name: ' \t'}), 'notes'),
   ).toThrow();
   expect(() =>
-    parseOmiAppName(JSON.stringify({id: 'other', name: 'Notes'}), 'notes'),
+    parseOmiApp(JSON.stringify({id: 'other', name: 'Notes'}), 'notes'),
   ).toThrow();
   expect(() =>
-    parseOmiAppName(
+    parseOmiApp(
       JSON.stringify({id: 'notes', name: 'Notes', deleted: true}),
+      'notes',
+    ),
+  ).toThrow();
+  expect(() =>
+    parseOmiApp(
+      JSON.stringify({id: 'notes', name: 'Notes', description: 1}),
       'notes',
     ),
   ).toThrow();
 });
 
-test('loadOmiAppNames names resolved GET apps and omits failures', async () => {
+test('loadOmiApps names resolved GET apps and omits failures', async () => {
   const request = jest.fn(async (input: {path: string}) => {
     if (input.path === '/v1/apps/notes') {
       return {
         id: 'app',
         status: 200,
-        body: JSON.stringify({id: 'notes', name: 'Notes'}),
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          description: 'Saves notes from calls',
+        }),
       };
     }
     if (input.path === '/v1/apps/missing') {
@@ -38,10 +60,13 @@ test('loadOmiAppNames names resolved GET apps and omits failures', async () => {
     return {id: 'app', status: 200, body: '{'};
   });
   const backend = {request} as unknown as OmiBackend;
-  const names = await loadOmiAppNames(backend, ['notes', 'missing', 'broken']);
-  expect(names.get('notes')).toBe('Notes');
-  expect(names.has('missing')).toBe(false);
-  expect(names.has('broken')).toBe(false);
+  const apps = await loadOmiApps(backend, ['notes', 'missing', 'broken']);
+  expect(apps.get('notes')).toEqual({
+    name: 'Notes',
+    description: 'Saves notes from calls',
+  });
+  expect(apps.has('missing')).toBe(false);
+  expect(apps.has('broken')).toBe(false);
   expect(request).toHaveBeenCalledWith({
     id: expect.any(String),
     method: 'GET',
@@ -54,7 +79,11 @@ test('attachOmiChatAppNames keeps unresolved app ids off the named chrome', asyn
   const request = jest.fn(async () => ({
     id: 'app',
     status: 200,
-    body: JSON.stringify({id: 'notes', name: 'Notes'}),
+    body: JSON.stringify({
+      id: 'notes',
+      name: 'Notes',
+      description: 'Saves notes from calls',
+    }),
   }));
   const backend = {request} as unknown as OmiBackend;
   const messages = await attachOmiChatAppNames(backend, [
@@ -83,6 +112,8 @@ test('attachOmiChatAppNames keeps unresolved app ids off the named chrome', asyn
     },
   ]);
   expect(messages[0]).toMatchObject({appId: 'notes', appName: 'Notes'});
+  expect(messages[0]).not.toHaveProperty('appDescription');
+  expect(JSON.stringify(messages[0])).not.toContain('Saves notes from calls');
   expect(messages[1]).toEqual(expect.objectContaining({appId: 'ghost'}));
   expect(messages[1]).not.toHaveProperty('appName');
   expect(messages[2]).not.toHaveProperty('appId');

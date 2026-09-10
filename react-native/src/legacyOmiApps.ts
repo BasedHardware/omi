@@ -17,7 +17,12 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-export function parseOmiAppName(body: string, appId: string): string {
+export type OmiAppChrome = {
+  name: string;
+  description?: string;
+};
+
+export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   const row = object(JSON.parse(body));
   if (row.deleted === true) {
     throw new AppError();
@@ -27,13 +32,20 @@ export function parseOmiAppName(body: string, appId: string): string {
   if (id !== appId || name === '') {
     throw new AppError();
   }
-  return name;
+  if (row.description === undefined || row.description === null) {
+    return {name};
+  }
+  if (typeof row.description !== 'string') {
+    throw new AppError();
+  }
+  const description = visibleDisplayText(row.description);
+  return description === '' ? {name} : {name, description};
 }
 
-export async function loadOmiAppNames(
+export async function loadOmiApps(
   backend: OmiBackend,
   appIds: readonly string[],
-): Promise<Map<string, string>> {
+): Promise<Map<string, OmiAppChrome>> {
   const unique: string[] = [];
   const seen = new Set<string>();
   for (const raw of appIds) {
@@ -47,22 +59,22 @@ export async function loadOmiAppNames(
       break;
     }
   }
-  const names = new Map<string, string>();
+  const apps = new Map<string, OmiAppChrome>();
   await Promise.all(
     unique.map(async id => {
-      const name = await loadOmiAppName(backend, id);
-      if (name !== null) {
-        names.set(id, name);
+      const app = await loadOmiApp(backend, id);
+      if (app !== null) {
+        apps.set(id, app);
       }
     }),
   );
-  return names;
+  return apps;
 }
 
-async function loadOmiAppName(
+async function loadOmiApp(
   backend: OmiBackend,
   appId: string,
-): Promise<string | null> {
+): Promise<OmiAppChrome | null> {
   const response = await backend.request({
     id: 'omi-app',
     method: 'GET',
@@ -77,7 +89,7 @@ async function loadOmiAppName(
     return null;
   }
   try {
-    return parseOmiAppName(response.body, appId);
+    return parseOmiApp(response.body, appId);
   } catch {
     return null;
   }
@@ -93,15 +105,15 @@ export async function attachOmiChatAppNames(
   if (ids.length === 0) {
     return messages;
   }
-  const names = await loadOmiAppNames(backend, ids);
+  const apps = await loadOmiApps(backend, ids);
   return messages.map(message => {
     if (message.appId === undefined) {
       return message;
     }
-    const name = names.get(message.appId);
-    if (name === undefined) {
+    const app = apps.get(message.appId);
+    if (app === undefined) {
       return message;
     }
-    return {...message, appName: name};
+    return {...message, appName: app.name};
   });
 }
