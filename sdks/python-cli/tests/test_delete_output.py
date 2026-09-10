@@ -53,3 +53,30 @@ def test_delete_declined_confirmation_makes_no_request(resource, authed_profile,
 
     assert result.exit_code != 0
     assert not route.called
+
+
+@pytest.mark.parametrize("status_code", [400, 401, 403, 404, 500])
+def test_delete_empty_http_error_fails_json_mode(
+    resource, status_code, authed_profile, respx_mock, cli_runner
+) -> None:
+    command, path = resource
+    route = respx_mock.delete(path).respond(status_code, content=b"")
+    result = cli_runner.invoke(app, ["--json", command, "delete", "test-id", "--yes"])
+
+    assert result.exit_code != 0, f"Expected non-zero exit code on empty {status_code}"
+    expected_calls = 4 if status_code >= 500 else 1
+    assert route.call_count == expected_calls
+
+
+@pytest.mark.parametrize("status_code", [400, 401, 403, 404, 500])
+def test_delete_empty_http_error_fails_pretty_mode(
+    resource, status_code, authed_profile, respx_mock, cli_runner
+) -> None:
+    command, path = resource
+    route = respx_mock.delete(path).respond(status_code, content=b"")
+    result = cli_runner.invoke(app, ["--no-color", command, "delete", "test-id", "--yes"])
+
+    assert result.exit_code != 0, f"Expected non-zero exit code on empty {status_code}"
+    expected_calls = 4 if status_code >= 500 else 1
+    assert route.call_count == expected_calls
+    assert "Deleted" not in result.stderr
