@@ -47,9 +47,11 @@ Generation has a parallel pair (`OMI_DISABLE_LOCAL_INFERENCE`,
    no indexer, no `requestAssets`. `recordFallback` `to: keyword` is not used;
    the route is `legacy`.
 2. Opted in, selected engine, 32-token synthetic fixture, dimension,
-   two-second budget → hybrid (FTS + cosine, RRF). Probe verdicts are cached
-   in-process per `(engineID, modelID, thermal, kill-switch)` with a 60s TTL
-   and invalidation on thermal or kill-switch change.
+  two-second budget → hybrid (FTS + cosine, RRF). Probe verdicts are cached
+  in-process per `(engineID, modelID, thermal, kill-switch)` with a 60s TTL
+  and invalidation on thermal or kill-switch change. `embed` and the probe
+  race each engine call against `Task.sleep` (`embedBudget` 30s, probe 2s);
+  timeout records `engine_timeout` and fail-closes to keyword, never Gemini.
 3. Opted in, probe miss (`assets_unavailable`, over budget, unknown engine) →
    local FTS-only. Never Gemini. `recordFallback` `to: keyword`.
 4. Opted in, selected engine that then fails a query → keyword-only. The route
