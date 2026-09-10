@@ -1652,6 +1652,18 @@ export function conversationDayLabel(
   return conversationGroupLabel(startedAt ?? createdAt, nowEpochMilliseconds);
 }
 
+export function conversationRecapDateLabel(
+  startedAt: string | null,
+  createdAt: string,
+  nowEpochMilliseconds: number,
+): string {
+  const label = clockLabel(
+    Date.parse(startedAt ?? createdAt),
+    nowEpochMilliseconds,
+  );
+  return label === '' ? 'Time unavailable' : label;
+}
+
 export type MemoryProjection = {
   kind: 'memory';
   id: string;

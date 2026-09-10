@@ -36,9 +36,9 @@ import {
 } from '../chatClient';
 import {omiBackend} from '../omiNative';
 import {
-  conversationDayLabel,
   conversationListEmoji,
   conversationListTag,
+  conversationRecapDateLabel,
   conversationRecapTitle,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
@@ -1072,7 +1072,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     const recapItems =
       readOutcomes?.conversations.status === 'success'
         ? readOutcomes.conversations.value.items.map(item => ({
-            dateLabel: conversationDayLabel(
+            dateLabel: conversationRecapDateLabel(
               item.startedAt,
               item.createdAt,
               recapNow,

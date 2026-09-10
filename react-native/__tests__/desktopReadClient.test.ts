@@ -6,6 +6,7 @@ import {
   conversationListUsesListenOverview,
   conversationRecapTitle,
   conversationDayLabel,
+  conversationRecapDateLabel,
   conversationGroupLabel,
   conversationCaptureCopy,
   conversationStatusCopy,
@@ -2053,6 +2054,35 @@ test('conversation day labels treat a zero timestamp as Date unavailable', () =>
       now,
     ),
   ).toBe('Date unavailable');
+});
+
+test('conversation recap date labels keep Today as time and date older days', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  const older = new Date(2026, 7, 10, 12, 0).toISOString();
+  const time = (value: Date) =>
+    value.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  const today = new Date(2026, 7, 14, 1, 0);
+  expect(conversationRecapDateLabel(today.toISOString(), older, now)).toBe(
+    time(today),
+  );
+  const yesterday = new Date(2026, 7, 13, 23, 0);
+  expect(conversationRecapDateLabel(null, yesterday.toISOString(), now)).toBe(
+    `Yesterday · ${time(yesterday)}`,
+  );
+  const olderDate = new Date(2026, 7, 10, 12, 0);
+  expect(conversationRecapDateLabel(null, olderDate.toISOString(), now)).toBe(
+    `${olderDate.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })} · ${time(olderDate)}`,
+  );
+  expect(conversationRecapDateLabel(null, new Date(0).toISOString(), now)).toBe(
+    'Time unavailable',
+  );
 });
 
 test('clock labels keep Today as time and date older days', () => {

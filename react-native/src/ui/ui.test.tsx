@@ -909,7 +909,7 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(orchestrator).toContain('discarded: item.discarded');
   expect(orchestrator).toContain('photoCount: item.photoCount');
   expect(orchestrator).not.toContain('onOpenCalls=');
-  expect(orchestrator).toContain('conversationDayLabel(');
+  expect(orchestrator).toContain('conversationRecapDateLabel(');
   expect(orchestrator).not.toContain("weekday: 'long'");
   expect(orchestrator).toContain(
     'requestedConversationId={requestedConversationId}',
