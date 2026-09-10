@@ -215,7 +215,9 @@ def test_goal_update_rejects_set_and_clear_unit(authed_profile, respx_mock, monk
 
 
 @pytest.mark.parametrize("bound_opt,clear_opt", [("--min", "--clear-min"), ("--max", "--clear-max")])
-def test_goal_update_rejects_set_and_clear_bounds(authed_profile, respx_mock, monkeypatch, capsys, bound_opt, clear_opt) -> None:
+def test_goal_update_rejects_set_and_clear_bounds(
+    authed_profile, respx_mock, monkeypatch, capsys, bound_opt, clear_opt
+) -> None:
     monkeypatch.setattr(sys, "argv", ["omi", "--json", "goal", "update", "g1", bound_opt, "5", clear_opt])
     with pytest.raises(SystemExit) as exc:
         main()
