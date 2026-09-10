@@ -10011,7 +10011,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deviceRenameDescription =>
-      'Iestatiet lokālu nosaukumu šai ierīcei. Tas tiek saglabāts telefonā un rādīts datētā nosaukuma vietā. Pati ierīce netiek pārdēvēta.';
+      'Iestatiet lokālu nosaukumu šai ierīcei. Tas tiek saglabāts telefonā un tiek rādīts reklāmētā nosaukuma vietā. Pati ierīce netiek pārdēvēta.';
 
   @override
   String get deviceRenameHint => 'Ierīces nosaukums';

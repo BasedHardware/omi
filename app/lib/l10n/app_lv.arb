@@ -3259,7 +3259,7 @@
     "tapPlusToStartRecording": "Pieskarieties +, lai sāktu ierakstīšanu",
     "processingTakingLonger": "Joprojām notiek — tas aizņem ilgāk nekā parasti.",
     "deviceRenameTitle": "Pārdēvēt ierīci",
-    "deviceRenameDescription": "Iestatiet lokālu nosaukumu šai ierīcei. Tas tiek saglabāts telefonā un rādīts datētā nosaukuma vietā. Pati ierīce netiek pārdēvēta.",
+    "deviceRenameDescription": "Iestatiet lokālu nosaukumu šai ierīcei. Tas tiek saglabāts telefonā un tiek rādīts reklāmētā nosaukuma vietā. Pati ierīce netiek pārdēvēta.",
     "deviceRenameHint": "Ierīces nosaukums",
     "deviceRenameTooShort": "Nosaukumam jābūt vismaz 2 rakstzīmēm",
     "deviceRenameSaved": "Ierīces nosaukums atjaunināts",

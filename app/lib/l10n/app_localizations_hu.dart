@@ -10029,7 +10029,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceRenameDescription =>
-      'Állítson be egy helyi nevet ehhez az eszkzhöz. A név a telefonon tárolódik, és a hirdetett név helyett jelenik meg. Maga az eszköz nem neveződik át.';
+      'Állítson be egy helyi nevet ehhez az eszközhöz. A név a telefonon tárolódik, és a hirdetett név helyett jelenik meg. Maga az eszköz nem neveződik át.';
 
   @override
   String get deviceRenameHint => 'Eszköz neve';

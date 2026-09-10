@@ -59,6 +59,17 @@ void main() {
       expect(SharedPreferencesUtil().deviceCustomName('AA:BB:CC:DD:EE:01'), '');
     });
 
+    test('non-string persisted values are discarded instead of rendered', () async {
+      await SharedPreferencesUtil().saveString('deviceCustomNames',
+          '{"AA:BB:CC:DD:EE:01":"Desk Omi","AA:BB:CC:DD:EE:02":false,"AA:BB:CC:DD:EE:03":null,"AA:BB:CC:DD:EE:04":{"nested":true}}');
+      final names = SharedPreferencesUtil().deviceCustomNames;
+      expect(names, {'AA:BB:CC:DD:EE:01': 'Desk Omi'});
+      expect(SharedPreferencesUtil().deviceCustomName('AA:BB:CC:DD:EE:01'), 'Desk Omi');
+      expect(SharedPreferencesUtil().deviceCustomName('AA:BB:CC:DD:EE:02'), '');
+      expect(SharedPreferencesUtil().deviceCustomName('AA:BB:CC:DD:EE:03'), '');
+      expect(SharedPreferencesUtil().deviceCustomName('AA:BB:CC:DD:EE:04'), '');
+    });
+
     test('displayNameFor prefers the custom name and falls back to the BLE name', () {
       final provider = OnboardingProvider();
       final device = BtDevice(id: 'AA:BB:CC:DD:EE:01', name: 'Omi', type: DeviceType.omi, rssi: -50);

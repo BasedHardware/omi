@@ -27,7 +27,10 @@ class _DeviceRenameDialogState extends State<DeviceRenameDialog> {
   void initState() {
     super.initState();
     final custom = SharedPreferencesUtil().deviceCustomName(widget.deviceId);
-    nameController = TextEditingController(text: custom.isNotEmpty ? custom : widget.currentName);
+    final initial = custom.isNotEmpty ? custom : widget.currentName;
+    // Clamp to the 32-char limit so an over-long advertised/custom name
+    // cannot be silently persisted unchanged.
+    nameController = TextEditingController(text: initial.length > 32 ? initial.substring(0, 32) : initial);
   }
 
   @override
@@ -104,6 +107,15 @@ class _DeviceRenameDialogState extends State<DeviceRenameDialog> {
                   child: GestureDetector(
                     onTap: () {
                       final name = nameController.text.trim();
+                      // Empty input clears the custom name (falls back to the
+                      // advertised name); non-empty input still requires at
+                      // least 2 characters.
+                      if (name.isEmpty) {
+                        SharedPreferencesUtil().setDeviceCustomName(widget.deviceId, '');
+                        AppSnackbar.showSnackbar(context.l10n.deviceRenameSaved);
+                        Navigator.of(context).pop('');
+                        return;
+                      }
                       if (name.length < 2) {
                         AppSnackbar.showSnackbarError(context.l10n.deviceRenameTooShort);
                         return;

@@ -128,15 +128,19 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             ),
           ),
           if (chipValue != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: chipColor ?? const Color(0xFF2A2A2E),
-                borderRadius: BorderRadius.circular(100),
-              ),
-              child: Text(
-                chipValue,
-                style: TextStyle(color: chipTextColor ?? Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: chipColor ?? const Color(0xFF2A2A2E),
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Text(
+                  chipValue,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: chipTextColor ?? Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                ),
               ),
             ),
             if (showChevron) const SizedBox(width: 8),

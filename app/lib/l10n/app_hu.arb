@@ -3355,7 +3355,7 @@
     "tapPlusToStartRecording": "Koppints a + jelre a felvétel indításához",
     "processingTakingLonger": "Még folyamatban — ez tovább tart a szokásosnál.",
     "deviceRenameTitle": "Eszköz átnevezése",
-    "deviceRenameDescription": "Állítson be egy helyi nevet ehhez az eszkzhöz. A név a telefonon tárolódik, és a hirdetett név helyett jelenik meg. Maga az eszköz nem neveződik át.",
+    "deviceRenameDescription": "Állítson be egy helyi nevet ehhez az eszközhöz. A név a telefonon tárolódik, és a hirdetett név helyett jelenik meg. Maga az eszköz nem neveződik át.",
     "deviceRenameHint": "Eszköz neve",
     "deviceRenameTooShort": "A név legalább 2 karakter legyen",
     "deviceRenameSaved": "Az eszköz neve frissült",

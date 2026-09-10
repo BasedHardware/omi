@@ -9988,7 +9988,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deviceRenameDescription =>
-      'یک نام محلی برای این دستگاه تنظیم کنید. این نام روی گوشی شما ذخیره می‌شود و به جای نام advertised نمایش داده می‌شود. نام خود دستگاه تغییر نمی‌کند.';
+      'یک نام محلی برای این دستگاه تنظیم کنید. این نام روی گوشی شما ذخیره می‌شود و به جای نام پخش‌شده نمایش داده می‌شود. نام خود دستگاه تغییر نمی‌کند.';
 
   @override
   String get deviceRenameHint => 'نام دستگاه';

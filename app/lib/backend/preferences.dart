@@ -285,7 +285,12 @@ class SharedPreferencesUtil {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) return {};
-      return decoded.map((k, v) => MapEntry(k, v.toString()));
+      // Keep only string values so corrupt/non-string persisted entries
+      // (false, null, nested objects) are discarded, never rendered.
+      return {
+        for (final entry in decoded.entries)
+          if (entry.value is String) entry.key: entry.value as String,
+      };
     } catch (e) {
       return {};
     }
