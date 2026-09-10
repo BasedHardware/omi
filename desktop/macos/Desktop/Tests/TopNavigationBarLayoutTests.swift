@@ -455,6 +455,48 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     XCTAssertLessThanOrEqual(navigation.width, lane - inset * 2)
   }
 
+  /// **A badge tick must not be able to re-measure the bar.** The glass row used to measure every
+  /// segment from its title with the `+N` folded in, so any count change — a task completed, a
+  /// conversation landed, one of the several store ticks a page transition fires mid-animation —
+  /// re-measured and re-laid-out the whole track with a width animation. That was the lag. The
+  /// count renders in a slot reserved by a hidden template now, so a segment measures the same
+  /// with counts at their widest and at zero; this fails against the measure-the-title behaviour.
+  func testSegmentMeasurementIsIndependentOfBadgeCounts() {
+    let widest = TopNavigationDestinationBadges(library: 99, tasks: 99)
+    let none = TopNavigationDestinationBadges()
+
+    #if compiler(>=6.2)
+      if #available(macOS 26.0, *) {
+        for item in TopNavigationRoutes.primaryItems {
+          XCTAssertEqual(
+            glassSegmentWidth(item, badges: none), glassSegmentWidth(item, badges: widest),
+            accuracy: 0.5,
+            "\(item.title)'s segment measures differently at the widest counts than at zero")
+        }
+        // `EqualWidthSegments` is `count × widest`, so one segment moving moves the whole track.
+        XCTAssertEqual(
+          rowWidth(none), rowWidth(widest), accuracy: 0.5,
+          "the bar's width follows the badge counts, so a badge change re-lays-out the bar")
+        // The reserved slot has to hold everything it can be asked to show, or the hidden template
+        // stops being the widest thing in it and the guarantees above turn font-dependent.
+        let template = countTextWidth(TopNavigationSegmentSelection.widestCountText)
+        XCTAssertGreaterThan(template, 0)
+        for count in [1, 4, 9, 10, 42, 99] {
+          XCTAssertLessThanOrEqual(
+            countTextWidth(TopNavigationSegmentSelection.countText(for: count)), template,
+            "+\(count) does not fit the slot every segment reserves for it")
+        }
+        return
+      }
+    #endif
+
+    // Below the glass renderer the count joins the system segmented control's title — the control
+    // owns its own measurement there. The fit guarantee is what pins the fallback: counts can
+    // widen the control but never shrink it, so the layout the widest-count test chose cannot
+    // overflow when a count drops.
+    XCTAssertLessThanOrEqual(rowWidth(none), rowWidth(widest))
+  }
+
   /// The rendered segment count, from the renderer that is actually on screen. Against the macOS 26
   /// SDK on macOS 26 the row is `EqualWidthSegments`, whose width is exactly `count × widest
   /// segment` plus the track inset, so a segment measured on its own gives the width four of them
@@ -491,6 +533,38 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     if let control = view as? NSSegmentedControl { found.append(control) }
     for subview in view.subviews { found += segmentedControls(in: subview) }
     return found
+  }
+
+  // The glass renderer only exists when compiled against the macOS 26 SDK (see
+  // `TopNavigationDestinationRow.body`); against an older SDK the row is the system control.
+  #if compiler(>=6.2)
+    /// What `EqualWidthSegments` measures for one segment: the segment label hosted on its own, the
+    /// same way `assertEveryDestinationIsRendered` measures the widest one.
+    @available(macOS 26.0, *)
+    private func glassSegmentWidth(
+      _ item: TopNavigationItem, badges: TopNavigationDestinationBadges
+    ) -> CGFloat {
+      NSHostingView(
+        rootView: TopNavigationGlassSegmentLabel(item: item, badges: badges, isSelected: false)
+      ).fittingSize.width
+    }
+
+    /// What the count slot renders a string at, in isolation — the reserved template has to be at
+    /// least this wide for every count the slot can show.
+    private func countTextWidth(_ text: String) -> CGFloat {
+      NSHostingView(
+        rootView: Text(verbatim: text)
+          .scaledMonospacedDigitFont(size: OmiType.caption, weight: .semibold)
+      ).fittingSize.width
+    }
+  #endif
+
+  /// The real row's intrinsic width, on whichever renderer this machine draws.
+  private func rowWidth(_ badges: TopNavigationDestinationBadges) -> CGFloat {
+    NSHostingView(
+      rootView: TopNavigationDestinationRow(
+        selectedIndex: SidebarNavItem.dashboard.rawValue, badges: badges, onSelect: { _ in })
+    ).fittingSize.width
   }
 
   /// The native tab bar shows one selected segment or none. Any Brain page lights the `Memories`
@@ -568,6 +642,18 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       TopNavigationSegmentSelection.accessibilityLabel(for: $0, badges: TopNavigationDestinationBadges())
     }
     XCTAssertEqual(spokenQuiet, TopNavigationRoutes.primaryItems.map(\.tooltip))
+
+    // The visible count caps at two digits — the slot it renders into is what the glass row is
+    // measured from, so a long absence cannot widen the bar — but VoiceOver keeps the exact number.
+    XCTAssertEqual(TopNavigationSegmentSelection.countText(for: 99), "+99")
+    XCTAssertEqual(
+      TopNavigationSegmentSelection.countText(for: 100),
+      TopNavigationSegmentSelection.widestCountText)
+    let tasks = TopNavigationRoutes.primaryItems[2]
+    XCTAssertEqual(
+      TopNavigationSegmentSelection.accessibilityLabel(
+        for: tasks, badges: TopNavigationDestinationBadges(tasks: 124)),
+      "Tasks — everything Omi heard you commit to, 124 new")
   }
 
   /// The glass lens follows the pointer but never leaves the track: its centre is clamped to the

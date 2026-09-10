@@ -287,8 +287,10 @@ struct TopNavigationDestinationBadges: Equatable {
 /// `titleAndIcon`), so the fallback carries the word, which is the half that names the destination.
 ///
 /// It takes plain values rather than the app's view models, which is what lets the layout test host
-/// the *real* row — real labels, real counts — and prove it fits the narrowest window.
-struct TopNavigationDestinationRow: View {
+/// the *real* row — real labels, real counts — and prove it fits the narrowest window. It is
+/// `Equatable` on what it draws — the selection and the counts — so the shell can hand it to
+/// `.equatable()` and a store tick that moves neither stops before this body.
+struct TopNavigationDestinationRow: View, Equatable {
   let selectedIndex: Int
   let badges: TopNavigationDestinationBadges
   let onSelect: (Int) -> Void
@@ -341,6 +343,16 @@ struct TopNavigationDestinationRow: View {
         TopNavigationSegmentSelection.press(tag: tag, selectedIndex: selectedIndex, onSelect: onSelect)
       }
     )
+  }
+}
+
+/// Equality is what the row *draws*: the selection and the counts. `onSelect` is the shell's
+/// `navigate` — the same behaviour for the life of the bar — so a re-render differing only in a
+/// fresh copy of the closure is not a change, and `.equatable()` may skip the body a store tick
+/// would otherwise have run.
+extension TopNavigationDestinationRow {
+  nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.selectedIndex == rhs.selectedIndex && lhs.badges == rhs.badges
   }
 }
 
@@ -495,12 +507,14 @@ struct TopNavigationDestinationRow: View {
     }
   }
 
-  /// One segment's content: the glyph and the word (with its `+N`), at the segment's fixed height.
+  /// One segment's content: the glyph, the word, and the count in its reserved slot.
   ///
   /// Its own type so the layout test can measure a segment on its own: `EqualWidthSegments` makes
   /// the row exactly `count × widest segment`, and that is what proves every destination is still
-  /// drawn. Selection only changes the ink, never the size, so the widest segment is the same
-  /// whichever one is selected.
+  /// drawn. What a segment measures is the word and the slot, never what is *in* either — selection
+  /// only changes the ink, and the count renders inside the slot a hidden template reserves — so a
+  /// badge tick can no longer re-measure and re-lay-out the bar the way it used to
+  /// (`testSegmentMeasurementIsIndependentOfBadgeCounts`).
   @available(macOS 26.0, *)
   struct TopNavigationGlassSegmentLabel: View {
     let item: TopNavigationItem
@@ -508,14 +522,33 @@ struct TopNavigationDestinationRow: View {
     let isSelected: Bool
 
     var body: some View {
-      Label(TopNavigationSegmentSelection.title(for: item, badges: badges), systemImage: item.icon)
-        .labelStyle(.titleAndIcon)
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-        .lineLimit(1)
-        .fixedSize()
-        .foregroundStyle(isSelected ? Ink.primary : Ink.secondary)
-        .padding(.horizontal, TopNavigationGlassSegmentMetrics.horizontalPadding)
-        .frame(height: TopNavigationGlassSegmentMetrics.height)
+      HStack(spacing: TopNavigationGlassSegmentMetrics.countSpacing) {
+        Label(item.title, systemImage: item.icon)
+          .labelStyle(.titleAndIcon)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .lineLimit(1)
+          .fixedSize()
+        countSlot
+      }
+      .foregroundStyle(isSelected ? Ink.primary : Ink.secondary)
+      .padding(.horizontal, TopNavigationGlassSegmentMetrics.horizontalPadding)
+      .frame(height: TopNavigationGlassSegmentMetrics.height)
+    }
+
+    private var count: Int { badges.count(forNavItemIndex: item.index) }
+
+    /// The count, in a slot as wide as the widest string it can ever show. The hidden template
+    /// reserves that width in every segment, zero count included, so the row is measured from the
+    /// slot and not from the count; `monospacedDigit` keeps a crossing digit boundary from nudging
+    /// even the pixels inside it.
+    private var countSlot: some View {
+      ZStack {
+        Text(verbatim: TopNavigationSegmentSelection.widestCountText).hidden()
+        if count > 0 {
+          Text(verbatim: TopNavigationSegmentSelection.countText(for: count))
+        }
+      }
+      .scaledMonospacedDigitFont(size: OmiType.caption, weight: .semibold)
     }
   }
 
@@ -614,7 +647,9 @@ struct TopNavigationGlassSegmentGeometry: Equatable {
 }
 
 /// Every segment as wide as the widest, in a row. Intrinsic width is `count × widest`, which is what
-/// keeps the row `fixedSize` and lets the narrowest-window test measure it.
+/// keeps the row `fixedSize` and lets the narrowest-window test measure it. What a segment measures
+/// is its word and the reserved count slot — never the live count — so a badge tick cannot change
+/// this width and restart the bar's width animation.
 private struct EqualWidthSegments: Layout {
   func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
     let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
@@ -639,6 +674,8 @@ enum TopNavigationGlassSegmentMetrics {
   /// The air between the track's glass edge and the lens.
   static let trackInset: CGFloat = 3
   static let horizontalPadding: CGFloat = 14
+  /// The air between a segment's word and its count slot.
+  static let countSpacing: CGFloat = 3
   static let height: CGFloat = 28
   /// How much the lens grows while held.
   static let liftScale: CGFloat = 1.08
@@ -667,12 +704,29 @@ enum TopNavigationSegmentSelection {
     onSelect(tag)
   }
 
-  /// The new-item count the pills used to wear as a badge is part of the title: `Tasks +7`. A native
-  /// segment carries text and nothing else. A zero count adds nothing.
+  /// The new-item count the pills used to wear as a badge is part of the title: `Tasks +7`. A
+  /// zero count adds nothing.
+  ///
+  /// This is the **fallback's** title: the system segmented control's only channel for a count is
+  /// its title string, so there a count does move the control's own width — which is why the
+  /// narrowest-window test measures with counts at their widest, and a smaller count can only
+  /// shrink that control back into a lane it already fit. The glass path renders the count in the
+  /// slot `TopNavigationGlassSegmentLabel` reserves and measures segments without it.
   static func title(for item: TopNavigationItem, badges: TopNavigationDestinationBadges) -> String {
     let count = badges.count(forNavItemIndex: item.index)
-    return count > 0 ? "\(item.title) +\(count)" : item.title
+    return count > 0 ? "\(item.title) \(countText(for: count))" : item.title
   }
+
+  /// The count as it renders in a segment: `+N`, capped at two digits — `99+` — so a long absence
+  /// cannot widen the slot every segment reserves for it. VoiceOver keeps hearing the exact count
+  /// (`accessibilityLabel(for:badges:)`).
+  static func countText(for count: Int) -> String {
+    count > 99 ? widestCountText : "+\(count)"
+  }
+
+  /// The widest string the count slot must hold: the cap itself, reserved invisibly in every
+  /// segment, so the row's measurement sees this and never the live count.
+  static let widestCountText = "99+"
 
   /// What VoiceOver reads for a segment: the tooltip sentence, then the count a sighted user sees in
   /// the title (`…, 7 new`). The tooltip alone dropped the count; the title alone drops the sentence.
