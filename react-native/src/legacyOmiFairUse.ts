@@ -34,6 +34,21 @@ function requiredBoolean(value: unknown): boolean {
   return value;
 }
 
+function optionalResetAtMs(value: unknown): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const raw = requiredString(value).trim();
+  if (raw === '') {
+    return undefined;
+  }
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+  return parsed;
+}
+
 function requiredInteger(value: unknown): number {
   const number = finiteNumber(value);
   if (!Number.isSafeInteger(number)) {
@@ -55,6 +70,7 @@ export type OmiFairUseStatus = {
   dailyLimitMs: number;
   usedMs: number;
   exhausted: boolean;
+  resetsAtMs?: number;
 };
 
 export function parseOmiFairUseStatus(body: string): OmiFairUseStatus {
@@ -66,6 +82,7 @@ export function parseOmiFairUseStatus(body: string): OmiFairUseStatus {
   finiteNumber(usagePct.daily);
   finiteNumber(usagePct.three_day);
   finiteNumber(usagePct.weekly);
+  const reset = optionalResetAtMs(budget.resets_at);
   return {
     stage: requiredString(record.stage),
     caseRef: requiredString(record.case_ref),
@@ -79,6 +96,7 @@ export function parseOmiFairUseStatus(body: string): OmiFairUseStatus {
     dailyLimitMs: requiredInteger(budget.daily_limit_ms),
     usedMs: requiredInteger(budget.used_ms),
     exhausted: requiredBoolean(budget.exhausted),
+    ...(reset === undefined ? {} : {resetsAtMs: reset}),
   };
 }
 

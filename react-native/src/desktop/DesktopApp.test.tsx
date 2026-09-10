@@ -2905,6 +2905,7 @@ test('Settings names GET fair use without Upgrade or a write sheet', async () =>
             used_ms: 1800000,
             remaining_ms: 0,
             exhausted: true,
+            resets_at: '2099-01-01T00:00:00Z',
           },
         }),
       };
@@ -2930,6 +2931,7 @@ test('Settings names GET fair use without Upgrade or a write sheet', async () =>
   expect(tree).toContain('FU-1');
   expect(tree).toContain('2.4h / 2h');
   expect(tree).toContain('Daily transcription limit reached');
+  expect(tree).toMatch(/Resets \d+h/);
   expect(tree).not.toContain('Upgrade');
 });
 

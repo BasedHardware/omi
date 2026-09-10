@@ -76,6 +76,7 @@ import {
   peopleNameRows,
   firmwareUpdateCopy,
   fairUseCopy,
+  fairUseBudgetResetCopy,
   dailySummaryDateCopy,
   dailySummaryCopy,
   dailySummaryDurationCopy,
@@ -923,6 +924,37 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
       dailyLimitMs: 1_800_000,
       usedMs: 1_800_000,
       exhausted: true,
+      resetsAtMs: Date.parse('2026-09-11T05:00:00Z'),
+    },
+    new Date('2026-09-11T00:00:00Z'),
+    ),
+  ).toEqual([
+    {title: 'Fair Use', copy: 'Restricted · FU-1'},
+    {title: 'Today', copy: '2.4h / 2h'},
+    {title: '3-Day Rolling', copy: '8.1h / 8h'},
+    {title: 'Weekly Rolling', copy: '11.0h / 10h'},
+    {title: 'Fair Use', copy: 'Usage is restricted.'},
+    {title: 'Daily transcription', copy: '30m / 30m'},
+    {
+      title: 'Daily transcription',
+      copy: 'Daily transcription limit reached',
+    },
+    {title: 'Daily transcription', copy: 'Resets 5h'},
+  ]);
+  expect(
+    fairUseCopy({
+      stage: 'restrict',
+      caseRef: 'FU-1',
+      message: 'Usage is restricted.',
+      speechHoursToday: 2.4,
+      speechHours3day: 8.1,
+      speechHoursWeekly: 11,
+      dailyHours: 2,
+      threeDayHours: 8,
+      weeklyHours: 10,
+      dailyLimitMs: 1_800_000,
+      usedMs: 1_800_000,
+      exhausted: true,
     }),
   ).toEqual([
     {title: 'Fair Use', copy: 'Restricted · FU-1'},
@@ -950,6 +982,7 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
       dailyLimitMs: 1_800_000,
       usedMs: 0,
       exhausted: false,
+      resetsAtMs: Date.parse('2026-09-11T05:00:00Z'),
     }),
   ).toEqual([
     {title: 'Today', copy: '0.0h / 2h'},
@@ -957,6 +990,20 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
     {title: 'Weekly Rolling', copy: '0.0h / 10h'},
   ]);
   expect(fairUseCopy(null)).toBeNull();
+  const now = new Date('2026-09-11T00:00:00Z');
+  expect(fairUseBudgetResetCopy(Date.parse('2026-09-11T05:00:00Z'), now)).toBe(
+    'Resets 5h',
+  );
+  expect(fairUseBudgetResetCopy(Date.parse('2026-09-11T00:45:00Z'), now)).toBe(
+    'Resets 45m',
+  );
+  expect(fairUseBudgetResetCopy(Date.parse('2026-09-11T01:30:00Z'), now)).toBe(
+    'Resets 1h',
+  );
+  expect(fairUseBudgetResetCopy(Date.parse('2026-09-10T23:00:00Z'), now)).toBe(
+    '',
+  );
+  expect(fairUseBudgetResetCopy(undefined, now)).toBe('');
 });
 
 test('daily summary copy names GET headlines without inventing Your Day in Review', () => {

@@ -785,6 +785,25 @@ function fairUseHoursCopy(hours: number, limit: number): string {
   return `${hours.toFixed(1)}h / ${limit.toFixed(0)}h`;
 }
 
+export function fairUseBudgetResetCopy(
+  resetsAtMs: number | undefined,
+  now: Date = new Date(),
+): string {
+  if (typeof resetsAtMs !== 'number' || !Number.isFinite(resetsAtMs) || resetsAtMs <= 0) {
+    return '';
+  }
+  const diffMs = resetsAtMs - now.getTime();
+  const hours = Math.trunc(diffMs / 3_600_000);
+  const minutes = Math.trunc(diffMs / 60_000);
+  if (hours > 0) {
+    return `Resets ${hours}h`;
+  }
+  if (minutes > 0) {
+    return `Resets ${minutes}m`;
+  }
+  return '';
+}
+
 export function fairUseCopy(
   status:
     | {
@@ -800,9 +819,11 @@ export function fairUseCopy(
         dailyLimitMs: number;
         usedMs: number;
         exhausted: boolean;
+        resetsAtMs?: number;
       }
     | null
     | undefined,
+  now: Date = new Date(),
 ): {title: string; copy: string}[] | null {
   if (status == null) {
     return null;
@@ -845,6 +866,13 @@ export function fairUseCopy(
       rows.push({
         title: 'Daily transcription',
         copy: 'Daily transcription limit reached',
+      });
+    }
+    const reset = fairUseBudgetResetCopy(status.resetsAtMs, now);
+    if (reset !== '') {
+      rows.push({
+        title: 'Daily transcription',
+        copy: reset,
       });
     }
   }

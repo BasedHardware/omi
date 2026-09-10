@@ -37,6 +37,7 @@ test('parses GET fair use status without invented limits', () => {
     dailyLimitMs: 1_800_000,
     usedMs: 1_800_000,
     exhausted: true,
+    resetsAtMs: Date.parse('2026-09-11T00:00:00Z'),
   });
 });
 
@@ -53,6 +54,30 @@ test('fails closed for malformed GET fair use status', () => {
   expect(() =>
     parseOmiFairUseStatus(JSON.stringify({...status, dg_budget: null})),
   ).toThrow();
+  expect(() =>
+    parseOmiFairUseStatus(
+      JSON.stringify({
+        ...status,
+        dg_budget: {...status.dg_budget, resets_at: 1},
+      }),
+    ),
+  ).toThrow();
+  expect(
+    parseOmiFairUseStatus(
+      JSON.stringify({
+        ...status,
+        dg_budget: {...status.dg_budget, resets_at: ''},
+      }),
+    ).resetsAtMs,
+  ).toBeUndefined();
+  expect(
+    parseOmiFairUseStatus(
+      JSON.stringify({
+        ...status,
+        dg_budget: {...status.dg_budget, resets_at: 'not-a-date'},
+      }),
+    ).resetsAtMs,
+  ).toBeUndefined();
 });
 
 test('loadOmiFairUseStatus names resolved GET status and omits failures', async () => {
@@ -75,6 +100,7 @@ test('loadOmiFairUseStatus names resolved GET status and omits failures', async 
     dailyLimitMs: 1_800_000,
     usedMs: 1_800_000,
     exhausted: true,
+    resetsAtMs: Date.parse('2026-09-11T00:00:00Z'),
   });
   expect(request).toHaveBeenCalledWith({
     id: expect.any(String),
