@@ -19,6 +19,7 @@ from utils.conversations.transcript_for_llm import (
     conversation_transcript_and_speaker_map,
     conversation_transcript_for_llm,
     conversation_transcripts_for_llm,
+    memory_transcript_from_segments,
 )
 from utils.conversations.wake_word import has_structural_wake_word_marker
 import database.conversations as conversations_db
@@ -74,10 +75,10 @@ from utils.conversations.projection_payload import (
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
+from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
 from utils.memory.memory_service import MemoryService
 from utils.memory.decision_path_telemetry import (
     classify_model_about,
-    count_speaker_ids,
     emit_memory_capture_decision,
     model_about_disagrees_with_attribution,
 )
@@ -1064,16 +1065,19 @@ def _l1_subject_from_matched_segments(
     *,
     source_id: str,
     matched_segments: List[Any],
+    owner_evidence: OwnerAttributionEvidence,
 ) -> Tuple[Optional[str], SubjectAttribution, str]:
     resolved_subjects: Set[Tuple[str, SubjectAttribution, str]] = set()
     for segment in matched_segments:
-        if bool(getattr(segment, "is_user", False)):
+        if may_attribute_to_owner(owner_evidence, segment=segment):
             resolved_subjects.add(("user", SubjectAttribution.user, "user"))
             continue
         person_id = getattr(segment, "person_id", None)
         if person_id:
             resolved_subjects.add((f"person:{person_id}", SubjectAttribution.third_party, "person"))
             continue
+        if getattr(segment, "is_user", False):
+            return None, SubjectAttribution.unknown, "unknown"
         raw_speaker = str(getattr(segment, "speaker", "") or "").strip()
         speaker_id = getattr(segment, "speaker_id", None)
         speaker_label = raw_speaker or (f"speaker_{speaker_id}" if speaker_id is not None else "")
@@ -1118,6 +1122,7 @@ def _l1_candidate_subject(
     segments: List[Any],
 ) -> Tuple[Optional[str], SubjectAttribution, str]:
     """Resolve one L1 candidate without assigning the whole conversation's subject."""
+    owner_evidence = OwnerAttributionEvidence.from_segments(segments)
     about_norm = _normalized_l1_subject_label(about)
     speaker_norm = _normalized_l1_subject_label(speaker_label)
     user_aliases = {"user", "the user", "primary user"}
@@ -1145,6 +1150,14 @@ def _l1_candidate_subject(
             matched_segments.append(segment)
 
     if about_norm in user_aliases:
+        if not may_attribute_to_owner(owner_evidence):
+            if quote_matched_segments and all(
+                getattr(segment, "person_id", None) for segment in quote_matched_segments
+            ):
+                return _l1_subject_from_matched_segments(
+                    source_id=source_id, matched_segments=quote_matched_segments, owner_evidence=owner_evidence
+                )
+            return None, SubjectAttribution.unknown, "unknown"
         if quote_matched_segments:
             # Quote-bearing source segments outrank both model-authored
             # ``about`` and ``speaker_label`` fields. This applies even when
@@ -1152,6 +1165,7 @@ def _l1_candidate_subject(
             # different segment elsewhere in the conversation.
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=quote_matched_segments,
             )
         if speaker_norm and matched_segments:
@@ -1159,9 +1173,12 @@ def _l1_candidate_subject(
             # model-authored about=user label.
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=matched_segments,
             )
-        return "user", SubjectAttribution.user, "user"
+        if may_attribute_to_owner(owner_evidence):
+            return "user", SubjectAttribution.user, "user"
+        return None, SubjectAttribution.unknown, "unknown"
 
     about_names_model_speaker = bool(
         about_norm and speaker_norm and (about_norm == speaker_norm or f" {speaker_norm} " in f" {about_norm} ")
@@ -1174,6 +1191,7 @@ def _l1_candidate_subject(
         # source-scoped entity.
         return _l1_subject_from_matched_segments(
             source_id=source_id,
+            owner_evidence=owner_evidence,
             matched_segments=quote_matched_segments,
         )
 
@@ -1190,11 +1208,13 @@ def _l1_candidate_subject(
         if quote_matched_segments:
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=quote_matched_segments,
             )
         if matched_segments:
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=matched_segments,
             )
         return None, SubjectAttribution.unknown, "unknown"
@@ -1409,6 +1429,11 @@ def _extract_memories_canonical(
             prompt_transcript, prompt_speaker_map = conversation_transcript_and_speaker_map(
                 uid, conversation, prompt_people
             )
+            if not may_attribute_to_owner(OwnerAttributionEvidence.from_segments(conversation.transcript_segments)):
+                prompt_transcript = memory_transcript_from_segments(
+                    conversation.transcript_segments, user_name=user_name, people=prompt_people
+                )
+                prompt_speaker_map = {}
             prompt_prefix = build_conversation_prompt_prefix(
                 conversation_id=conversation.id,
                 transcript=prompt_transcript,
@@ -1617,7 +1642,7 @@ def _extract_memories_canonical(
         replacement_payloads,
     )
     capture_regime = getattr(conversation.source, "value", conversation.source) or ConversationSource.unknown.value
-    distinct_speaker_ids, owner_speaker_ids = count_speaker_ids(conversation.transcript_segments)
+    owner_evidence = OwnerAttributionEvidence.from_segments(conversation.transcript_segments)
     for memory_db_obj, _, _, _ in parsed_memories:
         if not memory_db_obj.id:
             continue
@@ -1634,8 +1659,9 @@ def _extract_memories_canonical(
             subject_attribution=memory_db_obj.subject_attribution,
             model_about=model_about,
             attribution_disagreed=attribution_disagreed,
-            distinct_speaker_ids=distinct_speaker_ids,
-            owner_speaker_ids=owner_speaker_ids,
+            distinct_speaker_ids=owner_evidence.distinct_speaker_ids,
+            owner_speaker_ids=owner_evidence.owner_speaker_ids,
+            owner_trust=owner_evidence.trust,
         )
     if len(parsed_memories) == 0:
         logger.info(f"No canonical memories extracted for conversation {conversation.id}")

@@ -613,3 +613,20 @@ def test_l1_prompt_includes_belief_instructions_when_flag_on(monkeypatch):
     assert "half_life_days" in prompt
     assert "subject_scope" in prompt
     assert "media_screen" in prompt
+
+
+def test_l1_extraction_receives_untrusted_cluster_render(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        working_observations,
+        'extract_l1_memory_archive_items_from_text',
+        lambda **kwargs: captured.update(kwargs) or [],
+    )
+    segments = [
+        TranscriptSegment(text='I will move to Boston.', speaker_id=i, is_user=True, start=i, end=i + 1)
+        for i in range(2)
+    ]
+    extract_canonical_l1_memory_candidates('u', 'c', segments, user_name='David', language='en')
+    assert 'UNTRUSTED' in captured['text']
+    assert 'Speaker 0:' in captured['text'] and 'Speaker 1:' in captured['text']
+    assert 'David:' not in captured['text']
