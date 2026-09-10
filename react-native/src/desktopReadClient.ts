@@ -485,6 +485,12 @@ export function primaryLanguageCopy(
   return visibleName === '' ? language : visibleName;
 }
 
+export function peopleNameRows(
+  names: Map<string, string>,
+): {id: string; name: string}[] {
+  return Array.from(names, ([id, name]) => ({id, name}));
+}
+
 export function subscriptionStatusCopy(status: string): string {
   return accountWireCopy(status, 'Plan unavailable');
 }

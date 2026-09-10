@@ -68,6 +68,7 @@ import {
   subscriptionStatusCopy,
   usageStatsCopy,
   primaryLanguageCopy,
+  peopleNameRows,
   taskDisplaySummary,
   taskDisplayTitle,
   taskGroup,
@@ -874,6 +875,21 @@ test('primary language copy names GET language without Not set', () => {
   expect(primaryLanguageCopy('', [{code: 'en', name: 'English'}])).toBeNull();
   expect(primaryLanguageCopy(null, [{code: 'en', name: 'English'}])).toBeNull();
   expect(primaryLanguageCopy('\u0085', [{code: 'en', name: 'English'}])).toBeNull();
+});
+
+test('people name rows keep GET names without empty entries', () => {
+  expect(
+    peopleNameRows(
+      new Map([
+        ['person-alex', 'Alex Chen'],
+        ['person-sam', 'Sam'],
+      ]),
+    ),
+  ).toEqual([
+    {id: 'person-alex', name: 'Alex Chen'},
+    {id: 'person-sam', name: 'Sam'},
+  ]);
+  expect(peopleNameRows(new Map())).toEqual([]);
 });
 
 test('developer webhook titles are not raw API keys', () => {

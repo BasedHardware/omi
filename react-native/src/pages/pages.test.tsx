@@ -1237,6 +1237,29 @@ test('Settings names GET primary language without a write sheet', async () => {
   expect(tree).not.toContain('Not set');
 });
 
+test('Settings names GET people without a write sheet', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/people?include_speech_samples=false') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'person-alex', name: 'Alex Chen'},
+          {id: 'person-empty', name: ' \t'},
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('People');
+  expect(tree).toContain('Alex Chen');
+  expect(tree).not.toContain('person-alex');
+  expect(tree).not.toContain('person-empty');
+});
+
 test('Settings developer webhook URLs omit empty or whitespace values', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

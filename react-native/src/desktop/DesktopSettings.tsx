@@ -21,6 +21,7 @@ import {
   subscriptionStatusCopy,
   usageStatsCopy,
   primaryLanguageCopy,
+  peopleNameRows,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {
@@ -37,6 +38,7 @@ import {
   type PermissionState,
 } from '../desktopSettingsClient';
 import {omiBackend} from '../omiNative';
+import {loadOmiPeopleNames} from '../legacyOmiPeople';
 import {FocusPressable} from '../ui/Pressable';
 import {
   desktopMotion,
@@ -235,6 +237,9 @@ export function DesktopSettings({
     Record<PermissionKind, PermissionState>
   >({microphone: 'unknown', notifications: 'unknown', screen: 'unknown'});
   const [account, setAccount] = useState<AccountSettingsSnapshot | null>(null);
+  const [peopleNames, setPeopleNames] = useState<{id: string; name: string}[]>(
+    [],
+  );
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
     Record<PrivacyWriteKind, boolean>
@@ -258,17 +263,23 @@ export function DesktopSettings({
       setPermissions(nextPermissions);
     } catch {}
     let nextAccount: AccountSettingsSnapshot | null = null;
+    let nextPeople: {id: string; name: string}[] = [];
     if (backend !== undefined && backend !== null && session === 'ready') {
+      const peopleTask = loadOmiPeopleNames(backend).catch(
+        () => new Map<string, string>(),
+      );
       try {
         nextAccount = await loadAccountSettings(backend);
       } catch (reason) {
         nextAccount = failedAccountSettings(desktopReadErrorCopy(reason));
       }
+      nextPeople = peopleNameRows(await peopleTask);
     }
     if (seq !== reloadSeqRef.current) {
       return;
     }
     setAccount(nextAccount);
+    setPeopleNames(nextPeople);
   }, [backend, session]);
 
   useEffect(() => {
@@ -564,6 +575,9 @@ export function DesktopSettings({
           title="Primary language"
         />
       ) : null}
+      {peopleNames.map(person => (
+        <Row copy={person.name} key={person.id} title="People" />
+      ))}
     </>
   );
 

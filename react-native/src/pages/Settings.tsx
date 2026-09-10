@@ -35,9 +35,11 @@ import {
   subscriptionStatusCopy,
   usageStatsCopy,
   primaryLanguageCopy,
+  peopleNameRows,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
+import {loadOmiPeopleNames} from '../legacyOmiPeople';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {parseSoftwarePlane, type SoftwarePlane} from '../v5BackendOrigin';
@@ -165,6 +167,9 @@ export function SettingsPage({
   const [snapshot, setSnapshot] = useState<AccountSettingsSnapshot | null>(
     null,
   );
+  const [peopleNames, setPeopleNames] = useState<{id: string; name: string}[]>(
+    [],
+  );
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
@@ -212,6 +217,7 @@ export function SettingsPage({
     setActionError(null);
     if (backend === undefined || backend === null) {
       setSnapshot(null);
+      setPeopleNames([]);
       setError(cloudSessionUnavailableCopy(backend));
       setPhase('error');
       return;
@@ -250,6 +256,7 @@ export function SettingsPage({
         // A probe that cannot settle (session refresh transport failed) must
         // stay retryable instead of stranding the page on Loading forever.
         setSnapshot(null);
+        setPeopleNames([]);
         setError(desktopBackendServiceCopy);
         setSettingsCanRetry(true);
         setPhase('error');
@@ -257,11 +264,15 @@ export function SettingsPage({
       }
       if (!hasSession) {
         setSnapshot(null);
+        setPeopleNames([]);
         setError(desktopBackendUnauthorizedCopy);
         setPhase('signed-out');
         return;
       }
     }
+    const peopleTask = loadOmiPeopleNames(backend).catch(
+      () => new Map<string, string>(),
+    );
     try {
       const account = await loadAccountSettings(backend);
       if (!current()) {
@@ -279,6 +290,11 @@ export function SettingsPage({
       setSettingsCanRetry(true);
       setPhase('error');
     }
+    const names = await peopleTask;
+    if (!current()) {
+      return;
+    }
+    setPeopleNames(peopleNameRows(names));
   }, [browser]);
 
   useEffect(() => {
@@ -433,6 +449,9 @@ export function SettingsPage({
             title="Primary language"
           />
         ) : null}
+        {peopleNames.map(person => (
+          <SettingRow copy={person.name} key={person.id} title="People" />
+        ))}
         {(onSignOut !== undefined ||
           (omiAuth !== undefined && omiAuth !== null)) && (
           <SettingRow
