@@ -77,6 +77,24 @@ def test_pretty_mode_renders_no_results_for_empty_list(capsys) -> None:
     assert "no results" in captured.out
 
 
+@pytest.mark.parametrize("first_row", [{}, {"id": "first"}])
+def test_pretty_table_includes_fields_from_later_rows(capsys, first_row) -> None:
+    Renderer(no_color=True).emit([first_row, {"id": "second", "detail": "later-value"}])
+    output = capsys.readouterr().out
+    assert "second" in output
+    assert "detail" in output
+    assert "later-value" in output
+
+
+def test_pretty_table_respects_explicit_columns(capsys) -> None:
+    Renderer(no_color=True).emit([{"id": "first"}, {"id": "second", "detail": "hidden-value"}], columns=["id"])
+    output = capsys.readouterr().out
+    assert "first" in output
+    assert "second" in output
+    assert "detail" not in output
+    assert "hidden-value" not in output
+
+
 def test_shorten_basic() -> None:
     assert shorten("abcdef", 3) == "ab…"
     assert shorten("abcdef", 10) == "abcdef"
