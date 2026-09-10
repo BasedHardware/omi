@@ -22,6 +22,7 @@ import {
   conversationListUsesListenOverview,
   conversationRecapTitle,
   conversationDayLabel,
+  conversationGroupLabel,
   desktopBackendUnavailableCopy,
   formatConversationDuration,
   visibleDisplayText,
@@ -38,7 +39,27 @@ import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 import {goalProgressCopy, loadOmiGoals, type OmiGoal} from '../legacyOmiGoals';
 import {loadOmiFolderNames, type OmiFolder} from '../legacyOmiFolders';
+import {
+  calendarCaptureGapSpan,
+  captureGapHeaderCopy,
+  captureGapTimeRangeCopy,
+  loadOmiCalendarCaptureGaps,
+  type OmiCalendarCaptureGap,
+} from '../legacyOmiCalendarCaptureGaps';
 import type {OmiBackend} from '../omiNativeTypes';
+
+function conversationLocalDay(value: string): number | null {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return null;
+  }
+  const date = new Date(timestamp);
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  ).getTime();
+}
 
 const ConversationRow = memo(function ConversationRow({
   item,
@@ -208,31 +229,72 @@ export function ConversationsPage({
       setSelectedId(null);
     }
   }, [filtered, selectedId]);
-  const grouped = useMemo(
-    () =>
-      filtered.reduce<Array<{label: string; items: ConversationProjection[]}>>(
-        (groups, item) => {
-          const label = conversationDayLabel(
-            item.startedAt,
-            item.createdAt,
-            nowEpochMilliseconds,
-          );
-          const current = groups.find(group => group.label === label);
-          if (current !== undefined) {
-            current.items.push(item);
-          } else {
-            groups.push({label, items: [item]});
-          }
-          return groups;
-        },
-        [],
-      ),
-    [filtered, nowEpochMilliseconds],
-  );
   const searching = visibleDisplayText(query) !== '';
   const filtering = searching || starredOnly || selectedFolderId !== null;
   const [goals, setGoals] = useState<OmiGoal[]>([]);
   const [folders, setFolders] = useState<OmiFolder[]>([]);
+  const [captureGaps, setCaptureGaps] = useState<OmiCalendarCaptureGap[]>([]);
+  const grouped = useMemo(() => {
+    const groups: Array<{
+      label: string;
+      day: number;
+      items: ConversationProjection[];
+      gaps: OmiCalendarCaptureGap[];
+    }> = [];
+    const byDay = new Map<
+      number,
+      {
+        label: string;
+        day: number;
+        items: ConversationProjection[];
+        gaps: OmiCalendarCaptureGap[];
+      }
+    >();
+    for (const item of filtered) {
+      const label = conversationDayLabel(
+        item.startedAt,
+        item.createdAt,
+        nowEpochMilliseconds,
+      );
+      const day =
+        conversationLocalDay(item.startedAt ?? item.createdAt) ??
+        Number.NEGATIVE_INFINITY;
+      let group = byDay.get(day);
+      if (group === undefined) {
+        group = {label, day, items: [], gaps: []};
+        byDay.set(day, group);
+        groups.push(group);
+      }
+      group.items.push(item);
+    }
+    if (!filtering) {
+      for (const gap of captureGaps) {
+        const iso = new Date(gap.startMs).toISOString();
+        const day = conversationLocalDay(iso);
+        if (day === null) {
+          continue;
+        }
+        let group = byDay.get(day);
+        if (group === undefined) {
+          group = {
+            label: conversationGroupLabel(iso, nowEpochMilliseconds),
+            day,
+            items: [],
+            gaps: [],
+          };
+          byDay.set(day, group);
+          const index = groups.findIndex(existing => existing.day < day);
+          if (index === -1) {
+            groups.push(group);
+          } else {
+            groups.splice(index, 0, group);
+          }
+        }
+        group.gaps.push(gap);
+      }
+    }
+    return groups;
+  }, [captureGaps, filtered, filtering, nowEpochMilliseconds]);
   useEffect(() => {
     if (backend === undefined || backend === null) {
       setGoals([]);
@@ -283,6 +345,35 @@ export function ConversationsPage({
       setSelectedFolderId(null);
     }
   }, [folders, selectedFolderId]);
+  const captureGapWindow = useMemo(
+    () => calendarCaptureGapSpan(conversations),
+    [conversations],
+  );
+  useEffect(() => {
+    if (
+      backend === undefined ||
+      backend === null ||
+      captureGapWindow === null
+    ) {
+      setCaptureGaps([]);
+      return;
+    }
+    let cancelled = false;
+    loadOmiCalendarCaptureGaps(backend, captureGapWindow)
+      .then(rows => {
+        if (!cancelled) {
+          setCaptureGaps(rows);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCaptureGaps([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [backend, captureGapWindow, loading]);
 
   return (
     <View
@@ -442,21 +533,47 @@ export function ConversationsPage({
                 )}
               </View>
             ) : (
-              grouped.map(group => (
-                <View key={group.label} style={styles.conversationGroup}>
-                  <Text style={styles.conversationGroupTitle}>
-                    {group.label}
-                  </Text>
-                  {group.items.map(item => (
-                    <ConversationRow
-                      item={item}
-                      key={item.id}
-                      onPress={() => setSelectedId(item.id)}
-                      selected={selectedId === item.id}
-                    />
-                  ))}
-                </View>
-              ))
+              grouped.map(group => {
+                const gapHeader = captureGapHeaderCopy(group.gaps.length);
+                return (
+                  <View key={group.label} style={styles.conversationGroup}>
+                    <Text style={styles.conversationGroupTitle}>
+                      {group.label}
+                    </Text>
+                    {gapHeader !== '' ? (
+                      <Text style={styles.conversationRowTime}>
+                        {gapHeader}
+                      </Text>
+                    ) : null}
+                    {group.gaps.map(gap => {
+                      const timeCopy = captureGapTimeRangeCopy(
+                        gap.startMs,
+                        gap.endMs,
+                      );
+                      return (
+                        <View key={gap.eventId}>
+                          <Text numberOfLines={1} style={styles.resultTitle}>
+                            {gap.title}
+                          </Text>
+                          {timeCopy !== '' ? (
+                            <Text style={styles.conversationRowTime}>
+                              {timeCopy}
+                            </Text>
+                          ) : null}
+                        </View>
+                      );
+                    })}
+                    {group.items.map(item => (
+                      <ConversationRow
+                        item={item}
+                        key={item.id}
+                        onPress={() => setSelectedId(item.id)}
+                        selected={selectedId === item.id}
+                      />
+                    ))}
+                  </View>
+                );
+              })
             )}
             {outcome?.status === 'success' &&
               outcome.value.page.hasMore &&

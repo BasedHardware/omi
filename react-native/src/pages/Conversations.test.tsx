@@ -8,6 +8,10 @@ import {
   desktopBackendUnavailableCopy,
   type ConversationProjection,
 } from '../desktopReadClient';
+import {
+  calendarCaptureGapSpan,
+  captureGapTimeRangeCopy,
+} from '../legacyOmiCalendarCaptureGaps';
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -1856,5 +1860,225 @@ test('conversation list names GET folders without add or a write sheet', async (
   });
   expect(textOf(renderer)).toContain('Work standup');
   expect(textOf(renderer)).toContain('Inbox chat');
+});
+
+test('conversation list names GET calendar capture gaps without a write sheet', async () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'chat:work',
+    title: 'Work chat',
+    summary: 'Notes',
+    searchableText: 'Work chat\nNotes',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:01:00.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: 'in_progress',
+    source: 'chat',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  const span = calendarCaptureGapSpan([item]);
+  const request = jest.fn(async request => {
+    if (
+      typeof request.path === 'string' &&
+      request.path.startsWith('/v1/calendar/capture-gaps?')
+    ) {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            event_id: 'event-design',
+            title: 'Design review',
+            start_time: '2026-09-07T15:00:00.000Z',
+            end_time: '2026-09-07T16:30:00.000Z',
+            coverage: 'not_captured',
+          },
+          {
+            event_id: 'event-empty',
+            title: ' \t',
+            start_time: '2026-09-07T17:00:00.000Z',
+            end_time: '2026-09-07T18:00:00.000Z',
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Not captured (1)');
+  expect(tree).toContain('Design review');
+  expect(tree).toContain(
+    captureGapTimeRangeCopy(
+      Date.parse('2026-09-07T15:00:00.000Z'),
+      Date.parse('2026-09-07T16:30:00.000Z'),
+    ),
+  );
+  expect(tree).toContain('Work chat');
+  expect(tree).not.toContain('event-design');
+  expect(tree).not.toContain('event-empty');
+  expect(tree).not.toContain('not_captured');
+  expect(tree).not.toContain('html_link');
+  expect(tree).not.toContain('Add');
+  expect(request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: `/v1/calendar/capture-gaps?start=${encodeURIComponent(
+      span?.start ?? '',
+    )}&end=${encodeURIComponent(span?.end ?? '')}`,
+  });
+  expect(
+    request.mock.calls.some(
+      call => call[0].method === 'POST' || call[0].method === 'PATCH',
+    ),
+  ).toBe(false);
+  const search = renderer.root.findByProps({
+    accessibilityLabel: 'Search loaded conversations',
+  });
+  await act(async () => {
+    search.props.onChangeText('Work');
+  });
+  expect(textOf(renderer)).toContain('Work chat');
+  expect(textOf(renderer)).not.toContain('Not captured (1)');
+  expect(textOf(renderer)).not.toContain('Design review');
+  await act(async () => {
+    search.props.onChangeText('');
+  });
+  expect(textOf(renderer)).toContain('Design review');
+  await act(async () => {
+    renderer.root
+      .find(
+        node => node.props.accessibilityLabel === 'Show starred conversations',
+      )
+      .props.onPress();
+  });
+  expect(textOf(renderer)).not.toContain('Design review');
+});
+
+test('conversation list omits GET calendar capture gaps on failure and empty libraries', async () => {
+  const request = jest.fn(async request => {
+    if (
+      typeof request.path === 'string' &&
+      request.path.startsWith('/v1/calendar/capture-gaps?')
+    ) {
+      return {id: request.id, status: 400, body: '[]'};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(textOf(renderer)).toContain('No conversations yet.');
+  expect(textOf(renderer)).not.toContain('Not captured');
+  expect(
+    request.mock.calls.some(
+      call =>
+        typeof call[0].path === 'string' &&
+        call[0].path.startsWith('/v1/calendar/capture-gaps?'),
+    ),
+  ).toBe(false);
+  await act(async () => {
+    renderer.update(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                kind: 'conversation',
+                id: 'chat:one',
+                title: 'Standup',
+                summary: 'Notes',
+                searchableText: 'Standup\nNotes',
+                createdAt: '2026-09-07T12:00:00.000Z',
+                updatedAt: '2026-09-07T12:01:00.000Z',
+                startedAt: '2026-09-07T12:00:00.000Z',
+                finishedAt: null,
+                starred: false,
+                status: 'in_progress',
+                source: 'chat',
+                visibility: 'private',
+                folderId: null,
+                locked: false,
+                discarded: false,
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(textOf(renderer)).toContain('Standup');
+  expect(textOf(renderer)).not.toContain('Not captured');
+  expect(
+    request.mock.calls.some(
+      call =>
+        typeof call[0].path === 'string' &&
+        call[0].path.startsWith('/v1/calendar/capture-gaps?'),
+    ),
+  ).toBe(true);
 });
 
