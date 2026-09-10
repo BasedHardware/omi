@@ -1,0 +1,3 @@
+{
+  "change": "Made the Brain Map smoother to pan and zoom on large maps: gestures now paint straight from the canvas instead of re-laying-out hundreds of entity views every frame, and names stay on screen while you move"
+}

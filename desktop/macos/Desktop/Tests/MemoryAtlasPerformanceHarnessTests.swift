@@ -323,6 +323,34 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     XCTAssertEqual(cache.plannerInvocationCount, 2)
   }
 
+  func testTheInteractiveOverlayStepsAsideOnlyForCleanCameraMoves() {
+    // The overlay's per-frame repositioning is the render cost a gesture
+    // cannot afford on production-scale graphs, so the same inputs that admit
+    // the cached render plan must admit canvas-only painting — and a selection
+    // or search (whose emphasis lives in the overlay, and whose gestures
+    // bypass the plan cache) must keep the overlay up.
+    XCTAssertTrue(
+      MemoryAtlasSurfacePresentation.canvasOwnsMarks(
+        isCameraMoving: true, selectedNodeID: nil, matchingNodeIDs: nil, matchingEdges: nil)
+    )
+    XCTAssertFalse(
+      MemoryAtlasSurfacePresentation.canvasOwnsMarks(
+        isCameraMoving: false, selectedNodeID: nil, matchingNodeIDs: nil, matchingEdges: nil),
+      "The overlay is the thing that receives clicks; it must be up at rest"
+    )
+    XCTAssertFalse(
+      MemoryAtlasSurfacePresentation.canvasOwnsMarks(
+        isCameraMoving: true, selectedNodeID: "node-2", matchingNodeIDs: nil, matchingEdges: nil),
+      "Selection emphasis is drawn by the overlay"
+    )
+    XCTAssertFalse(
+      MemoryAtlasSurfacePresentation.canvasOwnsMarks(
+        isCameraMoving: true, selectedNodeID: nil, matchingNodeIDs: Set(["node-2"]),
+        matchingEdges: nil),
+      "Search-match emphasis is drawn by the overlay"
+    )
+  }
+
   func testProjectionKeepsTheSnapshotAndGestureCacheAcrossViewTransactions() {
     let graph = makeProductionScaleGraph()
     let projection = MemoryAtlasProjection(graph: graph, userName: "Atlas Owner")

@@ -290,6 +290,9 @@ private struct CanonicalMemoryAtlasSurface: View {
   @State private var settledPan: CGSize = .zero
   @State private var viewportSize: CGSize = .zero
   @State private var isCameraMoving = false
+  /// Settles a scroll-wheel zoom burst: the event stream has no end, so the
+  /// camera "rests" only once this fires after the last tick.
+  @State private var scrollSettleTask: Task<Void, Never>? = nil
   @State private var matchingNodeIDs: Set<String>? = nil
   @State private var matchingEdges: [MemoryAtlasEdgePlacement]? = nil
   @FocusState private var searchIsFocused: Bool
@@ -461,6 +464,19 @@ private struct CanonicalMemoryAtlasSurface: View {
     evidenceIsLoading = false
   }
 
+  /// Same inputs the render-plan cache gates on: mid-move, nothing emphasised.
+  /// While this holds the SwiftUI hit-target/label overlay steps aside and the
+  /// Canvas paints the cohort's marks and admitted names for the gesture, so a
+  /// frame's work is one drawing pass instead of repositioning hundreds of
+  /// composed views; the overlay returns the moment the camera rests.
+  private var canvasOwnsTheMap: Bool {
+    MemoryAtlasSurfacePresentation.canvasOwnsMarks(
+      isCameraMoving: isCameraMoving,
+      selectedNodeID: selectedNodeID,
+      matchingNodeIDs: matchingNodeIDs,
+      matchingEdges: matchingEdges)
+  }
+
   private var mapColumn: some View {
     // The map owns the whole column; the toolbar floats over its top edge.
     // Stacked above it, the toolbar's row cut the map off along the top and
@@ -487,32 +503,39 @@ private struct CanonicalMemoryAtlasSurface: View {
         // so the canvas below is drawn for a light surface. `Color.clear` only sizes the stack.
         Color.clear
 
-        atlasCanvas(size: proxy.size, plan: plan, regions: regions, quietened: quietened)
-          // Camera gestures belong to the painted atlas only. Keeping them
-          // off the enclosing ZStack prevents a click on zoom, playback, or
-          // the selection strip from also selecting a node behind the control.
-          .contentShape(Rectangle())
-          .gesture(panGesture)
-          .simultaneousGesture(magnificationGesture(in: proxy.size))
-          .simultaneousGesture(
-            SpatialTapGesture().onEnded { value in
-              selectAtlasElement(at: value.location, in: proxy.size, plan: plan)
-            }
-          )
+        atlasCanvas(
+          size: proxy.size, plan: plan, regions: regions, quietened: quietened,
+          gestureLabels: canvasOwnsTheMap ? plan.interactiveNodes : []
+        )
+        // Camera gestures belong to the painted atlas only. Keeping them
+        // off the enclosing ZStack prevents a click on zoom, playback, or
+        // the selection strip from also selecting a node behind the control.
+        .contentShape(Rectangle())
+        .gesture(panGesture)
+        .simultaneousGesture(magnificationGesture(in: proxy.size))
+        .simultaneousGesture(
+          SpatialTapGesture().onEnded { value in
+            selectAtlasElement(at: value.location, in: proxy.size, plan: plan)
+          }
+        )
 
         // Names and territories stay up while the camera moves. They used
         // to vanish for the length of every pan and zoom, which read as the
-        // map falling apart under the hand; the entity cohort is cached for
-        // the gesture, so what moves each frame is only where things are.
-        ForEach(plan.interactiveNodes) { placement in
-          nodeButton(
-            placement,
-            size: proxy.size,
-            relatedNodeIDs: plan.relatedNodeIDs,
-            showLabel: plan.labelNodeIDs.contains(placement.id)
-              && !quietened.contains(placement.id),
-            labelAbove: plan.labelAboveNodeIDs.contains(placement.id)
-          )
+        // map falling apart under the hand. Mid-gesture the names are painted
+        // by the Canvas itself (`gestureLabels` above); the SwiftUI marks,
+        // labels and hit targets return once the camera rests and the settled
+        // plan re-admits them.
+        if !canvasOwnsTheMap {
+          ForEach(plan.interactiveNodes) { placement in
+            nodeButton(
+              placement,
+              size: proxy.size,
+              relatedNodeIDs: plan.relatedNodeIDs,
+              showLabel: plan.labelNodeIDs.contains(placement.id)
+                && !quietened.contains(placement.id),
+              labelAbove: plan.labelAboveNodeIDs.contains(placement.id)
+            )
+          }
         }
 
         // Above the entities: a region name that an entity's own label
@@ -762,15 +785,20 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   private func atlasCanvas(
-    size: CGSize, plan: MemoryAtlasRenderPlan,
+    size: CGSize,
+    plan: MemoryAtlasRenderPlan,
     regions: [MemoryAtlasNeighbourhoodLabels.Placed],
-    quietened: Set<String>
+    quietened: Set<String>,
+    /// The admitted name cohort the SwiftUI overlay is currently standing in
+    /// for; painted here for the length of the camera move.
+    gestureLabels: [MemoryAtlasNodePlacement]
   ) -> some View {
     Canvas(opaque: false, colorMode: .linear) { context, _ in
       drawTerritories(context: &context, size: size, regions: regions)
       drawEdges(context: &context, size: size, plan: plan)
-      drawNodes(context: &context, size: size, plan: plan)
-      drawCanvasLabels(context: &context, size: size, plan: plan, quietened: quietened)
+      drawNodes(context: &context, size: size, plan: plan, paintsInteractiveMarks: canvasOwnsTheMap)
+      drawCanvasLabels(
+        context: &context, size: size, plan: plan, gestureLabels: gestureLabels, quietened: quietened)
     }
     .accessibilityHidden(true)
   }
@@ -1138,13 +1166,18 @@ private struct CanonicalMemoryAtlasSurface: View {
   private func drawNodes(
     context: inout GraphicsContext,
     size: CGSize,
-    plan: MemoryAtlasRenderPlan
+    plan: MemoryAtlasRenderPlan,
+    /// True while the camera move has the SwiftUI marks stepped aside, so the
+    /// Canvas marks their entities too and nothing blinks out of the map.
+    paintsInteractiveMarks: Bool
   ) {
     let paintBounds = canvasPaintBounds(for: size)
     // An entity with a glass ring is marked by the ring alone. Painting the
     // canvas dot under it as well put a small bubble inside the big one and
-    // made the lines look as if they ended at the small one.
-    let ringed = Set(plan.interactiveNodes.map(\.id))
+    // made the lines look as if they ended at the small one — but mid-gesture
+    // the ring's view has stepped aside, so the dot takes over until the
+    // camera rests.
+    let ringed = paintsInteractiveMarks ? Set<String>() : Set(plan.interactiveNodes.map(\.id))
 
     for cluster in snapshot.activeClusters {
       var primaryPath = Path()
@@ -1205,18 +1238,24 @@ private struct CanonicalMemoryAtlasSurface: View {
     context: inout GraphicsContext,
     size: CGSize,
     plan: MemoryAtlasRenderPlan,
+    /// Entities whose SwiftUI label stepped aside for a camera move; named
+    /// here so the map keeps its names under the hand.
+    gestureLabels: [MemoryAtlasNodePlacement],
     /// Entities standing on a named territory, whose name the caption is
     /// currently speaking for.
     quietened: Set<String>
   ) {
-    guard plan.usesCanvasLabels else { return }
+    guard plan.usesCanvasLabels || !gestureLabels.isEmpty else { return }
+    // At the automatic canvas-label zoom the Canvas already names everything
+    // visible; below it, only the admitted gesture cohort needs a stand-in.
+    let labelled = plan.usesCanvasLabels ? plan.canvasLabelNodes : gestureLabels
 
     // From the density-aware inspection threshold onward, every dot on this
     // canvas gets a label. Skip labels outside the clipped canvas before
     // resolving Text, which makes a 10k-node graph cost proportional to the
     // current viewport rather than the total graph size.
     let visibleBounds = CGRect(origin: .zero, size: size)
-    for placement in plan.canvasLabelNodes where !quietened.contains(placement.id) {
+    for placement in labelled where !quietened.contains(placement.id) {
       let center = point(for: placement.normalizedPosition, in: size)
       guard visibleBounds.contains(center) else { continue }
 
@@ -1605,6 +1644,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         )
       }
       .onEnded { _ in
+        scrollSettleTask?.cancel()
         settledPan = pan
         isCameraMoving = false
       }
@@ -1630,11 +1670,15 @@ private struct CanonicalMemoryAtlasSurface: View {
         )
       }
       .onEnded { _ in
+        scrollSettleTask?.cancel()
         settledZoom = zoom
         settledPan = pan
         isCameraMoving = false
       }
   }
+
+  /// How long after the last scroll-wheel tick the camera counts as resting.
+  private static let scrollSettleDelay: TimeInterval = 0.3
 
   private func scrollZoom(by delta: CGFloat, anchoredAt pointer: CGPoint, in size: CGSize) {
     guard delta != 0, size.width > 0, size.height > 0 else { return }
@@ -1652,6 +1696,19 @@ private struct CanonicalMemoryAtlasSurface: View {
     zoom = nextZoom
     settledZoom = nextZoom
     settledPan = pan
+    // A scroll is a stream of discrete events with no onEnded, so without this
+    // flag the burst never counted as a camera move: every tick re-ran the
+    // full planner over the whole graph and re-admitted labels, rebuilding the
+    // overlay mid-scroll. Flagging it gives the burst the same cached render
+    // plan and canvas-only painting a drag or pinch gets; the settle task
+    // restores the at-rest plan once the ticks stop.
+    isCameraMoving = true
+    scrollSettleTask?.cancel()
+    scrollSettleTask = Task { @MainActor in
+      try? await Task.sleep(nanoseconds: UInt64(Self.scrollSettleDelay * 1_000_000_000))
+      guard !Task.isCancelled else { return }
+      isCameraMoving = false
+    }
   }
 
   private var maximumZoom: CGFloat {
