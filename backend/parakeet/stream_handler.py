@@ -510,6 +510,11 @@ class StreamSession:
         self._streaming_failed: bool = False
         self._streaming_text: str = ""
         self._last_emitted_text: str = ""
+        # Streaming decoder tails are retained for final-word recovery. Keep
+        # their acoustic bytes for speaker assignment, but never let the
+        # recovered segment move the transcript clock backwards into an
+        # already emitted interval.
+        self._last_emitted_end_s: Optional[float] = None
 
         self._spk_centroids: List[np.ndarray[Any, Any]] = []
         self._spk_counts: List[int] = []
@@ -561,17 +566,19 @@ class StreamSession:
                         speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
                         result: List[Dict[str, Any]] = []
                         if speech_dur >= MIN_SPEECH_DURATION_S:
-                            # Keep the decoder's sample timeline exact while
-                            # the connection is still live. The final flush
-                            # is the only operation allowed to pad/finish a
-                            # partial decoder chunk.
-                            await self._drain_streaming_asr()
-                            result = await self._transcribe_utterance(trim_trailing_word=True)
+                            # A VAD endpoint is a real utterance boundary. It
+                            # must finalize held right-context text before the
+                            # next utterance can acquire a new speaker/time
+                            # window; max-duration splits remain non-final.
+                            if self._streaming_enabled():
+                                await self._drain_streaming_asr(force=True)
+                            result = await self._transcribe_utterance()
                             segments.extend(result)
                         self._is_speaking = False
-                        if result or not self._streaming_enabled():
-                            self._pending_audio.clear()
-                            self._speech_start_s = None
+                        self._pending_audio.clear()
+                        self._speech_start_s = None
+                        if self._streaming_enabled():
+                            self._reset_streaming_decoder()
                         self._silence_count = 0
 
             if self._is_speaking:
@@ -589,8 +596,16 @@ class StreamSession:
                         # pending audio and speech anchor in that case; dropping
                         # them here loses the text between max-window splits.
                         self._pending_audio.clear()
-                        self._is_speaking = False
-                        self._speech_start_s = None
+                        # Keep VAD speech state alive across an intermediate
+                        # max-window emission so immediate silence still
+                        # reaches the true utterance endpoint and finalizes
+                        # held decoder text before the next speaker.
+                        if self._streaming_enabled():
+                            self._is_speaking = True
+                            self._speech_start_s = self._stream_offset_s + chunk_dur
+                        else:
+                            self._is_speaking = False
+                            self._speech_start_s = None
                     self._silence_count = 0
 
             if len(self._pending_audio) > MAX_PENDING_SPEECH_S * self._sr * self._bytes_per_sample:
@@ -660,6 +675,7 @@ class StreamSession:
             self._asr_audio_buf.clear()
             self._finalization_audio = b""
             self._finalization_start_s = None
+            self._last_emitted_end_s = None
             self._spk_centroids.clear()
             self._spk_counts.clear()
 
@@ -679,6 +695,18 @@ class StreamSession:
             return False
         asr_decoding = getattr(_asr_model, "decoding", None)
         return hasattr(_asr_model, 'decoding') and hasattr(getattr(asr_decoding, 'decoding', None), 'decoding_computer')
+
+    def _reset_streaming_decoder(self) -> None:
+        """Start a fresh cumulative decoder after a VAD-confirmed utterance."""
+
+        self._streaming_decoder = None
+        self._decoder_has_audio = False
+        self._decoder_finalized = False
+        self._asr_audio_buf.clear()
+        self._streaming_text = ""
+        self._last_emitted_text = ""
+        self._finalization_audio = b""
+        self._finalization_start_s = None
 
     def _get_streaming_decoder(self) -> Any:
         if self._streaming_decoder is None:
@@ -832,6 +860,7 @@ class StreamSession:
                     "detected_language": detected_lang,
                 }
             )
+            self._last_emitted_end_s = max(self._last_emitted_end_s or 0.0, abs_end)
 
         return output
 
@@ -851,11 +880,21 @@ class StreamSession:
             except LangDetectException:
                 pass
         speaker = self._assign_speaker(pcm, 0, dur_s)
+        # A final decoder word may be recovered from retained audio that was
+        # already used for an earlier trimmed emission. Its speaker window
+        # remains the full acoustic tail, while its transcript interval starts
+        # at the last committed endpoint to preserve monotonic output.
+        emitted_start = start_s
+        if self._last_emitted_end_s is not None:
+            emitted_start = max(emitted_start, self._last_emitted_end_s)
+        acoustic_end = start_s + dur_s
+        emitted_end = max(emitted_start, acoustic_end)
+        self._last_emitted_end_s = emitted_end
         return [
             {
                 "text": text.strip(),
-                "start": round(start_s, 2),
-                "end": round(start_s + dur_s, 2),
+                "start": round(emitted_start, 2),
+                "end": round(emitted_end, 2),
                 "speaker": speaker,
                 "is_user": False,
                 "person_id": None,

@@ -66,6 +66,14 @@ All nine non-streaming phases completed successfully (57 tests): CPU imports, de
 
 The follow-up removes zero-padding from intermediate max-window and VAD drains: those drains now submit only complete chunks, preserving the persistent decoder sample timeline. Final connection flush alone finalizes partial audio. Empty deltas retain pending speech rather than dropping its anchor, and a bounded pending-speech budget closes a stalled stream so the backend can recover through vendors. Regressions assert exact input bytes across drains and bounded retention. Finalization also drains held right context at exact chunk boundaries, preserves real audio shorter than a VAD frame, and emits a retained final word once. The capacity test now includes an exact-boundary finalization probe. A fresh GPU image must verify these content fixes before capacity is accepted.
 
+## Attempt 5: content fixed, bounded timestamp jitter rejected the harness
+
+[Run 34466094153](https://github.com/BasedHardware/omi/actions/runs/34466094153) built source `50c9728b5caef68c0842807da1e5b3a1cc46f16e` as `gcr.io/based-hardware-dev/parakeet@sha256:e2f163a7b2ab5a140132e90cafca44985633c9ab7b04e17cdfb90215865bb1e6`. It matched the deployment cap, target, CPU budget and model settings. All 32 smoke/dependency/GPU checks passed, every short run returned all four content sentinels, sustained ten-stream replay accepted ten streams for 180 seconds with no transport errors, and the exact-chunk-boundary probe completed normally.
+
+The workflow still reported `qualification_passed=false` because its timestamp-validity check rejected segment timestamps that preceded receipt by 37–80 ms. Segment-end p95 lag remained below 1.7 seconds at levels 1, 5, 8 and 10, and text, admission and clean-drain gates passed. This is bounded clock/measurement jitter rather than negative workload lag. The harness now records the raw minimum and accepts up to 100 ms of jitter while clamping the latency sample at zero; a fresh image and rerun are required before claiming capacity.
+
+All nine non-streaming phases again passed (57 tests; DER 32.9%, WER 13.0%, both within existing gates). Cleanup succeeded and the task-owned GPU pool and Job were absent afterward. This attempt is retained as a rejected harness run, not as release qualification.
+
 ## Efficiency prescription
 
 The current implementation submits each session's two-second decoder work to one process-wide executor worker; every streaming buffer uses batch size one. The shared NeMo model/decoding computer makes simply raising the executor thread count unsafe without a concurrency proof. The low sampled GPU utilization is consistent with underfeeding and serialized host scheduling, but CPU/throttling and queue measurements are needed to isolate causes.

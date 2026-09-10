@@ -223,7 +223,6 @@ class TestStreamSessionFeed:
 
     def test_silence_produces_no_segments(self):
         session = sh.StreamSession(sample_rate=16000)
-        session._vad = None
         silent = b'\x00' * 3200
         result = asyncio.run(session.feed(silent))
         assert result == []
@@ -281,8 +280,28 @@ class TestStreamSessionFeed:
         assert transcribe.await_count == 2
         assert all(call.kwargs.get("pad_partial") is not True for call in drain.await_args_list)
         assert session._pending_audio == bytearray()
-        assert session._speech_start_s is None
-        assert session._is_speaking is False
+        assert session._speech_start_s is not None
+        assert session._is_speaking is True
+
+    def test_max_split_followed_by_silence_finalizes_before_next_utterance(self):
+        session = sh.StreamSession(sample_rate=16000)
+        session._vad = None
+        split = {"text": "first", "start": 0.0, "end": 1.0, "speaker": "SPEAKER_0"}
+        final = {"text": "held", "start": 1.0, "end": 1.0, "speaker": "SPEAKER_0"}
+
+        with patch.object(sh, "MAX_SPEECH_DURATION_S", 0.99), patch.object(
+            session, "_streaming_enabled", return_value=True
+        ), patch.object(session, "_drain_streaming_asr", new_callable=AsyncMock) as drain, patch.object(
+            session, "_transcribe_utterance", new_callable=AsyncMock, side_effect=[[split], [final]]
+        ) as transcribe, patch.object(
+            session, "_run_vad", side_effect=[True] * 32 + [False] * 64
+        ):
+            asyncio.run(session.feed(_make_pcm(1.0)))
+            asyncio.run(session.feed(b"\x00" * (16000 * 2 * 2)))
+
+        assert any(call.kwargs.get("force") is True for call in drain.await_args_list)
+        assert transcribe.await_count == 2
+        assert session._streaming_decoder is None
 
 
 class TestStreamSessionVADIsolation:
@@ -450,8 +469,27 @@ class TestStreamSessionRNNTStreaming:
         decoder.decode_pcm.assert_called_once_with(real_tail or bytes(4), is_last_chunk=True)
         assert session._pcm_buf == bytearray()
         assert final[0]["text"] == "world"
-        assert final[0]["start"] == 0.0
+        assert final[0]["start"] == 1.0
         assert final[0]["end"] == pytest.approx(1.0 + len(real_tail) / 32000, abs=0.001)
+
+    def test_vad_endpoint_finalizes_and_resets_decoder_before_next_utterance(self):
+        session = sh.StreamSession(sample_rate=16000)
+        session._streaming_decoder = object()
+        with patch.object(session, "_streaming_enabled", return_value=True), patch.object(
+            session, "_drain_streaming_asr", new_callable=AsyncMock
+        ) as drain, patch.object(
+            session, "_transcribe_utterance", new_callable=AsyncMock, return_value=[]
+        ) as transcribe, patch.object(
+            session, "_run_vad", side_effect=[True] * 32 + [False] * 64
+        ):
+            asyncio.run(session.feed(_make_pcm(1.0)))
+            asyncio.run(session.feed(b"\x00" * (16000 * 2 * 2)))
+
+        assert any(call.kwargs.get("force") is True for call in drain.await_args_list)
+        assert all(call.kwargs.get("trim_trailing_word") is not True for call in transcribe.await_args_list)
+        assert session._streaming_decoder is None
+        assert session._streaming_text == ""
+        assert session._last_emitted_text == ""
 
     def test_exact_boundary_flush_releases_right_context_once_without_fabricating_empty_audio(self):
         decoder = MagicMock()

@@ -458,6 +458,7 @@ async def _run_stream_inner(stream_id: int, pcm: bytes, duration_s: float) -> Di
     receive_task: Optional[asyncio.Task[None]] = None
     audio_start = 0.0
     transcript_parts: List[str] = []
+    previous_end_s: Optional[float] = None
 
     async def receive_segments() -> None:
         try:
@@ -501,6 +502,9 @@ async def _run_stream_inner(stream_id: int, pcm: bytes, duration_s: float) -> Di
                     continue
                 if float(start_s) < 0 or float(end_s) < float(start_s) or float(end_s) > duration_s + 5:
                     result["timestamp_valid"] = False
+                if previous_end_s is not None and float(start_s) < previous_end_s - 0.02:
+                    result["timestamp_valid"] = False
+                previous_end_s = max(previous_end_s or 0.0, float(end_s))
                 latency = arrival_s - float(end_s)
                 # Model timestamps can lead the client receipt clock by a
                 # small scheduling/jitter margin. Reject only materially
