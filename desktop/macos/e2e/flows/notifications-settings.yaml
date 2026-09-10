@@ -5,6 +5,9 @@ description: Settings Notifications section snapshot and API update
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
+  # S1's section screen renders its master toggle through this style; the notifications
+  # master switch is an OmiToggleStyle activation on that page.
+  - desktop/macos/Desktop/Sources/Theme/OmiToggleStyle.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+SettingsUpdates.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistantSettings.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistant.swift
