@@ -760,7 +760,7 @@ export async function handleDeviceSessionOpen(
     Date.now()
   );
   return session === null
-    ? backendError("conflict", "edit_request", 409)
+    ? backendError("device_session_conflict", "edit_request", 409)
     : json({ session }, 201);
 }
 
@@ -799,7 +799,7 @@ export async function handleDeviceSessionAudio(
     case "not_found":
       return backendError("device_session_not_found", "none", 404);
     case "conflict":
-      return backendError("conflict", "edit_request", 409);
+      return backendError("device_session_conflict", "edit_request", 409);
     case "too_large":
       return backendError("attachment_too_large", "edit_request", 413);
   }
@@ -822,7 +822,7 @@ export async function handleDeviceSessionComplete(
     Date.now()
   );
   if (outcome.kind === "conflict")
-    return backendError("conflict", "edit_request", 409);
+    return backendError("device_session_conflict", "edit_request", 409);
   return outcome.kind === "not_found"
     ? backendError("device_session_not_found", "none", 404)
     : json({ session: outcome.session });
@@ -1052,7 +1052,7 @@ export async function handleTranscribe(
   if (session === null)
     return backendError("device_session_not_found", "none", 404);
   if (session.state !== "complete")
-    return backendError("conflict", "retry", 409);
+    return backendError("device_session_conflict", "retry", 409);
   await processDeviceTranscriptions(
     DB,
     ATTACHMENTS,

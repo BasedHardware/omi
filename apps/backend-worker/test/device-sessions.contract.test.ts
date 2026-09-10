@@ -595,6 +595,78 @@ describe("device session request validators", () => {
     expect((await complete.json()) as object).toEqual(missing);
   });
 
+  test("capture write 409s use production Listen device_session_conflict", async () => {
+    const conflict = {
+      error: {
+        code: "device_session_conflict",
+        retryable: false,
+        action: "edit_request",
+      },
+    };
+    const opened = await fetchWorker("/v1/device-sessions", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify(openBody),
+    });
+    expect(opened.status).toBe(201);
+    const created = (await opened.json()) as { session: { id: string } };
+    const metadata = await fetchWorker("/v1/device-sessions", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({ ...openBody, codec: 20 }),
+    });
+    expect(metadata.status).toBe(409);
+    expect(metadata.headers.get("retry-after")).toBeNull();
+    expect((await metadata.json()) as object).toEqual(conflict);
+    const transcribe = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/transcribe`,
+      { method: "POST", headers: authenticatedHeaders }
+    );
+    expect(transcribe.status).toBe(409);
+    expect(transcribe.headers.get("retry-after")).toBeNull();
+    expect((await transcribe.json()) as object).toEqual({
+      error: {
+        code: "device_session_conflict",
+        retryable: false,
+        action: "retry",
+      },
+    });
+    const audio = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/audio`,
+      {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: JSON.stringify({
+          chunks: [
+            {
+              chunkIndex: 0,
+              bytesBase64: btoa(String.fromCharCode(0, 0, 0, 128, 129)),
+            },
+          ],
+        }),
+      }
+    );
+    expect(audio.status).toBe(200);
+    const completed = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/complete`,
+      { method: "POST", headers: authenticatedHeaders }
+    );
+    expect(completed.status).toBe(200);
+    const late = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/audio`,
+      {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: JSON.stringify({
+          chunks: [{ chunkIndex: 1, bytesBase64: btoa("late") }],
+        }),
+      }
+    );
+    expect(late.status).toBe(409);
+    expect(late.headers.get("retry-after")).toBeNull();
+    expect((await late.json()) as object).toEqual(conflict);
+  });
+
   test("recording create replay returns the original session and conflicting metadata is refused", async () => {
     const post = (body: unknown) =>
       fetchWorker("/v1/device-sessions", {
@@ -611,7 +683,7 @@ describe("device session request validators", () => {
     const conflict = await post({ ...openBody, codec: 20 });
     expect(conflict.status).toBe(409);
     expect((await conflict.json()) as unknown).toMatchObject({
-      error: { code: "conflict" },
+      error: { code: "device_session_conflict" },
     });
   });
   test("accepts a codec byte and rejects invented transcript fields", () => {
@@ -934,7 +1006,7 @@ describe("device session ingest", () => {
       error: { code: string };
       session?: unknown;
     };
-    expect(lateBody.error.code).toBe("conflict");
+    expect(lateBody.error.code).toBe("device_session_conflict");
     expect(lateBody.session).toBeUndefined();
     expect(r2Mock.objects.size).toBe(2);
   });
