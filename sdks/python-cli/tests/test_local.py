@@ -315,6 +315,28 @@ def test_sql_json_structures_single_column_table_text(config_path: Path, cli_run
     }
 
 
+@pytest.mark.parametrize(
+    "sql_text",
+    [
+        "value\n--------------------\na|b\n\n1 row(s)",
+        "value\n--------------------\nfirst line\nsecond line\n\n1 row(s)",
+        (
+            "value\n--------------------\na\n"
+            "Result truncated after 1 row(s) to protect chat context. "
+            "Refine the projection or aggregate the result.\n\n2 row(s)"
+        ),
+    ],
+)
+def test_sql_json_preserves_ambiguous_table_text(config_path: Path, cli_runner, sql_text: str) -> None:
+    _configure_local_profile(config_path)
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(sql_text)))
+        result = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT value FROM probe"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"text": sql_text}
+
+
 def test_task_commands_route_to_local_tools(config_path: Path, cli_runner) -> None:
     _configure_local_profile(config_path)
     with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:

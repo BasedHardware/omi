@@ -310,15 +310,22 @@ def _normalize_sql_result(result: Any) -> Any:
         return {"text": result}
 
     columns = [part.strip() for part in header.split("|")] if "|" in header else [header.strip()]
+    data_lines = non_empty[2:-1]
+    row_count = int(row_count_match.group(1))
+    if len(data_lines) != row_count or any(line.startswith("Result truncated after ") for line in data_lines):
+        return {"text": result}
+
     rows = []
-    for line in non_empty[2:-1]:
+    for line in data_lines:
         values = [part.strip() for part in line.split("|")] if "|" in line else [line.strip()]
+        if len(values) != len(columns):
+            return {"text": result}
         rows.append({column: values[index] if index < len(values) else "" for index, column in enumerate(columns)})
 
     return {
         "columns": columns,
         "rows": rows,
-        "row_count": int(row_count_match.group(1)),
+        "row_count": row_count,
     }
 
 
