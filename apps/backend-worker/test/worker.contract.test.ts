@@ -1780,10 +1780,28 @@ describe("worker request contract", () => {
     const extra = await fetchWorker("/v1/conversations?limit=1&extra=1", {
       headers: authenticatedHeaders,
     });
+    const extraOffset = await fetchWorker(
+      "/v1/conversations?limit=1&offset=0&extra=1",
+      { headers: authenticatedHeaders }
+    );
+    const duplicateLimit = await fetchWorker(
+      "/v1/conversations?limit=1&limit=2",
+      { headers: authenticatedHeaders }
+    );
     expect(invalidLimit.status).toBe(400);
     expect(invalidCursor.status).toBe(400);
     expect(unknownCursor.status).toBe(400);
-    expect(extra.status).toBe(400);
+    expect(extra.status).toBe(200);
+    expect((await extra.json()) as { items: Array<{ id: string }> }).toEqual(
+      expect.objectContaining({
+        items: [expect.objectContaining({ id: "chat:session-b" })],
+      })
+    );
+    expect(extraOffset.status).toBe(200);
+    expect((await extraOffset.json()) as Array<{ id: string }>).toEqual([
+      expect.objectContaining({ id: "chat:session-b" }),
+    ]);
+    expect(duplicateLimit.status).toBe(400);
   });
 
   test("omitted conversation limit pages 25 rows like production DEFAULT_PAGE_LIMIT", async () => {

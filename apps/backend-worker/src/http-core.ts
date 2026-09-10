@@ -848,14 +848,9 @@ export async function handleConversations(
   context: CoreContext
 ): Promise<Response> {
   const query = new URL(context.req.url).searchParams;
-  const keys = [...query.keys()];
   const hasOffset = query.has("offset");
   if (hasOffset) {
-    if (
-      keys.some((key) => key !== "limit" && key !== "offset") ||
-      query.getAll("limit").length > 1 ||
-      query.getAll("offset").length > 1
-    ) {
+    if (query.getAll("limit").length > 1 || query.getAll("offset").length > 1) {
       return backendError("bad_request", "edit_request", 400);
     }
     const limit = parseLimit(query.get("limit") ?? undefined);
@@ -872,11 +867,7 @@ export async function handleConversations(
         .map((item) => toLegacyConversation(item))
     );
   }
-  if (
-    keys.some((key) => key !== "limit" && key !== "cursor") ||
-    query.getAll("limit").length > 1 ||
-    query.getAll("cursor").length > 1
-  ) {
+  if (query.getAll("limit").length > 1 || query.getAll("cursor").length > 1) {
     return backendError("bad_request", "edit_request", 400);
   }
   const limit = parseLimit(query.get("limit") ?? undefined, 25);
