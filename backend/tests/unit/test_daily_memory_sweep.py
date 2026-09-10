@@ -1,5 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 from io import StringIO
+import json
+import logging
 import sys
 import threading
 import time
@@ -2536,3 +2538,99 @@ def test_completed_day_lookup_duplicate_is_skipped_not_staged_as_sibling(monkeyp
     assert len(result.daily_summary) == 1
     assert result.daily_summary[0].content == 'Dave now lifts on Fridays too'
     assert result.daily_summary[0].slot == 'gym_schedule'
+
+
+def test_completed_day_gate_emits_decision_path_drop_counters(monkeypatch, caplog):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document('users/user-1/memory_state/apply_control').set(control.model_dump(mode='json'))
+    local_date = date(2026, 8, 23)
+    trusted = [TranscriptSegment(text='I lift on Tuesdays.', speaker_id=0, is_user=True, start=0, end=1)]
+    untrusted = [
+        TranscriptSegment(text='I will move to Boston.', speaker_id=i, is_user=True, start=i, end=i + 1)
+        for i in range(2)
+    ]
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
+        lambda *_args, **_kwargs: (
+            (
+                _day_source('conversation-1', 'gym', segments=trusted),
+                _day_source('conversation-2', 'guest', segments=untrusted),
+            ),
+            'complete',
+        ),
+    )
+    with caplog.at_level(logging.INFO):
+        result = produce_completed_day_daily_summary_sources(
+            'user-1',
+            local_date,
+            'UTC',
+            control,
+            db_client=db,
+            model_authority=DailySweepModelAuthority(
+                enabled=True, model_name='test', max_candidates=8, max_cost_usd=1.0
+            ),
+            agent_runner=lambda *_args, **_kwargs: _agent_output(
+                memories=[
+                    SimpleNamespace(
+                        content='subjectless fact',
+                        conversation_ids=['conversation-1'],
+                        about='',
+                        basis='decided',
+                        slot='',
+                        duplicate_of='',
+                    ),
+                    SimpleNamespace(
+                        content='proposed plan',
+                        conversation_ids=['conversation-1'],
+                        about='user',
+                        basis='proposed',
+                        slot='',
+                        duplicate_of='',
+                    ),
+                    SimpleNamespace(
+                        content='already in ledger',
+                        conversation_ids=['conversation-1'],
+                        about='user',
+                        basis='observed',
+                        slot='',
+                        duplicate_of='mem-gym',
+                    ),
+                    SimpleNamespace(
+                        content='untrusted owner claim',
+                        conversation_ids=['conversation-2'],
+                        about='user',
+                        basis='decided',
+                        slot='home_city',
+                        duplicate_of='',
+                    ),
+                    SimpleNamespace(
+                        content='Dave lifts on Fridays',
+                        conversation_ids=['conversation-1'],
+                        about='user',
+                        basis='decided',
+                        slot='gym_schedule',
+                        duplicate_of='',
+                    ),
+                ]
+            ),
+            window_override=completed_local_day_window(local_date, 'UTC'),
+        )
+    assert result.source_status == 'complete'
+    assert [candidate.content for candidate in result.daily_summary] == ['Dave lifts on Fridays']
+    messages = [
+        record.getMessage() for record in caplog.records if 'canonical_memory_decision_path.v1' in record.getMessage()
+    ]
+    assert len(messages) == 1
+    event = json.loads(messages[0].split('canonical_memory_decision_path.v1 ', 1)[1])
+    assert event == {
+        'stage': 'sweep',
+        'uid': 'user-1',
+        'local_date': '2026-08-23',
+        'dropped_subjectless': 1,
+        'dropped_basis_proposed': 1,
+        'demoted_owner_untrusted': 1,
+        'skipped_duplicate_lookup': 1,
+    }
+    assert 'subjectless fact' not in caplog.text
+    assert 'I lift on Tuesdays' not in caplog.text

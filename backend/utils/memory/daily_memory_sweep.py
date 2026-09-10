@@ -92,6 +92,7 @@ from utils.memory.knowledge_ledger import (
 from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.memory.memory_authority import validate_uid_for_memory_path
 from utils.memory.jit_trigger_contract import compile_trigger_condition
+from utils.memory.decision_path_telemetry import emit_memory_sweep_decision
 from utils.llm.usage_tracker import Features, track_usage
 
 # These budgets are deliberately separate from the canonical write budget.  A
@@ -4275,8 +4276,10 @@ def _load_or_stage_daily_summary_candidates(
                 dispatch_evidence=dispatch_evidence,
             )
         candidates: List[DailySweepCandidate] = []
-        dropped_by_basis = 0
         dropped_subjectless = 0
+        dropped_basis_proposed = 0
+        demoted_owner_untrusted = 0
+        skipped_duplicate_lookup = 0
         for index, memory in enumerate(getattr(output, "memories", ()) or ()):
             content = str(getattr(memory, "content", "") or "").strip()[:MAX_CONTENT_CHARACTERS]
             cited = [
@@ -4294,6 +4297,7 @@ def _load_or_stage_daily_summary_candidates(
                 # A lookup hit already holds this fact. Skip it here rather
                 # than staging a sibling the occupancy check would have to
                 # catch later — or miss, if the slot/subject keys diverge.
+                skipped_duplicate_lookup += 1
                 continue
             about = " ".join(str(getattr(memory, "about", "") or "").split())
             basis = str(getattr(memory, "basis", "") or "").strip().lower()
@@ -4301,12 +4305,14 @@ def _load_or_stage_daily_summary_candidates(
                 dropped_subjectless += 1
                 continue
             if basis not in {"decided", "observed"}:
-                dropped_by_basis += 1
+                if basis == "proposed":
+                    dropped_basis_proposed += 1
                 continue
             if about.casefold() == "user":
                 if not any(may_attribute_to_owner(owner_lookup[conversation_id]) for conversation_id in cited):
                     # The model supplied no named alternate subject. Do not
                     # turn an untrusted user label into a relationship fact.
+                    demoted_owner_untrusted += 1
                     continue
                 subject_scope = MemorySubjectScope.primary_user
                 subject_entity_id = "user"
@@ -4352,10 +4358,14 @@ def _load_or_stage_daily_summary_candidates(
                 break
         if len(candidates) > MAX_CANDIDATES_PER_DAY:
             raise ValueError("daily summary model candidate budget exceeded")
-        logger.info(
-            "daily summary candidate gate dropped_by_basis=%d dropped_subjectless=%d",
-            dropped_by_basis,
-            dropped_subjectless,
+        emit_memory_sweep_decision(
+            logger,
+            uid=uid,
+            local_date=local_date.isoformat(),
+            dropped_subjectless=dropped_subjectless,
+            dropped_basis_proposed=dropped_basis_proposed,
+            demoted_owner_untrusted=demoted_owner_untrusted,
+            skipped_duplicate_lookup=skipped_duplicate_lookup,
         )
         valid_folder_ids = {folder_id for folder_id, _name in folder_options}
         assignment_rows = [

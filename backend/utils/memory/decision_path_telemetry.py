@@ -135,6 +135,31 @@ def emit_memory_promotion_decision(
     )
 
 
+def emit_memory_sweep_decision(
+    logger: logging.Logger,
+    *,
+    uid: str,
+    local_date: str,
+    dropped_subjectless: int,
+    dropped_basis_proposed: int,
+    demoted_owner_untrusted: int,
+    skipped_duplicate_lookup: int,
+) -> None:
+    """Emit text-free candidate-gate counters for one completed-day sweep."""
+    _emit(
+        logger,
+        {
+            "stage": "sweep",
+            "uid": uid,
+            "local_date": local_date,
+            "dropped_subjectless": dropped_subjectless,
+            "dropped_basis_proposed": dropped_basis_proposed,
+            "demoted_owner_untrusted": demoted_owner_untrusted,
+            "skipped_duplicate_lookup": skipped_duplicate_lookup,
+        },
+    )
+
+
 def emit_memory_promotion_failure(
     logger: logging.Logger,
     *,
