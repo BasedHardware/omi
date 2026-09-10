@@ -74,6 +74,12 @@ import {
   loadOmiImportJobs,
   type OmiImportJobRow,
 } from '../legacyOmiImportJobs';
+import {
+  loadOmiWebhookUrls,
+  mergeWebhookUrl,
+  type OmiWebhookUrl,
+  type OmiWebhookUrlType,
+} from '../legacyOmiWebhookUrls';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {parseSoftwarePlane, type SoftwarePlane} from '../v5BackendOrigin';
@@ -235,6 +241,9 @@ export function SettingsPage({
     [],
   );
   const [importJobs, setImportJobs] = useState<OmiImportJobRow[]>([]);
+  const [webhookUrls, setWebhookUrls] = useState<
+    Map<OmiWebhookUrlType, OmiWebhookUrl>
+  >(new Map());
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
@@ -298,6 +307,7 @@ export function SettingsPage({
       setDeveloperKeys([]);
       setMcpKeys([]);
       setImportJobs([]);
+      setWebhookUrls(new Map());
       setError(cloudSessionUnavailableCopy(backend));
       setPhase('error');
       return;
@@ -352,6 +362,7 @@ export function SettingsPage({
         setDeveloperKeys([]);
         setMcpKeys([]);
         setImportJobs([]);
+        setWebhookUrls(new Map());
         setError(desktopBackendServiceCopy);
         setSettingsCanRetry(true);
         setPhase('error');
@@ -375,6 +386,7 @@ export function SettingsPage({
         setDeveloperKeys([]);
         setMcpKeys([]);
         setImportJobs([]);
+        setWebhookUrls(new Map());
         setError(desktopBackendUnauthorizedCopy);
         setPhase('signed-out');
         return;
@@ -411,6 +423,9 @@ export function SettingsPage({
     const developerKeysTask = loadOmiDevApiKeys(backend).catch(() => []);
     const mcpKeysTask = loadOmiMcpApiKeys(backend).catch(() => []);
     const importJobsTask = loadOmiImportJobs(backend).catch(() => []);
+    const webhookUrlsTask = loadOmiWebhookUrls(backend).catch(
+      () => new Map<OmiWebhookUrlType, OmiWebhookUrl>(),
+    );
     try {
       const account = await loadAccountSettings(backend);
       if (!current()) {
@@ -443,6 +458,7 @@ export function SettingsPage({
     const nextDeveloperKeys = await developerKeysTask;
     const nextMcpKeys = await mcpKeysTask;
     const nextImportJobs = await importJobsTask;
+    const nextWebhookUrls = await webhookUrlsTask;
     if (!current()) {
       return;
     }
@@ -471,6 +487,7 @@ export function SettingsPage({
       ),
     );
     setImportJobs(importJobsCopy(nextImportJobs));
+    setWebhookUrls(nextWebhookUrls);
   }, [browser]);
 
   useEffect(() => {
@@ -839,7 +856,9 @@ export function SettingsPage({
         ) : (
           snapshot.webhooks.map(webhook => (
             <SettingRow
-              copy={developerWebhookRowCopy(webhook)}
+              copy={developerWebhookRowCopy(
+                mergeWebhookUrl(webhook, webhookUrls),
+              )}
               key={webhook.type}
               title={developerWebhookTypeCopy(webhook.type)}
             />

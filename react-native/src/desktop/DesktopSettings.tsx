@@ -73,6 +73,12 @@ import {
   loadOmiImportJobs,
   type OmiImportJobRow,
 } from '../legacyOmiImportJobs';
+import {
+  loadOmiWebhookUrls,
+  mergeWebhookUrl,
+  type OmiWebhookUrl,
+  type OmiWebhookUrlType,
+} from '../legacyOmiWebhookUrls';
 import {FocusPressable} from '../ui/Pressable';
 import {
   desktopMotion,
@@ -305,6 +311,9 @@ export function DesktopSettings({
     [],
   );
   const [importJobs, setImportJobs] = useState<OmiImportJobRow[]>([]);
+  const [webhookUrls, setWebhookUrls] = useState<
+    Map<OmiWebhookUrlType, OmiWebhookUrl>
+  >(new Map());
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
     Record<PrivacyWriteKind, boolean>
@@ -348,6 +357,7 @@ export function DesktopSettings({
     let nextDeveloperKeys: ReturnType<typeof developerKeysCopy> = [];
     let nextMcpKeys: ReturnType<typeof developerKeysCopy> = [];
     let nextImportJobs: OmiImportJobRow[] = [];
+    let nextWebhookUrls = new Map<OmiWebhookUrlType, OmiWebhookUrl>();
     if (backend !== undefined && backend !== null && session === 'ready') {
       const peopleTask = loadOmiPeopleNames(backend).catch(
         () => new Map<string, string>(),
@@ -380,6 +390,9 @@ export function DesktopSettings({
       const developerKeysTask = loadOmiDevApiKeys(backend).catch(() => []);
       const mcpKeysTask = loadOmiMcpApiKeys(backend).catch(() => []);
       const importJobsTask = loadOmiImportJobs(backend).catch(() => []);
+      const webhookUrlsTask = loadOmiWebhookUrls(backend).catch(
+        () => new Map<OmiWebhookUrlType, OmiWebhookUrl>(),
+      );
       try {
         nextAccount = await loadAccountSettings(backend);
       } catch (reason) {
@@ -417,6 +430,7 @@ export function DesktopSettings({
         'MCP key',
       );
       nextImportJobs = importJobsCopy(await importJobsTask);
+      nextWebhookUrls = await webhookUrlsTask;
     }
     if (seq !== reloadSeqRef.current) {
       return;
@@ -438,6 +452,7 @@ export function DesktopSettings({
     setDeveloperKeys(nextDeveloperKeys);
     setMcpKeys(nextMcpKeys);
     setImportJobs(nextImportJobs);
+    setWebhookUrls(nextWebhookUrls);
   }, [backend, session]);
 
   useEffect(() => {
@@ -984,7 +999,9 @@ export function DesktopSettings({
       ) : (
         account.webhooks.map(webhook => (
           <Row
-            copy={developerWebhookRowCopy(webhook)}
+            copy={developerWebhookRowCopy(
+              mergeWebhookUrl(webhook, webhookUrls),
+            )}
             key={webhook.type}
             title={developerWebhookTypeCopy(webhook.type)}
           />

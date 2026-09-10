@@ -1269,6 +1269,20 @@ test('developer webhook rows omit empty or whitespace URLs', () => {
   expect(
     developerWebhookRowCopy({enabled: true, url: '  https://example.test/a  '}),
   ).toBe('Enabled · https://example.test/a');
+  expect(
+    developerWebhookRowCopy({
+      enabled: true,
+      url: 'https://example.test/audio',
+      intervalSeconds: '5',
+    }),
+  ).toBe('Enabled · https://example.test/audio · 5s');
+  expect(
+    developerWebhookRowCopy({
+      enabled: true,
+      url: null,
+      intervalSeconds: '12',
+    }),
+  ).toBe('Enabled · 12s');
 });
 
 test('whitespace-only account fields stay unset instead of a blank row', () => {

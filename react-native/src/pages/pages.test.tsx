@@ -1539,6 +1539,74 @@ test('Settings developer webhook URLs omit empty or whitespace values', async ()
   expect(tree).not.toContain(' \t\n');
 });
 
+test('Settings names GET developer webhook URLs without enable writes', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/developer/webhooks/status') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          memory_created: true,
+          realtime_transcript: false,
+          audio_bytes: true,
+          day_summary: true,
+        }),
+      };
+    }
+    if (request.path === '/v1/users/developer/webhook/memory_created') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({url: 'https://example.test/conversation'}),
+      };
+    }
+    if (request.path === '/v1/users/developer/webhook/realtime_transcript') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({url: 'https://example.test/transcript'}),
+      };
+    }
+    if (request.path === '/v1/users/developer/webhook/audio_bytes') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({url: 'https://example.test/audio,5'}),
+      };
+    }
+    if (request.path === '/v1/users/developer/webhook/day_summary') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({url: ''}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Conversation Events');
+  expect(tree).toContain('https://example.test/conversation');
+  expect(tree).toContain('https://example.test/transcript');
+  expect(tree).toContain('https://example.test/audio');
+  expect(tree).toContain('5s');
+  expect(tree).not.toContain('https://example.test/audio,5');
+  expect(mockBackend.request.mock.calls.some(call => call[0].method === 'POST')).toBe(
+    false,
+  );
+  expect(
+    mockBackend.request.mock.calls.some(
+      call => call[0].path === '/v1/users/developer/webhook/button_event',
+    ),
+  ).toBe(false);
+});
+
 test('Settings names GET developer and MCP keys without revoke or a full secret', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

@@ -1058,9 +1058,15 @@ export function developerWebhookStatusCopy(enabled: boolean | null): string {
 export function developerWebhookRowCopy(webhook: {
   enabled: boolean | null;
   url: string | null;
+  intervalSeconds?: string | null;
 }): string {
   const url = visibleDisplayText(webhook.url ?? '');
-  return [developerWebhookStatusCopy(webhook.enabled), url !== '' ? url : null]
+  const interval = visibleDisplayText(webhook.intervalSeconds ?? '');
+  return [
+    developerWebhookStatusCopy(webhook.enabled),
+    url !== '' ? url : null,
+    interval !== '' ? `${interval}s` : null,
+  ]
     .filter(item => item !== null)
     .join(' · ');
 }
