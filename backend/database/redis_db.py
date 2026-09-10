@@ -566,6 +566,49 @@ def get_user_webhook_db(uid: str, wtype: str) -> str:
     return url.decode()
 
 
+FILTER_CATEGORY_CAP = 500
+FILTER_CATEGORY_TRIM_BATCH = 128
+FILTER_CATEGORIES = frozenset({'people', 'topics', 'entities', 'dates'})
+
+# allow-oom: trim must still run when the box is at maxmemory (the incident).
+_FILTER_TRIM_LUA = """#!lua flags=allow-oom
+local key = KEYS[1]
+local cap = tonumber(ARGV[1])
+local batch = tonumber(ARGV[2])
+local n = redis.call('SCARD', key)
+if n <= cap then
+  return {n, 0}
+end
+local to_remove = math.min(n - cap, batch)
+redis.call('SPOP', key, to_remove)
+return {redis.call('SCARD', key), to_remove}
+"""
+
+_FILTER_ADMIT_LUA = """
+local key = KEYS[1]
+local member = ARGV[1]
+local cap = tonumber(ARGV[2])
+if redis.call('SISMEMBER', key, member) == 1 then
+  return 0
+end
+if redis.call('SCARD', key) >= cap then
+  return 0
+end
+return redis.call('SADD', key, member)
+"""
+
+_filter_trim_script = None
+_filter_admit_script = None
+
+
+def _filter_category_scripts() -> tuple[Any, Any]:
+    global _filter_trim_script, _filter_admit_script
+    if _filter_trim_script is None:
+        _filter_trim_script = r.register_script(_FILTER_TRIM_LUA)
+        _filter_admit_script = r.register_script(_FILTER_ADMIT_LUA)
+    return _filter_trim_script, _filter_admit_script
+
+
 def get_filter_category_items(uid: str, category: str, limit: Optional[int] = None) -> List[str]:
     key = f'users:{uid}:filters:{category}'
     if limit:
@@ -581,7 +624,38 @@ def get_filter_category_items(uid: str, category: str, limit: Optional[int] = No
 
 
 def add_filter_category_item(uid: str, category: str, item: str) -> None:
-    r.sadd(f'users:{uid}:filters:{category}', item)
+    """SADD chat-search filter members with a 500-cap; SPOP-trim oversized sets.
+
+    Redis SETs have no insertion order. Trim is random, one batch per call.
+    Fail-open on Redis errors: never fall back to an uncapped SADD.
+    """
+    if category not in FILTER_CATEGORIES or not item:
+        return
+    key = f'users:{uid}:filters:{category}'
+    try:
+        trim, admit = _filter_category_scripts()
+        after, removed = trim(keys=[key], args=[FILTER_CATEGORY_CAP, FILTER_CATEGORY_TRIM_BATCH])
+        after_n = int(after)
+        removed_n = int(removed)
+        if removed_n:
+            logger.info('filter_category_trim removed=%s after=%s', removed_n, after_n)
+        if after_n < FILTER_CATEGORY_CAP:
+            admit(keys=[key], args=[item, FILTER_CATEGORY_CAP])
+    except redis.exceptions.RedisError:
+        try:
+            from utils.observability.fallback import record_fallback
+
+            record_fallback(
+                component='other',
+                from_mode='filter_sadd',
+                to_mode='skip',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+        except Exception:
+            pass
+        return
 
 
 def save_migrated_retrieval_conversation_id(conversation_id: str) -> None:
