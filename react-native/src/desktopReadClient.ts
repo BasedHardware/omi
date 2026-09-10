@@ -324,6 +324,53 @@ export function formatConversationDuration(
     : `${hours} hr ${remainingMinutes} min`;
 }
 
+export function conversationTranscriptDurationCopy(
+  segments: readonly {end: number}[] | null | undefined,
+): string | null {
+  if (segments == null || segments.length === 0) {
+    return null;
+  }
+  let lastEnd = 0;
+  for (const segment of segments) {
+    if (
+      typeof segment.end === 'number' &&
+      Number.isFinite(segment.end) &&
+      segment.end > lastEnd
+    ) {
+      lastEnd = segment.end;
+    }
+  }
+  const seconds = Math.trunc(lastEnd);
+  if (seconds <= 0) {
+    return null;
+  }
+  if (seconds < 60) {
+    return `${seconds} secs`;
+  }
+  if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    if (remainingSeconds === 0) {
+      return minutes === 1 ? `${minutes} min` : `${minutes} mins`;
+    }
+    return `${minutes} mins ${remainingSeconds} secs`;
+  }
+  if (seconds < 86400) {
+    const hours = Math.floor(seconds / 3600);
+    const remainingMinutes = Math.floor((seconds % 3600) / 60);
+    if (remainingMinutes === 0) {
+      return hours === 1 ? `${hours} hour` : `${hours} hours`;
+    }
+    return `${hours} hours ${remainingMinutes} mins`;
+  }
+  const days = Math.floor(seconds / 86400);
+  const remainingHours = Math.floor((seconds % 86400) / 3600);
+  if (remainingHours === 0) {
+    return days === 1 ? `${days} day` : `${days} days`;
+  }
+  return `${days} days ${remainingHours} hours`;
+}
+
 export function accountWireCopy(value: string, unavailable: string): string {
   const trimmed = visibleDisplayText(value);
   if (trimmed === '') {

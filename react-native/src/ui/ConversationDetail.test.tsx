@@ -531,12 +531,99 @@ test('legacy conversation details keep GET clocks from the list row', () => {
   );
   expect(copy).toContain('Started ·');
   expect(copy).toContain('Finished ·');
-  expect(copy).toContain('Duration ·');
+  expect(copy).not.toContain('Duration ·');
+  expect(copy).not.toContain('Duration unavailable');
   expect(copy).toContain('Status ·');
   expect(copy).toContain('Completed');
   expect(copy).toContain('Locked');
   expect(copy).toContain('Discarded');
   expect(copy).not.toContain('in_progress');
+});
+
+test('legacy conversation details name GET started from created_at when started_at is missing', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const missingStart = text(
+    render({
+      apiContract: 'omi',
+      conversation: {
+        ...conversation,
+        id: 'old-1',
+        startedAt: null,
+        createdAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T12:05:00.000Z',
+        status: 'completed',
+      },
+    }),
+  );
+  expect(missingStart).toContain('Started ·');
+  expect(missingStart).not.toContain('Time unavailable');
+  expect(missingStart).not.toContain('Duration ·');
+});
+
+test('legacy conversation details name GET duration from transcript span', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'Hello',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              start: 0,
+              end: 90,
+            },
+            {
+              text: 'Later',
+              speaker: 'SPEAKER_01',
+              isUser: false,
+              start: 120,
+              end: 150,
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {
+        ...conversation,
+        id: 'old-1',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T13:00:00.000Z',
+        status: 'completed',
+      },
+    }),
+  );
+  expect(copy).toContain('Duration ·');
+  expect(copy).toContain('2 mins 30 secs');
+  expect(copy).not.toContain('1 hr');
+  expect(copy).not.toContain('Duration unavailable');
 });
 
 test('legacy in-progress chats omit Finished like canonical detail', () => {

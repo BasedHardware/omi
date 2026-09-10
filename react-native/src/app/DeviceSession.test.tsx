@@ -46,6 +46,7 @@ test('connected device details show reported values and truthful unavailable fie
   const output = JSON.stringify(renderer.toJSON());
   expect(output).toContain('Omi Dev Kit');
   expect(output).toContain('1.2.3');
+  expect(output).toContain('"Device ID",": ","omi-test"');
   expect(output).toContain('"Serial number",": ","Unavailable"');
   expect(output).toContain('"Hardware",": ","Unavailable"');
   expect(output).not.toContain('Unknown');
@@ -183,6 +184,7 @@ test('connected device details treat empty information fields as Unavailable', a
   expect(output).toContain('"Hardware",": ","Unavailable"');
   expect(output).toContain('"Manufacturer",": ","Based"');
   expect(output).toContain('"Serial number",": ","Unavailable"');
+  expect(output).toContain('"Device ID",": ","omi-test"');
   expect(output).not.toContain(' \t\n');
   await act(async () => renderer.unmount());
 });

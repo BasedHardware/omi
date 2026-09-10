@@ -7,6 +7,7 @@ import {
   conversationDisplayTitle,
   conversationHasFinishClock,
   conversationStatusCopy,
+  conversationTranscriptDurationCopy,
   conversationVisibilityCopy,
   formatConversationDuration,
   legacyTranscriptCanDisplaySeconds,
@@ -33,34 +34,43 @@ function ConversationClockFields({
   conversation,
   ink,
   locked,
+  durationCopy,
 }: {
   conversation: ConversationProjection;
   ink?: {color: string};
   locked?: boolean;
+  durationCopy?: string | null;
 }) {
   const showLocked = locked === true || conversation.locked;
   const captureCopy = conversationCaptureCopy(conversation.capturedAtMs);
   const visibilityCopy = conversationVisibilityCopy(conversation.visibility);
+  const wallDuration =
+    durationCopy === undefined && conversationHasFinishClock(conversation)
+      ? formatConversationDuration(
+          conversation.startedAt,
+          conversation.finishedAt,
+        )
+      : null;
+  const duration = durationCopy === undefined ? wallDuration : durationCopy;
   return (
     <View style={styles.conversationDetailFields}>
       {captureCopy !== null ? (
         <Text style={[styles.conversationDetailField, ink]}>{captureCopy}</Text>
       ) : null}
       <Text style={[styles.conversationDetailField, ink]}>
-        Started · {formatConversationDate(conversation.startedAt)}
+        Started ·{' '}
+        {formatConversationDate(
+          conversation.startedAt ?? conversation.createdAt,
+        )}
       </Text>
       {conversationHasFinishClock(conversation) ? (
         <Text style={[styles.conversationDetailField, ink]}>
           Finished · {formatConversationDate(conversation.finishedAt)}
         </Text>
       ) : null}
-      {conversationHasFinishClock(conversation) ? (
+      {duration !== null ? (
         <Text style={[styles.conversationDetailField, ink]}>
-          Duration ·{' '}
-          {formatConversationDuration(
-            conversation.startedAt,
-            conversation.finishedAt,
-          )}
+          Duration · {duration}
         </Text>
       ) : null}
       <Text style={[styles.conversationDetailField, ink]}>
@@ -278,6 +288,11 @@ function LegacyConversationBody({
         conversation={conversation}
         ink={ink}
         locked={detail.locked}
+        durationCopy={
+          detail.transcript.status === 'loaded'
+            ? conversationTranscriptDurationCopy(detail.transcript.segments)
+            : null
+        }
       />
       {address === '' ? null : (
         <Text style={[styles.conversationDetailField, ink]}>{address}</Text>
