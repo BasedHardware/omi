@@ -2035,6 +2035,8 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
 def test_memory_maintenance_job_contract_rejects_daily_sweep_host_and_requires_posthog(env, tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    # This mutation validates one environment; avoid serializing and parsing the unrelated one.
+    manifest['environments'] = {env: manifest['environments'][env]}
     job = manifest['environments'][env]['cloud_run']['jobs']['memory-maintenance-job']
     job['env']['MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED'] = {'value': 'true'}
     job['env']['POSTHOG_HOST'] = {'value': 'https://app.posthog.com'}
