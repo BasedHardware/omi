@@ -310,9 +310,11 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     assert "needs: [backend-unit-shard, backend-unit-guardrails]" in workflow
     assert 'if [ "$SHARD_RESULT" != "success" ]' in workflow
     assert 'if [ "$GUARDRAILS_RESULT" != "success" ]' in workflow
-    # The runner slices the deterministic selection round-robin; `index` is
-    # an awk builtin, so the shard variable must be named anything else.
-    assert "NR % total == (shard - 1) % total" in runner
+    # The runner slices the deterministic selection round-robin with the
+    # one-based mapping (line i runs in shard ((i - 1) % total) + 1, so
+    # shard labels match the files they carry); `index` is an awk builtin,
+    # so the shard variable must be named anything else.
+    assert "(NR - 1) % total == shard - 1" in runner
     assert "awk -v index=" not in runner
 
 

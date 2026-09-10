@@ -87,9 +87,10 @@ shard_note=""
 if [ "$shard_total" -ge 2 ]; then
   full_count="$(wc -l < "$selected_tests" | tr -d ' ')"
   sliced="$(mktemp "${TMPDIR:-/tmp}/omi-backend-unit-tests-shard.XXXXXX")"
-  # NB: `index` is an awk builtin, so the shard variable must be named
-  # anything else; passing -v index=… is a syntax error on every awk.
-  awk -v total="$shard_total" -v shard="$shard_index" 'NR % total == (shard - 1) % total' \
+  # One-based mapping so shard labels match the files they carry: line i
+  # runs in shard ((i - 1) % total) + 1, i.e. shard 1 takes files 1, 5, 9…
+  # (`index` is an awk builtin; the shard variable must be named else.)
+  awk -v total="$shard_total" -v shard="$shard_index" '(NR - 1) % total == shard - 1' \
     "$selected_tests" >"$sliced"
   mv "$sliced" "$selected_tests"
   shard_note=" (shard ${shard_index}/${shard_total}: $(wc -l < "$selected_tests" | tr -d ' ') of ${full_count} files)"
