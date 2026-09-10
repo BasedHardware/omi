@@ -3948,6 +3948,80 @@ test('Settings developer webhook URLs omit empty or whitespace values', async ()
   expect(tree).not.toContain(' \t\n');
 });
 
+test('Settings names GET developer and MCP keys without revoke or a full secret', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: [],
+    webhooksError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/dev/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'dev-1',
+            name: 'Local',
+            key_prefix: 'omi_sk_ab',
+            key: 'omi_sk_abcdef_secret',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/mcp/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'mcp-1', name: 'Cursor', key_prefix: 'omi_mcp_cd'},
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Developer key');
+  expect(tree).toContain('Local · omi_sk_ab');
+  expect(tree).toContain('MCP key');
+  expect(tree).toContain('Cursor · omi_mcp_cd');
+  expect(tree).not.toContain('omi_sk_abcdef_secret');
+  expect(tree).not.toContain('Revoke');
+  expect(
+    omiBackend.request.mock.calls.some(
+      call => call[0].method === 'POST' || call[0].method === 'DELETE',
+    ),
+  ).toBe(false);
+});
+
 test('desktop Tasks does not claim editing unavailable over a failed task read', () => {
   const renderer = renderDesktop({
     outcomes: {

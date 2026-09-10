@@ -886,6 +886,31 @@ export function developerWebhookRowCopy(webhook: {
     .join(' · ');
 }
 
+export function developerKeyRowCopy(key: {
+  name: string;
+  keyPrefix: string;
+}): string {
+  const name = visibleDisplayText(key.name);
+  if (name === '') {
+    return '';
+  }
+  const prefix = visibleDisplayText(key.keyPrefix);
+  return prefix === '' ? name : `${name} · ${prefix}`;
+}
+
+export function developerKeysCopy(
+  keys: readonly {name: string; keyPrefix: string}[],
+  title: string,
+): {title: string; copy: string}[] {
+  return keys.flatMap(key => {
+    const copy = developerKeyRowCopy(key);
+    if (copy === '') {
+      return [];
+    }
+    return [{title, copy}];
+  });
+}
+
 export function appCategoryCopy(category: string): string {
   return accountWireCopy(category, '');
 }

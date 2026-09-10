@@ -1519,6 +1519,67 @@ test('Settings developer webhook URLs omit empty or whitespace values', async ()
   expect(tree).not.toContain(' \t\n');
 });
 
+test('Settings names GET developer and MCP keys without revoke or a full secret', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/dev/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'dev-1',
+            name: 'Local',
+            key_prefix: 'omi_sk_ab',
+            key: 'omi_sk_abcdef_secret',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/mcp/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'mcp-1', name: 'Cursor', key_prefix: 'omi_mcp_cd'},
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Developer key');
+  expect(tree).toContain('Local · omi_sk_ab');
+  expect(tree).toContain('MCP key');
+  expect(tree).toContain('Cursor · omi_mcp_cd');
+  expect(tree).not.toContain('omi_sk_abcdef_secret');
+  expect(tree).not.toContain('Revoke');
+  expect(tree).not.toContain('Create');
+  expect(mockBackend.request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/dev/keys',
+  });
+  expect(mockBackend.request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/mcp/keys',
+  });
+  expect(
+    mockBackend.request.mock.calls.some(
+      call => call[0].method === 'POST' || call[0].method === 'DELETE',
+    ),
+  ).toBe(false);
+});
+
 test('Apps category labels are not raw wire tokens', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

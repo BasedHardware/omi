@@ -16,6 +16,7 @@ import {
   desktopReadErrorCopy,
   developerWebhookRowCopy,
   developerWebhookTypeCopy,
+  developerKeysCopy,
   accountFieldCopy,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
@@ -51,6 +52,7 @@ import {loadOmiDailySummaries} from '../legacyOmiDailySummaries';
 import {loadOmiDailySummarySchedule} from '../legacyOmiDailySummarySchedule';
 import {loadOmiMentorNotificationSettings} from '../legacyOmiMentorNotifications';
 import {loadOmiTranscriptionPreferences} from '../legacyOmiTranscriptionPreferences';
+import {loadOmiDevApiKeys, loadOmiMcpApiKeys} from '../legacyOmiDeveloperKeys';
 import {FocusPressable} from '../ui/Pressable';
 import {
   desktopMotion,
@@ -268,6 +270,12 @@ export function DesktopSettings({
   const [customVocabulary, setCustomVocabulary] = useState<
     ReturnType<typeof customVocabularyCopy>
   >([]);
+  const [developerKeys, setDeveloperKeys] = useState<
+    ReturnType<typeof developerKeysCopy>
+  >([]);
+  const [mcpKeys, setMcpKeys] = useState<ReturnType<typeof developerKeysCopy>>(
+    [],
+  );
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
     Record<PrivacyWriteKind, boolean>
@@ -302,6 +310,8 @@ export function DesktopSettings({
     let nextAutomaticTranslation: ReturnType<typeof automaticTranslationCopy> =
       [];
     let nextCustomVocabulary: ReturnType<typeof customVocabularyCopy> = [];
+    let nextDeveloperKeys: ReturnType<typeof developerKeysCopy> = [];
+    let nextMcpKeys: ReturnType<typeof developerKeysCopy> = [];
     if (backend !== undefined && backend !== null && session === 'ready') {
       const peopleTask = loadOmiPeopleNames(backend).catch(
         () => new Map<string, string>(),
@@ -317,6 +327,8 @@ export function DesktopSettings({
       const transcriptionPreferencesTask = loadOmiTranscriptionPreferences(
         backend,
       ).catch(() => null);
+      const developerKeysTask = loadOmiDevApiKeys(backend).catch(() => []);
+      const mcpKeysTask = loadOmiMcpApiKeys(backend).catch(() => []);
       try {
         nextAccount = await loadAccountSettings(backend);
       } catch (reason) {
@@ -336,6 +348,11 @@ export function DesktopSettings({
         transcription?.singleLanguageMode,
       );
       nextCustomVocabulary = customVocabularyCopy(transcription?.vocabulary);
+      nextDeveloperKeys = developerKeysCopy(
+        await developerKeysTask,
+        'Developer key',
+      );
+      nextMcpKeys = developerKeysCopy(await mcpKeysTask, 'MCP key');
     }
     if (seq !== reloadSeqRef.current) {
       return;
@@ -348,6 +365,8 @@ export function DesktopSettings({
     setNotificationFrequency(nextNotificationFrequency);
     setAutomaticTranslation(nextAutomaticTranslation);
     setCustomVocabulary(nextCustomVocabulary);
+    setDeveloperKeys(nextDeveloperKeys);
+    setMcpKeys(nextMcpKeys);
   }, [backend, session]);
 
   useEffect(() => {
@@ -878,6 +897,12 @@ export function DesktopSettings({
           />
         ))
       )}
+      {developerKeys.map((row, index) => (
+        <Row copy={row.copy} key={`dev-key-${index}`} title={row.title} />
+      ))}
+      {mcpKeys.map((row, index) => (
+        <Row copy={row.copy} key={`mcp-key-${index}`} title={row.title} />
+      ))}
     </>
   );
 

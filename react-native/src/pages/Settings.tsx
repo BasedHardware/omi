@@ -29,6 +29,7 @@ import {
   dataProtectionCopy,
   developerWebhookRowCopy,
   developerWebhookTypeCopy,
+  developerKeysCopy,
   accountFieldCopy,
   connectionIdentityCopy,
   subscriptionPlanCopy,
@@ -52,6 +53,7 @@ import {loadOmiDailySummaries} from '../legacyOmiDailySummaries';
 import {loadOmiDailySummarySchedule} from '../legacyOmiDailySummarySchedule';
 import {loadOmiMentorNotificationSettings} from '../legacyOmiMentorNotifications';
 import {loadOmiTranscriptionPreferences} from '../legacyOmiTranscriptionPreferences';
+import {loadOmiDevApiKeys, loadOmiMcpApiKeys} from '../legacyOmiDeveloperKeys';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {parseSoftwarePlane, type SoftwarePlane} from '../v5BackendOrigin';
@@ -198,6 +200,12 @@ export function SettingsPage({
   const [customVocabulary, setCustomVocabulary] = useState<
     ReturnType<typeof customVocabularyCopy>
   >([]);
+  const [developerKeys, setDeveloperKeys] = useState<
+    ReturnType<typeof developerKeysCopy>
+  >([]);
+  const [mcpKeys, setMcpKeys] = useState<ReturnType<typeof developerKeysCopy>>(
+    [],
+  );
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
@@ -252,6 +260,8 @@ export function SettingsPage({
       setNotificationFrequency([]);
       setAutomaticTranslation([]);
       setCustomVocabulary([]);
+      setDeveloperKeys([]);
+      setMcpKeys([]);
       setError(cloudSessionUnavailableCopy(backend));
       setPhase('error');
       return;
@@ -297,6 +307,8 @@ export function SettingsPage({
         setNotificationFrequency([]);
         setAutomaticTranslation([]);
         setCustomVocabulary([]);
+        setDeveloperKeys([]);
+        setMcpKeys([]);
         setError(desktopBackendServiceCopy);
         setSettingsCanRetry(true);
         setPhase('error');
@@ -311,6 +323,8 @@ export function SettingsPage({
         setNotificationFrequency([]);
         setAutomaticTranslation([]);
         setCustomVocabulary([]);
+        setDeveloperKeys([]);
+        setMcpKeys([]);
         setError(desktopBackendUnauthorizedCopy);
         setPhase('signed-out');
         return;
@@ -330,6 +344,8 @@ export function SettingsPage({
     const transcriptionPreferencesTask = loadOmiTranscriptionPreferences(
       backend,
     ).catch(() => null);
+    const developerKeysTask = loadOmiDevApiKeys(backend).catch(() => []);
+    const mcpKeysTask = loadOmiMcpApiKeys(backend).catch(() => []);
     try {
       const account = await loadAccountSettings(backend);
       if (!current()) {
@@ -353,6 +369,8 @@ export function SettingsPage({
     const schedule = await dailySummaryScheduleTask;
     const frequency = await notificationFrequencyTask;
     const transcription = await transcriptionPreferencesTask;
+    const nextDeveloperKeys = await developerKeysTask;
+    const nextMcpKeys = await mcpKeysTask;
     if (!current()) {
       return;
     }
@@ -367,6 +385,8 @@ export function SettingsPage({
       automaticTranslationCopy(transcription?.singleLanguageMode),
     );
     setCustomVocabulary(customVocabularyCopy(transcription?.vocabulary));
+    setDeveloperKeys(developerKeysCopy(nextDeveloperKeys, 'Developer key'));
+    setMcpKeys(developerKeysCopy(nextMcpKeys, 'MCP key'));
   }, [browser]);
 
   useEffect(() => {
@@ -699,21 +719,38 @@ export function SettingsPage({
     );
 
   const developer =
-    snapshot === null ? null : snapshot.webhooks === null ? (
-      <Text style={styles.projectionEmptyCopy}>
-        {snapshot.webhooksError ?? 'Developer webhook status is unavailable.'}
-      </Text>
-    ) : snapshot.webhooks.length === 0 ? (
-      <Text style={styles.projectionEmptyCopy}>
-        No developer webhooks were returned.
-      </Text>
-    ) : (
+    snapshot === null ? null : (
       <>
-        {snapshot.webhooks.map(webhook => (
+        {snapshot.webhooks === null ? (
+          <Text style={styles.projectionEmptyCopy}>
+            {snapshot.webhooksError ??
+              'Developer webhook status is unavailable.'}
+          </Text>
+        ) : snapshot.webhooks.length === 0 ? (
+          <Text style={styles.projectionEmptyCopy}>
+            No developer webhooks were returned.
+          </Text>
+        ) : (
+          snapshot.webhooks.map(webhook => (
+            <SettingRow
+              copy={developerWebhookRowCopy(webhook)}
+              key={webhook.type}
+              title={developerWebhookTypeCopy(webhook.type)}
+            />
+          ))
+        )}
+        {developerKeys.map((row, index) => (
           <SettingRow
-            copy={developerWebhookRowCopy(webhook)}
-            key={webhook.type}
-            title={developerWebhookTypeCopy(webhook.type)}
+            copy={row.copy}
+            key={`dev-key-${index}`}
+            title={row.title}
+          />
+        ))}
+        {mcpKeys.map((row, index) => (
+          <SettingRow
+            copy={row.copy}
+            key={`mcp-key-${index}`}
+            title={row.title}
           />
         ))}
       </>
