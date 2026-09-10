@@ -2,6 +2,15 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.336",
+      "date": "2026-09-10",
+      "changes": [
+        "Fixed the notch collapsing to its narrow idle width while a notification card, a voice status message, or the thinking indicator was still showing in it",
+        "Fixed Settings switches ignoring the first click when it moved slightly — they now flip on the first click and are readable by accessibility tools",
+        "Fixed task Undo showing a restored task under a deleted identity until refresh"
+      ]
+    },
+    {
       "version": "0.12.335",
       "date": "2026-09-10",
       "changes": [

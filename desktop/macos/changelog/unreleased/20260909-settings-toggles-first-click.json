@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Settings switches ignoring the first click when it moved slightly — they now flip on the first click and are readable by accessibility tools"
-}
