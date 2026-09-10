@@ -37,6 +37,7 @@ import {
 import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 import {goalProgressCopy, loadOmiGoals, type OmiGoal} from '../legacyOmiGoals';
+import {loadOmiFolderNames, type OmiFolder} from '../legacyOmiFolders';
 import type {OmiBackend} from '../omiNativeTypes';
 
 const ConversationRow = memo(function ConversationRow({
@@ -174,6 +175,7 @@ export function ConversationsPage({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [starredOnly, setStarredOnly] = useState(false);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const nowEpochMilliseconds = useRef(Date.now()).current;
   const selected = conversations.find(item => item.id === selectedId) ?? null;
   useEffect(() => {
@@ -188,6 +190,7 @@ export function ConversationsPage({
     const normalized = visibleDisplayText(query).toLocaleLowerCase();
     return conversations.filter(
       item =>
+        (selectedFolderId === null || item.folderId === selectedFolderId) &&
         (!starredOnly || item.starred) &&
         (normalized === '' ||
           item.title.toLocaleLowerCase().includes(normalized) ||
@@ -199,7 +202,7 @@ export function ConversationsPage({
             .includes(normalized) ||
           item.summary.toLocaleLowerCase().includes(normalized)),
     );
-  }, [conversations, query, starredOnly]);
+  }, [conversations, query, selectedFolderId, starredOnly]);
   useEffect(() => {
     if (selectedId !== null && !filtered.some(item => item.id === selectedId)) {
       setSelectedId(null);
@@ -226,8 +229,10 @@ export function ConversationsPage({
       ),
     [filtered, nowEpochMilliseconds],
   );
-  const filtering = visibleDisplayText(query) !== '' || starredOnly;
+  const searching = visibleDisplayText(query) !== '';
+  const filtering = searching || starredOnly || selectedFolderId !== null;
   const [goals, setGoals] = useState<OmiGoal[]>([]);
+  const [folders, setFolders] = useState<OmiFolder[]>([]);
   useEffect(() => {
     if (backend === undefined || backend === null) {
       setGoals([]);
@@ -249,6 +254,35 @@ export function ConversationsPage({
       cancelled = true;
     };
   }, [backend, loading]);
+  useEffect(() => {
+    if (backend === undefined || backend === null) {
+      setFolders([]);
+      return;
+    }
+    let cancelled = false;
+    loadOmiFolderNames(backend)
+      .then(rows => {
+        if (!cancelled) {
+          setFolders(rows);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFolders([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [backend, loading]);
+  useEffect(() => {
+    if (
+      selectedFolderId !== null &&
+      !folders.some(folder => folder.id === selectedFolderId)
+    ) {
+      setSelectedFolderId(null);
+    }
+  }, [folders, selectedFolderId]);
 
   return (
     <View
@@ -267,40 +301,72 @@ export function ConversationsPage({
         </Text>
       )}
       {(!compact || selected === null) && (
-        <View
-          style={[
-            styles.conversationDiscovery,
-            embedded && mobileStyles.discovery,
-          ]}>
-          <View style={styles.conversationSearchBox}>
-            <Search accessible={false} color="#777777" size={17} />
-            <TextInput
-              accessibilityLabel="Search loaded conversations"
-              onChangeText={setQuery}
-              placeholder="Search loaded conversations"
-              placeholderTextColor="#666666"
-              style={styles.memorySearchInput}
-              value={query}
-            />
-          </View>
-          <FocusPressable
-            accessibilityLabel="Show starred conversations"
-            accessibilityRole="button"
-            accessibilityState={{selected: starredOnly}}
-            onPress={() => setStarredOnly(value => !value)}
-            style={({pressed}) => [
-              styles.conversationStarFilter,
-              starredOnly && styles.conversationStarFilterActive,
-              pressed && styles.pressed,
-            ]}>
-            <Text
-              style={[
-                styles.conversationStarFilterText,
-                starredOnly && styles.conversationStarFilterTextActive,
+        <View style={embedded ? mobileStyles.discovery : undefined}>
+          <View style={styles.conversationDiscovery}>
+            <View style={styles.conversationSearchBox}>
+              <Search accessible={false} color="#777777" size={17} />
+              <TextInput
+                accessibilityLabel="Search loaded conversations"
+                onChangeText={setQuery}
+                placeholder="Search loaded conversations"
+                placeholderTextColor="#666666"
+                style={styles.memorySearchInput}
+                value={query}
+              />
+            </View>
+            <FocusPressable
+              accessibilityLabel="Show starred conversations"
+              accessibilityRole="button"
+              accessibilityState={{selected: starredOnly}}
+              onPress={() => setStarredOnly(value => !value)}
+              style={({pressed}) => [
+                styles.conversationStarFilter,
+                starredOnly && styles.conversationStarFilterActive,
+                pressed && styles.pressed,
               ]}>
-              Starred
-            </Text>
-          </FocusPressable>
+              <Text
+                style={[
+                  styles.conversationStarFilterText,
+                  starredOnly && styles.conversationStarFilterTextActive,
+                ]}>
+                Starred
+              </Text>
+            </FocusPressable>
+          </View>
+          {folders.length > 0 ? (
+            <View style={styles.conversationFolderFilters}>
+              {folders.map(folder => {
+                const selectedFolder = selectedFolderId === folder.id;
+                return (
+                  <FocusPressable
+                    accessibilityLabel={`Show ${folder.name} conversations`}
+                    accessibilityRole="button"
+                    accessibilityState={{selected: selectedFolder}}
+                    key={folder.id}
+                    onPress={() =>
+                      setSelectedFolderId(current =>
+                        current === folder.id ? null : folder.id,
+                      )
+                    }
+                    style={({pressed}) => [
+                      styles.conversationStarFilter,
+                      selectedFolder && styles.conversationStarFilterActive,
+                      pressed && styles.pressed,
+                    ]}>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.conversationStarFilterText,
+                        selectedFolder &&
+                          styles.conversationStarFilterTextActive,
+                      ]}>
+                      {folder.name}
+                    </Text>
+                  </FocusPressable>
+                );
+              })}
+            </View>
+          ) : null}
         </View>
       )}
       <View style={styles.conversationContent}>
@@ -327,7 +393,7 @@ export function ConversationsPage({
                 {notice}
               </Text>
             )}
-            {goals.length > 0 && !filtering ? (
+            {goals.length > 0 && !searching && !starredOnly ? (
               <View>
                 <Text style={styles.projectionEmptyTitle}>Goals</Text>
                 {goals.map(goal => (

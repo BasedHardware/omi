@@ -864,6 +864,12 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
   },
   conversationStarFilterTextActive: {color: '#141414'},
+  conversationFolderFilters: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 9,
+    marginTop: 9,
+  },
   conversationContent: {flex: 1, flexDirection: 'row', gap: 16, marginTop: 18},
   conversationListPane: {flex: 1},
   conversationList: {gap: 16, paddingBottom: 28},

@@ -45,6 +45,37 @@ export function parseOmiFolderNames(body: string): Map<string, string> {
   return names;
 }
 
+export type OmiFolder = {
+  id: string;
+  name: string;
+};
+
+export async function loadOmiFolderNames(
+  backend: OmiBackend,
+): Promise<OmiFolder[]> {
+  const response = await backend.request({
+    id: 'omi-folders',
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/folders',
+  });
+  if (
+    response.status !== 200 ||
+    response.body === null ||
+    response.body.length > 1024 * 1024
+  ) {
+    return [];
+  }
+  try {
+    return [...parseOmiFolderNames(response.body)].map(([id, name]) => ({
+      id,
+      name,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function loadOmiFolderName(
   backend: OmiBackend,
   folderId: string,

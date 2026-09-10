@@ -1558,19 +1558,24 @@ test('conversation list names discarded GET photo counts and omits them otherwis
 });
 
 test('conversation list names GET goals without add or a write sheet', async () => {
-  const request = jest.fn(async () => ({
-    id: 'omi-goals',
-    status: 200,
-    body: JSON.stringify([
-      {
-        id: 'goal-read',
-        title: 'Read 20 books',
-        current_value: 3,
-        target_value: 10,
-      },
-      {id: 'goal-empty', title: ' \t', current_value: 1, target_value: 2},
-    ]),
-  }));
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/goals/all') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'goal-read',
+            title: 'Read 20 books',
+            current_value: 3,
+            target_value: 10,
+          },
+          {id: 'goal-empty', title: ' \t', current_value: 1, target_value: 2},
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await act(async () => {
     renderer = ReactTestRenderer.create(
@@ -1619,11 +1624,20 @@ test('conversation list names GET goals without add or a write sheet', async () 
 });
 
 test('conversation list omits GET goals on failure and while searching', async () => {
-  const request = jest.fn(async () => ({
-    id: 'omi-goals',
+  let goalsResponse: {status: number; body: string | null} = {
     status: 404,
     body: null,
-  }));
+  };
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/goals/all') {
+      return {
+        id: request.id,
+        status: goalsResponse.status,
+        body: goalsResponse.body,
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await act(async () => {
     renderer = ReactTestRenderer.create(
@@ -1670,8 +1684,7 @@ test('conversation list omits GET goals on failure and while searching', async (
   expect(textOf(renderer)).not.toContain('Goals');
   expect(textOf(renderer)).not.toContain('No goals');
 
-  request.mockResolvedValueOnce({
-    id: 'omi-goals',
+  goalsResponse = {
     status: 200,
     body: JSON.stringify([
       {
@@ -1681,7 +1694,7 @@ test('conversation list omits GET goals on failure and while searching', async (
         target_value: 10,
       },
     ]),
-  });
+  };
   await act(async () => {
     renderer.update(
       <ConversationsPage
@@ -1735,5 +1748,113 @@ test('conversation list omits GET goals on failure and while searching', async (
   expect(textOf(renderer)).not.toContain('Goals');
   expect(textOf(renderer)).not.toContain('Read 20 books');
   expect(textOf(renderer)).toContain('Standup');
+});
+
+test('conversation list names GET folders without add or a write sheet', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/folders') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'folder-work', name: 'Work'},
+          {id: 'folder-empty', name: ' \t'},
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const item = {
+    kind: 'conversation' as const,
+    summary: 'Notes',
+    searchableText: 'Notes',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: 'in_progress' as const,
+    source: 'chat' as const,
+    visibility: 'private' as const,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...item,
+                id: 'chat:work',
+                title: 'Work standup',
+                searchableText: 'Work standup\nNotes',
+                folderId: 'folder-work',
+              },
+              {
+                ...item,
+                id: 'chat:inbox',
+                title: 'Inbox chat',
+                searchableText: 'Inbox chat\nNotes',
+                folderId: null,
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Work');
+  expect(tree).toContain('Work standup');
+  expect(tree).toContain('Inbox chat');
+  expect(tree).not.toContain('folder-work');
+  expect(tree).not.toContain('folder-empty');
+  expect(tree).not.toContain('Add');
+  expect(request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/folders',
+  });
+  expect(
+    request.mock.calls.some(
+      call => call[0].method === 'POST' || call[0].method === 'PATCH',
+    ),
+  ).toBe(false);
+  await act(async () => {
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Show Work conversations',
+      )
+      .props.onPress();
+  });
+  expect(textOf(renderer)).toContain('Work standup');
+  expect(textOf(renderer)).not.toContain('Inbox chat');
+  await act(async () => {
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Show Work conversations',
+      )
+      .props.onPress();
+  });
+  expect(textOf(renderer)).toContain('Work standup');
+  expect(textOf(renderer)).toContain('Inbox chat');
 });
 
