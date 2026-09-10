@@ -426,6 +426,45 @@ def test_conversation_finalization_capability_contract_rejects_summary_pipeline_
     )
 
 
+def test_conversation_finalization_capability_contract_rejects_normalized_but_not_identical_flag_literals():
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+    # ' TRUE ' resolves to the same runtime boolean as 'true', but the pusher
+    # co-host gate compares raw literals; admission must not be weaker than it.
+    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ' TRUE '
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert any(
+        error.scope == 'prod/conversation-finalization'
+        and 'CONVERSATION_NOTES_V2_ENABLED disagrees' in error.message
+        and "' TRUE '" in error.message
+        and "'true'" in error.message
+        for error in errors
+    )
+
+
+def test_conversation_finalization_capability_contract_rejects_empty_summary_pipeline_flag_literal():
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+    # '' parses as literal-present so it dodges the omission check, and an
+    # all-empty fleet would also dodge disagreement — yet runtime treats it as
+    # False, the exact silent-off case this contract exists to reject.
+    env_config['gke']['backend-listen']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
+    env_config['gke']['pusher']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
+    env_config['cloud_run']['services']['backend']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
+    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert any(
+        error.scope == 'prod/cloud_run/backend-sync'
+        and 'CONVERSATION_NOTES_V2_ENABLED must be an explicit boolean literal' in error.message
+        for error in errors
+    )
+    assert not any('disagrees' in error.message for error in errors)
+
+
 def test_conversation_finalization_capability_contract_rejects_unknown_and_uncovered_declarations():
     validator = load_validator()
     env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['dev'])

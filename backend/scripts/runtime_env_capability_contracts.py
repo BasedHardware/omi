@@ -52,6 +52,13 @@ SUMMARY_PIPELINE_FLAGS = (
     'CONVERSATION_OCR_CONTEXT_ENABLED',
 )
 
+# The runtime resolves these flags with strip().casefold() against the truthy
+# set {'1','true','yes','on'}; anything else — including '' — is silently False.
+# Admission therefore only accepts that truthy set and its falsy counterparts,
+# so an empty or misspelled literal cannot pass the contract while behaving
+# like the omitted/False case the contract exists to reject.
+_SUMMARY_FLAG_LITERALS = frozenset({'1', 'true', 'yes', 'on', '0', 'false', 'no', 'off'})
+
 
 def _as_config_dict(value: object) -> ConfigDict | None:
     return cast(ConfigDict, value) if isinstance(value, dict) else None
@@ -176,7 +183,19 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
                     )
                 )
                 continue
-            summary_flag_values[flag][scope] = literal_env[flag].strip().lower()
+            # Compare raw literals, not normalized values: the pusher co-host
+            # gate (verify_pusher_cohost_env_diff.py) enforces byte-identical
+            # values for these same flags, so admission must not accept drift
+            # (e.g. 'true' vs ' TRUE ') that the co-host gate would reject.
+            summary_flag_values[flag][scope] = literal_env[flag]
+            if literal_env[flag].strip().casefold() not in _SUMMARY_FLAG_LITERALS:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'summary-pipeline flag {flag} must be an explicit boolean literal '
+                        f'(true/false), got {literal_env[flag]!r}',
+                    )
+                )
 
     for flag, host_values in summary_flag_values.items():
         distinct = set(host_values.values())
