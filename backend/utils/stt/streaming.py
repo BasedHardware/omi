@@ -245,9 +245,7 @@ async def connect_stt_socket_with_fallback(
     ``modulate-velma-2,dg-nova-3,parakeet`` lost 100% of its sessions for ~50
     minutes because a Modulate primary bypassed this helper entirely (#11752).
 
-    ``exclude`` contains provider identities that already died during the
-    current session. It is applied to fallback legs so a rebuild cannot walk
-    back into an earlier failed provider.
+    ``exclude`` prevents a rebuild from retrying providers that already died.
 
     The circuit is deliberately process-local and never owns capacity. The
     Parakeet service rejects excess streams at its GPU boundary; this helper
@@ -510,10 +508,8 @@ def modulate_is_configured_fallback(language: Optional[str]) -> bool:
 def parakeet_stream_api_url() -> Optional[str]:
     """Return the live Parakeet endpoint, preferring its dedicated service URL.
 
-    ``HOSTED_PARAKEET_API_URL`` is the historical batch endpoint. Keep it as a
-    compatibility fallback while dedicated stream deployments roll out, but
-    never make a stream caller guess which endpoint was intended when the
-    explicit stream URL is present.
+    The historical shared endpoint remains a compatibility fallback until a
+    dedicated streaming URL is configured.
     """
     return os.getenv('HOSTED_PARAKEET_STREAM_API_URL') or os.getenv('HOSTED_PARAKEET_API_URL')
 
