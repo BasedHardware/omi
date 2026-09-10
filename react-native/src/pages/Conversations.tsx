@@ -15,6 +15,7 @@ import {
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationHasFinishClock,
+  conversationListEmoji,
   conversationListUsesListenOverview,
   conversationRecapTitle,
   conversationDayLabel,
@@ -44,6 +45,7 @@ const ConversationRow = memo(function ConversationRow({
 }) {
   const listenOverview = conversationListUsesListenOverview(item);
   const captureCopy = conversationCaptureCopy(item.capturedAtMs);
+  const emoji = conversationListEmoji(item);
   return (
     <FocusPressable
       accessibilityLabel={`Open conversation ${conversationRecapTitle(item)}`}
@@ -91,6 +93,13 @@ const ConversationRow = memo(function ConversationRow({
           </Text>
         ) : null}
       </View>
+      {emoji !== null ? (
+        <Text
+          accessibilityLabel="Conversation emoji"
+          style={styles.conversationRowStar}>
+          {emoji}
+        </Text>
+      ) : null}
       <Text numberOfLines={listenOverview ? 3 : 1} style={styles.resultTitle}>
         {listenOverview
           ? conversationRecapTitle(item)

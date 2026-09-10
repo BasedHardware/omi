@@ -7,6 +7,8 @@ import {
   conversationCaptureCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
+  conversationHasFinishClock,
+  conversationListEmoji,
   conversationListUsesListenOverview,
   conversationRecapTitle,
   formatConversationDuration,
@@ -16,7 +18,6 @@ import {
   memoryDisplayTitle,
   memorySynthesisCopy,
   projectionClockLabel,
-  conversationHasFinishClock,
   taskDisplayTitle,
   taskIndentPadding,
   type ConversationProjection,
@@ -55,8 +56,10 @@ export function EmptyCopy({children}: {children: string}) {
 function ConversationCopy({item}: {item: ConversationProjection}) {
   const listenOverview = conversationListUsesListenOverview(item);
   const captureCopy = conversationCaptureCopy(item.capturedAtMs);
+  const emoji = conversationListEmoji(item);
   return (
     <View style={styles.rowCopy}>
+      {emoji !== null ? <Text style={styles.rowTitle}>{emoji}</Text> : null}
       <Text numberOfLines={listenOverview ? 3 : 1} style={styles.rowTitle}>
         {listenOverview
           ? conversationRecapTitle(item)

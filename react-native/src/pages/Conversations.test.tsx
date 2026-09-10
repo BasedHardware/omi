@@ -1227,3 +1227,62 @@ test('conversation list names failed conversations without Status on every row',
   ).toBeGreaterThan(0);
   expect(copy).not.toContain(conversationStatusCopy('in_progress'));
 });
+
+test('conversation list names GET emoji and omits it when discarded or empty', () => {
+  const base = {
+    kind: 'conversation' as const,
+    title: 'Morning standup',
+    summary: 'Notes',
+    searchableText: 'Morning standup\nNotes',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {...base, id: 'omi-emoji', emoji: '🚀'},
+              {
+                ...base,
+                id: 'omi-discarded',
+                title: 'Discarded talk',
+                discarded: true,
+                emoji: '🧠',
+              },
+              {...base, id: 'omi-empty', title: 'No emoji', emoji: ' \u0085 '},
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  expect(textOf(renderer)).toContain('🚀');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Conversation emoji',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(textOf(renderer)).not.toContain('🧠');
+  expect(textOf(renderer)).not.toContain('\u0085');
+});

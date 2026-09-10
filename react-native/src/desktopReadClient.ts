@@ -24,6 +24,7 @@ export type ConversationProjection = {
   folderId: string | null;
   locked: boolean;
   discarded: boolean;
+  emoji?: string;
 };
 
 export function visibleDisplayText(value: string): string {
@@ -197,6 +198,17 @@ export function legacyTranscriptTimestampCopy(
   return `${legacyTranscriptClockPart(start)} - ${legacyTranscriptClockPart(
     end,
   )}`;
+}
+
+export function conversationListEmoji(item: {
+  discarded: boolean;
+  emoji?: string | null;
+}): string | null {
+  if (item.discarded) {
+    return null;
+  }
+  const emoji = visibleDisplayText(item.emoji ?? '');
+  return emoji === '' ? null : emoji;
 }
 
 export function conversationHasFinishClock(conversation: {

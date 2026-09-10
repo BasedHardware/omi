@@ -33,6 +33,32 @@ const conversation = {
   folder_id: null,
 };
 
+test('old conversations keep wire-non-empty emoji and omit whitespace', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'emoji-one',
+      structured: {
+        title: 'Real title',
+        overview: 'Actual overview',
+        emoji: '🚀',
+      },
+    },
+    {
+      ...conversation,
+      id: 'emoji-two',
+      structured: {
+        title: 'Real title',
+        overview: 'Actual overview',
+        emoji: ' \u0085 ',
+      },
+    },
+  ]);
+  const result = await loadConversations(api);
+  expect(result.items[0]).toMatchObject({emoji: '🚀'});
+  expect(result.items[1]).not.toHaveProperty('emoji');
+});
+
 test('old bare conversation array preserves nullable metadata and offset pagination', async () => {
   const {api, request} = backend(
     Array.from({length: 50}, (_, i) => ({...conversation, id: `old-${i}`})),
@@ -44,6 +70,7 @@ test('old bare conversation array preserves nullable metadata and offset paginat
     updatedAt: null,
     startedAt: null,
   });
+  expect(first.items[0]).not.toHaveProperty('emoji');
   expect(first.apiContract).toBe('omi');
   expect(first.page).toMatchObject({
     complete: false,

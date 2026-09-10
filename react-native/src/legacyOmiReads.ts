@@ -2,6 +2,7 @@ import {
   conversationDisplaySummary,
   conversationDisplayTitle,
   taskDisplayTitle,
+  visibleDisplayText,
   type ConversationProjection,
   type DomainRead,
   type MemoryProjection,
@@ -121,6 +122,7 @@ export async function loadOmiConversations(
     const structured = object(row.structured);
     const title = text(structured.title, ''),
       summary = text(structured.overview, '');
+    const emoji = visibleDisplayText(text(structured.emoji, ''));
     const createdAt = date(row.created_at);
     if (createdAt === null)
       throw new Error('Omi conversation creation time is malformed');
@@ -148,6 +150,7 @@ export async function loadOmiConversations(
       folderId: row.folder_id == null ? null : text(row.folder_id),
       locked: bool(row.is_locked),
       discarded: bool(row.discarded),
+      ...(emoji === '' ? {} : {emoji}),
     };
   });
   return {apiContract: 'omi', items, page: page(start, items.length)};
