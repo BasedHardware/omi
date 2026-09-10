@@ -1001,39 +1001,47 @@ _PROBE_STEP = """jobs:
     steps:
       - name: Probe
         env:
-          FIREBASE_SIGNER_CREDENTIALS_B64: ${{{{ secrets.{secret} }}}}
+          FIREBASE_SIGNER_CREDENTIALS: ${{{{ secrets.{secret} }}}}
         run: |
-          printf '%s' "$FIREBASE_SIGNER_CREDENTIALS_B64" | base64 --decode > "$signer_file"
           python3 backend/scripts/firebase_release_probe_token.py \\
             --firebase-project based-hardware \\
             --signer-credentials-file "$signer_file" \\
             --token-output "$token_file"
 """
 
+_IMPERSONATION_STEP = """jobs:
+  deploy:
+    environment: development
+    steps:
+      - name: Probe
+        env:
+          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
+        run: |
+          python3 backend/scripts/firebase_release_probe_token.py \\
+            --firebase-project based-hardware \\
+            --signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" \\
+            --token-output "$token_file"
+"""
 
-def test_probe_signer_from_the_environment_deploy_identity_is_rejected(tmp_path, monkeypatch):
-    """The exact wiring 7883c816db shipped: a based-hardware-dev identity signing for
-    based-hardware. It failed signer_credentials/project_mismatch on every run for ten days
-    and blocked every production Pusher release behind it."""
+
+def test_probe_signing_as_the_lane_deploy_identity_is_rejected(tmp_path, monkeypatch):
+    """The exact wiring 7883c816db shipped: a based-hardware-dev deploy identity signing for
+    based-hardware. It returned signer_credentials/project_mismatch on every run for ten days
+    and froze every production Pusher release behind it."""
     errors = _workflow_tree(tmp_path, monkeypatch, _PROBE_STEP.format(secret="GCP_CREDENTIALS"))
 
-    assert any("GCP_CREDENTIALS" in error and "GCP_SERVICE_ACCOUNT" in error for error in errors), errors
+    assert any("GCP_CREDENTIALS" in error and "project_mismatch" in error for error in errors), errors
 
 
-def test_probe_signer_from_the_firebase_project_signer_is_accepted(tmp_path, monkeypatch):
-    """The wiring the desktop development lane already mints probe tokens with."""
+def test_probe_signing_with_the_firebase_projects_own_credential_is_accepted(tmp_path, monkeypatch):
+    """gcp_backend.yml's resolution: supply the Firebase project's signer key."""
     assert _workflow_tree(tmp_path, monkeypatch, _PROBE_STEP.format(secret="GCP_SERVICE_ACCOUNT")) == []
 
 
-def test_probe_with_a_signer_file_must_name_the_firebase_signer_secret(tmp_path, monkeypatch):
-    """A signer file assembled without the based-hardware secret cannot satisfy the probe."""
-    body = _PROBE_STEP.format(secret="GCP_SERVICE_ACCOUNT").replace(
-        "FIREBASE_SIGNER_CREDENTIALS_B64: ${{ secrets.GCP_SERVICE_ACCOUNT }}",
-        "OTHER_INPUT: ${{ secrets.DOCKER_PAT }}",
-    )
-    errors = _workflow_tree(tmp_path, monkeypatch, body)
-
-    assert any("never reads secrets.GCP_SERVICE_ACCOUNT" in error for error in errors), errors
+def test_probe_impersonating_a_named_signer_is_accepted(tmp_path, monkeypatch):
+    """The resolution a workflow forbidden to materialize a key must use: name the signer and
+    impersonate it, so no service-account key enters a backend image build."""
+    assert _workflow_tree(tmp_path, monkeypatch, _IMPERSONATION_STEP) == []
 
 
 def test_live_workflows_satisfy_the_probe_signer_contract():
