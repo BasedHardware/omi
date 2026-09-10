@@ -925,6 +925,19 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
+  /// Classifies a batch-transcription failure into the terminal reason it
+  /// should end the turn with. A plan-limit refusal (HTTP 402) must not read
+  /// as a generic transcription failure: the user-facing hint and the
+  /// usage-limit popup both depend on distinguishing the two.
+  static func transcriptionTerminalReason(for error: Error) -> VoiceTurnTerminalReason {
+    if let transcriptionError = error as? TranscriptionService.TranscriptionError,
+      case .planLimitReached = transcriptionError
+    {
+      return .transcriptionPlanLimit
+    }
+    return .transcriptionFailed
+  }
+
   private func performTerminalCleanup(discardBufferedAudio: Bool = false, parkWarm: Bool = false) {
     // Always restore audio on teardown (cancel, error, cleanup) so we never leave it muted.
     SystemAudioMuteController.shared.restore()
@@ -1689,8 +1702,15 @@ class PushToTalkManager: ObservableObject {
             transcriptLength: nil,
             turnKind: .question,
             audioSeconds: Double(audioData.count / 2) / 16000.0)
-          self.voiceTurnCoordinator.publish(
-            .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
+          let terminalReason = Self.transcriptionTerminalReason(for: error)
+          if terminalReason == .transcriptionPlanLimit {
+            NotificationCenter.default.post(
+              name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "transcription"])
+            self.voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .transcriptionPlanLimit))
+          } else {
+            self.voiceTurnCoordinator.publish(
+              .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
+          }
           return
         }
         self.sendTranscript(turnID: turnID)
@@ -2505,8 +2525,15 @@ class PushToTalkManager: ObservableObject {
             "stt_model": "unknown",
             "user_visible": true,
           ])
-        self.voiceTurnCoordinator.publish(
-          .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
+        let terminalReason = Self.transcriptionTerminalReason(for: error)
+        if terminalReason == .transcriptionPlanLimit {
+          NotificationCenter.default.post(
+            name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "transcription"])
+          self.voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .transcriptionPlanLimit))
+        } else {
+          self.voiceTurnCoordinator.publish(
+            .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
+        }
         return
       }
       self.sendTranscript(turnID: turnID)
@@ -4119,8 +4146,15 @@ extension PushToTalkManager {
           reason: capturedReason,
           outcome: .exhausted,
           extra: ["stt_provider": "unknown", "stt_model": "unknown", "user_visible": false])
-        self.voiceTurnCoordinator.publish(
-          .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
+        let terminalReason = Self.transcriptionTerminalReason(for: error)
+        if terminalReason == .transcriptionPlanLimit {
+          NotificationCenter.default.post(
+            name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "transcription"])
+          self.voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .transcriptionPlanLimit))
+        } else {
+          self.voiceTurnCoordinator.publish(
+            .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
+        }
         return
       }
       self.sendTranscript(turnID: turnID)

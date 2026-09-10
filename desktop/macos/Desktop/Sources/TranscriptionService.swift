@@ -71,6 +71,11 @@ class TranscriptionService: @unchecked Sendable {
     case connectionFailed(Error)
     case invalidResponse
     case payloadTooLarge
+    /// Omi's backend refused a batch (PTT) transcription request because the
+    /// account's transcription plan limit is exhausted (HTTP 402). Distinct
+    /// from `invalidResponse` so the user is told it is a billing limit, not
+    /// a generic backend or AI-service failure.
+    case planLimitReached
     case webSocketError(String)
 
     var errorDescription: String? {
@@ -83,6 +88,8 @@ class TranscriptionService: @unchecked Sendable {
         return "Invalid response from backend"
       case .payloadTooLarge:
         return "Recording too long — keep it under 5 minutes"
+      case .planLimitReached:
+        return "Transcription is over your plan's limit. Check Settings → Plan and Usage; holding the key again won't help."
       case .webSocketError(let message):
         return "WebSocket error: \(message)"
       }
@@ -742,6 +749,20 @@ enum WebSocketConnectionAttempt {
 // MARK: - Batch (Pre-Recorded) Transcription (PTT only)
 
 extension TranscriptionService {
+  /// Pure mapping from a batch-transcribe HTTP status code to the error the
+  /// caller should throw. 402 means Omi's backend exhausted the billing lane
+  /// for this transcription request, not a generic backend failure.
+  static func batchTranscriptionError(forStatusCode statusCode: Int) -> TranscriptionError {
+    switch statusCode {
+    case 402:
+      return .planLimitReached
+    case 413:
+      return .payloadTooLarge
+    default:
+      return .invalidResponse
+    }
+  }
+
   /// Transcribe a complete audio buffer using the Python backend `/v2/voice-message/transcribe`.
   /// Returns the transcript plus the provider/model selected by the backend.
   static func batchTranscribe(
@@ -802,10 +823,7 @@ extension TranscriptionService {
       let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
       let body = String(data: data, encoding: .utf8) ?? "no body"
       logError("TranscriptionService: Batch transcription failed with status \(statusCode): \(body)", error: nil)
-      if statusCode == 413 {
-        throw TranscriptionError.payloadTooLarge
-      }
-      throw TranscriptionError.invalidResponse
+      throw batchTranscriptionError(forStatusCode: statusCode)
     }
 
     // Parse Python backend response, including the provider selected by routed STT.

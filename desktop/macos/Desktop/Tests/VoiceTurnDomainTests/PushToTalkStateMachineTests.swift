@@ -93,6 +93,25 @@ final class PushToTalkStateMachineTests: XCTestCase {
     XCTAssertTrue(result.effects.contains(.stopCapture(turnID: turnID, captureID: captureID)))
   }
 
+  /// A batch-transcription failure Omi's backend attributes to the account's
+  /// transcription plan limit terminates the turn with its own typed reason
+  /// (not the generic `transcriptionFailed`) and carries the plan-limit hint,
+  /// never the "try again" hint.
+  func testFinishWithTranscriptionPlanLimitTerminatesFromFinalizingWithPlanLimitHint() {
+    let reducer = VoiceTurnReducer()
+    let turnID = VoiceTurnID()
+    var model = reducer.reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reducer.reduce(model, .finalize(turnID: turnID)).model
+    XCTAssertEqual(model.turn?.phase, .finalizing)
+
+    let result = reducer.reduce(model, .finish(turnID: turnID, reason: .transcriptionPlanLimit))
+
+    XCTAssertEqual(result.model.turn?.phase, .terminal(.transcriptionPlanLimit))
+    XCTAssertEqual(
+      result.model.turn?.projection.hint,
+      "Transcription is over your plan's limit. Check Settings → Plan and Usage.")
+  }
+
   func testCancelFromRecordingStopsCaptureAndTerminatesOnce() {
     let reducer = VoiceTurnReducer()
     let turnID = VoiceTurnID()

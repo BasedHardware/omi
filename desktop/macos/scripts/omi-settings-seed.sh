@@ -18,6 +18,8 @@
 # The settings authority is a single domain per run: the mirror below never
 # merges sources, so a key absent from the resolved authority still means
 # "delete the target override" (both sides resolve the compiled default).
+# One exception: chatBridgeMode is never mirrored away from a target already
+# set to "local" (see the protect_local_bridge_mode block below).
 #
 # Set OMI_DEV_EAGER_PERMISSIONS=1 to preserve eager post-onboarding behavior
 # for permission-flow parity testing.
@@ -171,14 +173,38 @@ initial_target_keys = set(target_data)
 selected = {key: source[key] for key in KEYS if key in source}
 keys_to_delete = set()
 
+# Exception to the mirror-not-overlay rule above: the Local provider's
+# companion keys (localLLMBaseURL, localLLMModelID, localLLMVisionModelID,
+# localBackendURL, localCloudAssistMode) are bundle-local and never mirrored.
+# Mirroring or deleting chatBridgeMode alone would then leave a bundle with a
+# Local endpoint configured but its chat routed to Omi's cloud model and
+# Omi's billing gate. Observed 2026-09-10: production Omi (no chatBridgeMode
+# override) was the authority, and the mirror deleted "local" from a target
+# that had been correctly set to it. So a target already on "local" keeps it,
+# regardless of what the authority has.
+target_bridge_mode = target_data.get("chatBridgeMode")
+protect_local_bridge_mode = target_bridge_mode == "local"
+if protect_local_bridge_mode:
+    selected.pop("chatBridgeMode", None)
+
 if source_exists:
     # This is a mirror, not an overlay. A missing source key means the source
     # app is using its compiled default. Remove any stale target override so
     # the named bundle resolves the same effective value after a Swift update.
     for key in KEYS:
+        if key == "chatBridgeMode" and protect_local_bridge_mode:
+            continue
         if key not in source and key in target_data:
             target_data.pop(key, None)
             keys_to_delete.add(key)
+
+if protect_local_bridge_mode:
+    keys_to_delete.discard("chatBridgeMode")
+    target_data["chatBridgeMode"] = "local"
+    print(
+        f"Kept {target}'s bundle-local Local AI provider selection "
+        f"(chatBridgeMode=local is not mirrored from {src})"
+    )
 
 # A present-but-stale authority is the silent-failure shape this seed exists
 # to prevent: every mirrored bundle would ship compiled hotkey defaults that

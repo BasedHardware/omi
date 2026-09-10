@@ -2622,6 +2622,11 @@ actor AgentRuntimeProcess {
       if !localVisionModelID.isEmpty {
         env["OMI_LOCAL_VISION_MODEL_ID"] = localVisionModelID
       }
+      log(
+        "AgentRuntimeProcess: piMono provider=omi-local baseURL=\(localBaseURL) model=\(localModelID) visionModel=\(localVisionModelID.isEmpty ? "none" : localVisionModelID)"
+      )
+    } else if preferredAdapterId == .piMono {
+      log("AgentRuntimeProcess: piMono provider=omi")
     }
 
     let rustBase = await APIClient.shared.rustBackendURL

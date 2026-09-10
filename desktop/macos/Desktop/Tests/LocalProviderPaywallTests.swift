@@ -1,6 +1,7 @@
 import XCTest
 
 @testable import Omi_Computer
+@testable import VoiceTurnDomain
 
 /// Returns a fixed HTTP status for every request, so a test can pin how the
 /// desktop app's tool-call error handling behaves on a specific server
@@ -733,5 +734,71 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
     }
     await ownerFixture.restore()
     UserDefaults.standard.removeObject(forKey: bridgeModeKey)
+  }
+
+  // MARK: - Batch transcription plan-limit (HTTP 402, billing)
+
+  /// `TranscriptionService.batchTranscribe`'s status-to-error mapping used to
+  /// treat every non-200 status (other than 413) as a generic `invalidResponse`,
+  /// so a billing 402 read to the user as "Invalid response from backend"
+  /// rather than a plan limit. Pins the pure classifier the throw site calls.
+  func testBatchTranscriptionErrorMapsStatusCodesToTranscriptionErrors() {
+    guard case .planLimitReached = TranscriptionService.batchTranscriptionError(forStatusCode: 402) else {
+      return XCTFail("expected planLimitReached for 402")
+    }
+    guard case .payloadTooLarge = TranscriptionService.batchTranscriptionError(forStatusCode: 413) else {
+      return XCTFail("expected payloadTooLarge for 413")
+    }
+    guard case .invalidResponse = TranscriptionService.batchTranscriptionError(forStatusCode: 500) else {
+      return XCTFail("expected invalidResponse for 500")
+    }
+  }
+
+  func testPlanLimitReachedErrorDescriptionNamesThePlanNotTheAIService() {
+    let description = TranscriptionService.TranscriptionError.planLimitReached.errorDescription ?? ""
+    XCTAssertTrue(description.contains("plan"), "must tell the user it is a plan limit: \(description)")
+    XCTAssertFalse(
+      description.contains("AI service"),
+      "must never attribute a billing limit to the AI service: \(description)")
+  }
+
+  // MARK: - Terminal hint: transcription_plan_limit vs transcription_failed
+
+  func testTerminalHintForTranscriptionPlanLimitNamesThePlanNotTheAIServiceOrRetry() {
+    let hint = VoiceTurnUICopy.terminalHint(for: .transcriptionPlanLimit) ?? ""
+    XCTAssertTrue(hint.contains("plan"), "must mention the plan limit: \(hint)")
+    XCTAssertTrue(hint.contains("Transcription"), "must name transcription, not a generic failure: \(hint)")
+    XCTAssertFalse(hint.contains("AI service"), "must not blame the AI service: \(hint)")
+    XCTAssertFalse(hint.contains("try again"), "holding the key again does not help a plan limit: \(hint)")
+  }
+
+  /// Regression: adding the new reason alongside it must not change the
+  /// existing generic transcription-failure hint.
+  func testTerminalHintForTranscriptionFailedUnchanged() {
+    XCTAssertEqual(
+      VoiceTurnUICopy.terminalHint(for: .transcriptionFailed),
+      "Couldn't transcribe that — try again")
+  }
+
+  // MARK: - PushToTalkManager.transcriptionTerminalReason
+
+  func testTranscriptionTerminalReasonMapsPlanLimitToItsOwnReason() {
+    XCTAssertEqual(
+      PushToTalkManager.transcriptionTerminalReason(
+        for: TranscriptionService.TranscriptionError.planLimitReached),
+      .transcriptionPlanLimit)
+  }
+
+  func testTranscriptionTerminalReasonMapsOtherTranscriptionErrorsToTranscriptionFailed() {
+    XCTAssertEqual(
+      PushToTalkManager.transcriptionTerminalReason(
+        for: TranscriptionService.TranscriptionError.invalidResponse),
+      .transcriptionFailed)
+  }
+
+  func testTranscriptionTerminalReasonMapsArbitraryErrorsToTranscriptionFailed() {
+    XCTAssertEqual(
+      PushToTalkManager.transcriptionTerminalReason(for: NSError(domain: "test", code: -1)),
+      .transcriptionFailed)
   }
 }
