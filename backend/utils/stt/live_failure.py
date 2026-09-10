@@ -79,8 +79,9 @@ _CIRCUIT_OPENING_REASONS = frozenset(
         # the death would otherwise stay invisible to selection: the surviving
         # session never runs the terminal funnel that feeds the circuit, and
         # the next session's successful connect resets the counter. One
-        # serve-error death opens the circuit for one cooldown window; the
-        # half-open probe restores Velma as soon as one stream serves again.
+        # serve-error death opens the circuit for the serve-error cooldown;
+        # re-admission needs more than one half-open success so a 5xx storm
+        # that still accepts connects cannot flap every 30s.
         # Session-scoped shapes (invalid input audio) stay untyped and do not
         # bench the provider.
         'modulate_serve_error',

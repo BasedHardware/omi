@@ -85,7 +85,7 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
-from utils.metrics import record_jit_first_open
+from utils.metrics import record_jit_first_open, record_lazy_desktop_deferral
 from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
@@ -2003,9 +2003,11 @@ def _store_deferred_conversation(
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
     if not persisted:
         logger.info('lazy: deferred conversation creation fenced uid=%s conv=%s', uid, conversation.id)
+        record_lazy_desktop_deferral(event='fenced')
         return conversation
 
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
+    record_lazy_desktop_deferral(event='stored')
     return conversation
 
 
