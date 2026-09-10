@@ -201,11 +201,13 @@ export async function readHistory(
 ): Promise<HistoryResult> {
   const sessionFilter = chatSessionId ?? null;
   let boundary: { createdAt: number; id: string } | null = null;
+  let expiresAt = Math.floor(Date.now() / 1000) + CHAT_CURSOR_TTL_SECONDS;
   if (olderCursor !== undefined) {
     const decoded = decodeCursor(olderCursor, sessionFilter);
     if (decoded.status === "invalid") return "invalid_cursor";
     if (decoded.status === "expired") return "cursor_expired";
     boundary = { createdAt: decoded.createdAt, id: decoded.id };
+    expiresAt = decoded.expiresAt;
   }
 
   const result = await db
@@ -258,7 +260,8 @@ export async function readHistory(
             olderCursor: encodeCursor(
               oldest.createdAt,
               oldest.id,
-              sessionFilter
+              sessionFilter,
+              expiresAt
             ),
             hasOlder: true,
           }
@@ -867,9 +870,9 @@ const CHAT_CURSOR_TTL_SECONDS = 3_600;
 function encodeCursor(
   createdAt: number,
   id: string,
-  chatSessionId: string | null
+  chatSessionId: string | null,
+  expiresAt: number
 ): string {
-  const expiresAt = Math.floor(Date.now() / 1000) + CHAT_CURSOR_TTL_SECONDS;
   const bytes = new TextEncoder().encode(
     JSON.stringify({ e: expiresAt, i: id, s: chatSessionId, t: createdAt })
   );
@@ -885,7 +888,7 @@ function decodeCursor(
   cursor: string,
   chatSessionId: string | null
 ):
-  | { status: "ok"; createdAt: number; id: string }
+  | { status: "ok"; createdAt: number; id: string; expiresAt: number }
   | { status: "expired" }
   | { status: "invalid" } {
   if (!/^[A-Za-z0-9_-]{1,1024}$/.test(cursor)) return { status: "invalid" };
@@ -933,7 +936,12 @@ function decodeCursor(
     if (Math.floor(Date.now() / 1000) >= record.e) {
       return { status: "expired" };
     }
-    return { status: "ok", createdAt: record.t, id: record.i };
+    return {
+      status: "ok",
+      createdAt: record.t,
+      id: record.i,
+      expiresAt: record.e,
+    };
   } catch {
     return { status: "invalid" };
   }

@@ -1953,6 +1953,73 @@ describe("worker request contract", () => {
     });
   });
 
+  test("chat history GET Load more reuses the first-page olderCursor expiresAt", async () => {
+    await insertChatMessage({
+      id: "ttl-reuse-1",
+      accountId: "test-account",
+      text: "oldest ttl reuse",
+      createdAt: 100,
+      position: 1,
+      chatSessionId: "ttl-reuse-expires-at",
+    });
+    await insertChatMessage({
+      id: "ttl-reuse-2",
+      accountId: "test-account",
+      text: "middle ttl reuse",
+      createdAt: 200,
+      position: 2,
+      chatSessionId: "ttl-reuse-expires-at",
+    });
+    await insertChatMessage({
+      id: "ttl-reuse-3",
+      accountId: "test-account",
+      text: "newest ttl reuse",
+      createdAt: 300,
+      position: 3,
+      chatSessionId: "ttl-reuse-expires-at",
+    });
+
+    const expiresAt = Math.floor(Date.now() / 1000) + 90;
+    const payload = JSON.stringify({
+      e: expiresAt,
+      i: "ttl-reuse-3",
+      s: "ttl-reuse-expires-at",
+      t: 300,
+    });
+    let binary = "";
+    for (const byte of new TextEncoder().encode(payload)) {
+      binary += String.fromCharCode(byte);
+    }
+    const firstCursor = btoa(binary)
+      .replaceAll("+", "-")
+      .replaceAll("/", "_")
+      .replace(/=+$/, "");
+
+    const older = await fetchWorker(
+      `/v1/chat-messages?limit=1&olderCursor=${encodeURIComponent(
+        firstCursor
+      )}&chatSessionId=ttl-reuse-expires-at`,
+      { headers: authenticatedHeaders }
+    );
+    expect(older.status).toBe(200);
+    const olderBody = (await older.json()) as {
+      messages: Array<{ id: string }>;
+      page: { olderCursor: string | null; hasOlder: boolean };
+    };
+    expect(olderBody.messages.map((message) => message.id)).toEqual([
+      "ttl-reuse-2",
+    ]);
+    expect(olderBody.page.hasOlder).toBe(true);
+    expect(olderBody.page.olderCursor).not.toBeNull();
+
+    const standard = olderBody.page.olderCursor!
+      .replaceAll("-", "+")
+      .replaceAll("_", "/");
+    const padded = standard + "=".repeat((4 - (standard.length % 4)) % 4);
+    const decoded = JSON.parse(atob(padded)) as { e: number };
+    expect(decoded.e).toBe(expiresAt);
+  });
+
   test("chat history GET refuses an olderCursor from another session", async () => {
     const insert = async (
       id: string,
