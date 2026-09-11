@@ -1,5 +1,8 @@
 import base64
 import os
+import hmac
+import time
+from hashlib import sha256
 
 import requests
 
@@ -96,10 +99,47 @@ class NotionClient:
         self.oauth_redirect_uri = oauth_redirect_uri
         self.auth_url = auth_url
 
+    def _oauth_state_secret(self) -> str:
+        # Prefer dedicated secret; fall back to shared plugin webhook secret or Notion client secret.
+        return (
+            os.getenv("NOTION_OAUTH_STATE_SECRET")
+            or os.getenv("OMI_PLUGIN_WEBHOOK_SECRET")
+            or self.oauth_client_secret
+            or ""
+        ).strip()
+
     def get_oauth_url(self, uid: str):
-        # Should use encryption on state (with some salt) to prevent attacks
-        state = uid
+        """Build Notion OAuth URL with HMAC-signed state (not bare uid)."""
+        secret = self._oauth_state_secret()
+        if not secret:
+            raise ValueError(
+                "NOTION_OAUTH_STATE_SECRET / OMI_PLUGIN_WEBHOOK_SECRET / oauth_client_secret required to sign OAuth state"
+            )
+        ts = str(int(time.time()))
+        sig = hmac.new(secret.encode("utf-8"), f"{uid}.{ts}".encode("utf-8"), sha256).hexdigest()
+        state = f"{uid}.{ts}.{sig}"
         return f"{self.auth_url}&state={state}"
+
+    def verify_oauth_state(self, state: str, *, max_age_seconds: int = 600) -> str:
+        """Verify HMAC-signed OAuth state and return uid. Raises ValueError on failure."""
+        parts = (state or "").split(".")
+        if len(parts) != 3:
+            raise ValueError("invalid oauth state format")
+        uid, ts, sig = parts
+        secret = self._oauth_state_secret()
+        if not secret or not uid or not ts or not sig:
+            raise ValueError("invalid oauth state")
+        try:
+            if abs(time.time() - int(ts)) > max_age_seconds:
+                raise ValueError("oauth state expired")
+        except ValueError as e:
+            if "expired" in str(e):
+                raise
+            raise ValueError("invalid oauth state timestamp") from e
+        expected = hmac.new(secret.encode("utf-8"), f"{uid}.{ts}".encode("utf-8"), sha256).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            raise ValueError("invalid oauth state signature")
+        return uid
 
     def get_database(self, database_id: str, access_token: str):
         resp: requests.Response

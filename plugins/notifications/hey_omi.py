@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 import logging
+import hmac
 import time
 import os
 import requests
@@ -159,13 +160,26 @@ def send_omi_notification(uid: str, message: str):
         return False
 
 
+def _require_hey_omi_inbound_auth(http_request: Request) -> None:
+    """Reject unauthenticated inbound webhooks.
+
+    Prefer Authorization: Bearer <HEY_OMI_APP_SECRET> (same secret used outbound).
+    Bare body uid is not authentication.
+    """
+    auth = (http_request.headers.get('Authorization') or '').strip()
+    expected = f'Bearer {omi_app_secret}'
+    if not auth or not hmac.compare_digest(auth, expected):
+        raise HTTPException(status_code=401, detail='authenticated webhook required')
+
+
 @router.post('/webhook')
-async def webhook(request: WebhookRequest):
+async def webhook(http_request: Request, request: WebhookRequest):
+    _require_hey_omi_inbound_auth(http_request)
     logger.info("Received webhook POST request")
     logger.info(f"Received data: {request.dict()}")
 
     session_id = request.session_id
-    uid = request.uid or session_id  # Use session_id as uid if uid is not provided
+    uid = request.uid or session_id  # session_id/uid only after auth
     logger.info(f"Processing request for session_id: {session_id}, uid: {uid}")
 
     if not session_id:

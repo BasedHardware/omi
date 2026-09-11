@@ -13,6 +13,7 @@ import httpx
 from database.apps import get_app_by_id_db
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import enforce_account_deletion_http_access
+from utils.plugin_auth import maybe_plugin_auth_headers
 from utils.http_client import safe_request_target, get_auth_client, UnsafeWebhookURLError
 from database.redis_db import enable_app, increase_app_installs_count
 from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
@@ -219,9 +220,11 @@ async def oauth_token(
                     db_executor, safe_request_target, app.external_integration.setup_completed_url
                 )
                 client = get_auth_client()
+                setup_headers = dict(pin_kwargs['headers'])
+                setup_headers.update(maybe_plugin_auth_headers(uid=uid, body=b''))
                 res = await client.get(
                     pinned_url + f'?uid={uid}',
-                    headers=pin_kwargs['headers'],
+                    headers=setup_headers,
                     extensions=pin_kwargs['extensions'],
                     follow_redirects=False,
                 )

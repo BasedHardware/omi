@@ -45,7 +45,13 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
     Callback from Notion Oauth.
     """
 
-    uid = state
+    try:
+        uid = get_notion().verify_oauth_state(state)
+    except ValueError as e:
+        print(f"Invalid Notion OAuth state: {e}")
+        return response_setup_notion_crm_page(
+            request, "", f"Invalid or expired OAuth state. Please restart setup. \n (code: 400003)"
+        )
 
     # Get access token
     oauth_ok = get_notion().get_access_token(code)

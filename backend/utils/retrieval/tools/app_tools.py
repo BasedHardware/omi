@@ -6,6 +6,7 @@ in the Omi chat when the app is installed by a user.
 """
 
 import contextvars
+import json
 from typing import Any, Dict, List, Optional, cast
 import httpx
 from pydantic import BaseModel, Field, create_model
@@ -30,6 +31,7 @@ from database.webhook_health import (
 from models.app import App, ChatTool
 from utils.mcp_client import call_mcp_tool
 from utils.http_client import get_webhook_circuit_breaker
+from utils.plugin_auth import maybe_plugin_auth_headers
 from utils.executors import db_executor, run_blocking
 from utils.notifications import send_notification
 import logging
@@ -321,17 +323,20 @@ async def _call_tool_endpoint(
     if geolocation:
         payload['geolocation'] = geolocation
 
-    # Prepare headers
+        # Sign the exact JSON body for mutating methods. GET signs empty body
+    # (query params are not covered by the HMAC — uid still carried in headers).
+    method = app_tool.method.upper()
+    if method in ['POST', 'PUT', 'PATCH']:
+        body_bytes = json.dumps(payload, default=str, separators=(',', ':')).encode('utf-8')
+    else:
+        body_bytes = b''
+
     headers = {
         'Content-Type': 'application/json',
     }
-
-    # Add authentication if required
-    if app_tool.auth_required:
-        # Get user's API key or auth token for this app
-        # For now, we'll pass the uid and let the app handle auth
-        # In the future, you might want to store app-specific tokens
-        pass
+    # Shared HMAC identity (OMI_PLUGIN_WEBHOOK_SECRET). Bare uid in the payload
+    # is not authentication — plugins must verify X-Omi-* headers.
+    headers.update(maybe_plugin_auth_headers(uid=uid, body=body_bytes))
 
     if await run_blocking(db_executor, is_app_webhook_disabled, app_id):
         return f"The {app_tool.name} tool is temporarily disabled due to sustained failures. The app developer has been notified."
@@ -342,13 +347,12 @@ async def _call_tool_endpoint(
 
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            method = app_tool.method.upper()
             request_kwargs: Dict[str, Any] = {
                 'headers': headers,
             }
 
             if method in ['POST', 'PUT', 'PATCH']:
-                request_kwargs['json'] = payload
+                request_kwargs['content'] = body_bytes
             elif method == 'GET':
                 request_kwargs['params'] = payload
 

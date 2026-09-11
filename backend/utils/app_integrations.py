@@ -1,4 +1,5 @@
 import asyncio
+import json
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import List
@@ -17,6 +18,7 @@ from utils.http_client import (
     latest_wins_check,
 )
 from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.plugin_auth import maybe_plugin_auth_headers
 from utils.async_tasks import gather_safe
 import utils.dev_cache as dev_cache
 import database.mentor_gate_state as mentor_gate_state
@@ -299,14 +301,17 @@ async def trigger_external_integrations(
 
         try:
             payload = serialize_datetimes(conversation_dict)
+            body_bytes = json.dumps(payload, default=str, separators=(',', ':')).encode('utf-8')
             headers = dict(pin_kwargs['headers'])
+            headers['Content-Type'] = 'application/json'
+            headers.update(maybe_plugin_auth_headers(uid=uid, body=body_bytes))
             if idempotency_key:
                 headers['X-Omi-Idempotency-Key'] = idempotency_key
             async with get_webhook_semaphore():
                 client = get_webhook_client()
                 response = await client.post(
                     pinned_url,
-                    json=payload,
+                    content=body_bytes,
                     headers=headers,
                     extensions=pin_kwargs['extensions'],
                     follow_redirects=False,
@@ -1067,15 +1072,17 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
             return
 
         try:
+            body_bytes = bytes(data)
             headers = dict(pin_kwargs['headers'])
             headers['Content-Type'] = 'application/octet-stream'
+            headers.update(maybe_plugin_auth_headers(uid=uid, body=body_bytes))
             async with get_webhook_semaphore():
                 if not latest_wins_check(uid, version):
                     return  # Check again after acquiring semaphore
                 client = get_webhook_client()
                 response = await client.post(
                     pinned_url,
-                    content=bytes(data),
+                    content=body_bytes,
                     headers=headers,
                     extensions=pin_kwargs['extensions'],
                     follow_redirects=False,
@@ -1183,12 +1190,17 @@ async def _async_trigger_realtime_integrations(
             return
 
         try:
+            payload = {"session_id": uid, "segments": segments}
+            body_bytes = json.dumps(payload, default=str, separators=(',', ':')).encode('utf-8')
+            headers = dict(pin_kwargs['headers'])
+            headers['Content-Type'] = 'application/json'
+            headers.update(maybe_plugin_auth_headers(uid=uid, body=body_bytes))
             async with get_webhook_semaphore():
                 client = get_webhook_client()
                 response = await client.post(
                     pinned_url,
-                    json={"session_id": uid, "segments": segments},
-                    headers=pin_kwargs['headers'],
+                    content=body_bytes,
+                    headers=headers,
                     extensions=pin_kwargs['extensions'],
                     follow_redirects=False,
                 )
