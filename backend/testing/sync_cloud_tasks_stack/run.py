@@ -203,6 +203,7 @@ class Stack:
                 'FIRESTORE_DATABASE_ID': '(default)',
                 'ENCRYPTION_SECRET': ENCRYPTION_SECRET,
                 'ADMIN_KEY': ADMIN_KEY,
+                'ADMIN_KEY_AUTH_ENABLED': 'true',
                 'REDIS_DB_HOST': '127.0.0.1',
                 'REDIS_DB_PORT': str(self.redis_port),
                 'REDIS_DB_PASSWORD': '',
