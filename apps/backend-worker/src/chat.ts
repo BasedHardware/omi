@@ -659,7 +659,8 @@ function projectStoredChatMessage(message: ChatMessage): ChatMessage | null {
     !isNonNegativeSafeInteger(message.createdAt) ||
     !isNonNegativeSafeInteger(message.updatedAt) ||
     !(
-      message.chatSessionId === null || typeof message.chatSessionId === "string"
+      message.chatSessionId === null ||
+      typeof message.chatSessionId === "string"
     ) ||
     !(message.appId === null || typeof message.appId === "string") ||
     !isNonNegativeSafeInteger(message.journalRevision) ||
@@ -814,7 +815,9 @@ function historyOutcomeFromTerminal(
   if (
     terminal.message.id !== message.id ||
     terminal.message.text !== message.text ||
-    terminal.message.sender !== "ai"
+    terminal.message.sender !== "ai" ||
+    (typeof terminal.message.type === "string" &&
+      terminal.message.type !== message.type)
   ) {
     return null;
   }
