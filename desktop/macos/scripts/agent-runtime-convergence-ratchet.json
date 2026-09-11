@@ -1,7 +1,7 @@
 {
   "limits": {
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4904,
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 8125
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4458,
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 7404
   },
   "raise_justifications": {
     "INV-CHAT-1": "Chat-first rich-block handling, answer submission, and task completion stay in the existing provider while its shared lifecycle extraction remains bounded.",
