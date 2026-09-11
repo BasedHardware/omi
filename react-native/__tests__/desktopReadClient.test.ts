@@ -4073,6 +4073,26 @@ test('loadAccountSettings names GET primary language without inventing Not set',
   );
 });
 
+test('names empty GET available-language name as omitted instead of hiding neighbors', () => {
+  expect(
+    parseCloudLanguageNames(
+      {
+        languages: [
+          {code: 'fr', name: ''},
+          {code: 'en', name: 'English'},
+        ],
+      },
+      'Languages',
+    ),
+  ).toEqual([{code: 'en', name: 'English'}]);
+  expect(() =>
+    parseCloudLanguageNames(
+      {languages: [{code: 'en', name: 1}]},
+      'Languages',
+    ),
+  ).toThrow('Languages languages[0] is malformed');
+});
+
 test('uses the ratified conversation cursor and preserves its completeness declaration', async () => {
   const paths: string[] = [];
   const backend = backendFor(request => {

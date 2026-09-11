@@ -338,7 +338,8 @@ export function parseCloudLanguageNames(
   if (record.languages.length === 0) {
     return null;
   }
-  return record.languages.map((item, index) => {
+  const names: CloudLanguageOption[] = [];
+  record.languages.forEach((item, index) => {
     const entry = object(item, `${label} languages[${index}]`);
     if (typeof entry.code !== 'string' || typeof entry.name !== 'string') {
       throw new Error(`${label} languages[${index}] is malformed`);
@@ -346,10 +347,11 @@ export function parseCloudLanguageNames(
     const code = visibleDisplayText(entry.code);
     const name = visibleDisplayText(entry.name);
     if (code === '' || name === '') {
-      throw new Error(`${label} languages[${index}] is malformed`);
+      return;
     }
-    return {code, name};
+    names.push({code, name});
   });
+  return names.length === 0 ? null : names;
 }
 
 export function parseCloudUsage(
