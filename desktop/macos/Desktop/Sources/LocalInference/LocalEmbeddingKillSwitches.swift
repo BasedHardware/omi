@@ -12,6 +12,11 @@ struct LocalEmbeddingKillSwitches: Sendable, Equatable {
     self.forcedEngineRaw = forcedEngineRaw
   }
 
+  private static func cachedPaidPlan(defaults: UserDefaults) -> Bool {
+    defaults.string(forKey: .floatingBarCachedPlan)
+      .map { SubscriptionPlanType(rawValue: $0).hasPaidCapability } ?? false
+  }
+
   static func resolve(
     environment: [String: String] = ProcessInfo.processInfo.environment,
     defaults: UserDefaults = .standard,
@@ -36,7 +41,8 @@ struct LocalEmbeddingKillSwitches: Sendable, Equatable {
     return Self(
       isDisabled: environment["OMI_DISABLE_LOCAL_EMBEDDINGS"] == "1"
         || defaults.bool(forKey: .disableLocalEmbeddings),
-      isEnabled: boolFlag(environment["OMI_LOCAL_EMBEDDINGS"]) ?? defaultsEnabled ?? isNonProduction,
+      isEnabled: boolFlag(environment["OMI_LOCAL_EMBEDDINGS"]) ?? defaultsEnabled
+        ?? (isNonProduction || !cachedPaidPlan(defaults: defaults)),
       forcedEngineRaw: trimmed(environment["OMI_FORCE_LOCAL_EMBEDDING_ENGINE"])
         ?? trimmed(defaults.string(forKey: .forceLocalEmbeddingEngine)))
   }

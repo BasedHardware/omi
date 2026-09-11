@@ -224,9 +224,10 @@ final class LocalEmbeddingOptInTests: XCTestCase {
     await LocalEmbeddingIndexer.shared.setRuntimeForTesting(.makeDefault())
   }
 
-  func testProductionFamilyDefaultDisablesEngineAndIndexer() async throws {
+  func testPaidProductionFamilyDefaultDisablesEngineAndIndexer() async throws {
     let (defaults, cleanup) = try emptyDefaults()
     defer { cleanup() }
+    defaults.set(SubscriptionPlanType.operator.rawValue, forKey: .floatingBarCachedPlan)
     let flags = LocalEmbeddingKillSwitches.resolve(
       environment: [:], defaults: defaults, isNonProduction: false)
     XCTAssertFalse(flags.isEnabled)

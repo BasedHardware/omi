@@ -25,9 +25,8 @@ struct LocalEmbeddingRuntime: Sendable {
       area: "local_embeddings", from: from, to: "keyword", reason: reason, outcome: .degraded)
   }
 
-  /// Apple NLCE is the registered engine. Released bundles stay on Gemini until
-  /// `localEmbeddingsEnabled` / `OMI_LOCAL_EMBEDDINGS=1` opts in; non-production
-  /// dogfoods it. Selection still fail-closes until the probe passes.
+  /// Apple NLCE is the registered engine. Free and unknown plans default on;
+  /// paid production bundles opt in. Selection fail-closes until the probe passes.
   /// Probe cache and engine are process-wide so chat search pays the 32-token probe once.
   static func makeDefault() -> Self {
     let apple = AppleNLContextualEmbeddingEngine.shared
