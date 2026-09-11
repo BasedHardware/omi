@@ -437,6 +437,27 @@ async def get_uid_with_conversations_write(auth: ApiKeyAuth = Depends(get_api_ke
     return auth.uid
 
 
+async def get_uid_with_conversations_from_segments_write(
+    auth: ApiKeyAuth = Depends(get_auth_with_conversations_write),
+    request: Request = None,
+) -> str:
+    """conversations:write plus the dedicated from-segments budget for the dev route.
+
+    POST /v1/dev/user/conversations/from-segments mirrors the first-party
+    route's dedicated conversations:from-segments policy (30/hour) on top of
+    the shared dev:conversations write ceiling — the same shared-plus-per-route
+    composition as _check_conversation_read_budgets_async, so per-route tuning
+    can never raise the aggregate conversation-write limit. Failure logging
+    includes remote IP and user agent: this route is a scripted-abuse target.
+    """
+    await _check_dev_api_key_rate_limit_async(
+        request=request,
+        auth=auth,
+        policy_name="dev:conversations_from_segments",
+    )
+    return auth.uid
+
+
 async def get_auth_with_memories_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
     if not has_scope(auth.scopes, Scopes.MEMORIES_READ):
         raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.MEMORIES_READ}")
@@ -621,6 +642,16 @@ async def get_developer_memory_default_memory_write_context(
         app_id=auth_context.app_id,
         key_id=auth_context.key_id,
         policy_name="dev:memories",
+    )
+    # Burst ceiling: the hourly dev:memories window alone admits the whole
+    # quota inside one minute (the 2026-09-11 scripted-abuse shape), so the
+    # per-minute cap is what actually stops 69/min bursts.
+    await _check_api_key_rate_limit_async(
+        prefix="dev",
+        uid=auth_context.uid,
+        app_id=auth_context.app_id,
+        key_id=auth_context.key_id,
+        policy_name="dev:memories_write_burst",
     )
     return auth_context
 
