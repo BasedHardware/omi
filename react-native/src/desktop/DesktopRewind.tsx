@@ -1,9 +1,9 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   AppState,
-  FlatList,
   Image,
   NativeModules,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -249,64 +249,56 @@ export function DesktopRewind({
       ) : null}
       <View style={styles.content}>
         <ScrollFade visible style={styles.list}>
-          <FlatList
-            data={frames}
-            keyExtractor={frame => frame.id}
-            extraData={selected?.id}
+          <ScrollView
             onLayout={fade.onLayout}
             onScroll={fade.onScroll}
             onContentSizeChange={fade.onContentSizeChange}
             scrollEventThrottle={16}
-            contentContainerStyle={styles.rows}
-            renderItem={({item: frame}) => (
-              <FocusPressable
-                key={frame.id}
-                accessibilityRole="button"
-                accessibilityLabel={`View capture ${frame.id}`}
-                accessibilityState={{selected: selected?.id === frame.id}}
-                onPress={() => setSelected(frame)}
-                style={[
-                  styles.row,
-                  selected?.id === frame.id && styles.selected,
-                ]}>
-                <Text style={styles.text}>
-                  {frame.appName || 'Captured screen'}
-                </Text>
-                <Text style={styles.meta} numberOfLines={2}>
-                  {frame.windowTitle}
-                </Text>
-                <Text style={styles.meta}>
-                  {new Date(frame.capturedAtMs).toLocaleString()}
-                </Text>
-              </FocusPressable>
+            contentContainerStyle={styles.rows}>
+            {frames.length === 0 && !busy && error === null ? (
+              <Text style={styles.text}>
+                {query
+                  ? 'No captures match this search.'
+                  : 'No captures saved yet.'}
+              </Text>
+            ) : (
+              frames.map(frame => (
+                <FocusPressable
+                  key={frame.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View capture ${frame.id}`}
+                  accessibilityState={{selected: selected?.id === frame.id}}
+                  onPress={() => setSelected(frame)}
+                  style={[
+                    styles.row,
+                    selected?.id === frame.id && styles.selected,
+                  ]}>
+                  <Text style={styles.text}>
+                    {frame.appName || 'Captured screen'}
+                  </Text>
+                  <Text style={styles.meta} numberOfLines={2}>
+                    {frame.windowTitle}
+                  </Text>
+                  <Text style={styles.meta}>
+                    {new Date(frame.capturedAtMs).toLocaleString()}
+                  </Text>
+                </FocusPressable>
+              ))
             )}
-            ListEmptyComponent={
-              !busy && error === null ? (
-                <Text style={styles.text}>
-                  {query
-                    ? 'No captures match this search.'
-                    : 'No captures saved yet.'}
-                </Text>
-              ) : null
-            }
-            ListFooterComponent={
-              <>
-                {busy ? (
-                  <Text style={styles.meta}>Loading screen history…</Text>
-                ) : null}
-                {hasMore ? (
-                  <FocusPressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Load more history"
-                    disabled={busy}
-                    onPress={() => void more()}
-                    style={styles.button}>
-                    <Text style={styles.text}>Load more</Text>
-                  </FocusPressable>
-                ) : null}
-              </>
-            }
-          />
+            {busy ? (
+              <Text style={styles.meta}>Loading screen history…</Text>
+            ) : null}
+            {hasMore ? (
+              <FocusPressable
+                accessibilityRole="button"
+                accessibilityLabel="Load more history"
+                disabled={busy}
+                onPress={() => void more()}
+                style={styles.button}>
+                <Text style={styles.text}>Load more</Text>
+              </FocusPressable>
+            ) : null}
+          </ScrollView>
         </ScrollFade>
         <View style={styles.preview}>
           {selected === null ? (

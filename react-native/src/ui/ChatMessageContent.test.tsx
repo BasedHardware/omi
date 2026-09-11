@@ -13,6 +13,22 @@ function render(text: string) {
   return tree;
 }
 
+test('streaming replies stay plain text until the generation settles', () => {
+  let tree!: Renderer.ReactTestRenderer;
+  act(() => {
+    tree = Renderer.create(
+      <ChatMessageContent
+        streaming
+        text={'## Heading\n\n**Bold**'}
+        style={{color: '#ddd', fontSize: 15}}
+      />,
+    );
+  });
+  expect(JSON.stringify(tree.toJSON())).toContain('## Heading');
+  expect(JSON.stringify(tree.toJSON())).toContain('**Bold**');
+  act(() => tree.unmount());
+});
+
 test('renders actual native markdown with selectable emphasis, lists and code', () => {
   const tree = render(
     '## Heading\n\n**Bold** and *italic*\n\n- First\n- Second\n\n```js\nconst answer = 42;\n```',

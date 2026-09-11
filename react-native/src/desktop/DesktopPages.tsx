@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {FlatList, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import {loadConnectors, type CloudApp} from '../desktopCloudClient';
 import {
@@ -137,69 +137,65 @@ export function LibraryPage({
         </ScrollView>
       ) : (
         <ScrollFade visible style={styles.list}>
-          <FlatList
-            data={items}
-            keyExtractor={item => `${item.kind}:${item.id}`}
+          <ScrollView
             onLayout={fade.onLayout}
             onScroll={fade.onScroll}
             onContentSizeChange={fade.onContentSizeChange}
             scrollEventThrottle={16}
-            contentContainerStyle={styles.listContent}
-            renderItem={({item}) => (
-              <FocusPressable
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${item.kind} ${
-                  item.title ||
-                  (item.kind === 'memory'
-                    ? 'Memory'
-                    : item.status === 'processing'
-                    ? 'Processing conversation…'
-                    : 'Conversation title unavailable')
-                }`}
-                onPress={() => setSelectedId(`${item.kind}:${item.id}`)}>
-                {item.kind === 'conversation' ? (
-                  <ConversationRow item={item} />
-                ) : (
-                  <ReadRow item={item} />
-                )}
-              </FocusPressable>
+            contentContainerStyle={styles.listContent}>
+            {items.length === 0 && !readError ? (
+              <EmptyCopy>{emptyCopy}</EmptyCopy>
+            ) : (
+              items.map(item => (
+                <FocusPressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${item.kind} ${
+                    item.title ||
+                    (item.kind === 'memory'
+                      ? 'Memory'
+                      : item.status === 'processing'
+                      ? 'Processing conversation…'
+                      : 'Conversation title unavailable')
+                  }`}
+                  key={`${item.kind}:${item.id}`}
+                  onPress={() => setSelectedId(`${item.kind}:${item.id}`)}>
+                  {item.kind === 'conversation' ? (
+                    <ConversationRow item={item} />
+                  ) : (
+                    <ReadRow item={item} />
+                  )}
+                </FocusPressable>
+              ))
             )}
-            ListEmptyComponent={
-              readError ? null : <EmptyCopy>{emptyCopy}</EmptyCopy>
-            }
-            ListFooterComponent={
+            {outcome?.status === 'success' ? (
               <>
-                {outcome?.status === 'success' ? (
-                  <>
-                    {outcome.value.page.hasMore && onLoadMore ? (
-                      <FocusPressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Load more conversations"
-                        disabled={loadingMore}
-                        onPress={onLoadMore}
-                        style={styles.taskEdit}>
-                        <Text style={styles.rowMeta}>
-                          {loadingMore ? 'Loading…' : 'Load more'}
-                        </Text>
-                      </FocusPressable>
-                    ) : null}
-                    <ReadStatus
-                      label="Conversations"
-                      mac
-                      page={outcome.value.page}
-                    />
-                  </>
+                {outcome.value.page.hasMore && onLoadMore ? (
+                  <FocusPressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Load more conversations"
+                    disabled={loadingMore}
+                    onPress={onLoadMore}
+                    style={styles.taskEdit}>
+                    <Text style={styles.rowMeta}>
+                      {loadingMore ? 'Loading…' : 'Load more'}
+                    </Text>
+                  </FocusPressable>
                 ) : null}
-                {memoryOutcome?.status === 'success' ? (
-                  <ReadStatus
-                    label="Memories"
-                    mac
-                    page={memoryOutcome.value.page}
-                  />
-                ) : null}
+                <ReadStatus
+                  label="Conversations"
+                  mac
+                  page={outcome.value.page}
+                />
               </>
-            }
-          />
+            ) : null}
+            {memoryOutcome?.status === 'success' ? (
+              <ReadStatus
+                label="Memories"
+                mac
+                page={memoryOutcome.value.page}
+              />
+            ) : null}
+          </ScrollView>
         </ScrollFade>
       )}
     </View>

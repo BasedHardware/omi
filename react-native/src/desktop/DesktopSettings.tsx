@@ -212,7 +212,20 @@ export function DesktopSettings({
       try {
         nextAccount = await loadAccountSettings(backend);
       } catch {
-        nextAccount = null;
+        nextAccount = {
+          profile: null,
+          profileError: 'Account details are unavailable.',
+          subscription: null,
+          subscriptionError: 'Plan is unavailable.',
+          storeRecordingPermission: null,
+          storeRecordingError: 'Cloud recording storage status is unavailable.',
+          trainingOptedIn: null,
+          trainingError: 'Training preference is unavailable.',
+          privateCloudSync: null,
+          privateCloudSyncError: 'Private cloud sync status is unavailable.',
+          webhooks: null,
+          webhooksError: 'Webhook status is unavailable.',
+        };
       }
     }
     if (seq !== reloadSeqRef.current) {
