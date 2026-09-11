@@ -110,10 +110,15 @@ describe('GptLiveClient', () => {
 
     expect(socket.url).toContain('/v1/omni/relay');
     expect(socket.url).toContain('provider=gpt_live');
-    expect(socket.url).toContain('token=token%2Fvalue');
+    // The bearer token must never appear in the WebSocket URL.
+    expect(socket.url).not.toContain('token');
+    expect(socket.url).not.toContain('token%2Fvalue');
 
     socket.onopen?.();
-    const start = JSON.parse(socket.sent[0]!);
+    // First-message auth before any session frame.
+    expect(JSON.parse(socket.sent[0]!)).toEqual({ type: 'auth', token: 'token/value' });
+    socket.emit({ type: 'auth_response', success: true });
+    const start = JSON.parse(socket.sent[1]!);
     expect(start.type).toBe('session.start');
     expect(start.event_id).toBeTruthy();
     expect(start.session.model).toBe('gpt-live-1');
@@ -163,6 +168,33 @@ describe('GptLiveClient', () => {
     client.stop();
   });
 
+  it('flushes one exchange at each response boundary instead of only at close', () => {
+    const handlers = callbacks();
+    const client = new GptLiveClient({ ...handlers });
+    client.connect('token');
+    const socket = FakeWebSocket.instances[0]!;
+
+    socket.emit({ type: 'session.input_transcript.delta', delta: 'First question' });
+    socket.emit({ type: 'session.output_transcript.delta', delta: 'First answer' });
+    socket.emit({ type: 'response.event', event: { type: 'response.done' } });
+    expect(handlers.onExchange).toHaveBeenNthCalledWith(
+      1,
+      'First question',
+      'First answer',
+    );
+
+    socket.emit({ type: 'session.input_transcript.delta', delta: 'Second question' });
+    socket.emit({ type: 'session.output_transcript.delta', delta: 'Second answer' });
+    socket.emit({ type: 'response.event', event: { type: 'response.completed' } });
+    expect(handlers.onExchange).toHaveBeenNthCalledWith(
+      2,
+      'Second question',
+      'Second answer',
+    );
+    expect(handlers.onExchange).toHaveBeenCalledTimes(2);
+    client.stop();
+  });
+
   it('closes the session and persists the latest partial transcript on stop', () => {
     const handlers = callbacks();
     const client = new GptLiveClient({ ...handlers });
@@ -175,10 +207,7 @@ describe('GptLiveClient', () => {
 
     client.stop();
 
-    expect(handlers.onExchange).toHaveBeenCalledWith(
-      'Remember this unfinished turn',
-      '',
-    );
+    expect(handlers.onExchange).toHaveBeenCalledWith('Remember this unfinished turn', '');
     expect(socket.sent.some((frame) => frame.includes('"session.close"'))).toBe(true);
   });
 

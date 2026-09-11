@@ -29,7 +29,10 @@ interface GptLiveMessage {
   interrupted?: boolean;
   error?: string;
   message?: string;
+  success?: boolean;
   usage?: GptLiveUsageMetadata;
+  /** Nested event for a `response.event` envelope (turn lifecycle). */
+  event?: GptLiveMessage;
 }
 
 export interface GptLiveClientCallbacks {
@@ -65,14 +68,13 @@ function relayBaseUrl(): string {
 }
 
 /**
- * Build the Omi relay URL. Browsers cannot set an Authorization header on a
- * WebSocket, so the Omi bearer token travels as the `token` query param (the
- * relay accepts it for browser clients).
+ * Build the Omi relay URL. The Omi bearer token never travels in the query
+ * string (WebSocket request targets, including query strings, are logged by the
+ * access logger and ingress); the browser authenticates in the first WS message
+ * instead (`{type:'auth', token}`), mirroring `transcriptionSocket.ts`.
  */
-export function gptLiveRelayUrl(authToken: string): string {
-  return `${relayBaseUrl()}/v1/omni/relay?provider=gpt_live&token=${encodeURIComponent(
-    authToken,
-  )}`;
+export function gptLiveRelayUrl(): string {
+  return `${relayBaseUrl()}/v1/omni/relay?provider=gpt_live`;
 }
 
 function eventId(): string {
@@ -99,12 +101,11 @@ export function gptLiveUsageReport(usage: GptLiveUsageMetadata): RealtimeUsageRe
   const outputText = output.text_tokens ?? 0;
   const outputAudio = output.audio_tokens ?? 0;
   return {
-    input_text_tokens:
-      inputText + inputAudio > 0 ? inputText : (usage.input_tokens ?? 0),
+    input_text_tokens: inputText + inputAudio > 0 ? inputText : usage.input_tokens ?? 0,
     input_audio_tokens: inputAudio,
     input_cached_tokens: input.cached_tokens ?? 0,
     output_text_tokens:
-      outputText + outputAudio > 0 ? outputText : (usage.output_tokens ?? 0),
+      outputText + outputAudio > 0 ? outputText : usage.output_tokens ?? 0,
     output_audio_tokens: outputAudio,
   };
 }
@@ -118,19 +119,21 @@ export class GptLiveClient {
   private usage: RealtimeUsageReport | null = null;
   private stopped = false;
   private connectionTimeout: number | null = null;
+  /** Sends `session.start`; deferred until `auth_response` on the managed relay. */
+  private sendStartFrame: (() => void) | null = null;
 
   constructor(private options: GptLiveClientOptions) {}
 
   connect(token = this.options.token ?? ''): void {
     this.stopped = false;
-    const url = this.options.relayUrl ?? gptLiveRelayUrl(token);
+    const url = this.options.relayUrl ?? gptLiveRelayUrl();
     const socket = new WebSocket(url);
     this.socket = socket;
     this.connectionTimeout = window.setTimeout(
       () => this.fail('GPT Live took too long to connect'),
       15000,
     );
-    socket.onopen = () => {
+    const sendStart = (): void => {
       socket.send(
         JSON.stringify({
           type: 'session.start',
@@ -145,6 +148,15 @@ export class GptLiveClient {
           },
         }),
       );
+    };
+    this.sendStartFrame = sendStart;
+    socket.onopen = () => {
+      if (token) {
+        // First-message auth: the bearer token must not ride the URL.
+        socket.send(JSON.stringify({ type: 'auth', token }));
+      } else {
+        sendStart();
+      }
     };
     socket.onmessage = (event) => this.handleMessage(String(event.data));
     socket.onerror = () => this.fail('GPT Live connection failed');
@@ -175,6 +187,7 @@ export class GptLiveClient {
     this.capture?.stop();
     this.capture = null;
     this.player.close();
+    this.sendStartFrame = null;
     const socket = this.socket;
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'session.close' }));
@@ -222,6 +235,15 @@ export class GptLiveClient {
       return;
     }
     switch (message.type) {
+      case 'auth_response': {
+        // Managed relay first-message auth. Only now is the session safe to open.
+        if (message.success) {
+          this.sendStartFrame?.();
+        } else {
+          this.fail('GPT Live authentication failed');
+        }
+        return;
+      }
       case 'session.started': {
         if (this.connectionTimeout !== null) {
           window.clearTimeout(this.connectionTimeout);
@@ -245,6 +267,16 @@ export class GptLiveClient {
         if (message.delta) {
           this.aiText = appendChunk(this.aiText, message.delta);
           this.options.onOutputTranscript(this.aiText);
+        }
+        return;
+      }
+      case 'response.event': {
+        // Per-turn boundary. Without this the whole multi-turn session collapses
+        // into one synthetic exchange flushed only at close.
+        const nested = message.event ?? message;
+        const nestedType = nested.type ?? '';
+        if (nestedType === 'response.done' || nestedType === 'response.completed') {
+          this.flushExchange();
         }
         return;
       }
