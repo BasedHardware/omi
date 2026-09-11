@@ -712,6 +712,86 @@ test('old chat history names empty-text GET tool thinking and citation fallbacks
   expect(copy).not.toContain('Show more');
 });
 
+test('old chat history names empty-text GET unknown content_block Chat item fallback', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'unknown-1',
+        sender: 'ai',
+        text: '',
+        created_at: '2026-09-07T01:02:03Z',
+        content_blocks: [
+          {
+            type: 'customWidget',
+            id: 'custom-1',
+            title: 'Title',
+            summary: 'Summary',
+            text: 'Body',
+          },
+          {
+            type: 'discoveryCard',
+            id: 'd1',
+            title: 'Quiet mornings',
+            summary: 'You like a slow start.',
+          },
+        ],
+      },
+      {
+        id: 'unknown-kept',
+        sender: 'ai',
+        text: 'Here is the answer.',
+        created_at: '2026-09-07T01:02:04Z',
+        content_blocks: [
+          {
+            type: 'customWidget',
+            id: 'custom-2',
+            title: 'Should stay omitted',
+            summary: 'Also omitted',
+            text: 'Also omitted text',
+          },
+        ],
+      },
+      {
+        id: 'unknown-empty',
+        sender: 'ai',
+        text: ' \t',
+        created_at: '2026-09-07T01:02:05Z',
+        content_blocks: [{type: 'customWidget', id: 'custom-empty'}],
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'unknown-1')?.text).toBe(
+    'Chat item - Title - Summary - Body',
+  );
+  expect(
+    page.messages.find(row => row.id === 'unknown-1')?.contentBlocks,
+  ).toEqual([
+    {
+      eyebrow: 'Discovery',
+      title: 'Quiet mornings',
+      detail: 'You like a slow start.',
+    },
+  ]);
+  expect(page.messages.find(row => row.id === 'unknown-1')?.text).not.toContain(
+    'Discovery',
+  );
+  expect(page.messages.find(row => row.id === 'unknown-1')?.text).not.toContain(
+    'Quiet mornings',
+  );
+  expect(page.messages.find(row => row.id === 'unknown-kept')?.text).toBe(
+    'Here is the answer.',
+  );
+  expect(
+    page.messages.find(row => row.id === 'unknown-kept')?.text,
+  ).not.toContain('Chat item');
+  expect(page.messages.find(row => row.id === 'unknown-empty')?.text).toBe(
+    'Chat item',
+  );
+  const copy = JSON.stringify(page.messages);
+  expect(copy).not.toContain('Should stay omitted');
+});
+
 test('old chat history names GET memory review cards without inventing writes', () => {
   const page = parseOmiHistory(
     JSON.stringify([

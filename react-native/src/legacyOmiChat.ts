@@ -339,8 +339,37 @@ function contentBlockFallbackLine(raw: unknown): string | null {
         wireString(row, 'title'),
         wireString(row, 'preview'),
       ]);
-    default:
+    case 'discoveryCard':
+    case 'discovery_card':
+    case 'questionCard':
+    case 'question_card':
+    case 'taskCard':
+    case 'task_card':
+    case 'goalLink':
+    case 'goal_link':
+    case 'memoryLink':
+    case 'memory_link':
+    case 'captureLink':
+    case 'capture_link':
+    case 'conversationLink':
+    case 'conversation_link':
+    case 'agentSpawn':
+    case 'agent_spawn':
+    case 'agentCompletion':
+    case 'agent_completion':
+    case 'memoryReviewCard':
+    case 'memory_review_card':
+    case 'followUp':
+    case 'follow_up':
+    case 'evidence':
+    case 'evidence_envelope':
       return null;
+    default:
+      return labelledFallback('Chat item', [
+        wireString(row, 'title'),
+        wireString(row, 'summary'),
+        wireString(row, 'text'),
+      ]);
   }
 }
 
