@@ -59,6 +59,7 @@ import {
   type OmiIntegration,
 } from '../legacyOmiIntegrations';
 import {
+  appChangelogHeading,
   loadOmiAppChangelogs,
   type OmiAppChangelogRow,
 } from '../legacyOmiAppChangelogs';
@@ -222,6 +223,9 @@ export function SettingsPage({
     string | null
   >(null);
   const [appChangelogs, setAppChangelogs] = useState<OmiAppChangelogRow[]>([]);
+  const [appChangelogsError, setAppChangelogsError] = useState<string | null>(
+    null,
+  );
   const [usageMonthly, setUsageMonthly] = useState<OmiUsageStats | null>(null);
   const [usageYearly, setUsageYearly] = useState<OmiUsageStats | null>(null);
   const [usageAllTime, setUsageAllTime] = useState<OmiUsageStats | null>(null);
@@ -324,6 +328,7 @@ export function SettingsPage({
       setIntegrations([]);
       setIntegrationsError(null);
       setAppChangelogs([]);
+      setAppChangelogsError(null);
       setUsageMonthly(null);
       setUsageYearly(null);
       setUsageAllTime(null);
@@ -390,6 +395,7 @@ export function SettingsPage({
         setIntegrations([]);
         setIntegrationsError(null);
         setAppChangelogs([]);
+        setAppChangelogsError(null);
         setUsageMonthly(null);
         setUsageYearly(null);
         setUsageAllTime(null);
@@ -425,6 +431,7 @@ export function SettingsPage({
         setIntegrations([]);
         setIntegrationsError(null);
         setAppChangelogs([]);
+        setAppChangelogsError(null);
         setUsageMonthly(null);
         setUsageYearly(null);
         setUsageAllTime(null);
@@ -472,7 +479,13 @@ export function SettingsPage({
         error: desktopReadErrorCopy(reason),
       }),
     );
-    const appChangelogsTask = loadOmiAppChangelogs(backend).catch(() => []);
+    const appChangelogsTask = loadOmiAppChangelogs(backend).then(
+      rows => ({rows, error: null as string | null}),
+      reason => ({
+        rows: [] as OmiAppChangelogRow[],
+        error: desktopReadErrorCopy(reason),
+      }),
+    );
     const usageMonthlyTask = loadOmiUsagePeriod(backend, 'monthly').then(
       stats => ({stats, error: null as string | null}),
       reason => ({
@@ -559,7 +572,7 @@ export function SettingsPage({
     const peopleResult = await peopleTask;
     const taskIntegrationsResult = await taskIntegrationsTask;
     const integrationsResult = await integrationsTask;
-    const nextAppChangelogs = await appChangelogsTask;
+    const appChangelogsResult = await appChangelogsTask;
     const usageMonthlyResult = await usageMonthlyTask;
     const usageYearlyResult = await usageYearlyTask;
     const usageAllTimeResult = await usageAllTimeTask;
@@ -581,7 +594,8 @@ export function SettingsPage({
     setTaskIntegrationsError(taskIntegrationsResult.error);
     setIntegrations(integrationsResult.rows);
     setIntegrationsError(integrationsResult.error);
-    setAppChangelogs(nextAppChangelogs);
+    setAppChangelogs(appChangelogsResult.rows);
+    setAppChangelogsError(appChangelogsResult.error);
     setUsageMonthly(usageMonthlyResult.stats);
     setUsageYearly(usageYearlyResult.stats);
     setUsageAllTime(usageAllTimeResult.stats);
@@ -905,9 +919,16 @@ export function SettingsPage({
             />
           ))
         )}
-        {appChangelogs.map(row => (
-          <SettingRow copy={row.copy} key={row.key} title={row.title} />
-        ))}
+        {appChangelogsError !== null ? (
+          <SettingRow
+            copy={appChangelogsError}
+            title={appChangelogHeading('')}
+          />
+        ) : (
+          appChangelogs.map(row => (
+            <SettingRow copy={row.copy} key={row.key} title={row.title} />
+          ))
+        )}
         {(onSignOut !== undefined ||
           (omiAuth !== undefined && omiAuth !== null)) && (
           <SettingRow

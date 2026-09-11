@@ -2274,6 +2274,23 @@ test('Settings names GET app changelogs without dismiss or a default icon', asyn
   ).toBe(false);
 });
 
+test('Settings names a failed app changelogs GET instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/announcements/changelogs?limit=5') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain("What's New");
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain("What's New in 1.2.0");
+  expect(tree).not.toContain('Dismiss');
+  expect(tree).not.toContain('✨');
+});
+
 test('Settings names GET usage monthly yearly all-time without Upgrade', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
