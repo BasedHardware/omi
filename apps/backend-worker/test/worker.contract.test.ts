@@ -17,6 +17,7 @@ import {
   handleChatCreate,
   handleChatHistory,
   handleConversations,
+  handleGenerationCancel,
   handleGenerationEvents,
   handleSettings,
   handleTasks,
@@ -4038,6 +4039,23 @@ describe("worker request contract", () => {
     expect(terminal.status).toBe(204);
     expect(await terminal.text()).toBe("");
   });
+
+  test("cancellation of a missing generation is refresh_history", async () => {
+    cancellation = "not_found";
+    const missing = await fetchWorker("/v1/chat-generations/missing", {
+      method: "DELETE",
+      headers: authenticatedHeaders,
+    });
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get("retry-after")).toBeNull();
+    expect((await missing.json()) as unknown).toEqual({
+      error: {
+        code: "not_found",
+        retryable: false,
+        action: "refresh_history",
+      },
+    });
+  });
 });
 
 describe("settings entitlement admission contract", () => {
@@ -4854,6 +4872,39 @@ describe("ratified generation wire", () => {
           "https://worker.test/v1/chat-generations/store-throw/events"
         ),
         routePath: "/v1/chat-generations/:id/events",
+        params: { id: "store-throw" },
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(storeThrow.status).toBe(503);
+    expect(storeThrow.headers.get("retry-after")).toBe("60");
+    expect((await storeThrow.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+  });
+
+  test("generation cancel DELETE store throw is production chat unavailable", async () => {
+    const storeThrow = await handleGenerationCancel(
+      coreContext({
+        env: {
+          ...env,
+          ACCOUNTS: {
+            getByName: () => ({
+              cancel: async () => {
+                throw new Error("cancel store failed");
+              },
+            }),
+          },
+        } as never,
+        request: new Request(
+          "https://worker.test/v1/chat-generations/store-throw",
+          { method: "DELETE" }
+        ),
+        routePath: "/v1/chat-generations/:id",
         params: { id: "store-throw" },
         values: { accountId: "test-account", requestId: "test-request" },
       })

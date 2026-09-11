@@ -768,18 +768,24 @@ export async function handleGenerationEvents(
 export async function handleGenerationCancel(
   context: CoreContext
 ): Promise<Response> {
-  const cancellation = await account(context).cancel(
-    context.get("accountId"),
-    context.req.param("id")
-  );
-  if (cancellation === "not_found")
-    return backendError("not_found", "refresh_history", 404);
-  return cancellation === "terminal"
-    ? new Response(null, {
-        status: 204,
-        headers: { "cache-control": "no-store" },
-      })
-    : json({ cancellation: { state: "accepted" } }, 202);
+  try {
+    const cancellation = await account(context).cancel(
+      context.get("accountId"),
+      context.req.param("id")
+    );
+    if (cancellation === "not_found")
+      return backendError("not_found", "refresh_history", 404);
+    return cancellation === "terminal"
+      ? new Response(null, {
+          status: 204,
+          headers: { "cache-control": "no-store" },
+        })
+      : json({ cancellation: { state: "accepted" } }, 202);
+  } catch {
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "60",
+    });
+  }
 }
 
 export async function handleAttachmentStage(
