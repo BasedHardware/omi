@@ -134,6 +134,55 @@ test('names GET transcript start/end numeric strings', async () => {
   });
 });
 
+test('names omitted GET transcript speaker as Flutter SPEAKER_00 instead of hiding Speaker 1', async () => {
+  const {speaker: _omitted, ...withoutSpeaker} = fixture.transcript_segments[0];
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [withoutSpeaker],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: fixture.transcript_segments[0].text,
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+      },
+    ],
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          speaker: null,
+        },
+      ],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: fixture.transcript_segments[0].text,
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+      },
+    ],
+  });
+});
+
 test('keeps GET calendar event title and attendees and omits missing events', async () => {
   mockRequest.mockResolvedValue(
     response({
@@ -1168,6 +1217,10 @@ test.each([
   {
     ...fixture,
     transcript_segments: [{...fixture.transcript_segments[0], is_user: null}],
+  },
+  {
+    ...fixture,
+    transcript_segments: [{...fixture.transcript_segments[0], speaker: 1}],
   },
   {
     ...fixture,

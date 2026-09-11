@@ -162,7 +162,7 @@ function discardedTranscriptSegments(value: unknown): {
     const segment = object(raw);
     return {
       text: text(segment.text, ''),
-      speaker: segment.speaker == null ? null : text(segment.speaker),
+      speaker: segment.speaker == null ? 'SPEAKER_00' : text(segment.speaker),
       isUser: bool(segment.is_user),
       start: finiteClock(segment.start),
       end: finiteClock(segment.end),

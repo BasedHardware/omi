@@ -403,7 +403,9 @@ export async function loadLegacyConversationDetail(
                 return {
                   text: text(segment.text, 100000),
                   speaker:
-                    segment.speaker == null ? null : text(segment.speaker, 256),
+                    segment.speaker == null
+                      ? 'SPEAKER_00'
+                      : text(segment.speaker, 256),
                   isUser: boolean(segment.is_user),
                   start: finite(segment.start),
                   end: finite(segment.end),
