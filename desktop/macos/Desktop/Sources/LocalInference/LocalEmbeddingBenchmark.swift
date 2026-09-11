@@ -15,7 +15,6 @@ enum LocalEmbeddingBenchmark {
     case fts
     case vector
     case hybrid
-    case gemini
   }
 
   struct Query: Sendable {
@@ -149,6 +148,13 @@ enum LocalEmbeddingBenchmark {
           sql: "INSERT INTO screenshots VALUES (?, ?, 'Editor', '', ?, NULL)",
           arguments: [id, day, text])
       }
+      let distractorDay = day.addingTimeInterval(10 * 24 * 3600)
+      for (index, name) in names.enumerated() {
+        let id = Int64(index + 21)
+        try db.execute(
+          sql: "INSERT INTO screenshots VALUES (?, ?, 'Editor', '', ?, NULL)",
+          arguments: [id, distractorDay, "\(name) distractor"])
+      }
       try db.execute(sql: "INSERT INTO screenshots_fts(screenshots_fts) VALUES('rebuild')")
     }
   }
@@ -166,7 +172,7 @@ enum LocalEmbeddingBenchmark {
       let vector = try await engine.embed([doc.text], task: .document)[0]
       try await store.write(
         sourceKind: .screenshot, sourceId: doc.id, modelID: engine.modelID, text: doc.text, vector: vector,
-        authorization: authorization)
+        dimension: engine.dimension, authorization: authorization)
     }
   }
 
@@ -182,12 +188,22 @@ enum LocalEmbeddingBenchmark {
         var recalls: [Double] = []
         var ndcgs: [Double] = []
         for item in sliceQueries {
-          let engineOrNil: (any LocalEmbeddingService)? = mode == .fts ? nil : engine
-          var hits = try await search.search(
-            query: item.query, engine: engineOrNil, startDate: item.startDate, endDate: item.endDate, limit: 10)
-          if mode == .vector {
-            hits = hits.filter { $0.matchedBy == .vector || $0.matchedBy == .both }
+          let retrieval: LocalHybridSearch.RetrievalMode
+          let engineOrNil: (any LocalEmbeddingService)?
+          switch mode {
+          case .fts:
+            retrieval = .keyword
+            engineOrNil = nil
+          case .vector:
+            retrieval = .vector
+            engineOrNil = engine
+          case .hybrid:
+            retrieval = .hybrid
+            engineOrNil = engine
           }
+          let hits = try await search.search(
+            query: item.query, engine: engineOrNil, startDate: item.startDate, endDate: item.endDate, limit: 10,
+            retrieval: retrieval)
           let ranked = hits.map(\.sourceId)
           recalls.append(recallAt10(relevant: item.relevantIDs, ranked: ranked))
           ndcgs.append(ndcgAt10(relevant: item.relevantIDs, ranked: ranked))
