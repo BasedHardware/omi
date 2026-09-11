@@ -54,6 +54,7 @@ jobs:
         run: python -m pytest -q
 
       - name: Build wheel
+        shell: bash
         run: |
           rm -rf dist
           python -m build

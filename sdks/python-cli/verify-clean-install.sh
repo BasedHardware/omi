@@ -62,17 +62,19 @@ VENV_BIN="$work/venv/bin"
 
 run_omi() {
   # Windows: a freshly created venv .exe can transiently fail exec (defender /
-  # indexer lock). Retry once, then fall back to `python -m omi_cli`.
+  # indexer lock). Retry the direct launcher once. There is deliberately NO
+  # `python -m omi_cli` fallback: this gate exists to prove the console entry
+  # point users invoke works after a bare `pip install`, so a broken or
+  # missing entry point must fail the smoke test, not route around it.
   "$VENV_BIN/omi" "$@" && return 0
   sleep 2
-  "$VENV_BIN/omi" "$@" && return 0
-  echo "verify-clean-install: direct exe failed; retrying via python -m omi_cli" >&2
-  "$VENV_BIN/python" -m omi_cli "$@"
+  "$VENV_BIN/omi" "$@"
 }
 
 # The console script must exist and run with ONLY the wheel's declared deps.
 echo "verify-clean-install: omi --version"
-version_out="$(run_omi --version)"
+version_out="$(run_omi --version)" || \
+  fail "'omi' console script failed to execute after clean install (entry point broken or missing)"
 echo "verify-clean-install: got: $version_out"
 case "$version_out" in
   omi-cli*) ;;                       # e.g. "omi-cli 0.3.0"
@@ -80,6 +82,6 @@ case "$version_out" in
 esac
 
 echo "verify-clean-install: omi --help"
-run_omi --help > /dev/null
+run_omi --help > /dev/null || fail "'omi --help' exited non-zero"
 
 echo "verify-clean-install: PASS (clean install + console script OK)"
