@@ -89,7 +89,13 @@ def get_action_item(
                 if item.get("id") == action_item_id:
                     ctx.renderer.emit(item, title="action item")
                     return
-            if len(page) < page_size:
+            # The API filters locked records after pagination, so a short page
+            # does not mean the result set is exhausted. Only stop on empty.
+            if len(page) == 0:
+                break
+            # Guard against a pathological infinite cursor if the server never
+            # advances offset semantics; 10k items matches the documented cap.
+            if offset >= 10_000:
                 break
             offset += page_size
     # Exit code 5 (NotFoundError) — same contract as a server-side 404,
