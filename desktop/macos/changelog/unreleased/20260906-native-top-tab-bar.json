@@ -1,0 +1,3 @@
+{
+  "change": "The main window's top navigation is now a Liquid Glass segmented control on macOS 26: press and drag to slide the glass selection between Chat, Memories, Tasks and Apps. Earlier macOS releases get the system segmented control. The custom pills are gone, so the bar follows your system appearance and accessibility settings."
+}
