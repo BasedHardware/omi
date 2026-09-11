@@ -13,11 +13,13 @@ dmg-assets/       DMG installer resources
 
 ## AI Providers
 
-Chat runs through one of three providers, chosen in Settings > AI Provider:
+Chat runs through one of five providers, chosen in Settings > AI Provider:
 
 - **Omi AI**: the default, routed through the Rust backend with your Omi account.
 - **Claude Code**: your own Claude OAuth session.
-- **Local**: talks directly to a self-hosted OpenAI-compatible server (e.g. LM Studio, Ollama). Set the server's base URL and pick a model from the list it fetches at `{baseURL}/models`; no chat prompt or completion is ever routed through Omi's servers or Anthropic. The agent process still authenticates its own tool calls into Omi storage (memories, conversations) with your Firebase session, which is a data fetch, not a model call. Running Local with no self-hosted backend URL at all is a fully supported configuration: chat, push-to-talk, and screen capture are never paywalled or metered against the free plan while Local is active, since those calls never touch Omi's cloud model. Only voice transcription needs a self-hosted backend to leave Omi's Deepgram proxy.
+- **Hermes**: your own Hermes session.
+- **OpenClaw**: your own OpenClaw session.
+- **Local**: talks directly to a self-hosted OpenAI-compatible server (e.g. LM Studio, Ollama). Set the server's base URL and pick a model from the list it fetches at `{baseURL}/models`; no chat prompt or completion is ever routed through Omi's servers or Anthropic. The agent process still authenticates its own tool calls into Omi storage (memories, conversations) with your Firebase session, which is a data fetch, not a model call. Chat, push-to-talk, and screen capture are never paywalled or metered against the free plan while Local is active, since those calls never touch Omi's cloud model. Voice transcription is unaffected by the chat provider and always goes through Omi's Deepgram proxy.
 
   A single Settings field, **Cloud-assisted features** (off by default), gates everything under Local that would otherwise still call a cloud model: connector synthesis (Apple Notes, Calendar, Gmail, AI-profile), proactive assistants and live notes (task/memory/suggestion/insight extraction from screen and transcripts), dictation polish, Rewind semantic-search embeddings, and web search. All of these fail closed under Local until you opt in (a clear log line or tool-result message, never a silent no-op or a retry loop) and are metered exactly like a cloud user once you do. An existing pre-unification "Connector synthesis" choice migrates forward automatically the first time it's read.
 
