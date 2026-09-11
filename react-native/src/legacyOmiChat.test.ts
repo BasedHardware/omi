@@ -384,6 +384,53 @@ test('old chat history keeps GET chart_data points and omits empty charts', () =
   ).toBeUndefined();
 });
 
+test('does not omit a neighboring chat message when stored chart_data cannot project', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'chart-neighbor',
+        sender: 'ai',
+        text: 'Neighbor.',
+        created_at: '2026-09-07T01:02:02Z',
+      },
+      {
+        id: 'chart-bad-point',
+        sender: 'ai',
+        text: 'Here is the trend.',
+        created_at: '2026-09-07T01:02:03Z',
+        chart_data: {
+          chart_type: 'bar',
+          title: 'Talk time',
+          datasets: [
+            {
+              label: 'Minutes',
+              data_points: [
+                {label: 'Mon', value: 12},
+                {label: 1, value: 15},
+              ],
+            },
+          ],
+        },
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'chart-neighbor')).toEqual({
+    id: 'chart-neighbor',
+    text: 'Neighbor.',
+    sender: 'ai',
+    createdAt: Date.parse('2026-09-07T01:02:02Z'),
+    generationOutcome: null,
+  });
+  expect(page.messages.find(row => row.id === 'chart-bad-point')).toEqual({
+    id: 'chart-bad-point',
+    text: 'Here is the trend.',
+    sender: 'ai',
+    createdAt: Date.parse('2026-09-07T01:02:03Z'),
+    generationOutcome: null,
+  });
+});
+
 test('old chat history rejects malformed GET chart_data', () => {
   expect(() =>
     parseOmiHistory(

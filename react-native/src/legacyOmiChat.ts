@@ -118,30 +118,38 @@ function parseOmiChatChart(
   ) {
     return undefined;
   }
-  if (row.datasets.length === 0) {
+  if (
+    row.datasets.length === 0 ||
+    row.datasets.length > 20 ||
+    row.datasets[0] === null ||
+    typeof row.datasets[0] !== 'object' ||
+    Array.isArray(row.datasets[0])
+  ) {
     return undefined;
   }
-  if (row.datasets.length > 20) {
-    throw new Error('Omi chat chart is malformed');
-  }
-  const dataset = object(row.datasets[0]);
-  if (!Array.isArray(dataset.data_points) || dataset.data_points.length > 200) {
-    throw new Error('Omi chat chart is malformed');
-  }
-  if (dataset.data_points.length === 0) {
+  const dataset = row.datasets[0] as Record<string, unknown>;
+  if (
+    !Array.isArray(dataset.data_points) ||
+    dataset.data_points.length === 0 ||
+    dataset.data_points.length > 200
+  ) {
     return undefined;
   }
-  const points = dataset.data_points.map(raw => {
-    const point = object(raw);
+  const points: {label: string; value: number}[] = [];
+  for (const raw of dataset.data_points) {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      return undefined;
+    }
+    const point = raw as Record<string, unknown>;
     if (
       typeof point.label !== 'string' ||
       typeof point.value !== 'number' ||
       !Number.isFinite(point.value)
     ) {
-      throw new Error('Omi chat chart is malformed');
+      return undefined;
     }
-    return {label: point.label, value: point.value};
-  });
+    points.push({label: point.label, value: point.value});
+  }
   return {title: row.title, points};
 }
 
