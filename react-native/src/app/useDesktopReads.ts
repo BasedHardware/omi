@@ -121,15 +121,25 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       }
       const backend = omiBackend;
       if (backend === undefined || backend === null) {
+        refreshSeqRef.current += 1;
+        refreshPendingRef.current = false;
+        conversationPagePendingRef.current = false;
+        memoryPagePendingRef.current = false;
+        taskPagePendingRef.current = false;
+        setConversationsLoadingMore(false);
+        setMemoriesLoadingMore(false);
+        setTasksLoadingMore(false);
         const unavailable = {
           status: 'error',
           error: desktopBackendConfigurationCopy,
         } as const;
-        setReadOutcomes({
+        const next: DesktopReadOutcomes = {
           conversations: unavailable,
           memories: unavailable,
           tasks: unavailable,
-        });
+        };
+        readOutcomesRef.current = next;
+        setReadOutcomes(next);
         setReadsPhase('unavailable');
         return;
       }

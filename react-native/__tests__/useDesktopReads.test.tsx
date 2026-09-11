@@ -12,14 +12,23 @@ jest.mock('../src/desktopReadClient', () => {
   };
 });
 
-jest.mock('../src/omiNative', () => ({
-  omiBackend: {request: jest.fn()},
-  omiNative: undefined,
-  omiAuth: undefined,
-}));
+jest.mock('../src/omiNative', () => {
+  const mockOmiBackendState = {current: {request: jest.fn()} as unknown};
+  return {
+    get omiBackend() {
+      return mockOmiBackendState.current;
+    },
+    __setOmiBackend(next: unknown) {
+      mockOmiBackendState.current = next;
+    },
+    omiNative: undefined,
+    omiAuth: undefined,
+  };
+});
 
 import {useDesktopReads} from '../src/app/useDesktopReads';
 import {
+  desktopBackendConfigurationCopy,
   desktopBackendServiceCopy,
   desktopProjectionUnavailableCopy,
   desktopBackendUnavailableCopy,
@@ -31,6 +40,7 @@ import {
   MemoryCursorExpiredError,
   TaskCursorExpiredError,
 } from '../src/desktopReadClient';
+import * as omiNative from '../src/omiNative';
 
 const readsMock = loadDesktopReads as jest.Mock;
 import type {DesktopReadOutcomes} from '../src/desktopReadClient';
@@ -151,11 +161,18 @@ async function renderReads(props: {enabled: boolean}) {
   };
 }
 
+function setOmiBackend(next: unknown) {
+  (
+    omiNative as unknown as {__setOmiBackend: (value: unknown) => void}
+  ).__setOmiBackend(next);
+}
+
 beforeEach(() => {
   readsMock.mockReset();
   (loadConversations as jest.Mock).mockReset();
   (loadMemories as jest.Mock).mockReset();
   (loadTasks as jest.Mock).mockReset();
+  setOmiBackend({request: jest.fn()});
 });
 
 test('ignoreEnabled loads while the gate is still closed', async () => {
@@ -310,6 +327,40 @@ test('a successful refresh inside the live session lands as saved rows', async (
     'Account A conversation',
   ]);
   expect(reads.latest().readsPhase).toBe('ready');
+  reads.unmount();
+});
+
+test('a missing backend retires saved rows so a later transient failure cannot restore them', async () => {
+  readsMock.mockResolvedValue(successOutcomes(['Saved conversation']));
+  const reads = await renderReads({enabled: true});
+  expect(reads.latest().reads.map(item => item.id)).toEqual([
+    'Saved conversation',
+  ]);
+  expect(reads.latest().readsPhase).toBe('ready');
+
+  setOmiBackend(null);
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().refreshReads(false);
+  });
+  expect(reads.latest().readsPhase).toBe('unavailable');
+  expect(reads.latest().reads).toEqual([]);
+  expect(reads.latest().readOutcomes?.conversations).toEqual({
+    status: 'error',
+    error: desktopBackendConfigurationCopy,
+  });
+
+  setOmiBackend({request: jest.fn()});
+  readsMock.mockResolvedValue({
+    conversations: {status: 'error', error: desktopBackendServiceCopy},
+    memories: {status: 'error', error: desktopBackendServiceCopy},
+    tasks: {status: 'error', error: desktopBackendServiceCopy},
+  });
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().refreshReads(false);
+  });
+  expect(reads.latest().reads).toEqual([]);
+  expect(reads.latest().readsPhase).toBe('unavailable');
+  expect(reads.latest().readOutcomes?.conversations.status).toBe('error');
   reads.unmount();
 });
 
