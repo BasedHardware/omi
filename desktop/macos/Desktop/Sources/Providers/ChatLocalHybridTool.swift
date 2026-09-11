@@ -47,10 +47,21 @@ enum ChatLocalHybridTool {
       if hits.isEmpty {
         return "No transcript matches for \"\(query)\"."
       }
+      let previews = try store.transcriptChunkPreviews(ids: hits.map(\.sourceId), limit: limit)
+      let displayTimeZone = TimeZone.current
       var lines = ["Found \(hits.count) transcript match(es) for \"\(query)\":"]
       for (index, hit) in hits.enumerated() {
+        let dateStr = DesktopChatTimestampFormat.userFacing(hit.capturedAt, timeZone: displayTimeZone)
         lines.append(
-          "\n\(index + 1). \(hit.appName) (id: \(hit.sourceId), hybrid: \(hit.matchedBy.rawValue))")
+          "\n\(index + 1). [\(dateStr)] \(hit.appName) (id: \(hit.sourceId), hybrid: \(hit.matchedBy.rawValue))")
+        if let preview = previews[hit.sourceId] {
+          let text = String(preview.text.prefix(300))
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+          if !text.isEmpty {
+            lines.append("   Content: \(text)")
+          }
+        }
       }
       return lines.joined(separator: "\n")
     } catch {
