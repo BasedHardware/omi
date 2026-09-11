@@ -5,13 +5,42 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 
+/**
+ * Android transport helpers. Capture-path allowlist, request timeouts, and
+ * example-platform method+path rules are owned by native-core
+ * ({@code omi_backend_policy.*}). When {@code libomi_native} is loaded the JNI
+ * entry points are used; host transport-tests fall back to a Java mirror of the
+ * same rules.
+ */
 public final class OmiBackendTransport {
+  private static final boolean HAS_NATIVE_POLICY;
+
+  static {
+    boolean available = false;
+    try {
+      System.loadLibrary("omi_native");
+      available = nativePolicyAvailable();
+    } catch (UnsatisfiedLinkError | RuntimeException ignored) {
+      available = false;
+    }
+    HAS_NATIVE_POLICY = available;
+  }
+
   private OmiBackendTransport() {}
 
+  private static native boolean nativePolicyAvailable();
+
+  private static native boolean nativeIsCapturePath(String path);
+
+  private static native int nativeRequestTimeoutSeconds(String method, String path);
+
+  private static native boolean nativeExamplePlatformSupported(String method, String path);
+
   public static int readTimeoutMillis(String method, String path) {
-    String route = URI.create(path).getPath();
-    return "POST".equals(method) && route != null &&
-      route.matches("/v1/device-sessions/[^/]+/transcribe") ? 150_000 : 30_000;
+    if (HAS_NATIVE_POLICY) {
+      return nativeRequestTimeoutSeconds(method, path) * 1000;
+    }
+    return mirrorRequestTimeoutSeconds(method, path) * 1000;
   }
 
   public static HttpURLConnection openConnection(URL url) throws IOException {
@@ -35,6 +64,33 @@ public final class OmiBackendTransport {
   }
 
   public static boolean isV5BackendPath(String path) {
+    if (HAS_NATIVE_POLICY) {
+      return nativeIsCapturePath(path);
+    }
+    return mirrorIsCapturePath(path);
+  }
+
+  public static boolean examplePlatformSupported(String method, String path) {
+    if (HAS_NATIVE_POLICY) {
+      return nativeExamplePlatformSupported(method, path);
+    }
+    return mirrorExamplePlatformSupported(method, path);
+  }
+
+  /** Java mirror of native-core omi_backend_request_timeout_seconds. */
+  static int mirrorRequestTimeoutSeconds(String method, String path) {
+    final String route;
+    try {
+      route = URI.create(path).getPath();
+    } catch (IllegalArgumentException error) {
+      return 60;
+    }
+    return "POST".equals(method) && route != null &&
+      route.matches("/v1/device-sessions/[^/]+/transcribe") ? 150 : 60;
+  }
+
+  /** Java mirror of native-core omi_backend_is_capture_path. */
+  static boolean mirrorIsCapturePath(String path) {
     final String route;
     try {
       route = URI.create(path).getPath();
@@ -54,7 +110,9 @@ public final class OmiBackendTransport {
       route.equals("/v1/memories") ||
       route.equals("/v1/tasks") || route.equals("/v1/tasks/ops");
   }
-  public static boolean examplePlatformSupported(String method, String path) {
+
+  /** Java mirror of native-core omi_backend_example_platform_supported. */
+  static boolean mirrorExamplePlatformSupported(String method, String path) {
     final String route;
     try {
       route = URI.create(path).getPath();
@@ -65,5 +123,4 @@ public final class OmiBackendTransport {
       "/v1/memories".equals(route) || "/v1/tasks".equals(route))) ||
       (method.equals("POST") && "/v1/tasks/ops".equals(route));
   }
-
 }

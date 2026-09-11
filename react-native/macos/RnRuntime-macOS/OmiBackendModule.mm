@@ -4,6 +4,8 @@
 #import "OmiAuthModule.h"
 #import "../../apple/OmiRequestTimeout.h"
 
+#include "omi_backend_policy.h"
+
 #import <LocalAuthentication/LocalAuthentication.h>
 #import <Security/Security.h>
 
@@ -33,21 +35,15 @@ typedef NS_ENUM(NSInteger, OmiBackendCredentialKind) {
 @end
 
 static BOOL OmiIsLoopbackHost(NSString *host) {
-  NSString *normalized = host.lowercaseString;
-  return [normalized isEqualToString:@"localhost"] ||
-      [normalized isEqualToString:@"127.0.0.1"] ||
-      [normalized isEqualToString:@"::1"];
+  return host.length > 0 && omi_backend_is_loopback_hostname(host.UTF8String) == 1;
 }
 
 static BOOL OmiIsCloudHost(NSString *host) {
-  return [host.lowercaseString isEqualToString:@"api.omi.me"];
+  return host.length > 0 && omi_backend_is_cloud_hostname(host.UTF8String) == 1;
 }
 
 static BOOL OmiIsAllowedV5Host(NSString *host) {
-  NSString *normalized = host.lowercaseString;
-  if (OmiIsLoopbackHost(normalized) || OmiIsCloudHost(normalized)) return YES;
-  return [normalized hasSuffix:@".workers.dev"] &&
-      normalized.length > [@".workers.dev" length];
+  return host.length > 0 && omi_backend_is_allowed_v5_hostname(host.UTF8String) == 1;
 }
 
 static NSURL *OmiValidatedV5URL(NSString *value);
@@ -63,24 +59,18 @@ static NSString *OmiSoftwarePlaneValue(void) {
 }
 
 static NSString *OmiBackendRoute(NSString *path) {
-  NSRange delimiter = [path rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"?#"]];
-  return delimiter.location == NSNotFound ? path : [path substringToIndex:delimiter.location];
+  if (path.length == 0) return path;
+  char buffer[2048];
+  int32_t length = omi_backend_route_strip(path.UTF8String, buffer, sizeof(buffer));
+  if (length < 0) {
+    NSRange delimiter = [path rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"?#"]];
+    return delimiter.location == NSNotFound ? path : [path substringToIndex:delimiter.location];
+  }
+  return [[NSString alloc] initWithBytes:buffer length:(NSUInteger)length encoding:NSUTF8StringEncoding];
 }
 
 static BOOL OmiIsCaptureBackendPath(NSString *path) {
-  NSString *route = OmiBackendRoute(path);
-  return [route isEqualToString:@"/v1/settings"] ||
-      [route isEqualToString:@"/v1/live/sessions"] ||
-      [route isEqualToString:@"/v1/chat-messages"] ||
-      [route hasPrefix:@"/v1/chat-generations/"] ||
-      [route isEqualToString:@"/v1/chat-attachments"] ||
-      [route hasPrefix:@"/v1/chat-attachments/"] ||
-      [route isEqualToString:@"/v1/device-sessions"] ||
-      [route hasPrefix:@"/v1/device-sessions/"] ||
-      [route isEqualToString:@"/v1/conversations"] ||
-      [route isEqualToString:@"/v1/memories"] ||
-      [route isEqualToString:@"/v1/tasks"] ||
-      [route isEqualToString:@"/v1/tasks/ops"];
+  return path.length > 0 && omi_backend_is_capture_path(path.UTF8String) == 1;
 }
 
 static NSURL *OmiValidatedV5URL(NSString *value) {
@@ -462,12 +452,8 @@ static BOOL OmiApplyAuthorization(NSMutableURLRequest *request, OmiBackendPolicy
 }
 
 static BOOL OmiExamplePlatformRequestSupported(NSString *method, NSString *path) {
-  NSString *route = OmiBackendRoute(path);
-  return ([method isEqualToString:@"GET"] &&
-      ([route isEqualToString:@"/v1/conversations"] ||
-       [route isEqualToString:@"/v1/memories"] ||
-       [route isEqualToString:@"/v1/tasks"])) ||
-      ([method isEqualToString:@"POST"] && [route isEqualToString:@"/v1/tasks/ops"]);
+  if (method.length == 0 || path.length == 0) return NO;
+  return omi_backend_example_platform_supported(method.UTF8String, path.UTF8String) == 1;
 }
 
 static NSDictionary *OmiDevelopmentBackendUnsupportedResponse(NSString *requestId) {

@@ -74,6 +74,12 @@ export function isAllowedV5Hostname(hostname: string): boolean {
   );
 }
 
+/**
+ * Capture/v5 backend path allowlist.
+ * Source of truth: `native-core` `omi_backend_is_capture_path` /
+ * `omi_backend_policy.*`. Keep this route list identical when changing policy.
+ * Extra JS guards (`//`, `://`) are frontend-only hardening.
+ */
 export function isCaptureBackendPath(path: string): boolean {
   if (!path.startsWith('/') || path.startsWith('//') || path.includes('://')) {
     return false;

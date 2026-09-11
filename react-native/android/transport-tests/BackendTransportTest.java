@@ -10,9 +10,9 @@ public final class BackendTransportTest {
   public static void main(String[] args) throws Exception {
     assert OmiBackendTransport.readTimeoutMillis("POST", "/v1/device-sessions/id/transcribe") == 150_000;
     assert OmiBackendTransport.readTimeoutMillis("POST", "/v1/device-sessions/id/transcribe?retry=1") == 150_000;
-    assert OmiBackendTransport.readTimeoutMillis("GET", "/v1/device-sessions/id/transcribe") == 30_000;
-    assert OmiBackendTransport.readTimeoutMillis("POST", "/v1/device-sessions/id/complete") == 30_000;
-    assert OmiBackendTransport.readTimeoutMillis("POST", "/v1/device-sessions//transcribe") == 30_000;
+    assert OmiBackendTransport.readTimeoutMillis("GET", "/v1/device-sessions/id/transcribe") == 60_000;
+    assert OmiBackendTransport.readTimeoutMillis("POST", "/v1/device-sessions/id/complete") == 60_000;
+    assert OmiBackendTransport.readTimeoutMillis("POST", "/v1/device-sessions//transcribe") == 60_000;
     for (String path : new String[] {
       "/v1/settings", "/v1/live/sessions", "/v1/chat-messages", "/v1/chat-generations/id/events",
       "/v1/chat-generations/id", "/v1/chat-attachments", "/v1/chat-attachments/id/complete",
