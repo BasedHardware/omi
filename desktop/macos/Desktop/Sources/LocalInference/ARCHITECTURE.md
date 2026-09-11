@@ -62,16 +62,32 @@ Selected engines must pass a 32-token synthetic probe with valid dimensions
 within two seconds. Probe results are cached per engine/model/thermal/switch
 for 60 seconds. Missing assets, Intel, timeouts, and unknown engine IDs fail
 closed for free users. An already-selected local query failure stays keyword-only.
-Capture and backfill must recheck the cached entitlement before Gemini batch
+Both Rewind capture variants share `indexScreenshotEmbeddings`: OCR is persisted
+first, then the policy schedules Gemini and/or local vector writes. The local
+indexer resolves production switches on each operation so checkout, sign-out,
+and opt-out do not require restarting the process.
+
+Capture and backfill recheck the cached entitlement before Gemini batch
 dispatch, including batches queued before a downgrade.
 
 Route decisions emit one existing `recordFallback` counter with
-`event=screen_embedding_route`, `plan_class=free|paid|unknown`,
+`route_event=screen_embedding_route`, `plan_class=free|paid|unknown`,
 `route=gemini|local|fts_only|disabled`, and bounded `route_reason` (the shared
-helper buckets its standard `reason`). `disabled` means the hard kill restored
-Gemini. No OCR text, query text, plan raw strings, or frame identifiers are sent.
+helper uses `policy` or `dispatch_disabled` for its standard `reason`).
+`disabled` means the hard kill restored Gemini. No OCR text, query text, plan raw strings, or frame identifiers are sent.
 The policy exposes search intent; routing the Rewind UI through that policy is
 the follow-up in BasedHardware/omi #13465.
+
+## Rollout dependency: vectorless row sync
+
+Before enabling this foundation in a released bundle, ensure screen-activity
+sync supports vectorless rows. `ScreenActivitySyncService.syncRowsSQL` (legacy)
+requires `embedding IS NOT NULL`, so new free frames will not sync on that path.
+The lossless selector supports text-only rows after its 15-minute embedding grace.
+Stable defaults to legacy unless its rollout flag is enabled; Beta/non-production
+normally use lossless. This foundation leaves both row-sync paths unchanged per
+#13465; resolving the legacy dependency belongs with the follow-up before rollout.
+Rewind UI search wiring is also required before the user-facing move is complete.
 
 ## Storage and hybrid search
 

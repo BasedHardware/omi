@@ -7,11 +7,12 @@ actor LocalEmbeddingIndexer {
   static let shared = LocalEmbeddingIndexer()
 
   private var isBackfillRunning = false
-  private var runtime: LocalEmbeddingRuntime = .makeDefault()
+  private var runtimeOverride: LocalEmbeddingRuntime?
+  private var runtime: LocalEmbeddingRuntime { runtimeOverride ?? .makeDefault() }
   private static let detachedWork = DetachedEmbeddingWork()
 
-  func setRuntimeForTesting(_ runtime: LocalEmbeddingRuntime) {
-    self.runtime = runtime
+  func setRuntimeForTesting(_ runtime: LocalEmbeddingRuntime?) {
+    self.runtimeOverride = runtime
   }
 
   func drainForTesting() async {
@@ -66,6 +67,29 @@ actor LocalEmbeddingIndexer {
       await work()
     }
     detachedWork.add(id, task)
+  }
+
+  func indexScreenshot(
+    id: Int64, ocrText: String, appName: String, windowTitle: String?,
+    owner: RewindCaptureOwnerSnapshot, runtime: LocalEmbeddingRuntime,
+    engine: any LocalEmbeddingService
+  ) async {
+    guard owner.isCurrent() else { return }
+    let text = OCREmbeddingService.formatForEmbedding(ocrText: ocrText, appName: appName, windowTitle: windowTitle)
+    do {
+      let store = try await RewindDatabase.shared.localEmbeddingStore(owner: owner)
+      let authorization = LocalMutationAuthorization { owner.isCurrent() }
+      let pending = try store.filterNeedingEmbedding(
+        items: [(id, text)], sourceKind: .screenshot, modelID: engine.modelID)
+      guard !pending.isEmpty,
+        let vector = await runtime.embed([text], task: .document, using: engine)?.first
+      else { return }
+      try await store.write(
+        sourceKind: .screenshot, sourceId: id, modelID: engine.modelID, text: text,
+        vector: vector, dimension: engine.dimension, authorization: authorization)
+    } catch {
+      log("LocalEmbeddingIndexer: screenshot indexing skipped")
+    }
   }
 
   func indexFinalizedSession(sessionId: Int64, owner: RewindCaptureOwnerSnapshot? = nil) async {

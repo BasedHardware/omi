@@ -37,6 +37,39 @@ final class ScreenEmbeddingPolicyTests: XCTestCase {
     }
   }
 
+  func testRouteTelemetrySurvivesTheSharedDiagnosticsEnvelope() throws {
+    let decisions = [
+      ScreenEmbeddingPolicy(
+        plan: .basic, status: .active, localRoute: .engine(HashEmbeddingEngine()), killSwitches: .enabled),
+      ScreenEmbeddingPolicy(plan: nil, status: nil, localRoute: .none, killSwitches: .enabled),
+      ScreenEmbeddingPolicy(plan: .operator, status: .active, localRoute: .none, killSwitches: .enabled),
+      ScreenEmbeddingPolicy(
+        plan: .unknown("synthetic-unknown-plan"), status: nil, localRoute: .none,
+        killSwitches: LocalEmbeddingKillSwitches(isDisabled: true, forcedEngineRaw: nil)),
+    ]
+    let diagnostics = DesktopDiagnosticsManager.shared
+    for decision in decisions {
+      let before = diagnostics.currentSnapshotsForSentry().filter {
+        $0["route_event"] as? String == "screen_embedding_route"
+      }.count
+      decision.recordRoute()
+      let events = diagnostics.currentSnapshotsForSentry().filter {
+        $0["route_event"] as? String == "screen_embedding_route"
+      }
+      XCTAssertEqual(events.count, before + 1)
+      let event = try XCTUnwrap(events.last)
+      XCTAssertEqual(event["event"] as? String, "fallback_triggered")
+      XCTAssertEqual(event["plan_class"] as? String, decision.planClass.rawValue)
+      XCTAssertEqual(
+        event["route"] as? String, decision.reason == .hardKill ? "disabled" : decision.searchRoute.rawValue)
+      XCTAssertEqual(event["route_reason"] as? String, decision.reason.rawValue)
+      XCTAssertEqual(event["reason"] as? String, decision.reason == .hardKill ? "dispatch_disabled" : "policy")
+      XCTAssertFalse(event.values.contains { ($0 as? String) == "synthetic-unknown-plan" })
+      XCTAssertNil(event["ocr_text"])
+      XCTAssertNil(event["query"])
+    }
+  }
+
   func testCachedEntitlementAndDefaultLadder() throws {
     let name = "screen-embedding-policy-\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: name))

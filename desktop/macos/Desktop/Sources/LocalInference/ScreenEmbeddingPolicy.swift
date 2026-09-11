@@ -63,9 +63,10 @@ struct ScreenEmbeddingPolicy: Sendable, Equatable {
   func recordRoute() {
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "local_embeddings", from: "gemini", to: searchRoute.rawValue,
-      reason: reason.rawValue, outcome: searchRoute == .ftsOnly ? .degraded : .recovered,
+      reason: reason == .hardKill ? "dispatch_disabled" : "policy",
+      outcome: searchRoute == .ftsOnly ? .degraded : .recovered,
       extra: [
-        "event": "screen_embedding_route", "plan_class": planClass.rawValue,
+        "route_event": "screen_embedding_route", "plan_class": planClass.rawValue,
         "route": reason == .hardKill ? "disabled" : searchRoute.rawValue,
         "route_reason": reason.rawValue,
       ])
