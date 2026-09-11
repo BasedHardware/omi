@@ -137,8 +137,8 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
     XCTAssertTrue(
       AppState.isScreenCaptureExemptFromPaywall,
-      "screenshot interpretation now runs against the user's own server under Local "
-        + "(vision-subagent delegation), so it must not be paywalled")
+      "screenshot interpretation now runs against the user's own server under Local, "
+        + "so it must not be paywalled")
   }
 
   /// Regression: every other provider stays on the general paywall check:

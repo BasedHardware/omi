@@ -2566,13 +2566,6 @@ actor AgentRuntimeProcess {
       env["OMI_PROVIDER"] = "omi-local"
       env["OMI_LOCAL_BASE_URL"] = localBaseURL
       env["OMI_LOCAL_MODEL_ID"] = localModelID
-      // Optional vision subagent: a second model on the same local server the
-      // main model can delegate screenshot interpretation to. Omitted
-      // entirely when unset so the bridge treats "absent" as "feature off".
-      let localVisionModelID = defaults.string(forKey: AIProvider.localVisionModelIDKey) ?? ""
-      if !localVisionModelID.isEmpty {
-        env["OMI_LOCAL_VISION_MODEL_ID"] = localVisionModelID
-      }
       // Context budget: scales retained journal turns and per-source
       // payload caps in the kernel context snapshot on the first turn of a
       // chat. Omitted entirely at the 100% default, so the env var is
@@ -2582,7 +2575,7 @@ actor AgentRuntimeProcess {
         env["OMI_CONTEXT_BUDGET_PERCENT"] = String(contextBudgetPercent)
       }
       log(
-        "AgentRuntimeProcess: piMono provider=omi-local baseURL=\(localBaseURL) model=\(localModelID) visionModel=\(localVisionModelID.isEmpty ? "none" : localVisionModelID) contextBudget=\(contextBudgetPercent ?? 100)%"
+        "AgentRuntimeProcess: piMono provider=omi-local baseURL=\(localBaseURL) model=\(localModelID) contextBudget=\(contextBudgetPercent ?? 100)%"
       )
     } else if preferredAdapterId == .piMono {
       log("AgentRuntimeProcess: piMono provider=omi")

@@ -90,7 +90,6 @@ import {
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import { isProductionAdapterId, type PromptBlock, type RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
-import { syncVisionSubagentFile } from "./vision-subagent.js";
 import {
   AcpError,
   AcpRuntimeAdapter,
@@ -1730,10 +1729,6 @@ async function main(): Promise<void> {
     // to a user-configured endpoint and never use Omi credentials.
     if (provider === "omi" && process.env.OMI_MODEL_CREDENTIALS !== "on_demand") return false;
     piMonoClasses ??= await import("./adapters/pi-mono.js");
-    // Optional vision subagent (local mode only), see syncVisionSubagentFile.
-    // Regenerated on every bridge start so it always reflects the current
-    // Settings choice; removed entirely when unset.
-    syncVisionSubagentFile(process.env.OMI_LOCAL_VISION_MODEL_ID, piMonoClasses.resolveBundledExtension(), logErr);
     if (!registry.has("pi-mono")) {
       registry.register("pi-mono", () => {
         const harness = new piMonoClasses!.PiMonoAdapter({
