@@ -69,7 +69,10 @@ class ChatMarkdownRenderer extends Renderer {
   }
 }
 
-export function ChatMessageContent({text, style}: ChatMessageContentProps) {
+function MarkdownChatMessageContent({
+  text,
+  style,
+}: Pick<ChatMessageContentProps, 'text' | 'style'>) {
   const renderer = useMemo(
     () => new ChatMarkdownRenderer(StyleSheet.flatten(style) || {}),
     [style],
@@ -110,4 +113,19 @@ export function ChatMessageContent({text, style}: ChatMessageContentProps) {
   }, [style]);
   const elements = useMarkdown(text, {renderer, styles});
   return <View>{elements}</View>;
+}
+
+export function ChatMessageContent({
+  text,
+  style,
+  streaming,
+}: ChatMessageContentProps) {
+  if (streaming) {
+    return (
+      <Text selectable style={style}>
+        {text}
+      </Text>
+    );
+  }
+  return <MarkdownChatMessageContent text={text} style={style} />;
 }

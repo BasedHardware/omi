@@ -3,7 +3,6 @@ import {resolve} from 'node:path';
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {
-  FlatList,
   NativeModules,
   Platform,
   ScrollView,
@@ -661,8 +660,8 @@ test('Chat has its own selected destination, keeps one omnibar, and closes to th
 });
 
 test('only an explicit Ask submission resumes following after reading earlier messages', () => {
-  const scrollToOffset = jest
-    .spyOn(FlatList.prototype, 'scrollToOffset')
+  const scrollToEnd = jest
+    .spyOn(ScrollView.prototype, 'scrollToEnd')
     .mockImplementation(() => undefined);
   const onSend = jest.fn();
   const onLoadOlderChat = jest.fn();
@@ -687,7 +686,10 @@ test('only an explicit Ask submission resumes following after reading earlier me
         .find(node => node.props.accessibilityLabel === 'Chat')
         .props.onPress(),
     );
-    const list = () => renderer.root.findByType(FlatList);
+    const list = () =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Chat with Omi')
+        .findByType(ScrollView);
     const scrollUp = () =>
       list().props.onScroll({
         nativeEvent: {
@@ -701,7 +703,7 @@ test('only an explicit Ask submission resumes following after reading earlier me
       scrollUp();
       list().props.onScrollEndDrag();
     });
-    scrollToOffset.mockClear();
+    scrollToEnd.mockClear();
     const props = renderer.root.findByType(DesktopApp)
       .props as React.ComponentProps<typeof DesktopApp>;
     act(() =>
@@ -722,52 +724,39 @@ test('only an explicit Ask submission resumes following after reading earlier me
       ),
     );
     act(() => list().props.onContentSizeChange(600, 2200));
-    expect(scrollToOffset).not.toHaveBeenCalled();
+    expect(scrollToEnd).not.toHaveBeenCalled();
     act(() =>
       renderer.root
         .find(node => node.props.accessibilityLabel === 'Load earlier messages')
         .props.onPress(),
     );
     expect(onLoadOlderChat).toHaveBeenCalledTimes(1);
-    expect(list().props.maintainVisibleContentPosition).toEqual({
-      minIndexForVisible: 1,
-    });
     act(() => list().props.onContentSizeChange(600, 2400));
-    expect(scrollToOffset).not.toHaveBeenCalled();
+    expect(scrollToEnd).not.toHaveBeenCalled();
     act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
     expect(onSend).toHaveBeenCalledTimes(1);
-    expect(list().props.maintainVisibleContentPosition).toBeUndefined();
-    expect(scrollToOffset).toHaveBeenCalledWith({
-      offset: 2400,
-      animated: false,
-    });
-    scrollToOffset.mockClear();
+    expect(scrollToEnd).toHaveBeenCalledWith({animated: false});
+    scrollToEnd.mockClear();
     act(scrollUp);
     act(() => list().props.onContentSizeChange(600, 2600));
-    expect(scrollToOffset).toHaveBeenLastCalledWith({
-      offset: 2600,
-      animated: false,
-    });
+    expect(scrollToEnd).toHaveBeenLastCalledWith({animated: false});
     act(scrollUp);
     act(() => list().props.onContentSizeChange(600, 3200));
-    expect(scrollToOffset).toHaveBeenLastCalledWith({
-      offset: 3200,
-      animated: false,
-    });
+    expect(scrollToEnd).toHaveBeenLastCalledWith({animated: false});
     act(() => list().props.onLayout({nativeEvent: {layout: {height: 400}}}));
-    expect(scrollToOffset).toHaveBeenCalledTimes(3);
+    expect(scrollToEnd).toHaveBeenCalledTimes(3);
     act(() => {
       list().props.onScrollBeginDrag();
       scrollUp();
       list().props.onScrollEndDrag();
     });
-    scrollToOffset.mockClear();
+    scrollToEnd.mockClear();
     act(() => list().props.onContentSizeChange(600, 2800));
-    expect(scrollToOffset).not.toHaveBeenCalled();
+    expect(scrollToEnd).not.toHaveBeenCalled();
     act(() => renderer.unmount());
     renderers.splice(renderers.indexOf(renderer), 1);
   } finally {
-    scrollToOffset.mockRestore();
+    scrollToEnd.mockRestore();
   }
 });
 
@@ -1179,6 +1168,57 @@ test('chat transport errors appear only in the lower Chat view', () => {
   expect(renderedText(renderer)).not.toContain(
     'Chat is temporarily unavailable.',
   );
+});
+
+test('chat empty copy stays truthful while history loads or fails', () => {
+  const renderer = renderDesktop({
+    loadingHistory: true,
+    messages: [],
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Chat')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('Loading conversation…');
+  expect(renderedText(renderer)).not.toContain('What’s on your mind?');
+  const props = renderer.root.findByType(DesktopApp)
+    .props as React.ComponentProps<typeof DesktopApp>;
+  act(() =>
+    renderer.update(
+      <DesktopApp
+        {...props}
+        loadingHistory={false}
+        chatError="Chat is temporarily unavailable."
+        messages={[]}
+      />,
+    ),
+  );
+  expect(renderedText(renderer)).toContain('Chat is temporarily unavailable.');
+  expect(renderedText(renderer)).not.toContain('What’s on your mind?');
+  act(() =>
+    renderer.update(
+      <DesktopApp
+        {...props}
+        loadingHistory={false}
+        chatError={null}
+        messages={[]}
+      />,
+    ),
+  );
+  expect(renderedText(renderer)).toContain('What’s on your mind?');
+});
+
+test('desktop chat, library and recall lists are ScrollViews', () => {
+  expect(
+    readFileSync(resolve(__dirname, 'DesktopChat.tsx'), 'utf8'),
+  ).not.toContain('FlatList');
+  expect(
+    readFileSync(resolve(__dirname, 'DesktopPages.tsx'), 'utf8'),
+  ).not.toContain('FlatList');
+  expect(
+    readFileSync(resolve(__dirname, 'DesktopRewind.tsx'), 'utf8'),
+  ).not.toContain('FlatList');
 });
 
 test('Settings opens the shipping multi-pane IA including Advanced', async () => {
@@ -1905,19 +1945,12 @@ test('web wheel and scrollbar events pause following through the actual scroll n
   const remove = jest.spyOn(node, 'removeEventListener');
   const documentRemove = jest.spyOn(node.ownerDocument, 'removeEventListener');
   const getNode = jest
-    .spyOn(FlatList.prototype, 'getScrollableNode')
+    .spyOn(ScrollView.prototype, 'getScrollableNode')
     .mockReturnValue(node);
   let tree!: ReactTestRenderer.ReactTestRenderer;
-  const anchorAtScroll: unknown[] = [];
   const scroll = jest
-    .spyOn(FlatList.prototype, 'scrollToOffset')
-    .mockImplementation(() => {
-      if (tree) {
-        anchorAtScroll.push(
-          tree.root.findByType(FlatList).props.maintainVisibleContentPosition,
-        );
-      }
-    });
+    .spyOn(ScrollView.prototype, 'scrollToEnd')
+    .mockImplementation(() => undefined);
   const props = {
     submission: 0,
     messages: [],
@@ -1932,7 +1965,7 @@ test('web wheel and scrollbar events pause following through the actual scroll n
     act(() => {
       tree = ReactTestRenderer.create(<DesktopChat {...props} />);
     });
-    const list = () => tree.root.findByType(FlatList);
+    const list = () => tree.root.findByType(ScrollView);
     const move = (y: number) =>
       list().props.onScroll({
         nativeEvent: {
@@ -1949,10 +1982,8 @@ test('web wheel and scrollbar events pause following through the actual scroll n
     });
     act(() => list().props.onContentSizeChange(600, 2200));
     expect(scroll).not.toHaveBeenCalled();
-    anchorAtScroll.length = 0;
     act(() => tree.update(<DesktopChat {...props} submission={1} />));
     expect(scroll).toHaveBeenCalled();
-    expect(anchorAtScroll).toEqual([undefined]);
     scroll.mockClear();
     act(() => {
       node.dispatchEvent(new Event('pointerdown'));

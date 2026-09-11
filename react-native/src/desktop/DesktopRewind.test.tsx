@@ -2,7 +2,6 @@ import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {
   AppState,
-  FlatList,
   Image,
   NativeModules,
   Switch,
@@ -80,6 +79,21 @@ function rows(view: ReactTestRenderer.ReactTestRenderer) {
     .map(node => node.props.children)
     .filter(value => typeof value === 'string' && value.startsWith('Window '));
 }
+function captureLabels(view: ReactTestRenderer.ReactTestRenderer) {
+  return [
+    ...new Set(
+      view.root
+        .findAll(
+          node =>
+            typeof node.props.accessibilityLabel === 'string' &&
+            (node.props.accessibilityLabel as string).startsWith(
+              'View capture ',
+            ),
+        )
+        .map(node => node.props.accessibilityLabel as string),
+    ),
+  ];
+}
 const firstPage = () =>
   Array.from({length: 50}, (_, index) => ({
     ...frame(`captured:${index}`),
@@ -119,8 +133,7 @@ test('merges native history, advances the source cursor and opens the stored fra
   await act(async () =>
     first.resolve({frames: firstPage(), nextCursor: 'page-two'}),
   );
-  expect(view.root.findByType(FlatList).props.data).toHaveLength(50);
-  expect(rows(view).length).toBeLessThan(50);
+  expect(captureLabels(view)).toHaveLength(50);
   await press(view, 'Load more history');
   expect(mockRewind.listFrames).toHaveBeenCalledWith({
     source: 'captured',
@@ -128,12 +141,10 @@ test('merges native history, advances the source cursor and opens the stored fra
     cursor: 'page-two',
     limit: 50,
   });
-  expect(
-    view.root
-      .findByType(FlatList)
-      .props.data.slice(-2)
-      .map((item: ReturnType<typeof frame>) => item.windowTitle),
-  ).toEqual(['Window captured:two', 'Window shipping:old']);
+  expect(rows(view).slice(-2)).toEqual([
+    'Window captured:two',
+    'Window shipping:old',
+  ]);
   await press(view, 'View capture captured:0');
   expect(mockRewind.readFrame).toHaveBeenCalledWith('captured:0');
   expect(view.root.findByType(Image).props.source.uri).toBe(
@@ -398,18 +409,14 @@ test('automatic refresh never replaces older pages the user has loaded', async (
   );
   const view = await render({captureRevision: 0});
   await press(view, 'Load more history');
-  expect(view.root.findByType(FlatList).props.data).toEqual(
-    expect.arrayContaining([frame('captured:older')]),
-  );
+  expect(captureLabels(view)).toContain('View capture captured:older');
   mockRewind.listFrames.mockClear();
   await act(async () => view.update(<DesktopRewind captureRevision={1} />));
   await act(async () => {
     jest.advanceTimersByTime(30000);
   });
   expect(mockRewind.listFrames).not.toHaveBeenCalled();
-  expect(view.root.findByType(FlatList).props.data).toEqual(
-    expect.arrayContaining([frame('captured:older')]),
-  );
+  expect(captureLabels(view)).toContain('View capture captured:older');
 });
 
 test('Settings Screen Capture switch operates the shared producer instead of changing a staged preference', async () => {

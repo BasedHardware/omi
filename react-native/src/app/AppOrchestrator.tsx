@@ -109,6 +109,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [olderChatCursor, setOlderChatCursor] = useState<string | null>(null);
   const [hasOlderChat, setHasOlderChat] = useState(false);
   const [loadingOlderChat, setLoadingOlderChat] = useState(false);
+  const [chatHistorySettled, setChatHistorySettled] = useState(false);
   const [chatBusy, setChatBusy] = useState(false);
   const [activeGenerationId, setActiveGenerationId] = useState<string | null>(
     null,
@@ -235,6 +236,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       setHasOlderChat(false);
       setChatBusy(false);
       setLoadingOlderChat(false);
+      setChatHistorySettled(false);
       setActiveGenerationId(null);
       stableChatMessageIds.clear();
       animatedChatMessageIds.clear();
@@ -244,6 +246,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     }
     const backend = omiBackend;
     if (backend === undefined || backend === null) {
+      setChatHistorySettled(true);
       return () => undefined;
     }
     // Capture the session this load belongs to. send() bumps mutation so an
@@ -265,6 +268,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         setOlderChatCursor(page.olderCursor);
         setHasOlderChat(page.hasOlder);
         setChatError(null);
+        setChatHistorySettled(true);
       })
       .catch(error => {
         if (
@@ -274,6 +278,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           onboardingRequired === false
         ) {
           setChatError(chatHistoryErrorCopy(error));
+          setChatHistorySettled(true);
           // A 401/unconfigured history load can mean the cloud session died;
           // re-probe it instead of keeping a ready shell on dead credentials.
           if (nativeSessionRequired && chatSessionLost(error)) {
@@ -478,6 +483,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     if (backend === undefined || backend === null || text === '' || chatBusy) {
       return;
     }
+    if (nativeSessionRequired && onboardingRequired !== false) {
+      return;
+    }
     const session = chatSessionEpochRef.current;
     chatMutationSeqRef.current += 1;
     let admitted = false;
@@ -617,7 +625,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       backend === undefined ||
       backend === null ||
       cursor === null ||
-      loadingOlderChat
+      loadingOlderChat ||
+      (nativeSessionRequired && onboardingRequired !== false)
     ) {
       return;
     }
@@ -947,6 +956,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           draft={draft}
           hasOlderChat={hasOlderChat}
           loadingOlderChat={loadingOlderChat}
+          loadingHistory={!chatHistorySettled}
           messages={messages}
           onDraftChange={setDraft}
           onLoadOlderChat={() => {
@@ -980,6 +990,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             setHasOlderChat(false);
             setChatBusy(false);
             setLoadingOlderChat(false);
+            setChatHistorySettled(false);
             setActiveGenerationId(null);
             stableChatMessageIds.clear();
             animatedChatMessageIds.clear();

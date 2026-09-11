@@ -1,5 +1,5 @@
 import React, {useCallback, useLayoutEffect, useRef, useState} from 'react';
-import {FlatList, Platform, StyleSheet, Text, View} from 'react-native';
+import {Platform, ScrollView, StyleSheet, Text, View} from 'react-native';
 import X from 'lucide-react-native/icons/x';
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
@@ -15,6 +15,7 @@ type Props = {
   error: string | null;
   hasOlder: boolean;
   loadingOlder: boolean;
+  loadingHistory?: boolean;
   onLoadOlder: () => void;
   onClose: () => void;
 };
@@ -25,10 +26,11 @@ export function DesktopChat({
   error,
   hasOlder,
   loadingOlder,
+  loadingHistory = false,
   onLoadOlder,
   onClose,
 }: Props) {
-  const list = useRef<FlatList<ChatMessage>>(null);
+  const list = useRef<ScrollView>(null);
   const follow = useRef(true);
   const userScrolling = useRef(false);
   const pointerScrolling = useRef(false);
@@ -36,10 +38,7 @@ export function DesktopChat({
   const contentHeight = useRef(0);
   const scrollToBottom = useCallback(() => {
     if (follow.current) {
-      list.current?.scrollToOffset({
-        offset: contentHeight.current,
-        animated: false,
-      });
+      list.current?.scrollToEnd({animated: false});
     }
   }, []);
   const stopFollowing = useCallback(() => {
@@ -114,18 +113,21 @@ export function DesktopChat({
   }, [following, submission, scrollToBottom]);
   const fade = useScrollFade();
   const reduceMotion = useReduceMotion();
-  const renderItem = useCallback(
-    ({item}: {item: ChatMessage}) => (
-      <ChatMessageRow
-        message={item}
-        compact={false}
-        desktop
-        animate={false}
-        reduceMotion={reduceMotion}
-      />
-    ),
-    [reduceMotion],
-  );
+  const empty =
+    messages.length === 0 ? (
+      loadingHistory ? (
+        <View style={styles.empty}>
+          <Text style={styles.muted}>Loading conversation…</Text>
+        </View>
+      ) : error ? null : (
+        <View style={styles.empty}>
+          <Text style={styles.title}>What’s on your mind?</Text>
+          <Text style={styles.muted}>
+            Ask about a conversation, a task, or something you want to remember.
+          </Text>
+        </View>
+      )
+    ) : null;
   return (
     <View style={styles.root} accessibilityLabel="Chat with Omi">
       <View style={styles.header}>
@@ -138,14 +140,8 @@ export function DesktopChat({
         </FocusPressable>
       </View>
       <ScrollFade visible style={styles.history}>
-        <FlatList
-          maintainVisibleContentPosition={
-            following ? undefined : {minIndexForVisible: 1}
-          }
+        <ScrollView
           ref={list}
-          data={messages}
-          keyExtractor={item => item.id}
-          renderItem={renderItem}
           contentContainerStyle={styles.messages}
           onLayout={event => {
             fade.onLayout(event);
@@ -181,40 +177,38 @@ export function DesktopChat({
             fade.onContentSizeChange(width, height);
             contentHeight.current = height;
             scrollToBottom();
-          }}
-          ListHeaderComponent={
-            hasOlder ? (
-              <FocusPressable
-                accessibilityRole="button"
-                accessibilityLabel="Load earlier messages"
-                disabled={loadingOlder}
-                onPress={() => {
-                  userScrolling.current = false;
-                  stopFollowing();
-                  onLoadOlder();
-                }}
-                style={styles.earlier}>
-                <Text style={styles.muted}>
-                  {loadingOlder ? 'Loading earlier…' : 'Load earlier messages'}
-                </Text>
-              </FocusPressable>
-            ) : null
-          }
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.title}>What’s on your mind?</Text>
+          }}>
+          {hasOlder ? (
+            <FocusPressable
+              accessibilityRole="button"
+              accessibilityLabel="Load earlier messages"
+              disabled={loadingOlder}
+              onPress={() => {
+                userScrolling.current = false;
+                stopFollowing();
+                onLoadOlder();
+              }}
+              style={styles.earlier}>
               <Text style={styles.muted}>
-                Ask about a conversation, a task, or something you want to
-                remember.
+                {loadingOlder ? 'Loading earlier…' : 'Load earlier messages'}
               </Text>
-            </View>
-          }
-          ListFooterComponent={
-            busy && !messages.some(isStreamingAssistant) ? (
-              <ChatThinking reduceMotion={reduceMotion} desktop />
-            ) : null
-          }
-        />
+            </FocusPressable>
+          ) : null}
+          {empty}
+          {messages.map(item => (
+            <ChatMessageRow
+              key={item.id}
+              message={item}
+              compact={false}
+              desktop
+              animate={false}
+              reduceMotion={reduceMotion}
+            />
+          ))}
+          {busy && !messages.some(isStreamingAssistant) ? (
+            <ChatThinking reduceMotion={reduceMotion} desktop />
+          ) : null}
+        </ScrollView>
       </ScrollFade>
       {error ? (
         <Text accessibilityRole="alert" style={styles.error}>

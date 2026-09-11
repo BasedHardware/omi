@@ -72,6 +72,7 @@ type Props = TaskMutationProps & {
   messages: ChatMessage[];
   hasOlderChat: boolean;
   loadingOlderChat: boolean;
+  loadingHistory?: boolean;
   chatBusy: boolean;
   chatError: string | null;
   onRefresh: () => void;
@@ -97,6 +98,7 @@ export function DesktopApp({
   draft,
   hasOlderChat,
   loadingOlderChat,
+  loadingHistory = false,
   messages,
   onDraftChange,
   onLoadOlderChat,
@@ -262,6 +264,7 @@ export function DesktopApp({
             error={chatNotice}
             hasOlder={hasOlderChat}
             loadingOlder={loadingOlderChat}
+            loadingHistory={loadingHistory}
             onLoadOlder={onLoadOlderChat}
           />
         ) : route === 'Conversations' ? (
