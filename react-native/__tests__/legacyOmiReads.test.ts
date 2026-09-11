@@ -761,6 +761,60 @@ test('old tasks name GET sort_order and indent_level integer strings', async () 
   ).rejects.toThrow('Omi order is malformed');
 });
 
+test('old tasks name GET negative indent_level instead of hiding neighbors', async () => {
+  const {api} = backend({
+    action_items: [
+      {
+        id: 'negative-indent',
+        description: 'Call Alex',
+        completed: false,
+        indent_level: -1,
+      },
+      {
+        id: 'named',
+        description: 'Write recap',
+        completed: false,
+      },
+    ],
+    has_more: false,
+  });
+  const result = await loadTasks(api);
+  expect(result.items).toEqual([
+    expect.objectContaining({
+      id: 'negative-indent',
+      title: 'Call Alex',
+      indentLevel: -1,
+    }),
+    expect.objectContaining({id: 'named', title: 'Write recap'}),
+  ]);
+  const namedStrings = await loadTasks(
+    backend({
+      action_items: [
+        {
+          id: 'negative-string',
+          description: 'Call Alex',
+          completed: false,
+          indent_level: '-1',
+        },
+        {
+          id: 'named',
+          description: 'Write recap',
+          completed: false,
+        },
+      ],
+      has_more: false,
+    }).api,
+  );
+  expect(namedStrings.items).toEqual([
+    expect.objectContaining({
+      id: 'negative-string',
+      title: 'Call Alex',
+      indentLevel: -1,
+    }),
+    expect.objectContaining({id: 'named', title: 'Write recap'}),
+  ]);
+});
+
 test('old tasks name omitted GET has_more as Flutter false instead of hiding neighbors', async () => {
   const {api} = backend({
     action_items: [

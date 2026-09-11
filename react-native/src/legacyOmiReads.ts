@@ -53,7 +53,7 @@ function milliseconds(value: unknown): number | null {
   const parsed = date(value);
   return parsed === null ? null : Date.parse(parsed);
 }
-function integer(value: unknown, nonnegative = false): number {
+function integer(value: unknown): number {
   if (value === undefined || value === null) return 0;
   let parsed: number;
   if (typeof value === 'string') {
@@ -66,7 +66,7 @@ function integer(value: unknown, nonnegative = false): number {
   } else {
     throw new Error('Omi order is malformed');
   }
-  if (!Number.isSafeInteger(parsed) || (nonnegative && parsed < 0)) {
+  if (!Number.isSafeInteger(parsed)) {
     throw new Error('Omi order is malformed');
   }
   return parsed;
@@ -342,7 +342,7 @@ export async function loadOmiTasks(
         return JSON.stringify(ref);
       }),
       sortOrder: integer(row.sort_order),
-      indentLevel: integer(row.indent_level, true),
+      indentLevel: integer(row.indent_level),
       createdAt: milliseconds(row.created_at),
       updatedAt: milliseconds(row.updated_at),
       revision: null,
