@@ -28,6 +28,17 @@ final class LocalEmbeddingBenchmarkTests: XCTestCase {
     let paraphraseHybrid = try XCTUnwrap(
       report.metrics.first { $0.slice == "paraphrase" && $0.mode == "hybrid" })
     XCTAssertGreaterThanOrEqual(paraphraseHybrid.recallAt10, paraphraseFTS.recallAt10)
+    let dateHits = try await LocalHybridSearch(
+      store: store, runtime: runtime, authorization: .unrestricted
+    ).search(
+      query: "Northwind", engine: engine,
+      startDate: day.addingTimeInterval(-3600), endDate: day.addingTimeInterval(3600), limit: 10)
+    XCTAssertTrue(dateHits.contains { $0.sourceId == 1 })
+    XCTAssertFalse(dateHits.contains { $0.sourceId == 21 })
+    let unbounded = try await LocalHybridSearch(
+      store: store, runtime: runtime, authorization: .unrestricted
+    ).search(query: "Northwind", engine: engine, limit: 10)
+    XCTAssertTrue(unbounded.contains { $0.sourceId == 21 })
     let url = directory.appendingPathComponent("report.json")
     try LocalEmbeddingBenchmark.write(report, to: url)
     let decoded = try JSONDecoder().decode(LocalEmbeddingBenchmark.Report.self, from: Data(contentsOf: url))
