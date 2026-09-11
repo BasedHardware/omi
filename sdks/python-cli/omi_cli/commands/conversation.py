@@ -93,6 +93,82 @@ def get_conversation(
     ctx.renderer.emit(result, title="conversation")
 
 
+def _srt_timestamp(seconds: float) -> str:
+    total_ms = max(0, int(round(seconds * 1000)))
+    hours, rem = divmod(total_ms, 3_600_000)
+    minutes, rem = divmod(rem, 60_000)
+    secs, millis = divmod(rem, 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+
+def _render_srt(segments: list) -> tuple[str, int]:
+    """Render transcript_segments as SRT text; returns (srt, skipped_count).
+
+    Segments with missing/invalid timing or empty text are skipped and counted,
+    never silently included with fabricated timestamps.
+    """
+    blocks: list[str] = []
+    skipped = 0
+    for seg in segments:
+        if not isinstance(seg, dict):
+            skipped += 1
+            continue
+        start = seg.get("start")
+        end = seg.get("end")
+        text = str(seg.get("text") or "").strip()
+        if (
+            isinstance(start, bool)
+            or isinstance(end, bool)
+            or not isinstance(start, (int, float))
+            or not isinstance(end, (int, float))
+            or end < start
+            or not text
+        ):
+            skipped += 1
+            continue
+        blocks.append(f"{len(blocks) + 1}\n{_srt_timestamp(start)} --> {_srt_timestamp(end)}\n{text}")
+    if not blocks:
+        return "", skipped
+    return "\n\n".join(blocks) + "\n", skipped
+
+
+@app.command("export", help="Export a conversation transcript as an SRT subtitle file.")
+def export_conversation(
+    typer_ctx: typer.Context,
+    conversation_id: str = typer.Argument(..., help="Conversation ID."),
+    output: Path = typer.Option(..., "--output", "-o", help="Output .srt file path."),
+    force: bool = typer.Option(False, "--force", help="Overwrite the output file if it exists."),
+) -> None:
+    ctx = _ctx(typer_ctx)
+    if output.exists() and not force:
+        raise UsageError(
+            message=f"Output file already exists: {output}",
+            detail="Use --force to overwrite the existing file.",
+        )
+    with ctx.make_client() as client:
+        result = client.get(
+            f"/v1/dev/user/conversations/{conversation_id}",
+            params={"include_transcript": True},
+        )
+    segments = result.get("transcript_segments") or []
+    srt_text, skipped = _render_srt(segments)
+    if not srt_text:
+        raise UsageError(
+            message=f"Conversation {conversation_id} has no valid transcript segments",
+            detail="Fetch the conversation with --include-transcript and check transcript_segments.",
+        )
+    output.write_text(srt_text, encoding="utf-8")
+    exported = len(srt_text.rstrip("\n").split("\n\n"))
+    suffix = f" ({skipped} invalid segment(s) skipped)" if skipped else ""
+    ctx.renderer.success(
+        f"Exported [bold]{exported}[/bold] segment(s) to [bold]{output}[/bold]{suffix}"
+    )
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit(
+            {"conversation_id": conversation_id, "output": str(output), "segments": exported, "skipped": skipped}
+        )
+
+
 @app.command("create", help="Create a conversation from raw text.")
 def create_conversation(
     typer_ctx: typer.Context,
