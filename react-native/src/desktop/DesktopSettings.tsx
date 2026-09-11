@@ -318,6 +318,9 @@ export function DesktopSettings({
   const [dailySummarySchedule, setDailySummarySchedule] = useState<
     ReturnType<typeof dailySummaryScheduleCopy>
   >([]);
+  const [dailySummaryScheduleError, setDailySummaryScheduleError] = useState<
+    string | null
+  >(null);
   const [notificationFrequency, setNotificationFrequency] = useState<
     ReturnType<typeof mentorNotificationFrequencyCopy>
   >([]);
@@ -379,6 +382,7 @@ export function DesktopSettings({
     let nextDailySummariesError: string | null = null;
     let nextDailySummarySchedule: ReturnType<typeof dailySummaryScheduleCopy> =
       [];
+    let nextDailySummaryScheduleError: string | null = null;
     let nextNotificationFrequency: ReturnType<
       typeof mentorNotificationFrequencyCopy
     > = [];
@@ -449,7 +453,13 @@ export function DesktopSettings({
       );
       const dailySummaryScheduleTask = loadOmiDailySummarySchedule(
         backend,
-      ).catch(() => null);
+      ).then(
+        settings => ({settings, error: null as string | null}),
+        reason => ({
+          settings: null,
+          error: desktopReadErrorCopy(reason),
+        }),
+      );
       const notificationFrequencyTask = loadOmiMentorNotificationSettings(
         backend,
       ).catch(() => null);
@@ -492,9 +502,11 @@ export function DesktopSettings({
       const dailySummariesResult = await dailySummariesTask;
       nextDailySummaries = dailySummaryCopy(dailySummariesResult.rows);
       nextDailySummariesError = dailySummariesResult.error;
+      const dailySummaryScheduleResult = await dailySummaryScheduleTask;
       nextDailySummarySchedule = dailySummaryScheduleCopy(
-        await dailySummaryScheduleTask,
+        dailySummaryScheduleResult.settings,
       );
+      nextDailySummaryScheduleError = dailySummaryScheduleResult.error;
       nextNotificationFrequency = mentorNotificationFrequencyCopy(
         (await notificationFrequencyTask)?.frequency,
       );
@@ -545,6 +557,7 @@ export function DesktopSettings({
     setDailySummaries(nextDailySummaries);
     setDailySummariesError(nextDailySummariesError);
     setDailySummarySchedule(nextDailySummarySchedule);
+    setDailySummaryScheduleError(nextDailySummaryScheduleError);
     setNotificationFrequency(nextNotificationFrequency);
     setAutomaticTranslation(nextAutomaticTranslation);
     setCustomVocabulary(nextCustomVocabulary);
@@ -914,9 +927,13 @@ export function DesktopSettings({
       {notificationFrequency.map((row, index) => (
         <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
       ))}
-      {dailySummarySchedule.map((row, index) => (
-        <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
-      ))}
+      {dailySummaryScheduleError !== null ? (
+        <Row copy={dailySummaryScheduleError} title="Daily summaries" />
+      ) : (
+        dailySummarySchedule.map((row, index) => (
+          <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
+        ))
+      )}
       {dailySummariesError !== null ? (
         <Row copy={dailySummariesError} title="Daily summary" />
       ) : (

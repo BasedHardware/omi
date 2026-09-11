@@ -1478,6 +1478,23 @@ test('Settings names GET daily-summary-settings without a picker or Flutter defa
   );
 });
 
+test('Settings names a failed daily-summary-settings GET instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/daily-summary-settings') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Daily summaries');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('Enabled');
+  expect(tree).not.toContain('10:00 PM');
+  expect(tree).not.toContain('Your Day in Review');
+});
+
 test('Settings names GET mentor notification frequency without a purple slider', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
