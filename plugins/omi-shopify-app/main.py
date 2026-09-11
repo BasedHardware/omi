@@ -489,8 +489,9 @@ async def tool_get_analytics(request: Request):
                     for transaction in refund.get("transactions", []):
                         total_refunds += float(transaction.get("amount", 0))
         
-        # Net sales (gross - discounts - refunds)
-        net_sales = gross_sales - total_discounts - total_refunds
+        # Shopify subtotal_price is already after discounts. Do not subtract
+        # total_discounts again or discounts are applied twice.
+        net_sales = gross_sales - total_refunds
         
         # Total collected (what was actually charged - includes tax & shipping)
         total_collected = sum(float(o.get("total_price", 0)) for o in orders)
