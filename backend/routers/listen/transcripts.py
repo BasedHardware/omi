@@ -43,6 +43,8 @@ from utils.translation_cache import ConversationLanguageState, TranscriptSegment
 from utils.translation_coordinator import TranslationCoordinator
 from utils.product_telemetry import emit_product_event
 
+from .registry import is_shared_capture as is_registered_shared_capture
+
 logger = logging.getLogger(__name__)
 
 
@@ -89,6 +91,7 @@ class TranscriptProcessor:
         self.cache = ConversationCache(self._load_conversation)
         self.current_session_segments: Dict[str, bool] = {}
         self.suggested_segments: set[str] = set()
+        self.last_accepted_segments: List[TranscriptSegment] = []
 
         self.speaker_id_allocator = ConversationSpeakerIdAllocator()
         self.language_cache = TranscriptSegmentLanguageCache()
@@ -104,8 +107,14 @@ class TranscriptProcessor:
                 language_state=ConversationLanguageState(host.translation_language or 'en'),
             )
 
-    def _is_shared_capture(self, source: Any, marker: bool = False) -> bool:
-        if marker or bool(getattr(self.host, 'shared_capture', False)):
+    def _is_shared_capture(self, source: Any) -> bool:
+        if bool(getattr(self.host, 'shared_capture', False)):
+            return True
+        state = getattr(self.host, 'state', None)
+        if is_registered_shared_capture(
+            getattr(getattr(self.host, 'request', None), 'uid', ''),
+            getattr(state, 'current_conversation_id', None),
+        ):
             return True
         source_value = source.value if isinstance(source, ConversationSource) else source
         return should_pair_omi_desktop_capture(
@@ -201,44 +210,42 @@ class TranscriptProcessor:
     ) -> Optional[tuple[Conversation, List[TranscriptSegment], List[str]]]:
         updated: List[TranscriptSegment] = []
         removed: List[str] = []
+        self.last_accepted_segments = []
         if segments:
-            deduplicate_overlapping = self._is_shared_capture(
-                conversation.source,
-                conversation.shared_capture,
+            deduplicate_overlapping = self._is_shared_capture(conversation.source)
+            accepted_segments = (
+                TranscriptSegment.deduplicate_overlapping_segments(conversation.transcript_segments, segments)
+                if deduplicate_overlapping
+                else list(segments)
             )
-            if deduplicate_overlapping:
+            self.last_accepted_segments = [segment.model_copy(deep=True) for segment in accepted_segments]
+            if accepted_segments:
                 conversation.transcript_segments, updated, removed = TranscriptSegment.combine_segments(
-                    conversation.transcript_segments,
-                    segments,
-                    deduplicate_overlapping=True,
+                    conversation.transcript_segments, accepted_segments
                 )
-            else:
-                conversation.transcript_segments, updated, removed = TranscriptSegment.combine_segments(
-                    conversation.transcript_segments, segments
+                sort_transcript_segments_in_place(conversation.transcript_segments)
+                speaker = self.host.speakers
+                targets = conversation.transcript_segments if self.host.state.speaker_map_dirty else updated
+                process_speaker_assigned_segments(targets, speaker.segment_assignments, speaker.speaker_to_person)
+                self._apply_speaker_identity_statuses(targets)
+                self.host.state.speaker_map_dirty = False
+                serialised = [segment.model_dump() for segment in conversation.transcript_segments]
+                written = await self.host.persistence.call(
+                    conversations_db.update_conversation_segments,
+                    self.host.request.uid,
+                    conversation.id,
+                    serialised,
+                    started_at=started_at,
+                    data_protection_level=self.cache.protection_level,
+                    # Opt out of the unconditional DELETE_FIELD sentinel so this ~0.6s
+                    # write loop stays cheap when no projection is present. The segment
+                    # transaction still clears a projection that is actually on the
+                    # document (a finalize overlapping capture).
+                    invalidate_client_processing=False,
                 )
-            sort_transcript_segments_in_place(conversation.transcript_segments)
-            speaker = self.host.speakers
-            targets = conversation.transcript_segments if self.host.state.speaker_map_dirty else updated
-            process_speaker_assigned_segments(targets, speaker.segment_assignments, speaker.speaker_to_person)
-            self._apply_speaker_identity_statuses(targets)
-            self.host.state.speaker_map_dirty = False
-            serialised = [segment.model_dump() for segment in conversation.transcript_segments]
-            written = await self.host.persistence.call(
-                conversations_db.update_conversation_segments,
-                self.host.request.uid,
-                conversation.id,
-                serialised,
-                started_at=started_at,
-                data_protection_level=self.cache.protection_level,
-                # Opt out of the unconditional DELETE_FIELD sentinel so this ~0.6s
-                # write loop stays cheap when no projection is present. The segment
-                # transaction still clears a projection that is actually on the
-                # document (a finalize overlapping capture).
-                invalidate_client_processing=False,
-            )
-            if not written:
-                return None
-            self.cache.update_segments(serialised)
+                if not written:
+                    return None
+                self.cache.update_segments(serialised)
         if photos:
             stored = await self.host.persistence.call(
                 conversations_db.store_conversation_photos, self.host.request.uid, conversation.id, photos
@@ -375,10 +382,7 @@ class TranscriptProcessor:
                     diarized_speaker_ids_by_conversation.setdefault(conversation_id, set()).update(
                         segment.speaker_id for segment in new_segments if isinstance(segment.speaker_id, int)
                     )
-                self.host.state.words_transcribed_since_last_record += len(
-                    ' '.join(segment.text for segment in new_segments).split()
-                )
-            if self._is_shared_capture(data.get('source'), bool(data.get('shared_capture', False))):
+            if self._is_shared_capture(data.get('source')):
                 transcript_segments, _, _ = TranscriptSegment.combine_segments(
                     [], new_segments, deduplicate_overlapping=True
                 )
@@ -403,21 +407,25 @@ class TranscriptProcessor:
             if not result or not result[0]:
                 continue
             conversation, updated, removed = result
+            accepted_segments = getattr(self, 'last_accepted_segments', transcript_segments)
             if removed:
                 self.host.send_event(SegmentsDeletedEvent(segment_ids=removed))
-            if not transcript_segments:
+            if not accepted_segments:
                 continue
+            self.host.state.words_transcribed_since_last_record += len(
+                ' '.join(segment.text for segment in accepted_segments).split()
+            )
             client_segments = [segment.model_dump() for segment in updated]
             delivered = await self._deliver_segments(client_segments)
             if delivered and client_segments:
                 self.host.complete_live_transcription()
             if self.host.transcript_send is not None and self.host.user_has_credits:
-                self.host.transcript_send([segment.model_dump() for segment in transcript_segments])
+                self.host.transcript_send([segment.model_dump() for segment in accepted_segments])
             elif not self.host.pusher_enabled and self.host.user_has_credits:
                 try:
                     await trigger_realtime_integrations(
                         self.host.request.uid,
-                        [segment.model_dump() for segment in transcript_segments],
+                        [segment.model_dump() for segment in accepted_segments],
                         self.host.state.current_conversation_id,
                         source=self.host.request.source,
                         client_kind=self.host.client_kind,
@@ -426,7 +434,7 @@ class TranscriptProcessor:
                     logger.error('Realtime integration trigger failed type=%s', type(error).__name__)
             if self.host.onboarding_handler and not self.host.onboarding_handler.completed:
                 self.host.onboarding_handler.on_segments_received(
-                    [segment.model_dump() for segment in transcript_segments]
+                    [segment.model_dump() for segment in accepted_segments]
                 )
             await self._translate(updated, conversation.id, removed)
             await self._speaker_detection(updated, offset)

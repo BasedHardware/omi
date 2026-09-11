@@ -219,7 +219,8 @@ actor TranscriptionStorage {
     id: Int64,
     backendId: String,
     conversationStatus: LocalConversationStatus = .completed,
-    allowBackendIdOverride: Bool = false
+    allowBackendIdOverride: Bool = false,
+    emitCreationTelemetry: Bool = true
   ) async throws -> Bool {
     let db = try await ensureInitialized()
 
@@ -253,7 +254,7 @@ actor TranscriptionStorage {
       record.updatedAt = completedAt
       try record.update(database)
       let telemetry =
-        wasAlreadyCompleted
+        wasAlreadyCompleted || !emitCreationTelemetry
         ? nil : ConversationCreatedTelemetry(session: record, conversationId: backendId)
       return (true, telemetry)
     }

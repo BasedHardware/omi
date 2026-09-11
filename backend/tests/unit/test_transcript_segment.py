@@ -116,6 +116,15 @@ def test_short_overlapping_phrase_is_not_deduped():
     assert len(segments) == 2
 
 
+def test_compact_script_sentence_is_deduped_without_word_separators():
+    existing = _segment('これは重複する文章です。', speaker='SPEAKER_00', start=10.0, end=13.0)
+    incoming = _segment('これは重複する文章です。', speaker='SPEAKER_01', start=10.5, end=13.4)
+
+    segments, _, _ = TranscriptSegment.combine_segments([existing], [incoming], deduplicate_overlapping=True)
+
+    assert len(segments) == 1
+
+
 def test_non_overlapping_duplicate_text_is_preserved():
     existing = _segment(
         "The project review is scheduled for tomorrow morning.",

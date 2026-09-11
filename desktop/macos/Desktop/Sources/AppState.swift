@@ -604,7 +604,6 @@ class AppState: ObservableObject {
   /// another client. The recording-session id remains the local identity.
   var currentBackendConversationIsShared = false
   var pendingBackendConversationId: String?
-  var pendingBackendConversationIsShared = false
   /// Last accepted server event sequence per durable recording session. This
   /// is display state only; Firestore remains the authoritative sequence owner.
   var lifecycleSequenceByRecordingSession: [String: Int] = [:]

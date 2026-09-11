@@ -418,7 +418,10 @@ actor ConversationFinalizationService {
         try await TranscriptionStorage.shared.markSessionCompleted(
           id: sessionId,
           backendId: conversation.id,
-          conversationStatus: status
+          conversationStatus: status,
+          emitCreationTelemetry: !(
+            conversation.source == .omi && ConversationSource(rawValue: session.source) == .desktop
+          )
         )
         log("ConversationFinalization: Finalized cloud session \(sessionId) by backend id \(conversation.id)")
         return nil
@@ -619,7 +622,8 @@ actor ConversationFinalizationService {
       id: sessionId,
       backendId: conversation.id,
       conversationStatus: status,
-      allowBackendIdOverride: allowBackendIdOverride
+      allowBackendIdOverride: allowBackendIdOverride,
+      emitCreationTelemetry: !(conversation.source == .omi && localSource == .desktop)
     )
     log("ConversationFinalization: Reconciled cloud session \(sessionId) by conversation id \(conversation.id)")
     return true

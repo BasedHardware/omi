@@ -75,6 +75,7 @@ from .conversations import LiveConversationController
 from .persistence import ListenPersistence
 from .parity_capture import ListenParityCapture
 from .receiver import ListenReceiver
+from .registry import has_shared_capture_peer
 from .registry import register as register_listen_session
 from .registry import unregister as unregister_listen_session
 from .speakers import SpeakerMatcher
@@ -857,6 +858,9 @@ class ListenSessionRuntime:
             except Exception:
                 pass
         conversation_id = self.state.current_conversation_id
+        shared_capture_peer_active = bool(
+            conversation_id and has_shared_capture_peer(self.request.uid, conversation_id)
+        )
         if conversation_id and not owner_persistence_blocked:
             try:
                 if self.is_multi_channel:
@@ -886,6 +890,7 @@ class ListenSessionRuntime:
                         and self.state.close_code == 1000
                         and getattr(conversation.get('source'), 'value', conversation.get('source')) == 'desktop'
                         and (conversation.get('transcript_segments') or conversation.get('photos'))
+                        and not shared_capture_peer_active
                     ):
                         await self.transcripts.flush_speaker_assignments(conversation_id)
                         if await self.conversations.process_conversation(conversation_id):

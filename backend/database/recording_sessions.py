@@ -97,6 +97,9 @@ def _create_or_get_recording_session_txn(
         current = snapshot.to_dict() or {}
         if current.get('uid') != uid or current.get('recording_session_id') != recording_session_id:
             raise ValueError('recording session identity does not match its document binding')
+        if shared_capture and not bool(current.get('shared_capture', False)):
+            current = {**current, 'shared_capture': True, 'updated_at': now}
+            transaction.update(session_ref, {'shared_capture': True, 'updated_at': now})
         return _binding(
             current,
             recording_session_id,

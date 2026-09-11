@@ -103,8 +103,9 @@ cross-source pairing. When the second socket finds the other source's fresh
 `in_progress` conversation, it creates its own durable recording-session binding
 to that canonical conversation and marks both the binding and conversation
 `shared_capture`. Other cross-source combinations remain separate conversations.
-The conversation marker lets an already-running first socket apply the same
-policy as the joining socket. In a shared capture,
+The active listen-session registry propagates the pairing state to an already-
+running first socket; the durable marker remains lifecycle provenance rather
+than a permanent dedupe switch. In a shared capture,
 the live transcript writer applies shrink-only dedupe for substantial text that
 matches after punctuation/case normalization and has nearly the same timeline;
 short backchannels and repeated text at different times remain distinct. The

@@ -273,13 +273,11 @@ extension AppState {
 
     guard let sessionId = currentSessionId else {
       pendingBackendConversationId = backendId
-      pendingBackendConversationIsShared = acceptedSharedCapture
       log("Transcription: Deferred backend conversation bind until local DB session exists (backend: \(backendId))")
       return
     }
 
     pendingBackendConversationId = nil
-    pendingBackendConversationIsShared = false
     Task {
       do {
         try await TranscriptionStorage.shared.bindBackendConversation(
@@ -408,6 +406,7 @@ extension AppState {
       let memory = event.raw["memory"] as? [String: Any]
       let memoryId = memory?["id"] as? String ?? "?"
       let recordingSessionId = event.raw["recording_session_id"] as? String
+      let sharedCapture = event.raw["shared_capture"] as? Bool ?? false
       log("Transcription: Backend created conversation: \(memoryId)")
 
       // Mark DB session as completed so TranscriptionRetryService won't re-upload.
@@ -420,7 +419,7 @@ extension AppState {
           memory: memory,
           recordingSessionId: recordingSessionId,
           pending: pendingFinishedRecordings,
-          sharedCapture: event.raw["shared_capture"] as? Bool ?? false
+          sharedCapture: sharedCapture
         )
       else {
         log("Transcription: Ignoring memory_created \(memoryId); no matching finished local recording")
@@ -448,7 +447,10 @@ extension AppState {
         Task {
           do {
             try await TranscriptionStorage.shared.markSessionCompleted(
-              id: sessionId, backendId: memoryId)
+              id: sessionId,
+              backendId: memoryId,
+              emitCreationTelemetry: !sharedCapture
+            )
             log("Transcription: Marked DB session \(sessionId) completed (backend: \(memoryId))")
           } catch {
             logError(

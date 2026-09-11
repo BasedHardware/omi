@@ -487,6 +487,7 @@ def record_recording_session_event(
     conversation_id: str,
     phase: recording_sessions_db.RecordingPhase,
     *,
+    shared_capture: bool = False,
     firestore_client: Any = None,
 ) -> dict[str, Any] | None:
     """Persist and return an ordered client envelope, discarding stale callbacks."""
@@ -520,7 +521,7 @@ def record_recording_session_event(
             'lifecycle_version': None,
             'lifecycle_phase': None,
             'lifecycle_sequence': None,
-            'shared_capture': False,
+            'shared_capture': shared_capture,
         }
     if event['accepted']:
         return dict(event)
@@ -549,7 +550,7 @@ def record_recording_session_event(
             'lifecycle_version': None,
             'lifecycle_phase': None,
             'lifecycle_sequence': None,
-            'shared_capture': False,
+            'shared_capture': shared_capture,
         }
     return None
 

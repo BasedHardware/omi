@@ -128,35 +128,9 @@ class TranscriptSegment(BaseModel):
             return segments, [], []
 
         if deduplicate_overlapping:
-
-            def _duplicate_text(text: str) -> str:
-                return re.sub(r'[^\w]+', ' ', text.casefold()).strip()
-
-            def _is_overlapping_duplicate(existing: 'TranscriptSegment', incoming: 'TranscriptSegment') -> bool:
-                # Provider IDs are not shared across paired sockets, so identity
-                # alone cannot deduplicate the second stream. Require a substantial
-                # text match and nearly the same timeline; this leaves short
-                # backchannels and genuinely repeated lines untouched.
-                existing_text = _duplicate_text(existing.text)
-                incoming_text = _duplicate_text(incoming.text)
-                if not existing_text or existing_text != incoming_text:
-                    return False
-                if len(existing_text) < 20 and len(existing_text.split()) < 4:
-                    return False
-                if existing.id == incoming.id:
-                    return True
-                return abs(existing.start - incoming.start) <= 2 and abs(existing.end - incoming.end) <= 2
-
-            deduped_new_segments: List[TranscriptSegment] = []
-            for new_segment in new_segments:
-                if any(
-                    _is_overlapping_duplicate(existing, new_segment) for existing in [*segments, *deduped_new_segments]
-                ):
-                    continue
-                deduped_new_segments.append(new_segment)
-            if not deduped_new_segments:
+            new_segments = TranscriptSegment.deduplicate_overlapping_segments(segments, new_segments)
+            if not new_segments:
                 return segments, [], []
-            new_segments = deduped_new_segments
 
         def _extract_last_incomplete_sentence(text: str) -> Tuple[Optional[str], str]:
             text = text.strip()
@@ -301,6 +275,71 @@ class TranscriptSegment(BaseModel):
             )
 
         return segments, joined_similar_segments, removed_ids
+
+    @staticmethod
+    def deduplicate_overlapping_segments(
+        segments: List['TranscriptSegment'], new_segments: List['TranscriptSegment']
+    ) -> List['TranscriptSegment']:
+        """Drop only the same-text rows that overlap in the paired timelines.
+
+        The normalized-text index keeps the pairing check proportional to the
+        number of matching phrases instead of scanning the complete transcript
+        for every incoming segment.
+        """
+        if not new_segments:
+            return []
+
+        def _duplicate_text(text: str) -> str:
+            return re.sub(r'[^\w]+', ' ', text.casefold()).strip()
+
+        def _compact_script_char_count(text: str) -> int:
+            return sum(
+                1
+                for char in text
+                if (
+                    '\u0e00' <= char <= '\u0e7f'  # Thai
+                    or '\u3040' <= char <= '\u30ff'  # Hiragana/Katakana
+                    or '\u3400' <= char <= '\u9fff'  # CJK
+                    or '\uac00' <= char <= '\ud7af'  # Hangul
+                )
+            )
+
+        def _is_overlapping_duplicate(
+            existing: 'TranscriptSegment', incoming: 'TranscriptSegment', normalized_text: str
+        ) -> bool:
+            # Provider IDs are not shared across paired sockets, so identity
+            # alone cannot deduplicate the second stream. Require a substantial
+            # text match and nearly the same timeline; this leaves short
+            # backchannels and genuinely repeated lines untouched.
+            if not normalized_text or _duplicate_text(incoming.text) != normalized_text:
+                return False
+            if len(normalized_text) < 20 and len(normalized_text.split()) < 4:
+                # CJK/Thai and other compact scripts do not use spaces between
+                # words, so a long single token can still be a full sentence.
+                if _compact_script_char_count(normalized_text) < 4:
+                    return False
+            if existing.id == incoming.id:
+                return True
+            return abs(existing.start - incoming.start) <= 2 and abs(existing.end - incoming.end) <= 2
+
+        existing_by_text: dict[str, List[TranscriptSegment]] = {}
+        for existing in segments:
+            normalized_text = _duplicate_text(existing.text)
+            if normalized_text:
+                existing_by_text.setdefault(normalized_text, []).append(existing)
+
+        deduped_new_segments: List[TranscriptSegment] = []
+        for new_segment in new_segments:
+            normalized_text = _duplicate_text(new_segment.text)
+            if any(
+                _is_overlapping_duplicate(existing, new_segment, normalized_text)
+                for existing in existing_by_text.get(normalized_text, ())
+            ):
+                continue
+            deduped_new_segments.append(new_segment)
+            if normalized_text:
+                existing_by_text.setdefault(normalized_text, []).append(new_segment)
+        return deduped_new_segments
 
 
 class ImprovedTranscriptSegment(BaseModel):

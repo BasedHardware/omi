@@ -228,7 +228,6 @@ extension AppState {
       currentBackendConversationId = nil
       pendingBackendConversationId = nil
       currentBackendConversationIsShared = false
-      pendingBackendConversationIsShared = false
       ignoredRotatedBackendConversationIds = []
       AudioLevelMonitor.shared.reset()
       RecordingTimer.shared.start()
@@ -1010,7 +1009,7 @@ extension AppState {
     // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil).
     let capturedSessionId = currentSessionId
     let capturedBackendId = currentBackendConversationId ?? pendingBackendConversationId
-    let capturedSharedCapture = currentBackendConversationIsShared || pendingBackendConversationIsShared
+    let capturedSharedCapture = currentBackendConversationIsShared
     captureCurrentFinishedRecordingForLifecycle()
     stopAudioCapture()
     clearTranscriptionState(
@@ -1229,7 +1228,6 @@ extension AppState {
     currentBackendConversationId = nil
     currentClientConversationId = nil
     currentBackendConversationIsShared = false
-    pendingBackendConversationIsShared = false
     pendingBackendConversationId = nil
     RecordingTimer.shared.restart()
 

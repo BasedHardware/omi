@@ -21,24 +21,75 @@ from models.message_event import ProactiveMessageEvent
 logger = logging.getLogger(__name__)
 
 _sessions: Dict[str, Set[Any]] = {}
+_shared_capture_conversations: Dict[str, Set[str]] = {}
 _lock = threading.Lock()
 
 PROACTIVE_MESSAGE_CHANNEL = "proactive_message:listen"
 
 
+def _conversation_id_for_session(session: Any) -> str | None:
+    current = getattr(getattr(session, 'state', None), 'current_conversation_id', None)
+    if current:
+        return current
+    return getattr(session, '_shared_capture_conversation_id', None)
+
+
 def register(session: Any) -> None:
     with _lock:
-        _sessions.setdefault(session.request.uid, set()).add(session)
+        uid = session.request.uid
+        _sessions.setdefault(uid, set()).add(session)
+        conversation_id = _conversation_id_for_session(session)
+        if conversation_id in _shared_capture_conversations.get(uid, set()):
+            session.shared_capture = True
 
 
 def unregister(session: Any) -> None:
     with _lock:
-        sessions = _sessions.get(session.request.uid)
+        uid = session.request.uid
+        sessions = _sessions.get(uid)
         if not sessions:
             return
         sessions.discard(session)
         if not sessions:
-            _sessions.pop(session.request.uid, None)
+            _sessions.pop(uid, None)
+        marked = _shared_capture_conversations.get(uid)
+        if marked:
+            active_conversations = {_conversation_id_for_session(active) for active in sessions}
+            marked.intersection_update(conversation for conversation in active_conversations if conversation)
+            if not marked:
+                _shared_capture_conversations.pop(uid, None)
+
+
+def mark_shared_capture(uid: str, conversation_id: str) -> None:
+    """Publish a pairing marker to already-registered sockets in this worker."""
+    if not uid or not conversation_id:
+        return
+    with _lock:
+        _shared_capture_conversations.setdefault(uid, set()).add(conversation_id)
+        for session in _sessions.get(uid, ()):
+            current = getattr(getattr(session, 'state', None), 'current_conversation_id', None)
+            source = getattr(getattr(session, 'request', None), 'source', None)
+            source = getattr(source, 'value', source)
+            if current == conversation_id or (current is None and source in {'omi', 'desktop'}):
+                session._shared_capture_conversation_id = conversation_id
+                session.shared_capture = True
+
+
+def is_shared_capture(uid: str, conversation_id: str | None) -> bool:
+    if not uid or not conversation_id:
+        return False
+    with _lock:
+        return conversation_id in _shared_capture_conversations.get(uid, set())
+
+
+def has_shared_capture_peer(uid: str, conversation_id: str | None) -> bool:
+    """Return whether another live socket still owns a paired conversation."""
+    if not uid or not conversation_id:
+        return False
+    with _lock:
+        if conversation_id not in _shared_capture_conversations.get(uid, set()):
+            return False
+        return any(_conversation_id_for_session(session) == conversation_id for session in _sessions.get(uid, ()))
 
 
 def _sessions_for(uid: str) -> List[Any]:
