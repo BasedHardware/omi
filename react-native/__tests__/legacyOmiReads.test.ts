@@ -676,6 +676,33 @@ test('old tasks name GET sort_order and indent_level integer strings', async () 
   ).rejects.toThrow('Omi order is malformed');
 });
 
+test('old tasks name omitted GET has_more as Flutter false instead of hiding neighbors', async () => {
+  const {api} = backend({
+    action_items: [
+      {id: 'named', description: 'Call Sam', completed: false},
+      {id: 'also', description: 'Write recap', completed: true},
+    ],
+  });
+  const result = await loadTasks(api);
+  expect(result.items).toEqual([
+    expect.objectContaining({id: 'named', title: 'Call Sam'}),
+    expect.objectContaining({id: 'also', title: 'Write recap'}),
+  ]);
+  expect(result.page).toMatchObject({
+    complete: true,
+    hasMore: false,
+    nextCursor: null,
+  });
+  await expect(
+    loadTasks(
+      backend({
+        action_items: [{id: 'named', description: 'Call Sam', completed: false}],
+        has_more: 'true',
+      }).api,
+    ),
+  ).rejects.toThrow('Omi boolean is malformed');
+});
+
 test('old task wrapper preserves dates in milliseconds, nullable epochs and source evidence', async () => {
   const evidence = {
     kind: 'conversation',

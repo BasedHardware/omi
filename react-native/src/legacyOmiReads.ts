@@ -294,8 +294,7 @@ export async function loadOmiTasks(
   const envelope = object(
     await read(`/v1/action-items?limit=${limit}&offset=${start}`),
   );
-  if (typeof envelope.has_more !== 'boolean')
-    throw new Error('Omi pagination is malformed');
+  const hasMore = bool(envelope.has_more);
   const records = rows(envelope.action_items);
   const items = records.map(row => {
     const description = text(row.description),
@@ -350,7 +349,7 @@ export async function loadOmiTasks(
     page: page(
       start,
       items.length,
-      envelope.has_more,
+      hasMore,
       bool(envelope.truncated),
       true,
     ),
