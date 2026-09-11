@@ -260,6 +260,24 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
             )
         )
 
+    # The split moves X extraction off notifications-job; the daily summary stays
+    # there and reads DAILY_SUMMARY_SELECTION_MODE at import. Unset falls back to
+    # 'legacy' silently, so the selection mode must not travel with the X job.
+    if 'DAILY_SUMMARY_SELECTION_MODE' not in notifications_env:
+        errors.append(
+            ValidationError(
+                notifications_scope,
+                'DAILY_SUMMARY_SELECTION_MODE must stay on notifications-job; unset falls back to legacy',
+            )
+        )
+    if 'DAILY_SUMMARY_SELECTION_MODE' in x_sync_env:
+        errors.append(
+            ValidationError(
+                x_sync_scope,
+                'DAILY_SUMMARY_SELECTION_MODE belongs only on notifications-job',
+            )
+        )
+
     job = _as_config_dict(jobs.get('memory-maintenance-job'))
     if job is None:
         errors.append(ValidationError(scope, 'missing cloud_run.jobs.memory-maintenance-job'))

@@ -2524,6 +2524,10 @@ def test_x_connector_sync_job_workflow_is_listed_and_targets_job():
         assert 'RAPID_API_HOST' in x_sync.get('env', {})
         assert x_sync.get('env', {}).get('OMI_BACKGROUND_FLEX_CAPABLE', {}).get('value') == 'true'
         assert x_sync.get('env', {}).get('OMI_LLM_GATEWAY_URL', {}).get('env_var') == 'OMI_LLM_GATEWAY_URL'
+        # The daily summary stays on notifications-job and reads this at import;
+        # unset falls back to 'legacy' with no error, so the split must not take it.
+        assert notifications.get('env', {}).get('DAILY_SUMMARY_SELECTION_MODE', {}).get('value') == 'indexed'
+        assert 'DAILY_SUMMARY_SELECTION_MODE' not in x_sync.get('env', {})
 
 
 def test_sync_backfill_co_deploy_is_required_per_workflow(tmp_path):
