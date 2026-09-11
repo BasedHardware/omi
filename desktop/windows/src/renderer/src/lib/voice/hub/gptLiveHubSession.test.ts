@@ -93,11 +93,12 @@ function harness(opts: { token?: string; byokKey?: string } = {}): {
   }
 }
 
-/** Drive ensureWarm through socket-open + provider `session.started`. */
+/** Drive ensureWarm through socket-open + relay auth + provider `session.started`. */
 async function connect(h: ReturnType<typeof harness>): Promise<void> {
   const warm = h.session.ensureWarm()
   await tick()
   h.getSocket().spec.onOpen()
+  h.getSocket().spec.onMessage(JSON.stringify({ type: 'auth_response', success: true }))
   h.getSocket().spec.onMessage(JSON.stringify({ type: 'session.started', session: { id: 'x' } }))
   await warm
   h.getSocket().sent = []
@@ -111,18 +112,22 @@ describe('GptLiveHubSession — connect + session.start', () => {
     expect(h.session.bargeInStrategy).toBe('inSessionCancel')
   })
 
-  it('managed: targets the Omi relay with provider=gpt_live&token= and sends session.start', async () => {
+  it('managed: targets the Omi relay without the token in the URL, authenticates first, then sends session.start', async () => {
     const h = harness({ token: 'omi-token/value' })
     const warm = h.session.ensureWarm()
     await tick()
     const socket = h.getSocket()
     expect(socket.spec.url).toContain('/v1/omni/relay')
     expect(socket.spec.url).toContain('provider=gpt_live')
-    expect(socket.spec.url).toContain('token=omi-token%2Fvalue')
+    // The bearer token must never appear in the WebSocket URL.
+    expect(socket.spec.url).not.toContain('token')
     expect(socket.spec.protocols).toBeUndefined()
 
     socket.spec.onOpen()
-    const start = socket.frames()[0]
+    expect(socket.frames()[0]).toEqual({ type: 'auth', token: 'omi-token/value' })
+
+    socket.spec.onMessage(JSON.stringify({ type: 'auth_response', success: true }))
+    const start = socket.frames()[1]
     expect(start.type).toBe('session.start')
     expect(typeof start.event_id).toBe('string')
     const session = start.session as Json
@@ -137,6 +142,18 @@ describe('GptLiveHubSession — connect + session.start', () => {
     await warm
     expect(h.session.isWarm()).toBe(true)
     expect(h.events.onConnected).toHaveBeenCalledWith('sess-gpt')
+  })
+
+  it('a managed relay auth failure errors the warm instead of sending session.start', async () => {
+    const h = harness({ token: 'omi-token/value' })
+    const warm = h.session.ensureWarm().catch(() => {})
+    await tick()
+    const socket = h.getSocket()
+    socket.spec.onOpen()
+    socket.spec.onMessage(JSON.stringify({ type: 'auth_response', success: false }))
+    await warm
+    expect(h.events.onError).toHaveBeenCalled()
+    expect(socket.types()).not.toContain('session.start')
   })
 
   it('BYOK: connects direct to OpenAI with the openai-insecure-api-key subprotocol', async () => {
@@ -185,6 +202,35 @@ describe('GptLiveHubSession — full-duplex turn', () => {
     expect(h.player.clear).toHaveBeenCalledTimes(1)
   })
 
+  it('a response.event done completes the turn and flushes the playback tail', async () => {
+    const h = harness()
+    await connect(h)
+    h.session.beginTurn({ turnID: tid, responseID: rid })
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.event', event: { type: 'response.done' } })
+    )
+    expect(h.player.flush).toHaveBeenCalledTimes(1)
+    expect(h.events.onAssistantText).toHaveBeenCalledWith('', true, {
+      turnID: tid,
+      responseID: rid
+    })
+    expect(h.events.onTurnDone).toHaveBeenCalledTimes(1)
+  })
+
+  it('a tool-only response.event does not end the turn', async () => {
+    const h = harness()
+    await connect(h)
+    h.session.beginTurn({ turnID: tid, responseID: rid })
+    h.getSocket().spec.onMessage(
+      JSON.stringify({
+        type: 'response.event',
+        event: { type: 'response.output_item.done', item: { type: 'function_call' } }
+      })
+    )
+    expect(h.events.onTurnDone).not.toHaveBeenCalled()
+    expect(h.player.flush).not.toHaveBeenCalled()
+  })
+
   it('session.closed surfaces a fatal and tears the socket down', async () => {
     const h = harness()
     await connect(h)
@@ -203,10 +249,12 @@ describe('GptLiveHubSession — cold press (warm-wait buffer)', () => {
     h.session.appendAudio(new Uint8Array([9, 9]))
     h.session.commitTurn()
     h.getSocket().spec.onOpen()
-    // Only the setup frame so far; open alone does not mark ready.
-    expect(h.getSocket().types()).toEqual(['session.start'])
+    // Only the auth frame so far; readiness waits on the relay's auth_response.
+    expect(h.getSocket().types()).toEqual(['auth'])
+    h.getSocket().spec.onMessage(JSON.stringify({ type: 'auth_response', success: true }))
+    expect(h.getSocket().types()).toEqual(['auth', 'session.start'])
     h.getSocket().spec.onMessage(JSON.stringify({ type: 'session.started', session: { id: 'x' } }))
     await warm
-    expect(h.getSocket().types()).toEqual(['session.start', 'session.input_audio.append'])
+    expect(h.getSocket().types()).toEqual(['auth', 'session.start', 'session.input_audio.append'])
   })
 })

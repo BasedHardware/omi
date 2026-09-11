@@ -193,8 +193,8 @@ export const HUB_WARM_TIMEOUT_MS = 10_000
 
 export type HubSessionOptions = {
   /** Ephemeral token minted by the backend (managed users — Windows path). For
-   *  GPT-Live this is the Omi-auth token the relay accepts via `?token=`; for the
-   *  legacy lanes it is the provider's ephemeral secret. */
+   *  GPT-Live this is the Omi-auth token the relay accepts via its first-message
+   *  auth frame; for the legacy lanes it is the provider's ephemeral secret. */
   token: string
   /** Optional BYOK OpenAI key for the GPT-Live lane's direct-connect path (the
    *  `openai-insecure-api-key.<key>` subprotocol against api.openai.com). When
@@ -274,6 +274,10 @@ export abstract class BaseHubSession implements HubSession {
   private warmResolve: (() => void) | null = null
   private warmReject: ((e: Error) => void) | null = null
   private errored = false
+  /** True after sending a first-message auth frame and before `auth_response`:
+   *  the session setup must wait for the relay to accept the Omi bearer token,
+   *  which never rides the URL. */
+  private awaitingAuth = false
 
   constructor(opts: HubSessionOptions) {
     this.instructions = opts.instructions
@@ -365,8 +369,16 @@ export abstract class BaseHubSession implements HubSession {
   }
 
   private onSocketOpen(): void {
-    // Provider "ready" (session.created / setupComplete) flips isOpen in
-    // markReady(); the open handshake only sends session setup.
+    // Browser clients cannot set an Authorization header on a WebSocket, so a
+    // managed relay lane authenticates in the first message and defers its
+    // session setup until the relay's `auth_response`. Provider "ready"
+    // (session.created / setupComplete) flips isOpen in markReady().
+    const auth = this.authFrame()
+    if (auth) {
+      this.awaitingAuth = true
+      this.send(auth)
+      return
+    }
     this.send(this.sessionSetupFrame())
   }
 
@@ -376,6 +388,15 @@ export abstract class BaseHubSession implements HubSession {
     try {
       obj = JSON.parse(data) as Record<string, unknown>
     } catch {
+      return
+    }
+    if (this.awaitingAuth) {
+      this.awaitingAuth = false
+      if (obj.type === 'auth_response' && obj.success === true) {
+        this.send(this.sessionSetupFrame())
+        return
+      }
+      this.handleError('relay authentication failed', true)
       return
     }
     this.handleProviderMessage(obj)
@@ -411,6 +432,7 @@ export abstract class BaseHubSession implements HubSession {
     const s = this.socket
     this.socket = null
     this.isOpen = false
+    this.awaitingAuth = false
     this.pendingAudio = []
     this.pendingCommit = false
     this.resetProviderState()
@@ -566,6 +588,11 @@ export abstract class BaseHubSession implements HubSession {
 
   // MARK: Provider hooks
 
+  /** Optional first-message auth frame. Return null (default) when the lane
+   *  authenticates via the upgrade headers or a WS subprotocol (BYOK). */
+  protected authFrame(): object | null {
+    return null
+  }
   /** Connection URL + WS subprotocols. */
   protected abstract connectSpec(): { url: string; protocols?: string[] }
   /** The one-time session-config frame sent right after socket open. */

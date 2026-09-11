@@ -8,10 +8,11 @@
 //
 // Managed auth (the Windows path): the Omi backend injects the OpenAI key, so the
 // session connects to the Omi relay `wss://<backend>/v1/omni/relay?provider=gpt_live`
-// with the Omi-auth token as a `token` query param (a renderer WebSocket cannot set
-// an Authorization header). BYOK: when the caller supplies the user's own OpenAI
-// key, we connect direct to `wss://api.openai.com/v1/live/sessions` and carry the
-// key in the `openai-insecure-api-key.<key>` subprotocol (the same pattern
+// and authenticates in the first WS message (`{type:'auth', token}`) because a
+// renderer WebSocket cannot set an Authorization header and the bearer token must
+// not ride the URL. BYOK: when the caller supplies the user's own OpenAI key, we
+// connect direct to `wss://api.openai.com/v1/live/sessions` and carry the key in
+// the `openai-insecure-api-key.<key>` subprotocol (the same pattern
 // `openaiHubSession.ts` uses for the realtime API).
 //
 // The macOS `RealtimeHubSession.swift` has no GPT-Live lane yet; this mirrors its
@@ -34,13 +35,16 @@ export const GPT_LIVE_VOICE = 'marin'
  *  when the env var is absent (tests / a bare node import). */
 function relayWsBaseUrl(): string {
   const apiBase = import.meta.env.VITE_OMI_API_BASE as string | undefined
-  if (apiBase && /^https?:\/\//.test(apiBase)) return apiBase.replace(/^http/, 'ws').replace(/\/$/, '')
+  if (apiBase && /^https?:\/\//.test(apiBase))
+    return apiBase.replace(/^http/, 'ws').replace(/\/$/, '')
   return 'wss://api.omi.me'
 }
 
-/** The Omi relay URL for a managed GPT-Live session. Exported for the URL test. */
-export function gptLiveRelayUrl(omiToken: string): string {
-  return `${relayWsBaseUrl()}/v1/omni/relay?provider=gpt_live&token=${encodeURIComponent(omiToken)}`
+/** The Omi relay URL for a managed GPT-Live session. The Omi bearer token never
+ *  travels in the query string (WebSocket request targets are logged); managed
+ *  clients send it in the first `{type:'auth'}` message. Exported for the URL test. */
+export function gptLiveRelayUrl(): string {
+  return `${relayWsBaseUrl()}/v1/omni/relay?provider=gpt_live`
 }
 
 /** Unique per-frame event id (the protocol requires one on `session.start`). */
@@ -74,7 +78,15 @@ export class GptLiveHubSession extends BaseHubSession {
       }
     }
     // Managed: through the Omi relay, which injects the OpenAI key server-side.
-    return { url: gptLiveRelayUrl(this.token) }
+    return { url: gptLiveRelayUrl() }
+  }
+
+  /** Managed relay: the renderer cannot set the upgrade `Authorization` header,
+   *  so the Omi token is sent in the first WS message (never the URL). BYOK
+   *  connects direct to OpenAI with the key in the subprotocol — no auth frame. */
+  protected authFrame(): object | null {
+    if (this.byokKey) return null
+    return { type: 'auth', token: this.token }
   }
 
   protected sessionSetupFrame(): object {
@@ -156,6 +168,10 @@ export class GptLiveHubSession extends BaseHubSession {
         this.clearPlayback()
         return
       }
+      case 'response.event': {
+        this.handleResponseEvent(e)
+        return
+      }
       case 'session.closed': {
         // The server ended the session. Surface it as a normal close so the hub
         // controller's reconnect policy runs (same class as a socket close).
@@ -176,6 +192,27 @@ export class GptLiveHubSession extends BaseHubSession {
         if (e.interrupted === true) this.clearPlayback()
         return
       }
+    }
+  }
+
+  /**
+   * GPT-Live response lifecycle arrives as `response.event` envelopes (mirrors
+   * `RealtimeHubSession.swift`). A nested `response.done` / `response.completed`
+   * is the per-turn boundary the full-duplex lane otherwise never surfaces, so
+   * the hub would wait out `providerNoResponse` on every spoken turn. Tool calls
+   * are not yet mapped onto the hub pipeline (web parity) — return without
+   * ending the turn so a tool-only event can't dispatch a premature finish.
+   */
+  private handleResponseEvent(e: Record<string, unknown>): void {
+    const nested = (e.event as Record<string, unknown> | undefined) ?? e
+    const nestedType = typeof nested.type === 'string' ? nested.type : ''
+    if (nestedType.includes('function_call') || nestedType.includes('tool_call')) {
+      return
+    }
+    if (nestedType === 'response.done' || nestedType === 'response.completed') {
+      this.flushPlayback()
+      this.emitAssistantText('', true)
+      this.emitTurnDone()
     }
   }
 }

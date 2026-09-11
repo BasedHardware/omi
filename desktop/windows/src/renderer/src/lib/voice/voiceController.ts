@@ -24,6 +24,7 @@ import { refreshIfStale, resolveEffectiveVoiceProvider } from './autoModelSelect
 import { getAboutUserCard, refreshAboutUserCard } from './aboutUser'
 import { buildVoiceSystemInstruction } from './systemInstruction'
 import { getPreferences } from '../preferences'
+import { openAiByokKeyCached } from '../byokKeys'
 import { reportRealtimeUsage } from './usageReport'
 import { startOpenAiSession } from './openaiSession'
 import { startGeminiSession } from './geminiSession'
@@ -340,8 +341,13 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
   let session: ProviderSessionHandle
   try {
     if (provider === 'gpt_live') {
+      // BYOK: a cached OpenAI key routes GPT-Live direct to OpenAI (the REST
+      // mint's request-local key can't reach the WebSocket). Otherwise the Omi
+      // relay injects the platform key server-side.
+      const byokKey = openAiByokKeyCached()
       session = await startGptLiveSession({
-        token,
+        token: byokKey ?? token,
+        byok: byokKey !== undefined,
         instructions,
         sinkId: sinkId || undefined,
         cb

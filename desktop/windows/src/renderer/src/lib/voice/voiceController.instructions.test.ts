@@ -3,15 +3,17 @@
 // and building it must never block session start on a network fetch.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { get, startOpenAiSession, startGeminiSession, startGptLiveSession, mintRealtimeToken } =
+const { get, startOpenAiSession, startGeminiSession, startGptLiveSession, mintRealtimeToken, openAiByokKeyCached } =
   vi.hoisted(() => ({
     get: vi.fn(),
     startOpenAiSession: vi.fn(),
     startGeminiSession: vi.fn(),
     startGptLiveSession: vi.fn(),
-    mintRealtimeToken: vi.fn()
+    mintRealtimeToken: vi.fn(),
+    openAiByokKeyCached: vi.fn()
   }))
 
+vi.mock('../byokKeys', () => ({ openAiByokKeyCached }))
 vi.mock('../analytics', () => ({ trackEvent: vi.fn() }))
 vi.mock('../firebase', () => ({ auth: { currentUser: { uid: 'u1', displayName: 'Ada' } } }))
 vi.mock('../apiClient', () => ({ omiApi: { get } }))
@@ -40,6 +42,7 @@ beforeEach(() => {
   startGeminiSession.mockReset().mockResolvedValue(handle)
   startGptLiveSession.mockReset().mockResolvedValue(handle)
   mintRealtimeToken.mockReset().mockResolvedValue({ token: 't' })
+  openAiByokKeyCached.mockReset().mockReturnValue(undefined)
   resetAboutUserCard()
   localStorage.clear()
   setPreferences({ voiceLanguages: undefined })
@@ -90,5 +93,21 @@ describe('startVoiceSession — system instruction', () => {
       expect(text).toContain('- Ships fast.')
       expect(text).toContain('The user speaks ONLY these languages: Russian, English')
     }
+  })
+
+  it('routes GPT-Live direct to OpenAI with the cached BYOK key', async () => {
+    openAiByokKeyCached.mockReturnValue('sk-user-openai')
+    await startVoiceSession('gpt_live')
+    expect(startGptLiveSession).toHaveBeenCalledTimes(1)
+    const args = startGptLiveSession.mock.calls[0][0]
+    expect(args.byok).toBe(true)
+    expect(args.token).toBe('sk-user-openai')
+  })
+
+  it('keeps GPT-Live on the managed relay when no OpenAI key is configured', async () => {
+    await startVoiceSession('gpt_live')
+    const args = startGptLiveSession.mock.calls[0][0]
+    expect(args.byok).toBe(false)
+    expect(args.token).toBe('t')
   })
 })

@@ -3,8 +3,8 @@
 //   POST { provider: 'gpt_live' | 'openai' | 'gemini' }  (Firebase Bearer auth;
 //   plain token, no platform requirements — works for the Windows client as-is)
 //   → 200 { provider, token, expires_at? }
-//       gpt_live: token  Omi-auth token for the `wss://<backend>/v1/omni/relay
-//                        ?provider=gpt_live` session (key injected server-side)
+//       gpt_live: token  Omi-auth token sent in the relay's first `{type:'auth'}`
+//                        WS message (never the URL); key injected server-side
 //       openai: token 'ek_…'          (Bearer / client secret for WebRTC)
 //       gemini: token 'auth_tokens/…' (used as the SDK apiKey, v1alpha)
 //   → 4xx/5xx { error, reason, retryable, provider?, code?, upstream_status_code? }

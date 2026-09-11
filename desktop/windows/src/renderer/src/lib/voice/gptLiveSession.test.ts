@@ -14,7 +14,12 @@ vi.mock('./pcmPlayer', () => ({
   base64ToBytes: (s: string) => new TextEncoder().encode(s)
 }))
 
-import { createGptLiveMessageHandler, gptLiveSessionStartFrame } from './gptLiveSession'
+import {
+  createGptLiveMessageHandler,
+  gptLiveSessionStartFrame,
+  startGptLiveSession
+} from './gptLiveSession'
+import { acquireMicStream } from '../audio'
 
 function makePlayer(): VoicePlayer & Record<string, ReturnType<typeof vi.fn>> {
   return {
@@ -134,5 +139,91 @@ describe('createGptLiveMessageHandler', () => {
     stopped = true
     h.handle(JSON.stringify({ type: 'session.output_audio.delta', delta: 'AAE=' }))
     expect(player.enqueuePcm16).not.toHaveBeenCalled()
+  })
+})
+
+describe('startGptLiveSession — stop flush', () => {
+  class FakeWebSocket {
+    static OPEN = 1
+    static instances: FakeWebSocket[] = []
+    readyState = FakeWebSocket.OPEN
+    sent: string[] = []
+    onopen: (() => void) | null = null
+    onmessage: ((e: { data: string }) => void) | null = null
+    onerror: (() => void) | null = null
+    onclose: ((e: { code: number; reason: string }) => void) | null = null
+    constructor(
+      public url: string,
+      public protocols?: string[]
+    ) {
+      FakeWebSocket.instances.push(this)
+    }
+    send(d: string): void {
+      this.sent.push(d)
+    }
+    close(): void {
+      this.onclose?.({ code: 1000, reason: '' })
+    }
+    emit(o: object): void {
+      this.onmessage?.({ data: JSON.stringify(o) })
+    }
+  }
+
+  beforeEach(() => {
+    FakeWebSocket.instances = []
+    vi.stubGlobal('WebSocket', FakeWebSocket)
+    vi.mocked(acquireMicStream).mockResolvedValue({ getTracks: () => [] } as never)
+  })
+
+  it('authenticates in the first message and starts the session after auth_response', async () => {
+    const cb = makeCb()
+    const promise = startGptLiveSession({ token: 'omi-token', instructions: 'INSTR', cb })
+    await new Promise((r) => setTimeout(r, 0))
+    const ws = FakeWebSocket.instances[0]!
+    expect(ws.url).toContain('/v1/omni/relay')
+    expect(ws.url).not.toContain('token')
+    ws.onopen!()
+    expect(ws.sent).toHaveLength(1)
+    expect(JSON.parse(ws.sent[0]!)).toEqual({ type: 'auth', token: 'omi-token' })
+
+    ws.emit({ type: 'auth_response', success: true })
+    const start = JSON.parse(ws.sent[1]!)
+    expect(start.type).toBe('session.start')
+    expect(start.session.model).toBe('gpt-live-1')
+
+    ws.emit({ type: 'session.started' })
+    const handle = await promise
+    expect(cb.onConnected).toHaveBeenCalledTimes(1)
+    handle.stop()
+  })
+
+  it('flushes the accumulated assistant reply before marking the session stopped', async () => {
+    const cb = makeCb()
+    const promise = startGptLiveSession({ token: 'tok', instructions: 'INSTR', cb })
+    await new Promise((r) => setTimeout(r, 0))
+    const ws = FakeWebSocket.instances[0]!
+    ws.onopen!()
+    ws.emit({ type: 'auth_response', success: true })
+    ws.emit({ type: 'session.started' })
+    const handle = await promise
+
+    ws.emit({ type: 'session.output_transcript.delta', delta: 'Pending reply' })
+    handle.stop()
+
+    expect(cb.onUtterance).toHaveBeenCalledWith('gpt-live-turn-0', 'Pending reply')
+  })
+
+  it('BYOK connects direct with the key subprotocol and sends no auth frame', async () => {
+    const cb = makeCb()
+    const promise = startGptLiveSession({ token: 'sk-user', byok: true, instructions: 'INSTR', cb })
+    await new Promise((r) => setTimeout(r, 0))
+    const ws = FakeWebSocket.instances[0]!
+    expect(ws.url).toBe('wss://api.openai.com/v1/live/sessions')
+    expect(ws.protocols).toEqual(['openai-insecure-api-key.sk-user'])
+    ws.onopen!()
+    expect(JSON.parse(ws.sent[0]!).type).toBe('session.start')
+    ws.emit({ type: 'session.started' })
+    const handle = await promise
+    handle.stop()
   })
 })

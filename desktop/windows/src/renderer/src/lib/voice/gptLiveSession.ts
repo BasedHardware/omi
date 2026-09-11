@@ -172,9 +172,15 @@ export async function startGptLiveSession(args: {
   let socket: WebSocket | null = null
   let player: VoicePlayer | null = null
   let mic: { stop: () => void } | null = null
+  // Assigned once the message handler exists; lets `stop()` flush the accumulated
+  // assistant reply before it marks the session stopped (flush is a no-op after).
+  let flushPendingReply: (() => void) | null = null
 
   const stop = (): void => {
     if (stopped) return
+    // Flush the in-progress assistant transcript before marking stopped, so a
+    // manual stop / socket close still reports the reply to `onUtterance`.
+    flushPendingReply?.()
     stopped = true
     mic?.stop()
     mic = null
@@ -218,11 +224,12 @@ export async function startGptLiveSession(args: {
   }
 
   await new Promise<void>((resolve, reject) => {
-    const url = args.byok ? 'wss://api.openai.com/v1/live/sessions' : gptLiveRelayUrl(args.token)
+    const url = args.byok ? 'wss://api.openai.com/v1/live/sessions' : gptLiveRelayUrl()
     const protocols = args.byok ? [`openai-insecure-api-key.${args.token}`] : undefined
     const ws = new WebSocket(url, protocols)
     socket = ws
     let connected = false
+    let sessionStarted = false
 
     const startCapture = async (): Promise<void> => {
       if (stopped || mic) return
@@ -276,10 +283,23 @@ export async function startGptLiveSession(args: {
         )
       }
     })
+    flushPendingReply = handler.flush
 
+    const sendStart = (): void => {
+      if (sessionStarted) return
+      sessionStarted = true
+      ws.send(JSON.stringify(gptLiveSessionStartFrame(args.instructions)))
+    }
     ws.onopen = () => {
       try {
-        ws.send(JSON.stringify(gptLiveSessionStartFrame(args.instructions)))
+        if (args.byok) {
+          sendStart()
+        } else {
+          // Browser WebSocket can't set the upgrade `Authorization` header, so the
+          // Omi token is sent in the first message; `session.start` waits for the
+          // relay's `auth_response` (the token never rides the URL).
+          ws.send(JSON.stringify({ type: 'auth', token: args.token }))
+        }
       } catch (e) {
         stop()
         reject(e instanceof Error ? e : new Error(String(e)))
@@ -287,6 +307,28 @@ export async function startGptLiveSession(args: {
     }
     ws.onmessage = (e: MessageEvent) => {
       const data = typeof e.data === 'string' ? e.data : ''
+      if (!args.byok && !sessionStarted) {
+        let msg: { type?: string; success?: boolean } | null = null
+        try {
+          msg = JSON.parse(data) as { type?: string; success?: boolean }
+        } catch {
+          msg = null
+        }
+        if (msg?.type === 'auth_response') {
+          if (msg.success) {
+            try {
+              sendStart()
+            } catch (err) {
+              stop()
+              reject(err instanceof Error ? err : new Error(String(err)))
+            }
+          } else {
+            stop()
+            reject(new Error('GPT-Live relay authentication failed'))
+          }
+          return
+        }
+      }
       handler.handle(data)
     }
     ws.onerror = () => {
