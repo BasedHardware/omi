@@ -15,11 +15,19 @@ actor LocalEmbeddingIndexer {
   }
 
   func drainForTesting() async {
+    await finishDetachedForTesting(cancel: true)
+  }
+
+  func awaitDetachedForTesting() async {
+    await finishDetachedForTesting(cancel: false)
+  }
+
+  private func finishDetachedForTesting(cancel: Bool) async {
     while true {
       let tasks = Self.detachedWork.takeAll()
       if tasks.isEmpty { return }
       for task in tasks {
-        task.cancel()
+        if cancel { task.cancel() }
         await task.value
       }
     }
@@ -38,10 +46,16 @@ actor LocalEmbeddingIndexer {
   }
 
   nonisolated static func scheduleMemoryIndex(id: Int64, content: String) {
+    scheduleMemoryIndex(items: [(id, content)])
+  }
+
+  nonisolated static func scheduleMemoryIndex(items: [(Int64, String)]) {
+    guard !items.isEmpty else { return }
+    let snapshot = items
     let owner = RewindCaptureOwnerSnapshot.capture()
     scheduleDetached {
       guard let owner, owner.isCurrent() else { return }
-      await shared.indexMemory(id: id, content: content, owner: owner)
+      await shared.indexMemories(snapshot, owner: owner)
     }
   }
 
@@ -67,15 +81,18 @@ actor LocalEmbeddingIndexer {
   }
 
   func indexMemory(id: Int64, content: String, owner: RewindCaptureOwnerSnapshot? = nil) async {
-    guard embeddingsAreActive else { return }
+    await indexMemories([(id, content)], owner: owner)
+  }
+
+  func indexMemories(_ items: [(Int64, String)], owner: RewindCaptureOwnerSnapshot? = nil) async {
+    guard embeddingsAreActive, !items.isEmpty else { return }
     guard let owner = owner ?? RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else { return }
     do {
       let store = try await RewindDatabase.shared.localEmbeddingStore(owner: owner)
       let authorization = LocalMutationAuthorization { owner.isCurrent() }
-      try await embedTexts(
-        [(id, content)], sourceKind: .memory, store: store, authorization: authorization)
+      try await embedTexts(items, sourceKind: .memory, store: store, authorization: authorization)
     } catch {
-      log("LocalEmbeddingIndexer: memory \(id) indexing skipped")
+      log("LocalEmbeddingIndexer: memory batch indexing skipped")
     }
   }
 
@@ -155,10 +172,13 @@ actor LocalEmbeddingIndexer {
     } else {
       return
     }
-    for batchStart in stride(from: 0, to: items.count, by: selected.capabilities.maxBatchSize) {
+    let pending = try store.filterNeedingEmbedding(
+      items: items, sourceKind: sourceKind, modelID: selected.modelID)
+    guard !pending.isEmpty else { return }
+    for batchStart in stride(from: 0, to: pending.count, by: selected.capabilities.maxBatchSize) {
       try Task.checkCancellation()
       try authorization.require()
-      let slice = Array(items[batchStart..<min(batchStart + selected.capabilities.maxBatchSize, items.count)])
+      let slice = Array(pending[batchStart..<min(batchStart + selected.capabilities.maxBatchSize, pending.count)])
       guard let vectors = await runtime.embed(slice.map(\.1), task: .document, using: selected) else { return }
       for (item, vector) in zip(slice, vectors) {
         try await store.write(

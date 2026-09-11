@@ -18,6 +18,36 @@ struct HashEmbeddingEngine: LocalEmbeddingService {
   }
 }
 
+struct CountingEmbeddingEngine: LocalEmbeddingService {
+  let engineID = "test_hash"
+  var modelID = "test-hash-v1"
+  let dimension = 8
+  let capabilities = LocalEmbeddingCapabilities(assetsAvailable: true, requiresAppleSilicon: false, maxBatchSize: 32)
+  let counter: EmbedCallCounter
+
+  func embed(_ texts: [String], task: LocalEmbeddingTask) async throws -> [[Float]] {
+    counter.add(1)
+    return try await HashEmbeddingEngine().embed(texts, task: task)
+  }
+}
+
+final class EmbedCallCounter: @unchecked Sendable {
+  private let lock = NSLock()
+  private var calls = 0
+
+  func add(_ count: Int) {
+    lock.lock()
+    calls += count
+    lock.unlock()
+  }
+
+  func snapshot() -> Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return calls
+  }
+}
+
 struct ForbiddenEmbeddingHTTPClient: LocalInferenceHTTPClient {
   func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
     XCTFail("local runtime invoked HTTP")
