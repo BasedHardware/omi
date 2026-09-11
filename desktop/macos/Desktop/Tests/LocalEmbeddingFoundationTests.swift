@@ -34,14 +34,14 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: directory) }
     try await store.write(
       sourceKind: .screenshot, sourceId: 1, modelID: "a", text: "[Editor]\nbudget synthetic content", vector: [1, 0],
-      authorization: .unrestricted)
+      dimension: 2, authorization: .unrestricted)
     try await store.write(
       sourceKind: .screenshot, sourceId: 1, modelID: "b", text: "[Editor]\nbudget synthetic content",
       vector: [0, 1, 0],
-      authorization: .unrestricted)
+      dimension: 3, authorization: .unrestricted)
     try await store.write(
       sourceKind: .screenshot, sourceId: 1, modelID: "a", text: "[Editor]\nbudget synthetic content", vector: [0, 1],
-      authorization: .unrestricted)
+      dimension: 2, authorization: .unrestricted)
     let rows = try await store.pool.read { db in
       XCTAssertTrue(try db.tableExists("local_embeddings"))
       XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM local_embeddings"), 2)
@@ -76,7 +76,7 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
       do {
         try await store.write(
           sourceKind: .screenshot, sourceId: 1, modelID: "test",
-          text: "[Editor]\nbudget synthetic content", vector: [1], authorization: .unrestricted)
+          text: "[Editor]\nbudget synthetic content", vector: [1], dimension: 1, authorization: .unrestricted)
         XCTFail("stale embedding accepted")
       } catch { XCTAssertTrue(error is LocalEmbeddingStoreError) }
     }
@@ -91,7 +91,7 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
       try await store.write(
         sourceKind: .screenshot, sourceId: id, modelID: engine.modelID,
         text: id == 1 ? "[Editor]\nbudget synthetic content" : "[Editor]\nunrelated synthetic content", vector: vector,
-        authorization: .unrestricted)
+        dimension: engine.dimension, authorization: .unrestricted)
     }
     let runtime = LocalEmbeddingRuntime(engines: [engine], defaultEngineID: engine.engineID, record: { _, _ in })
     let search = LocalHybridSearch(store: store, runtime: runtime, authorization: .unrestricted)
@@ -120,7 +120,7 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
     do {
       try await store.write(
         sourceKind: .screenshot, sourceId: 1, modelID: "test", text: "[Editor]\nunrelated synthetic content",
-        vector: [1], authorization: revoked)
+        vector: [1], dimension: 1, authorization: revoked)
       XCTFail("revoked write accepted")
     } catch { XCTAssertTrue(error is LocalMutationAuthorizationError) }
     let count = try await store.pool.read { db in try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM local_embeddings") }
@@ -142,7 +142,7 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
     XCTAssertEqual(winner.map(\.id), [3])
     try await store.write(
       sourceKind: .screenshot, sourceId: 3, modelID: "a", text: "[Editor]\nunrelated synthetic content", vector: [1],
-      authorization: .unrestricted)
+      dimension: 1, authorization: .unrestricted)
     XCTAssertTrue(try store.screenshotsNeedingEmbedding(modelID: "a", olderThan: cutoff).isEmpty)
     XCTAssertEqual(try store.screenshotsNeedingEmbedding(modelID: "b", olderThan: cutoff).count, 1)
   }
@@ -254,5 +254,144 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
     let memories = try await search.search(query: "budget", engine: nil, sourceKinds: [.memory])
     XCTAssertTrue(memories.contains { $0.sourceKind == .memory })
     XCTAssertFalse(memories.contains { $0.sourceKind == .screenshot })
+  }
+
+  func testWriteRejectsVectorThatDoesNotMatchExpectedDimension() async throws {
+    let (store, directory) = try fixture()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    do {
+      try await store.write(
+        sourceKind: .screenshot, sourceId: 1, modelID: "a",
+        text: "[Editor]\nbudget synthetic content", vector: [1, 0],
+        dimension: 8, authorization: .unrestricted)
+      XCTFail("truncated vector accepted")
+    } catch {
+      XCTAssertTrue(error is LocalInferenceError)
+    }
+    let count = try await store.pool.read { db in try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM local_embeddings") }
+    XCTAssertEqual(count, 0)
+  }
+
+  func testKeywordSearchPreservesBM25OverRecency() async throws {
+    let (store, directory) = try fixture()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try await store.pool.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO screenshots VALUES
+            (10, '2026-09-08 12:00:00.000', 'Editor', '', 'budget budget budget exact match', NULL),
+            (11, '2026-09-10 12:00:00.000', 'Editor', '', 'budget', NULL);
+          INSERT INTO screenshots_fts(screenshots_fts) VALUES('rebuild');
+          """)
+    }
+    let hits = try await LocalHybridSearch(
+      store: store, runtime: .makeDefault(), authorization: .unrestricted
+    ).search(query: "budget", engine: nil)
+    let older = try XCTUnwrap(hits.firstIndex { $0.sourceId == 10 })
+    let newer = try XCTUnwrap(hits.firstIndex { $0.sourceId == 11 })
+    XCTAssertLessThan(older, newer)
+  }
+
+  func testVectorOnlySearchRanksBeforeFusionTruncation() async throws {
+    let (store, directory) = try fixture()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let engine = HashEmbeddingEngine()
+    let query = "alpha"
+    let queryVector = try await engine.embed([query], task: .query)[0]
+    try await store.pool.write { db in
+      for id in 4...13 {
+        try db.execute(
+          sql:
+            "INSERT INTO screenshots VALUES (?, '2026-09-09 12:00:00.000', 'Editor', '', 'alpha keyword hit \(id)', NULL)",
+          arguments: [Int64(id)])
+      }
+      try db.execute(sql: "INSERT INTO screenshots_fts(screenshots_fts) VALUES('rebuild')")
+    }
+    let filler = try await engine.embed(["alpha keyword hit"], task: .document)[0]
+    for id: Int64 in 4...13 {
+      try await store.write(
+        sourceKind: .screenshot, sourceId: id, modelID: engine.modelID,
+        text: "[Editor]\nalpha keyword hit \(id)", vector: filler,
+        dimension: engine.dimension, authorization: .unrestricted)
+    }
+    try await store.write(
+      sourceKind: .screenshot, sourceId: 3, modelID: engine.modelID,
+      text: "[Editor]\nunrelated synthetic content", vector: queryVector,
+      dimension: engine.dimension, authorization: .unrestricted)
+    let runtime = LocalEmbeddingRuntime(engines: [engine], defaultEngineID: engine.engineID, record: { _, _ in })
+    let search = LocalHybridSearch(store: store, runtime: runtime, authorization: .unrestricted)
+    let hybrid = try await search.search(query: query, engine: engine, limit: 10, retrieval: .hybrid)
+    XCTAssertFalse(
+      hybrid.contains { $0.sourceId == 3 },
+      "keyword+vector RRF must crowd out a vector-only hit at limit 10")
+    let vector = try await search.search(query: query, engine: engine, limit: 10, retrieval: .vector)
+    XCTAssertEqual(vector.first?.sourceId, 3)
+    XCTAssertEqual(vector.first?.matchedBy, .vector)
+  }
+
+  func testCompletedSessionBackfillRewritesStaleChunks() async throws {
+    let (store, directory) = try fixture()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try await store.pool.write { db in
+      try db.execute(sql: "ALTER TABLE transcription_sessions ADD COLUMN status TEXT")
+      try db.execute(sql: "ALTER TABLE transcription_sessions ADD COLUMN startedAt DATETIME")
+      try db.execute(
+        sql: """
+          CREATE TABLE transcription_segments (
+            id INTEGER PRIMARY KEY, sessionId INTEGER, text TEXT, segmentOrder INTEGER, startTime DOUBLE)
+          """)
+      try db.execute(
+        sql: """
+          INSERT INTO transcription_sessions(id, status, startedAt) VALUES
+            (1, 'recording', ?),
+            (2, 'completed', ?)
+          """,
+        arguments: [Date(timeIntervalSince1970: 10), Date(timeIntervalSince1970: 20)])
+      for order in 0..<8 {
+        try db.execute(
+          sql: "INSERT INTO transcription_segments(sessionId, text, segmentOrder, startTime) VALUES (1, ?, ?, 0)",
+          arguments: ["recording segment \(order)", order])
+        try db.execute(
+          sql: "INSERT INTO transcription_segments(sessionId, text, segmentOrder, startTime) VALUES (2, ?, ?, 0)",
+          arguments: ["original completed \(order)", order])
+      }
+    }
+    XCTAssertEqual(try store.sessionsNeedingTranscriptChunks(), [2])
+    let original = TranscriptChunker.chunks(
+      sessionId: 2,
+      segments: (0..<8).map {
+        TranscriptChunker.Segment(
+          text: "original completed \($0)", order: $0, startedAt: Date(timeIntervalSince1970: 20))
+      })
+    _ = try await store.replaceTranscriptChunks(sessionId: 2, chunks: original, authorization: .unrestricted)
+    XCTAssertTrue(try store.sessionsNeedingTranscriptChunks().isEmpty)
+    try await store.pool.write { db in
+      try db.execute(sql: "DELETE FROM transcription_segments WHERE sessionId = 2")
+      try db.execute(
+        sql: "INSERT INTO transcription_segments(sessionId, text, segmentOrder, startTime) VALUES (2, 'replaced', 0, 0)"
+      )
+    }
+    XCTAssertEqual(try store.sessionsNeedingTranscriptChunks(), [2])
+    let replaced = TranscriptChunker.chunks(
+      sessionId: 2,
+      segments: [
+        TranscriptChunker.Segment(text: "replaced", order: 0, startedAt: Date(timeIntervalSince1970: 20))
+      ])
+    let stored = try await store.replaceTranscriptChunks(
+      sessionId: 2, chunks: replaced, authorization: .unrestricted)
+    XCTAssertEqual(stored.count, 1)
+    let remaining = try await store.pool.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM transcript_chunks WHERE sessionId = 2")
+    }
+    XCTAssertEqual(remaining, 1)
+    try await store.pool.write { db in
+      try db.execute(sql: "DELETE FROM transcription_segments WHERE sessionId = 2")
+    }
+    XCTAssertEqual(try store.sessionsNeedingTranscriptChunks(), [2])
+    _ = try await store.replaceTranscriptChunks(sessionId: 2, chunks: [], authorization: .unrestricted)
+    let leftover = try await store.pool.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM transcript_chunks WHERE sessionId = 2")
+    }
+    XCTAssertEqual(leftover, 0)
   }
 }

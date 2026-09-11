@@ -138,9 +138,9 @@ struct LocalEmbeddingStore: Sendable {
 
   func write(
     sourceKind: LocalEmbeddingSourceKind, sourceId: Int64, modelID: String,
-    text: String, vector: [Float], authorization: LocalMutationAuthorization
+    text: String, vector: [Float], dimension: Int, authorization: LocalMutationAuthorization
   ) async throws {
-    guard !modelID.isEmpty, LocalEmbeddingProbe.valid(vector, dimension: vector.count) else {
+    guard !modelID.isEmpty, LocalEmbeddingProbe.valid(vector, dimension: dimension) else {
       throw LocalInferenceError.invalidResponse("invalid local vector shape")
     }
     let data = vector.withUnsafeBytes { Data($0) }
@@ -181,7 +181,7 @@ struct LocalEmbeddingStore: Sendable {
               vector = excluded.vector, createdAt = excluded.createdAt
             """,
           arguments: [
-            sourceKind.rawValue, sourceId, modelID, vector.count, Self.textHash(text), data,
+            sourceKind.rawValue, sourceId, modelID, dimension, Self.textHash(text), data,
             Date().timeIntervalSince1970,
           ])
         try authorization.require()
@@ -266,10 +266,7 @@ struct LocalEmbeddingStore: Sendable {
           })
       }
     }
-    return Array(
-      candidates.sorted {
-        $0.capturedAt == $1.capturedAt ? $0.sourceId > $1.sourceId : $0.capturedAt > $1.capturedAt
-      }.prefix(50))
+    return Array(candidates.prefix(50))
   }
 
   func readBatch(
@@ -346,45 +343,78 @@ struct LocalEmbeddingStore: Sendable {
     try await authorization.withCommitLeaseSuppressingSupersededResult {
       try await pool.write { db in
         try authorization.require()
-        var stored: [TranscriptChunkRecord] = []
-        stored.reserveCapacity(chunks.count)
-        for chunk in chunks {
-          try db.execute(
-            sql: """
-              INSERT INTO transcript_chunks(sessionId, chunkIndex, text, textSha256, startedAt)
-              VALUES (?, ?, ?, ?, ?)
-              ON CONFLICT(sessionId, chunkIndex) DO UPDATE SET
-                text = excluded.text, textSha256 = excluded.textSha256, startedAt = excluded.startedAt
-              """,
-            arguments: [
-              chunk.sessionId, chunk.chunkIndex, chunk.text, chunk.textSha256, chunk.startedAt,
-            ])
-          let id = try Int64.fetchOne(
-            db,
-            sql: "SELECT id FROM transcript_chunks WHERE sessionId = ? AND chunkIndex = ?",
-            arguments: [chunk.sessionId, chunk.chunkIndex])
-          stored.append(
-            TranscriptChunkRecord(
-              id: id, sessionId: chunk.sessionId, chunkIndex: chunk.chunkIndex,
-              text: chunk.text, textSha256: chunk.textSha256, startedAt: chunk.startedAt))
-        }
+        let stored = try Self.insertTranscriptChunks(chunks, db: db)
         try authorization.require()
         return stored
       }
     }
   }
 
+  func replaceTranscriptChunks(
+    sessionId: Int64, chunks: [TranscriptChunkRecord], authorization: LocalMutationAuthorization
+  ) async throws -> [TranscriptChunkRecord] {
+    try await authorization.withCommitLeaseSuppressingSupersededResult {
+      try await pool.write { db in
+        try authorization.require()
+        try db.execute(sql: "DELETE FROM transcript_chunks WHERE sessionId = ?", arguments: [sessionId])
+        let stored = try Self.insertTranscriptChunks(chunks, db: db)
+        try authorization.require()
+        return stored
+      }
+    }
+  }
+
+  func transcriptChunkPreviews(ids: [Int64], limit: Int = 50) throws -> [Int64: (text: String, startedAt: Date)] {
+    let bounded = Array(ids.prefix(max(0, min(limit, 50))))
+    guard !bounded.isEmpty else { return [:] }
+    return try pool.read { db in
+      var previews: [Int64: (text: String, startedAt: Date)] = [:]
+      let placeholders = bounded.map { _ in "?" }.joined(separator: ",")
+      let rows = try Row.fetchAll(
+        db,
+        sql: "SELECT id, text, startedAt FROM transcript_chunks WHERE id IN (\(placeholders))",
+        arguments: StatementArguments(bounded))
+      for row in rows {
+        let id: Int64 = row["id"]
+        let text: String = row["text"]
+        let startedAt: Date = row["startedAt"]
+        previews[id] = (text, startedAt)
+      }
+      return previews
+    }
+  }
+
   func sessionsNeedingTranscriptChunks(limit: Int = 20) throws -> [Int64] {
     try pool.read { db in
-      try Int64.fetchAll(
-        db,
-        sql: """
-          SELECT s.id FROM transcription_sessions s
-          WHERE EXISTS (SELECT 1 FROM transcription_segments g WHERE g.sessionId = s.id)
-            AND NOT EXISTS (SELECT 1 FROM transcript_chunks c WHERE c.sessionId = s.id)
-          ORDER BY s.id DESC LIMIT ?
-          """,
-        arguments: [max(0, min(limit, 50))])
+      let bound = max(0, min(limit, 50))
+      let hasStatus = try db.columns(in: "transcription_sessions").contains { $0.name == "status" }
+      let sql =
+        hasStatus
+        ? """
+        SELECT s.id FROM transcription_sessions s
+        WHERE s.status = 'completed'
+          AND (
+            EXISTS (SELECT 1 FROM transcription_segments g WHERE g.sessionId = s.id)
+            OR EXISTS (SELECT 1 FROM transcript_chunks c WHERE c.sessionId = s.id)
+          )
+        ORDER BY s.id DESC LIMIT ?
+        """
+        : """
+        SELECT s.id FROM transcription_sessions s
+        WHERE EXISTS (SELECT 1 FROM transcription_segments g WHERE g.sessionId = s.id)
+          OR EXISTS (SELECT 1 FROM transcript_chunks c WHERE c.sessionId = s.id)
+        ORDER BY s.id DESC LIMIT ?
+        """
+      let ids = try Int64.fetchAll(db, sql: sql, arguments: [bound])
+      var needed: [Int64] = []
+      needed.reserveCapacity(ids.count)
+      for id in ids {
+        if try Self.sessionChunksNeedRewrite(sessionId: id, db: db) {
+          needed.append(id)
+          if needed.count >= bound { break }
+        }
+      }
+      return needed
     }
   }
 
@@ -425,6 +455,74 @@ struct LocalEmbeddingStore: Sendable {
           text: $0["text"], textSha256: $0["textSha256"], startedAt: $0["startedAt"])
       }
     }
+  }
+
+  private static func insertTranscriptChunks(_ chunks: [TranscriptChunkRecord], db: Database) throws
+    -> [TranscriptChunkRecord]
+  {
+    var stored: [TranscriptChunkRecord] = []
+    stored.reserveCapacity(chunks.count)
+    for chunk in chunks {
+      try db.execute(
+        sql: """
+          INSERT INTO transcript_chunks(sessionId, chunkIndex, text, textSha256, startedAt)
+          VALUES (?, ?, ?, ?, ?)
+          """,
+        arguments: [
+          chunk.sessionId, chunk.chunkIndex, chunk.text, chunk.textSha256, chunk.startedAt,
+        ])
+      let id = try Int64.fetchOne(
+        db,
+        sql: "SELECT id FROM transcript_chunks WHERE sessionId = ? AND chunkIndex = ?",
+        arguments: [chunk.sessionId, chunk.chunkIndex])
+      stored.append(
+        TranscriptChunkRecord(
+          id: id, sessionId: chunk.sessionId, chunkIndex: chunk.chunkIndex,
+          text: chunk.text, textSha256: chunk.textSha256, startedAt: chunk.startedAt))
+    }
+    return stored
+  }
+
+  private static func sessionChunksNeedRewrite(sessionId: Int64, db: Database) throws -> Bool {
+    let origin: Date
+    if try db.columns(in: "transcription_sessions").contains(where: { $0.name == "startedAt" }),
+      let startedAt = try Date.fetchOne(
+        db, sql: "SELECT startedAt FROM transcription_sessions WHERE id = ?", arguments: [sessionId])
+    {
+      origin = startedAt
+    } else {
+      origin = Date(timeIntervalSince1970: 0)
+    }
+    let segments = try Row.fetchAll(
+      db,
+      sql: """
+        SELECT text, segmentOrder, startTime FROM transcription_segments
+        WHERE sessionId = ? ORDER BY segmentOrder, startTime
+        """,
+      arguments: [sessionId]
+    ).map { row in
+      TranscriptChunker.Segment(
+        text: row["text"], order: row["segmentOrder"],
+        startedAt: origin.addingTimeInterval(row["startTime"]))
+    }
+    let expected = TranscriptChunker.chunks(sessionId: sessionId, segments: segments)
+    let stored = try Row.fetchAll(
+      db,
+      sql: """
+        SELECT chunkIndex, textSha256, startedAt FROM transcript_chunks
+        WHERE sessionId = ? ORDER BY chunkIndex
+        """,
+      arguments: [sessionId])
+    guard stored.count == expected.count else { return true }
+    for (chunk, row) in zip(expected, stored) {
+      let index: Int = row["chunkIndex"]
+      let hash: String = row["textSha256"]
+      let startedAt: Date = row["startedAt"]
+      if index != chunk.chunkIndex || hash != chunk.textSha256 || startedAt != chunk.startedAt {
+        return true
+      }
+    }
+    return false
   }
 
   private static func candidate(_ row: Row, kind: LocalEmbeddingSourceKind) -> LocalEmbeddingCandidate {
