@@ -1619,6 +1619,64 @@ test('conversation list names discarded GET photo counts and omits them otherwis
   expect(textOf(renderer)).not.toContain('3 photos');
 });
 
+test('conversation list names discarded GET transcript excerpt as the title', () => {
+  const excerpt =
+    '[00:00:00 - 00:00:02] Speaker 1: Hello from the recording';
+  const base = {
+    kind: 'conversation' as const,
+    summary: 'Notes',
+    searchableText: `${excerpt}\nNotes`,
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...base,
+                id: 'omi-discarded-speech',
+                title: excerpt,
+                discarded: true,
+              },
+              {
+                ...base,
+                id: 'omi-kept-speech',
+                title: 'Real title',
+                discarded: false,
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain(excerpt);
+  expect(copy).toContain('Real title');
+  expect(copy).toContain('Discarded');
+});
+
 test('conversation list names GET goals without add or a write sheet', async () => {
   const request = jest.fn(async request => {
     if (request.path === '/v1/goals/all') {

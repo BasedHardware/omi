@@ -5,6 +5,7 @@ import {
   conversationDisplayTitle,
   conversationListUsesListenOverview,
   conversationRecapTitle,
+  conversationDiscardedTranscriptCopy,
   conversationDayLabel,
   conversationRecapDateLabel,
   conversationListNewCopy,
@@ -823,6 +824,81 @@ test('compact recaps keep list overview speech when GET title is empty', () => {
       summary: 'Short title with later speech',
     }),
   ).toBe(false);
+});
+
+test('discarded conversation titles use Flutter transcript excerpt without people names', () => {
+  expect(
+    conversationDiscardedTranscriptCopy([
+      {
+        text: 'Hello',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        start: 0,
+        end: 2,
+      },
+      {
+        text: 'Later',
+        speaker: 'SPEAKER_01',
+        isUser: false,
+        start: 3,
+        end: 5,
+      },
+    ]),
+  ).toBe(
+    '[00:00:00 - 00:00:02] Speaker 1: Hello \n\n[00:00:03 - 00:00:05] Speaker 2: Later',
+  );
+  expect(
+    conversationDiscardedTranscriptCopy([
+      {text: 'Hi', speaker: 'SPEAKER_00', isUser: true, start: 0, end: 1},
+    ]),
+  ).toBe('[00:00:00 - 00:00:01] User: Hi');
+  expect(
+    conversationDiscardedTranscriptCopy([
+      {
+        text: 'Hello',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        start: 0,
+        end: 5,
+      },
+      {
+        text: 'Later',
+        speaker: 'SPEAKER_01',
+        isUser: false,
+        start: 1,
+        end: 6,
+      },
+    ]),
+  ).toBe('Speaker 1: Hello \n\n Speaker 2: Later');
+  expect(
+    conversationDiscardedTranscriptCopy([
+      {text: 'A', speaker: 'SPEAKER_05', isUser: false, start: 0, end: 1},
+      {text: 'B', speaker: 'SPEAKER_06', isUser: false, start: 2, end: 3},
+    ]),
+  ).toBe(
+    '[00:00:00 - 00:00:01] Speaker 1: A \n\n[00:00:02 - 00:00:03] Speaker 2: B',
+  );
+  expect(
+    conversationDiscardedTranscriptCopy([
+      {
+        text: 'Named',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        start: 0,
+        end: 1,
+        personId: 'person-1',
+      },
+    ]),
+  ).toBe('[00:00:00 - 00:00:01] Speaker 1: Named');
+  expect(
+    conversationDiscardedTranscriptCopy([
+      {text: 'a'.repeat(90), isUser: true, start: 0, end: 2},
+    ]),
+  ).toBe(`[00:00:00 - 00:00:02] User: ${'a'.repeat(90)}`.slice(-100));
+  expect(conversationDiscardedTranscriptCopy([])).toBeNull();
+  expect(
+    conversationDiscardedTranscriptCopy([{text: ' \t\n', isUser: false}]),
+  ).toBe('Speaker 1:');
 });
 
 test('conversation status copy is not a raw wire token', () => {

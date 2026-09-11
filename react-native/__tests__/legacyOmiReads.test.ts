@@ -51,6 +51,69 @@ test('old conversations keep GET photo counts and omit empty lists', async () =>
   expect(result.items[1]).not.toHaveProperty('photoCount');
 });
 
+test('old discarded conversations name GET transcript_segments as the list title', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'discarded-speech',
+      discarded: true,
+      structured: {title: '', overview: 'Actual overview'},
+      transcript_segments: [
+        {
+          text: 'Hello from the recording',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 0,
+          end: 2,
+        },
+      ],
+    },
+    {
+      ...conversation,
+      id: 'discarded-titled',
+      discarded: true,
+      structured: {title: 'AI title', overview: 'Actual overview'},
+      transcript_segments: [
+        {
+          text: 'Live speech',
+          speaker: 'SPEAKER_00',
+          is_user: true,
+          start: 0,
+          end: 1,
+        },
+      ],
+    },
+    {
+      ...conversation,
+      id: 'discarded-empty',
+      discarded: true,
+      structured: {title: 'Kept title', overview: 'Actual overview'},
+      transcript_segments: [],
+    },
+    {
+      ...conversation,
+      id: 'kept-speech',
+      discarded: false,
+      transcript_segments: [
+        {
+          text: 'Should not replace title',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 0,
+          end: 2,
+        },
+      ],
+    },
+  ]);
+  const result = await loadConversations(api);
+  expect(result.items[0].title).toBe(
+    '[00:00:00 - 00:00:02] Speaker 1: Hello from the recording',
+  );
+  expect(result.items[1].title).toBe('[00:00:00 - 00:00:01] User: Live speech');
+  expect(result.items[2].title).toBe('Kept title');
+  expect(result.items[3].title).toBe('Real title');
+});
+
 test('old conversations keep wire-non-empty category and omit whitespace', async () => {
   const {api} = backend([
     {

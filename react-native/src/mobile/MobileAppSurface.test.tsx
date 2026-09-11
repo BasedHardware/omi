@@ -848,6 +848,24 @@ test('Daily Recaps name discarded photo counts without a photo viewer', () => {
   expect(renderedText(empty)).not.toContain('photos');
 });
 
+test('Daily Recaps name discarded GET transcript excerpt as the title', () => {
+  const excerpt =
+    '[00:00:00 - 00:00:02] Speaker 1: Hello from the recording';
+  const flagged = render({
+    recaps: [
+      {
+        id: 'recap-discarded-speech',
+        title: excerpt,
+        dateLabel: 'Yesterday',
+        discarded: true,
+      },
+    ],
+  });
+  expect(renderedText(flagged)).toContain(excerpt);
+  expect(renderedText(flagged)).toContain('Discarded');
+  expect(renderedText(flagged)).not.toContain('Duration');
+});
+
 test('Daily Recaps name failed conversations without Status on every card', () => {
   const flagged = render({
     recaps: [

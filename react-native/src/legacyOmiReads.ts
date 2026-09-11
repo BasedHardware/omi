@@ -1,5 +1,6 @@
 import {isOptionalCaptureTimestamp} from './captureTimestamp';
 import {
+  conversationDiscardedTranscriptCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
   memoryCaptureDeviceCopy,
@@ -122,6 +123,36 @@ function photoCount(value: unknown): number {
   }
   return value.length;
 }
+function finiteClock(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error('Omi transcript is malformed');
+  }
+  return value;
+}
+function discardedTranscriptSegments(value: unknown): {
+  text: string;
+  speaker: string | null;
+  isUser: boolean;
+  start: number;
+  end: number;
+}[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value) || value.length > 20000) {
+    throw new Error('Omi transcript is malformed');
+  }
+  return value.map(raw => {
+    const segment = object(raw);
+    return {
+      text: text(segment.text, ''),
+      speaker: segment.speaker == null ? null : text(segment.speaker),
+      isUser: bool(segment.is_user),
+      start: finiteClock(segment.start),
+      end: finiteClock(segment.end),
+    };
+  });
+}
 export async function loadOmiConversations(
   read: Read,
   cursor: string | null,
@@ -132,8 +163,16 @@ export async function loadOmiConversations(
   );
   const items = records.map(row => {
     const structured = object(row.structured);
-    const title = text(structured.title, ''),
+    const structuredTitle = text(structured.title, ''),
       summary = text(structured.overview, '');
+    const discarded = bool(row.discarded);
+    const discardedExcerpt = discarded
+      ? conversationDiscardedTranscriptCopy(
+          discardedTranscriptSegments(row.transcript_segments),
+        )
+      : null;
+    const title =
+      discardedExcerpt !== null ? discardedExcerpt : structuredTitle;
     const emoji = visibleDisplayText(text(structured.emoji, ''));
     const category = visibleDisplayText(text(structured.category, ''));
     const createdAt = date(row.created_at);
@@ -166,7 +205,7 @@ export async function loadOmiConversations(
       visibility: visibility as ConversationProjection['visibility'],
       folderId: row.folder_id == null ? null : text(row.folder_id),
       locked: bool(row.is_locked),
-      discarded: bool(row.discarded),
+      discarded,
       ...(emoji === '' ? {} : {emoji}),
       ...(category === '' ? {} : {category}),
       ...(photos === 0 ? {} : {photoCount: photos}),

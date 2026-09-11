@@ -91,6 +91,80 @@ export function conversationRecapTitle(item: {
   return conversationDisplayTitle(item);
 }
 
+function discardedTranscriptSpeakerId(
+  speaker: string | number | null | undefined,
+): number {
+  if (typeof speaker === 'number' && Number.isSafeInteger(speaker)) {
+    return speaker;
+  }
+  if (typeof speaker !== 'string') {
+    return 0;
+  }
+  const labeled = /^SPEAKER_(\d+)$/.exec(visibleDisplayText(speaker));
+  return labeled !== null ? Number(labeled[1]) : 0;
+}
+
+export function conversationDiscardedTranscriptCopy(
+  segments: readonly {
+    text: string;
+    speaker?: string | number | null;
+    isUser?: boolean;
+    start?: number | null;
+    end?: number | null;
+  }[],
+): string | null {
+  if (segments.length === 0) {
+    return null;
+  }
+  const clocks: {start: number; end: number}[] = [];
+  for (const segment of segments) {
+    if (typeof segment.start !== 'number' || typeof segment.end !== 'number') {
+      clocks.length = 0;
+      break;
+    }
+    clocks.push({start: segment.start, end: segment.end});
+  }
+  const includeTimestamps =
+    clocks.length === segments.length &&
+    legacyTranscriptCanDisplaySeconds(clocks);
+  let minSpeakerId: number | null = null;
+  for (const segment of segments) {
+    if (segment.isUser === true) {
+      continue;
+    }
+    const speakerId = discardedTranscriptSpeakerId(segment.speaker);
+    if (minSpeakerId === null || speakerId < minSpeakerId) {
+      minSpeakerId = speakerId;
+    }
+  }
+  let transcript = '';
+  for (const segment of segments) {
+    const segmentText = visibleDisplayText(segment.text);
+    const timestampStr =
+      includeTimestamps &&
+      typeof segment.start === 'number' &&
+      typeof segment.end === 'number'
+        ? `[${legacyTranscriptTimestampCopy(segment.start, segment.end)}]`
+        : '';
+    const speakerName =
+      segment.isUser === true
+        ? 'User'
+        : `Speaker ${
+            discardedTranscriptSpeakerId(segment.speaker) -
+            (minSpeakerId ?? 0) +
+            1
+          }`;
+    transcript += `${timestampStr} ${speakerName}: ${segmentText} \n\n`;
+  }
+  transcript = transcript.trim();
+  if (transcript === '') {
+    return null;
+  }
+  return transcript.length <= 100
+    ? transcript
+    : transcript.slice(transcript.length - 100);
+}
+
 export function conversationDisplaySummary(item: {
   summary: string;
   status: string;
