@@ -14,6 +14,13 @@ function object(value: unknown): Record<string, unknown> {
 }
 
 function finiteNumber(value: unknown): number {
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (value.trim() === '' || !Number.isFinite(parsed)) {
+      throw new FairUseError();
+    }
+    return parsed;
+  }
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new FairUseError();
   }
@@ -50,6 +57,12 @@ function optionalResetAtMs(value: unknown): number | undefined {
 }
 
 function requiredInteger(value: unknown): number {
+  if (typeof value === 'string') {
+    if (!/^[+-]?[0-9]+$/.test(value)) {
+      throw new FairUseError();
+    }
+    return Number(value);
+  }
   const number = finiteNumber(value);
   if (!Number.isSafeInteger(number)) {
     throw new FairUseError();
