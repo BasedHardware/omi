@@ -290,6 +290,15 @@ export async function loadOmiTasks(
         ? undefined
         : text(row.export_platform),
     );
+    const rawTaskId = row.taskId ?? row.task_id;
+    const parsedTaskId =
+      rawTaskId === undefined || rawTaskId === null
+        ? undefined
+        : text(rawTaskId);
+    const taskId =
+      parsedTaskId === undefined || visibleDisplayText(parsedTaskId) === ''
+        ? undefined
+        : parsedTaskId;
     return {
       kind: 'task' as const,
       id: id(row.id),
@@ -312,6 +321,7 @@ export async function loadOmiTasks(
       updatedAt: milliseconds(row.updated_at),
       revision: null,
       ...(exportCopy === null ? {} : {exportCopy}),
+      ...(taskId === undefined ? {} : {taskId}),
     };
   });
   return {

@@ -33,6 +33,8 @@ import {
   connectionIdentityCopy,
   chatMessageDisplayText,
   chatChartCopy,
+  paintedChatContentBlock,
+  taskCardDescription,
   chatAttachmentThumbnailUrl,
   chatSenderCopy,
   chatDaySummaryCopy,
@@ -1620,6 +1622,38 @@ test('chat message copy names GET chart points and omits empty charts', () => {
       points: [{label: ' \t', value: 12}],
     }),
   ).toBeNull();
+});
+
+test('task card chrome names loaded GET task description and omits ids', () => {
+  const tasks = [
+    {id: 'task-join', title: 'Send the follow-up notes'},
+    {id: 'other', taskId: 'task-alias', title: 'Alias description'},
+  ];
+  expect(taskCardDescription('task-join', tasks)).toBe(
+    'Send the follow-up notes',
+  );
+  expect(taskCardDescription('task-alias', tasks)).toBe('Alias description');
+  expect(taskCardDescription('missing', tasks)).toBeUndefined();
+  expect(
+    paintedChatContentBlock({eyebrow: 'Task', taskId: 'task-join'}, tasks),
+  ).toEqual({eyebrow: 'Task', title: 'Send the follow-up notes'});
+  expect(
+    paintedChatContentBlock({eyebrow: 'Task', taskId: 'missing'}, tasks),
+  ).toEqual({eyebrow: 'Task'});
+  expect(
+    JSON.stringify(
+      paintedChatContentBlock({eyebrow: 'Task', taskId: 'task-join'}, tasks),
+    ),
+  ).not.toContain('task-join');
+  expect(
+    paintedChatContentBlock({eyebrow: 'Task', taskId: 'task-join'}, tasks),
+  ).not.toHaveProperty('taskId');
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Memory', title: 'Prefers concise notes', taskId: 'task-join'},
+      tasks,
+    ),
+  ).toEqual({eyebrow: 'Memory', title: 'Prefers concise notes'});
 });
 
 test('chat attachment thumbnails keep http image GET urls and omit local or non-image paths', () => {

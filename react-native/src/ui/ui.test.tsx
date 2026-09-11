@@ -1688,7 +1688,7 @@ test('a chat message names GET content_blocks without inventing write actions', 
           },
           {eyebrow: 'Memory', title: 'Prefers concise notes'},
           {eyebrow: 'Question', title: 'Schedule the follow-up?'},
-          {eyebrow: 'Task'},
+          {eyebrow: 'Task', taskId: 'task-1'},
         ],
       }}
       reduceMotion
@@ -1717,6 +1717,7 @@ test('a chat message names GET content_blocks without inventing write actions', 
   expect(copies).toContain('Question');
   expect(copies).toContain('Schedule the follow-up?');
   expect(copies).toContain('Task');
+  expect(copies).not.toContain('task-1');
   expect(copies).not.toContain('Open in Memories');
   expect(copies).not.toContain('Open conversation');
   expect(copies).not.toContain('Open in Goals');
@@ -1773,6 +1774,82 @@ test('a chat message names GET content_blocks without inventing write actions', 
     renderer.unmount();
     omitted.unmount();
     human.unmount();
+  });
+});
+
+test('a chat message names loaded GET task_card description without leaking ids', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-task',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        contentBlocks: [{eyebrow: 'Task', taskId: 'task-join'}],
+      }}
+      reduceMotion
+      tasks={[{id: 'task-join', title: 'Send the follow-up notes'}]}
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Task');
+  expect(copies).toContain('Send the follow-up notes');
+  expect(copies).not.toContain('task-join');
+  expect(copies).not.toContain('Loading');
+  expect(copies).not.toContain('No longer available');
+  const unmatched = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-task-miss',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        contentBlocks: [{eyebrow: 'Task', taskId: 'task-join'}],
+      }}
+      reduceMotion
+      tasks={[{id: 'other', title: 'Send the follow-up notes'}]}
+    />,
+  );
+  const unmatchedCopies = unmatched.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(unmatchedCopies).toContain('Task');
+  expect(unmatchedCopies).not.toContain('Send the follow-up notes');
+  expect(unmatchedCopies).not.toContain('task-join');
+  expect(unmatchedCopies).not.toContain('No longer available');
+  act(() => {
+    renderer.unmount();
+    unmatched.unmount();
   });
 });
 

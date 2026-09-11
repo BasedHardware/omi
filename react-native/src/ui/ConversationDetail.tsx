@@ -14,6 +14,7 @@ import {
   legacyTranscriptTimestampCopy,
   visibleDisplayText,
   type ConversationProjection,
+  type TaskCardLookup,
 } from '../desktopReadClient';
 import {RecordingTranscriptView} from './RecordingTranscript';
 import {ChatConversationHistory} from './ChatConversationHistory';
@@ -148,10 +149,12 @@ export function ConversationDetail({
   conversation,
   desktop = false,
   apiContract,
+  tasks = [],
 }: {
   conversation: ConversationProjection;
   desktop?: boolean;
   apiContract?: 'omi';
+  tasks?: readonly TaskCardLookup[];
 }) {
   if (apiContract === 'omi') {
     return (
@@ -193,6 +196,7 @@ export function ConversationDetail({
             desktop={desktop}
             key={conversation.id}
             conversationId={conversation.id}
+            tasks={tasks}
           />
         )}
       {conversation.source === 'chat' &&
@@ -405,28 +409,30 @@ function LegacyConversationBody({
       {conversation.discarded
         ? null
         : detail.sections.flatMap((section, index) => {
-        const heading = visibleDisplayText(section.heading);
-        const bodyMarkdown = visibleDisplayText(section.bodyMarkdown);
-        if (heading === '' && bodyMarkdown === '') {
-          return [];
-        }
-        return [
-          <View key={index} style={styles.conversationDetailFields}>
-            {heading !== '' ? (
-              <Text
-                accessibilityRole="header"
-                style={[styles.resultTitle, ink]}>
-                {heading}
-              </Text>
-            ) : null}
-            {bodyMarkdown !== '' ? (
-              <Text selectable style={[styles.conversationTranscriptText, ink]}>
-                {bodyMarkdown}
-              </Text>
-            ) : null}
-          </View>,
-        ];
-      })}
+            const heading = visibleDisplayText(section.heading);
+            const bodyMarkdown = visibleDisplayText(section.bodyMarkdown);
+            if (heading === '' && bodyMarkdown === '') {
+              return [];
+            }
+            return [
+              <View key={index} style={styles.conversationDetailFields}>
+                {heading !== '' ? (
+                  <Text
+                    accessibilityRole="header"
+                    style={[styles.resultTitle, ink]}>
+                    {heading}
+                  </Text>
+                ) : null}
+                {bodyMarkdown !== '' ? (
+                  <Text
+                    selectable
+                    style={[styles.conversationTranscriptText, ink]}>
+                    {bodyMarkdown}
+                  </Text>
+                ) : null}
+              </View>,
+            ];
+          })}
       {actionItems.length > 0 ? (
         <>
           <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>

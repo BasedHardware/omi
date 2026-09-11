@@ -491,7 +491,7 @@ function questionHasOptions(row: Record<string, unknown>): boolean {
 
 function parseContentBlock(
   raw: unknown,
-): {eyebrow: string; title?: string; detail?: string}[] {
+): {eyebrow: string; title?: string; detail?: string; taskId?: string}[] {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     return [];
   }
@@ -538,10 +538,11 @@ function parseContentBlock(
     }
     case 'taskCard':
     case 'task_card': {
-      if (wireString(row, 'taskId', 'task_id') === undefined) {
+      const taskId = wireString(row, 'taskId', 'task_id');
+      if (taskId === undefined) {
         return [];
       }
-      return [contentBlockChrome('Task')];
+      return [{...contentBlockChrome('Task'), taskId}];
     }
     case 'goalLink':
     case 'goal_link': {
@@ -684,7 +685,7 @@ function parseOmiChatContentBlocksRaw(
 
 function parseOmiChatContentBlocks(
   row: Record<string, unknown>,
-): {eyebrow: string; title?: string; detail?: string}[] {
+): {eyebrow: string; title?: string; detail?: string; taskId?: string}[] {
   try {
     const raw = parseOmiChatContentBlocksRaw(row);
     if (raw === null) {

@@ -1393,6 +1393,52 @@ export function chatChartCopy(chart: {
   return title === '' ? lines.join('\n') : `${title}\n${lines.join('\n')}`;
 }
 
+export type TaskCardLookup = {
+  id: string;
+  title: string;
+  taskId?: string;
+};
+
+export function taskCardDescription(
+  taskId: string,
+  tasks: readonly TaskCardLookup[],
+): string | undefined {
+  for (const task of tasks) {
+    if (task.id !== taskId && task.taskId !== taskId) {
+      continue;
+    }
+    const title = visibleDisplayText(task.title);
+    return title === '' ? undefined : title;
+  }
+  return undefined;
+}
+
+export function paintedChatContentBlock(
+  block: {
+    eyebrow: string;
+    title?: string;
+    detail?: string;
+    taskId?: string;
+  },
+  tasks: readonly TaskCardLookup[] = [],
+): {eyebrow: string; title?: string; detail?: string} {
+  const joined =
+    block.title === undefined &&
+    block.eyebrow === 'Task' &&
+    block.taskId !== undefined
+      ? taskCardDescription(block.taskId, tasks)
+      : undefined;
+  const title = block.title ?? joined;
+  const visibleTitle = title === undefined ? '' : visibleDisplayText(title);
+  const visibleDetail =
+    block.detail === undefined ? '' : visibleDisplayText(block.detail);
+  return {
+    eyebrow: block.eyebrow,
+    ...(visibleTitle === '' ? {} : {title: visibleTitle}),
+    ...(visibleDetail === '' ? {} : {detail: visibleDetail}),
+  };
+}
+
 export function chatMessageDisplayText(
   message: {
     text: string;
@@ -1411,6 +1457,7 @@ export function chatMessageDisplayText(
       eyebrow: string;
       title?: string;
       detail?: string;
+      taskId?: string;
     }[];
   },
   cancelledEmptyCopy = 'Response stopped',
@@ -1808,6 +1855,7 @@ export type TaskProjection = {
   updatedAt: number | null;
   revision: string | null;
   exportCopy?: string;
+  taskId?: string;
 };
 
 export type TaskGroup =

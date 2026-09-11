@@ -30,6 +30,7 @@ import {
   type ConversationProjection,
   type DesktopReadProjection,
   type DomainReadOutcome,
+  type TaskCardLookup,
 } from '../desktopReadClient';
 import {FocusPressable} from '../ui/Pressable';
 import {
@@ -176,6 +177,7 @@ export function ConversationsPage({
   requestedConversationId = null,
   onRequestedConversationConsumed,
   backend = null,
+  tasks = [],
 }: {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
@@ -187,6 +189,7 @@ export function ConversationsPage({
   requestedConversationId?: string | null;
   onRequestedConversationConsumed?: () => void;
   backend?: OmiBackend | null;
+  tasks?: readonly TaskCardLookup[];
 }) {
   const compact = useWindowDimensions().width < 720;
   const conversations = useMemo(
@@ -639,6 +642,7 @@ export function ConversationsPage({
                       : undefined
                   }
                   conversation={selected}
+                  tasks={tasks}
                 />
               </>
             )}

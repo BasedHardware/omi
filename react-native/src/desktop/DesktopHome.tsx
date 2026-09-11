@@ -24,10 +24,12 @@ import {
   desktopBackendUnavailableCopy,
   desktopReadsCanRetry,
   conversationRecapTitle,
+  paintedChatContentBlock,
   taskDisplayTitle,
   visibleDisplayText,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
+  type TaskCardLookup,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
@@ -112,12 +114,14 @@ function AskExchange({
   loadingOlderChat,
   messages,
   onLoadOlderChat,
+  tasks = [],
 }: {
   chatBusy: boolean;
   olderChatAvailable: boolean;
   loadingOlderChat: boolean;
   messages: ChatMessage[];
   onLoadOlderChat: () => void;
+  tasks?: readonly TaskCardLookup[];
 }) {
   return (
     <View accessibilityLabel="Ask exchange" style={styles.exchange}>
@@ -215,23 +219,26 @@ function AskExchange({
               </View>
             ))}
             {!human &&
-              (item.contentBlocks ?? []).map((block, index) => (
-                <View key={`block-${index}`}>
-                  <Text numberOfLines={1} style={styles.rowMeta}>
-                    {block.eyebrow}
-                  </Text>
-                  {block.title !== undefined ? (
-                    <Text numberOfLines={2} style={styles.rowMeta}>
-                      {block.title}
+              (item.contentBlocks ?? []).map((block, index) => {
+                const painted = paintedChatContentBlock(block, tasks);
+                return (
+                  <View key={`block-${index}`}>
+                    <Text numberOfLines={1} style={styles.rowMeta}>
+                      {painted.eyebrow}
                     </Text>
-                  ) : null}
-                  {block.detail !== undefined ? (
-                    <Text numberOfLines={6} style={styles.rowMeta}>
-                      {block.detail}
-                    </Text>
-                  ) : null}
-                </View>
-              ))}
+                    {painted.title !== undefined ? (
+                      <Text numberOfLines={2} style={styles.rowMeta}>
+                        {painted.title}
+                      </Text>
+                    ) : null}
+                    {painted.detail !== undefined ? (
+                      <Text numberOfLines={6} style={styles.rowMeta}>
+                        {painted.detail}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              })}
             <Text style={styles.rowMeta}>
               {chatClockLabel(item.createdAt, Date.now()) || 'Time unavailable'}
             </Text>
@@ -373,6 +380,9 @@ export function DesktopHome({
             olderChatAvailable={olderChatAvailable}
             loadingOlderChat={loadingOlderChat}
             messages={messages}
+            tasks={
+              tasksOutcome?.status === 'success' ? tasksOutcome.value.items : []
+            }
             onLoadOlderChat={() => {
               shouldFollowChat.current = false;
               onLoadOlderChat();

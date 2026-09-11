@@ -246,6 +246,46 @@ test('conversation-detail history names GET content_blocks without inventing wri
   expect(humanTree).not.toContain('Quiet mornings');
 });
 
+test('conversation-detail history names loaded GET task_card description without leaking ids', () => {
+  mockChat.mockReturnValue({
+    result: {
+      status: 'loaded',
+      messages: [
+        {
+          id: 'ai-1',
+          sender: 'ai',
+          text: 'Here is what I found.',
+          createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+          generationOutcome: 'completed',
+          contentBlocks: [{eyebrow: 'Task', taskId: 'task-join'}],
+        },
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    },
+    reload: jest.fn(),
+    loadingOlder: false,
+    loadOlder: jest.fn(),
+    olderNotice: null,
+    olderRetryable: true,
+  });
+  const view = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+    tasks: [{id: 'task-join', title: 'Send the follow-up notes'}],
+  });
+  const tree = text(view);
+  expect(tree).toContain('Task');
+  expect(tree).toContain('Send the follow-up notes');
+  expect(tree).not.toContain('task-join');
+  expect(tree).not.toContain('Loading');
+  expect(tree).not.toContain('No longer available');
+});
+
 test('canonical listen rows do not invent a transcript producer', () => {
   const view = render({
     conversation: {...conversation, id: 'listen:one', source: 'listen'},

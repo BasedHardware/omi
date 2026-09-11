@@ -426,6 +426,42 @@ test('old empty task descriptions stay searchable instead of failing the page', 
   ]);
 });
 
+test('old tasks keep GET taskId for chat task_card joins', async () => {
+  const {api} = backend({
+    action_items: [
+      {
+        id: 'exported',
+        description: 'Call Sam',
+        completed: false,
+        task_id: 'task-join',
+      },
+      {
+        id: 'aliased',
+        description: 'Write recap',
+        completed: false,
+        taskId: 'task-alias',
+      },
+      {
+        id: 'plain',
+        description: 'Ship notes',
+        completed: false,
+      },
+      {
+        id: 'blank',
+        description: 'Blank task id',
+        completed: false,
+        task_id: ' \t',
+      },
+    ],
+    has_more: false,
+  });
+  const result = await loadTasks(api);
+  expect(result.items[0]).toMatchObject({taskId: 'task-join'});
+  expect(result.items[1]).toMatchObject({taskId: 'task-alias'});
+  expect(result.items[2]).not.toHaveProperty('taskId');
+  expect(result.items[3]).not.toHaveProperty('taskId');
+});
+
 test('old tasks name GET exported platforms and omit missing exports', async () => {
   const {api} = backend({
     action_items: [

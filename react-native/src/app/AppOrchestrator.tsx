@@ -1148,6 +1148,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               readsPhase === 'initial-loading' || readsPhase === 'refreshing'
             }
             embedded
+            tasks={
+              readOutcomes?.tasks.status === 'success'
+                ? readOutcomes.tasks.value.items
+                : []
+            }
           />
         }
         settingsContent={
@@ -1678,6 +1683,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                 key={message.id}
                                 message={message}
                                 reduceMotion={reduceMotion}
+                                tasks={
+                                  readOutcomes?.tasks.status === 'success'
+                                    ? readOutcomes.tasks.value.items
+                                    : []
+                                }
                               />
                             ))}
                             {chatBusy && (
@@ -1708,6 +1718,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     notice={conversationNotice}
                     loading={readsPhase === 'initial-loading'}
                     outcome={routeOutcome}
+                    tasks={
+                      readOutcomes?.tasks.status === 'success'
+                        ? readOutcomes.tasks.value.items
+                        : []
+                    }
                   />
                 ) : route === 'Memories' ? (
                   <MemoriesPage

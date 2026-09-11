@@ -713,7 +713,7 @@ test('desktop chat names GET content_blocks without inventing write actions', ()
             detail: 'You like a slow start.',
           },
           {eyebrow: 'Memory', title: 'Prefers concise notes'},
-          {eyebrow: 'Task'},
+          {eyebrow: 'Task', taskId: 'task-join'},
         ],
       },
     ],
@@ -729,6 +729,7 @@ test('desktop chat names GET content_blocks without inventing write actions', ()
   expect(copy).toContain('You like a slow start.');
   expect(copy).toContain('Prefers concise notes');
   expect(copy).toContain('Task');
+  expect(copy).not.toContain('task-join');
   expect(copy).not.toContain('Open in Memories');
   expect(copy).not.toContain('Open conversation');
   expect(copy).not.toContain('Open in Goals');

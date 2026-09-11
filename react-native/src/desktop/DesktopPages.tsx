@@ -104,6 +104,11 @@ export function LibraryPage({
             }
             conversation={selected}
             desktop
+            tasks={
+              outcomes?.tasks.status === 'success'
+                ? outcomes.tasks.value.items
+                : []
+            }
           />
         </ScrollView>
       ) : (

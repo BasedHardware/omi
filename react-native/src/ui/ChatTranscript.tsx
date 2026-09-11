@@ -12,7 +12,9 @@ import {
   chatMemoryCitationCopy,
   chatMessageDisplayText,
   chatSenderCopy,
+  paintedChatContentBlock,
   visibleDisplayText,
+  type TaskCardLookup,
 } from '../desktopReadClient';
 import {OmiAvatar} from './OmiAvatar';
 import {styles} from './styles';
@@ -22,11 +24,13 @@ const ChatMessageRow = memo(function ChatMessageRow({
   compact,
   message,
   reduceMotion,
+  tasks = [],
 }: {
   animate: boolean;
   compact: boolean;
   message: ChatMessage;
   reduceMotion: boolean;
+  tasks?: readonly TaskCardLookup[];
 }) {
   const opacity = useRef(new Animated.Value(animate ? 0 : 1)).current;
   const translateY = useRef(
@@ -153,29 +157,32 @@ const ChatMessageRow = memo(function ChatMessageRow({
           </View>
         ))}
         {!human &&
-          (message.contentBlocks ?? []).map((item, index) => (
-            <View
-              key={`block-${index}`}
-              accessibilityLabel={
-                item.title === undefined
-                  ? item.eyebrow
-                  : `${item.eyebrow}: ${item.title}`
-              }>
-              <Text numberOfLines={1} style={styles.cancelledLabel}>
-                {item.eyebrow}
-              </Text>
-              {item.title !== undefined && (
-                <Text numberOfLines={2} style={styles.cancelledLabel}>
-                  {item.title}
+          (message.contentBlocks ?? []).map((item, index) => {
+            const painted = paintedChatContentBlock(item, tasks);
+            return (
+              <View
+                key={`block-${index}`}
+                accessibilityLabel={
+                  painted.title === undefined
+                    ? painted.eyebrow
+                    : `${painted.eyebrow}: ${painted.title}`
+                }>
+                <Text numberOfLines={1} style={styles.cancelledLabel}>
+                  {painted.eyebrow}
                 </Text>
-              )}
-              {item.detail !== undefined && (
-                <Text numberOfLines={6} style={styles.cancelledLabel}>
-                  {item.detail}
-                </Text>
-              )}
-            </View>
-          ))}
+                {painted.title !== undefined && (
+                  <Text numberOfLines={2} style={styles.cancelledLabel}>
+                    {painted.title}
+                  </Text>
+                )}
+                {painted.detail !== undefined && (
+                  <Text numberOfLines={6} style={styles.cancelledLabel}>
+                    {painted.detail}
+                  </Text>
+                )}
+              </View>
+            );
+          })}
         {message.sender === 'unknown' && (
           <Text style={styles.cancelledLabel}>
             {chatSenderCopy(message.sender)}

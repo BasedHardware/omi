@@ -590,7 +590,7 @@ test('old chat history names GET content_blocks without inventing writes', () =>
       title: 'Schedule the follow-up?',
       detail: 'Yes, schedule it · Not now',
     },
-    {eyebrow: 'Task'},
+    {eyebrow: 'Task', taskId: 'task-1'},
     {
       eyebrow: 'Processing',
       title: 'Draft recap',
@@ -693,7 +693,7 @@ test('old chat history names empty-text GET tool thinking and citation fallbacks
       title: 'Quiet mornings',
       detail: 'You like a slow start.',
     },
-    {eyebrow: 'Task'},
+    {eyebrow: 'Task', taskId: 'task-1'},
   ]);
   expect(page.messages.find(row => row.id === 'fallback-kept')?.text).toBe(
     'Here is what I found.',
@@ -706,7 +706,9 @@ test('old chat history names empty-text GET tool thinking and citation fallbacks
   ).toBe('Thinking');
   const copy = JSON.stringify(page.messages);
   expect(copy).not.toContain('Should stay omitted');
-  expect(copy).not.toContain('task-1');
+  expect(page.messages.find(row => row.id === 'fallback-1')?.text).not.toContain(
+    'task-1',
+  );
   expect(copy).not.toContain('Show more');
 });
 

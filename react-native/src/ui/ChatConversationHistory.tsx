@@ -13,7 +13,9 @@ import {
   chatMemoryCitationCopy,
   chatMessageDisplayText,
   chatSenderCopy,
+  paintedChatContentBlock,
   visibleDisplayText,
+  type TaskCardLookup,
 } from '../desktopReadClient';
 import {desktopTokens} from '../desktop/tokens';
 import {FocusPressable} from './Pressable';
@@ -22,9 +24,11 @@ import {styles} from './styles';
 export function ChatConversationHistory({
   conversationId,
   desktop = false,
+  tasks = [],
 }: {
   conversationId: string;
   desktop?: boolean;
+  tasks?: readonly TaskCardLookup[];
 }) {
   const {result, reload, loadingOlder, loadOlder, olderNotice, olderRetryable} =
     useChatConversationHistory(true, conversationId);
@@ -189,29 +193,32 @@ export function ChatConversationHistory({
                     </View>
                   ))}
                   {!human &&
-                    (message.contentBlocks ?? []).map((item, index) => (
-                      <View key={`block-${index}`}>
-                        <Text
-                          numberOfLines={1}
-                          style={[styles.conversationDetailField, ink]}>
-                          {item.eyebrow}
-                        </Text>
-                        {item.title !== undefined ? (
+                    (message.contentBlocks ?? []).map((item, index) => {
+                      const painted = paintedChatContentBlock(item, tasks);
+                      return (
+                        <View key={`block-${index}`}>
                           <Text
-                            numberOfLines={2}
+                            numberOfLines={1}
                             style={[styles.conversationDetailField, ink]}>
-                            {item.title}
+                            {painted.eyebrow}
                           </Text>
-                        ) : null}
-                        {item.detail !== undefined ? (
-                          <Text
-                            numberOfLines={6}
-                            style={[styles.conversationDetailField, ink]}>
-                            {item.detail}
-                          </Text>
-                        ) : null}
-                      </View>
-                    ))}
+                          {painted.title !== undefined ? (
+                            <Text
+                              numberOfLines={2}
+                              style={[styles.conversationDetailField, ink]}>
+                              {painted.title}
+                            </Text>
+                          ) : null}
+                          {painted.detail !== undefined ? (
+                            <Text
+                              numberOfLines={6}
+                              style={[styles.conversationDetailField, ink]}>
+                              {painted.detail}
+                            </Text>
+                          ) : null}
+                        </View>
+                      );
+                    })}
                   <Text style={[styles.conversationDetailField, ink]}>
                     {chatClockLabel(message.createdAt, Date.now()) ||
                       'Time unavailable'}
