@@ -40,6 +40,12 @@ void main() {
     expect(find.byIcon(Icons.image_not_supported_outlined), findsOneWidget);
     expect(find.byIcon(Icons.error_outline), findsNothing);
     expect(tester.getSize(thumbnail), const Size(60, 60));
+    // Check the rendered glyph, not just the Icon's expanded 60px box.
+    final glyph = find.descendant(
+      of: find.byIcon(Icons.image_not_supported_outlined),
+      matching: find.byType(RichText),
+    );
+    expect(tester.getCenter(glyph), tester.getCenter(thumbnail));
     expect(tester.takeException(), isNull);
   });
 }

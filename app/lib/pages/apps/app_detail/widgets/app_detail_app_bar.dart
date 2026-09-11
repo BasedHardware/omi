@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/extensions/string.dart';
 
 /// App-detail actions; the page retains navigation and availability ownership.
 class AppDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
@@ -12,7 +13,6 @@ class AppDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
   final ValueChanged<BuildContext>? onShare;
   final VoidCallback? onEdit;
   final bool chatLoading;
-  final bool isOwner;
 
   const AppDetailAppBar({
     super.key,
@@ -23,7 +23,6 @@ class AppDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.onShare,
     this.onEdit,
     this.chatLoading = false,
-    this.isOwner = false,
   });
 
   @override
@@ -69,7 +68,7 @@ class AppDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
           if (onChat != null)
             _button(
               name: 'chat',
-              tooltip: context.l10n.chatWithAppName(appName),
+              tooltip: context.l10n.chatWithAppName(appName.decodeString),
               onPressed: chatLoading ? null : onChat,
               icon: chatLoading
                   ? const SizedBox(
@@ -104,9 +103,8 @@ class AppDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
               tooltip: context.l10n.edit,
               icon: const FaIcon(FontAwesomeIcons.edit, size: 16, color: Colors.white),
               onPressed: onEdit,
-            )
-          else if (!isOwner)
-            const SizedBox(width: 8),
+            ),
+          const SizedBox(width: 8),
         ],
       );
 }

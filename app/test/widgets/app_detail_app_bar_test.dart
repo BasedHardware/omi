@@ -28,7 +28,6 @@ void main() {
       onOpen: () => actions.add('open'),
       onShare: (_) => actions.add('share'),
       onEdit: () => actions.add('edit'),
-      isOwner: true,
     )));
     await tester.pumpAndSettle();
 
@@ -36,7 +35,14 @@ void main() {
     expect(find.byIcon(FontAwesomeIcons.gear.data), findsNothing);
     final icons = tester.widgetList<FaIcon>(find.byType(FaIcon)).map((icon) => icon.icon).toSet();
     expect(icons, hasLength(4));
-    final labels = {'back': 'Back', 'chat': 'Chat with Notes', 'open': 'Open', 'share': 'Share', 'edit': 'Edit'};
+    final localized = await AppLocalizations.delegate.load(const Locale('en'));
+    final labels = {
+      'back': localized.back,
+      'chat': localized.chatWithAppName('Notes'),
+      'open': localized.open,
+      'share': localized.share,
+      'edit': localized.edit,
+    };
     for (final entry in labels.entries) {
       expect(find.byTooltip(entry.value), findsOneWidget);
       final button = find.byKey(ValueKey('app_detail_${entry.key}'));
@@ -54,6 +60,7 @@ void main() {
 
   testWidgets('only available actions are shown, and loading chat stays labelled but disabled', (tester) async {
     var chats = 0;
+    final localized = await AppLocalizations.delegate.load(const Locale('en'));
     await tester.pumpWidget(_wrap(AppDetailAppBar(appName: 'Notes', onBack: () {})));
     await tester.pumpAndSettle();
     expect(find.byType(IconButton), findsOneWidget);
@@ -67,7 +74,7 @@ void main() {
     await tester.pump();
     final chat = find.byKey(const ValueKey('app_detail_chat'));
     expect(tester.widget<IconButton>(chat).onPressed, isNull);
-    expect(find.byTooltip('Chat with Notes'), findsOneWidget);
+    expect(find.byTooltip(localized.chatWithAppName('Notes')), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     await tester.tap(chat);
     expect(chats, 0);
@@ -77,6 +84,51 @@ void main() {
     await tester.tap(chat);
     expect(chats, 1);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('chat tooltip normalizes an encoded app name like the detail summary', (tester) async {
+    final localized = await AppLocalizations.delegate.load(const Locale('en'));
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(_wrap(AppDetailAppBar(appName: 'Caf\u00c3\u00a9', onBack: () {}, onChat: () {})));
+    await tester.pumpAndSettle();
+    final label = localized.chatWithAppName('Café');
+    expect(find.byTooltip(label), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byKey(const ValueKey('app_detail_chat'))).getSemanticsData().tooltip,
+      label,
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('trailing inset stays consistent when edit becomes unavailable during loading', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(_wrap(AppDetailAppBar(
+      appName: 'Notes',
+      onBack: () {},
+      onChat: () {},
+      onOpen: () {},
+      onEdit: () {},
+    )));
+    await tester.pumpAndSettle();
+    final right = tester.getRect(find.byType(AppBar)).right;
+    expect(right - tester.getRect(find.byKey(const ValueKey('app_detail_edit'))).right, 8);
+
+    // The page removes Edit while an owner's app data is loading; the toolbar
+    // derives layout from available actions rather than duplicating ownership.
+    await tester.pumpWidget(_wrap(AppDetailAppBar(
+      appName: 'Notes',
+      onBack: () {},
+      onChat: () {},
+      onOpen: () {},
+      chatLoading: true,
+    )));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('app_detail_edit')), findsNothing);
+    expect(right - tester.getRect(find.byKey(const ValueKey('app_detail_open'))).right, 8);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('share receives its own laid-out anchor for the iOS share sheet', (tester) async {
@@ -117,6 +169,7 @@ void main() {
     for (final text in [labels.back, labels.chatWithAppName('Notes'), labels.open, labels.share, labels.edit]) {
       expect(find.byTooltip(text), findsOneWidget);
     }
-    expect(find.byTooltip('Open'), findsNothing);
+    final english = await AppLocalizations.delegate.load(const Locale('en'));
+    expect(find.byTooltip(english.open), findsNothing);
   });
 }

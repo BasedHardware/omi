@@ -590,7 +590,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
         return Scaffold(
           appBar: AppDetailAppBar(
             appName: app.name,
-            isOwner: appProvider.isAppOwner,
             chatLoading: chatButtonLoading,
             onBack: () {
               HapticFeedback.mediumImpact();
