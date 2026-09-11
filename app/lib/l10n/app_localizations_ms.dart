@@ -1865,9 +1865,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get openSettings => 'Buka Tetapan';
 
   @override
-  String get wantDifferentName => 'Mahu dipanggil dengan nama lain?';
-
-  @override
   String get whatsYourName => 'Siapa nama anda?';
 
   @override
@@ -2049,7 +2046,8 @@ class AppLocalizationsMs extends AppLocalizations {
   String get memoryDeleted => 'Ingatan Dipadam.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Sebahagian sejarah ingatan tidak tersedia. Memaparkan sejarah yang telah diterima setakat ini.';
 
   @override
   String get undo => 'Buat Asal';
@@ -9870,12 +9868,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get accountCutoverOpenStore => 'Buka toko';
 
   @override
-  String get chatScopeToday => 'Hari ini';
-
-  @override
-  String get chatScopeThisWeek => 'Minggu ini';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Perihal: $title';
   }
@@ -9939,4 +9931,81 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Storan Pendant penuh dan ia masih dalam mod rakaman, jadi audio yang tersimpan tidak dapat dipindahkan. Tekan butang Pendant untuk menghentikan rakaman, kemudian segerakkan semula.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Tidak dirakam ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Profil Suara $name';
+  }
+
+  @override
+  String get play => 'Mainkan';
+
+  @override
+  String get redo => 'Rakam semula';
+
+  @override
+  String get answerWithYourVoice => 'Jawab dengan suara anda:';
+
+  @override
+  String get speechProfileTopicLocation => 'Di manakah anda tinggal?';
+
+  @override
+  String get speechProfileTopicWork => 'Apakah pekerjaan anda?';
+
+  @override
+  String get speechProfileTopicGoal => 'Apakah matlamat jangka panjang anda?';
+
+  @override
+  String get transcriptionNoAudio => 'Transkripsi tidak menerima audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Ketik + untuk mula merakam';
+
+  @override
+  String get chatBlockTask => 'Tugas';
+
+  @override
+  String get chatBlockGoal => 'Matlamat';
+
+  @override
+  String get chatBlockConversation => 'Perbualan';
+
+  @override
+  String get chatBlockMemory => 'Memori';
+
+  @override
+  String get chatBlockQuestion => 'Soalan';
+
+  @override
+  String get chatBlockOpenInGoals => 'Buka dalam Matlamat';
+
+  @override
+  String get chatBlockOpenConversation => 'Buka perbualan';
+
+  @override
+  String get chatBlockOpenInMemories => 'Buka dalam Memori';
+
+  @override
+  String get chatBlockUnavailable => 'Tidak lagi tersedia';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Langkah seterusnya yang disyorkan';
+
+  @override
+  String get couldNotLoadMemories => 'Tidak dapat memuatkan kenangan';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Tidak dapat memuatkan graf pengetahuan';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Penukaran pertuturan kepada teks tidak tersedia sekarang. Semak sambungan internet dan tetapan pengecaman pertuturan peranti anda, kemudian cuba lagi.';
+
+  @override
+  String get processingTakingLonger => 'Masih diproses — ini mengambil masa lebih lama daripada biasa.';
 }

@@ -35,13 +35,13 @@ recaps, `/connectors` is apps plus services. `/chat`, `/recaps`, `/my-apps` and
 `/persona` were removed, not redirected — do not re-add aliases.
 Route map, shared page chrome, shadcn, the moonshine >= 0.3.7 floor, and this
 runtime's two motion traps:
-[`docs/agents/web-app-destinations.md`](../../docs/agents/web-app-destinations.md).
+[`.github/agent-docs/web-app-destinations.md`](../../.github/agent-docs/web-app-destinations.md).
 
 ## State & Tests
 
 Home runs on `@tschk/moonshine` signals, not React state: `useAsyncResource` for
 reads, a signal store for optimistically-written lists. Import only the kernel —
-why and the pitfalls: [`docs/agents/web-app-signals.md`](../../docs/agents/web-app-signals.md).
+why and the pitfalls: [`.github/agent-docs/web-app-signals.md`](../../.github/agent-docs/web-app-signals.md).
 
 Tests live in `__tests__/` beside the code (`vitest.config.mts`, jsdom, `@` →
 `src/`). Prefer pure logic in `src/lib/` and `src/hooks/`; reserve component

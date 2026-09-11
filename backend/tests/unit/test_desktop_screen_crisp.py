@@ -296,10 +296,11 @@ def test_the_entitlement_gate_fails_open(monkeypatch):
     import utils.subscription as subscription
 
     subscription.clear_cloud_screen_vector_entitlement_cache("uid-under-test")
+    monkeypatch.setattr(subscription, "get_customer_firestore_client", lambda: object())
     monkeypatch.setattr(
         subscription.users_db,
         "get_user_valid_subscription",
-        lambda uid: (_ for _ in ()).throw(RuntimeError("firestore unavailable")),
+        lambda uid, **_kwargs: (_ for _ in ()).throw(RuntimeError("firestore unavailable")),
     )
 
     assert subscription.grants_cloud_screen_vectors("uid-under-test") is True

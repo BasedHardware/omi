@@ -16,9 +16,10 @@ from database import redis_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.auth import get_user_name
 from utils.conversations.transcript_for_llm import (
-    conversation_transcript_for_action_items,
+    conversation_transcript_and_speaker_map,
     conversation_transcript_for_llm,
     conversation_transcripts_for_llm,
+    memory_transcript_from_segments,
 )
 from utils.conversations.wake_word import has_structural_wake_word_marker
 import database.conversations as conversations_db
@@ -44,21 +45,40 @@ from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.memory_contracts import L1MemoryArchiveClass, deterministic_contract_id
 from models.workstream_association import AssociationEvidence
 from models.product_memory import MemoryTier
+from utils.memory.belief_model import (
+    belief_model_enabled,
+    horizon_from_extraction,
+    subject_scope_from_extraction,
+)
 from models.calendar_context import CalendarMeetingContext
+from models.client_processing import ClientProcessing
 from models.conversation import (
     AppResult,
     Conversation,
     CreateConversation,
     ExternalIntegrationCreateConversation,
 )
-from models.conversation_enums import ConversationSource, ConversationStatus, ExternalIntegrationConversationSource
+from models.conversation_enums import (
+    ConversationProcessingState,
+    ConversationSource,
+    ConversationStatus,
+    ExternalIntegrationConversationSource,
+)
+from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.projection_payload import (
+    client_processing_mutation,
+    omit_null_processing_state,
+    sanitize_untrusted_provenance_field,
+    strip_client_processing,
+)
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
+from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
 from utils.memory.memory_service import MemoryService
 from utils.memory.decision_path_telemetry import (
     classify_model_about,
-    count_speaker_ids,
     emit_memory_capture_decision,
     model_about_disagrees_with_attribution,
 )
@@ -66,11 +86,31 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
+from utils.metrics import record_jit_first_open, record_lazy_desktop_deferral
+from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
-from utils.subscription import request_has_llm_byok_key
-from utils.transcribe_decisions import should_skip_custom_stt_postprocessing
+from utils.free_tier_memory_policy import (
+    free_tier_memory_suppression_enabled,
+    memory_formation_verdict,
+)
+from utils.free_tier_processing_policy import (
+    FreeTierProcessingPlan,
+    free_tier_local_processing_enabled,
+    minimum_processing_state,
+    resolve_free_tier_processing_plan,
+)
+
+# The injected ``decision_for`` closure and its funding-owner resolution live in
+# ``utils/managed_compute`` (next to ``authorize_managed_compute`` and the BYOK
+# lookup they compose) and are shared with the app-integration, X-connector and
+# twitter-persona memory producers (flip-review F-3). Imported under the historic
+# private name so the coordinator's call sites and this module's tests read
+# unchanged.
+from utils.managed_compute import (
+    managed_compute_decision_for as _managed_compute_decision_for,
+)
 from models.other import Person
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.notifications import send_important_conversation_message
@@ -176,6 +216,10 @@ class SummaryPipelineMode(str, Enum):
     reachable purely by flag misconfiguration.
     """
 
+    # Retire 2026-09-29: legacy path survives only a four-week prod bake of notes v2
+    # (prod-on 2026-09-01). After that date a follow-up PR deletes LEGACY_APP_PRIMARY,
+    # the legacy writers, and CONVERSATION_NOTES_V2_ENABLED itself — v2 becomes the
+    # only path. Do not build on this mode.
     LEGACY_APP_PRIMARY = 'legacy_app_primary'
     NOTES_V2_APPS_OPT_IN = 'notes_v2_primary_apps_opt_in'
 
@@ -186,6 +230,29 @@ class AppUsageAttribution(str, Enum):
     AUTOMATIC_PROCESSING = 'automatic_processing'
     EXPLICIT_SELECTION = 'explicit_selection'
     NON_USER_REPROCESS = 'non_user_reprocess'
+
+
+class DerivedEffectsDisposition(str, Enum):
+    """What the durable finalizer should do after the coordinator persists.
+
+    RUN is the paid/legacy bundle (or the empty-bundle memory-extraction
+    fallback). TERMINAL_NO_DERIVED_EFFECTS is a successful persist that must
+    not extract memories, fan out apps, or run any other derived effect.
+    Reporting persistence True alone is unsafe: the finalizer treats an empty
+    bundle as "extract memories now". The terminal value is also written onto
+    the Firestore document (see ``TERMINAL_NO_DERIVED_EFFECTS_FIELD``) so a
+    Cloud Tasks retry after a completed minimum still suppresses the bundle.
+    """
+
+    RUN = 'run'
+    TERMINAL_NO_DERIVED_EFFECTS = 'terminal_no_derived_effects'
+
+
+# Unmodeled Firestore field. Same precedent as ``jit_first_open``: Conversation
+# does not declare it, so the persist dict is the only write path. A Cloud Tasks
+# retry after a completed minimum must still see this marker; otherwise the
+# finalizer defaults disposition to RUN and extracts memories.
+TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
 
 
 class ExplicitAppSelectionFailedError(RuntimeError):
@@ -416,7 +483,7 @@ def _get_structured(
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {ext_conv.text_source}')
 
         main_conv = cast(Union[Conversation, CreateConversation], conversation)
-        transcript_text, action_items_transcript = conversation_transcripts_for_llm(uid, main_conv, people)
+        transcript_text, action_items_transcript, speaker_map = conversation_transcripts_for_llm(uid, main_conv, people)
         has_wake_word_marker = has_structural_wake_word_marker(action_items_transcript)
 
         # For re-processing, we don't discard, just re-structure.
@@ -431,6 +498,7 @@ def _get_structured(
                     language_code=language_code,
                     calendar_context=calendar_context,
                     photos=main_conv.photos,
+                    speaker_map=speaker_map,
                 )
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                     structured = get_conversation_notes(
@@ -469,10 +537,9 @@ def _get_structured(
                 )
             return structured, False
 
-        # Compute conversation duration for discard heuristics
-        duration_seconds: Optional[float] = None
-        if main_conv.started_at and main_conv.finished_at:
-            duration_seconds = max(0, (main_conv.finished_at - main_conv.started_at).total_seconds())
+        # Transcript span, not the wall window: `started_at` is the streaming-session
+        # origin, so `finished_at - started_at` read an 8s scrap as 42 minutes (#4056).
+        duration_seconds: Optional[float] = conversation_duration_seconds(main_conv)
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
@@ -484,7 +551,20 @@ def _get_structured(
                 trusted_wake_word_markers=has_wake_word_marker,
             )
         if discarded:
-            return Structured(emoji=random.choice(['🧠', '🎉'])), True
+            # Calendar overlap outranks discard (SCA-381): a scrap recorded
+            # inside a booked meeting is evidence, never noise. Only a positive
+            # overlap hit keeps it; a disconnected calendar, a missing token, or
+            # a failed lookup leaves the discard verdict standing.
+            if _calendar_overlap_retains_conversation(uid, main_conv.started_at, main_conv.finished_at):
+                logger.info(
+                    'Calendar overlap overrides discard for uid=%s conversation=%s window=[%s, %s]',
+                    uid,
+                    getattr(conversation, 'id', '?'),
+                    main_conv.started_at,
+                    main_conv.finished_at,
+                )
+            else:
+                return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         conv_started_at = cast(datetime, main_conv.started_at)
@@ -497,6 +577,7 @@ def _get_structured(
                 language_code=language_code,
                 calendar_context=calendar_context,
                 photos=main_conv.photos,
+                speaker_map=speaker_map,
             )
             with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                 structured = get_conversation_notes(
@@ -726,14 +807,16 @@ def trigger_conversation_apps(
             transcript = conversation_transcript_for_llm(uid, conversation, people)
             prompt_prefix = None
             if _conversation_notes_v2_enabled() and conversation.started_at:
+                app_transcript, app_speaker_map = conversation_transcript_and_speaker_map(uid, conversation, people)
                 prompt_prefix = build_conversation_prompt_prefix(
                     conversation_id=conversation.id,
-                    transcript=conversation_transcript_for_action_items(uid, conversation, people),
+                    transcript=app_transcript,
                     started_at=conversation.started_at,
                     timezone_name=notification_db.get_user_time_zone(uid) or '',
                     language_code=language_code,
                     calendar_context=_stored_meeting_context(conversation),
                     photos=conversation.photos,
+                    speaker_map=app_speaker_map,
                 )
             result = get_app_result(
                 transcript,
@@ -892,6 +975,12 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     Finalization workers use this public boundary while holding their durable
     lease. Keep the private helper below for existing in-module async callers.
     """
+    # The deployment-wide capability fence is mandatory even when this
+    # account's non-compatibility writer delegates formation to the sweep.
+    # Otherwise a reused release-probe principal could skip the exact static
+    # configuration contract that Pusher qualification is meant to exercise.
+    db_client = getattr(db_client_module, 'db', None)
+    MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
     sweep_owned_mode = _sweep_owned_writer_mode(uid)
     if sweep_owned_mode is not None:
         logger.info(
@@ -901,6 +990,19 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
             conversation.id,
         )
         return
+    # §1.8: plan denial is a second early return in this same boundary, not a
+    # parallel branch. Everything below spends `get_llm('memories')`, so the
+    # gate has to sit above it rather than inside the extractor.
+    if free_tier_memory_suppression_enabled():
+        verdict = memory_formation_verdict(decision_for=_managed_compute_decision_for(uid))
+        if verdict.suppressed:
+            logger.info(
+                'memory extraction skipped: plan denies managed formation uid=%s conv=%s reason=%s',
+                uid,
+                conversation.id,
+                verdict.reason,
+            )
+            return
     source = source_for_conversation(conversation)
     parity_capture = SurfaceParityCapture.from_environ(
         principal_id=uid,
@@ -963,16 +1065,19 @@ def _l1_subject_from_matched_segments(
     *,
     source_id: str,
     matched_segments: List[Any],
+    owner_evidence: OwnerAttributionEvidence,
 ) -> Tuple[Optional[str], SubjectAttribution, str]:
     resolved_subjects: Set[Tuple[str, SubjectAttribution, str]] = set()
     for segment in matched_segments:
-        if bool(getattr(segment, "is_user", False)):
+        if may_attribute_to_owner(owner_evidence, segment=segment):
             resolved_subjects.add(("user", SubjectAttribution.user, "user"))
             continue
         person_id = getattr(segment, "person_id", None)
         if person_id:
             resolved_subjects.add((f"person:{person_id}", SubjectAttribution.third_party, "person"))
             continue
+        if getattr(segment, "is_user", False):
+            return None, SubjectAttribution.unknown, "unknown"
         raw_speaker = str(getattr(segment, "speaker", "") or "").strip()
         speaker_id = getattr(segment, "speaker_id", None)
         speaker_label = raw_speaker or (f"speaker_{speaker_id}" if speaker_id is not None else "")
@@ -1017,6 +1122,7 @@ def _l1_candidate_subject(
     segments: List[Any],
 ) -> Tuple[Optional[str], SubjectAttribution, str]:
     """Resolve one L1 candidate without assigning the whole conversation's subject."""
+    owner_evidence = OwnerAttributionEvidence.from_segments(segments)
     about_norm = _normalized_l1_subject_label(about)
     speaker_norm = _normalized_l1_subject_label(speaker_label)
     user_aliases = {"user", "the user", "primary user"}
@@ -1044,6 +1150,14 @@ def _l1_candidate_subject(
             matched_segments.append(segment)
 
     if about_norm in user_aliases:
+        if not may_attribute_to_owner(owner_evidence):
+            if quote_matched_segments and all(
+                getattr(segment, "person_id", None) for segment in quote_matched_segments
+            ):
+                return _l1_subject_from_matched_segments(
+                    source_id=source_id, matched_segments=quote_matched_segments, owner_evidence=owner_evidence
+                )
+            return None, SubjectAttribution.unknown, "unknown"
         if quote_matched_segments:
             # Quote-bearing source segments outrank both model-authored
             # ``about`` and ``speaker_label`` fields. This applies even when
@@ -1051,6 +1165,7 @@ def _l1_candidate_subject(
             # different segment elsewhere in the conversation.
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=quote_matched_segments,
             )
         if speaker_norm and matched_segments:
@@ -1058,9 +1173,12 @@ def _l1_candidate_subject(
             # model-authored about=user label.
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=matched_segments,
             )
-        return "user", SubjectAttribution.user, "user"
+        if may_attribute_to_owner(owner_evidence):
+            return "user", SubjectAttribution.user, "user"
+        return None, SubjectAttribution.unknown, "unknown"
 
     about_names_model_speaker = bool(
         about_norm and speaker_norm and (about_norm == speaker_norm or f" {speaker_norm} " in f" {about_norm} ")
@@ -1073,6 +1191,7 @@ def _l1_candidate_subject(
         # source-scoped entity.
         return _l1_subject_from_matched_segments(
             source_id=source_id,
+            owner_evidence=owner_evidence,
             matched_segments=quote_matched_segments,
         )
 
@@ -1089,11 +1208,13 @@ def _l1_candidate_subject(
         if quote_matched_segments:
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=quote_matched_segments,
             )
         if matched_segments:
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=matched_segments,
             )
         return None, SubjectAttribution.unknown, "unknown"
@@ -1238,6 +1359,7 @@ def _canonical_extraction_unavailable(
         reason='provider_5xx',
         outcome='degraded',
     )
+    record_finalization_failure(FinalizationFailureReason.provider)
     return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
 
 
@@ -1304,14 +1426,23 @@ def _extract_memories_canonical(
             people_records = users_db.get_people_by_ids(uid, list(set(person_ids))) if person_ids else []
             prompt_people = [Person(**record) for record in people_records]
             calendar_context = _stored_meeting_context(conversation)
+            prompt_transcript, prompt_speaker_map = conversation_transcript_and_speaker_map(
+                uid, conversation, prompt_people
+            )
+            if not may_attribute_to_owner(OwnerAttributionEvidence.from_segments(conversation.transcript_segments)):
+                prompt_transcript = memory_transcript_from_segments(
+                    conversation.transcript_segments, user_name=user_name, people=prompt_people
+                )
+                prompt_speaker_map = {}
             prompt_prefix = build_conversation_prompt_prefix(
                 conversation_id=conversation.id,
-                transcript=conversation_transcript_for_action_items(uid, conversation, prompt_people),
+                transcript=prompt_transcript,
                 started_at=conversation.started_at,
                 timezone_name=notification_db.get_user_time_zone(uid) or '',
                 language_code=conversation.language or 'en',
                 calendar_context=calendar_context,
                 photos=conversation.photos,
+                speaker_map=prompt_speaker_map,
             )
         try:
             extracted_candidates = extract_canonical_l1_memory_candidates(
@@ -1360,6 +1491,23 @@ def _extract_memories_canonical(
                 subject_entity_id=subject_entity_id,
                 subject_attribution=subject_attribution,
             )
+            if belief_model_enabled():
+                resolved_scope = subject_scope_from_extraction(
+                    extracted_scope=candidate.subject_scope,
+                    attribution=subject_attribution.value,
+                    about=candidate.about,
+                    user_name=user_name,
+                    speaker_label=candidate.speaker_label,
+                )
+                resolved_class, resolved_half_life = horizon_from_extraction(
+                    belief_class=candidate.belief_class,
+                    half_life_days_override=candidate.half_life_days,
+                    user_asserted=False,
+                )
+                memory.subject_scope = resolved_scope
+                memory.belief_class = resolved_class
+                memory.half_life_days = resolved_half_life
+                memory.valid_to = candidate.valid_to
             model_about = classify_model_about(
                 candidate.about,
                 user_name=user_name,
@@ -1494,7 +1642,7 @@ def _extract_memories_canonical(
         replacement_payloads,
     )
     capture_regime = getattr(conversation.source, "value", conversation.source) or ConversationSource.unknown.value
-    distinct_speaker_ids, owner_speaker_ids = count_speaker_ids(conversation.transcript_segments)
+    owner_evidence = OwnerAttributionEvidence.from_segments(conversation.transcript_segments)
     for memory_db_obj, _, _, _ in parsed_memories:
         if not memory_db_obj.id:
             continue
@@ -1511,8 +1659,9 @@ def _extract_memories_canonical(
             subject_attribution=memory_db_obj.subject_attribution,
             model_about=model_about,
             attribution_disagreed=attribution_disagreed,
-            distinct_speaker_ids=distinct_speaker_ids,
-            owner_speaker_ids=owner_speaker_ids,
+            distinct_speaker_ids=owner_evidence.distinct_speaker_ids,
+            owner_speaker_ids=owner_evidence.owner_speaker_ids,
+            owner_trust=owner_evidence.trust,
         )
     if len(parsed_memories) == 0:
         logger.info(f"No canonical memories extracted for conversation {conversation.id}")
@@ -1817,32 +1966,236 @@ def _build_deferred_structured(
     return Structured(title=title or 'Recording')
 
 
+def _attach_client_projection(conversation: Conversation, client_projection: ClientProcessing | None) -> None:
+    """Stamp a validated display projection on the server-authored conversation.
+
+    Called only after `_get_conversation_obj` so `_get_structured` never sees it.
+    The field is display-only: persist serialises it; no managed seam reads it.
+    """
+    if client_projection is None:
+        return
+    conversation.client_processing = client_projection
+
+
+_INGRESS_CREATE_TYPES = (CreateConversation, ExternalIntegrationCreateConversation)
+
+
+def _is_ingress_create(
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+) -> bool:
+    """True iff this persist is creating the conversation document.
+
+    That is the only processor-adjacent write allowed to carry a projection:
+    no prior row exists, so this persist cannot last-writer-wins over a later
+    ingest mutation. An existing ``Conversation`` is a processor completing
+    work on a row that already exists — that persist must omit the field.
+    Bound to the same type check that selects ``create_*_conversation`` vs
+    ``persist_processed_conversation`` so the two cannot drift. Existing-row
+    callers stamp via ``client_processing_mutation`` (from-segments, finalize).
+    """
+    return isinstance(conversation, _INGRESS_CREATE_TYPES)
+
+
+# Bound for reject-log provenance only. Schema caps are larger; logs must stay
+# a single line even when the payload never passed validation.
 def _store_deferred_conversation(
-    uid: str, conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation]
+    uid: str,
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+    *,
+    client_projection: ClientProcessing | None = None,
 ) -> Conversation:
     """Persist a desktop conversation with a cheap (no-LLM) title and `deferred=True`, skipping
     all enrichment. Mirrors the tail of process_conversation's persistence (cheap structured →
     `_get_conversation_obj` → upsert) without any LLM / Pinecone / app work. The enrichment runs
     later via the lazy trigger in `get_conversation_by_id`."""
-    is_initial_creation = isinstance(conversation, (CreateConversation, ExternalIntegrationCreateConversation))
+    is_initial_creation = _is_ingress_create(conversation)
     structured = _build_deferred_structured(conversation)
     conversation = _get_conversation_obj(uid, structured, conversation)
+    _attach_client_projection(conversation, client_projection)
     conversation.deferred = True
     # `processing` (not completed) is the user-facing "awaiting enrichment" state. Unlike the
     # `deferred` flag it survives the desktop's local conversation cache, so the client shows a
     # processing indicator and re-fetches on open to trigger enrichment. The lazy enrich sets it
     # back to `completed`.
     conversation.status = ConversationStatus.processing
+    # Generic persist: never write ``client_processing``. A later ingest
+    # mutation (or a genuine clear) must not be last-writer-loser to this
+    # in-memory snapshot. A None ``processing_state`` is likewise never
+    # stamped: merge=True would write the explicit null as a real key.
+    payload = omit_null_processing_state(strip_client_processing(conversation.dict()))
     if is_initial_creation:
-        persisted = lifecycle_service.create_processing_conversation(uid, conversation.dict(), idempotent=True)
+        persisted = lifecycle_service.create_processing_conversation(uid, payload, idempotent=True)
     else:
-        persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+        persisted = lifecycle_service.persist_processed_conversation(uid, payload)
     if not persisted:
         logger.info('lazy: deferred conversation creation fenced uid=%s conv=%s', uid, conversation.id)
+        record_lazy_desktop_deferral(event='fenced')
         return conversation
 
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
+    record_lazy_desktop_deferral(event='stored')
     return conversation
+
+
+def _terminal_persist_payload(conversation: Conversation) -> dict[str, Any]:
+    """Generic persist dict for a free-tier terminal store.
+
+    Always strips ``client_processing``. A processor holding a stale in-memory
+    projection must not last-writer-wins over a later ingest mutation. An
+    ingress create (``_store_deterministic_minimum`` /
+    ``_store_projected_conversation`` when ``_is_ingress_create``) stamps the
+    field back via ``client_processing_mutation`` after calling this. An
+    existing-conversation persist leaves the field omitted.
+
+    ``Conversation.dict()`` does not model ``jit_first_open`` or the durable
+    terminal-disposition marker. Firestore persist uses ``merge=True``, so a
+    prior pending first-open obligation would survive this write (paid→basic
+    reprocess) and ``get_conversation_by_id`` would dispatch folder assignment
+    and app fan-out. There is no lifecycle_service or first_open_obligations
+    helper that deletes the field; write ``None`` in the same persist so the
+    merge clears it. The terminal marker must be written here too: a completed
+    minimum that then fails receipt/keyframe/fanout-completion is retried by
+    Cloud Tasks against ``status=completed``, which skips process_conversation
+    and would otherwise default the request-scoped disposition to RUN.
+
+    ``processing_state`` follows the dark discipline: a real value (the
+    flag-on minimum's ``local_pending``) passes through, but the modeled
+    field's None default is omitted — merge=True would stamp the explicit
+    null onto every conversation with both flags off.
+    """
+    payload = conversation.dict()
+    payload['jit_first_open'] = None
+    payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
+    return omit_null_processing_state(strip_client_processing(payload))
+
+
+def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker: bool) -> dict[str, Any]:
+    """Generic persist dict for a completed store that is not a free-tier terminal.
+
+    Always strips ``client_processing``. This is a processor result, not the
+    projection's owner: a long-running worker's in-memory snapshot must not
+    overwrite a later ingest mutation.
+
+    Write ``TERMINAL_NO_DERIVED_EFFECTS_FIELD=None`` only when the flag-on
+    desktop policy was consulted and returned process_normally. That is the
+    upgrade path (a prior free-tier minimum left the marker True;
+    ``Conversation.dict()`` does not model it; persist uses ``merge=True``)
+    whose write must clear the stale field so derived effects run. Flag-off,
+    non-desktop, and any path that never consulted the policy must omit the
+    key entirely: missing versus explicit-null is a real Firestore distinction,
+    and the dark rollout must not stamp a new field onto every conversation.
+
+    ``processing_state`` is the same distinction with the polarity reversed:
+    the modeled field's None default is omitted (never stamped), while a real
+    deserialized value — a ``local_pending`` minimum enriched after an upgrade
+    — is written back as an explicit None. Enrichment must clear the state
+    (the model promises it is absent on every enriched conversation), and
+    merge=True keeps an omitted key, so the explicit null is the only write
+    that lands the clear.
+    """
+    payload = conversation.dict()
+    if clear_terminal_marker:
+        payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = None
+    if payload.get('processing_state') is None:
+        payload.pop('processing_state', None)
+    else:
+        payload['processing_state'] = None
+    return strip_client_processing(payload)
+
+
+def _store_deterministic_minimum(
+    uid: str,
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+    plan: FreeTierProcessingPlan,
+    *,
+    client_projection: ClientProcessing | None = None,
+) -> Tuple[Conversation, bool]:
+    """Persist a conversation at the no-LLM deterministic minimum, terminally.
+
+    ``structured`` is §1.7's deterministic minimum
+    (``build_deterministic_minimum_structured``): a title derived from the
+    transcript's first sentence with no model in the path, an empty overview,
+    category ``other``, and no action items or events. It is NOT
+    ``_build_deferred_structured`` — that one is the JIT first-open placeholder
+    and stays on the deferred path, where a later luna enrichment overwrites it.
+    Here nothing overwrites it, so the values have to be the spec's.
+
+    This does not set ``deferred=True`` or
+    ``status=processing`` — those are the first-open reprocess markers
+    ``get_conversation_by_id`` reads. This path emits no managed call, no JIT
+    obligation, no memory extraction, no app fan-out, and no folder assignment.
+    Typesense is not invoked from this persist path (keyword index is a
+    Firestore→Typesense sync, free of ``get_llm``); nothing that calls
+    ``get_llm`` runs here.
+
+    When this persist is the ingress create (``_is_ingress_create``) and
+    ``client_projection`` is present, it owns the display-only
+    ``client_processing`` field: the generic terminal payload strips it, then
+    ``client_processing_mutation`` stamps it back. An existing-conversation
+    persist always omits the field — even when a projection is attached
+    in-memory — so a stale processor snapshot cannot last-writer-wins over a
+    later ingest mutation. Existing-row callers (finalize, from-segments
+    session-id) persist the field via ``client_processing_mutation`` at the
+    ingest site, not through this persist.
+    """
+    is_initial_creation = _is_ingress_create(conversation)
+    structured = build_deterministic_minimum_structured(
+        conversation,
+        tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
+    )
+    conversation = _get_conversation_obj(uid, structured, conversation)
+    conversation.deferred = False
+    conversation.status = ConversationStatus.completed
+    minimum_state = minimum_processing_state(
+        getattr(conversation, 'source', None), has_projection=client_projection is not None
+    )
+    conversation.processing_state = ConversationProcessingState(minimum_state) if minimum_state else None
+    _attach_client_projection(conversation, client_projection)
+    payload = _terminal_persist_payload(conversation)
+    if is_initial_creation and client_projection is not None:
+        payload.update(client_processing_mutation(client_projection))
+    if is_initial_creation:
+        persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
+    else:
+        persisted = lifecycle_service.persist_processed_conversation(uid, payload)
+    kind = 'projected conversation' if client_projection is not None else 'deterministic minimum'
+    if not persisted:
+        logger.info(
+            'free-tier: %s persist fenced uid=%s conv=%s mode=%s reason=%s',
+            kind,
+            uid,
+            conversation.id,
+            plan.mode,
+            plan.reason,
+        )
+        return conversation, False
+    logger.info(
+        'free-tier: stored %s uid=%s conv=%s mode=%s reason=%s',
+        kind,
+        uid,
+        conversation.id,
+        plan.mode,
+        plan.reason,
+    )
+    return conversation, True
+
+
+def _store_projected_conversation(
+    uid: str,
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+    plan: FreeTierProcessingPlan,
+    *,
+    client_projection: ClientProcessing | None = None,
+) -> Tuple[Conversation, bool]:
+    """Persist the untrusted display projection plus the deterministic-minimum structured.
+
+    Ingress create owns ``client_processing``: the generic terminal payload
+    strips it, then ``client_processing_mutation`` stamps it back. An
+    existing-conversation persist omits the field. Terminal:
+    ``deferred=False``, ``status=completed``, no managed seams. Shares the
+    persist path with ``_store_deterministic_minimum``.
+    """
+    return _store_deterministic_minimum(uid, conversation, plan, client_projection=client_projection)
 
 
 def _stored_meeting_context(conversation: Any) -> Optional[CalendarMeetingContext]:
@@ -1893,6 +2246,37 @@ def _meeting_context_from_redis_mapping(uid: str, conversation: Any) -> Optional
     except Exception as exc:
         logger.error('Error retrieving mapped meeting context for conversation %s: %s', conversation_id, exc)
         return None
+
+
+def _calendar_overlap_retains_conversation(
+    uid: str, started_at: Optional[datetime], finished_at: Optional[datetime]
+) -> bool:
+    """Whether a non-declined calendar meeting overlaps [started_at, finished_at].
+
+    The discard override's only source of truth (SCA-381): stored meeting intent
+    in `users/{uid}/meetings` first (a cheap Firestore read, no provider
+    traffic), then a read-only Google Calendar lookup restricted to events the
+    user has not declined or cancelled. Fails closed to False on every error —
+    the override must never keep a conversation *because* a lookup failed, and
+    must never fail the conversation itself. No writes in this path.
+    """
+    if not isinstance(started_at, datetime) or not isinstance(finished_at, datetime):
+        return False
+
+    try:
+        tolerance = timedelta(minutes=MEETING_SEARCH_TOLERANCE_MINUTES)
+        records = calendar_db.get_meetings_in_time_range(uid, started_at - tolerance, finished_at + tolerance)
+        if select_overlapping_meeting(records, started_at=started_at, finished_at=finished_at) is not None:
+            return True
+    except Exception as exc:
+        logger.error('Error reading stored meetings for discard override uid=%s: %s', uid, exc)
+
+    try:
+        linked = asyncio.run(get_overlapping_calendar_event(uid, started_at, finished_at, require_accepted=True))
+        return linked is not None
+    except Exception as exc:
+        logger.error('Error reading Google Calendar for discard override uid=%s: %s', uid, exc)
+        return False
 
 
 def _meeting_context_from_time_overlap(
@@ -1994,17 +2378,27 @@ def process_conversation(
     defer_memory_extraction: bool = False,
     defer_derived_effects: bool = False,
     derived_effects_observer: Callable[[Callable[[], None]], None] | None = None,
+    bypass_jit_first_open: bool = False,
+    derived_effects_disposition_observer: Callable[[DerivedEffectsDisposition], None] | None = None,
+    *,
+    client_projection: ClientProcessing | None = None,
 ) -> Conversation:
     if app_usage_attribution is None:
         app_usage_attribution = (
             AppUsageAttribution.NON_USER_REPROCESS if is_reprocess else AppUsageAttribution.AUTOMATIC_PROCESSING
         )
 
-    def report_persistence(current: bool) -> None:
+    def report_persistence(
+        current: bool,
+        *,
+        derived_effects: DerivedEffectsDisposition = DerivedEffectsDisposition.RUN,
+    ) -> None:
         if persistence_observer is not None:
             persistence_observer(current)
+        if derived_effects_disposition_observer is not None:
+            derived_effects_disposition_observer(derived_effects)
 
-    is_initial_creation = isinstance(conversation, (CreateConversation, ExternalIntegrationCreateConversation))
+    is_initial_creation = _is_ingress_create(conversation)
     # Trial paywall: skip ALL post-processing (summaries, memories, action
     # items, embeddings, app integrations) for paywalled desktop users.
     # Without this, any segments that did get through before the trial gate
@@ -2034,50 +2428,63 @@ def process_conversation(
         report_persistence(False)
         return cast(Conversation, conversation)
 
-    # Custom-STT conversations are transcribed on the user's own provider, so no
-    # Omi transcription credits were consumed. Their LLM post-processing still
-    # runs on Omi's infrastructure; without a cap that is unbounded Omi spend.
-    # Skip the Omi-paid enrichment unless the request carries an LLM BYOK key
-    # (the user then pays their own LLM bill — the same discriminator
-    # enforce_chat_quota uses). Mirrors the trial-paywall gate: keep the
-    # conversation valid and completed, but do no LLM / Pinecone / app work.
-    # The BYOK lookup is deferred until after the custom-STT check so the hot
-    # Omi-STT path never pays for the uncached users/... document read.
-    uses_custom_stt = getattr(conversation, 'uses_custom_stt', False) is True
-    if uses_custom_stt:
-        # Deferred: users_db.is_byok_active does an uncached Firestore read, so
-        # it only runs for custom-STT conversations, not every finalization.
-        has_llm_byok_key = bool(users_db.is_byok_active(uid) and request_has_llm_byok_key())
-    else:
-        has_llm_byok_key = False
-    if uses_custom_stt and should_skip_custom_stt_postprocessing(
-        uses_custom_stt=True,
-        has_llm_byok_key=has_llm_byok_key,
+    # Free-tier local processing (S6): when the rollout flag is on, desktop
+    # conversations consult the processing policy instead of the legacy
+    # should_defer_desktop_processing fail-open. Identified-basic and other
+    # denies land at the deterministic minimum (terminal; no first-open luna).
+    # Flag off leaves the legacy branch below byte-identical.
+    # The stale-marker clear below is applied only when this branch actually
+    # consulted the policy and continued to process_normally (paid upgrade).
+    clear_stale_terminal_marker = False
+    if (
+        free_tier_local_processing_enabled()
+        and hasattr(conversation, 'source')
+        and conversation.source == ConversationSource.desktop
     ):
-        logger.info(
-            "custom STT: skipping Omi-paid post-processing for uid=%s conv=%s",
-            uid,
-            getattr(conversation, 'id', '?'),
+        source_value = getattr(conversation.source, 'value', conversation.source)
+        # Explicit ingest-time projection wins over a previously stored one.
+        # A stored Conversation.client_processing still counts: an idempotent
+        # retry with no kwarg must not fall through to the bare minimum.
+        effective_projection = (
+            client_projection if client_projection is not None else getattr(conversation, 'client_processing', None)
         )
-        if isinstance(conversation, Conversation):
-            try:
-                conversation.status = ConversationStatus.completed
-                # Durably persist the completed status so the conversation is not
-                # left stuck in `processing` (the finalizer is told nothing more
-                # will be persisted). A fresh listen creation is written through
-                # the completed-lifecycle path; existing conversations go through
-                # the processing-result persist path.
-                if is_initial_creation:
-                    lifecycle_service.create_completed_conversation(uid, conversation.dict(), idempotent=True)
-                else:
-                    lifecycle_service.persist_processed_conversation(uid, conversation.dict())
-                report_persistence(True)
-            except Exception:
-                report_persistence(False)
-        else:
-            report_persistence(False)
-        return cast(Conversation, conversation)
-
+        # Nothing before this call may raise: funding-owner resolution lives
+        # inside decision_for, which the policy runs under its exception guard.
+        plan = resolve_free_tier_processing_plan(
+            uid=uid,
+            source=str(source_value),
+            force_process=force_process,
+            is_reprocess=is_reprocess,
+            has_projection=effective_projection is not None,
+            decision_for=_managed_compute_decision_for(uid),
+        )
+        if plan.reason == 'plan_identification_fail_open':
+            # Policy is pure (no telemetry). An unresolved plan fail-opens onto
+            # managed processing; emit here so rollout monitoring can see it.
+            record_fallback(
+                component='other',
+                from_mode='unresolved_plan',
+                to_mode='managed_processing',
+                reason='policy',
+                outcome='degraded',
+                log=logger,
+            )
+        if plan.mode != 'process_normally':
+            stored, persisted = (
+                _store_projected_conversation(uid, conversation, plan, client_projection=effective_projection)
+                if plan.mode == 'store_projection'
+                else _store_deterministic_minimum(uid, conversation, plan)
+            )
+            report_persistence(
+                persisted,
+                derived_effects=(
+                    DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
+                    if persisted
+                    else DerivedEffectsDisposition.RUN
+                ),
+            )
+            return stored
+        clear_stale_terminal_marker = True
     # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
     # paid plan (basic / Neo) get ONLY the raw transcript on capture. The expensive LLM
     # enrichment (summary, action items, memories, embeddings, app results) is deferred until
@@ -2085,14 +2492,23 @@ def process_conversation(
     # force_process=True). Paid desktop plans (Operator / Architect), BYOK users, and all
     # non-desktop sources are processed normally here. force_process / is_reprocess — the lazy
     # trigger and manual reprocess — bypass this so the enrichment actually runs.
-    if (
+    # force_process does not bypass JIT first-open: Flutter create and macOS
+    # finalize need it to still defer folders/apps when rollout admits. Explicit
+    # "run everything now" paths pass bypass_jit_first_open=True.
+    # Unreachable when FREE_TIER_LOCAL_PROCESSING is on (the branch above already
+    # handled desktop); flag-off behaviour stays the legacy fail-open deferral.
+    elif (
         not force_process
         and not is_reprocess
         and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
         and should_defer_desktop_processing(uid)
     ):
-        deferred = _store_deferred_conversation(uid, conversation)
+        deferred = _store_deferred_conversation(uid, conversation, client_projection=client_projection)
+        # Flag-off legacy deferral reports False even when the write succeeded.
+        # That is deliberate and pre-existing: the conversation is not terminally
+        # processed (status=processing, deferred=True; first-open will reprocess).
+        # Do not change this onto the flag-off path — it must stay byte-identical.
         report_persistence(False)
         return deferred
 
@@ -2104,11 +2520,7 @@ def process_conversation(
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
-    generated_conversation_id = (
-        str(uuid.uuid4())
-        if isinstance(conversation, (CreateConversation, ExternalIntegrationCreateConversation))
-        else None
-    )
+    generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     structured, discarded = _get_structured(
         uid,
         language_code,
@@ -2118,16 +2530,23 @@ def process_conversation(
         conversation_id=generated_conversation_id,
     )
     conversation = _get_conversation_obj(uid, structured, conversation, conversation_id=generated_conversation_id)
+    _attach_client_projection(conversation, client_projection)
 
     # Persist the completed generation before it can trigger any derived work.
     # A discard or replacement that wins this transaction must not create
     # integrations, vectors, memories, action items, audio artifacts, folders,
     # calendar links, usage, or webhooks from a stale in-memory snapshot.
     conversation.status = ConversationStatus.completed
+    payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
+    if conversation.processing_state is not None:
+        # The payload merge-clears the stale state (an upgraded-then-reprocessed
+        # minimum's local_pending); the object the caller returns must agree,
+        # not answer the stale pending state back to the client.
+        conversation.processing_state = None
     if is_initial_creation:
-        persisted = lifecycle_service.create_completed_conversation(uid, conversation.dict(), idempotent=True)
+        persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
     else:
-        persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+        persisted = lifecycle_service.persist_processed_conversation(uid, payload)
     report_persistence(persisted)
     if not persisted:
         logger.info(
@@ -2139,12 +2558,14 @@ def process_conversation(
     # conversation source. We create the durable obligation before omitting a
     # single effect; authority/Firestore failure preserves full-eager behavior.
     jit_defer_expensive = False
-    if not force_process and not is_reprocess and not discarded:
+    if not bypass_jit_first_open and not is_reprocess and not discarded:
         source_value = getattr(conversation.source, 'value', conversation.source)
         first_open_plan = resolve_authorized_first_open_plan(uid=uid, source=str(source_value))
         if first_open_plan.defer_derived_work:
             try:
                 jit_defer_expensive = conversations_db.initialize_first_open_work(uid, conversation.id)
+                if jit_defer_expensive:
+                    record_jit_first_open(event='claim', effect='obligation')
             except Exception as error:
                 logger.warning(
                     'JIT first-open initialization failed; using eager path uid=%s conv=%s: %s',
@@ -2152,6 +2573,10 @@ def process_conversation(
                     conversation.id,
                     error,
                 )
+                try:
+                    record_jit_first_open(event='fail', effect='obligation')
+                except Exception:
+                    pass
 
     # Wrap every post-persistence derived effect so the durable finalizer can
     # defer the bundle until it transactionally claims ownership (#10468 r5).

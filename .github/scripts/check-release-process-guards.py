@@ -940,7 +940,7 @@ def check_desktop_promotion_independent_of_qualification() -> list[str]:
 
 def check_desktop_update_docs() -> list[str]:
     """Keep operator docs aligned with Stable/Beta's signed artifact identities."""
-    path = ROOT / "docs/doc/developer/desktop-updates.mdx"
+    path = ROOT / "desktop/macos/docs/desktop-updates.mdx"
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     errors: list[str] = []
     required = (

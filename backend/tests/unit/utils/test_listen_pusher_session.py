@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import struct
 
 import pytest
@@ -403,6 +404,34 @@ async def test_incoming_finalization_error_keeps_request_for_bounded_retry():
 
 
 @pytest.mark.anyio
+async def test_will_retry_finalization_error_logs_warning_not_error(caplog):
+    # The will-retry branch is healthy in-flight work by the session's own
+    # accounting (the pending entry is re-armed for bounded retry); logging
+    # it at ERROR paged on-call for traffic that self-heals (2026-09-05:
+    # 40-50 ERROR/30min for 2h against ~250-270 healthy processing/30min,
+    # 0-17 terminal). Severity is the fault-origin signal — same boundary
+    # as the WS-auth reclassification (FC-request-input-rejection-escapes-
+    # as-server-fault). The terminal branch keeps ERROR (companion test).
+    with caplog.at_level(logging.DEBUG, logger="utils.listen_pusher_session"):
+        active_ref = {"active": True}
+        ws = FakePusherWebSocket(incoming=[error_response_201("conv-1")])
+        ws.on_recv = lambda: active_ref.update(active=False)
+        session = make_session(ws=ws, active_ref=active_ref)
+        await session.connect()
+        await session.request_conversation_processing("conv-1", "job-1", 2)
+
+        await session.pusher_receive()
+
+    records = [r for r in caplog.records if r.getMessage().startswith("Conversation processing failed")]
+    assert records, "expected a will-retry failure record"
+    assert all(
+        r.levelno == logging.WARNING for r in records
+    ), "the will-retry finalization branch must log at WARNING, not ERROR"
+    # WARNING must not mean dropped: the request stays armed for bounded retry.
+    assert session.pending_conversation_requests['conv-1']['retries'] == 1
+
+
+@pytest.mark.anyio
 async def test_in_flight_finalization_lease_does_not_consume_the_retry_burst():
     # `job_leased` means a concurrent dispatch of the same job is finalizing
     # normally. Treating it as a failure re-requested it immediately, and each
@@ -495,7 +524,7 @@ async def test_stale_generation_one_drops_pending_job_with_omitted_generation():
 
 
 @pytest.mark.anyio
-async def test_incoming_terminal_finalization_error_stops_retrying():
+async def test_incoming_terminal_finalization_error_stops_retrying(caplog):
     active_ref = {"active": True}
     ws = FakePusherWebSocket(incoming=[error_response_201("conv-1", terminal=True)])
     ws.on_recv = lambda: active_ref.update(active=False)
@@ -503,13 +532,20 @@ async def test_incoming_terminal_finalization_error_stops_retrying():
     await session.connect()
     await session.request_conversation_processing("conv-1", "job-1", 2)
 
-    await session.pusher_receive()
+    with caplog.at_level(logging.DEBUG, logger="utils.listen_pusher_session"):
+        await session.pusher_receive()
 
     # A dead-lettered job can never succeed: re-requesting it would retry the
     # same failing finalization for the whole life of the session.
     assert session.pending_conversation_requests == {}
     finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
     assert len(finalization_frames) == 1
+    # The terminal branch is the genuine fault signal: it stays at ERROR.
+    terminal_records = [
+        r for r in caplog.records if r.getMessage().startswith("Conversation processing failed terminally")
+    ]
+    assert terminal_records, "expected a terminal failure record"
+    assert all(r.levelno == logging.ERROR for r in terminal_records)
 
 
 @pytest.mark.anyio

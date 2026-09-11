@@ -2,6 +2,7 @@
 
 import json
 import runpy
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -174,6 +175,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'OPENAI_API_KEY=OPENAI_API_KEY:latest' in memory_secrets
     assert 'PINECONE_API_KEY=PINECONE_API_KEY:latest' in memory_secrets
     assert 'TYPESENSE_API_KEY=TYPESENSE_API_KEY:latest' in memory_secrets
+    assert 'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest' in memory_secrets
 
 
 @pytest.mark.parametrize('env', ['dev', 'prod'])
@@ -196,7 +198,10 @@ def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
         'POSTHOG_HOST',
     }
     assert daily_names.isdisjoint(maintenance.get('env', {}))
-    assert 'POSTHOG_PROJECT_API_KEY' not in maintenance.get('secrets', {})
+    assert maintenance.get('secrets', {}).get('POSTHOG_PROJECT_API_KEY') == {
+        'secret': 'POSTHOG_PROJECT_API_KEY',
+        'version': 'latest',
+    }
     assert {
         'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
         'MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED',
@@ -213,7 +218,12 @@ def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
 
 
 def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
-    serialized = json.dumps(_MANIFEST['environments']['dev'], sort_keys=True)
+    dev = deepcopy(_MANIFEST['environments']['dev'])
+    # The dev-only ledger drain has an explicit operational fence for the two
+    # owner test accounts. Product/runtime surfaces must still contain no
+    # first-user or capture admission lists.
+    dev['cloud_run']['jobs'].pop('knowledge-ledger-drain-job', None)
+    serialized = json.dumps(dev, sort_keys=True)
     assert 'vi7SA9ckQCe4ccobWNxlbdcNdC23' not in serialized
 
     cloud_run = _MANIFEST['environments']['dev']['cloud_run']
@@ -249,6 +259,8 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
         'PINECONE_API_KEY',
         'OMI_LLM_GATEWAY_SERVICE_TOKEN',
     }
+    assert notifications_job['flags']['--memory'] == '2Gi'
+    assert notifications_job['flags']['--task-timeout'] == '3600s'
 
 
 def test_notifications_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
@@ -354,6 +366,7 @@ def test_notifications_job_workflow_passes_vpc_vars_and_checkout_sha():
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text
     assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job notifications-job' in text
+    assert '${{ steps.runtime-env.outputs.notifications_job_flags }}' in text
     assert 'env_vars_update_strategy: overwrite' not in text
     assert 'secrets_update_strategy: overwrite' not in text
     assert (

@@ -3,6 +3,11 @@
   "id": "FC-nonexecuting-verification-command",
   "violated_contract": "A registered verification command must execute the cases it claims to verify; an invocation that can exit 0 without evaluating a single assertion must never report success.",
   "canonical_prevention": "Assert the invocation contract where the command is registered rather than trusting its exit code: a test module handed straight to the interpreter must be self-running, and every registered guard must be shown to fail on the historical input it exists to catch.",
+  "canonical_prevention_artifact": [
+    "backend/utils/memory/daily_memory_sweep.py",
+    "backend/tests/unit/test_daily_memory_sweep.py",
+    "backend/tests/unit/test_daily_sweep_summary_agent.py"
+  ],
   "evidence_prs": [10237],
   "scope_hints": [".github/checks-manifest.yaml", ".github/scripts/**", "scripts/**"],
   "status": "open"

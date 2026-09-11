@@ -1863,9 +1863,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get openSettings => 'Mở cài đặt';
 
   @override
-  String get wantDifferentName => 'Muốn được gọi bằng tên khác?';
-
-  @override
   String get whatsYourName => 'Tên bạn là gì?';
 
   @override
@@ -2045,7 +2042,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get memoryDeleted => 'Đã xóa ký ức.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Một phần lịch sử ký ức không khả dụng. Đang hiển thị lịch sử đã nhận được cho đến nay.';
 
   @override
   String get undo => 'Hoàn tác';
@@ -9841,12 +9839,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get accountCutoverOpenStore => 'Mở cửa hàng';
 
   @override
-  String get chatScopeToday => 'Hôm nay';
-
-  @override
-  String get chatScopeThisWeek => 'Tuần này';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Về: $title';
   }
@@ -9908,4 +9900,81 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Bộ nhớ của Pendant đã đầy và nó vẫn đang ở chế độ ghi âm, nên không thể chuyển âm thanh đã lưu. Nhấn nút của Pendant để dừng ghi âm, sau đó đồng bộ lại.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Không được ghi âm ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Hồ sơ giọng nói của $name';
+  }
+
+  @override
+  String get play => 'Phát';
+
+  @override
+  String get redo => 'Ghi âm lại';
+
+  @override
+  String get answerWithYourVoice => 'Trả lời bằng giọng nói của bạn:';
+
+  @override
+  String get speechProfileTopicLocation => 'Bạn sống ở đâu?';
+
+  @override
+  String get speechProfileTopicWork => 'Bạn làm công việc gì?';
+
+  @override
+  String get speechProfileTopicGoal => 'Mục tiêu dài hạn của bạn là gì?';
+
+  @override
+  String get transcriptionNoAudio => 'Bản ghi âm không nhận được âm thanh';
+
+  @override
+  String get tapPlusToStartRecording => 'Nhấn + để bắt đầu ghi âm';
+
+  @override
+  String get chatBlockTask => 'Nhiệm vụ';
+
+  @override
+  String get chatBlockGoal => 'Mục tiêu';
+
+  @override
+  String get chatBlockConversation => 'Cuộc trò chuyện';
+
+  @override
+  String get chatBlockMemory => 'Ký ức';
+
+  @override
+  String get chatBlockQuestion => 'Câu hỏi';
+
+  @override
+  String get chatBlockOpenInGoals => 'Mở trong Mục tiêu';
+
+  @override
+  String get chatBlockOpenConversation => 'Mở cuộc trò chuyện';
+
+  @override
+  String get chatBlockOpenInMemories => 'Mở trong Ký ức';
+
+  @override
+  String get chatBlockUnavailable => 'Không còn khả dụng';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Các bước tiếp theo được đề xuất';
+
+  @override
+  String get couldNotLoadMemories => 'Không thể tải ký ức';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Không thể tải đồ thị tri thức';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Hiện không thể chuyển giọng nói thành văn bản. Hãy kiểm tra kết nối internet và cài đặt nhận dạng giọng nói trên thiết bị rồi thử lại.';
+
+  @override
+  String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
 }

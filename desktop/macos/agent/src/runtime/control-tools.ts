@@ -18,6 +18,11 @@ import { AgentRuntimeKernel, type DesktopAwarenessSnapshot, type ExecuteAgentRun
 import { serializeArtifact } from "./artifact-serialization.js";
 import { defaultArtifactRoot, maybePruneExpiredToolOutputs, TOOL_OUTPUT_DIRECTORY_NAME } from "./artifact-storage.js";
 import { assertToolResultEnvelope, makeToolResultEnvelope, type ToolResultEnvelope } from "./tool-result-envelope.js";
+import {
+  projectionIsComplete,
+  projectToolResultPayload,
+  toolResultBudgetBytes,
+} from "./tool-result-projector.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "./control-tool-manifest.js";
 import type { McpServerBuildContext } from "./jsonl-transport.js";
 import {
@@ -31,6 +36,7 @@ import type {
   WorkstreamContinuationCheckpoint,
   WorkstreamProductContext,
 } from "./workstream-continuity.js";
+
 import {
   executionRoleAllowsTool,
   LEAF_AGENT_CONTROL_TOOLS,
@@ -39,6 +45,11 @@ import {
   type AgentExecutionRole,
   type ProviderBoundary,
 } from "./execution-policy.js";
+
+const PROVIDER_TOOL_RESULT_BUDGET_BYTES = toolResultBudgetBytes("list_agent_sessions", "realtime_voice");
+const PROVIDER_RESULT_ENVELOPE_RESERVE_BYTES = PROVIDER_TOOL_RESULT_BUDGET_BYTES / 4;
+const PROVIDER_DETAIL_PROJECTION_RESERVE_BYTES = PROVIDER_RESULT_ENVELOPE_RESERVE_BYTES * 1.5;
+const DEFAULT_READ_TOOL_OUTPUT_BYTES = PROVIDER_TOOL_RESULT_BUDGET_BYTES / 2;
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
 const terminalRunStatuses = new Set(["succeeded", "failed", "cancelled", "timed_out", "orphaned"]);
@@ -275,7 +286,9 @@ const updateAgentArtifactLifecycleSchema = strictObject({
 const readToolOutputSchema = strictObject({
   artifactId: z.string().min(1),
   ownerId: z.string().min(1).optional(),
-  maxBytes: z.coerce.number().int().positive().max(8 * 1024).default(4 * 1024),
+  maxBytes: z.coerce.number().int().positive()
+    .max(PROVIDER_TOOL_RESULT_BUDGET_BYTES)
+    .default(DEFAULT_READ_TOOL_OUTPUT_BYTES),
 });
 
 const searchToolOutputSchema = strictObject({
@@ -561,6 +574,8 @@ export interface AgentControlToolContext {
     runId: string;
     attemptId: string;
     toolName: string;
+    surfaceKind?: string;
+    purpose?: string;
   };
   trustedUserControl?: boolean;
   getOwnerId?: () => string;
@@ -1955,7 +1970,6 @@ function rejectSynchronousNestedRun(context: AgentControlToolContext, adapterId:
   }
 }
 
-const MAX_REALTIME_TOOL_RESULT_BYTES = 8 * 1024;
 // Direct desktop control is authenticated local IPC, not a provider tool
 // response. It still has a bounded payload so UI reconciliation cannot be held
 // hostage by historical state, but it must not inherit the provider budget and
@@ -1969,7 +1983,13 @@ function isDirectControlOutput(context: AgentControlToolContext | undefined): bo
 function controlToolResultByteBudget(context: AgentControlToolContext | undefined): number {
   return isDirectControlOutput(context)
     ? MAX_DIRECT_CONTROL_TOOL_RESULT_BYTES
-    : MAX_REALTIME_TOOL_RESULT_BYTES;
+    : toolResultBudgetBytes(
+      context?.authorizedToolInvocation?.toolName ?? "unknown_control_tool",
+      context?.authorizedToolInvocation?.surfaceKind === "realtime"
+        || context?.authorizedToolInvocation?.surfaceKind === "realtime_voice"
+        ? "realtime_voice"
+        : "desktop_chat",
+    );
 }
 
 function controlToolResultProvenance(
@@ -2035,10 +2055,9 @@ function withToolResultEnvelope(
       : null)
     : null;
   if (needsArtifactBackedProjection && fullOutputRef === null) {
-    // Never relabel a lossy success as an untruncated success. The provider
-    // receives a typed failure unless the complete result is durably readable
-    // through its artifact reference.
-    return providerBudgetFailure(toolName, context);
+    return JSON.parse(stringifyProjectedControlSuccess(
+      toolName, fullJson, originalBytes, null, context,
+    )) as Record<string, unknown>;
   }
   const isRecoverableProjection = needsArtifactBackedProjection && fullOutputRef !== null;
   const result = {
@@ -2056,27 +2075,9 @@ function withToolResultEnvelope(
     const recoveredRef = fullOutputRef ?? (sessionId
       ? persistToolOutputArtifact(context, ownerId, sessionId, toolName, fullJson)
       : null);
-    const failure = {
-      error: {
-        code: "tool_result_projection_exceeded_budget",
-        message: `${toolName} output was saved locally; use its fullOutputRef with read_tool_output or search_tool_output.`,
-      },
-    };
-    const failureBytes = Buffer.byteLength(JSON.stringify(failure), "utf8");
-    if (recoveredRef) {
-      return {
-        ...failure,
-        toolResultEnvelope: makeToolResultEnvelope({
-          status: "failed",
-          truncated: true,
-          originalBytes: Math.max(originalBytes, projectedBytes),
-          projectedBytes: failureBytes,
-          fullOutputRef: recoveredRef,
-          provenance: controlToolResultProvenance(context, toolName),
-        }),
-      };
-    }
-    return providerBudgetFailure(toolName, context);
+    return JSON.parse(stringifyProjectedControlSuccess(
+      toolName, fullJson, originalBytes, recoveredRef, context,
+    )) as Record<string, unknown>;
   }
   return result;
 }
@@ -2182,6 +2183,12 @@ function stringifyToolResult(
       });
       const result = JSON.stringify({ ok: status === "succeeded", ...payload, toolResultEnvelope: envelope });
       if (Buffer.byteLength(result, "utf8") <= controlToolResultByteBudget(scope?.context)) return result;
+      if (status === "succeeded") {
+        return stringifyProjectedControlSuccess(toolName, JSON.stringify(payload), envelope.originalBytes, envelope.fullOutputRef, scope?.context);
+      }
+      if (status === "cancelled") {
+        return stringifyProjectedControlCancellation(toolName, envelope.originalBytes, envelope.fullOutputRef, scope?.context);
+      }
       return stringifyProviderBudgetFailure(toolName, envelope.originalBytes, envelope.fullOutputRef, scope?.context);
     } catch {
       // An invalid envelope is itself an untrusted transport value. Continue
@@ -2212,9 +2219,13 @@ function stringifyToolResult(
     }
     const fullOutputRef = projected ? persistedFullOutputRef ?? null : null;
     if (projected && !fullOutputRef) {
-      // Do not report a lossy success. The bounded error explicitly tells the
-      // caller that no recoverable projection could be produced.
-      return stringifyProviderBudgetFailure(toolName, undefined, null, scope?.context);
+      if (status === "succeeded") {
+        return stringifyProjectedControlSuccess(toolName, fullJson, originalBytes, null, scope?.context);
+      }
+      if (status === "cancelled") {
+        return stringifyProjectedControlCancellation(toolName, originalBytes, null, scope?.context);
+      }
+      return stringifyProjectedControlSuccess(toolName, fullJson, originalBytes, null, scope?.context);
     }
     const toolResultEnvelope = makeToolResultEnvelope({
       status,
@@ -2232,7 +2243,226 @@ function stringifyToolResult(
     if (Buffer.byteLength(result, "utf8") <= controlToolResultByteBudget(scope?.context)) return result;
   }
 
-  return stringifyProviderBudgetFailure(toolName, undefined, null, scope?.context);
+  if (status === "succeeded") {
+    return stringifyProjectedControlSuccess(toolName, fullJson, originalBytes, persistedFullOutputRef ?? null, scope?.context);
+  }
+  if (status === "cancelled") {
+    return stringifyProjectedControlCancellation(
+      toolName, originalBytes, persistedFullOutputRef ?? null, scope?.context,
+    );
+  }
+  return stringifyProjectedControlSuccess(
+    toolName, fullJson, originalBytes, persistedFullOutputRef ?? null, scope?.context,
+  );
+}
+
+function stringifyProjectedControlSuccess(
+  toolName: string,
+  fullJson: string,
+  originalBytes: number,
+  existingRef: string | null,
+  context: AgentControlToolContext | undefined,
+): string {
+  if (isDirectControlOutput(context)) {
+    return stringifyProjectedDirectControlSuccess(toolName, fullJson, originalBytes, existingRef, context!);
+  }
+  const budget = controlToolResultByteBudget(context);
+  const ownerId = context ? safeControlToolOwnerId(context) : null;
+  const sessionId = context?.callerSessionId;
+  let persistedRef: string | null | undefined = existingRef ?? undefined;
+  const recoveryRef = (): string => {
+    if (persistedRef === undefined) {
+      persistedRef = ownerId && sessionId && context
+        ? persistToolOutputArtifact(context, ownerId, sessionId, toolName, fullJson)
+        : null;
+    }
+    return persistedRef ?? "artifact:unavailable";
+  };
+  for (let reserve = 768; reserve < budget; reserve += 256) {
+    const projection = projectToolResultPayload({
+      toolName,
+      result: fullJson,
+      purpose: context?.authorizedToolInvocation?.purpose
+        ? truncateUtf8(context.authorizedToolInvocation.purpose, 256).text
+        : undefined,
+      maxBytes: Math.max(0, budget - reserve),
+    });
+    const projectedBytes = Buffer.byteLength(JSON.stringify(projection), "utf8");
+    const truncated = !projectionIsComplete(projection);
+    if (truncated && projectedBytes >= originalBytes) continue;
+    const result = JSON.stringify({
+      ok: true,
+      ...projection,
+      toolResultEnvelope: makeToolResultEnvelope({
+        status: "succeeded",
+        truncated,
+        originalBytes: truncated ? originalBytes : projectedBytes,
+        projectedBytes,
+        fullOutputRef: truncated ? recoveryRef() : null,
+        purpose: context?.authorizedToolInvocation?.purpose
+          ? truncateUtf8(context.authorizedToolInvocation.purpose, 256).text
+          : undefined,
+        provenance: controlToolResultProvenance(context, toolName),
+      }),
+    });
+    if (Buffer.byteLength(result, "utf8") <= budget) {
+      if (truncated) recordControlProjectionFallback(toolName, originalBytes, projectedBytes);
+      return result;
+    }
+  }
+  const projection = { text: "Tool result available via fullOutputRef.", omitted: {} };
+  const projectedBytes = Buffer.byteLength(JSON.stringify(projection), "utf8");
+  recordControlProjectionFallback(toolName, originalBytes, projectedBytes);
+  return JSON.stringify({
+    ok: true,
+    ...projection,
+    toolResultEnvelope: makeToolResultEnvelope({
+      status: "succeeded",
+      truncated: true,
+      originalBytes,
+      projectedBytes,
+      fullOutputRef: recoveryRef(),
+      provenance: controlToolResultProvenance(context, toolName),
+    }),
+  });
+}
+
+function stringifyProjectedDirectControlSuccess(
+  toolName: string,
+  fullJson: string,
+  originalBytes: number,
+  existingRef: string | null,
+  context: AgentControlToolContext,
+): string {
+  const budget = controlToolResultByteBudget(context);
+  let parsed: Record<string, unknown>;
+  try {
+    const value = JSON.parse(fullJson) as unknown;
+    parsed = value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : { result: value };
+  } catch {
+    parsed = { result: fullJson };
+  }
+  const typedPayload = { ...parsed };
+  delete typedPayload.ok;
+  delete typedPayload.toolResultEnvelope;
+  const canonicalOriginalBytes = Math.max(originalBytes, Buffer.byteLength(fullJson, "utf8"));
+  const ownerId = safeControlToolOwnerId(context);
+  const sessionId = context.callerSessionId ?? findSessionIdForToolOutput(typedPayload);
+  const fullOutputRef = existingRef ?? (ownerId && sessionId
+    ? persistToolOutputArtifact(context, ownerId, sessionId, toolName, fullJson)
+    : null);
+  if (!fullOutputRef) {
+    return stringifyToolOutputPersistFailure(toolName, canonicalOriginalBytes, context);
+  }
+
+  const candidates = [
+    projectDirectControlPayload(typedPayload),
+    ...([[256, 16, 24], [128, 8, 16], [64, 4, 8], [32, 2, 4]] as const)
+      .map((limits) => compactProviderPayload(typedPayload, ...limits)),
+  ];
+  for (const projectedPayload of candidates) {
+    const projectedBytes = Buffer.byteLength(JSON.stringify(projectedPayload), "utf8");
+    if (projectedBytes >= canonicalOriginalBytes) continue;
+    const result = JSON.stringify({
+      ...projectedPayload,
+      ok: true,
+      toolResultEnvelope: makeToolResultEnvelope({
+        status: "succeeded",
+        truncated: true,
+        originalBytes: canonicalOriginalBytes,
+        projectedBytes,
+        fullOutputRef,
+        provenance: controlToolResultProvenance(context, toolName),
+      }),
+    });
+    if (Buffer.byteLength(result, "utf8") <= budget) {
+      recordControlProjectionFallback(toolName, canonicalOriginalBytes, projectedBytes);
+      return result;
+    }
+  }
+
+  // The final shape is still typed and retains array omission accounting.
+  const projection = compactProviderPayload(typedPayload, 16, 1, 1);
+  const projectedBytes = Buffer.byteLength(JSON.stringify(projection), "utf8");
+  recordControlProjectionFallback(toolName, canonicalOriginalBytes, projectedBytes);
+  return JSON.stringify({
+    ...projection,
+    ok: true,
+    toolResultEnvelope: makeToolResultEnvelope({
+      status: "succeeded",
+      truncated: true,
+      originalBytes: canonicalOriginalBytes,
+      projectedBytes,
+      fullOutputRef,
+      provenance: controlToolResultProvenance(context, toolName),
+    }),
+  });
+}
+
+function stringifyToolOutputPersistFailure(
+  toolName: string,
+  originalBytes: number,
+  context: AgentControlToolContext,
+): string {
+  const failure = {
+    error: {
+      code: "tool_output_persist_failed",
+      message: "The full tool output could not be persisted for recovery.",
+      originalBytes,
+    },
+  };
+  const projectedBytes = Buffer.byteLength(JSON.stringify(failure), "utf8");
+  return JSON.stringify({
+    ok: false,
+    ...failure,
+    toolResultEnvelope: makeToolResultEnvelope({
+      status: "failed",
+      truncated: false,
+      originalBytes: projectedBytes,
+      projectedBytes,
+      fullOutputRef: null,
+      provenance: controlToolResultProvenance(context, toolName),
+    }),
+  });
+}
+
+function recordControlProjectionFallback(toolName: string, originalBytes: number, projectedBytes: number): void {
+  // Mirrors index.ts logErr: a bounded projection of a successful result is
+  // routine, so emit a plain operational line through a pipe-safe stderr write
+  // instead of error-level console output that can throw on a destroyed pipe.
+  try {
+    process.stderr.write(
+      `[agent] fallback area=tool_result_projection outcome=degraded toolName=${toolName} originalBytes=${originalBytes} projectedBytes=${projectedBytes}\n`);
+  } catch {
+    // Parent stderr pipe is gone; nothing to record.
+  }
+}
+
+function stringifyProjectedControlCancellation(
+  toolName: string,
+  originalBytes: number,
+  existingRef: string | null,
+  context: AgentControlToolContext | undefined,
+): string {
+  const cancellation = {
+    cancellation: { code: "cancelled", message: "The tool operation was cancelled." },
+  };
+  const projectedBytes = Buffer.byteLength(JSON.stringify(cancellation), "utf8");
+  const truncated = existingRef !== null && originalBytes > projectedBytes;
+  return JSON.stringify({
+    ok: false,
+    ...cancellation,
+    toolResultEnvelope: makeToolResultEnvelope({
+      status: "cancelled",
+      truncated,
+      originalBytes: truncated ? originalBytes : projectedBytes,
+      projectedBytes,
+      fullOutputRef: truncated ? existingRef : null,
+      provenance: controlToolResultProvenance(context, toolName),
+    }),
+  });
 }
 
 /**
@@ -2256,15 +2486,27 @@ function stringifyRealtimeSpawnPrecompactResult(
   // The second compaction boundary removes the large run/context fields. Keep
   // the source envelope explicitly artifact-backed so the relay's finalizer
   // can preserve the complete control result while replacing its projection.
+  // `projectedBytes` describes that downstream projection target, not the
+  // precompact JSON emitted here; the relay validates the source envelope but
+  // remeasures and reprojects the payload before any provider observes it.
   // A missing artifact is not silently relabeled as an untruncated success.
   if (!fullOutputRef) {
+    if (status === "succeeded") {
+      return stringifyProjectedControlSuccess("spawn_agent", fullJson, bytes, null, context);
+    }
+    if (status === "cancelled") {
+      return stringifyProjectedControlCancellation("spawn_agent", bytes, null, context);
+    }
     return stringifyProviderBudgetFailure("spawn_agent", bytes, null, context);
   }
   const envelope = makeToolResultEnvelope({
     status,
     truncated: true,
     originalBytes: bytes,
-    projectedBytes: Math.min(Math.max(0, bytes - 1), MAX_REALTIME_TOOL_RESULT_BYTES),
+    projectedBytes: Math.min(
+      Math.max(0, bytes - 1),
+      toolResultBudgetBytes("spawn_agent", "realtime_voice"),
+    ),
     fullOutputRef,
     provenance: controlToolResultProvenance(context, "spawn_agent"),
   });
@@ -2361,19 +2603,18 @@ function providerBudgetFailure(
 
 /** A compact projection for detail endpoints whose stored JSON can be huge. */
 function projectProviderPayload(fullPayload: Record<string, unknown>, toolName: string): Record<string, unknown> {
-  const originalBytes = Buffer.byteLength(JSON.stringify(fullPayload), "utf8");
-  const maximumProjectedBytes = 5 * 1024;
+  // Preserve structural roots used by the coordinator while deriving the
+  // compaction target from the manifest-owned provider budget. The canonical
+  // projector below remains the sole final fit check.
+  const maximumProjectedBytes = Math.max(
+    256,
+    toolResultBudgetBytes(toolName, "realtime_voice") - PROVIDER_DETAIL_PROJECTION_RESERVE_BYTES,
+  );
   for (const limits of [[512, 24, 32], [256, 16, 24], [128, 10, 16], [64, 6, 10]] as const) {
     const compact = compactProviderPayload(fullPayload, ...limits);
     if (Buffer.byteLength(JSON.stringify(compact), "utf8") <= maximumProjectedBytes) return compact;
   }
-  const preview = truncateUtf8(JSON.stringify(compactProviderPayload(fullPayload, 64, 6, 10)), maximumProjectedBytes).text;
-  return {
-    projection: "bounded_json_preview",
-    toolName,
-    originalBytes,
-    preview,
-  };
+  return compactProviderPayload(fullPayload, 64, 6, 10);
 }
 
 /**
@@ -2384,7 +2625,7 @@ function projectProviderPayload(fullPayload: Record<string, unknown>, toolName: 
  * same object shape rather than returning a provider-only string preview.
  */
 function projectDirectControlPayload(fullPayload: Record<string, unknown>): Record<string, unknown> {
-  const maximumProjectedBytes = MAX_DIRECT_CONTROL_TOOL_RESULT_BYTES - 8 * 1024;
+  const maximumProjectedBytes = MAX_DIRECT_CONTROL_TOOL_RESULT_BYTES - PROVIDER_TOOL_RESULT_BUDGET_BYTES;
   if (Buffer.byteLength(JSON.stringify(fullPayload), "utf8") <= maximumProjectedBytes) return fullPayload;
   for (const limits of [[4096, 200, 128], [2048, 128, 96], [1024, 64, 64], [512, 32, 40]] as const) {
     const compact = compactProviderPayload(fullPayload, ...limits);
@@ -2509,7 +2750,7 @@ function serializeAgentSessionsList(
   // completed child result it just found.
   // Reserve room for the common ToolResultEnvelope. The final guard above is
   // authoritative and protects every provider response from transport drift.
-  const maximumSerializedBytes = 6 * 1024;
+  const maximumSerializedBytes = PROVIDER_TOOL_RESULT_BUDGET_BYTES - PROVIDER_RESULT_ENVELOPE_RESERVE_BYTES;
   const dismissed = new Set(
     overrides
       .filter((override) => override.dismissedAtMs != null || (override.hiddenUntilMs ?? 0) > Date.now())

@@ -216,8 +216,8 @@ def test_conversation_and_transcript_chunk_search_return_persisted_conversation_
     conversation["finished_at"] = datetime.fromisoformat(conversation["finished_at"].replace("Z", "+00:00"))
     seed_conversation("123", conversation)
 
-    vector_db.upsert_vector(
-        "123", conversation["id"], vector_db.embeddings.embed_query(conversation["structured"]["overview"])
+    vector_db.upsert_vector2(
+        "123", conversation["id"], vector_db.embeddings.embed_query(conversation["structured"]["overview"]), {}
     )
     chunks = build_transcript_chunks(conversation["transcript_segments"], conversation["started_at"])
     assert vector_db.upsert_transcript_chunk_vectors("123", conversation["id"], chunks) == 1

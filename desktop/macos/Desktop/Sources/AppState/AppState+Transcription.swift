@@ -10,15 +10,21 @@ extension AppState {
       AssistantSettings.shared.audioRecordingMode = .off
     } else {
       let selected = AssistantSettings.shared.audioRecordingMode
-      AssistantSettings.shared.audioRecordingMode = selected == .off ? .onlyMeetings : selected
+      let requested: AssistantSettings.AudioRecordingMode = selected == .off ? .onlyMeetings : selected
+      if !AudioCaptureService.checkPermission() {
+        requestMicrophonePermission()
+      }
+      AssistantSettings.shared.audioRecordingMode = requested
     }
   }
 
-  /// Start real-time transcription
-  /// - Parameter source: Audio source to use (defaults to current audioSource setting)
+  /// Starts transcription. `userInitiated` is false on automatic paths (launch,
+  /// reactivation, key load, sync, wake, rotations, post-onboarding), which must
+  /// never raise the mic TCC sheet — see `MicrophoneCaptureAuthorizationPolicy`.
   func startTranscription(
     source: AudioSource? = nil,
-    conversationRole: MeetingConversationBoundaryPolicy.Role = .ambient
+    conversationRole: MeetingConversationBoundaryPolicy.Role = .ambient,
+    userInitiated: Bool = true
   ) {
     guard !isTranscribing else { return }
     guard AssistantSettings.shared.audioRecordingMode != .off else {
@@ -51,9 +57,19 @@ extension AppState {
         return
       }
     } else {
-      // For microphone, check permission
-      guard AudioCaptureService.checkPermission() else {
-        requestMicrophonePermission()
+      // For microphone: user-initiated starts may raise the sheet (or the denied
+      // alert); automatic starts abandon and let the intent wait for an explicit
+      // Listen/Grant action instead of re-prompting after a skip.
+      let action = MicrophoneCaptureAuthorizationPolicy.action(
+        for: AudioCaptureService.authorizationStatus(), userInitiated: userInitiated)
+      guard action == .proceed else {
+        if action == .abandonAutomaticStart {
+          log(
+            "Transcription: automatic start abandoned — microphone permission not granted; automatic paths never prompt"
+          )
+        } else {
+          requestMicrophonePermission()
+        }
         return
       }
     }
@@ -68,14 +84,20 @@ extension AppState {
       // Desktop transcribes on-device with Parakeet by default on Apple Silicon — no Deepgram.
       // Intel Macs (no Neural Engine) fall back to the cloud path. Force cloud for debugging with
       // OMI_FORCE_CLOUD_STT=1 or `defaults write <bundle> forceCloudSTT -bool true`.
+      // Pendant BLE used to force cloud; identified basic now matches mic (local, unnamed).
+      // Cache miss / unknown plan fail open to the previous BLE→cloud path; prefetch warms the next start.
       let debugForceCloud = STTSessionState.debugForceCloudSTT(
         environmentForceCloud: ProcessInfo.processInfo.environment["OMI_FORCE_CLOUD_STT"] == "1",
         userDefaultsForceCloud: UserDefaults.standard.bool(forKey: "forceCloudSTT")
       )
+      let preferLocalOnBasic =
+        SubscriptionEntitlementService.shared.cachedDecisionForManagedProactivity() == .planGated
+      Task { _ = await SubscriptionEntitlementService.shared.snapshot() }
       sttSession.beginRecording(
         audioSource: effectiveSource,
         isAppleSilicon: Self.isAppleSilicon,
-        debugForceCloud: debugForceCloud
+        debugForceCloud: debugForceCloud,
+        preferLocalOnBasic: preferLocalOnBasic
       )
       let clientConversationId = UUID().uuidString.lowercased()
       currentClientConversationId = sttSession.useLocalSTT ? nil : clientConversationId
@@ -152,7 +174,7 @@ extension AppState {
       // Local (Parakeet) mode has no WebSocket — start capture immediately instead.
       if sttSession.useLocalSTT {
         Task { [weak self] in
-          await self?.startAudioCapture(source: effectiveSource)
+          await self?.startAudioCapture(source: effectiveSource, userInitiated: userInitiated)
         }
       } else {
         transcriptionService?.start(
@@ -184,7 +206,7 @@ extension AppState {
             Task { @MainActor in
               log("Transcription: Connected to Python backend")
               // Start audio capture once connected
-              await self?.startAudioCapture(source: effectiveSource)
+              await self?.startAudioCapture(source: effectiveSource, userInitiated: userInitiated)
             }
           },
           onDisconnected: {
@@ -331,7 +353,7 @@ extension AppState {
               )
             }
           }
-          self.startTranscription(conversationRole: conversationRole)
+          self.startTranscription(conversationRole: conversationRole, userInitiated: false)
         }
       }
 
@@ -356,13 +378,16 @@ extension AppState {
 
   /// Start audio capture and pipe to transcription service
   /// - Parameter source: Audio source to capture from
-  func startAudioCapture(source: AudioSource = .microphone) async {
+  func startAudioCapture(
+    source: AudioSource = .microphone,
+    userInitiated: Bool = false
+  ) async {
     if source == .bleDevice {
       // Use BLE device audio
       await startBleAudioCapture()
     } else {
       // Use microphone (+ optional system audio)
-      await startMicrophoneAudioCapture()
+      await startMicrophoneAudioCapture(userInitiated: userInitiated)
     }
   }
 
@@ -392,7 +417,7 @@ extension AppState {
     }
   }
 
-  func startMicrophoneAudioCapture() async {
+  func startMicrophoneAudioCapture(userInitiated: Bool = false) async {
     guard let audioCaptureService = audioCaptureService else { return }
 
     // Authorization first, capture second. CoreAudio HAL capture never triggers the
@@ -403,14 +428,18 @@ extension AppState {
     // a hardware costume. startTranscription() has its own guard, but resume, the meeting
     // gate, and the watchdog's own rebuild all arm capture through here without passing it.
     var gateAction = MicrophoneCaptureAuthorizationPolicy.action(
-      for: AudioCaptureService.authorizationStatus())
+      for: AudioCaptureService.authorizationStatus(), userInitiated: userInitiated)
     if gateAction == .requestPermission {
       log("Transcription: microphone permission undetermined — requesting before capture")
       gateAction = MicrophoneCaptureAuthorizationPolicy.action(
         afterRequestGranted: await AudioCaptureService.requestPermission())
     }
     guard gateAction == .proceed else {
-      surfaceMicrophonePermissionAlert()
+      if gateAction == .surfacePermissionAlert {
+        surfaceMicrophonePermissionAlert()
+      } else {
+        log("Transcription: automatic capture abandoned after microphone authorization changed")
+      }
       stopTranscription()
       return
     }
@@ -485,6 +514,11 @@ extension AppState {
       await parked.waitForPhysicalStop()
       guard let current = audioCaptureService, current === mic else { return false }
     }
+    // A warm PTT capture whose CoreAudio start has not resolved holds the same
+    // device and cannot be stopped from here — waiting for its own completion is
+    // the boundary. See `PushToTalkManager.releaseInFlightWarmCapture`.
+    await PushToTalkManager.shared.drainInFlightWarmCapture()
+    guard let current = audioCaptureService, current === mic else { return false }
 
     do {
       let useLocalSTT = sttSession.useLocalSTT
@@ -512,6 +546,13 @@ extension AppState {
         return false
       }
       log("Transcription: Microphone capture started")
+      // This path released the parked push-to-talk capture above so the two
+      // IOProcs could not overlap, and until now nothing put one back: every
+      // press after an ambient capture start paid a cold CoreAudio start inside
+      // the hold. Re-arm now that this session's device is open — PTT routes
+      // around a contended input, so the warm capture it opens is not the one
+      // this session holds.
+      PushToTalkManager.shared.schedulePTTCaptureWarmup(trigger: .ambientCaptureStarted)
       return true
     } catch {
       logError("Transcription: Failed to start microphone capture", error: error)
@@ -1032,7 +1073,7 @@ extension AppState {
         if !self.isTranscribing { break }
         try? await Task.sleep(nanoseconds: 100_000_000)
       }
-      self.startTranscription(source: source, conversationRole: conversationRole)
+      self.startTranscription(source: source, conversationRole: conversationRole, userInitiated: false)
       self.sttSession.completeFallback()
     }
   }
@@ -1086,7 +1127,7 @@ extension AppState {
         if !self.isTranscribing { break }
         try? await Task.sleep(nanoseconds: 100_000_000)
       }
-      self.startTranscription(source: source, conversationRole: conversationRole)
+      self.startTranscription(source: source, conversationRole: conversationRole, userInitiated: false)
       self.sttSession.completeFallback()
     }
   }
@@ -1228,7 +1269,7 @@ extension AppState {
             )
           }
         }
-        self.startTranscription(conversationRole: conversationRole)
+        self.startTranscription(conversationRole: conversationRole, userInitiated: false)
       }
     }
 

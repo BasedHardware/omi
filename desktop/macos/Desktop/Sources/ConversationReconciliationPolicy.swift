@@ -125,8 +125,12 @@ enum ConversationReconciliationPolicy {
       }
     }
 
+    let currentByID = Dictionary(current.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     var merged = server.map { serverConversation in
-      apply(mutation: nextPending[serverConversation.id], to: serverConversation)
+      apply(
+        mutation: nextPending[serverConversation.id],
+        to: retainingLoadedTranscript(server: serverConversation, current: currentByID[serverConversation.id])
+      )
     }
 
     // Preserve genuinely local in-progress rows that have not reached the
@@ -141,6 +145,23 @@ enum ConversationReconciliationPolicy {
       conversations: merged,
       pendingMutations: nextPending
     )
+  }
+
+  /// List responses omit `transcript_segments`; that means "not loaded", not
+  /// "empty". A row that already holds a loaded transcript (local capture
+  /// cache, or a detail fetch) keeps it so a processing row's provisional
+  /// title does not flicker back to the clock on every list refresh.
+  static func retainingLoadedTranscript(
+    server: ServerConversation,
+    current: ServerConversation?
+  ) -> ServerConversation {
+    guard !server.transcriptSegmentsIncluded, let current, !current.transcriptSegments.isEmpty else {
+      return server
+    }
+    var retained = server
+    retained.transcriptSegments = current.transcriptSegments
+    retained.transcriptSegmentsIncluded = true
+    return retained
   }
 
   static func apply(

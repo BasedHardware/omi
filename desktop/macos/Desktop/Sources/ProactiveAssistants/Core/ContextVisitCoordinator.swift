@@ -204,7 +204,9 @@ actor ContextVisitCoordinator {
     reconciled = false
   }
 
-  func activeFenceForTesting() -> ContextVisitFence? { state.activeFence }
+  func currentFence() -> ContextVisitFence? { state.activeFence }
+
+  func activeFenceForTesting() -> ContextVisitFence? { currentFence() }
 
   /// The visit currently in progress, or nil when idle. Read-only production
   /// accessor: speech-driven evaluation grounds on the live visit.

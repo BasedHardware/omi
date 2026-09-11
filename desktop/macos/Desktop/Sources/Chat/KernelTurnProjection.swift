@@ -140,7 +140,9 @@ enum KernelAgentLifecycleMutation {
       appendResourcesJSON: ChatResource.encodeResourcesForPersistence(
         result.resources
       ) ?? "[]",
-      metadataJSON: nil
+      appendEvidenceJSON: nil,
+      metadataJSON: nil,
+      terminalRevision: false
     )
   }
 
@@ -483,6 +485,7 @@ final class KernelTurnProjection {
     message: ChatMessage,
     status: KernelJournalTurnStatus? = nil,
     terminalReason: String? = nil,
+    answerTextCompleted: Bool? = nil,
     ownerID: String? = nil
   ) async -> KernelJournalTurn? {
     guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
@@ -491,7 +494,8 @@ final class KernelTurnProjection {
       let turn = try await client.updateJournalTurn(
         surface: surface,
         ownerID: lease.ownerID,
-        update: message.journalUpdate(status: status, terminalReason: terminalReason)
+        update: message.journalUpdate(
+          status: status, terminalReason: terminalReason, answerTextCompleted: answerTextCompleted)
       )
       guard isCurrent(lease) else { return nil }
       _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
@@ -499,6 +503,51 @@ final class KernelTurnProjection {
       return turn
     } catch {
       log("KernelTurnProjection: journal update failed (code=journal_update_failed)")
+      return nil
+    }
+  }
+
+  /// Adds one stable-ID evidence item to an already-admitted user row. The
+  /// runtime atomically merges the object into the owned row, preserving
+  /// unrelated metadata even when a streaming update races this late OCR.
+  @discardableResult
+  func appendEvidence(
+    surface: AgentSurfaceReference,
+    turnID: String,
+    evidence: ConversationEvidence,
+    ownerID: String? = nil
+  ) async -> KernelJournalTurn? {
+    guard !turnID.isEmpty,
+      let lease = captureOwnerLease(ownerID: ownerID),
+      let host
+    else { return nil }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return nil }
+    do {
+      guard let evidenceData = try? JSONEncoder().encode(evidence),
+        let evidenceJSON = String(data: evidenceData, encoding: .utf8)
+      else { return nil }
+      let updated = try await client.updateJournalTurn(
+        surface: surface,
+        ownerID: lease.ownerID,
+        update: KernelJournalTurnUpdate(
+          turnId: turnID,
+          status: nil,
+          content: nil,
+          contentBlocksJSON: nil,
+          appendContentBlocksJSON: nil,
+          resourcesJSON: nil,
+          appendResourcesJSON: nil,
+          appendEvidenceJSON: evidenceJSON,
+          metadataJSON: nil,
+          terminalRevision: false))
+      guard isCurrent(lease) else { return nil }
+      _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
+      guard isCurrent(lease) else { return nil }
+      return updated
+    } catch {
+      if isCurrent(lease) {
+        log("KernelTurnProjection: journal evidence append failed (code=journal_evidence_append_failed)")
+      }
       return nil
     }
   }
@@ -624,6 +673,41 @@ final class KernelTurnProjection {
     }
   }
 
+  /// Revises a row this client sealed `.completed` before delivery resolved,
+  /// downgrading it to `.failed` with its truncation cause when the answer
+  /// never reached the user (#12743). Payload-free by construction: the row's
+  /// content, blocks, resources, and existing metadata (model attribution,
+  /// continuity) are preserved; the kernel merges the terminal reason into
+  /// the row's metadata rather than replacing it.
+  @discardableResult
+  func reviseSealedTerminalTurn(
+    surface: AgentSurfaceReference,
+    turnId: String,
+    terminalReason: String,
+    answerTextCompleted: Bool = false,
+    ownerID: String? = nil
+  ) async -> KernelJournalTurn? {
+    guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return nil }
+    do {
+      let turn = try await client.updateJournalTurn(
+        surface: surface,
+        ownerID: lease.ownerID,
+        update: .sealedTerminalRevision(
+          turnId: turnId,
+          terminalReason: terminalReason,
+          answerTextCompleted: answerTextCompleted)
+      )
+      guard isCurrent(lease) else { return nil }
+      _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
+      guard isCurrent(lease) else { return nil }
+      return turn
+    } catch {
+      log("KernelTurnProjection: journal terminal revision failed (code=journal_terminal_revision_failed)")
+      return nil
+    }
+  }
+
   /// Convenience for a logical exchange. IDs derive from the opaque continuity
   /// key, so retries cannot create a second user/assistant row.
   @discardableResult
@@ -637,18 +721,26 @@ final class KernelTurnProjection {
     resources: [ChatResource] = [],
     assistantStatus: KernelJournalTurnStatus = .completed,
     terminalReason: String? = nil,
+    answerTextCompleted: Bool? = nil,
+    userScreenContext: String? = nil,
+    userEvidence: [ConversationEvidence] = [],
     ownerID: String? = nil
   ) async -> Bool {
     let baseDate = Date()
     var writes: [KernelJournalTurnWrite] = []
     if !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      let user = ChatMessage(
+      var user = ChatMessage(
         id: Self.stableTurnID(continuityKey: continuityKey, role: "user"),
         clientTurnId: continuityKey,
         text: userText,
         createdAt: baseDate,
         sender: .user
       )
+      if !userEvidence.isEmpty || !(userScreenContext?.isEmpty ?? true) {
+        user.metadata = MessageMetadata(
+          screenContext: userScreenContext,
+          evidence: userEvidence)
+      }
       writes.append(
         user.journalWrite(
           origin: origin,
@@ -675,7 +767,8 @@ final class KernelTurnProjection {
           status: assistantStatus,
           continuityKey: continuityKey,
           messageSource: origin,
-          terminalReason: terminalReason
+          terminalReason: terminalReason,
+          answerTextCompleted: answerTextCompleted
         ))
     }
 

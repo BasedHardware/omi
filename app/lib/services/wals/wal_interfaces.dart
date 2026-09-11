@@ -1,5 +1,6 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -83,6 +84,9 @@ abstract class LocalWalSync implements IWalSync {
 
   /// Set device metadata for WAL file naming.
   void setDeviceInfo(String? deviceId, String? deviceModel);
+
+  /// Set the snapshot inherited by WALs created for the active session.
+  void setSessionGeolocation(Geolocation? geolocation);
 }
 
 abstract class SDCardWalSync implements IWalSync {

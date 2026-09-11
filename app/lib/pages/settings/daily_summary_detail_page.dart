@@ -2,9 +2,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import 'package:flutter_map/flutter_map.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
@@ -18,13 +16,15 @@ import 'package:omi/utils/daily_summary_journey.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/share_links.dart';
+import 'package:omi/utils/share_sheet.dart';
+import 'package:omi/widgets/components/memory_review_card.dart';
+import 'package:omi/widgets/omi_map_preview.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
   final DailySummary? summary; // Can pass directly if already loaded
-  final TileProvider? tileProvider;
 
-  const DailySummaryDetailPage({super.key, required this.summaryId, this.summary, this.tileProvider});
+  const DailySummaryDetailPage({super.key, required this.summaryId, this.summary});
 
   @override
   State<DailySummaryDetailPage> createState() => _DailySummaryDetailPageState();
@@ -111,7 +111,9 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       }
       PlatformManager.instance.analytics.dailySummaryShared(summaryId: widget.summaryId, date: summary.date);
       final url = recapShareUrl(widget.summaryId);
-      await SharePlus.instance.share(ShareParams(uri: Uri.parse(url), subject: summary.headline));
+      await SharePlus.instance.share(
+        ShareParams(uri: Uri.parse(url), subject: summary.headline, sharePositionOrigin: shareSheetOrigin()),
+      );
     } finally {
       if (mounted) setState(() => _isSharing = false);
     }
@@ -351,6 +353,10 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                   const SizedBox(height: 32),
                   _buildDecisionsMadeSection(summary),
                 ],
+                if (summary.memoriesLearned.isNotEmpty) ...[
+                  const SizedBox(height: 32),
+                  _buildMemoriesLearnedSection(summary),
+                ],
                 if (summary.knowledgeNuggets.isNotEmpty) ...[
                   const SizedBox(height: 32),
                   _buildKnowledgeNuggetsSection(summary),
@@ -482,33 +488,44 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   }
 
   Widget _buildStatsRow(DailySummary summary) {
-    return Row(
-      children: [
-        _buildStatItem(FontAwesomeIcons.message, '${summary.stats.totalConversations}'),
-        const SizedBox(width: 8),
-        _buildStatItem(FontAwesomeIcons.clock, summary.stats.formattedDuration),
-        const SizedBox(width: 8),
-        _buildStatItem(FontAwesomeIcons.circleCheck, '${summary.stats.actionItemsCount}'),
-      ],
+    final items = <Widget>[
+      _buildStatItem(FontAwesomeIcons.message, '${summary.stats.totalConversations}'),
+      _buildStatItem(FontAwesomeIcons.clock, summary.stats.formattedDuration),
+      _buildStatItem(FontAwesomeIcons.circleCheck, '${summary.stats.actionItemsCount}'),
+    ];
+    if ((summary.stats.watchingMinutes ?? 0) > 0) {
+      items.add(_buildStatItem(FontAwesomeIcons.eye, summary.stats.formattedWatchingDuration!));
+    }
+    if ((summary.stats.proactiveMoments ?? 0) > 0) {
+      items.add(_buildStatItem(FontAwesomeIcons.bell, '${summary.stats.proactiveMoments}'));
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = items.length > 3 ? 3 : items.length;
+        final itemWidth = (constraints.maxWidth - (columns - 1) * 8) / columns;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [for (final item in items) SizedBox(width: itemWidth, child: item)],
+        );
+      },
     );
   }
 
   Widget _buildStatItem(FaIconData icon, String value) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-        decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            FaIcon(icon, color: Colors.grey.shade400, size: 14),
-            const SizedBox(width: 8),
-            Text(
-              value,
-              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FaIcon(icon, color: Colors.grey.shade400, size: 14),
+          const SizedBox(width: 8),
+          Text(
+            value,
+            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+          ),
+        ],
       ),
     );
   }
@@ -532,34 +549,6 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   Widget _buildLocationsMap(DailySummary summary) {
     final timelineLocations = buildTimelineLocations(summary.locations, unknownLabel: context.l10n.unknown);
 
-    // Get all coordinates as LatLng
-    final points = summary.locations.map((l) => LatLng(l.latitude, l.longitude)).toList();
-
-    // Calculate bounds to fit all markers
-    final minLat = summary.locations.map((l) => l.latitude).reduce((a, b) => a < b ? a : b);
-    final maxLat = summary.locations.map((l) => l.latitude).reduce((a, b) => a > b ? a : b);
-    final minLng = summary.locations.map((l) => l.longitude).reduce((a, b) => a < b ? a : b);
-    final maxLng = summary.locations.map((l) => l.longitude).reduce((a, b) => a > b ? a : b);
-
-    // Add padding to bounds (in degrees) to ensure pins aren't at the edge
-    const padding = 0.01; // ~1km padding
-    final bounds = LatLngBounds(LatLng(minLat - padding, minLng - padding), LatLng(maxLat + padding, maxLng + padding));
-
-    // For single location, use center + zoom; for multiple, use bounds
-    final bool singleLocation = summary.locations.length == 1;
-    final centerLat = (minLat + maxLat) / 2;
-    final centerLng = (minLng + maxLng) / 2;
-
-    // Build markers for FlutterMap
-    final markers = summary.locations.map((loc) {
-      return Marker(
-        point: LatLng(loc.latitude, loc.longitude),
-        width: 32,
-        height: 32,
-        child: const FaIcon(FontAwesomeIcons.locationDot, color: Colors.deepPurple, size: 28),
-      );
-    }).toList();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -570,33 +559,21 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           child: GestureDetector(
             onTap: () {
               if (summary.locations.isNotEmpty) {
+                // Apple Maps cannot take waypoints via map_launcher, so the
+                // preview opens the day's first stop; each timeline row below
+                // opens its own stop.
                 MapsUtil.launchMap(summary.locations.first.latitude, summary.locations.first.longitude);
               }
             },
             child: SizedBox(
               width: double.infinity,
               height: 200,
-              child: IgnorePointer(
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCenter: singleLocation ? points.first : LatLng(centerLat, centerLng),
-                    initialZoom: singleLocation ? 14 : 12,
-                    // Use bounds fitting for multiple locations
-                    initialCameraFit:
-                        singleLocation ? null : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
-                    interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                      subdomains: const ['a', 'b', 'c', 'd'],
-                      userAgentPackageName: 'me.omi.app',
-                      retinaMode: true,
-                      tileProvider: widget.tileProvider,
-                    ),
-                    MarkerLayer(markers: markers),
-                  ],
-                ),
+              child: OmiMapPreview(
+                key: const ValueKey('daily_summary_journey_preview'),
+                pins: [
+                  for (final location in summary.locations)
+                    OmiMapPin(latitude: location.latitude, longitude: location.longitude),
+                ],
               ),
             ),
           ),
@@ -782,6 +759,17 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           );
         }),
       ],
+    );
+  }
+
+  /// The same review rows the day-summary chat card shows, so a verdict cast
+  /// in either place lands on the same memory. Placed before the LLM-prose
+  /// learnings, which stay exactly as they were.
+  Widget _buildMemoriesLearnedSection(DailySummary summary) {
+    return MemoryReviewCard(
+      items: summary.memoriesLearned,
+      source: MemoryReviewSource.dailySummaryDetail,
+      impressionKey: summary.id.isNotEmpty ? summary.id : widget.summaryId,
     );
   }
 

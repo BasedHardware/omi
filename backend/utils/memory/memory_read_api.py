@@ -110,6 +110,8 @@ def _tier_value(item: MemoryItem) -> str:
 
 
 def _product_memory_result(item: MemoryItem, *, agent_use: str, access_reason: str) -> Dict[str, Any]:
+    from utils.memory.belief_model import public_belief_overlay_json
+
     return {
         "memory_id": item.memory_id,
         "memory_layer": "product_memory",
@@ -128,6 +130,7 @@ def _product_memory_result(item: MemoryItem, *, agent_use: str, access_reason: s
         "agent_use": agent_use,
         "access_reason": access_reason,
         "superseded_by": None,
+        **public_belief_overlay_json(item, now=datetime.now(timezone.utc)),
     }
 
 

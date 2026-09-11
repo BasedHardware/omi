@@ -79,9 +79,11 @@ def merge():
     models_pkg.__path__ = []  # type: ignore[attr-defined]
     model_submods = {
         "models.audio_file": ["AudioFile"],
+        "models.client_processing": ["PROJECTION_FAMILY_FIELDS"],
         "models.conversation": ["Conversation"],
         "models.conversation_enums": ["ConversationStatus"],
         "models.structured": ["Structured"],
+        "models.client_processing": ["PROJECTION_FAMILY_FIELDS"],
     }
     model_stubs: dict[str, ModuleType] = {}
     for _modname, _attrs in model_submods.items():
@@ -89,6 +91,7 @@ def merge():
         for _attr in _attrs:
             setattr(_mod, _attr, MagicMock())
         model_stubs[_modname] = _mod
+    model_stubs["models.client_processing"].PROJECTION_FAMILY_FIELDS = frozenset({"client_processing"})
 
     # utils.memory.* — used only by the delete/cascade path in perform_merge_async.
     memory_service_stub = ModuleType("utils.memory.memory_service")

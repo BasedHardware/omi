@@ -11,6 +11,15 @@ struct UserNotificationSettingsSnapshot: Sendable {
   let soundSetting: UNNotificationSetting
   let badgeSetting: UNNotificationSetting
 
+  /// The answer for a host process that cannot own notification authorization at all,
+  /// such as the xctest tool. Distinct from a real `.notDetermined` only in origin.
+  static let hostProcessUnavailable = UserNotificationSettingsSnapshot(
+    authorizationStatus: .notDetermined,
+    alertStyle: .none,
+    soundSetting: .notSupported,
+    badgeSetting: .notSupported
+  )
+
   init(_ settings: UNNotificationSettings) {
     authorizationStatus = settings.authorizationStatus
     alertStyle = settings.alertStyle
@@ -221,9 +230,30 @@ enum UserNotificationCallbackBridge {
     return true
   }
 
-  nonisolated private static func systemNotificationSettingsQuery(
+  /// True when the running process is an app bundle, which `UNUserNotificationCenter`
+  /// requires.
+  ///
+  /// `UNUserNotificationCenter.current()` does not fail softly off an app bundle: it raises
+  /// `NSInternalInconsistencyException` ("bundleProxyForCurrentProcess is nil"), and an
+  /// Objective-C exception cannot be caught in Swift, so it terminates the whole process.
+  /// Under `swift test` the main bundle is the xctest tool
+  /// (`…/Xcode.app/Contents/Developer/usr/bin/`), so any suite that reaches this query kills
+  /// the run — see #9029, where the victim suite moved with test ordering because the crash
+  /// lands on whichever suite is executing, not on the one that triggered it.
+  nonisolated static var hostProcessIsAppBundle: Bool {
+    Bundle.main.bundleURL.pathExtension == "app"
+  }
+
+  nonisolated static func systemNotificationSettingsQuery(
     completion: @escaping @Sendable (UserNotificationSettingsSnapshot) -> Void
   ) {
+    guard hostProcessIsAppBundle else {
+      // No app bundle means no notification authorization to report. Answering
+      // `.notDetermined` keeps callers on their unauthorized path, which is the same
+      // answer a fresh install gives.
+      completion(.hostProcessUnavailable)
+      return
+    }
     UNUserNotificationCenter.current().getNotificationSettings { settings in
       completion(UserNotificationSettingsSnapshot(settings))
     }

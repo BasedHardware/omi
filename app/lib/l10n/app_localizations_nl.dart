@@ -1864,9 +1864,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get openSettings => 'Instellingen openen';
 
   @override
-  String get wantDifferentName => 'Wil je een andere naam gebruiken?';
-
-  @override
   String get whatsYourName => 'Wat is je naam?';
 
   @override
@@ -2047,7 +2044,8 @@ class AppLocalizationsNl extends AppLocalizations {
   String get memoryDeleted => 'Herinnering verwijderd.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Een deel van de herinneringsgeschiedenis is niet beschikbaar. De tot nu toe ontvangen geschiedenis wordt getoond.';
 
   @override
   String get undo => 'Ongedaan maken';
@@ -9872,12 +9870,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Store openen';
 
   @override
-  String get chatScopeToday => 'Vandaag';
-
-  @override
-  String get chatScopeThisWeek => 'Deze week';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Over: $title';
   }
@@ -9940,4 +9932,81 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'De opslag van je Pendant is vol en hij staat nog in de opnamemodus, dus de opgeslagen audio kan niet worden overgedragen. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer daarna opnieuw.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Niet opgenomen ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Stemprofiel van $name';
+  }
+
+  @override
+  String get play => 'Afspelen';
+
+  @override
+  String get redo => 'Opnieuw opnemen';
+
+  @override
+  String get answerWithYourVoice => 'Antwoord met je stem:';
+
+  @override
+  String get speechProfileTopicLocation => 'Waar woon je?';
+
+  @override
+  String get speechProfileTopicWork => 'Wat doe je voor werk?';
+
+  @override
+  String get speechProfileTopicGoal => 'Wat is je langetermijndoel?';
+
+  @override
+  String get transcriptionNoAudio => 'Transcriptie ontvangt geen audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tik op + om de opname te starten';
+
+  @override
+  String get chatBlockTask => 'Taak';
+
+  @override
+  String get chatBlockGoal => 'Doel';
+
+  @override
+  String get chatBlockConversation => 'Gesprek';
+
+  @override
+  String get chatBlockMemory => 'Herinnering';
+
+  @override
+  String get chatBlockQuestion => 'Vraag';
+
+  @override
+  String get chatBlockOpenInGoals => 'Openen in Doelen';
+
+  @override
+  String get chatBlockOpenConversation => 'Gesprek openen';
+
+  @override
+  String get chatBlockOpenInMemories => 'Openen in Herinneringen';
+
+  @override
+  String get chatBlockUnavailable => 'Niet langer beschikbaar';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Aanbevolen volgende stappen';
+
+  @override
+  String get couldNotLoadMemories => 'Herinneringen konden niet worden geladen';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Kennisgrafiek kon niet worden geladen';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Spraak naar tekst is momenteel niet beschikbaar. Controleer je internetverbinding en de instellingen voor spraakherkenning op je apparaat en probeer het opnieuw.';
+
+  @override
+  String get processingTakingLonger => 'Nog bezig — dit duurt langer dan normaal.';
 }

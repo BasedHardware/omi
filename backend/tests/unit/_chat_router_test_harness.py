@@ -91,6 +91,11 @@ def wire_common_stubs(install) -> SimpleNamespace:
     llm_usage_db.record_chat_quota_question = MagicMock(return_value=True)
     users_db = install('database.users')
     users_db.set_chat_message_rating_score = MagicMock()
+    # The feedback ledger reaches Firestore for real. Importing it inside a
+    # process that has stubbed google.cloud.firestore_v1 makes protobuf reject
+    # the duplicate descriptor registration, so stub it like its siblings.
+    feedback_utils = install('utils.feedback', ModuleType('utils.feedback'))
+    feedback_utils.record_chat_message_feedback = MagicMock()
     redis_db = install('database.redis_db')
     redis_db.try_acquire_goal_extraction_lock = MagicMock(return_value=False)
     redis_db.check_rate_limit = MagicMock(return_value=(True, 99, 0))
@@ -121,6 +126,7 @@ def wire_common_stubs(install) -> SimpleNamespace:
     gateway_client.CHAT_AGENT_ROUTE_DIRECT = 'direct'
     gateway_client.CHAT_AGENT_ROUTE_GATEWAY = 'gateway'
     gateway_client.get_chat_agent_route = MagicMock(return_value='direct')
+    gateway_client.GatewayDirectModelSurfaceBlocked = type('GatewayDirectModelSurfaceBlocked', (Exception,), {})
     # chat_file's gateway-mode helpers; the upload suite loads the real chat_file,
     # so the imports must resolve even though these tests never call them.
     gateway_client.should_route_features_through_gateway = MagicMock(return_value=False)
@@ -128,6 +134,7 @@ def wire_common_stubs(install) -> SimpleNamespace:
     gateway_client.file_chat_feature_header = MagicMock(return_value={})
     gateway_client.get_file_chat_gateway_async_client = MagicMock()
     gateway_client.get_file_chat_gateway_sync_client = MagicMock()
+    gateway_client.is_gateway_model_not_found = MagicMock(return_value=False)
     users = install('utils.users', ModuleType('utils.users'))
     users.get_user_display_name = MagicMock(return_value='Test User')
     sanitizer = install('utils.log_sanitizer', ModuleType('utils.log_sanitizer'))
@@ -270,20 +277,16 @@ def wire_common_stubs(install) -> SimpleNamespace:
 
     usage_tracker.Features = Features
 
-    # routers.chat imports gateway_client at module load. Keep a package-safe stub
-    # so isolated file runs never pull the real client (which imports get_current_context).
-    gateway_client = install('utils.llm.gateway_client', ModuleType('utils.llm.gateway_client'))
-    gateway_client.CHAT_AGENT_ROUTE_DIRECT = 'direct'
-    gateway_client.get_chat_agent_route = MagicMock(return_value='direct')
-    gateway_client.should_route_features_through_gateway = MagicMock(return_value=False)
-    gateway_client.GatewayDirectModelSurfaceBlocked = type('GatewayDirectModelSurfaceBlocked', (Exception,), {})
-
     limiter = install('utils.voice_duration_limiter', ModuleType('utils.voice_duration_limiter'))
+    limiter.MAX_SESSION_DURATION_S = 120
     limiter.compute_pcm_duration_ms = MagicMock(return_value=1000)
     limiter.read_wav_duration_ms = MagicMock(return_value=1000)
     limiter.try_consume_budget = MagicMock(return_value=(True, 1000, 7199000))
     limiter.check_budget = MagicMock(return_value=(True, 0, 7200000))
+    limiter.try_reserve_session_budget = MagicMock(return_value=(True, 120000, 120000, 7080000))
+    limiter.settle_reserved_duration = MagicMock()
     limiter.record_actual_duration = MagicMock()
+    limiter.MAX_SESSION_DURATION_S = 120
 
     multipart = install('multipart', ModuleType('multipart'))
     multipart.__version__ = '0.0.20'

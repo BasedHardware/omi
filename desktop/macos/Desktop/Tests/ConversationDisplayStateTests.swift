@@ -17,13 +17,15 @@ final class ConversationDisplayStateTests: XCTestCase {
     title: String = "",
     status: ConversationStatus = .completed,
     isLocked: Bool = false,
-    segments: [TranscriptSegment] = []
+    segments: [TranscriptSegment] = [],
+    deferred: Bool = false,
+    startedAt: Date? = nil
   ) -> ServerConversation {
     ServerConversation(
       id: "id",
       createdAt: Date(),
       updatedAt: nil,
-      startedAt: nil,
+      startedAt: startedAt,
       finishedAt: nil,
       structured: Structured(
         title: title,
@@ -46,7 +48,8 @@ final class ConversationDisplayStateTests: XCTestCase {
       isLocked: isLocked,
       starred: false,
       folderId: nil,
-      inputDeviceName: nil
+      inputDeviceName: nil,
+      deferred: deferred
     )
   }
 
@@ -96,8 +99,49 @@ final class ConversationDisplayStateTests: XCTestCase {
   func test_inProgressStatus_returnsProcessing() {
     let conv = makeConversation(status: .inProgress)
     XCTAssertEqual(conv.displayState, .processing)
-    XCTAssertEqual(conv.displayTitle, "Processing…")
     XCTAssertFalse(conv.canReprocess)
+  }
+
+  func test_processingTitle_isNeverTheStatusWord() {
+    // Status belongs in the badge. The title slot carries identity: the
+    // recording time when no transcript is loaded yet.
+    guard let started = Calendar.current.date(bySettingHour: 23, minute: 12, second: 0, of: Date()) else {
+      return XCTFail("Calendar could not build the fixture date")
+    }
+    let conv = makeConversation(status: .processing, startedAt: started)
+    XCTAssertEqual(conv.displayTitle, "Recording at 11:12 PM")
+    XCTAssertFalse(conv.hasTranscriptProvisionalTitle)
+    XCTAssertFalse(conv.displayTitle.localizedCaseInsensitiveContains("processing"))
+  }
+
+  func test_processingTitle_quotesFirstSubstantiveTranscriptLine() {
+    let conv = makeConversation(
+      status: .processing,
+      segments: [segment("yeah"), segment("let's go over the launch timeline for next week")]
+    )
+    XCTAssertEqual(conv.displayTitle, "Let's go over the launch timeline for next week")
+    XCTAssertTrue(conv.hasTranscriptProvisionalTitle)
+    XCTAssertEqual(conv.displayState, .processing)
+  }
+
+  // MARK: - Deferred (awaiting first open)
+
+  func test_deferredProcessingRow_isAwaitingFirstOpen_notProcessing() {
+    // Free-tier desktop capture: stored with the raw transcript, `processing`
+    // on the wire, enriched on first open. Nothing is running for it.
+    let conv = makeConversation(
+      status: .processing,
+      segments: [segment("we talked about the budget for the offsite")],
+      deferred: true
+    )
+    XCTAssertEqual(conv.displayState, .awaitingFirstOpen)
+    XCTAssertEqual(conv.displayTitle, "We talked about the budget for the offsite")
+    XCTAssertFalse(conv.canReprocess)
+  }
+
+  func test_deferredFlagIgnored_onceCompleted() {
+    let conv = makeConversation(title: "Real title", status: .completed, deferred: true)
+    XCTAssertEqual(conv.displayState, .titled("Real title"))
   }
 
   func test_processingStatus_returnsProcessing() {

@@ -49,6 +49,7 @@ import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -78,6 +79,7 @@ import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/utils/analytics/app_session_telemetry.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/environment_detector.dart';
@@ -192,7 +194,12 @@ Future _init() async {
 
   bool isAuth = await resolveStartupAuth(() => AuthService.instance.getIdToken());
   if (isAuth) {
-    PlatformManager.instance.analytics.identify();
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    PlatformManager.instance.analytics.identify(
+      authMethod:
+          firebaseUser == null || firebaseUser.providerData.isEmpty ? null : firebaseUser.providerData.first.providerId,
+      userCreatedAt: firebaseUser?.metadata.creationTime,
+    );
     // Restore onboarding state from server if not already set locally
     // This handles the case where cached credentials are used on startup
     if (!SharedPreferencesUtil().onboardingCompleted) {
@@ -284,11 +291,14 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  final AppSessionTelemetry _appSessionTelemetry = AppSessionTelemetry();
+
   @override
   void initState() {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
     WidgetsBinding.instance.addObserver(this);
+    _appSessionTelemetry.recordColdStart();
     if (SharedPreferencesUtil().devLogsToFileEnabled) {
       DebugLogManager.setEnabled(true);
     }
@@ -321,8 +331,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
+      _appSessionTelemetry.recordResumed();
       unawaited(_refreshAccountCutoverThenWakeUploads());
     } else if (state == AppLifecycleState.paused) {
+      _appSessionTelemetry.recordBackgrounded();
       SyncReconciler.instance.onBackground();
       _onAppPaused();
     } else if (state == AppLifecycleState.detached) {
@@ -352,7 +364,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ),
         ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
             CaptureProvider>(
-          create: (context) => CaptureProvider(),
+          create: (context) => CaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(
               conversationProvider: conversation,
@@ -361,7 +373,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               usageProvider: usage,
             );
             return (previous?..updateExternalActions(externalActions)) ??
-                CaptureProvider(externalActions: externalActions);
+                CaptureProvider(
+                  externalActions: externalActions,
+                  localSegmentStore: LocalSegmentStore.appSupport(),
+                );
           },
         ),
         ChangeNotifierProxyProvider<ConversationProvider, LocalRecordingsProvider>(

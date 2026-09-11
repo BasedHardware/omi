@@ -108,6 +108,7 @@ ingress:
 envFrom:
   - configMapRef:
       name: prod-omi-backend-config
+runtimeConfigMapName: prod-omi-backend-config
 
 env:
   - name: BUCKET_SPEECH_PROFILES
@@ -141,6 +142,14 @@ env:
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_ENABLED
     value: "on"
+  # Shared process_conversation rollout flags. Must match backend-listen in this
+  # environment — pusher hosts the same finalizer after 2026-08-30.
+  - name: CONVERSATION_NOTES_V2_ENABLED
+    value: "true"
+  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
+    value: "false"
+  - name: CONVERSATION_OCR_CONTEXT_ENABLED
+    value: "false"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -151,8 +160,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
-  - name: HOSTED_SPEECH_PROFILE_API_URL
-    value: "http://vad.omi.me:80/v1/speaker-identification"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://diarizer.omi.me:80"
   - name: PINECONE_API_KEY
@@ -287,7 +294,7 @@ env:
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
-    value: "dg-nova-3,modulate-velma-2,parakeet"
+    value: "modulate-velma-2,dg-nova-3,parakeet"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:

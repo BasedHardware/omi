@@ -1866,9 +1866,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get openSettings => 'సెట్టింగ్‌లను తెరండి';
 
   @override
-  String get wantDifferentName => 'వేరే పేరుతో వెళ్లాలనుకుంటున్నారా?';
-
-  @override
   String get whatsYourName => 'మీ పేరు ఏమిటి?';
 
   @override
@@ -2051,7 +2048,8 @@ class AppLocalizationsTe extends AppLocalizations {
   String get memoryDeleted => 'జ్ఞాపకం తొలగించబడింది.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'జ్ఞాపకాల చరిత్రలో కొంత భాగం అందుబాటులో లేదు. ఇప్పటివరకు అందిన చరిత్ర చూపబడుతోంది.';
 
   @override
   String get undo => 'మరలుచేయండి';
@@ -9893,12 +9891,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
-  String get chatScopeToday => 'ఈ రోజు';
-
-  @override
-  String get chatScopeThisWeek => 'ఈ వారం';
-
-  @override
   String chatScopeAbout(String title) {
     return '$title గురించి';
   }
@@ -9962,4 +9954,81 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendant నిల్వ నిండిపోయింది మరియు అది ఇంకా రికార్డింగ్ మోడ్‌లో ఉంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయడం సాధ్యం కాదు. రికార్డింగ్ ఆపడానికి Pendant బటన్‌ను నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'రికార్డ్ కాలేదు ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name వాయిస్ ప్రొఫైల్';
+  }
+
+  @override
+  String get play => 'ప్లే చేయండి';
+
+  @override
+  String get redo => 'మళ్లీ రికార్డ్ చేయండి';
+
+  @override
+  String get answerWithYourVoice => 'మీ స్వరంతో సమాధానం ఇవ్వండి:';
+
+  @override
+  String get speechProfileTopicLocation => 'మీరు ఎక్కడ నివసిస్తున్నారు?';
+
+  @override
+  String get speechProfileTopicWork => 'మీరు ఏ పని చేస్తారు?';
+
+  @override
+  String get speechProfileTopicGoal => 'మీ దీర్ఘకాలిక లక్ష్యం ఏమిటి?';
+
+  @override
+  String get transcriptionNoAudio => 'ట్రాన్స్‌క్రిప్షన్ ఆడియో స్వీకరించడం లేదు';
+
+  @override
+  String get tapPlusToStartRecording => 'రికార్డింగ్ ప్రారంభించడానికి + నొక్కండి';
+
+  @override
+  String get chatBlockTask => 'పని';
+
+  @override
+  String get chatBlockGoal => 'లక్ష్యం';
+
+  @override
+  String get chatBlockConversation => 'సంభాషణ';
+
+  @override
+  String get chatBlockMemory => 'జ్ఞాపకం';
+
+  @override
+  String get chatBlockQuestion => 'ప్రశ్న';
+
+  @override
+  String get chatBlockOpenInGoals => 'లక్ష్యాలలో తెరవండి';
+
+  @override
+  String get chatBlockOpenConversation => 'సంభాషణను తెరవండి';
+
+  @override
+  String get chatBlockOpenInMemories => 'జ్ఞాపకాలలో తెరవండి';
+
+  @override
+  String get chatBlockUnavailable => 'ఇకపై అందుబాటులో లేదు';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'సిఫార్సు చేసిన తదుపరి దశలు';
+
+  @override
+  String get couldNotLoadMemories => 'జ్ఞాపకాలను లోడ్ చేయలేకపోయాం';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'నాలెడ్జ్ గ్రాఫ్‌ను లోడ్ చేయలేకపోయాం';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'ప్రస్తుతం మాటలను వచనంగా మార్చే సదుపాయం అందుబాటులో లేదు. మీ ఇంటర్నెట్ కనెక్షన్ మరియు పరికరంలోని వాయిస్ గుర్తింపు సెట్టింగ్‌లను తనిఖీ చేసి, మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get processingTakingLonger => 'ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది.';
 }

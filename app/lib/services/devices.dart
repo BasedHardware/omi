@@ -40,7 +40,14 @@ abstract class IDeviceServiceSubsciption {
   );
 }
 
+typedef DeviceConnectionBuilder = DeviceConnection? Function(BtDevice device);
+
 class DeviceService {
+  DeviceService({DeviceConnectionBuilder? connectionBuilder})
+      : _connectionBuilder = connectionBuilder ?? DeviceConnectionFactory.create;
+
+  final DeviceConnectionBuilder _connectionBuilder;
+
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
   Future<void>? _activeDiscovery;
@@ -54,7 +61,10 @@ class DeviceService {
 
   final Map<Object, IDeviceServiceSubsciption> _subscriptions = {};
 
-  DeviceConnection? _connection;
+  final Map<String, DeviceConnection> _connections = {};
+
+  DeviceConnection? connectionFor(String deviceId) => _connections[deviceId];
+  List<DeviceConnection> get connections => List.unmodifiable(_connections.values);
   List<BtDevice> get devices => _devices;
 
   DeviceServiceStatus get status => _status;
@@ -130,14 +140,7 @@ class DeviceService {
   }
 
   Future<void> _connectToDevice(String id) async {
-    // Clean up existing connection — disconnect if active, then dispose transport
-    if (_connection != null) {
-      if (_connection!.status == DeviceConnectionState.connected) {
-        await _connection!.disconnect();
-      }
-      await _connection!.transport.dispose();
-    }
-    _connection = null;
+    await _teardownConnection(id);
 
     var device = _devices.firstWhereOrNull((f) => f.id == id);
     Logger.debug(
@@ -164,9 +167,10 @@ class DeviceService {
       }
     }
 
-    _connection = DeviceConnectionFactory.create(device);
-    if (_connection != null) {
-      await _connection!.connect(
+    final connection = _connectionBuilder(device);
+    if (connection != null) {
+      _connections[id] = connection;
+      await connection.connect(
         onConnectionStateChanged: onDeviceConnectionStateChanged,
       );
     } else {
@@ -195,13 +199,17 @@ class DeviceService {
     // TODO: Start watchdog to discover automatically, re-connect automatically
   }
 
-  void stop() {
+  Future<void> stop() async {
     _status = DeviceServiceStatus.stop;
     onStatusChanged(_status);
 
     // Stop all discoverers to prevent resource leaks and battery drain
     for (final discoverer in _discoverers) {
       discoverer.stop();
+    }
+
+    for (final deviceId in _connections.keys.toList()) {
+      await _teardownConnection(deviceId);
     }
 
     _subscriptions.clear();
@@ -242,23 +250,24 @@ class DeviceService {
   }) async {
     await _mutex.acquire();
     try {
+      final existing = _connections[deviceId];
       Logger.debug(
-        "ensureConnection ${_connection?.device.id} ${_connection?.status} $force",
+        "ensureConnection $deviceId ${existing?.status} $force",
       );
 
       // Connected to this device — return it
-      if (_connection?.device.id == deviceId && _connection?.status == DeviceConnectionState.connected) {
-        return _connection;
+      if (existing?.status == DeviceConnectionState.connected) {
+        return existing;
       }
 
       // Transport exists for this device but disconnected — native handles reconnection.
       // Don't dispose and recreate the transport; that would cancel native's auto-reconnect.
       // But if force=true (user-initiated), reconnect explicitly.
-      if (!force && _connection?.device.id == deviceId) {
+      if (!force && existing != null) {
         return null;
       }
 
-      // No connection or different device — only connect on force (user-initiated)
+      // No connection for this device — only connect on force (user-initiated)
       if (!force) return null;
 
       try {
@@ -269,7 +278,7 @@ class DeviceService {
       }
 
       _firstConnectedAt ??= DateTime.now();
-      return _connection;
+      return _connections[deviceId];
     } finally {
       _mutex.release();
     }
@@ -282,44 +291,44 @@ class DeviceService {
   // Helper method to get stored device from SharedPreferences
   BtDevice? _getStoredDevice(String id) {
     try {
-      final storedDevice = SharedPreferencesUtil().btDevice;
-      if (storedDevice.id == id && storedDevice.id.isNotEmpty) {
-        return storedDevice;
-      }
+      return SharedPreferencesUtil().btDevices.firstWhereOrNull(
+            (d) => d.id == id && d.id.isNotEmpty,
+          );
     } catch (e) {
       Logger.debug('Error getting stored device: $e');
     }
     return null;
   }
 
-  Future<void> disconnectDevice() async {
-    if (_connection != null) {
-      Logger.debug("DeviceService: Disconnecting device...");
-      await _connection?.disconnect();
-      _connection = null;
+  Future<void> disconnectDevice(String deviceId) async {
+    final connection = _connections[deviceId];
+    if (connection != null) {
+      Logger.debug("DeviceService: Disconnecting device $deviceId...");
+      await connection.disconnect();
+      _connections.remove(deviceId);
+    }
+  }
+
+  Future<void> _teardownConnection(String deviceId) async {
+    final connection = _connections.remove(deviceId);
+    if (connection == null) return;
+    if (connection.status == DeviceConnectionState.connected) {
+      try {
+        await connection.disconnect();
+      } catch (e) {
+        Logger.debug("DeviceService: disconnect for $deviceId failed: $e");
+      }
+    }
+    try {
+      await connection.transport.dispose();
+    } catch (e) {
+      Logger.debug("DeviceService: transport dispose for $deviceId failed: $e");
     }
   }
 
   Future<void> forgetDevice(String deviceId) async {
     Logger.debug("DeviceService: Forgetting device $deviceId");
-    if (_connection != null) {
-      if (_connection!.status == DeviceConnectionState.connected) {
-        try {
-          await _connection!.disconnect();
-        } catch (e) {
-          Logger.debug("DeviceService: disconnect during forget failed: $e");
-        }
-      }
-
-      try {
-        await _connection!.transport.dispose();
-      } catch (e) {
-        Logger.debug(
-          "DeviceService: transport dispose during forget failed: $e",
-        );
-      }
-      _connection = null;
-    }
+    await _teardownConnection(deviceId);
 
     _devices.removeWhere((d) => d.id == deviceId);
   }

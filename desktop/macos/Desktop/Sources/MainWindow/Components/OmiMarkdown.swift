@@ -13,14 +13,22 @@ import OmiTheme
 /// - Thematic breaks render as a quiet, branded section divider rather than
 ///   leaking their Markdown source (`---`) into a response.
 ///
-/// Live chat Markdown deliberately disables native SwiftUI text selection. Even
-/// settled messages still participate in transcript loading, scrolling, window
-/// resizing, and parent-state updates. AppKit-backed selection overlays can turn
-/// those updates into a non-converging font/intrinsic-size/layout loop.
+/// Live chat Markdown deliberately disables native SwiftUI text selection, and
+/// **there is no opt-in** — not per host, not for settled rows. PR #10834 tried
+/// exactly that and reopened FC-selection-overlay-layout-loop in Omi Beta
+/// 0.12.146: every sampled main-thread stack sat in `SelectionOverlay`,
+/// `setFont`, intrinsic-size invalidation and AttributeGraph while memory grew
+/// without bound. Settled rows are not safe either — they still participate in
+/// transcript loading, scrolling, window resizing and parent-state updates.
+/// `.github/scripts/check_chat_selection_boundary.py` enforces this.
 ///
-/// Chat bubbles retain whole-message copy actions, while code blocks and tables
-/// keep their focused copy controls. A future selectable reading surface must be
-/// isolated from the live transcript instead of adding an escape hatch here.
+/// A reader who needs to drag a date out of an answer no longer opens a popover
+/// beside the row: `appKitProseSelection` draws that prose through
+/// `ChatSelectableProse` instead, where one `NSTextView` owns one selection and
+/// installs no overlay for a rebuild to thrash. That is not an opt-in to the
+/// paragraph above — it is the other half of it, and the boundary check guards
+/// both files. Chat bubbles keep their whole-message copy action, and code
+/// blocks and tables keep their own focused copy controls.
 struct OmiMarkdown: View {
   enum Style: Equatable {
     case assistant
@@ -32,19 +40,26 @@ struct OmiMarkdown: View {
   let style: Style
   let citations: [ChatCitationReference]
   let onOpenCitation: ((ChatCitationReference) -> Void)?
+  /// Draw prose through `ChatSelectableProse` (one `NSTextView`) instead of
+  /// SwiftUI `Text`, so the reader can drag across it. This is **not** the
+  /// banned SwiftUI selection: no `SelectionOverlay` is installed anywhere on
+  /// this path, which is the whole distinction the boundary is drawing.
+  let appKitProseSelection: Bool
   @Environment(\.fontScale) private var fontScale
 
   init(
     text: String,
     sender: ChatSender,
     citations: [ChatCitationReference] = [],
-    onOpenCitation: ((ChatCitationReference) -> Void)? = nil
+    onOpenCitation: ((ChatCitationReference) -> Void)? = nil,
+    appKitProseSelection: Bool = false
   ) {
     let style: Style = sender == .user ? .user : .assistant
     self.text = Self.renderableText(text, style: style)
     self.style = style
     self.citations = citations
     self.onOpenCitation = onOpenCitation
+    self.appKitProseSelection = appKitProseSelection
   }
 
   init(text: String, style: Style) {
@@ -52,6 +67,7 @@ struct OmiMarkdown: View {
     self.style = style
     self.citations = []
     self.onOpenCitation = nil
+    self.appKitProseSelection = false
   }
 
   /// Assistant text may open with an Interject classification token; it is
@@ -63,7 +79,7 @@ struct OmiMarkdown: View {
 
   var body: some View {
     Group {
-      if citations.isEmpty {
+      if citations.isEmpty && !appKitProseSelection {
         OmiMarkdownContent(text: text, style: style, fontScale: fontScale)
           .equatable()
       } else {
@@ -72,7 +88,8 @@ struct OmiMarkdown: View {
           style: style,
           fontScale: fontScale,
           citations: citations,
-          onOpenCitation: onOpenCitation)
+          onOpenCitation: onOpenCitation,
+          appKitProseSelection: appKitProseSelection)
       }
     }
     .textSelection(.disabled)
@@ -94,31 +111,33 @@ struct OmiMarkdownContent: View, Equatable {
   let text: String
   let style: OmiMarkdown.Style
   let fontScale: CGFloat
-  let document: OmiMarkdownDocument
   let citations: [ChatCitationReference]
   let onOpenCitation: ((ChatCitationReference) -> Void)?
+  let appKitProseSelection: Bool
 
   init(
     text: String,
     style: OmiMarkdown.Style,
     fontScale: CGFloat,
     citations: [ChatCitationReference] = [],
-    onOpenCitation: ((ChatCitationReference) -> Void)? = nil
+    onOpenCitation: ((ChatCitationReference) -> Void)? = nil,
+    appKitProseSelection: Bool = false
   ) {
     self.text = text
     self.style = style
     self.fontScale = fontScale
-    self.document = OmiMarkdownDocument(markdown: text)
     self.citations = citations
     self.onOpenCitation = onOpenCitation
+    self.appKitProseSelection = appKitProseSelection
   }
 
   nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
     lhs.text == rhs.text && lhs.style == rhs.style && lhs.fontScale == rhs.fontScale
-      && lhs.citations == rhs.citations
+      && lhs.citations == rhs.citations && lhs.appKitProseSelection == rhs.appKitProseSelection
   }
 
   var body: some View {
+    let document = ChatMarkdownRenderCache.document(for: text)
     Group {
       if document.blocks.count == 1, case .text(let content) = document.blocks[0].kind {
         // Single text segment — no VStack overhead
@@ -163,34 +182,55 @@ struct OmiMarkdownContent: View, Equatable {
   @ViewBuilder
   private func textView(_ content: String) -> some View {
     let fontSize = round(14 * fontScale)
-    let processed = Self.preprocessText(content)
-    let inlineCopy = Self.inlineCopyContent(
-      from: processed, style: style, fontSize: fontSize, fontScale: fontScale
-    )
 
     Group {
-      if !citations.isEmpty {
+      if appKitProseSelection {
+        // One text view per prose block: selection spans the whole block, and
+        // the block is the whole message for all but tables and fenced code.
+        // The block parses its own Markdown for AppKit; nothing of the SwiftUI
+        // prose path below is computed for it. It used to be — every streaming
+        // flush ran a full Foundation Markdown parse here and then threw the
+        // result away, a second parse per flush for text this branch never draws.
+        ChatSelectableProseBlock(
+          text: content,
+          style: style,
+          fontScale: fontScale,
+          citations: citations,
+          onOpenCitation: onOpenCitation)
+      } else if !citations.isEmpty {
         OmiMarkdownCitationContent(
           text: content,
           style: style,
           fontScale: fontScale,
           citations: citations,
           onOpenCitation: onOpenCitation)
-      } else if let inlineCopy {
-        OmiMarkdownInlineCopyText(
-          attributed: inlineCopy.attributed,
-          placeholders: inlineCopy.placeholders,
-          style: style,
-          fontSize: fontSize,
-          fontScale: fontScale
-        )
-      } else if let s = Self.styledAttributedString(
-        from: processed, style: style, fontSize: fontSize, fontScale: fontScale
-      ) {
-        OmiMarkdownChatText(s, fontSize: fontSize)
       } else {
-        OmiMarkdownChatText(content, fontSize: fontSize, style: style)
+        swiftUIProse(content, fontSize: fontSize)
       }
+    }
+  }
+
+  /// The SwiftUI prose renderers: the inline-copy flow when the block has a
+  /// closed code span, otherwise one `Text`.
+  @ViewBuilder
+  private func swiftUIProse(_ content: String, fontSize: CGFloat) -> some View {
+    let processed = Self.preprocessText(content)
+    if let inlineCopy = Self.inlineCopyContent(
+      from: processed, style: style, fontSize: fontSize, fontScale: fontScale
+    ) {
+      OmiMarkdownInlineCopyText(
+        attributed: inlineCopy.attributed,
+        placeholders: inlineCopy.placeholders,
+        style: style,
+        fontSize: fontSize,
+        fontScale: fontScale
+      )
+    } else if let s = Self.styledAttributedString(
+      from: processed, style: style, fontSize: fontSize, fontScale: fontScale
+    ) {
+      OmiMarkdownChatText(s, fontSize: fontSize)
+    } else {
+      OmiMarkdownChatText(content, fontSize: fontSize, style: style)
     }
   }
 
@@ -206,6 +246,9 @@ struct OmiMarkdownContent: View, Equatable {
   static func styledAttributedString(
     from processed: String, style: OmiMarkdown.Style, fontSize: CGFloat, fontScale: CGFloat
   ) -> AttributedString? {
+    #if DEBUG
+      ChatStreamingRenderProbe.hit(.swiftUIProseBuild)
+    #endif
     // Every surface that renders assistant text lands here — chat bubbles, the floating bar, the
     // onboarding transcript, table cells, and both the plain and inline-copy paths — so the tilde
     // rule is applied once, at the only point all of them share.
@@ -321,25 +364,38 @@ struct OmiMarkdownContent: View, Equatable {
 
   /// Converts block-level elements (headers, asterisk lists) into inline-compatible
   /// form for `AttributedString(markdown:)` with `.inlineOnlyPreservingWhitespace`.
-  static func preprocessText(_ text: String) -> String {
-    text.components(separatedBy: "\n").map { line in
-      var processed = line
+  ///
+  /// Two rules, applied by hand rather than by regular expression: a header
+  /// (`^#{1,6}\s+`) becomes bold, and a leading `* ` becomes `• `. The regex
+  /// form compiled both patterns afresh for every line of every call, and this
+  /// runs on the whole answer on every streaming flush — a long reply paid
+  /// hundreds of compiles per flush for two fixed patterns.
+  nonisolated static func preprocessText(_ text: String) -> String {
+    text.split(separator: "\n", omittingEmptySubsequences: false)
+      .map { preprocessLine(Substring($0)) }
+      .joined(separator: "\n")
+  }
 
-      // Convert headers to bold text
-      if let match = processed.range(of: #"^#{1,6}\s+"#, options: .regularExpression) {
-        let headerText = String(processed[match.upperBound...])
-        processed = "**\(headerText)**"
+  private nonisolated static func preprocessLine(_ line: Substring) -> String {
+    // Header: one to six `#`, then at least one whitespace character, then the
+    // text; the whole run of whitespace is dropped, as `\s+` did.
+    if line.first == "#" {
+      let hashes = line.prefix(while: { $0 == "#" })
+      if hashes.count <= 6 {
+        let afterHashes = line[hashes.endIndex...]
+        let whitespace = afterHashes.prefix(while: \.isWhitespace)
+        if !whitespace.isEmpty {
+          return "**\(afterHashes[whitespace.endIndex...])**"
+        }
       }
-
-      // Convert "* item" to "• item" so asterisks aren't parsed as italic
-      processed = processed.replacingOccurrences(
-        of: #"^(\s*)\* "#,
-        with: "$1• ",
-        options: .regularExpression
-      )
-
-      return processed
-    }.joined(separator: "\n")
+    }
+    // Bullet: optional leading whitespace, then `* `.
+    let indent = line.prefix(while: \.isWhitespace)
+    let body = line[indent.endIndex...]
+    if body.hasPrefix("* ") {
+      return "\(indent)• \(body.dropFirst(2))"
+    }
+    return String(line)
   }
 }
 
@@ -464,6 +520,9 @@ struct OmiMarkdownDocument: Equatable {
   let blocks: [Block]
 
   init(markdown: String) {
+    #if DEBUG
+      ChatStreamingRenderProbe.hit(.documentParse)
+    #endif
     let lines = markdown.components(separatedBy: "\n")
     var parsedBlocks = [Block]()
     var textLines = [String]()
@@ -746,15 +805,24 @@ enum OmiMarkdownTilde {
     guard text.contains("~") else { return text }
 
     // A backslash is literal inside a code span, so escaping in there would print `\~` at the user.
+    // The spans come back in document order and never overlap, so one cursor over them is enough;
+    // searching the whole list at every character made this quadratic in an answer's inline code —
+    // and it runs on the whole answer on every streaming flush.
     let codeSpans = OmiMarkdownInlineCode.codeSpanRanges(in: text)
+    var nextSpan = codeSpans.startIndex
     var result = ""
     result.reserveCapacity(text.count)
     var index = text.startIndex
 
     while index < text.endIndex {
-      if let span = codeSpans.first(where: { $0.contains(index) }) {
+      while nextSpan < codeSpans.endIndex, codeSpans[nextSpan].upperBound <= index {
+        nextSpan += 1
+      }
+      if nextSpan < codeSpans.endIndex, codeSpans[nextSpan].contains(index) {
+        let span = codeSpans[nextSpan]
         result += text[index..<span.upperBound]
         index = span.upperBound
+        nextSpan += 1
         continue
       }
 
@@ -1236,7 +1304,7 @@ private struct ChatCitationToken: View {
   }
 }
 
-private struct ChatCitationPreview: View {
+struct ChatCitationPreview: View {
   let reference: ChatCitationReference
   let fontScale: CGFloat
   let onOpen: () -> Void
@@ -1328,6 +1396,10 @@ struct OmiMarkdownTable: Equatable {
     startingAt startIndex: Int
   ) -> (table: OmiMarkdownTable, nextLineIndex: Int)? {
     guard startIndex + 1 < lines.count else { return nil }
+    // A table row needs a cell separator on both the header and the divider
+    // line. Splitting every line of every answer into cells to discover that
+    // it has none was a full character copy per line per streaming flush.
+    guard lines[startIndex].contains("|"), lines[startIndex + 1].contains("|") else { return nil }
 
     let header = cells(in: lines[startIndex])
     let separatorCells = cells(in: lines[startIndex + 1])
@@ -1484,7 +1556,8 @@ private struct OmiMarkdownTableView: View {
     )
     .fixedSize(horizontal: false, vertical: true)
     // Tables do not create one AppKit SelectionOverlay per cell inside the
-    // live transcript. Copy remains available only on fenced code blocks.
+    // live transcript. Copy remains available only on fenced code blocks, and
+    // "Select Text" opens the whole answer on a non-live surface.
     .textSelection(.disabled)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("omi-markdown-table")

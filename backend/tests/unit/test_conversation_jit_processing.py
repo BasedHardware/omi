@@ -52,6 +52,8 @@ def test_foundation_does_not_silently_cross_capture_cutover_gate() -> None:
     }
     assert isinstance(defaults["defer_memory_extraction"], ast.Constant)
     assert defaults["defer_memory_extraction"].value is False
+    assert isinstance(defaults["bypass_jit_first_open"], ast.Constant)
+    assert defaults["bypass_jit_first_open"].value is False
 
     finalizer = _function(
         _module_tree(BACKEND_DIR / "utils/conversations/finalizer.py"),
@@ -94,7 +96,7 @@ def conversation_tools_module(monkeypatch: pytest.MonkeyPatch):
         "database.vector_db": (),
         "models.other": ("Person",),
         "utils.conversations.factory": ("deserialize_conversation",),
-        "utils.conversations.render": ("conversations_to_string",),
+        "utils.conversations.render": ("conversation_to_citation_card", "conversations_to_string"),
         "utils.conversations.mcp_transcript_search": ("build_transcript_match_snippets",),
         "utils.conversations.search": (
             "conversation_matches_date_range",
@@ -136,6 +138,20 @@ def _jit_module():
 
 
 def _validate_message_conversation(value: dict):
+    # models/chat.py imports models.feedback for the rating enum. The fixture
+    # installs `models` as an empty package, so load the real (dependency-free)
+    # feedback module first or that import cannot resolve. It is removed again
+    # below: leaving it behind would outlive the `models` stub it hangs off,
+    # and a later test installing its own `models` package would inherit a
+    # stale submodule it never asked for.
+    installed_feedback = "models.feedback" not in sys.modules
+    if installed_feedback:
+        feedback_spec = importlib.util.spec_from_file_location("models.feedback", BACKEND_DIR / "models/feedback.py")
+        assert feedback_spec is not None and feedback_spec.loader is not None
+        feedback_module = importlib.util.module_from_spec(feedback_spec)
+        sys.modules["models.feedback"] = feedback_module
+        feedback_spec.loader.exec_module(feedback_module)
+
     module_name = "_jit_message_conversation_contract"
     spec = importlib.util.spec_from_file_location(module_name, BACKEND_DIR / "models/chat.py")
     assert spec is not None and spec.loader is not None
@@ -146,6 +162,8 @@ def _validate_message_conversation(value: dict):
         return module.MessageConversation.model_validate(value)
     finally:
         sys.modules.pop(module_name, None)
+        if installed_feedback:
+            sys.modules.pop("models.feedback", None)
 
 
 def test_retrieval_is_summary_only_until_explicit_evidence_hydration(conversation_tools_module) -> None:
@@ -813,3 +831,47 @@ def test_gate_on_search_honors_one_segment_bound(conversation_tools_module) -> N
     assert "segment:segment-1" in result
     assert snippet_builder.call_args.kwargs["context_neighbors"] == 0
     assert snippet_builder.call_args.kwargs["max_snippets"] == 1
+
+
+def _call_keywords(tree: ast.AST, function_name: str, callee: str) -> dict[str, ast.AST]:
+    func = _function(tree, function_name)
+    for node in ast.walk(func):
+        if not isinstance(node, ast.Call):
+            continue
+        name = node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, "attr", None)
+        if name != callee:
+            continue
+        return {keyword.arg: keyword.value for keyword in node.keywords if keyword.arg}
+    raise AssertionError(f"call to {callee!r} not found in {function_name!r}")
+
+
+def _constant_bool(node: ast.AST | None) -> bool | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, bool):
+        return node.value
+    return None
+
+
+def test_force_process_still_defers_first_open_when_rollout_admits() -> None:
+    process_source = (BACKEND_DIR / "utils/conversations/process_conversation.py").read_text(encoding="utf-8")
+    assert "if not bypass_jit_first_open and not is_reprocess and not discarded:" in process_source
+    assert "if not force_process and not is_reprocess and not discarded:" not in process_source
+
+    conversations = _module_tree(BACKEND_DIR / "routers/conversations.py")
+    create_kwargs = _call_keywords(conversations, "process_in_progress_conversation", "process_conversation")
+    assert _constant_bool(create_kwargs.get("force_process")) is True
+    assert "bypass_jit_first_open" not in create_kwargs
+
+    reprocess_kwargs = _call_keywords(conversations, "reprocess_conversation", "process_conversation")
+    assert _constant_bool(reprocess_kwargs.get("force_process")) is True
+    assert _constant_bool(reprocess_kwargs.get("bypass_jit_first_open")) is True
+
+    finalize_kwargs = _call_keywords(conversations, "finalize_conversation", "request_finalization")
+    assert _constant_bool(finalize_kwargs.get("force_process")) is True
+    assert "bypass_jit_first_open" not in finalize_kwargs
+
+    worker = _module_tree(BACKEND_DIR / "routers/conversation_finalization.py")
+    worker_kwargs = _call_keywords(worker, "run_listen_finalization_job", "finalize_persisted_conversation")
+    assert "bypass_jit_first_open" not in worker_kwargs
+
+    finalizer_source = (BACKEND_DIR / "utils/conversations/finalizer.py").read_text(encoding="utf-8")
+    assert "bypass_jit_first_open" not in finalizer_source

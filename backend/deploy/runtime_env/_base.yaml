@@ -17,6 +17,9 @@ environment_shared:
           category: rollout
       values_file: backend/charts/parakeet/{env}_omi_parakeet_values.yaml
     backend-listen:
+      capabilities:
+      - conversation.finalize.persisted
+      - memory.canonical.mutate
       env:
         OMI_LLM_GATEWAY_URL:
           value: http://{env}-omi-llm-gateway.{env}-omi-backend.svc.cluster.local:8080
@@ -65,7 +68,7 @@ environment_shared:
           value: '{env}'
           category: runtime_identity
         STT_SERVICE_MODELS:
-          value: dg-nova-3,modulate-velma-2,parakeet
+          value: modulate-velma-2,dg-nova-3,parakeet
           category: stt_policy
         CONVERSATION_SUMMARIZED_APP_IDS:
           config_map:
@@ -73,6 +76,9 @@ environment_shared:
             key: CONVERSATION_SUMMARIZED_APP_IDS
         CONVERSATION_NOTES_V2_ENABLED:
           value: 'false'
+          category: rollout
+        LLM_GATEWAY_ACCOUNTING_ENABLED:
+          value: 'true'
           category: rollout
         MEETING_RECEIPT_RECONCILER_ENABLED:
           value: 'false'
@@ -85,6 +91,9 @@ environment_shared:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'false'
+          category: rollout
+        WAKE_WORD_ADJUDICATION_ENABLED:
+          value: 'true'
           category: rollout
         HOSTED_PARAKEET_API_URL:
           category: service_discovery
@@ -125,6 +134,12 @@ environment_shared:
             key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
         GOOGLE_CLOUD_PROJECT:
           value: '{compute_project}'
+        OMI_FIRESTORE_DATA_PLANE_PROJECT:
+          value: '{data_plane_project}'
+        POSTHOG_PROJECT_API_KEY:
+          secret:
+            name: '{env}-omi-backend-secrets'
+            key: POSTHOG_PROJECT_API_KEY
         TWILIO_API_KEY_SID:
           config_map:
             name: '{env}-omi-backend-config'
@@ -156,6 +171,9 @@ environment_shared:
         MEMORY_ENABLED:
           category: memory_rollout
           value: 'off'
+        MEMORY_BELIEF_MODEL_ENABLED:
+          value: 'false'
+          category: rollout
         MEMORY_TYPESENSE_COLLECTION:
           value: canonical_memory_atoms
           category: memory_rollout
@@ -185,6 +203,11 @@ environment_shared:
       PROMETHEUS_SIDECAR_PORT:
         value: '9090'
         category: telemetry
+      # Direct-provider surfaces (desktop_proxy, omni_relay) write their
+      # attempts to the gateway's llm_gateway_attempts ledger under this switch.
+      LLM_GATEWAY_ACCOUNTING_ENABLED:
+        value: 'true'
+        category: rollout
     secrets:
       METRICS_SECRET:
         secret: METRICS_SECRET
@@ -247,6 +270,9 @@ environment_shared:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'off'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
             category: rollout
@@ -272,6 +298,9 @@ environment_shared:
           GCP_LOCATION:
             value: us-central1
       backend:
+        capabilities:
+        - conversation.finalize.persisted
+        - memory.canonical.mutate
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
@@ -308,6 +337,9 @@ environment_shared:
           CONVERSATION_NOTES_V2_ENABLED:
             value: 'false'
             category: rollout
+          LLM_GATEWAY_ACCOUNTING_ENABLED:
+            value: 'true'
+            category: rollout
           MEETING_RECEIPT_RECONCILER_ENABLED:
             value: 'false'
             category: rollout
@@ -316,6 +348,9 @@ environment_shared:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
             value: 'false'
+            category: rollout
+          WAKE_WORD_ADJUDICATION_ENABLED:
+            value: 'true'
             category: rollout
           OMI_LLM_GATEWAY_URL:
             env_var: OMI_LLM_GATEWAY_URL
@@ -381,6 +416,9 @@ environment_shared:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'off'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+            category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -469,6 +507,9 @@ environment_shared:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'off'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+            category: rollout
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
             value: '555'
@@ -478,6 +519,9 @@ environment_shared:
             category: memory_rollout
         provisional: true
       backend-sync:
+        capabilities:
+        - conversation.finalize.persisted
+        - memory.canonical.mutate
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
@@ -565,6 +609,9 @@ environment_shared:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'off'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+            category: rollout
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
             value: '555'
@@ -576,6 +623,7 @@ environment_shared:
       notifications-job:
         flags:
           --task-timeout: 3600s
+          --memory: 2Gi
         secrets:
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -600,6 +648,9 @@ environment_shared:
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'false'
             category: memory_rollout
+          DAILY_SUMMARY_SELECTION_MODE:
+            value: legacy
+            category: rollout
           PINECONE_INDEX_NAME:
             category: integrations
           OMI_ENV_STAGE:
@@ -621,6 +672,9 @@ environment_shared:
             version: latest
           SERVICE_ACCOUNT_JSON:
             secret: SERVICE_ACCOUNT_JSON
+            version: latest
+          POSTHOG_PROJECT_API_KEY:
+            secret: POSTHOG_PROJECT_API_KEY
             version: latest
           PINECONE_API_KEY:
             secret: PINECONE_API_KEY
@@ -672,6 +726,9 @@ environment_shared:
           MEMORY_ENABLED:
             category: memory_rollout
             value: 'off'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+            category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -729,6 +786,9 @@ environment_shared:
           MEMORY_ENABLED:
             value: 'off'
             category: memory_rollout
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'false'
+            category: rollout
           MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
             value: 'false'
             category: memory_rollout
@@ -761,6 +821,35 @@ environment_shared:
             category: memory_rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
+      knowledge-ledger-drain-job:
+        flags:
+          --task-timeout: 1200s
+          --max-retries: '1'
+        secrets:
+          ENCRYPTION_SECRET:
+            secret: ENCRYPTION_SECRET
+            version: latest
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
+          POSTHOG_PROJECT_API_KEY:
+            secret: POSTHOG_PROJECT_API_KEY
+            version: latest
+        env:
+          OMI_ENV_STAGE:
+            value: '{env}'
+            category: runtime_identity
+          GOOGLE_CLOUD_PROJECT:
+            value: '{compute_project}'
+          MEMORY_ENABLED:
+            value: 'off'
+            category: memory_rollout
+          KNOWLEDGE_LEDGER_DRAIN_ENABLED:
+            value: 'false'
+            category: memory_rollout
+          KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
+            value: ''
+            category: memory_rollout
       # EXP-001. Ships default-off: both the enable flag and the kill switch
       # must be set deliberately before a single message is sent.
       #

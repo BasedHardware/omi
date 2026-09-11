@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 from pathlib import Path
 from typing import Any, Mapping, Optional
@@ -156,7 +157,20 @@ def _unwrap_tool_response(body: Any) -> Any:
         raise CliError(message=message, detail=json.dumps(body, sort_keys=True), exit_code=1)
 
     result = body["result"] if "result" in body else body
-    return _unwrap_tool_result(result)
+    unwrapped = _unwrap_tool_result(result)
+    if isinstance(unwrapped, Mapping) and unwrapped.get("ok") is False:
+        raw_error = unwrapped.get("error") or unwrapped.get("message") or "Local tool error"
+        if isinstance(raw_error, Mapping):
+            raw_message = raw_error.get("message")
+            message = raw_message if isinstance(raw_message, str) else "Local tool error"
+        else:
+            message = raw_error
+        raise CliError(
+            message=str(message),
+            detail=json.dumps(unwrapped, sort_keys=True),
+            exit_code=1,
+        )
+    return unwrapped
 
 
 def _unwrap_tool_result(result: Any) -> Any:
@@ -191,4 +205,11 @@ def existing_path(value: str) -> Optional[Path]:
         path = Path(value).expanduser()
     except RuntimeError:
         return None
-    return path if path.is_file() else None
+    try:
+        return path if path.is_file() else None
+    except OSError as exc:
+        # Screenshot responses may be text rather than paths. An oversized
+        # filename cannot name a file; let the caller use its text fallback.
+        if exc.errno == errno.ENAMETOOLONG:
+            return None
+        raise

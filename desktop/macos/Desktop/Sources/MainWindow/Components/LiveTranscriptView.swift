@@ -158,6 +158,53 @@ struct ConversationsLiveTranscript: View {
   }
 }
 
+/// Replaces the Live card between "capture stopped" and "row in the list".
+/// Same slot, same shape, same last line of transcript — the capture the
+/// user was watching is what is being saved.
+struct ConversationsSavingCaptureCard: View {
+  @ObservedObject private var monitor = LiveTranscriptMonitor.shared
+  @State private var pulse = false
+
+  private var lastLine: String? {
+    monitor.savedSegments.last?.text ?? monitor.latestText
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      HStack(spacing: OmiSpacing.xs) {
+        Circle()
+          .fill(Ink.accent)
+          .frame(width: 7, height: 7)
+          .opacity(pulse ? 0.4 : 1.0)
+          .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+        Text("Saving").scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundColor(Ink.secondary)
+        Spacer()
+      }
+      if let lastLine, !lastLine.isEmpty {
+        Text(lastLine)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+          .lineLimit(2)
+          .padding(.vertical, OmiSpacing.sm)
+      } else {
+        Text("Adding to your conversations…").scaledFont(size: OmiType.body).foregroundColor(Ink.secondary)
+          .padding(.vertical, OmiSpacing.sm)
+      }
+    }
+    .padding(OmiSpacing.lg)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous)
+        .fill(Ink.rowFill)
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous)
+            .stroke(Ink.separator.opacity(0.3), lineWidth: 1))
+    )
+    .onAppear { pulse = true }
+    .accessibilityIdentifier("conversations-saving-capture")
+  }
+}
+
 /// Adds the click-to-expand behavior only when an `onExpand` handler is present,
 /// so the card stays inert (no pointer cursor, no tap) when expansion is
 /// unavailable.

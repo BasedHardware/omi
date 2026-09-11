@@ -34,6 +34,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/widgets/omi_map_preview.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'maps_util.dart';
 
@@ -1240,37 +1241,15 @@ class GetGeolocationWidgets extends StatelessWidget {
                         height: 200,
                         child: Stack(
                           children: [
-                            // Map Image
-                            CachedNetworkImage(
-                              imageBuilder: (context, imageProvider) {
-                                return Container(
-                                  height: 200,
-                                  decoration: BoxDecoration(
-                                    image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-                                  ),
-                                );
-                              },
-                              errorWidget: (context, url, error) {
-                                return Container(
-                                  height: 200,
-                                  color: const Color(0xFF2A2A2A),
-                                  child: Center(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        const Icon(Icons.location_off, size: 40, color: Colors.grey),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          context.l10n.couldNotLoadMap,
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(color: Colors.grey),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                              imageUrl: MapsUtil.getMapImageUrl(geolocation.latitude!, geolocation.longitude!),
+                            // Map Image — served by the backend static-map
+                            // proxy through the shared preview widget; offline
+                            // or on failure it renders the pin-dot canvas.
+                            OmiMapPreview(
+                              key: const ValueKey('conversation_location_map'),
+                              pins: [
+                                OmiMapPin(latitude: geolocation.latitude!, longitude: geolocation.longitude!),
+                              ],
+                              backgroundColor: const Color(0xFF2A2A2A),
                             ),
                             // Gradient blur overlay from bottom
                             Positioned(
@@ -1586,20 +1565,6 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
             },
           ),
         ),
-        // widget.memory.postprocessing?.status == MemoryPostProcessingStatus.completed
-        // widget.memory.postprocessing?.status != MemoryPostProcessingStatus.not_started
-        //     ? Card(
-        //         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-        //         child: ListTile(
-        //           title: const Text('Compare Transcripts Models'),
-        //           leading: const Icon(Icons.chat),
-        //           trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-        //           onTap: () {
-        //             routeToPage(context, CompareTranscriptsPage(memory: widget.memory));
-        //           },
-        //         ),
-        //       )
-        //     : const SizedBox.shrink(),
       ],
     );
   }

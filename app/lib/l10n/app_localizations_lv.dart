@@ -1863,9 +1863,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get openSettings => 'Atvērt iestatījumus';
 
   @override
-  String get wantDifferentName => 'Vēlaties, lai jūs uzrunā citādi?';
-
-  @override
   String get whatsYourName => 'Kā tevi sauc?';
 
   @override
@@ -2047,7 +2044,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get memoryDeleted => 'Atmiņa izdzēsta.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Daļa atmiņu vēstures nav pieejama. Tiek rādīta līdz šim saņemtā vēsture.';
 
   @override
   String get undo => 'Atsaukt';
@@ -9868,12 +9865,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otwórz sklep';
 
   @override
-  String get chatScopeToday => 'Šodien';
-
-  @override
-  String get chatScopeThisWeek => 'Šonedēļ';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Par: $title';
   }
@@ -9937,4 +9928,81 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendant atmiņa ir pilna, un tas joprojām ir ierakstīšanas režīmā, tāpēc saglabāto audio nevar pārsūtīt. Nospiediet Pendant pogu, lai apturētu ierakstīšanu, un pēc tam sinhronizējiet vēlreiz.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Nav ierakstīts ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name balss profils';
+  }
+
+  @override
+  String get play => 'Atskaņot';
+
+  @override
+  String get redo => 'Ierakstīt vēlreiz';
+
+  @override
+  String get answerWithYourVoice => 'Atbildiet ar balsi:';
+
+  @override
+  String get speechProfileTopicLocation => 'Kur jūs dzīvojat?';
+
+  @override
+  String get speechProfileTopicWork => 'Kādu darbu jūs darāt?';
+
+  @override
+  String get speechProfileTopicGoal => 'Kāds ir jūsu ilgtermiņa mērķis?';
+
+  @override
+  String get transcriptionNoAudio => 'Transkripcija nesaņem audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Pieskarieties +, lai sāktu ierakstīšanu';
+
+  @override
+  String get chatBlockTask => 'Uzdevums';
+
+  @override
+  String get chatBlockGoal => 'Mērķis';
+
+  @override
+  String get chatBlockConversation => 'Saruna';
+
+  @override
+  String get chatBlockMemory => 'Atmiņa';
+
+  @override
+  String get chatBlockQuestion => 'Jautājums';
+
+  @override
+  String get chatBlockOpenInGoals => 'Atvērt sadaļā “Mērķi”';
+
+  @override
+  String get chatBlockOpenConversation => 'Atvērt sarunu';
+
+  @override
+  String get chatBlockOpenInMemories => 'Atvērt sadaļā “Atmiņas”';
+
+  @override
+  String get chatBlockUnavailable => 'Vairs nav pieejams';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Ieteicamie nākamie soļi';
+
+  @override
+  String get couldNotLoadMemories => 'Neizdevās ielādēt atmiņas';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Neizdevās ielādēt zināšanu grafu';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.';
+
+  @override
+  String get processingTakingLonger => 'Joprojām notiek — tas aizņem ilgāk nekā parasti.';
 }

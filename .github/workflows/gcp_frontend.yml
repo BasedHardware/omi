@@ -46,8 +46,19 @@ jobs:
           PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA }}
           PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE }}
         run: |
-          test -n "$PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA"
-          test -n "$PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE"
+          set -euo pipefail
+          user_sa='^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]+\.iam\.gserviceaccount\.com$'
+          compute_sa='^[0-9]+-compute@developer\.gserviceaccount\.com$'
+          audience='^https://[A-Za-z0-9.-]+$'
+          if [[ ! "$PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA" =~ $user_sa &&
+                ! "$PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA" =~ $compute_sa ]]; then
+            echo "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA is not a Cloud Run service-account identity" >&2
+            exit 1
+          fi
+          if [[ ! "$PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE" =~ $audience ]]; then
+            echo "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE is not an origin-only HTTPS audience" >&2
+            exit 1
+          fi
 
       - name: Deploy checked public-build candidate
         id: public-build-deploy

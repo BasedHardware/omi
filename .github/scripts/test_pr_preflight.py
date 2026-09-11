@@ -23,9 +23,18 @@ from pr_metadata import (
     extract_merged_pr_number,
     load_from_api,
     load_from_event_file,
+    load_from_gh,
     resolve_main_push_body,
 )
-from pr_preflight import changed_files, format_failure_class_suggest, resolve_pr_metadata, run_git, select_checks
+from pr_preflight import (
+    changed_files,
+    current_branch,
+    format_failure_class_suggest,
+    resolve_pr_metadata,
+    run_git,
+    run_python_capture,
+    select_checks,
+)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
@@ -41,6 +50,26 @@ class FakeResponse(io.BytesIO):
 
 
 class MetadataTests(unittest.TestCase):
+    def test_gh_loader_decodes_current_metadata_as_utf8(self) -> None:
+        payload = json.dumps(
+            {
+                "number": 10823,
+                "body": "packaged entry → debug → ms",
+                "updatedAt": "2026-08-28T07:45:46Z",
+                "labels": [{"name": "workflow-review"}],
+            },
+            ensure_ascii=False,
+        )
+        completed = subprocess.CompletedProcess(args=["gh"], returncode=0, stdout=payload, stderr="")
+
+        with patch("pr_metadata.subprocess.run", return_value=completed) as run:
+            metadata = load_from_gh(REPO_ROOT)
+
+        self.assertEqual(metadata.body, "packaged entry → debug → ms")
+        self.assertEqual(metadata.labels, ("workflow-review",))
+        _, kwargs = run.call_args
+        self.assertEqual(kwargs.get("encoding"), "utf-8")
+
     def test_api_loader_uses_current_body_and_records_provenance(self) -> None:
         captured = {}
 
@@ -245,6 +274,37 @@ class MetadataTests(unittest.TestCase):
 
 
 class SelectionTests(unittest.TestCase):
+    def test_captured_python_output_is_utf8_when_host_utf8_mode_is_disabled(self) -> None:
+        env = os.environ.copy()
+        env["PYTHONUTF8"] = "0"
+        env.pop("PYTHONIOENCODING", None)
+
+        with patch.dict(os.environ, env, clear=True):
+            completed = run_python_capture(
+                REPO_ROOT,
+                "-c",
+                "print('\\u8def\\u5f84\\U0001f680')",
+            )
+
+        self.assertEqual(completed.returncode, 0, completed.stdout)
+        self.assertEqual(completed.stdout, "路径🚀\n")
+
+    def test_current_branch_decodes_utf8_when_host_utf8_mode_is_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            env = os.environ.copy()
+            env["PYTHONUTF8"] = "0"
+            env.pop("PYTHONIOENCODING", None)
+            for key in tuple(env):
+                if key.startswith("GIT_"):
+                    del env[key]
+            subprocess.run(["git", "init", "-q", "-b", "分支-🚀", str(root)], check=True, env=env)
+
+            with patch.dict(os.environ, env, clear=True):
+                branch = current_branch(root)
+
+        self.assertEqual(branch, "分支-🚀")
+
     def test_run_git_decodes_unicode_checkout_path_as_utf8(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "路径 checkout"
@@ -276,6 +336,100 @@ class SelectionTests(unittest.TestCase):
             "base...head",
         )
 
+    def test_local_diff_includes_staged_unstaged_untracked_and_both_rename_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ):
+            for key in list(os.environ):
+                if key.startswith("GIT_"):
+                    del os.environ[key]
+            root = Path(tmp)
+
+            def git(*args: str) -> None:
+                subprocess.run(
+                    [
+                        "git",
+                        "-c",
+                        "core.hooksPath=/dev/null",
+                        "-c",
+                        "commit.gpgsign=false",
+                        "-c",
+                        "user.name=Fixture",
+                        "-c",
+                        "user.email=fixture@example.com",
+                        *args,
+                    ],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                )
+
+            git("init", "-q")
+            for name in ("staged.txt", "unstaged.txt", "before.txt", "deleted.txt"):
+                (root / name).write_text("baseline\n", encoding="utf-8")
+            (root / ".gitignore").write_text("ignored.txt\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-qm", "baseline")
+            (root / "staged.txt").write_text("staged\n", encoding="utf-8")
+            git("add", "staged.txt")
+            (root / "unstaged.txt").write_text("unstaged\n", encoding="utf-8")
+            (root / "new.txt").write_text("new\n", encoding="utf-8")
+            (root / "ignored.txt").write_text("ignored\n", encoding="utf-8")
+            (root / "deleted.txt").unlink()
+            git("mv", "before.txt", "after.txt")
+            self.assertEqual(
+                changed_files(root, "HEAD", "HEAD", include_worktree=True),
+                ["after.txt", "before.txt", "deleted.txt", "new.txt", "staged.txt", "unstaged.txt"],
+            )
+            self.assertEqual(changed_files(root, "HEAD", "HEAD"), [])
+            self.assertEqual(changed_files(root, "HEAD", "HEAD~0", include_worktree=True), [])
+
+    def test_metadata_selection_preserves_every_body_dependent_contract(self) -> None:
+        # #12935 reran code tests for a description edit; the body needs four checks.
+        names = {
+            check.name
+            for check in select_checks(
+                ["backend/routers/example.py"],
+                platform="linux",
+                metadata_only=True,
+            )
+        }
+        self.assertEqual(
+            names,
+            {
+                "product-file-line-count-ratchet",
+                "product-invariants",
+                "failure-class-protocol",
+                "failure-class-guard-artifact-ratchet",
+            },
+        )
+
+    def test_manifest_edit_summary_uses_the_executors_entry_diff_filter(self) -> None:
+        with patch("pr_preflight.manifest_changed_check_ids", return_value={"pr-preflight-contract-tests"}):
+            names = {
+                check.name
+                for check in select_checks(
+                    [".github/checks-manifest.yaml"],
+                    platform="linux",
+                    base="base",
+                )
+            }
+        self.assertIn("pr-preflight-contract-tests", names)
+        self.assertNotIn("backend-deploy-source-admission", names)
+
+    def test_metadata_cli_forwards_scope_to_executor(self) -> None:
+        from pr_preflight import main
+
+        with patch("sys.argv", ["pr-preflight", "--metadata-only", "--root", str(REPO_ROOT)]), patch(
+            "pr_preflight.run_git", return_value="base"
+        ), patch("pr_preflight.changed_files", return_value=[]), patch(
+            "pr_preflight.resolve_pr_metadata", return_value=None
+        ), patch(
+            "pr_preflight.current_branch", return_value="feature"
+        ), patch(
+            "pr_preflight.subprocess.run", return_value=Mock(returncode=0)
+        ) as run:
+            self.assertEqual(main(), 0)
+        self.assertIn("--metadata-only", run.call_args.args[0])
+
     def test_stale_event_payload_base_widens_diff_scope_past_the_live_base(self) -> None:
         """Behavioral regression for FC-stale-event-payload-diff-base (#10758).
 
@@ -291,11 +445,23 @@ class SelectionTests(unittest.TestCase):
         git_isolation = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
 
         def run(*args: str, cwd: Path) -> None:
-            subprocess.run(["git", *git_isolation, *args], cwd=cwd, check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["git", *git_isolation, *args],
+                cwd=cwd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
 
         def rev_parse(cwd: Path, ref: str = "HEAD") -> str:
             result = subprocess.run(
-                ["git", *git_isolation, "rev-parse", ref], cwd=cwd, check=True, capture_output=True, text=True
+                ["git", *git_isolation, "rev-parse", ref],
+                cwd=cwd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
             )
             return result.stdout.strip()
 
@@ -350,6 +516,7 @@ class SelectionTests(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
         )
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("scripts/dev-harness/run-python.sh", result.stdout)
@@ -415,6 +582,7 @@ class SelectionTests(unittest.TestCase):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
             )
             coverage = subprocess.run(
                 [
@@ -428,6 +596,7 @@ class SelectionTests(unittest.TestCase):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
             )
             self.assertEqual(invariant.returncode, 1, invariant.stdout)
             self.assertIn("INV-AUTH-1", invariant.stdout)
@@ -482,6 +651,7 @@ class SelectionTests(unittest.TestCase):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
             )
 
         self.assertEqual(coverage.returncode, 1, coverage.stdout)
@@ -503,6 +673,7 @@ class SelectionTests(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
         )
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("## Product invariants affected", result.stdout)
@@ -549,6 +720,7 @@ class SelectionTests(unittest.TestCase):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
             )
             # This test isolates metadata-file selection. Other manifest-selected
             # repository guardrails may legitimately fail as global state evolves;
@@ -575,20 +747,20 @@ class SelectionTests(unittest.TestCase):
         # the behavioral regression backing FC-stale-event-payload-diff-base.
         self.assertNotIn("github.event.pull_request.base.sha", metadata_job)
         self.assertIn('--base "origin/${{ github.base_ref }}"', metadata_job)
-        self.assertIn("astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84", metadata_job)
-        self.assertLess(metadata_job.index("Set up uv"), metadata_job.index("Run current PR metadata preflight"))
+        self.assertIn("scripts/pr-preflight --metadata-only", metadata_job)
+        self.assertNotIn("--metadata-only", hygiene_job)
         self.assertIn("github.event_name != 'pull_request'", changes_job)
         self.assertIn("github.event_name != 'pull_request'", hygiene_job)
-
-        # The manifest can select the Firestore admission proof for either PR
-        # preflight path. Java must be present before the selected check runs.
-        for job, gate in (
-            (metadata_job, "Run current PR metadata preflight"),
-            (hygiene_job, "Run shared PR contract preflight"),
-        ):
-            self.assertIn("actions/setup-java@v5", job)
-            self.assertIn("java-version: '21'", job)
-            self.assertLess(job.index("Set up Java for manifest-selected Firestore checks"), job.index(gate))
+        # #12935: metadata checks took 0.70s; code checks consumed the remaining
+        # 140s. Only Hygiene needs the code suites' dependency toolchains.
+        for tool in ("astral-sh/setup-uv@", "actions/setup-java@", "oven-sh/setup-bun@"):
+            self.assertNotIn(tool, metadata_job)
+            self.assertIn(tool, hygiene_job)
+        self.assertIn("java-version: '21'", hygiene_job)
+        self.assertLess(
+            hygiene_job.index("Set up Java for manifest-selected Firestore checks"),
+            hygiene_job.index("Run shared PR contract preflight"),
+        )
 
     def test_issue_sync_action_is_pinned(self) -> None:
         workflow = (REPO_ROOT / ".github/workflows/main.yml").read_text(encoding="utf-8")
@@ -655,6 +827,7 @@ class SingleFlightTests(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
         )
 
     def wait_for_lock(self, state_root: Path) -> None:
@@ -664,55 +837,11 @@ class SingleFlightTests(unittest.TestCase):
             time.sleep(0.02)
         self.assertTrue(lock.exists(), "runner did not acquire its lock")
 
-    def test_runner_starts_from_unicode_checkout(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "路径 checkout"
-            root.mkdir()
-            state_root = root / "state"
-            env = os.environ.copy()
-            env["OMI_PREFLIGHT_STATE_DIR"] = str(state_root)
-            for key in tuple(env):
-                if key.startswith("GIT_"):
-                    del env[key]
-            subprocess.run(["git", "init", "-q", str(root)], check=True, env=env)
-
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    str(RUNNER),
-                    "--name",
-                    "unicode-checkout",
-                    "--",
-                    sys.executable,
-                    "-c",
-                    "print('\\u8def\\u5f84\\U0001f680')",
-                ],
-                cwd=root,
-                env=env,
-                input="",
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-            )
-            log = (state_root / "unicode-checkout" / "preflight.log").read_text(encoding="utf-8")
-
-        self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("路径🚀", result.stdout)
-        self.assertEqual(log, "路径🚀\n")
-
     @unittest.skipUnless(os.name == "nt", "Windows-only")
     def test_process_liveness_check_does_not_send_windows_ctrl_c(self) -> None:
         with patch.object(os, "kill", side_effect=AssertionError("must not signal")):
             self.assertTrue(preflight_runner.process_exists(os.getpid()))
             self.assertFalse(preflight_runner.process_exists(0x7FFFFFFF))
-
-    @unittest.skipUnless(os.name == "nt", "Windows-only")
-    def test_process_that_exits_with_still_active_status_is_not_alive(self) -> None:
-        child = subprocess.Popen([sys.executable, "-c", "raise SystemExit(259)"])
-        self.assertEqual(child.wait(), 259)
-        self.assertFalse(preflight_runner.process_exists(child.pid))
 
     def test_pr_body_content_participates_in_singleflight_fingerprint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

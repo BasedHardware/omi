@@ -114,7 +114,7 @@ def test_cutover_evidence_execute_does_not_change_state_or_run_network_calls():
 
 def test_cutover_evidence_docs_and_ticket_reference_runner_and_non_claims():
     root = Path(__file__).resolve().parents[2].parent
-    evidence_markers = (root / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text()
+    evidence_markers = (root / "backend" / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text()
 
     assert "cutover_evidence_readiness.py" in evidence_markers
     assert "Oracle P0-8" in evidence_markers

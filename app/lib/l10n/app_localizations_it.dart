@@ -1867,9 +1867,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get openSettings => 'Apri Impostazioni';
 
   @override
-  String get wantDifferentName => 'Vuoi farti chiamare diversamente?';
-
-  @override
   String get whatsYourName => 'Come ti chiami?';
 
   @override
@@ -2050,7 +2047,8 @@ class AppLocalizationsIt extends AppLocalizations {
   String get memoryDeleted => 'Ricordo Eliminato.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Parte della cronologia dei ricordi non è disponibile. Viene mostrata la cronologia ricevuta finora.';
 
   @override
   String get undo => 'Annulla';
@@ -9902,12 +9900,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get accountCutoverOpenStore => 'Apri store';
 
   @override
-  String get chatScopeToday => 'Oggi';
-
-  @override
-  String get chatScopeThisWeek => 'Questa settimana';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Informazioni su: $title';
   }
@@ -9970,4 +9962,81 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'La memoria del Pendant è piena ed è ancora in modalità registrazione, quindi l\'audio memorizzato non può essere trasferito. Premi il pulsante del Pendant per interrompere la registrazione, poi sincronizza di nuovo.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Non registrato ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Profilo vocale di $name';
+  }
+
+  @override
+  String get play => 'Riproduci';
+
+  @override
+  String get redo => 'Registra di nuovo';
+
+  @override
+  String get answerWithYourVoice => 'Rispondi a voce:';
+
+  @override
+  String get speechProfileTopicLocation => 'Dove vivi?';
+
+  @override
+  String get speechProfileTopicWork => 'Che lavoro fai?';
+
+  @override
+  String get speechProfileTopicGoal => 'Qual è il tuo obiettivo a lungo termine?';
+
+  @override
+  String get transcriptionNoAudio => 'La trascrizione non riceve audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tocca + per iniziare a registrare';
+
+  @override
+  String get chatBlockTask => 'Attività';
+
+  @override
+  String get chatBlockGoal => 'Obiettivo';
+
+  @override
+  String get chatBlockConversation => 'Conversazione';
+
+  @override
+  String get chatBlockMemory => 'Ricordo';
+
+  @override
+  String get chatBlockQuestion => 'Domanda';
+
+  @override
+  String get chatBlockOpenInGoals => 'Apri in Obiettivi';
+
+  @override
+  String get chatBlockOpenConversation => 'Apri conversazione';
+
+  @override
+  String get chatBlockOpenInMemories => 'Apri in Ricordi';
+
+  @override
+  String get chatBlockUnavailable => 'Non è più disponibile';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Prossimi passi consigliati';
+
+  @override
+  String get couldNotLoadMemories => 'Impossibile caricare i ricordi';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Impossibile caricare il grafo della conoscenza';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'La trascrizione vocale non è disponibile al momento. Controlla la connessione Internet e le impostazioni di riconoscimento vocale del dispositivo, poi riprova.';
+
+  @override
+  String get processingTakingLonger => 'Ancora in corso: ci sta mettendo più del solito.';
 }

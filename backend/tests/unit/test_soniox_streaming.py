@@ -21,7 +21,7 @@ from config.stt_provider_policy import (
     default_models_for_surface,
     provider_is_enabled,
 )
-from utils.stt.streaming import SafeSonioxSocket, process_audio_soniox
+from utils.stt.streaming import SafeSonioxSocket, process_audio_soniox, validate_streaming_stt_env
 
 
 class FakeWebSocket:
@@ -205,9 +205,36 @@ def _empty_stream():
     return gen()
 
 
-def test_soniox_is_streaming_only_and_off_by_default():
+def test_soniox_serves_streaming_only_and_is_opt_in():
+    """Soniox stays streaming-capable but is not a default hop.
+
+    Prod's key is empty, so listing it consumed a mental next slot while
+    accepted=0. A deployment that wants it must name it in STT_SERVICE_MODELS
+    and set SONIOX_API_KEY. The batch path still has no Soniox client.
+    """
     assert provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.STREAMING)
     assert not provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.PRERECORDED)
     assert not provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.PTT)
-    for surface in STTServingSurface:
+
+    streaming = default_models_for_surface(STTServingSurface.STREAMING)
+    assert 'soniox' not in streaming
+    assert streaming == ('modulate-velma-2', 'dg-nova-3', 'parakeet')
+    for surface in (STTServingSurface.PRERECORDED, STTServingSurface.PTT):
         assert 'soniox' not in default_models_for_surface(surface)
+
+
+def test_soniox_listed_without_key_is_rejected_at_config_check():
+    with pytest.raises(RuntimeError, match='SONIOX_API_KEY is empty'):
+        validate_streaming_stt_env(
+            {'STT_SERVICE_MODELS': 'modulate-velma-2,soniox,dg-nova-3,parakeet', 'SONIOX_API_KEY': ''}
+        )
+
+
+def test_soniox_listed_with_key_is_accepted_at_config_check():
+    validate_streaming_stt_env(
+        {'STT_SERVICE_MODELS': 'modulate-velma-2,soniox,dg-nova-3,parakeet', 'SONIOX_API_KEY': 'k'}
+    )
+
+
+def test_default_chain_without_soniox_is_accepted_at_config_check():
+    validate_streaming_stt_env({'STT_SERVICE_MODELS': 'modulate-velma-2,dg-nova-3,parakeet'})

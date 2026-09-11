@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-isolated-qa-named-database-fence",
+  "violated_contract": "An isolated JIT QA runtime must not read or mutate the shared default Firestore database; every QA client must bind the fixed development named database before serving or executing maintenance work.",
+  "canonical_prevention": "Provision the fixed jit-qa database in based-hardware-dev, require FIRESTORE_DATABASE_ID=jit-qa only under the dev project and QA auth fence in every Firestore client factory, and verify the resource environment and durable database identity before execution.",
+  "canonical_prevention_artifact": [
+    ".github/workflows/jit_qa_cloud_run.yml",
+    "backend/database/_client.py",
+    "backend/tests/unit/test_data_plane_firestore_client.py",
+    "backend/tests/unit/test_jit_qa_cloud_run_contract.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/workflows/jit_qa_cloud_run.yml",
+    "backend/database/_client.py",
+    "backend/scripts/jit_qa_cloud_run_contract.py"
+  ],
+  "status": "open"
+}

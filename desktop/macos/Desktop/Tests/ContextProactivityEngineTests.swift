@@ -4,6 +4,18 @@ import XCTest
 
 @testable import Omi_Computer
 
+private actor VisitAdmissionRecorder {
+  private(set) var events: [String] = []
+
+  func record(_ event: String) {
+    events.append(event)
+  }
+
+  func snapshot() -> [String] {
+    events
+  }
+}
+
 final class ContextProactivityEngineTests: XCTestCase {
   func testDwellAdmissionTracksVisitsInsteadOfSuppressingARevisitToTheSameBucket() {
     var admission = ContextVisitDwellAdmission()
@@ -260,6 +272,108 @@ final class ContextProactivityEngineTests: XCTestCase {
     XCTAssertFalse(ContextProactivityEngine.presentationSurfaceAvailable(.windowUnavailable))
     XCTAssertFalse(ContextProactivityEngine.presentationSurfaceAvailable(.rejectedOwnerChange))
     XCTAssertFalse(ContextProactivityEngine.presentationSurfaceAvailable(.presented))
+  }
+
+  func testZeroWorthinessValidatedFactsReachJITHandleAndSkipLegacyDirector() async throws {
+    let recorder = VisitAdmissionRecorder()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0,
+      presentationPreflight: { _ in
+        await recorder.record("director")
+        return .suppressed
+      },
+      jitHandle: { _, snapshot, _, _ in
+        await recorder.record("jit:\(snapshot.notifyWorthiness):\(snapshot.validatedFacts.count)")
+        return false
+      })
+
+    let outcome = await engine.admitJITThenLegacyDirector(
+      fence: visitFence(),
+      snapshot: bucketSnapshot(facts: ["Safari is showing github.com/BasedHardware/omi"], worthiness: 0),
+      frame: visitFrame(),
+      authorizationSnapshot: try authorizationSnapshot())
+
+    XCTAssertEqual(outcome, .skipped)
+    let events = await recorder.snapshot()
+    XCTAssertEqual(events, ["jit:0.0:1"])
+  }
+
+  func testEmptyFactsSkipJITAndLegacyDirector() async throws {
+    let recorder = VisitAdmissionRecorder()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0,
+      presentationPreflight: { _ in
+        await recorder.record("director")
+        return .suppressed
+      },
+      jitHandle: { _, _, _, _ in
+        await recorder.record("jit")
+        return true
+      })
+
+    let outcome = await engine.admitJITThenLegacyDirector(
+      fence: visitFence(),
+      snapshot: bucketSnapshot(facts: [], worthiness: 1),
+      frame: visitFrame(),
+      authorizationSnapshot: try authorizationSnapshot())
+
+    XCTAssertEqual(outcome, .skipped)
+    let events = await recorder.snapshot()
+    XCTAssertEqual(events, [])
+  }
+
+  func testPositiveWorthinessFallsThroughToLegacyDirectorWhenJITDeclines() async throws {
+    let recorder = VisitAdmissionRecorder()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0,
+      presentationPreflight: { _ in
+        await recorder.record("director")
+        return .suppressed
+      },
+      jitHandle: { _, _, _, _ in
+        await recorder.record("jit")
+        return false
+      })
+
+    let outcome = await engine.admitJITThenLegacyDirector(
+      fence: visitFence(),
+      snapshot: bucketSnapshot(facts: ["Safari is showing github.com/BasedHardware/omi"], worthiness: 0.8),
+      frame: visitFrame(),
+      authorizationSnapshot: try authorizationSnapshot())
+
+    XCTAssertEqual(outcome, .legacyDirector)
+    let events = await recorder.snapshot()
+    XCTAssertEqual(events.first, "jit")
+  }
+
+  private func visitFence() -> ContextVisitFence {
+    ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: 1, bucketID: "safari",
+      startedAt: Date(timeIntervalSince1970: 1_725_000_000))
+  }
+
+  private func visitFrame() -> CapturedFrame {
+    CapturedFrame(
+      jpegData: Data(), appName: "Safari", windowTitle: "GitHub", frameNumber: 0,
+      captureTime: Date(timeIntervalSince1970: 1_725_000_000))
+  }
+
+  private func bucketSnapshot(facts: [String], worthiness: Double) -> ContextBucketSnapshot {
+    ContextBucketSnapshot(
+      bucketID: "safari", versionID: 1, version: 1, header: "Safari",
+      frozenRankedSegment: Data(), tail: [], validatedFacts: facts, notifyWorthiness: worthiness)
+  }
+
+  private func authorizationSnapshot() throws -> RuntimeOwnerAuthorizationSnapshot {
+    let authority = RuntimeOwnerAuthorizationAuthority()
+    authority.endTransition(ownerID: "owner")
+    return try XCTUnwrap(authority.capture(ownerID: "owner", expectedOwnerID: "owner"))
   }
 
   func testHttpLaneErrorRecordsStatusInTerminalProvenanceJSON() throws {

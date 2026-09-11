@@ -56,6 +56,46 @@ export interface QueryMessage extends ProtocolEnvelope {
    * which tools the model is offered, never authorization.
    */
   jitKnowledgeToolsEnabled?: boolean;
+  /** QA-only source-owned prompt projection; persisted beside the admitted
+   * snapshot and hashed by the runtime before the run is inserted. */
+  jitCostEvidenceProjection?: JitCostEvidenceProjection;
+  /** Qualification-only JIT budget; absent for all normal chat. */
+  jitBudget?: {
+    contractVersion: string;
+    executionID: string;
+    maxProviderAttempts: number;
+    maxOutputTokensPerAttempt: number;
+    maxNormalizedInputTokensPerAttempt: number;
+    maxEstimatedSpendMicroUSD: number;
+  };
+}
+
+export interface JitCostEvidenceProjection {
+  schema_version: string;
+  owner_id: string;
+  execution_id: string;
+  producer_lane: "planned" | "ambient";
+  matched_input: {
+    evaluation_time: string;
+    timezone: string;
+    context_id: string;
+    evidence_sha256?: string;
+  };
+  legacy: {
+    prompt: string;
+    uncached_prompt: string;
+    [key: string]: unknown;
+  };
+  nano: {
+    prompt: string;
+    [key: string]: unknown;
+  };
+  full: {
+    prompt: string;
+    [key: string]: unknown;
+  };
+  evidence_sha256?: string;
+  [key: string]: unknown;
 }
 
 export interface QueryAttachment {
@@ -127,6 +167,21 @@ export interface ExternalSurfaceRunCompleteMessage extends ProtocolEnvelope {
   runId: string;
   attemptId: string;
   terminalStatus: "completed" | "failed" | "cancelled";
+  /**
+   * The answer text the external surface reports for this run.
+   *
+   * An external surface owns its own streaming, so the kernel never observes this
+   * run's output — it has to be handed back at terminalization or it is lost.
+   * Without it `runs.final_text` stays null and every consumer that reads a run's
+   * answer is content-free: the completion lane can only report that an agent
+   * finished, and a spawn-agent child's receipt, which builds its journal block
+   * from the child's final text, has nothing to write (#12731).
+   *
+   * What a surface can actually report is its own problem: for a realtime voice
+   * deferral the text must be accumulated over the turn stream, because the
+   * turn-end hub property is already cleared by the time terminalization runs.
+   */
+  finalText?: string;
   errorCode?: string;
 }
 
@@ -343,7 +398,8 @@ export interface JournalUpdateTurnMessage extends ProtocolEnvelope {
   surfaceKind: string;
   externalRefKind: string;
   externalRefId: string;
-  update: Record<string, unknown>;
+  /** Swift may append typed evidence atomically; the kernel still owns turn identity. */
+  update: Record<string, unknown> & { appendEvidence?: unknown[] };
 }
 
 export interface JournalTerminalizeTurnMessage extends ProtocolEnvelope {
@@ -753,6 +809,14 @@ export interface ExternalSurfaceRunCompleteResultMessage extends OutboundEnvelop
   ok: boolean;
   terminalStatus?: "completed" | "failed" | "cancelled";
   duplicate?: boolean;
+  /**
+   * Whether the kernel stored `finalText` for this run. Absent from an older
+   * kernel, which lets a surface keep its own journal fallback instead of
+   * trusting a silent no-op (#12731).
+   */
+  finalTextPersisted?: boolean;
+  /** Whether completion left a canonical assistant row for this voice turn. */
+  journalMaterialized?: boolean;
   error?: ExternalAuthorityError;
 }
 
@@ -791,6 +855,13 @@ export interface ResultMessage extends QueryScopedOutbound {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  /** Qualification-only gateway attribution; null is explicit unknown. */
+  jitCostStatus?: "estimated" | "unknown";
+  jitEstimatedCostUsd?: number | null;
+  jitProviderAttempts?: number;
+  jitReceiptAttemptIDs?: string[];
+  /// Served model identities observed on this run's completions, deduplicated.
+  modelsUsed?: string[];
   artifacts?: SerializedArtifact[];
   completionDeltaArtifacts?: SerializedArtifact[];
 }
@@ -825,7 +896,20 @@ export interface RuntimeFailurePayload {
   retryable?: boolean;
   recoveryAction?: "worker_recycled";
   recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
-  retryDisposition?: "next_send";
+  retryDisposition?: "next_send" | "same_turn";
+}
+
+/// One concrete model identity observed serving this turn's completions.
+/// `model` is ONLY the SERVED model from the provider's response stream (e.g.
+/// the gateway lane's resolved upstream, pi-ai's `responseModel`). A response
+/// that names no model produces NO event — the requested id is an alias and
+/// must never be presented as the served model (#11521). Deduplicated per
+/// turn by the adapter; `requestedModel` is context, not attribution.
+export interface ModelUsedMessage extends QueryScopedOutbound {
+  type: "model_used";
+  model: string;
+  requestedModel?: string;
+  provider?: string;
 }
 
 export interface ToolActivityMessage extends QueryScopedOutbound {
@@ -862,6 +946,9 @@ export interface ErrorMessage extends QueryScopedOutbound {
   type: "error";
   message: string;
   failure?: RuntimeFailurePayload;
+  /** Qualification-only gateway attribution; failures are always unknown. */
+  jitCostStatus?: "unknown";
+  jitEstimatedCostUsd?: null;
 }
 
 /** Sent when ACP requires user authentication (OAuth) */
@@ -944,6 +1031,32 @@ export interface ContextSourceOutcomeProjection {
   payload: Record<string, unknown>;
 }
 
+/** Compact, untrusted evidence reference admitted into shared context. Full
+ * evidence remains local to the journal and is read through an owner-scoped
+ * kernel helper when the model actually needs it. */
+export interface ConversationEvidenceProjection {
+  evidenceId: string;
+  kind: "screen" | "document" | "attachment" | "tool_result";
+  title: string;
+  capturedAtMs: number;
+  availability: "pending" | "available" | "partial" | "unavailable";
+  extractionCompleteness: "complete" | "partial" | "none";
+  snippet?: string;
+  digest?: string;
+  fullReadRequired: boolean;
+}
+
+/** Bounded receipts derived from the existing operation ledger. They describe
+ * recorded tool outcomes only; they are not a replacement for tool authority. */
+export interface ConversationOperationReceiptProjection {
+  invocationId: string;
+  runId: string;
+  toolName: string;
+  status: "prepared" | "dispatched" | "succeeded" | "failed" | "outcome_unknown";
+  retryPolicy: "safe_retry" | "never_auto_retry";
+  updatedAtMs: number;
+}
+
 export interface ContextSnapshotProjection {
   snapshotId: string;
   version: string;
@@ -975,6 +1088,8 @@ export interface ContextSnapshotProjection {
   ownerId: string;
   sessionId: string;
   conversationId: string;
+  /** Journal clear generation at admission; absent only on legacy snapshots. */
+  conversationGeneration?: number;
   recentTurns: Array<{
     turnId: string;
     turnSeq: number;
@@ -983,7 +1098,17 @@ export interface ContextSnapshotProjection {
     status: string;
     origin: string;
     createdAtMs: number;
+    /** Text of what the user's screen showed when this turn was asked (historical). */
+    screenContext?: string;
+    /** Present when the desktop journaled this assistant turn's answer text as
+     *  complete even though spoken delivery was cut (e.g. a PTT barge-in). */
+    answerTextCompleted?: true;
+    /** Bounded historical evidence references attached to this turn. */
+    evidence?: ConversationEvidenceProjection[];
+    /** True when an authorized evidence read is needed for complete detail. */
+    evidenceReadRequired?: boolean;
   }>;
+  recentOperations?: ConversationOperationReceiptProjection[];
   sourceOutcomes: ContextSourceOutcomeProjection[];
   activeRuns: Array<{
     sessionId: string;
@@ -1111,6 +1236,8 @@ export interface JournalOperationResultMessage extends OutboundEnvelope {
   suppressedByStreamingTail?: boolean;
   materializationStoppedByTail?: boolean;
   materializationReceipts?: Array<{ intentId: string; receiptId: string }>;
+  materializationRejections?: Array<{ intentId: string; code: string; message: string }>;
+  materializationDeferrals?: Array<{ intentId: string; code: "tail_question" | "streaming_tail" }>;
   coldStartSequenceTerminalReceipts?: Array<{
     sequenceId: string;
     receiptId: string;
@@ -1199,6 +1326,7 @@ export type OutboundMessage =
   | TextDeltaMessage
   | ToolUseMessage
   | ToolActivityMessage
+  | ModelUsedMessage
   | TurnActivityMessage
   | ToolResultDisplayMessage
   | ThinkingDeltaMessage
@@ -1240,6 +1368,7 @@ export type OutboundMessageDraft =
   | DraftEnvelope<TextDeltaMessage>
   | DraftEnvelope<ToolUseMessage>
   | DraftEnvelope<ToolActivityMessage>
+  | DraftEnvelope<ModelUsedMessage>
   | DraftEnvelope<TurnActivityMessage>
   | DraftEnvelope<ToolResultDisplayMessage>
   | DraftEnvelope<ThinkingDeltaMessage>

@@ -52,6 +52,38 @@ def _current_month_llm_usage_docs(llm_usage_ref: Any, now: datetime) -> Iterable
     )
 
 
+def get_monthly_bucket_call_count(
+    uid: str, bucket: str, now: Optional[datetime] = None, *, firestore_client: Any | None = None
+) -> int:
+    """Sum one bucket's ``call_count`` over the current month's ``llm_usage`` docs.
+
+    Bounded like :func:`get_monthly_chat_usage` (and recorded under its own
+    ``FirestoreReadFamily`` so the read stays visible in the read metrics).
+    Used by the realtime relay to bound how many Omi-paid provider responses a
+    user may take in a month independently of the question counter, which only
+    the chat request advances.
+    """
+    now = now or datetime.now(timezone.utc)
+    llm_usage_ref = (firestore_client or db).collection('users').document(uid).collection('llm_usage')
+    total = 0
+    document_count = 0
+    for snap in _current_month_llm_usage_docs(llm_usage_ref, now):
+        document_count += 1
+        data = _typed_doc(snap)
+        value = data.get(bucket)
+        if isinstance(value, dict):
+            total += int(cast(Dict[str, Any], value).get('call_count', 0) or 0)
+        flat = data.get(f'{bucket}.call_count')
+        if isinstance(flat, (int, float)) and not isinstance(flat, bool):
+            total += int(flat)
+    record_firestore_read(
+        FirestoreReadFamily.RELAY_RESPONSE_MONTHLY_COUNT,
+        FirestoreReadMode.BOUNDED,
+        document_count,
+    )
+    return total
+
+
 def _merge_cost_status(existing: str | None, observed: str) -> str:
     statuses = {existing, observed} - {None}
     if statuses == {'complete'} or (statuses <= {'complete', 'excluded'} and 'complete' in statuses):

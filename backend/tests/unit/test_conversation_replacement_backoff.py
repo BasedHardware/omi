@@ -232,3 +232,62 @@ def test_empty_replacement_over_existing_rows_still_demands_the_gate(monkeypatch
 
     # Fail-closed: the row survives the refused deletion.
     assert db.docs[f"users/{UID}/memory_items/{items[0]['id']}"]["status"] == MemoryItemStatus.active.value
+
+
+def test_extraction_intent_empty_over_existing_rows_is_a_noop_that_keeps_them(monkeypatch):
+    """Reprocess extracting nothing must keep the rows, not 500 or delete them.
+
+    Residual prod regression after #12410: conversation *reprocess*
+    (``routers/conversations.py -> process_conversation``) over a conversation
+    that already has canonical rows, where the new extraction is empty. The
+    empty replacement genuinely would retract rows, so it kept demanding the
+    ``explicit_memory_deletion`` gate the extraction path never holds and died
+    with LegalHoldAuthorityUnavailable. Extraction emptiness is model variance,
+    not deletion intent (FC-destructive-gate-keyed-on-proxy-for-intent), so the
+    extraction caller now declares its intent and the existing rows survive as
+    a successful no-op.
+    """
+
+    db = _extraction_db()
+    items = _extracted_items()
+    replace_conversation_sourced_memories(UID, CONVERSATION_ID, items, db_client=db)
+    assert db.docs[f"users/{UID}/memory_items/{items[0]['id']}"]["status"] == MemoryItemStatus.active.value
+    injector = _install_injector(monkeypatch, conflicts=0)
+
+    result = replace_conversation_sourced_memories(
+        UID,
+        CONVERSATION_ID,
+        [],
+        db_client=db,
+        empty_set_intent="extraction",
+    )
+
+    assert result["retracted_memory_ids"] == []
+    assert result["committed_memory_ids"] == []
+    assert result["reactivated_memory_ids"] == []
+    # The rows survive and the destructive boundary was never entered.
+    assert db.docs[f"users/{UID}/memory_items/{items[0]['id']}"]["status"] == MemoryItemStatus.active.value
+    assert injector.calls == 0
+    assert db.docs[f"users/{UID}/memory_state/apply_control"]["source_generation"] == 2
+
+
+def test_default_intent_still_treats_empty_over_existing_rows_as_a_retraction():
+    """The extraction shortcut must not relax the deletion callers' contract."""
+
+    from database.legal_holds import LegalHoldAuthorityUnavailable
+
+    db = _extraction_db()
+    items = _extracted_items()
+    replace_conversation_sourced_memories(UID, CONVERSATION_ID, items, db_client=db)
+
+    with pytest.raises(LegalHoldAuthorityUnavailable):
+        replace_conversation_sourced_memories(UID, CONVERSATION_ID, [], db_client=db)
+
+    assert db.docs[f"users/{UID}/memory_items/{items[0]['id']}"]["status"] == MemoryItemStatus.active.value
+
+
+def test_unknown_empty_set_intent_is_rejected():
+    with pytest.raises(ValueError, match="empty_set_intent"):
+        replace_conversation_sourced_memories(
+            UID, CONVERSATION_ID, [], db_client=_extraction_db(), empty_set_intent="oops"
+        )

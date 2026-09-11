@@ -1864,9 +1864,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get openSettings => 'Otvoriť nastavenia';
 
   @override
-  String get wantDifferentName => 'Chcete sa volať inak?';
-
-  @override
   String get whatsYourName => 'Ako sa voláš?';
 
   @override
@@ -2047,7 +2044,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get memoryDeleted => 'Spomienka bola odstránená.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Časť histórie spomienok nie je dostupná. Zobrazuje sa doteraz prijatá história.';
 
   @override
   String get undo => 'Vrátiť späť';
@@ -9838,12 +9835,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
-  String get chatScopeToday => 'Dnes';
-
-  @override
-  String get chatScopeThisWeek => 'Tento týždeň';
-
-  @override
   String chatScopeAbout(String title) {
     return 'O: $title';
   }
@@ -9906,4 +9897,81 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Úložisko Pendantu je plné a stále je v režime nahrávania, takže uložený zvuk nemožno preniesť. Stlačením tlačidla na Pendante zastavte nahrávanie a potom znova synchronizujte.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Nezaznamenané ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Hlasový profil: $name';
+  }
+
+  @override
+  String get play => 'Prehrať';
+
+  @override
+  String get redo => 'Nahrať znova';
+
+  @override
+  String get answerWithYourVoice => 'Odpovedzte hlasom:';
+
+  @override
+  String get speechProfileTopicLocation => 'Kde bývate?';
+
+  @override
+  String get speechProfileTopicWork => 'Čím sa živíte?';
+
+  @override
+  String get speechProfileTopicGoal => 'Aký je váš dlhodobý cieľ?';
+
+  @override
+  String get transcriptionNoAudio => 'Transkripcia neprijíma zvuk';
+
+  @override
+  String get tapPlusToStartRecording => 'Ťuknutím na + spustíte nahrávanie';
+
+  @override
+  String get chatBlockTask => 'Úloha';
+
+  @override
+  String get chatBlockGoal => 'Cieľ';
+
+  @override
+  String get chatBlockConversation => 'Konverzácia';
+
+  @override
+  String get chatBlockMemory => 'Spomienka';
+
+  @override
+  String get chatBlockQuestion => 'Otázka';
+
+  @override
+  String get chatBlockOpenInGoals => 'Otvoriť v Cieľoch';
+
+  @override
+  String get chatBlockOpenConversation => 'Otvoriť konverzáciu';
+
+  @override
+  String get chatBlockOpenInMemories => 'Otvoriť v Spomienkach';
+
+  @override
+  String get chatBlockUnavailable => 'Už nie je k dispozícii';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Odporúčané ďalšie kroky';
+
+  @override
+  String get couldNotLoadMemories => 'Nepodarilo sa načítať spomienky';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nepodarilo sa načítať graf znalostí';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Prevod reči na text momentálne nie je dostupný. Skontrolujte internetové pripojenie a nastavenia rozpoznávania reči v zariadení a skúste to znova.';
+
+  @override
+  String get processingTakingLonger => 'Stále prebieha — trvá to dlhšie ako zvyčajne.';
 }

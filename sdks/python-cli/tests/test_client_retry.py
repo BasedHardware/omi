@@ -106,6 +106,52 @@ def test_401_maps_to_auth_error(authed_profile, respx_mock) -> None:
             client.get("/v1/dev/user/memories")
 
 
+@pytest.mark.parametrize("json_mode", [False, True])
+def test_cli_auth_error_with_markup_preserves_exit_code(
+    authed_profile, respx_mock, monkeypatch, capsys, json_mode
+) -> None:
+    import json
+
+    from omi_cli.main import main
+
+    detail = "Invalid key [/bold] :warning:"
+    respx_mock.get("/v1/dev/user/memories").respond(401, json={"detail": detail})
+    args = ["--json"] if json_mode else ["--no-color"]
+    monkeypatch.setattr("sys.argv", ["omi", *args, "memory", "list"])
+    with pytest.raises(SystemExit) as info:
+        main()
+    assert info.value.code == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    if json_mode:
+        assert json.loads(captured.err)["detail"] == detail
+    else:
+        assert detail in captured.err
+
+
+def test_empty_body_401_maps_to_auth_error(authed_profile, respx_mock) -> None:
+    """An empty-body 401 must still raise, not be treated like an empty 204 success."""
+    respx_mock.delete("/v1/dev/user/memories/abc").respond(401, content=b"")
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(AuthError):
+            client.delete("/v1/dev/user/memories/abc")
+
+
+def test_empty_body_404_maps_to_not_found(authed_profile, respx_mock) -> None:
+    respx_mock.delete("/v1/dev/user/memories/abc").respond(404, content=b"")
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(NotFoundError):
+            client.delete("/v1/dev/user/memories/abc")
+
+
+def test_204_delete_still_returns_none(authed_profile, respx_mock) -> None:
+    """Guard the success path the fix must not regress: empty 2xx bodies stay silent."""
+    respx_mock.delete("/v1/dev/user/memories/abc").respond(204, content=b"")
+    with OmiClient(authed_profile) as client:
+        result = client.delete("/v1/dev/user/memories/abc")
+    assert result is None
+
+
 def test_403_maps_to_auth_error(authed_profile, respx_mock) -> None:
     respx_mock.post("/v1/dev/user/memories").respond(
         403, json={"detail": "Insufficient permissions. Required scope: memories:write"}
@@ -135,6 +181,72 @@ def test_500_then_200_succeeds_after_retry(authed_profile, respx_mock) -> None:
     with OmiClient(authed_profile) as client:
         result = client.get("/v1/dev/user/goals")
     assert result == []
+
+
+@pytest.mark.parametrize(
+    ("retry_after", "expected_wait"),
+    [("3", 3.0), ("99999", 60.0), ("invalid", 0.25), (None, 0.25)],
+)
+def test_cli_503_uses_retry_after_or_backoff(
+    authed_profile, respx_mock, monkeypatch, cli_runner, retry_after, expected_wait
+) -> None:
+    """RFC 9110 section 10.2.3 permits Retry-After on Service Unavailable."""
+    import json
+
+    from omi_cli import client as client_module
+    from omi_cli.main import app
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+    monkeypatch.setattr(client_module, "_jittered_backoff", lambda _: 0.25)
+    headers = {"Retry-After": retry_after} if retry_after is not None else {}
+    route = respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[
+            httpx.Response(503, headers=headers, json={"detail": "Temporarily unavailable"}),
+            httpx.Response(200, json=[]),
+        ]
+    )
+
+    result = cli_runner.invoke(app, ["--json", "memory", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == []
+    assert route.call_count == 2
+    assert sleeps == [expected_wait]
+
+
+def test_503_retry_after_exhaustion_preserves_server_error(authed_profile, respx_mock, monkeypatch) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+    route = respx_mock.get("/v1/dev/user/goals").mock(
+        side_effect=[httpx.Response(503, headers={"Retry-After": "3"}, json={"detail": "Maintenance"})] * 4
+    )
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(ServerError) as info:
+            client.get("/v1/dev/user/goals")
+    assert route.call_count == 4
+    assert sleeps == [3.0, 3.0, 3.0]
+    assert info.value.exit_code == 3
+    assert info.value.detail == "Maintenance"
+
+
+def test_503_retry_after_http_date(authed_profile, respx_mock, monkeypatch) -> None:
+    from email.utils import formatdate
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+    future_date = formatdate(time.time() + 10.0, usegmt=True)
+    route = respx_mock.get("/v1/dev/user/goals").mock(
+        side_effect=[
+            httpx.Response(503, headers={"Retry-After": future_date}, json={"detail": "Maintenance"}),
+            httpx.Response(200, json=[]),
+        ]
+    )
+    with OmiClient(authed_profile) as client:
+        result = client.get("/v1/dev/user/goals")
+    assert result == []
+    assert len(sleeps) == 1
+    assert 8.0 <= sleeps[0] <= 11.0
 
 
 def test_429_surfaces_rate_limit_with_policy(authed_profile, respx_mock) -> None:
@@ -238,3 +350,89 @@ def test_validation_error_detail_string_is_formatted(authed_profile, respx_mock)
     detail = info.value.detail or ""
     assert "body.content" in detail
     assert "body.tags" in detail
+
+
+def test_transport_connect_error_retries_and_surfaces_server_error(authed_profile, respx_mock, monkeypatch) -> None:
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    route = respx_mock.get("/v1/dev/user/goals").mock(side_effect=[httpx.ConnectError("Connection refused")] * 4)
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(ServerError) as info:
+            client.get("/v1/dev/user/goals")
+    assert route.call_count == 4
+    err = info.value
+    assert err.exit_code == 3
+    assert err.message == "Connection failed"
+    assert "Unable to reach the Omi API" in (err.detail or "")
+    assert isinstance(err.__cause__, httpx.ConnectError)
+
+
+def test_transport_read_timeout_surfaces_server_error(authed_profile, respx_mock, monkeypatch) -> None:
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    respx_mock.get("/v1/dev/user/goals").mock(side_effect=[httpx.ReadTimeout("The read operation timed out")] * 4)
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(ServerError) as info:
+            client.get("/v1/dev/user/goals")
+    err = info.value
+    assert err.exit_code == 3
+    assert err.message == "Connection failed"
+    assert isinstance(err.__cause__, httpx.ReadTimeout)
+
+
+def test_transport_protocol_error_surfaces_server_error(authed_profile, respx_mock, monkeypatch) -> None:
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    respx_mock.get("/v1/dev/user/goals").mock(side_effect=[httpx.ProtocolError("protocol error")] * 4)
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(ServerError) as info:
+            client.get("/v1/dev/user/goals")
+    err = info.value
+    assert err.exit_code == 3
+    assert err.message == "Connection failed"
+    assert isinstance(err.__cause__, httpx.ProtocolError)
+
+
+def test_transport_error_then_200_succeeds_after_retry(authed_profile, respx_mock) -> None:
+    respx_mock.get("/v1/dev/user/goals").mock(
+        side_effect=[
+            httpx.ConnectError("Connection refused"),
+            httpx.Response(200, json=[{"id": "g1"}]),
+        ]
+    )
+    with OmiClient(authed_profile) as client:
+        result = client.get("/v1/dev/user/goals")
+    assert result == [{"id": "g1"}]
+
+
+def test_main_cli_transport_error_plain_mode(authed_profile, respx_mock, monkeypatch, capsys) -> None:
+    import sys
+
+    from omi_cli.main import main
+
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    respx_mock.get("/v1/dev/user/memories").mock(side_effect=[httpx.ConnectError("Connection refused")] * 4)
+    monkeypatch.setattr(sys, "argv", ["omi", "memory", "list"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 3
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Connection failed" in captured.err
+    assert "Unable to reach the Omi API" in captured.err
+
+
+def test_main_cli_transport_error_json_mode(authed_profile, respx_mock, monkeypatch, capsys) -> None:
+    import json
+    import sys
+
+    from omi_cli.main import main
+
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    respx_mock.get("/v1/dev/user/memories").mock(side_effect=[httpx.ConnectError("Connection refused")] * 4)
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "memory", "list"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 3
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    payload = json.loads(captured.err)
+    assert payload["error"] == "Connection failed"
+    assert "Unable to reach the Omi API" in payload["detail"]

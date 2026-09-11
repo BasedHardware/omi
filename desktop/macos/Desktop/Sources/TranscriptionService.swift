@@ -645,7 +645,15 @@ class TranscriptionService: @unchecked Sendable {
 
       case .failure(let error):
         guard self.isConnected else { return }
-        logError("TranscriptionService: Receive error", error: error)
+        // The server's close frame, when there was one, is the only thing that
+        // says *why* the socket went away; `handleDisconnection` drops the task
+        // and its delegate, so it has to be read here or not at all.
+        let task = self.webSocketTask
+        let reason = task?.closeReason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        logError(
+          "TranscriptionService: Receive error (closeCode=\(task?.closeCode.rawValue ?? -1)"
+            + (reason.isEmpty ? ")" : " reason=\(reason))"),
+          error: error)
         self.handleDisconnection()
       }
     }
@@ -770,6 +778,10 @@ extension TranscriptionService {
     request.httpMethod = "POST"
     request.setValue(authHeader, forHTTPHeaderField: "Authorization")
     request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+    // Same provenance header the WebSocket upgrade sends (see connect):
+    // without it the backend labels desktop PTT dictation journeys
+    // client_platform=unknown on the voice_rest_pcm route.
+    request.setValue("macos", forHTTPHeaderField: "X-App-Platform")
     if let entry = APIKeyService.activeBYOKSnapshot[.deepgram] {
       request.setValue(entry.key, forHTTPHeaderField: BYOKProvider.deepgram.headerName)
     }

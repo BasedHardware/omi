@@ -7,6 +7,177 @@ import VoiceTurnDomain
 extension RealtimeHubController {
   // MARK: - PTT integration
 
+  /// Reserves the native OCR result before the asynchronous extractor starts.
+  /// The reservation is independent of Gemini's JPEG/report protocol and is
+  /// therefore still valid when the model never asks for a screenshot.
+  @discardableResult
+  func beginNativeTurnEvidence(
+    turnID: VoiceTurnID,
+    capturedAt: Date = Date()
+  ) -> RealtimeTurnEvidenceLedger.Key? {
+    guard let ownerID = VoiceTurnCoordinator.shared.activeTurn?.ownerID,
+      VoiceTurnCoordinator.shared.activeTurnID == turnID,
+      RuntimeOwnerIdentity.currentOwnerId() == ownerID
+    else { return nil }
+    let continuityKey = Self.voiceContinuityKey(for: turnID)
+    let pendingEvidence = ConversationEvidence.pendingNativeScreenOCR(
+      evidenceID: "ptt-ocr:\(turnID.rawValue.uuidString.lowercased())",
+      capturedAt: capturedAt,
+      turnID: turnID,
+      frontmostApp: screenEvidence?.descriptor.frontmostApp,
+      frontmostBundleID: screenEvidence?.descriptor.frontmostBundleID)
+    return turnEvidenceLedger.begin(
+      ownerID: ownerID,
+      turnID: turnID,
+      continuityKey: continuityKey,
+      surface: FloatingControlBarManager.shared.mainChatSurfaceReference(),
+      screenDescriptor: screenEvidence?.descriptor,
+      initialEvidence: pendingEvidence,
+      createdAt: capturedAt)
+  }
+
+  /// Resolves one native OCR result. When the streaming write tail already
+  /// contains this continuity key, the journal update is queued behind the
+  /// record task. When the producing user row is already known
+  /// (`journalUserTurnID`) and streaming has not begun — or has already
+  /// finalized — the update attaches directly to that row. When no producing
+  /// row is known yet, the resolved evidence stays on the ledger so the
+  /// projection constructor, `persistNativeEvidenceAfterJournalAdmission`, or
+  /// `bindNativeTurnEvidenceToProducingRow` can attach it after admission.
+  /// Never synthesize a stable user turn ID for an UPDATE against a row that
+  /// does not exist yet.
+  func resolveNativeTurnEvidence(
+    turnID: VoiceTurnID,
+    ownerID: String,
+    capturedAt: Date,
+    text: String?,
+    textWasTruncated: Bool = false
+  ) {
+    let continuityKey = Self.voiceContinuityKey(for: turnID)
+    let key = RealtimeTurnEvidenceLedger.Key(
+      ownerID: ownerID, turnID: turnID, continuityKey: continuityKey)
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+      _ = turnEvidenceLedger.revoke(ownerID: ownerID)
+      return
+    }
+    guard let entry = turnEvidenceLedger.entry(for: key) else { return }
+    let evidence = ConversationEvidence.nativeScreenOCR(
+      evidenceID: "ptt-ocr:\(turnID.rawValue.uuidString.lowercased())",
+      capturedAt: capturedAt,
+      text: text,
+      turnID: turnID,
+      frontmostApp: entry.screenDescriptor?.frontmostApp,
+      frontmostBundleID: entry.screenDescriptor?.frontmostBundleID,
+      textWasTruncated: textWasTruncated)
+    let state: RealtimeTurnEvidenceLedger.CaptureState =
+      evidence.availability == .unavailable
+      ? .unavailable
+      : (evidence.extractionCompleteness == .partial ? .partial : .complete)
+    guard turnEvidenceLedger.resolve(key: key, evidence: evidence, state: state) else { return }
+    if streamingJournalWriteLedger.contains(continuityKey: continuityKey) {
+      enqueueNativeEvidenceUpdate(continuityKey: continuityKey, evidence: evidence)
+      return
+    }
+    guard let surface = entry.surface, let userTurnID = entry.journalUserTurnID else { return }
+    Task { @MainActor [weak self] in
+      guard let self,
+        RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+        let current = self.turnEvidenceLedger.evidence(for: key)
+      else { return }
+      if self.streamingJournalWriteLedger.contains(continuityKey: continuityKey) {
+        self.enqueueNativeEvidenceUpdate(continuityKey: continuityKey, evidence: current)
+        return
+      }
+      let accepted = await self.attachResolvedNativeUserEvidence(
+        surface: surface,
+        ownerID: ownerID,
+        userTurnID: userTurnID,
+        evidence: current)
+      guard accepted else {
+        _ = self.turnEvidenceLedger.markPersistenceFailed(key: key)
+        return
+      }
+      _ = self.turnEvidenceLedger.markEvidencePersisted(key: key)
+      _ = self.turnEvidenceLedger.attachJournalUserTurn(key: key, turnID: userTurnID)
+    }
+  }
+
+  /// Single attach seam so tests can observe the UPDATE without a kernel journal.
+  func attachResolvedNativeUserEvidence(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    userTurnID: String,
+    evidence: ConversationEvidence
+  ) async -> Bool {
+    #if DEBUG
+      if let hook = turnEvidenceLedger.testingAttachRealtimeUserEvidence {
+        return await hook(surface, ownerID, userTurnID, evidence)
+      }
+    #endif
+    return await FloatingControlBarManager.shared.attachRealtimeUserEvidence(
+      surface: surface,
+      ownerID: ownerID,
+      userTurnID: userTurnID,
+      evidence: evidence)
+  }
+
+  /// Terminal OCR already bound to this exact owner/turn reservation, if any.
+  /// Pending placeholders are not a source body and must not be copied onto a
+  /// later producing row as if extraction had finished.
+  func resolvedNativeTurnEvidence(for turnID: VoiceTurnID) -> ConversationEvidence? {
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
+      let key = turnEvidenceLedger.key(
+        turnID: turnID, continuityKey: Self.voiceContinuityKey(for: turnID)),
+      let entry = turnEvidenceLedger.entry(for: key),
+      entry.key.ownerID == ownerID,
+      entry.state != .pending
+    else { return nil }
+    return entry.evidence
+  }
+
+  /// Point a reserved native source at the journal row that actually recorded
+  /// this voice turn. Dictation and typed fallback use different continuity keys
+  /// than `voice:<uuid>`; late OCR must still append to that producing row.
+  func bindNativeTurnEvidenceToProducingRow(
+    turnID: VoiceTurnID,
+    journalUserTurnID: String
+  ) {
+    let trimmed = journalUserTurnID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty,
+      let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+    else { return }
+    let continuityKey = Self.voiceContinuityKey(for: turnID)
+    let key = RealtimeTurnEvidenceLedger.Key(
+      ownerID: ownerID, turnID: turnID, continuityKey: continuityKey)
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+      turnEvidenceLedger.attachJournalUserTurn(key: key, turnID: trimmed)
+    else { return }
+    Task { @MainActor [weak self] in
+      guard let self, RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+      _ = await self.persistNativeEvidenceAfterJournalAdmission(
+        ownerID: ownerID, continuityKey: continuityKey)
+      self.fenceNativeTurnEvidence(ownerID: ownerID, continuityKey: continuityKey)
+    }
+  }
+
+  /// The allowed producing write was rejected or the owner is no longer current.
+  /// Fence immediately so a late callback cannot invent an admission.
+  func retireNativeTurnEvidenceAfterRejectedWrite(turnID: VoiceTurnID) {
+    let continuityKey = Self.voiceContinuityKey(for: turnID)
+    guard let key = turnEvidenceLedger.key(turnID: turnID, continuityKey: continuityKey) else {
+      return
+    }
+    _ = RealtimeTurnEvidenceTerminalPolicy.retireRejectedWrite(
+      ledger: turnEvidenceLedger, key: key)
+  }
+
+  func fenceNativeTurnEvidence(ownerID: String, continuityKey: String) {
+    guard let turnID = Self.turnID(forVoiceContinuityKey: continuityKey) else { return }
+    let key = RealtimeTurnEvidenceLedger.Key(
+      ownerID: ownerID, turnID: turnID, continuityKey: continuityKey)
+    _ = turnEvidenceLedger.markPersistenceFence(key: key)
+  }
+
   /// PTT-down: make sure the socket is warm and reset per-turn state. The typed
   /// result is the caller's fail-closed gate for buffered audio replay.
   @discardableResult
@@ -52,7 +223,9 @@ extension RealtimeHubController {
     audioReceivedThisTurn = false
     lastExternalToolName = ""
     lastExternalToolErrorCode = ""
-    turnIdempotencyKey = "voice:\(turnID.rawValue.uuidString.lowercased())"
+    turnIdempotencyKey = Self.voiceContinuityKey(for: turnID)
+    if journalSuppressedContinuityKey != turnIdempotencyKey { journalSuppressedContinuityKey = nil }
+    turnPublicWebEvidence = nil
     resetScreenGrounding(for: turnID)
     if let interruptedTurnTask, !supersedesPendingReplacement {
       if !providerResponseInFlight || session?.bargeInStrategy != .freshSession {
@@ -64,7 +237,9 @@ extension RealtimeHubController {
             assistantText: interruptedTurn.assistantText,
             terminal: .interruptedByBargeIn,
             idempotencyKey: interruptedTurn.idempotencyKey,
-            acceptedSpawnOwnerID: interruptedTurn.acceptedSpawnOwnerID) ?? false
+            acceptedSpawnOwnerID: interruptedTurn.acceptedSpawnOwnerID,
+            delivery: interruptedTurn.answerDelivered ? .delivered : .notDelivered,
+            answerTextCompleted: interruptedTurn.answerTextCompleted ? true : nil) ?? false
         }
       }
     }
@@ -202,7 +377,38 @@ extension RealtimeHubController {
     return .accepted
   }
 
+  /// Whether a turn's just-spoken text may still be recovered into the journal.
+  /// A deliberately unwritten turn (Silent Type) has no accepted receipt to stand
+  /// recovery down, so it names itself here instead.
+  static func recoversInterruptedTurn(continuityKey: String, suppressedKey: String?) -> Bool {
+    continuityKey.isEmpty || suppressedKey != continuityKey
+  }
+
+  /// Arms the suppression at the start of a turn while Silent Type is on. The
+  /// delivery close path would only name the turn after it has finished
+  /// delivering, but a provider failure during finalization reaches
+  /// `captureInterruptedTurnPayloadIfNeeded` earlier — and recovery must find
+  /// the receipt already standing, not journal the dictation into the chat.
+  /// `commitTurn` ends the suppression for a turn that commits as a question,
+  /// whose provider-failure continuity depends on recovery.
+  func suppressJournalRecoveryAtTurnStart(turnID: VoiceTurnID) {
+    journalSuppressedContinuityKey = Self.voiceContinuityKey(for: turnID)
+  }
+
+  /// Never journal this turn's transcript, on any path: no producing row, and no
+  /// interrupted-turn recovery. Used by a Silent Type dictation, which delivered
+  /// its text to the focused app and must leave the chat untouched.
+  func suppressJournalRecoveryForUnwrittenTurn(turnID: VoiceTurnID) {
+    journalSuppressedContinuityKey = Self.voiceContinuityKey(for: turnID)
+    retireNativeTurnEvidenceAfterRejectedWrite(turnID: turnID)
+  }
+
   func captureInterruptedTurnPayloadIfNeeded() -> Task<InterruptedTurnPayload?, Never>? {
+    if !Self.recoversInterruptedTurn(
+      continuityKey: turnIdempotencyKey, suppressedKey: journalSuppressedContinuityKey)
+    {
+      return nil
+    }
     if turnPersistenceLedger.pendingContinuityKeys.contains(turnIdempotencyKey)
       || turnPersistenceLedger.receipt(for: turnIdempotencyKey)?.accepted == true
       || !prefetchedVoiceContextTurnIDs.isDisjoint(
@@ -219,7 +425,27 @@ extension RealtimeHubController {
     let partialAssistantText = assistantText
     let idempotencyKey = turnIdempotencyKey
     let acceptedSpawnOwnerID = acceptedSpawnJournalReceiptByContinuityKey[idempotencyKey]?.ownerID
-    guard let ownerID = VoiceTurnCoordinator.shared.activeTurn?.ownerID else { return nil }
+    guard let activeTurn = VoiceTurnCoordinator.shared.activeTurn,
+      let ownerID = activeTurn.ownerID
+    else { return nil }
+    // On a barge-in press the old turn was superseded synchronously by the new
+    // turn's `begin` (the reducer terminalizes it `.interruptedByBargeIn` and
+    // consumes its per-turn full-answer duration), so `activeTurn` here is the
+    // NEW turn and reading its drain state would always be false. The delivery
+    // state of the superseded turn survives on the coordinator's last terminal.
+    let coordinator = VoiceTurnCoordinator.shared
+    let answerDelivered: Bool
+    let answerTextCompleted: Bool
+    if let superseded = coordinator.model.lastTerminal,
+      superseded.reason == .interruptedByBargeIn,
+      superseded.turnID != activeTurn.id
+    {
+      answerDelivered = coordinator.lastTerminalAnswerDelivered
+      answerTextCompleted = coordinator.lastTerminalAnswerTextCompleted
+    } else {
+      answerDelivered = coordinator.fullAnswerDrained(turnID: activeTurn.id)
+      answerTextCompleted = coordinator.providerResponseFinished(turnID: activeTurn.id)
+    }
     return Task {
       let resolution = await Self.resolveTranscript(
         providerText: providerText,
@@ -232,7 +458,9 @@ extension RealtimeHubController {
         assistantText: InterruptedTurnPayload.visibleAssistantText(
           partialAssistantText: partialAssistantText),
         idempotencyKey: idempotencyKey,
-        acceptedSpawnOwnerID: acceptedSpawnOwnerID)
+        acceptedSpawnOwnerID: acceptedSpawnOwnerID,
+        answerDelivered: answerDelivered,
+        answerTextCompleted: answerTextCompleted)
     }
   }
 
@@ -375,6 +603,11 @@ extension RealtimeHubController {
       log("RealtimeHub: rejected duplicate/stale physical commit before provider side effects")
       return .rejectedNoSession
     }
+    // A commit is by definition not a dictation — dictations are routed to the
+    // typing pipeline before any hub commit — so a Silent Type suppression
+    // armed at this turn's start ends here, and the question keeps the
+    // provider-failure continuity that recovery provides.
+    journalSuppressedContinuityKey = nil
 
     if let pending = replacementAudioBuffer {
       VoiceTurnCoordinator.shared.publish(.hubCommitDeferredForReplacement(turnID: turnID))
@@ -458,8 +691,13 @@ extension RealtimeHubController {
     s.commitInputTurn()
     AnalyticsManager.shared.floatingBarQuerySent(
       messageLength: turnTranscript.count,
-      hasScreenshot: false,
-      source: .pttRealtime
+      // A PTT turn does carry a screenshot whenever the pre-overlay capture produced usable
+      // pixels. Hard-coding false made every screen-grounded voice turn look screenshot-free.
+      // Only a Gemini session attaches the pre-overlay frame to the turn
+      // (`attachTurnScreenFrameIfNeeded`); elsewhere the image is not sent.
+      hasScreenshot: sessionProvider == .gemini && screenEvidence?.descriptor.canVerifyCurrentScreen == true,
+      source: .pttRealtime,
+      attemptID: turnID.description
     )
     VoiceTurnCoordinator.shared.publish(
       .hubCommitAccepted(

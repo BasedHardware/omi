@@ -34,7 +34,9 @@ from routers import (
 )
 from utils.http_client import close_all_clients
 from utils.jit_rollout import close_posthog_control_plane
+from utils.free_tier_cohort import close_free_tier_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
+from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
 
 
 def _initialize_firebase_admin() -> None:
@@ -78,8 +80,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await shutdown_managed_spend_ledger()
         await close_all_clients()
         close_posthog_control_plane()
+        close_free_tier_control_plane()
         stop_metrics_sidecar_server()
 
 

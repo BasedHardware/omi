@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-accepted-session-completes-silently-without-payload",
+  "violated_contract": "When a live session is accepted upstream (listen WebSocket connected, call audio path nominally active) but its payload never arrives — zero prefixed audio frames for the whole session — the teardown must not complete indistinguishably from success. A classifiable silent state has to be surfaced in two places before any destructive cleanup runs: the client UI must replace its neutral \"transcript will appear here\" placeholder with a visible not-receiving-audio state, and the server must emit a bounded funnel signal (accepted vs first-audio vs no-audio teardown) before deleting the empty record. Silent deletion plus a neutral placeholder makes a broken capture path look like a quiet conversation, so the failure can persist across every call with nothing to alert or debug.",
+  "canonical_prevention": "PhoneCallProvider arms a 3s no-audio watchdog once the transcription socket exists; if zero prefixed frames were sent it flips TranscriptionStatus.noAudio, the live transcript view renders the no-audio warning instead of the placeholder, and a `Phone Call Transcript Session` analytics event reports counts (ws_accepted, frames/bytes per channel, event-channel errors). The backend counts accepted listen sessions (OMI_LISTEN_ACCEPTED_TOTAL), first audio (OMI_LISTEN_AUDIO_OUTCOME_TOTAL outcome=first_audio), unknown channel prefixes, and emits outcome=no_audio_teardown immediately before delete_empty_recording_conversation deletes a silent multi-channel session's empty conversation. Regression tests drive the provider with an accepted fake socket and zero frames (status becomes noAudio, session event reports zeros), and the backend instrumentation tests pin pcm48 0x01/0x02 delivery to STT, the unknown-prefix counter, and the no_audio teardown outcome.",
+  "canonical_prevention_artifact": [
+    "app/test/providers/phone_call_provider_test.dart",
+    "backend/tests/unit/test_listen_phone_call_instrumentation.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/providers/phone_call_provider.dart",
+    "app/lib/services/phone_call_service.dart",
+    "backend/routers/listen/**"
+  ],
+  "status": "open"
+}

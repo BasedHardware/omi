@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from math import isfinite
 from os import environ as process_environ
 from typing import Mapping
 
@@ -46,8 +47,8 @@ def resolve_translation_profile(env: Mapping[str, str] | None = None) -> Transla
     """Resolve mutable environment at the translation call boundary.
 
     The configured list is an ordered provider policy. Unavailable providers
-    are filtered, unsupported tokens are retained as diagnostics, and Gemini is
-    used only when the list is empty or no configured provider is usable.
+    are filtered, unsupported tokens are retained as diagnostics, and NLLB is
+    used when the list is empty or no configured provider is usable.
     """
 
     values = process_environ if env is None else env
@@ -79,7 +80,7 @@ def resolve_translation_profile(env: Mapping[str, str] | None = None) -> Transla
         if provider not in usable_providers:
             usable_providers.append(provider)
 
-    providers = tuple(usable_providers) or (TranslationProvider.gemini,)
+    providers = tuple(usable_providers) or (TranslationProvider.nllb,)
 
     timeout = _positive_float(values.get('TRANSLATION_NLLB_TIMEOUT_SECONDS', '5.0'), 'TRANSLATION_NLLB_TIMEOUT_SECONDS')
     cache_ttl = _positive_int(values.get('TRANSLATION_CACHE_TTL', str(60 * 60 * 24 * 14)), 'TRANSLATION_CACHE_TTL')
@@ -105,6 +106,8 @@ def _positive_float(raw: str, name: str) -> float:
         value = float(raw)
     except (TypeError, ValueError) as error:
         raise ValueError(f'{name} must be a number') from error
+    if not isfinite(value):
+        raise ValueError(f'{name} must be a finite number greater than zero')
     if value <= 0:
         raise ValueError(f'{name} must be greater than zero')
     return value

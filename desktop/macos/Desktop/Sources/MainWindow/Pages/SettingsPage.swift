@@ -361,8 +361,6 @@ struct SettingsContentView: View {
   // Multi-chat mode setting
   @AppStorage("multiChatEnabled") var multiChatEnabled = false
   @AppStorage("conversationsCompactView") var conversationsCompactView = true
-  @AppStorage("useLegacyHomeDesign") var useLegacyHomeDesign = false
-  @AppStorage("useOldestHomeDesign") var useOldestHomeDesign = false
   @AppStorage("speakNotificationsAloud") var speakNotificationsAloud = false
   @AppStorage(DefaultsKey.integrationNudgesEnabled.rawValue) var integrationNudgesEnabled = true
 
@@ -686,6 +684,11 @@ struct SettingsContentView: View {
       appState.checkNotificationPermission()
       screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
     }
+    .onReceive(NotificationCenter.default.publisher(for: .floatingBarEnabledDidChange)) { _ in
+      // The notch's Hide control, the bar's own hide path, and a Push-to-Talk reveal all move
+      // this preference without going through the switch; keep the switch honest.
+      showAskOmiBar = FloatingControlBarManager.shared.isEnabled
+    }
     .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) {
       notification in
       if let userInfo = notification.userInfo, let state = userInfo["isMonitoring"] as? Bool {
@@ -756,6 +759,8 @@ struct SettingsContentView: View {
   }
 
   @ObservedObject var fontScaleSettings = FontScaleSettings.shared
+  @ObservedObject var glassTransparencySettings = InkGlassTransparencySettings.shared
+  @ObservedObject var reduceTransparencyObserver = InkReduceTransparencyObserver.shared
   @ObservedObject var rewindSettings = RewindSettings.shared
   @State var rewindStats: (total: Int, indexed: Int, storageSize: Int64)? = nil
 }

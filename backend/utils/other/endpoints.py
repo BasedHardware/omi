@@ -31,6 +31,7 @@ from utils.byok import (
 )
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
+from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +199,12 @@ def get_current_user_uid(
     except InvalidIdTokenError as e:
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
+    try:
+        # This runs immediately after Firebase verification, before any
+        # account-deletion, platform, device, BYOK, Redis, or model work.
+        enforce_jit_qa_uid(uid)
+    except JITQAAdmissionError as error:
+        raise HTTPException(status_code=403, detail="account is not admitted to the isolated JIT QA plane") from error
 
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
@@ -259,6 +266,10 @@ def get_current_user_uid_no_byok_validation(
     except InvalidIdTokenError as e:
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
+    try:
+        enforce_jit_qa_uid(uid)
+    except JITQAAdmissionError as error:
+        raise HTTPException(status_code=403, detail="account is not admitted to the isolated JIT QA plane") from error
 
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
@@ -301,16 +312,48 @@ def _verify_ws_auth(authorization: str) -> str:
 
     try:
         token = authorization.split(' ')[1]
-        return verify_token(token)
+        uid = verify_token(token)
+        enforce_jit_qa_uid(uid)
+        return uid
+    except JITQAAdmissionError as e:
+        raise WebSocketException(code=1008, reason="Account is not admitted to isolated JIT QA") from e
     except (InvalidIdTokenError, CertificateFetchError) as e:
         close_code, reason = _get_ws_auth_close(e)
-        logger.error("WebSocket auth failed: code=%s error=%s", close_code, e)
+        _log_ws_auth_rejection(close_code, e)
         raise WebSocketException(code=close_code, reason=reason)
     except WebSocketException:
         raise
     except Exception as e:
         logger.error(f"WebSocket auth error: {e}")
         raise WebSocketException(code=1008, reason="Auth error")
+
+
+def _log_ws_auth_rejection(close_code: int, error: Exception) -> None:
+    """Log a token rejection at the severity its fault origin deserves.
+
+    InvalidIdTokenError means Firebase *evaluated* the client-supplied token
+    and rejected it for a client-side reason — expired, signed by a key Google
+    retired, wrong audience, malformed. The close frame (4001/4004/1008)
+    already tells that client what to do; the rejection is the protocol
+    working, not a server failure. Logging each attempt at ERROR turned the
+    stale-client reconnect population into a top-3 production error
+    signature (backend-listen, GCP 2026-08-30/31: ``Token expired`` up to
+    ×47/30m and ``Certificate for key id … not found`` ×34/30m for a single
+    retired key id), burying real serving faults in the same feed.
+
+    CertificateFetchError is the other fault domain: the server could not
+    fetch Google's public certificates, so it could not even evaluate the
+    token. That is a server fault and stays at ERROR.
+
+    Failure-Class: FC-request-input-rejection-escapes-as-server-fault — a
+    route owns the classification of its own request input; a client-caused
+    token rejection must not be indistinguishable from a serving outage in
+    error metrics. Close codes are unchanged; only severity is classified.
+    """
+    if isinstance(error, CertificateFetchError):
+        logger.error("WebSocket auth failed: code=%s error=%s", close_code, error)
+    else:
+        logger.warning("WebSocket auth rejected: code=%s error=%s", close_code, error)
 
 
 def _get_ws_auth_close(error: Exception) -> 'tuple[int, str]':
@@ -351,6 +394,10 @@ async def get_current_user_uid_ws_listen(
     Firestore calls are offloaded via ``run_blocking``.
     """
     uid = await run_blocking(critical_executor, _verify_ws_auth, authorization)
+    try:
+        enforce_jit_qa_uid(uid)
+    except JITQAAdmissionError as error:
+        raise WebSocketException(code=1008, reason="Account is not admitted to isolated JIT QA") from error
     await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
     if cutover_enforcement_enabled() and websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]
         await run_blocking(
@@ -382,6 +429,10 @@ def get_current_user_uid_ws(
     Use for WebSocket endpoints that need retry-storm protection.
     """
     uid = _verify_ws_auth(authorization)
+    try:
+        enforce_jit_qa_uid(uid)
+    except JITQAAdmissionError as error:
+        raise WebSocketException(code=1008, reason="Account is not admitted to isolated JIT QA") from error
     enforce_account_deletion_ws_access(uid)
     if cutover_enforcement_enabled() and websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]
         enforce_account_cutover_ws_access(
@@ -437,7 +488,9 @@ def _verify_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
     if not token:
         raise ValueError("Missing token")
 
-    return verify_token(token)
+    uid = verify_token(token)
+    enforce_jit_qa_uid(uid)
+    return uid
 
 
 async def get_current_user_uid_from_ws_message(
@@ -450,7 +503,10 @@ async def get_current_user_uid_from_ws_message(
     Pass ``websocket`` so account-cutover enforcement can fence product surfaces
     such as ``/v4/web/listen`` the same way header-auth listen does.
     """
-    uid = await run_blocking(critical_executor, _verify_user_uid_from_ws_message, message)
+    try:
+        uid = await run_blocking(critical_executor, _verify_user_uid_from_ws_message, message)
+    except JITQAAdmissionError as error:
+        raise WebSocketException(code=1008, reason="Account is not admitted to isolated JIT QA") from error
     await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
     if cutover_enforcement_enabled() and websocket is not None:
         await run_blocking(

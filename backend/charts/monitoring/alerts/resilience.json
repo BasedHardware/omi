@@ -1637,6 +1637,108 @@
     "record": null
   },
   {
+    "uid": "omi-capture-finalization-memory-fence",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Capture finalization - canonical memory admission failure",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_capture_finalization_failures_total{reason=~\"memory_fence|memory_config\"}[5m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-08-30T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "9",
+      "summary": "A real capture finalization was rejected by the canonical-memory runtime admission fence",
+      "threshold": "at least one memory_fence or memory_config finalization failure in 5m",
+      "user_impact": "At least one accepted voice capture could not complete finalization because its serving runtime could not safely mutate canonical memory.",
+      "scope": "Persisted conversation finalization on Pusher and Cloud Tasks workers.",
+      "verification": "Confirm the bounded reason and exact serving image/config receipt; do not infer the cause from HTTP status or workflow state alone.",
+      "safe_next_action": "Halt promotion, preserve the durable retry queue, and restore a capability-admitted image plus config bundle before replay.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-capture-finalization-memory-fence",
+      "component": "speech-processing",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
     "uid": "omi-journey-capture-success-critical",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
@@ -2474,6 +2576,84 @@
       "instatus_component": "speech-processing",
       "alert_identity": "omi-capture-dead-letter-surge",
       "component": "speech-processing",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-chat-first-proactive-stalled",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Chat-first proactive delivery - ready queue stalled",
+    "condition": "C",
+    "data": [
+      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(chat_first_proactive_total{event=\"stalled\"}[1h]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
+      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "B", "type": "reduce"}},
+      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "B", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "threshold"}}
+    ],
+    "updated": "2026-09-01T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "A Chat-first proactive queue with an intent older than 24 hours was fetched during the last hour",
+      "threshold": "non-zero stalled event rate over 1h for 5m",
+      "user_impact": "Meeting notes and daily opener cards may be delayed behind an intent that is not reaching a terminal state.",
+      "scope": "The account-scoped Chat-first proactive fetch and acknowledgement path.",
+      "verification": "Break down chat_first_proactive_total by source and reason, then compare fetch, rejected, reconciled, and dead-letter events.",
+      "safe_next_action": "Inspect recent backend and desktop kernel errors; verify poison intents are reaching reconciled or dead-letter state before changing any retry budget.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "ai-chat",
+      "alert_identity": "omi-chat-first-proactive-stalled",
+      "component": "ai-chat",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-queue-oldest-ready",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Durable queue - oldest ready item stalled",
+    "condition": "C",
+    "data": [
+      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max(omi_queue_oldest_ready_age_seconds) > 21600 or absent(omi_queue_oldest_ready_age_seconds)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
+      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "B", "type": "reduce"}},
+      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "B", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "threshold"}}
+    ],
+    "updated": "2026-09-03T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "A durable queue has a ready item older than 6 hours, or the omi_queue_oldest_ready_age_seconds gauge is absent",
+      "threshold": "oldest ready age > 6h or absent() for 5m",
+      "user_impact": "Independent items behind a poison head can stall: memories, task integrations, Chat-first cards, or capture finalization may stop advancing.",
+      "scope": "Every backend durable queue that publishes omi_queue_oldest_ready_age_seconds.",
+      "verification": "Break down omi_queue_oldest_ready_age_seconds by queue, then inspect that queue's dead-letter rows and last_error_text before changing retry budgets.",
+      "safe_next_action": "Confirm poison items reached a dead letter; redrive by identity only after the error is understood. Do not raise the attempt budget.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "api",
+      "alert_identity": "omi-queue-oldest-ready",
+      "component": "api",
       "impact": "user-experience"
     },
     "isPaused": false,

@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import {
   createDeepgramTranscriber,
+  createParakeetTranscriber,
   createTranscriber,
   createWhisperTranscriber,
   deepgramWsUrl,
+  parakeetWsUrl,
 } from './index.ts';
 
 describe('deepgramWsUrl', () => {
@@ -99,5 +101,66 @@ describe('createWhisperTranscriber', () => {
     await Promise.resolve();
 
     expect(transcripts).toEqual(['final transcript']);
+  });
+});
+
+describe('parakeetWsUrl', () => {
+  test('converts https to wss and appends streaming endpoint', () => {
+    const url = parakeetWsUrl('https://parakeet.example');
+    expect(url).toBe('wss://parakeet.example/v3/stream?sample_rate=16000');
+  });
+
+  test('converts http to ws', () => {
+    const url = parakeetWsUrl('http://parakeet.example:8080');
+    expect(url).toBe('ws://parakeet.example:8080/v3/stream?sample_rate=16000');
+  });
+
+  test('preserves existing path and query parameters', () => {
+    const url = parakeetWsUrl('https://parakeet.example/gateway?region=eu');
+    expect(url).toBe('wss://parakeet.example/gateway/v3/stream?region=eu&sample_rate=16000');
+  });
+
+  test('strips trailing slashes from path before appending stream endpoint', () => {
+    const url = parakeetWsUrl('https://parakeet.example/gateway/');
+    expect(url).toBe('wss://parakeet.example/gateway/v3/stream?sample_rate=16000');
+  });
+
+  test('removes hash fragments', () => {
+    const url = parakeetWsUrl('https://parakeet.example/gateway?region=eu#debug');
+    expect(url).toBe('wss://parakeet.example/gateway/v3/stream?region=eu&sample_rate=16000');
+  });
+
+  test('supports custom sample rate', () => {
+    const url = parakeetWsUrl('https://parakeet.example', 8000);
+    expect(url).toBe('wss://parakeet.example/v3/stream?sample_rate=8000');
+  });
+
+  test('rejects unsupported protocols', () => {
+    expect(() => parakeetWsUrl('ftp://parakeet.example')).toThrow(TypeError);
+  });
+});
+
+describe('createParakeetTranscriber', () => {
+  test('connects to parakeetWsUrl with query params preserved', () => {
+    let openedUrl: string | undefined;
+    class FakeWebSocket {
+      binaryType: string = 'blob';
+      readyState = 1;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      constructor(url: string) {
+        openedUrl = url;
+      }
+      send(_data: any) {}
+      close() {}
+    }
+
+    createParakeetTranscriber({
+      apiUrl: 'https://parakeet.example/gateway?region=eu',
+      sampleRate: 16000,
+      onTranscript: () => {},
+      WebSocketImpl: FakeWebSocket as any,
+    });
+
+    expect(openedUrl).toBe('wss://parakeet.example/gateway/v3/stream?region=eu&sample_rate=16000');
   });
 });

@@ -279,7 +279,7 @@ def test_resolve_geolocation_keeps_enrichment():
 
     from models.geolocation import Geolocation
 
-    enriched = Geolocation(latitude=37.78, longitude=-122.4, google_place_id='ChIJ_test', address='1 Main St')
+    enriched = Geolocation(latitude=37.7801, longitude=-122.4001, google_place_id='ChIJ_test', address='1 Main St')
     with (
         patch.object(integ, 'run_blocking', side_effect=_passthrough_run_blocking),
         patch.object(integ, 'get_google_maps_location', return_value=enriched),
@@ -288,6 +288,8 @@ def test_resolve_geolocation_keeps_enrichment():
         result = asyncio.run(integ._resolve_geolocation(raw))
 
     assert result.google_place_id == 'ChIJ_test'  # enrichment kept, not clobbered back to the raw value
+    assert result.latitude == raw.latitude
+    assert result.longitude == raw.longitude
 
 
 def test_resolve_geolocation_falls_back_to_raw_on_geocode_miss():

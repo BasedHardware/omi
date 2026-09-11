@@ -1857,9 +1857,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get openSettings => 'Avaa asetukset';
 
   @override
-  String get wantDifferentName => 'Haluatko käyttää eri nimeä?';
-
-  @override
   String get whatsYourName => 'Mikä on nimesi?';
 
   @override
@@ -2040,7 +2037,8 @@ class AppLocalizationsFi extends AppLocalizations {
   String get memoryDeleted => 'Muisto poistettu.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Osa muistojen historiasta ei ole saatavilla. Näytetään tähän mennessä saatu historia.';
 
   @override
   String get undo => 'Kumoa';
@@ -9845,12 +9843,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get accountCutoverOpenStore => 'Avaa kauppa';
 
   @override
-  String get chatScopeToday => 'Tänään';
-
-  @override
-  String get chatScopeThisWeek => 'Tällä viikolla';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Aihe: $title';
   }
@@ -9914,4 +9906,81 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendantin muisti on täynnä ja se on yhä äänitystilassa, joten tallennettua ääntä ei voi siirtää. Pysäytä äänitys painamalla Pendantin painiketta ja synkronoi sitten uudelleen.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Ei tallennettu ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Käyttäjän $name ääniprofiili';
+  }
+
+  @override
+  String get play => 'Toista';
+
+  @override
+  String get redo => 'Tallenna uudelleen';
+
+  @override
+  String get answerWithYourVoice => 'Vastaa puhumalla:';
+
+  @override
+  String get speechProfileTopicLocation => 'Missä asut?';
+
+  @override
+  String get speechProfileTopicWork => 'Mitä teet työksesi?';
+
+  @override
+  String get speechProfileTopicGoal => 'Mikä on pitkän aikavälin tavoitteesi?';
+
+  @override
+  String get transcriptionNoAudio => 'Transkriptio ei vastaanota ääntä';
+
+  @override
+  String get tapPlusToStartRecording => 'Aloita tallennus napauttamalla +';
+
+  @override
+  String get chatBlockTask => 'Tehtävä';
+
+  @override
+  String get chatBlockGoal => 'Tavoite';
+
+  @override
+  String get chatBlockConversation => 'Keskustelu';
+
+  @override
+  String get chatBlockMemory => 'Muisto';
+
+  @override
+  String get chatBlockQuestion => 'Kysymys';
+
+  @override
+  String get chatBlockOpenInGoals => 'Avaa Tavoitteissa';
+
+  @override
+  String get chatBlockOpenConversation => 'Avaa keskustelu';
+
+  @override
+  String get chatBlockOpenInMemories => 'Avaa Muistoissa';
+
+  @override
+  String get chatBlockUnavailable => 'Ei ole enää saatavilla';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Suositellut seuraavat vaiheet';
+
+  @override
+  String get couldNotLoadMemories => 'Muistoja ei voitu ladata';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Tietograafia ei voitu ladata';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Puheen muuntaminen tekstiksi ei ole juuri nyt käytettävissä. Tarkista internetyhteytesi ja laitteesi puheentunnistusasetukset ja yritä uudelleen.';
+
+  @override
+  String get processingTakingLonger => 'Vielä käynnissä — tämä kestää tavallista kauemmin.';
 }

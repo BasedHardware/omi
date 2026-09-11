@@ -3504,7 +3504,7 @@ abstract class AppLocalizations {
   /// Introduction text for speech profile setup
   ///
   /// In en, this message translates to:
-  /// **'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.'**
+  /// **'Let\'s set up your speech profile. You can always change it later'**
   String get speechProfileIntro;
 
   /// Button text to begin a process
@@ -3632,12 +3632,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open Settings'**
   String get openSettings;
-
-  /// Question asking if user wants to change their display name
-  ///
-  /// In en, this message translates to:
-  /// **'Want to go by something else?'**
-  String get wantDifferentName;
 
   /// Question asking for user's name
   ///
@@ -10626,7 +10620,7 @@ abstract class AppLocalizations {
   /// Button text to listen to speech profile
   ///
   /// In en, this message translates to:
-  /// **'Listen to my speech profile ➡️'**
+  /// **'Listen to my speech profile'**
   String get listenToSpeechProfile;
 
   /// Button text to recognize other people
@@ -18339,18 +18333,6 @@ abstract class AppLocalizations {
   /// **'Open store'**
   String get accountCutoverOpenStore;
 
-  /// Chat timeframe scope chip for today
-  ///
-  /// In en, this message translates to:
-  /// **'Today'**
-  String get chatScopeToday;
-
-  /// Chat timeframe scope chip for this week
-  ///
-  /// In en, this message translates to:
-  /// **'This week'**
-  String get chatScopeThisWeek;
-
   /// Chat scope chip when asking about a specific conversation
   ///
   /// In en, this message translates to:
@@ -18458,6 +18440,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
   String get pendantFullSyncBlocked;
+
+  /// Header for the calendar capture-gap group in the conversations list
+  ///
+  /// In en, this message translates to:
+  /// **'Not captured ({count})'**
+  String conversationsNotCapturedCount(int count);
+
+  /// Title shown on the speech profile page when the user already has a speech profile set up
+  ///
+  /// In en, this message translates to:
+  /// **'{name}\'s Speech Profile'**
+  String speechProfileOwnerTitle(String name);
+
+  /// Label for the play/listen button on the speech profile page
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get play;
+
+  /// Label for the redo/re-record button on the speech profile page
+  ///
+  /// In en, this message translates to:
+  /// **'Redo'**
+  String get redo;
+
+  /// Heading of the compact card listing the topics to speak about while recording the speech profile
+  ///
+  /// In en, this message translates to:
+  /// **'Answer with your voice:'**
+  String get answerWithYourVoice;
+
+  /// First speech profile topic prompt; must match the backend onboarding question
+  ///
+  /// In en, this message translates to:
+  /// **'Where do you live?'**
+  String get speechProfileTopicLocation;
+
+  /// Second speech profile topic prompt; must match the backend onboarding question
+  ///
+  /// In en, this message translates to:
+  /// **'What do you do for work?'**
+  String get speechProfileTopicWork;
+
+  /// Third speech profile topic prompt; must match the backend onboarding question
+  ///
+  /// In en, this message translates to:
+  /// **'What is your long-term goal?'**
+  String get speechProfileTopicGoal;
+
+  /// Status when an active call transcription socket receives no audio frames
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription not receiving audio'**
+  String get transcriptionNoAudio;
+
+  /// Empty-home hint pointing at the + record button
+  ///
+  /// In en, this message translates to:
+  /// **'Tap + to start recording'**
+  String get tapPlusToStartRecording;
+
+  /// Eyebrow label on a chat task card block
+  ///
+  /// In en, this message translates to:
+  /// **'Task'**
+  String get chatBlockTask;
+
+  /// Eyebrow label on a chat goal link block
+  ///
+  /// In en, this message translates to:
+  /// **'Goal'**
+  String get chatBlockGoal;
+
+  /// Eyebrow label on a chat conversation/capture link block
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation'**
+  String get chatBlockConversation;
+
+  /// Eyebrow label on a chat memory link block
+  ///
+  /// In en, this message translates to:
+  /// **'Memory'**
+  String get chatBlockMemory;
+
+  /// Eyebrow label on a chat question card block
+  ///
+  /// In en, this message translates to:
+  /// **'Question'**
+  String get chatBlockQuestion;
+
+  /// Action on a chat goal link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Goals'**
+  String get chatBlockOpenInGoals;
+
+  /// Action on a chat conversation link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open conversation'**
+  String get chatBlockOpenConversation;
+
+  /// Action on a chat memory link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Memories'**
+  String get chatBlockOpenInMemories;
+
+  /// Status shown when a chat block's entity no longer exists
+  ///
+  /// In en, this message translates to:
+  /// **'No longer available'**
+  String get chatBlockUnavailable;
+
+  /// Header above recommended action items on a chat conversation link block
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended next steps'**
+  String get chatBlockRecommendedNextSteps;
+
+  /// Retryable error when fetching memories failed instead of returning an empty list
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load memories'**
+  String get couldNotLoadMemories;
+
+  /// Short user-facing error when the knowledge graph request is non-200; must not include the response body
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load knowledge graph'**
+  String get couldNotLoadKnowledgeGraph;
+
+  /// Error dialog body when neither the server transcriber nor on-device speech recognition is available for the speech profile recording
+  ///
+  /// In en, this message translates to:
+  /// **'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.'**
+  String get speechToTextUnavailableDesc;
+
+  /// Shown on the homepage processing card after ~2 minutes with a Retry action (#5481).
+  ///
+  /// In en, this message translates to:
+  /// **'Still working — this is taking longer than usual.'**
+  String get processingTakingLonger;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

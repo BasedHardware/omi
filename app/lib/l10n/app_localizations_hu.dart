@@ -1872,9 +1872,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get openSettings => 'Beállítások megnyitása';
 
   @override
-  String get wantDifferentName => 'Máshogy szeretnéd, hogy hívjanak?';
-
-  @override
   String get whatsYourName => 'Mi a neved?';
 
   @override
@@ -2056,7 +2053,8 @@ class AppLocalizationsHu extends AppLocalizations {
   String get memoryDeleted => 'Emlék törölve.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Az emlékek előzményeinek egy része nem érhető el. Az eddig megkapott előzmények láthatók.';
 
   @override
   String get undo => 'Visszavonás';
@@ -9885,12 +9883,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get accountCutoverOpenStore => 'Áruház megnyitása';
 
   @override
-  String get chatScopeToday => 'Ma';
-
-  @override
-  String get chatScopeThisWeek => 'Ezen a héten';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Erről: $title';
   }
@@ -9954,4 +9946,81 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'A Pendant tárhelye megtelt, és még mindig felvételi módban van, ezért a tárolt hang nem vihető át. Nyomja meg a Pendant gombját a felvétel leállításához, majd szinkronizáljon újra.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Nincs rögzítve ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name hangprofilja';
+  }
+
+  @override
+  String get play => 'Lejátszás';
+
+  @override
+  String get redo => 'Újrafelvétel';
+
+  @override
+  String get answerWithYourVoice => 'Válaszolj szóban:';
+
+  @override
+  String get speechProfileTopicLocation => 'Hol élsz?';
+
+  @override
+  String get speechProfileTopicWork => 'Mivel foglalkozol?';
+
+  @override
+  String get speechProfileTopicGoal => 'Mi a hosszú távú célod?';
+
+  @override
+  String get transcriptionNoAudio => 'Az átírás nem kap hangot';
+
+  @override
+  String get tapPlusToStartRecording => 'Koppints a + jelre a felvétel indításához';
+
+  @override
+  String get chatBlockTask => 'Feladat';
+
+  @override
+  String get chatBlockGoal => 'Cél';
+
+  @override
+  String get chatBlockConversation => 'Beszélgetés';
+
+  @override
+  String get chatBlockMemory => 'Emlék';
+
+  @override
+  String get chatBlockQuestion => 'Kérdés';
+
+  @override
+  String get chatBlockOpenInGoals => 'Megnyitás a Célokban';
+
+  @override
+  String get chatBlockOpenConversation => 'Beszélgetés megnyitása';
+
+  @override
+  String get chatBlockOpenInMemories => 'Megnyitás az Emlékekben';
+
+  @override
+  String get chatBlockUnavailable => 'Már nem érhető el';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Javasolt következő lépések';
+
+  @override
+  String get couldNotLoadMemories => 'Nem sikerült betölteni az emlékeket';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nem sikerült betölteni a tudásgráfot';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'A beszéd szöveggé alakítása jelenleg nem érhető el. Ellenőrizd az internetkapcsolatot és az eszköz beszédfelismerési beállításait, majd próbáld újra.';
+
+  @override
+  String get processingTakingLonger => 'Még folyamatban — ez tovább tart a szokásosnál.';
 }

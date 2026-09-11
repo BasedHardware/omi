@@ -1858,9 +1858,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get openSettings => 'Åpne innstillinger';
 
   @override
-  String get wantDifferentName => 'Vil du bli kalt noe annet?';
-
-  @override
   String get whatsYourName => 'Hva heter du?';
 
   @override
@@ -2040,7 +2037,8 @@ class AppLocalizationsNo extends AppLocalizations {
   String get memoryDeleted => 'Minne slettet.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Deler av minnehistorikken er ikke tilgjengelig. Viser historikken som er mottatt så langt.';
 
   @override
   String get undo => 'Angre';
@@ -9844,12 +9842,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get accountCutoverOpenStore => 'Öppna butik';
 
   @override
-  String get chatScopeToday => 'I dag';
-
-  @override
-  String get chatScopeThisWeek => 'Denne uken';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Om: $title';
   }
@@ -9911,4 +9903,81 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Lagringen på Pendant er full, og den er fortsatt i opptaksmodus, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Ikke fanget opp ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Stemmeprofil for $name';
+  }
+
+  @override
+  String get play => 'Spill av';
+
+  @override
+  String get redo => 'Ta opp på nytt';
+
+  @override
+  String get answerWithYourVoice => 'Svar med stemmen din:';
+
+  @override
+  String get speechProfileTopicLocation => 'Hvor bor du?';
+
+  @override
+  String get speechProfileTopicWork => 'Hva jobber du med?';
+
+  @override
+  String get speechProfileTopicGoal => 'Hva er ditt langsiktige mål?';
+
+  @override
+  String get transcriptionNoAudio => 'Transkripsjon mottar ikke lyd';
+
+  @override
+  String get tapPlusToStartRecording => 'Trykk på + for å starte opptaket';
+
+  @override
+  String get chatBlockTask => 'Oppgave';
+
+  @override
+  String get chatBlockGoal => 'Mål';
+
+  @override
+  String get chatBlockConversation => 'Samtale';
+
+  @override
+  String get chatBlockMemory => 'Minne';
+
+  @override
+  String get chatBlockQuestion => 'Spørsmål';
+
+  @override
+  String get chatBlockOpenInGoals => 'Åpne i Mål';
+
+  @override
+  String get chatBlockOpenConversation => 'Åpne samtale';
+
+  @override
+  String get chatBlockOpenInMemories => 'Åpne i Minner';
+
+  @override
+  String get chatBlockUnavailable => 'Ikke lenger tilgjengelig';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Anbefalte neste trinn';
+
+  @override
+  String get couldNotLoadMemories => 'Kunne ikke laste minner';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Kunne ikke laste kunnskapsgrafen';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Tale til tekst er ikke tilgjengelig akkurat nå. Kontroller internettforbindelsen og enhetens innstillinger for talegjenkjenning, og prøv igjen.';
+
+  @override
+  String get processingTakingLonger => 'Jobber fortsatt — dette tar lengre tid enn vanlig.';
 }

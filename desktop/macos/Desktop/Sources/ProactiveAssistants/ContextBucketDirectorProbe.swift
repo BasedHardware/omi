@@ -114,7 +114,7 @@
         nil,
         ContextProactivityEngine.schema(allowLookup: allowLookup),
         cacheKey,
-        800,
+        ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens,
         nil)
       let elapsedNanoseconds = DispatchTime.now().uptimeNanoseconds - started
       let latencyMs = min(90_000, Int((Double(elapsedNanoseconds) / 1_000_000).rounded()))

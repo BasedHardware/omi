@@ -1844,9 +1844,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get openSettings => 'فتح الإعدادات';
 
   @override
-  String get wantDifferentName => 'تريد أن يُناديك باسم آخر؟';
-
-  @override
   String get whatsYourName => 'ما اسمك؟';
 
   @override
@@ -2026,7 +2023,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get memoryDeleted => 'تم حذف الذكرى.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'بعض سجل الذكريات غير متاح. يتم عرض السجل المستلم حتى الآن.';
 
   @override
   String get undo => 'تراجع';
@@ -9787,12 +9784,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get accountCutoverOpenStore => 'فتح المتجر';
 
   @override
-  String get chatScopeToday => 'اليوم';
-
-  @override
-  String get chatScopeThisWeek => 'هذا الأسبوع';
-
-  @override
   String chatScopeAbout(String title) {
     return 'عن: $title';
   }
@@ -9855,4 +9846,81 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'ذاكرة Pendant ممتلئة وما زال في وضع التسجيل، لذا لا يمكن نقل الصوت المخزّن. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'لم يتم التسجيل ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'الملف الصوتي لـ $name';
+  }
+
+  @override
+  String get play => 'تشغيل';
+
+  @override
+  String get redo => 'إعادة';
+
+  @override
+  String get answerWithYourVoice => 'أجب بصوتك:';
+
+  @override
+  String get speechProfileTopicLocation => 'أين تعيش؟';
+
+  @override
+  String get speechProfileTopicWork => 'ما طبيعة عملك؟';
+
+  @override
+  String get speechProfileTopicGoal => 'ما هدفك على المدى الطويل؟';
+
+  @override
+  String get transcriptionNoAudio => 'النسخ لا يستلم الصوت';
+
+  @override
+  String get tapPlusToStartRecording => 'اضغط على + لبدء التسجيل';
+
+  @override
+  String get chatBlockTask => 'مهمة';
+
+  @override
+  String get chatBlockGoal => 'هدف';
+
+  @override
+  String get chatBlockConversation => 'محادثة';
+
+  @override
+  String get chatBlockMemory => 'ذكرى';
+
+  @override
+  String get chatBlockQuestion => 'سؤال';
+
+  @override
+  String get chatBlockOpenInGoals => 'فتح في الأهداف';
+
+  @override
+  String get chatBlockOpenConversation => 'فتح المحادثة';
+
+  @override
+  String get chatBlockOpenInMemories => 'فتح في الذكريات';
+
+  @override
+  String get chatBlockUnavailable => 'لم يعد متاحًا';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'الخطوات التالية الموصى بها';
+
+  @override
+  String get couldNotLoadMemories => 'تعذر تحميل الذكريات';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'تعذر تحميل الرسم البياني للمعرفة';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'تحويل الكلام إلى نص غير متاح الآن. تحقق من اتصالك بالإنترنت وإعدادات التعرف على الكلام في جهازك، ثم حاول مرة أخرى.';
+
+  @override
+  String get processingTakingLonger => 'ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد.';
 }

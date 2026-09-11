@@ -5,6 +5,9 @@ description: Tasks tab — search, Today/No Deadline sections, keyboard toolbar 
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  # The exact-record handoff TasksPage consumes on arrival.
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/TaskNavigationRequestStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksViewModel+SearchAnalytics.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksSection.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/TasksEscapeHandling.swift
@@ -18,6 +21,9 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailSourceNavigator.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/RewindEvidenceCard.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+  # S6 reads the lanes these two build — the ones the assistant answers from —
+  # and compares them against the page's own Today count.
+  - desktop/macos/Desktop/Sources/Stores/DashboardTaskRefreshPolicy.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore+BulkSelection.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage+BulkDelete.swift
 preconditions:
@@ -105,3 +111,19 @@ steps:
     do: "Verify the search bar is present at the top. Check for filter/settings icons next to the search bar and the add (+) button."
     expect:
       interactive_count: { min: 2 }
+
+  - id: S6
+    name: The assistant's lanes carry what this page shows
+    do: >-
+      Count the tasks the page lists under 'Today' (it holds overdue and
+      due-today rows together), then run `./scripts/omi-ctl action
+      tasks_snapshot`. Verify `overdue_count` + `today_count` equals the page's
+      Today count, and that `task_count` is non-zero whenever the page lists any
+      task. These are the lanes the voice `get_tasks` tool, the About-user card
+      and SuggestionAssistant read; a backlog older than a week, or one captured
+      from a conversation, used to be missing from them alone, so the assistant
+      said "you don't have any tasks overdue or due today" to someone looking at
+      thirty of them.
+    expect:
+      text_visible:
+        - Today

@@ -3,14 +3,57 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from asyncio import Queue
 from typing import Callable, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 def parakeet_ws_url(api_url: str, sample_rate: int = 16000) -> str:
-    base = api_url.strip().rstrip("/")
-    base = base.replace("https://", "wss://").replace("http://", "ws://")
-    return f"{base}/v3/stream?sample_rate={sample_rate}"
+    """Build Parakeet WebSocket URL with proper path and query composition."""
+    api_url = api_url.strip()
+    if not api_url:
+        raise ValueError("api_url cannot be empty")
+
+    if api_url.startswith("//"):
+        normalized_url = "https:" + api_url
+    elif not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", api_url):
+        normalized_url = "https://" + api_url
+    else:
+        normalized_url = api_url
+
+    parsed = urlsplit(normalized_url)
+    if not parsed.netloc:
+        raise ValueError(f"Invalid Parakeet API URL, missing host: {api_url!r}")
+
+    # Scheme mapping: http/ws -> ws, otherwise wss
+    scheme = parsed.scheme.lower()
+    if scheme in ("http", "ws"):
+        new_scheme = "ws"
+    else:
+        new_scheme = "wss"
+
+    # Path composition: append /v3/stream
+    path = parsed.path.rstrip("/")
+    new_path = f"{path}/v3/stream" if path else "/v3/stream"
+
+    # Query parameters: preserve repeated and blank values, update sample_rate
+    query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
+    updated_pairs = []
+    found_sample_rate = False
+    for k, v in query_pairs:
+        if k == "sample_rate":
+            updated_pairs.append((k, str(sample_rate)))
+            found_sample_rate = True
+        else:
+            updated_pairs.append((k, v))
+    if not found_sample_rate:
+        updated_pairs.append(("sample_rate", str(sample_rate)))
+
+    new_query = urlencode(updated_pairs)
+
+    # Omit fragment
+    return urlunsplit((new_scheme, parsed.netloc, new_path, new_query, ""))
 
 
 class ParakeetTranscriber:
@@ -59,7 +102,20 @@ class ParakeetTranscriber:
                         else:
                             print(text)
 
-            await asyncio.gather(send_audio(), receive())
+            tasks = (
+                asyncio.create_task(send_audio()),
+                asyncio.create_task(receive()),
+            )
+            try:
+                done, _ = await asyncio.wait(
+                    tasks, return_when=asyncio.FIRST_COMPLETED
+                )
+                for task in done:
+                    task.result()
+            finally:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def _extract_text(data: object) -> str:

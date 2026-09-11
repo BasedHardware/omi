@@ -246,6 +246,9 @@ def integration_harness() -> Iterator[SimpleNamespace]:
             'utils.conversations.render',
             conversations_to_string=MagicMock(return_value=''),
             conversation_to_dict=MagicMock(return_value={}),
+            redact_conversation_for_integration=lambda conv: {
+                key: value for key, value in conv.items() if key != 'geolocation'
+            },
             serialize_datetimes=MagicMock(side_effect=lambda value: value),
         ),
         'utils.apps': _module('utils.apps', get_available_apps=get_available_apps),

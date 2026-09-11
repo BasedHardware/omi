@@ -7,6 +7,7 @@ stubbing pattern in test_mcp_search_memories.py.
 """
 
 from datetime import datetime, timezone
+import asyncio
 import json
 from unittest.mock import patch, MagicMock
 import os
@@ -14,6 +15,7 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -671,6 +673,37 @@ def test_authorize_request_rejects_legacy_omi_client_id():
                 'a' * 64,
                 'S256',
             )
+
+
+def test_mcp_oauth_authorize_rejects_non_qa_uid_before_grant_write(monkeypatch):
+    monkeypatch.setenv('OMI_JIT_QA_AUTH_ONLY', 'true')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev')
+    monkeypatch.setenv('OMI_JIT_QA_UID_ALLOWLIST', 'qa-user')
+
+    async def inline_run_blocking(_executor, function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    with (
+        patch.object(sse, '_validate_authorize_request', return_value=({}, ['memories.read'])),
+        patch.object(sse.firebase_admin.auth, 'verify_id_token', return_value={'uid': 'other-user'}),
+        patch.object(sse, 'run_blocking', inline_run_blocking),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(
+                sse.mcp_authorize_consent(
+                    response_type='code',
+                    client_id='omi-chatgpt-prod',
+                    redirect_uri='https://chatgpt.com/connector_platform_oauth_redirect',
+                    resource=sse.MCP_RESOURCE_URL,
+                    firebase_id_token='token',
+                    state='state',
+                    scope='memories.read',
+                    code_challenge='a' * 64,
+                    code_challenge_method='S256',
+                )
+            )
+        assert exc.value.status_code == 403
 
 
 def test_legacy_api_key_helper_rejects_oauth_tokens():

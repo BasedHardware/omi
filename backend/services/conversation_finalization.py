@@ -443,6 +443,20 @@ def final_attempt_failed(
             # Dead-lettering is authoritative; a best-effort metric lookup must
             # never change its terminal outcome.
             logger.exception('listen finalization terminal metric lookup failed job=%s', job_id)
+        # Dead-lettering flips the bound conversation to discarded inside its
+        # own transaction, bypassing the update hooks; converge the search
+        # projection. Fail-open: never change the terminal outcome.
+        try:
+            job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
+            if job:
+                uid = job.get('uid')
+                conversation_id = job.get('conversation_id')
+                if isinstance(uid, str) and uid and isinstance(conversation_id, str) and conversation_id:
+                    from utils.conversations.typesense_index import sync_conversation_index_after_write
+
+                    sync_conversation_index_after_write(uid, conversation_id)
+        except Exception:
+            logger.warning('listen finalization dead-letter index sync failed job=%s', job_id)
     return marked
 
 

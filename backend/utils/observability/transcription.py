@@ -10,11 +10,16 @@ from typing import Any, Callable, Literal, Mapping
 from models.conversation_enums import ConversationSource
 from utils.metrics import (
     OMI_LIVE_STT_ACCEPTED_TOTAL,
+    OMI_LIVE_STT_AUDIO_SECONDS_TOTAL,
     OMI_LIVE_STT_TERMINAL_TOTAL,
     OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL,
+    OMI_LISTEN_ACCEPTED_TOTAL,
+    OMI_LISTEN_AUDIO_OUTCOME_TOTAL,
+    OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL,
     OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL,
     OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL,
     OMI_TRANSCRIPTION_ACCEPTED_TOTAL,
+    OMI_TRANSCRIPTION_AUDIO_SECONDS_TOTAL,
     OMI_TRANSCRIPTION_COMPLETED_TOTAL,
     OMI_TRANSCRIPTION_LATENCY_SECONDS,
 )
@@ -30,6 +35,7 @@ _SYNC_MODELS = {'nova-3', 'parakeet', 'velma-2'}
 _LIVE_PHASES = {'connection', 'initialization', 'send'}
 _LIVE_TERMINAL_OUTCOMES = frozenset({'success', 'failure', 'cancelled'})
 _LIVE_TERMINAL_PHASES = frozenset({'connection', 'initialization', 'send', 'teardown', 'transcript_delivery'})
+_LISTEN_AUDIO_OUTCOMES = frozenset({'first_audio', 'no_audio_teardown'})
 LiveSTTTerminalOutcome = Literal['success', 'failure', 'cancelled']
 LiveSTTTerminalPhase = Literal['connection', 'initialization', 'send', 'teardown', 'transcript_delivery']
 
@@ -45,7 +51,10 @@ def _bounded_platform(platform: str | None) -> str:
 
 def _bounded_source(source: str | None) -> str:
     normalized = (source or '').strip()
-    return ConversationSource(normalized).value if normalized else ConversationSource.unknown.value
+    try:
+        return ConversationSource(normalized).value if normalized else ConversationSource.unknown.value
+    except ValueError:
+        return ConversationSource.unknown.value
 
 
 def _deployment_version() -> str:
@@ -63,12 +72,24 @@ def _deployment_environment() -> str:
 class TranscriptionAttempt:
     """Records one accepted journey and at most one terminal semantic outcome."""
 
-    def __init__(self, *, route: str, provider: str | None, platform: str | None) -> None:
+    def __init__(
+        self,
+        *,
+        route: str,
+        provider: str | None,
+        platform: str | None,
+        audio_seconds: float | None = None,
+    ) -> None:
         self.route = _bounded_route(route)
         self.provider = bounded_provider(provider)
         self.platform = _bounded_platform(platform)
         self.deployment_version = _deployment_version()
         self.started_at = monotonic()
+        # Measured audio duration (PCM byte length / WAV header), passed by
+        # callers that already compute it for the daily budget. None means
+        # the duration was unreadable: skip provider minutes rather than
+        # charging the budget's worst case into the metric.
+        self.audio_seconds = max(0.0, float(audio_seconds)) if audio_seconds is not None else None
         self._outcome: TranscriptionOutcome | None = None
         OMI_TRANSCRIPTION_ACCEPTED_TOTAL.labels(
             route=self.route,
@@ -98,6 +119,15 @@ class TranscriptionAttempt:
         }
         OMI_TRANSCRIPTION_COMPLETED_TOTAL.labels(**labels).inc()
         OMI_TRANSCRIPTION_LATENCY_SECONDS.labels(**labels).observe(max(0.0, monotonic() - self.started_at))
+        if self.audio_seconds:
+            # Provider audio minutes are recorded on every terminal outcome,
+            # including failures: the provider still processed the audio.
+            OMI_TRANSCRIPTION_AUDIO_SECONDS_TOTAL.labels(
+                route=self.route,
+                provider=self.provider,
+                outcome=outcome.value,
+                client_platform=self.platform,
+            ).inc(self.audio_seconds)
 
 
 class LiveSTTAttempt:
@@ -237,4 +267,51 @@ def record_live_stt_failure(
         client_platform=_bounded_platform(platform),
         deployment_environment=_deployment_environment(),
         phase=phase if phase in _LIVE_PHASES else 'unknown',
+    ).inc()
+
+
+def record_live_stt_audio_seconds(*, provider: str | None, platform: str | None, seconds: float) -> None:
+    """Add VAD-measured speech seconds for a backend-provider live-STT session.
+
+    Called once per speech-delta consumption in the listen usage flush; the
+    delta semantics of ``consume_speech_ms_delta`` make each millisecond reach
+    this counter exactly once.
+    """
+
+    if seconds <= 0:
+        return
+    OMI_LIVE_STT_AUDIO_SECONDS_TOTAL.labels(
+        provider=bounded_provider(provider),
+        client_platform=_bounded_platform(platform),
+        deployment_environment=_deployment_environment(),
+    ).inc(seconds)
+
+
+def record_listen_session_accepted(*, source: str | None, platform: str | None) -> None:
+    """Count one accepted /v4/listen socket with bounded labels only."""
+
+    OMI_LISTEN_ACCEPTED_TOTAL.labels(
+        transcription_source=_bounded_source(source),
+        client_platform=_bounded_platform(platform),
+    ).inc()
+
+
+def record_listen_audio_outcome(*, source: str | None, outcome: str, platform: str | None) -> None:
+    """Record a per-session listen audio funnel outcome (first audio / silent teardown)."""
+
+    if outcome not in _LISTEN_AUDIO_OUTCOMES:
+        raise ValueError(f'unknown listen audio outcome: {outcome}')
+    OMI_LISTEN_AUDIO_OUTCOME_TOTAL.labels(
+        transcription_source=_bounded_source(source),
+        outcome=outcome,
+        client_platform=_bounded_platform(platform),
+    ).inc()
+
+
+def record_listen_unknown_channel_prefix(*, source: str | None, platform: str | None) -> None:
+    """Count a multi-channel frame dropped because its channel prefix was unknown."""
+
+    OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL.labels(
+        transcription_source=_bounded_source(source),
+        client_platform=_bounded_platform(platform),
     ).inc()

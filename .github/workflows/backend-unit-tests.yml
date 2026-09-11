@@ -107,11 +107,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend-unit-tests:
-    name: Backend unit suite
+  # The suite's measured cost is per-file pytest process startup (2026-09-10,
+  # run 34430370667: 1126 files each in its own session, 19m18s of a 21m53s
+  # run, only two files above 4.5s of test time), and sharing processes
+  # across files is blocked by dense sys.modules contamination (see the
+  # BACKEND_PYTEST_PARALLEL_SESSION measurement in backend/test.sh). So the
+  # SAME selection fans out to four parallel shard jobs — standard runners
+  # on this public repository are free — each executing an interleaved slice
+  # of the sorted file list with the same per-file isolation. Union of the
+  # shards is exactly the full selection; ~5m of tests per shard replaces
+  # ~20m on one runner.
+  backend-unit-shard:
+    name: Backend unit shard ${{ matrix.shard }}/4
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -145,13 +158,91 @@ jobs:
 
       - name: Run authoritative backend unit contract
         working-directory: backend
+        env:
+          # Regression budget: a shard carries ~1/4 of the selection
+          # (measured ~5m of per-file sessions + ~1m preflight/typecheck
+          # + ~1.5m setup). 600s holds every legitimate shard shape with
+          # headroom and sits far below the unsharded 20m class this
+          # workflow existed at. Raise only with measured evidence.
+          BACKEND_UNIT_STEP_BUDGET_SECONDS: "600"
         run: |
+          step_started=$SECONDS
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             # Resolve the base live against the checkout (matching detect-changes)
             # rather than the event-payload base.sha, which can be stale for a
             # queued run (FC-stale-event-payload-diff-base, #10785).
             ../scripts/changed-files "origin/${{ github.base_ref }}"...HEAD > /tmp/backend-changed-files.txt
-            bash scripts/run-unit-ci.sh --changed-files /tmp/backend-changed-files.txt
+            bash scripts/run-unit-ci.sh --changed-files /tmp/backend-changed-files.txt --shard 4/${{ matrix.shard }}
           else
-            bash scripts/run-unit-ci.sh --all
+            bash scripts/run-unit-ci.sh --all --shard 4/${{ matrix.shard }}
           fi
+          elapsed=$((SECONDS - step_started))
+          echo "backend unit shard wall: ${elapsed}s (budget ${BACKEND_UNIT_STEP_BUDGET_SECONDS}s)"
+          if [ "${BACKEND_UNIT_STEP_BUDGET_SECONDS}" -gt 0 ] && [ "$elapsed" -gt "${BACKEND_UNIT_STEP_BUDGET_SECONDS}" ]; then
+            echo "FAIL: backend unit shard ${{ matrix.shard }} took ${elapsed}s, over its ${BACKEND_UNIT_STEP_BUDGET_SECONDS}s regression budget. The per-file duration summary above names the slow tail; fix the regression or raise the budget with measured evidence." >&2
+            exit 1
+          fi
+
+  # `run-unit-ci.sh` runs `not integration and not slow`, which is correct
+  # for PR latency but meant every `slow`-marked codebase guardrail in the
+  # repository executed nowhere. This job runs exactly those, unselected
+  # and unconditional: a guardrail whose job is to notice a change nobody
+  # anticipated cannot be gated on the change set that triggered the run.
+  backend-unit-guardrails:
+    name: Backend unit guardrails
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pylock*.toml
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          uv venv .venv
+          uv pip sync pylock.toml --python .venv/bin/python
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Run slow-marked backend guardrails
+        working-directory: backend
+        run: PYTHON=.venv/bin/python bash scripts/run-slow-guardrails-ci.sh
+
+  # Keep this name a literal and the sole required-check surface: GitHub
+  # publishes matrix job names as separate checks, so the shards must never
+  # carry the check name branch protection and humans watch. The gate fails
+  # closed on any non-success shard or guardrail result.
+  backend-unit-suite:
+    name: Backend unit suite
+    needs: [backend-unit-shard, backend-unit-guardrails]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every shard and the guardrails to pass
+        env:
+          # A matrix job's aggregate result is 'success' only when every
+          # shard instance succeeded, which is exactly the fail-closed
+          # verdict this gate exists to publish.
+          SHARD_RESULT: ${{ needs.backend-unit-shard.result }}
+          GUARDRAILS_RESULT: ${{ needs.backend-unit-guardrails.result }}
+        run: |
+          failed=0
+          if [ "$SHARD_RESULT" != "success" ]; then
+            echo "FAIL: backend unit shards result was '$SHARD_RESULT'" >&2
+            failed=1
+          fi
+          if [ "$GUARDRAILS_RESULT" != "success" ]; then
+            echo "FAIL: backend unit guardrails result was '$GUARDRAILS_RESULT'" >&2
+            failed=1
+          fi
+          exit "$failed"

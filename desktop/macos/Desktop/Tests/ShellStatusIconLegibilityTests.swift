@@ -625,17 +625,36 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
       """)
   }
 
-  func testTheAwaitingMeetingAudioTooltipDoesNotClaimOffOrStart() {
+  /// An armed Only Meetings wait is on — green dot, no slash — while nothing is transcribed yet, so
+  /// its sentence says the mic opens on a call rather than claiming "listening", "off", or "start".
+  func testTheAwaitingMeetingAudioTooltipSaysRecordingStartsOnACall() {
     let tooltip = ShellStatusTooltip.audio(
-      state: .inactive, mode: "Only Meetings", isAwaitingMeeting: true,
+      state: .active, mode: "Only Meetings", isAwaitingMeeting: true,
       next: CaptureListeningLogic.audioRecordingModeTitle(
         CaptureListeningLogic.nextAudioRecordingMode(after: .onlyMeetings)))
     XCTAssertTrue(tooltip.hasPrefix("Audio"))
-    XCTAssertTrue(tooltip.contains("waiting for a call"))
+    XCTAssertTrue(tooltip.contains("call"))
     XCTAssertTrue(tooltip.contains("Only Meetings"))
     XCTAssertTrue(tooltip.contains("Click for Off"))
+    XCTAssertFalse(tooltip.contains("listening"), "nothing is transcribed while the mic waits for a call")
     XCTAssertFalse(
       tooltip.contains("Click to start"),
       "An armed Only Meetings wait is not off; clicking turns listening off, it does not start it.")
+  }
+
+  /// The armed wait can outlive a revoked microphone grant. Promising that recording starts on the
+  /// next call would then be false, so the sentence names the missing grant instead, and still says
+  /// where a click goes, because from Only Meetings a click turns listening off without prompting.
+  func testTheAwaitingMeetingAudioTooltipNamesTheMissingMicrophoneGrant() {
+    let tooltip = ShellStatusTooltip.audio(
+      state: .active, mode: "Only Meetings", isAwaitingMeeting: true, next: "Off",
+      hasMicrophonePermission: false)
+    XCTAssertTrue(tooltip.hasPrefix("Audio"))
+    XCTAssertTrue(tooltip.localizedCaseInsensitiveContains("microphone"), "it has to say what is missing: \(tooltip)")
+    XCTAssertTrue(tooltip.contains("Only Meetings"))
+    XCTAssertTrue(tooltip.contains("click for Off"))
+    XCTAssertFalse(
+      tooltip.contains("Recording starts"),
+      "without the grant no call can be recorded, so the tooltip must not promise one: \(tooltip)")
   }
 }

@@ -11,7 +11,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
 import pytest
 
-from utils.llm import clients, gateway_shadow, gateway_serving
+from utils.llm import clients, gateway_shadow, gateway_serving, model_config
 from utils.llm import providers
 from utils.llm.gateway_client import DEFAULT_LLM_GATEWAY_URL, GatewayContextChatOpenAI, get_llm_gateway_base_url
 from utils.llm.gateway_client import (
@@ -253,6 +253,66 @@ def test_get_llm_forwards_an_explicit_gateway_transport_timeout(monkeypatch):
         "options": {"request_timeout": 20.0},
         "feature": "memory_l2",
     }
+
+
+def test_get_llm_gives_a_user_waiting_feature_the_foreground_deadline(monkeypatch):
+    """Without this the lane keeps the 15s background first-byte deadline and the user loses the
+    summary: prod 2026-08-19 (conv_structure, daily_summary) and 2026-09-04 (conv_app_result, 31%
+    of app-selected reprocesses). The deadline belongs to the feature, not to the call site."""
+    captured = {}
+
+    def fake_gateway(lane_id, streaming=False, options=None, *, feature=None):
+        captured.update(lane_id=lane_id, options=options, feature=feature)
+        return FakeChatModel(name="gateway", calls=[])
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, "gateway")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm", fake_gateway)
+
+    clients.get_llm("conv_app_result")
+
+    assert captured["lane_id"] == "omi:auto:conv-app-result"
+    assert captured["options"] == {"request_timeout": model_config.FOREGROUND_REQUEST_TIMEOUT_SECONDS}
+
+
+def test_get_llm_leaves_a_background_feature_on_the_gateway_transport_deadline(monkeypatch):
+    """The bounded transport deadline stays the default for everything else."""
+    captured = {}
+
+    def fake_gateway(lane_id, streaming=False, options=None, *, feature=None):
+        captured.update(lane_id=lane_id, options=options, feature=feature)
+        return FakeChatModel(name="gateway", calls=[])
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, "gateway")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm", fake_gateway)
+
+    clients.get_llm("conv_folder")
+
+    assert captured["options"] is None
+
+
+def test_get_llm_gives_a_byok_user_the_same_feature_deadline(monkeypatch):
+    """A BYOK request runs the same prompt on the same lane, so it gets the same deadline."""
+    captured = {}
+
+    def fake_byok_gateway(lane_id, *, provider, api_key, streaming=False, options=None, feature=None):
+        captured.update(lane_id=lane_id, provider=provider, options=options, feature=feature)
+        return FakeChatModel(name="gateway-byok", calls=[])
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, "gateway")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm_for_byok", fake_byok_gateway)
+    monkeypatch.setattr(clients, "get_byok_profile", lambda: None)
+    monkeypatch.setattr(clients, "get_byok_key", lambda provider: "sk-user-key" if provider == "openai" else None)
+
+    clients.get_llm("conv_app_result")
+
+    assert captured["lane_id"] == "omi:auto:conv-app-result"
+    assert captured["options"] == {"request_timeout": model_config.FOREGROUND_REQUEST_TIMEOUT_SECONDS}
 
 
 def test_get_llm_feature_gateway_mode_fails_closed_on_transport_failure(monkeypatch):

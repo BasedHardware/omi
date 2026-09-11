@@ -23,7 +23,7 @@ import SwiftUI
 //
 //  These windows are therefore drawn, always, for everyone. There is no store read on this path,
 //  no image decode, no `CinematicFrameSource`, and so no fallback branch and nothing to record —
-//  the honest way to satisfy `docs/agents/fallback-telemetry.md` is to not have a second path.
+//  the honest way to satisfy `.github/agent-docs/fallback-telemetry.md` is to not have a second path.
 //
 //  What they must never be is *plausible*. `CinematicWindowArt.swift` holds the drawing, and the
 //  invariant that makes this safe: a window is built from numbers only and no view in that file can

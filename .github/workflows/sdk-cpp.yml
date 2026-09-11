@@ -1,0 +1,28 @@
+name: C++ Device SDK
+
+on:
+  pull_request:
+    paths:
+      - "sdks/device/cpp/**"
+      - ".github/workflows/sdk-cpp.yml"
+  push:
+    branches: [main]
+    paths:
+      - "sdks/device/cpp/**"
+      - ".github/workflows/sdk-cpp.yml"
+
+jobs:
+  cpp:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/device/cpp
+    steps:
+      - uses: actions/checkout@v7
+      # No third-party dependency step: the package must configure and build
+      # from a bare checkout. A dependency that needs fetching fails here.
+      - run: cmake -S . -B build -DOMI_DEVICE_BUILD_TESTS=ON
+      - run: cmake --build build
+      - run: ctest --test-dir build --output-on-failure
+      # Consumers of the retired SimpleBLE flags must fail at configure time.
+      - run: bash tests/retired-ble-flags.sh

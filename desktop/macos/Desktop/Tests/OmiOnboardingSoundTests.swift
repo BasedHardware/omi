@@ -375,4 +375,15 @@ final class OmiOnboardingSoundTests: XCTestCase {
   func testTheCapIsTenSeconds() {
     XCTAssertEqual(OmiSoundController.maxMusicDuration, 10)
   }
+
+  // MARK: - Engine playback guard
+
+  /// `AVAudioPlayerNode.play()` raises when the engine is not running. The predicate
+  /// is the testable half of that contract; the engine itself cannot be driven here.
+  func testPlaybackIsRefusedWhenTheEngineIsNotRunningOrTheOutputIsSilenced() {
+    XCTAssertTrue(OmiAVSoundPlayback.mayPlay(engineIsRunning: true, isSilenced: false))
+    XCTAssertFalse(OmiAVSoundPlayback.mayPlay(engineIsRunning: false, isSilenced: false))
+    XCTAssertFalse(OmiAVSoundPlayback.mayPlay(engineIsRunning: true, isSilenced: true))
+    XCTAssertFalse(OmiAVSoundPlayback.mayPlay(engineIsRunning: false, isSilenced: true))
+  }
 }

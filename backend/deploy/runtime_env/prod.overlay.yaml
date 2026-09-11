@@ -61,6 +61,10 @@ overlay:
         OMI_LLM_GATEWAY_FEATURE_MODE:
           value: gateway
           category: rollout
+        # Notes v2 prod-on (2026-09-01). Calendar/OCR context stay dev-only below.
+        CONVERSATION_NOTES_V2_ENABLED:
+          value: 'true'
+          category: rollout
         MEMORY_ENABLED:
           value: 'on'
         # Canonical graph and /v3/memories first-page cursors fail closed without this HMAC.
@@ -72,6 +76,23 @@ overlay:
           secret:
             name: prod-omi-backend-secrets
             key: MCP_OAUTH_CLIENTS_JSON
+    pusher:
+      capabilities:
+      - conversation.finalize.persisted
+      - memory.canonical.mutate
+      values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
+      env:
+        MEMORY_ENABLED:
+          value: 'on'
+        CONVERSATION_NOTES_V2_ENABLED:
+          value: 'true'
+          category: rollout
+        CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+          value: 'false'
+          category: rollout
+        CONVERSATION_OCR_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
     config_map:
       name: prod-omi-backend-config
       entries:
@@ -100,7 +121,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: dg-nova-3,modulate-velma-2,parakeet
+          value: modulate-velma-2,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -198,6 +219,10 @@ overlay:
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
+            category: rollout
+          # Notes v2 prod-on (2026-09-01); keep calendar/OCR context dev-only.
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'true'
             category: rollout
           MEMORY_ENABLED:
             value: 'on'
@@ -375,6 +400,9 @@ overlay:
         env:
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'
+          DAILY_SUMMARY_SELECTION_MODE:
+            value: indexed
+            category: rollout
           PINECONE_INDEX_NAME:
             value: memories-backend
       daily-memory-sweep-job:
@@ -405,6 +433,16 @@ overlay:
             value: '3'
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             value: 'false'
+      knowledge-ledger-drain-job:
+        env:
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware
+          MEMORY_ENABLED:
+            value: 'on'
+          KNOWLEDGE_LEDGER_DRAIN_ENABLED:
+            value: 'false'
+          KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
+            value: ''
       day3-reengagement-email-job:
         flags:
           --task-timeout: 900s

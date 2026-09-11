@@ -50,6 +50,7 @@ from utils.memory.memory_system import (
     resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
 )
 from utils.memory.short_term_lifecycle import ShortTermDisposition, effective_short_term_expiry
+from utils.memory.belief_model import belief_model_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -138,10 +139,10 @@ def _canonical_outbox_side_effects(*, db_client: Any) -> CanonicalMemoryOutboxSi
     )
 
 
-def _canonical_outbox_worker_config(*, run_id: str) -> CanonicalMemoryOutboxWorkerConfig:
+def _canonical_outbox_worker_config(*, run_id: str, event_limit: int = 100) -> CanonicalMemoryOutboxWorkerConfig:
     return CanonicalMemoryOutboxWorkerConfig(
         worker_id=f"canonical-maintenance:{run_id}"[:200],
-        limit=100,
+        limit=event_limit,
         scan_limit=500,
         lease_seconds=300,
         max_attempts=5,
@@ -157,9 +158,14 @@ def _drain_canonical_outbox(
     run_id: str,
     now: datetime,
     max_ticks: int = 5,
+    job_budget_guard: Optional[Callable[[], None]] = None,
 ) -> Dict[str, Any]:
     """Drain a bounded pass, not just one page, so one maintenance run projects its own commits."""
-    config = _canonical_outbox_worker_config(run_id=run_id)
+    # When the job clock is bound, one tick is one event so the clock is
+    # checked between vector deletes instead of after a 100-event page.
+    event_limit = 1 if job_budget_guard is not None else 100
+    tick_limit = 500 if job_budget_guard is not None else max_ticks
+    config = _canonical_outbox_worker_config(run_id=run_id, event_limit=event_limit)
     aggregate: Dict[str, Any] = {
         "uid": uid,
         "worker_id": config.worker_id,
@@ -175,7 +181,9 @@ def _drain_canonical_outbox(
         "errors": [],
     }
     side_effects = _canonical_outbox_side_effects(db_client=db_client)
-    for _tick in range(max_ticks):
+    for _tick in range(tick_limit):
+        if job_budget_guard is not None:
+            job_budget_guard()
         summary = run_canonical_memory_outbox_worker_tick(
             db_client=db_client,
             uid=uid,
@@ -243,6 +251,7 @@ def run_canonical_short_term_ttl_lifecycle(
     now: Optional[datetime] = None,
     run_id: str,
     limit: Optional[int] = None,
+    job_budget_guard: Optional[Callable[[], None]] = None,
 ) -> CanonicalShortTermLifecycleReport:
     """Audit expiry and settle indexed Short-term items through canonical L2 apply."""
     client: Any = db_client if db_client is not None else default_db_client
@@ -263,9 +272,19 @@ def run_canonical_short_term_ttl_lifecycle(
     existing = 0
     terminal = 0
     for item in items:
+        if job_budget_guard is not None:
+            job_budget_guard()
         disposition = None
-        if item.tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= current_time:
+        expired = item.tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= current_time
+        if expired and not belief_model_enabled():
             disposition = ShortTermDisposition.reject_or_hide
+        elif expired:
+            logger.info(
+                "canonical_short_term_ttl_lifecycle: skipped_time_only_reject " "uid=%s memory_id=%s run_id=%s",
+                uid,
+                item.memory_id,
+                run_id,
+            )
         record, was_created = process_short_term_lifecycle_item(
             item,
             store=store,
@@ -354,6 +373,7 @@ def run_canonical_short_term_maintenance(
     required_processing_limit: int = 0,
     consolidation_attempt_lease_seconds: int = CONSOLIDATION_ATTEMPT_LEASE_SECONDS,
     consolidation_result_guard: Optional[Callable[[], None]] = None,
+    job_budget_guard: Optional[Callable[[], None]] = None,
 ) -> CanonicalShortTermMaintenanceReport:
     """Drain prior projections, run maintenance phases, then project their commits."""
     client: Any = db_client if db_client is not None else default_db_client
@@ -368,7 +388,10 @@ def run_canonical_short_term_maintenance(
         db_client=client,
         run_id=run_id,
         now=pre_outbox_now,
+        job_budget_guard=job_budget_guard,
     )
+    if job_budget_guard is not None:
+        job_budget_guard()
     if required_processing_limit > 0:
         required_processing = run_required_memory_processing(
             uid,
@@ -386,7 +409,10 @@ def run_canonical_short_term_maintenance(
         db_client=client,
         now=current_time,
         run_id=run_id,
+        job_budget_guard=job_budget_guard,
     )
+    if job_budget_guard is not None:
+        job_budget_guard()
     consolidation = run_canonical_consolidation(
         uid,
         db_client=client,
@@ -399,12 +425,15 @@ def run_canonical_short_term_maintenance(
     )
     # In production, use a post-commit timestamp so events created during this
     # pass are immediately due. Explicit test/replay clocks remain deterministic.
+    if job_budget_guard is not None:
+        job_budget_guard()
     outbox_now = current_time if now is not None else datetime.now(timezone.utc)
     post_outbox = _drain_canonical_outbox(
         uid,
         db_client=client,
         run_id=run_id,
         now=outbox_now,
+        job_budget_guard=job_budget_guard,
     )
     outbox = _merge_canonical_outbox_summaries(pre_outbox, post_outbox)
     return CanonicalShortTermMaintenanceReport(

@@ -20,6 +20,9 @@ enum ConversationDisplayState: Equatable {
   case titled(String)
   /// Pipeline is still running. Title will arrive soon.
   case processing
+  /// Stored with the raw transcript only; the backend enriches it the first
+  /// time it is opened (free-tier desktop capture). Nothing is running.
+  case awaitingFirstOpen
   /// Conversation is locked (subscription gating). Title intentionally hidden.
   case locked
   /// Processing finished but the title slot is empty AND the transcript has
@@ -98,10 +101,20 @@ enum TranscriptPresenceState: Equatable {
 struct CaptureAudioFile: Codable, Equatable, Identifiable {
   let id: String
   let duration: TimeInterval
+  /// Unix time of the part's earliest chunk: where its media timeline starts
+  /// on the wall clock. Nil for a part the device never stamped.
+  let firstChunkTimestamp: TimeInterval?
 
   init(_ wire: OmiAPI.AudioFile) {
     id = wire.id
     duration = wire.duration
+    firstChunkTimestamp = wire.chunkTimestamps.min()
+  }
+
+  init(id: String, duration: TimeInterval, firstChunkTimestamp: TimeInterval?) {
+    self.id = id
+    self.duration = duration
+    self.firstChunkTimestamp = firstChunkTimestamp
   }
 }
 
@@ -337,7 +350,10 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     }
     switch status {
     case .inProgress, .processing, .merging:
-      return .processing
+      // A deferred row wears `processing` on the wire only so the client
+      // re-fetches on open. Nothing is running for it, so it must not look
+      // like — or be timed like — a live pipeline.
+      return deferred ? .awaitingFirstOpen : .processing
     case .failed:
       return .failed
     case .completed:
@@ -354,11 +370,30 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     }
   }
 
+  /// Identity for a row that has no LLM title yet: the first substantive
+  /// transcript line, or the recording time when the transcript is not loaded.
+  /// Never the pipeline status — that belongs in the badge.
+  var provisionalTitle: String {
+    ConversationProcessingProgress.provisionalTitle(from: transcriptSegments)
+      ?? "Recording at \(Self.provisionalTimeFormatter.string(from: startedAt ?? createdAt))"
+  }
+
+  /// True when `provisionalTitle` quotes the transcript rather than the clock.
+  var hasTranscriptProvisionalTitle: Bool {
+    ConversationProcessingProgress.provisionalTitle(from: transcriptSegments) != nil
+  }
+
+  private static let provisionalTimeFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "h:mm a"
+    return f
+  }()
+
   /// The string a row/header should display in the title slot.
   var displayTitle: String {
     switch displayState {
     case .titled(let title): return title
-    case .processing: return "Processing…"
+    case .processing, .awaitingFirstOpen: return provisionalTitle
     case .locked: return "Locked"
     case .failed: return "Failed to process"
     case .untitledRecoverable, .untitledEmpty: return "Untitled"
@@ -380,14 +415,44 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     structured.overview
   }
 
-  /// Returns duration in seconds based on start/finish times or transcript
+  /// Returns duration in seconds: the transcript span when the record carries
+  /// usable transcript segments, the wall window when it does not (including
+  /// records whose segments all fail validation).
+  ///
+  /// `started_at` is the live-socket streaming-session origin, not the moment
+  /// this conversation's speech began, so `finished_at - started_at` over-counts
+  /// by however long the socket had already been open — an 8s dictation scrap
+  /// read as 42m45s here while mobile showed 8s (#4056). Mirrors the backend
+  /// helper `utils/conversations/duration.py` and the Flutter
+  /// `ServerConversation.getDurationInSeconds`; the shared vectors live in
+  /// `contracts/parity/conversation_duration.json`.
+  ///
+  /// A list response that omits `transcript_segments` leaves nothing to measure,
+  /// so those rows still report the wall window — the same answer mobile gives.
   var durationInSeconds: Int {
-    if let start = startedAt, let end = finishedAt {
-      return Int(end.timeIntervalSince(start))
+    if let span = transcriptSpanSeconds {
+      // A finite segment end can still exceed Int.max (a malformed persisted
+      // segment), where Int(Double) would trap and crash the client. Clamp in
+      // Double space first: Double(Int.max) rounds up to 2^63, so converting
+      // that boundary back to Int traps — compare before converting.
+      let bounded = max(span, 0)
+      return bounded >= Double(Int.max) ? Int.max : Int(bounded)
     }
-    // Fallback to transcript duration
-    guard let lastSegment = transcriptSegments.last else { return 0 }
-    return Int(lastSegment.end)
+    guard let start = startedAt, let end = finishedAt else { return 0 }
+    return max(0, Int(end.timeIntervalSince(start)))
+  }
+
+  /// Largest valid segment `end`, or nil when no segment can answer. Segments
+  /// with blank text, non-finite bounds, or `end < start` are ignored.
+  private var transcriptSpanSeconds: Double? {
+    var span: Double?
+    for segment in transcriptSegments {
+      guard !segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+      guard segment.start.isFinite, segment.end.isFinite, segment.end >= segment.start else { continue }
+      let end = max(0, segment.end)
+      span = span.map { Swift.max($0, end) } ?? end
+    }
+    return span
   }
 
   /// Formatted duration string (e.g., "5m 30s")

@@ -237,7 +237,7 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
         # env mapping simply won. It can now raise, and this early return means
         # the subscriber's stored row silently stops tracking Stripe. That is
         # the Apr 17-20 failure shape, so it must be observable rather than a
-        # bare log line. See docs/agents/plan-source-of-truth.md.
+        # bare log line. See .github/agent-docs/plan-source-of-truth.md.
         record_fallback(
             component='other',
             from_mode='stripe_price_resolution',

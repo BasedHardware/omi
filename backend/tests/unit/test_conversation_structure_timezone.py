@@ -143,6 +143,11 @@ _load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm"
 # cache floor the preflight assertions below depend on.
 _load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" / "prompt_cache.py")
 
+# model_config pulls in gateway_client; stub the one constant conversation_processing
+# imports so the isolated load does not need the real module tree.
+model_config_stub = _stub_module("utils.llm.model_config")
+model_config_stub.FOREGROUND_REQUEST_TIMEOUT_SECONDS = 60.0
+
 prompt_prefix_stub = _stub_module("utils.llm.conversation_prompt_prefix")
 prompt_prefix_stub.ConversationPromptPrefix = MagicMock
 prompt_prefix_stub.shared_conversation_cache_supported = MagicMock(return_value=False)
@@ -237,8 +242,9 @@ def _capture_structure(fn, **kwargs):
 
     Returns {'invoke': <dict passed to chain.invoke>, 'system_text': <joined system prompt text>}.
     """
-    mock_response = MagicMock()
-    mock_response.events = []
+    # The writers now sanitize the returned Structured (#12503 follow-up), so the
+    # mocked chain response must be a real model, not a bare MagicMock.
+    mock_response = conv_proc.Structured()
 
     mock_chain = MagicMock()
     mock_chain.invoke.return_value = mock_response
@@ -389,7 +395,8 @@ def test_unique_prompt_routes_drop_legacy_cache_key_whenever_gateway_mode_is_on(
             return self
 
         def invoke(self, *_args, **_kwargs):
-            return MagicMock(events=[])
+            # Reprocess sanitizes the returned Structured; return a real model, not a MagicMock.
+            return conv_proc.Structured()
 
     class _LLM:
         def __or__(self, _parser):

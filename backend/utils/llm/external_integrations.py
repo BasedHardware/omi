@@ -1,18 +1,21 @@
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 from typing import Any, Dict, List, Optional, cast
 import pytz
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import ValidationError
 import database.action_items as action_items_db
+import database.daily_summaries as daily_summaries_db
+import database.memories as memories_db
 import database.users as users_db
 from models.conversation import Conversation
-from models.daily_summary_payload import DailySummaryPayload
+from models.daily_summary_payload import DailySummaryDayStatsPayload, DailySummaryPayload
 from models.structured import Structured
 from models.structured_extraction import StructuredExtraction
 from models.other import Person
+from utils.conversations.location import get_google_maps_location
 from utils.conversations.render import conversations_to_string
 from utils.llm.clients import get_llm, parser
 from utils.llm.usage_tracker import track_usage, Features
@@ -21,6 +24,11 @@ from utils.log_sanitizer import sanitize, sanitize_validation_error
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Read-time address fills per generated summary (see the pins loop below):
+# bounds geocode attempts — and therefore worst-case wall-clock — per summary
+# generation; pins past the cap keep an empty address ("Unknown" in the app).
+_DAILY_SUMMARY_GEOCODE_ATTEMPT_CAP = 10
 
 
 def _content_str(response: Any) -> str:
@@ -40,6 +48,8 @@ def _basic_daily_summary(
     total_duration_minutes: float,
     actual_action_items: List[Dict[str, Any]],
     locations: List[Dict[str, Any]],
+    stats: DailySummaryDayStatsPayload,
+    memories_learned: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     return {
         "id": str(uuid.uuid4()),
@@ -48,16 +58,13 @@ def _basic_daily_summary(
         "headline": "Your Day in Review",
         "overview": f"You had {total_conversations} conversations today.",
         "day_emoji": "📅",
-        "stats": {
-            "total_conversations": total_conversations,
-            "total_duration_minutes": int(total_duration_minutes),
-            "action_items_count": len(actual_action_items),
-        },
+        "stats": stats.model_dump(),
         "highlights": [],
         "action_items": actual_action_items,
         "unresolved_questions": [],
         "decisions_made": [],
         "knowledge_nuggets": [],
+        "memories_learned": list(memories_learned or []),
         "locations": locations,
     }
 
@@ -194,12 +201,19 @@ def generate_comprehensive_daily_summary(
     date_str: str,
     start_date_utc: Optional[datetime] = None,
     end_date_utc: Optional[datetime] = None,
+    memories_learned: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Generate a comprehensive daily summary with structured data for storage.
 
+    ``memories_learned`` is the already-selected review contract from
+    ``utils.memory.learned_today``. It is passed in rather than read here: this
+    module is the LLM summary builder, and making it reach into the memory stack
+    would put a Firestore read behind every caller and every test of it.
+
     Returns a dictionary matching the DailySummary model structure.
     """
+    learned_refs: List[Dict[str, Any]] = list(memories_learned or [])
     # Get user's timezone
     user_profile = users_db.get_user_profile(uid)
     user_tz_str = user_profile.get('time_zone', 'UTC')
@@ -231,13 +245,57 @@ def generate_comprehensive_daily_summary(
         (c.finished_at - c.started_at).total_seconds() / 60 for c in non_discarded if c.finished_at and c.started_at
     )
 
+    stats_start_date_utc = start_date_utc
+    stats_end_date_utc = end_date_utc
+    if stats_start_date_utc is None or stats_end_date_utc is None:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        start_of_day = user_tz.localize(datetime.combine(target_date, time.min))
+        end_of_day = user_tz.localize(datetime.combine(target_date, time.max))
+        stats_start_date_utc = stats_start_date_utc or start_of_day.astimezone(pytz.UTC)
+        stats_end_date_utc = stats_end_date_utc or end_of_day.astimezone(pytz.UTC)
+    assert stats_start_date_utc is not None and stats_end_date_utc is not None
+
+    memories_created = memories_db.count_memories_created(uid, stats_start_date_utc, stats_end_date_utc)
+    action_items_created = len(
+        action_items_db.get_action_items(
+            uid,
+            start_date=stats_start_date_utc,
+            end_date=stats_end_date_utc,
+        )
+    )
+    desktop_usage = daily_summaries_db.get_desktop_daily_usage(uid, date_str)
+    watching_minutes = int(round(desktop_usage.get('watching_seconds', 0) / 60))
+    proactive_moments = desktop_usage.get('proactive_cards_shown', 0)
+
     # Extract ALL locations from non-discarded conversations.
     # latitude/longitude are required floats on the Geolocation model, so guarding on
     # their truthiness wrongly drops a valid coordinate of exactly 0.0 (for example
     # longitude 0.0 on the prime meridian). Guard on the geolocation's presence instead.
     locations: List[Dict[str, Any]] = []
+    geocode_attempts = 0
     for c in non_discarded:
         if c.geolocation:
+            address = c.geolocation.address
+            if not address and geocode_attempts < _DAILY_SUMMARY_GEOCODE_ATTEMPT_CAP:
+                # Read-time fill for conversations created before write-time
+                # enrichment existed (notably the sync path): look the address up
+                # through the shared ~100m-rounded geocode cache, so a day whose
+                # conversations were already enriched costs no extra upstream call.
+                # A geocode miss or error leaves the address empty — the pin stays
+                # and the app labels it "Unknown"; a pin is never dropped.
+                # The attempt cap bounds wall-clock: cache hits are cheap, but
+                # attempts (hits and misses alike) are the deterministic bound —
+                # 10 attempts x the geocoder's 10s worst case stays far inside
+                # the summary job's budget. Pins past the cap keep an empty
+                # address and fall back to the app's "Unknown" label.
+                geocode_attempts += 1
+                try:
+                    geocoded = get_google_maps_location(c.geolocation.latitude, c.geolocation.longitude)
+                except Exception as error:
+                    logger.warning('daily summary address geocode failed error_type=%s', type(error).__name__)
+                    geocoded = None
+                if geocoded is not None:
+                    address = geocoded.address
             # Convert UTC time to user's local timezone
             local_time = None
             if c.started_at:
@@ -249,7 +307,7 @@ def generate_comprehensive_daily_summary(
                 {
                     "latitude": c.geolocation.latitude,
                     "longitude": c.geolocation.longitude,
-                    "address": c.geolocation.address,
+                    "address": address,
                     "conversation_id": c.id,
                     "time": local_time,
                 }
@@ -270,6 +328,16 @@ def generate_comprehensive_daily_summary(
                 }
             )
 
+    stats = DailySummaryDayStatsPayload(
+        total_conversations=total_conversations,
+        total_duration_minutes=int(total_duration_minutes),
+        action_items_count=len(actual_action_items),
+        memories_created=memories_created,
+        action_items_created=action_items_created,
+        watching_minutes=watching_minutes,
+        proactive_moments=proactive_moments,
+    )
+
     # Build conversation ID mapping for the LLM
     convo_id_map = {i + 1: c.id for i, c in enumerate(non_discarded)}
 
@@ -278,6 +346,7 @@ OUTPUT LANGUAGE: {output_language}. You MUST write every word of this summary in
 
 Today's date: {date_str}
 Conversations: {total_conversations}
+Daily stats: {memories_created} memories created, {action_items_created} action items created, {watching_minutes} minutes watched, {proactive_moments} proactive moments.
 
 Here are {user_name}'s conversations from today (numbered 1-{total_conversations}):
 ```
@@ -393,25 +462,34 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "headline": summary_data.headline,
             "overview": summary_data.overview,
             "day_emoji": summary_data.day_emoji,
-            "stats": {
-                "total_conversations": total_conversations,
-                "total_duration_minutes": int(total_duration_minutes),
-                "action_items_count": len(actual_action_items),
-            },
+            "stats": stats.model_dump(),
             "highlights": highlights,
             "action_items": actual_action_items,
             "unresolved_questions": unresolved_questions,
             "decisions_made": decisions_made,
             "knowledge_nuggets": knowledge_nuggets,
+            "memories_learned": learned_refs,
             "locations": locations,
         }
     except json.JSONDecodeError as e:
         logger.error("Failed to decode daily summary payload JSON: %s", sanitize(str(e)))
         return _basic_daily_summary(
-            date_str, total_conversations, total_duration_minutes, actual_action_items, locations
+            date_str,
+            total_conversations,
+            total_duration_minutes,
+            actual_action_items,
+            locations,
+            stats,
+            memories_learned=learned_refs,
         )
     except ValidationError as e:
         logger.error("Failed to validate daily summary payload: %s", sanitize_validation_error(cast(Any, e)))
         return _basic_daily_summary(
-            date_str, total_conversations, total_duration_minutes, actual_action_items, locations
+            date_str,
+            total_conversations,
+            total_duration_minutes,
+            actual_action_items,
+            locations,
+            stats,
+            memories_learned=learned_refs,
         )
