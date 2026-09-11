@@ -25,8 +25,30 @@ function array(value: unknown, limit: number): unknown[] {
   return value;
 }
 
-export function parseOmiFolderNames(body: string): Map<string, string> {
+const FOLDER_HEX_COLOR = /^#?[0-9A-Fa-f]{6}$/;
+
+export function omiFolderHexColor(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const color = value.trim();
+  if (!FOLDER_HEX_COLOR.test(color)) {
+    return undefined;
+  }
+  return (color.startsWith('#') ? color : `#${color}`).toUpperCase();
+}
+
+export function omiFolderFill(color: string, alpha: number): string {
+  const hex = color.startsWith('#') ? color.slice(1) : color;
+  return `rgba(${Number.parseInt(hex.slice(0, 2), 16)}, ${Number.parseInt(
+    hex.slice(2, 4),
+    16,
+  )}, ${Number.parseInt(hex.slice(4, 6), 16)}, ${alpha})`;
+}
+
+export function parseOmiFolders(body: string): OmiFolder[] {
   const rows = array(JSON.parse(body), 1000);
+  const folders: OmiFolder[] = [];
   const names = new Map<string, string>();
   for (const raw of rows) {
     const folder = object(raw);
@@ -38,16 +60,24 @@ export function parseOmiFolderNames(body: string): Map<string, string> {
       throw new FoldersError();
     }
     const name = visibleDisplayText(text(folder.name, 10000));
-    if (name !== '') {
-      names.set(id, name);
+    if (name === '') {
+      continue;
     }
+    names.set(id, name);
+    const color = omiFolderHexColor(folder.color);
+    folders.push(color === undefined ? {id, name} : {id, name, color});
   }
-  return names;
+  return folders;
+}
+
+export function parseOmiFolderNames(body: string): Map<string, string> {
+  return new Map(parseOmiFolders(body).map(folder => [folder.id, folder.name]));
 }
 
 export type OmiFolder = {
   id: string;
   name: string;
+  color?: string;
 };
 
 export async function loadOmiFolderNames(
@@ -67,20 +97,17 @@ export async function loadOmiFolderNames(
     return [];
   }
   try {
-    return [...parseOmiFolderNames(response.body)].map(([id, name]) => ({
-      id,
-      name,
-    }));
+    return parseOmiFolders(response.body);
   } catch {
     return [];
   }
 }
 
-export async function loadOmiFolderName(
+export async function loadOmiFolder(
   backend: OmiBackend,
   folderId: string,
   signal?: AbortSignal,
-): Promise<string | undefined> {
+): Promise<OmiFolder | undefined> {
   if (signal?.aborted) {
     return undefined;
   }
@@ -100,5 +127,19 @@ export async function loadOmiFolderName(
   ) {
     return undefined;
   }
-  return parseOmiFolderNames(response.body).get(folderId);
+  try {
+    return parseOmiFolders(response.body).find(
+      folder => folder.id === folderId,
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+export async function loadOmiFolderName(
+  backend: OmiBackend,
+  folderId: string,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  return (await loadOmiFolder(backend, folderId, signal))?.name;
 }

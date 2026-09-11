@@ -2025,6 +2025,114 @@ test('conversation list names GET folders without add or a write sheet', async (
   expect(textOf(renderer)).toContain('Inbox chat');
 });
 
+test('conversation list names GET folder color on the selected chip', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/folders') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'folder-work',
+            name: 'Work',
+            color: '#3B82F6',
+            icon: '💼',
+            conversation_count: 99,
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                kind: 'conversation',
+                id: 'chat:work',
+                title: 'Work standup',
+                summary: 'Notes',
+                searchableText: 'Work standup\nNotes',
+                createdAt: '2026-09-07T00:00:00.000Z',
+                updatedAt: '2026-09-07T00:01:00.000Z',
+                startedAt: '2026-09-07T00:00:00.000Z',
+                finishedAt: null,
+                starred: false,
+                status: 'in_progress',
+                source: 'chat',
+                visibility: 'private',
+                locked: false,
+                discarded: false,
+                folderId: 'folder-work',
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Work');
+  expect(tree).not.toContain('#3B82F6');
+  expect(tree).not.toContain('💼');
+  expect(tree).not.toContain('99');
+  expect(tree).not.toContain('Add');
+  const chip = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Show Work conversations',
+  );
+  const idle = Object.assign(
+    {},
+    ...(typeof chip.props.style === 'function'
+      ? chip.props.style({pressed: false})
+      : [chip.props.style]
+    )
+      .flat(Infinity)
+      .filter(entry => entry && typeof entry === 'object'),
+  );
+  expect(idle.backgroundColor).not.toBe('rgba(59, 130, 246, 0.15)');
+  await act(async () => {
+    chip.props.onPress();
+  });
+  const selectedChip = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Show Work conversations',
+  );
+  const selected = Object.assign(
+    {},
+    ...(typeof selectedChip.props.style === 'function'
+      ? selectedChip.props.style({pressed: false})
+      : [selectedChip.props.style]
+    )
+      .flat(Infinity)
+      .filter(entry => entry && typeof entry === 'object'),
+  );
+  expect(selected.backgroundColor).toBe('rgba(59, 130, 246, 0.15)');
+  expect(selected.borderColor).toBe('#3B82F6');
+  const label = Object.assign(
+    {},
+    ...[selectedChip.findAllByType(Text)[0]?.props.style]
+      .flat(Infinity)
+      .filter(entry => entry && typeof entry === 'object'),
+  );
+  expect(label.color).toBe('#3B82F6');
+  expect(textOf(renderer)).not.toContain('#3B82F6');
+});
+
 test('conversation list names a failed GET folders instead of empty success', async () => {
   const request = jest.fn(async request => {
     if (request.path === '/v1/folders') {

@@ -345,6 +345,7 @@ function LegacyConversationBody({
       ? calendarStart
       : calendarEnd;
   const folderName = visibleDisplayText(detail.folderName ?? '');
+  const folderColor = visibleDisplayText(detail.folderColor ?? '');
   const externalText = visibleDisplayText(detail.externalText ?? '');
   const showExternalTranscript =
     externalText !== '' &&
@@ -459,7 +460,14 @@ function LegacyConversationBody({
         return nodes;
       })}
       {folderName === '' ? null : (
-        <Text style={[styles.conversationDetailField, ink]}>{folderName}</Text>
+        <Text
+          style={[
+            styles.conversationDetailField,
+            ink,
+            folderColor === '' ? null : {color: folderColor},
+          ]}>
+          {folderName}
+        </Text>
       )}
       {conversation.discarded
         ? null

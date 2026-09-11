@@ -493,14 +493,19 @@ test('names GET folder name when folders resolve and omits otherwise', async () 
       return {
         id: 'folders',
         status: 200,
-        body: JSON.stringify([{id: 'folder-work', name: 'Work'}]),
+        body: JSON.stringify([
+          {id: 'folder-work', name: 'Work', color: '#3B82F6', icon: '💼'},
+        ]),
       };
     }
     return response({...fixture, folder_id: 'folder-work'});
   });
-  expect(
-    (await loadLegacyConversationDetail(backend, fixture.id)).folderName,
-  ).toBe('Work');
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({
+      folderName: 'Work',
+      folderColor: '#3B82F6',
+    }),
+  );
   mockRequest.mockImplementation(async (request: {path?: string}) => {
     if (request.path === '/v1/folders') {
       return {

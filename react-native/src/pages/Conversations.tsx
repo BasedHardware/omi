@@ -41,7 +41,11 @@ import {
 import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 import {goalProgressCopy, loadOmiGoals, type OmiGoal} from '../legacyOmiGoals';
-import {loadOmiFolderNames, type OmiFolder} from '../legacyOmiFolders';
+import {
+  loadOmiFolderNames,
+  omiFolderFill,
+  type OmiFolder,
+} from '../legacyOmiFolders';
 import {
   calendarCaptureGapSpan,
   captureGapHeaderCopy,
@@ -472,6 +476,12 @@ export function ConversationsPage({
                     style={({pressed}) => [
                       styles.conversationStarFilter,
                       selectedFolder && styles.conversationStarFilterActive,
+                      selectedFolder && folder.color !== undefined
+                        ? {
+                            backgroundColor: omiFolderFill(folder.color, 0.15),
+                            borderColor: folder.color,
+                          }
+                        : null,
                       pressed && styles.pressed,
                     ]}>
                     <Text
@@ -480,6 +490,9 @@ export function ConversationsPage({
                         styles.conversationStarFilterText,
                         selectedFolder &&
                           styles.conversationStarFilterTextActive,
+                        selectedFolder && folder.color !== undefined
+                          ? {color: folder.color}
+                          : null,
                       ]}>
                       {folder.name}
                     </Text>

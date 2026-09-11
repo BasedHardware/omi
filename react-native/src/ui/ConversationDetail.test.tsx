@@ -1469,6 +1469,52 @@ test('legacy conversation details name GET folder name and omit unresolved folde
   expect(omitted).not.toContain('folder-work');
 });
 
+test('legacy conversation details name GET folder color without hex copy', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        folderName: 'Work',
+        folderColor: '#3B82F6',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const view = render({
+    apiContract: 'omi',
+    conversation: {
+      ...conversation,
+      id: 'old-1',
+      folderId: 'folder-work',
+    },
+  });
+  expect(text(view)).toContain('Work');
+  expect(text(view)).not.toContain('#3B82F6');
+  const folder = view.root.find(
+    node =>
+      node.type === Text &&
+      (Array.isArray(node.props.children)
+        ? node.props.children
+        : [node.props.children]
+      ).includes('Work'),
+  );
+  const style = Object.assign(
+    {},
+    ...[folder.props.style]
+      .flat(Infinity)
+      .filter(entry => entry && typeof entry === 'object'),
+  );
+  expect(style.color).toBe('#3B82F6');
+});
+
 test('legacy conversation details name GET external_data text when the transcript is empty', () => {
   mockLegacy.mockReturnValue({
     result: {

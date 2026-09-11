@@ -6,7 +6,7 @@ import {
   transcriptSttProviderCopy,
   visibleDisplayText,
 } from './desktopReadClient';
-import {loadOmiFolderName} from './legacyOmiFolders';
+import {loadOmiFolder} from './legacyOmiFolders';
 import {loadOmiPeopleNames} from './legacyOmiPeople';
 import {loadOmiApps, type OmiAppChrome} from './legacyOmiApps';
 
@@ -32,6 +32,7 @@ export type LegacyConversationDetail = {
   photoCaptions?: string[];
   photoRows?: {caption?: string; imageUri?: string}[];
   folderName?: string;
+  folderColor?: string;
   peopleError?: string;
   appsError?: string;
   externalText?: string;
@@ -419,12 +420,10 @@ export async function loadLegacyConversationDetail(
     value.folder_id === undefined || value.folder_id === null
       ? undefined
       : visibleDisplayText(text(value.folder_id, 256));
-  const folderName =
+  const folder =
     folderId === undefined || folderId === ''
       ? undefined
-      : await loadOmiFolderName(backend, folderId, signal).catch(
-          () => undefined,
-        );
+      : await loadOmiFolder(backend, folderId, signal).catch(() => undefined);
   return {
     id,
     title: text(structured.title),
@@ -455,7 +454,12 @@ export async function loadLegacyConversationDetail(
             : {photoCaptions: photos.captions}),
           photoRows: photos.rows,
         }),
-    ...(folderName === undefined ? {} : {folderName}),
+    ...(folder === undefined
+      ? {}
+      : {
+          folderName: folder.name,
+          ...(folder.color === undefined ? {} : {folderColor: folder.color}),
+        }),
     ...(integrationText === undefined ? {} : {externalText: integrationText}),
     transcript,
   };
