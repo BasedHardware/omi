@@ -34,7 +34,13 @@ function optionalCount(value: unknown): number | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+  if (typeof value === 'string') {
+    if (!/^[+-]?[0-9]+$/.test(value)) {
+      throw new ImportJobError();
+    }
+    return Number(value);
+  }
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
     throw new ImportJobError();
   }
   return value;

@@ -116,6 +116,40 @@ test('names GET import job rows without inventing ETA or No imports yet', () => 
   expect(importJobRowCopy({id: 'job-4', status: 'queued'})).toBe('queued');
 });
 
+test('does not omit a neighboring import job when stored counts are integer strings', () => {
+  expect(
+    parseOmiImportJobs(
+      JSON.stringify([
+        {job_id: 'job-kept', status: 'completed'},
+        {
+          job_id: 'job-string',
+          status: 'completed',
+          conversations_created: '3',
+          conversations_skipped: '-1',
+          processed_files: '1',
+          total_files: '4',
+        },
+        {
+          job_id: 'job-negative',
+          status: 'completed',
+          conversations_created: -1,
+        },
+      ]),
+    ),
+  ).toEqual([
+    {id: 'job-kept', status: 'completed'},
+    {
+      id: 'job-string',
+      status: 'completed',
+      conversationsCreated: 3,
+      conversationsSkipped: -1,
+      processedFiles: 1,
+      totalFiles: 4,
+    },
+    {id: 'job-negative', status: 'completed', conversationsCreated: -1},
+  ]);
+});
+
 test('fails closed for malformed GET import jobs', () => {
   expect(() => parseOmiImportJobs(JSON.stringify({}))).toThrow();
   expect(() =>
@@ -135,7 +169,14 @@ test('fails closed for malformed GET import jobs', () => {
   expect(() =>
     parseOmiImportJobs(
       JSON.stringify([
-        {job_id: 'job-1', status: 'completed', conversations_created: -1},
+        {job_id: 'job-1', status: 'completed', conversations_created: 1.5},
+      ]),
+    ),
+  ).toThrow();
+  expect(() =>
+    parseOmiImportJobs(
+      JSON.stringify([
+        {job_id: 'job-1', status: 'completed', conversations_created: '3.0'},
       ]),
     ),
   ).toThrow();
