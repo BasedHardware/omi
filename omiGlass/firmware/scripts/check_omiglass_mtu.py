@@ -122,6 +122,7 @@ def run_behavioral_simulation() -> int:
                 pkt[AUDIO_PACKET_HEADER_SIZE:] = raw_audio[offset : offset + chunk_size]
 
                 mock_notify(pkt)
+                packet_index = (packet_index + 1) & 0xFFFF
                 offset += chunk_size
                 sub_index += 1
 
@@ -149,9 +150,10 @@ def run_behavioral_simulation() -> int:
                 # Check headers
                 pkt_seq = pkt[0] | (pkt[1] << 8)
                 pkt_sub = pkt[2]
-                if pkt_seq != packet_index:
+                expected_seq = (seq + idx) & 0xFFFF
+                if pkt_seq != expected_seq:
                     ok = False
-                    error_reasons.append(f"Packet sequence {pkt_seq} != expected {packet_index}")
+                    error_reasons.append(f"Packet sequence {pkt_seq} != expected {expected_seq}")
                 if pkt_sub != idx:
                     ok = False
                     error_reasons.append(f"Packet sub-index {pkt_sub} != expected {idx}")

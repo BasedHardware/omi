@@ -392,11 +392,10 @@ void broadcastAudioPacket(uint8_t *data, size_t len)
         audioDataCharacteristic->setValue(audio_packet_buffer, chunk_size + AUDIO_PACKET_HEADER_SIZE);
         audioDataCharacteristic->notify();
 
+        audioPacketIndex++; // Monotonically advance packet index per notification (matches Omi protocol)
         offset += chunk_size;
         sub_index++;
     }
-
-    audioPacketIndex++;
 }
 
 void processAudioTx()
