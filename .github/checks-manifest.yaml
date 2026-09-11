@@ -748,7 +748,7 @@ checks:
     reason: "#9843/#13144: semantic feature sentinels prove flags are active without compiling every unrelated Swift test target"
   - id: desktop-feature-sentinel-scope-test
     command: ["bash", "desktop/macos/tests/test-feature-sentinel-compile-scope.sh"]
-    triggers: ["desktop/macos/Desktop/Package.swift", "desktop/macos/tests/test-feature-sentinel-negative-control.sh", "desktop/macos/tests/test-feature-sentinel-compile-scope.sh"]
+    triggers: ["desktop/macos/Desktop/Package.swift", "desktop/macos/tests/test-feature-sentinel-negative-control.sh", "desktop/macos/tests/test-feature-sentinel-compile-scope.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13144: the feature sentinel must select its compile-only target and never regress to a package-wide --build-tests invocation"
   - id: desktop-hub-controller-ratchet
