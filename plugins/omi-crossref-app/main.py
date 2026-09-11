@@ -23,6 +23,8 @@ def clamp_max_results(value: int) -> int:
 
 
 _JATS_TAG = re.compile(r"</?jats:[^>]+>")
+# Require a non-word char before "<" so inequalities like a<b are preserved.
+_HTML_TAG = re.compile(r"(?<![A-Za-z0-9_])</?[a-zA-Z][^>]*>")
 
 
 def clean(text: Any) -> str:
@@ -31,7 +33,7 @@ def clean(text: Any) -> str:
     value = html.unescape(str(text)).strip()
     # Crossref abstracts often carry JATS markup; chat tools want plain text.
     value = _JATS_TAG.sub("", value)
-    value = re.sub(r"</?[a-zA-Z][^>]*>", "", value)
+    value = _HTML_TAG.sub("", value)
     return value.strip()
 
 

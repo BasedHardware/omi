@@ -10,3 +10,7 @@ def test_clean_strips_jats_paragraph_tags():
 
 def test_clean_unescapes_entities_and_strips_generic_tags():
     assert clean("A &amp; B <b>bold</b>") == "A & B bold"
+
+
+def test_clean_preserves_inequality_operators():
+    assert clean("If a<b, then c>d.") == "If a<b, then c>d."
