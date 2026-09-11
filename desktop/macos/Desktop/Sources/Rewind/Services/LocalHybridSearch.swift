@@ -16,18 +16,26 @@ struct LocalHybridSearch: Sendable {
   let runtime: LocalEmbeddingRuntime
   let authorization: LocalMutationAuthorization
 
+  enum RetrievalMode: Sendable { case keyword, vector, hybrid }
+
   /// FTS remains available if the selected local engine fails. No cloud step exists here.
   func search(
     query: String, engine: (any LocalEmbeddingService)?, startDate: Date? = nil,
     endDate: Date? = nil, appFilter: String? = nil, limit: Int = 50,
     maxScannedEmbeddings: Int = 20_000,
-    sourceKinds: Set<LocalEmbeddingSourceKind> = [.screenshot]
+    sourceKinds: Set<LocalEmbeddingSourceKind> = [.screenshot],
+    retrieval: RetrievalMode = .hybrid
   ) async throws -> [LocalHybridHit] {
     try authorization.require()
-    let keywords = try store.keywordCandidates(
-      query: query, startDate: startDate, endDate: endDate, appFilter: appFilter, sourceKinds: sourceKinds)
+    let keywords =
+      retrieval == .vector
+      ? []
+      : try store.keywordCandidates(
+        query: query, startDate: startDate, endDate: endDate, appFilter: appFilter, sourceKinds: sourceKinds)
     var vectors: [(candidate: LocalEmbeddingCandidate, score: Float)] = []
-    if let engine, let queryVector = await runtime.embed([query], task: .query, using: engine)?.first {
+    if retrieval != .keyword, let engine,
+      let queryVector = await runtime.embed([query], task: .query, using: engine)?.first
+    {
       var scanned = 0
       let budget = max(0, min(maxScannedEmbeddings, 20_000))
       while scanned < budget {
@@ -51,6 +59,14 @@ struct LocalHybridSearch: Sendable {
     }
     try authorization.require()
     try Task.checkCancellation()
+    if retrieval == .vector {
+      return vectors.prefix(max(0, min(limit, 50))).map { candidate, score in
+        LocalHybridHit(
+          sourceKind: candidate.sourceKind, sourceId: candidate.sourceId,
+          fusedScore: Double(score), matchedBy: .vector,
+          capturedAt: candidate.capturedAt, appName: candidate.appName)
+      }
+    }
     return Self.fuse(keywords: keywords, vectors: vectors.map(\.candidate), limit: limit)
   }
 
