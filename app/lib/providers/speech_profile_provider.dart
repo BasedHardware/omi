@@ -26,6 +26,7 @@ import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Enum for loading text states in speech profile
 enum SpeechProfileLoadingState { uploading, memorizing, personalizing, allSet }
@@ -514,6 +515,8 @@ class SpeechProfileProvider extends ChangeNotifier
       }
 
       SharedPreferencesUtil().hasSpeakerProfile = true;
+      PlatformManager.instance.analytics.speechProfileUploadSucceeded();
+      PlatformManager.instance.analytics.speechProfileEmbeddingStored();
       Logger.debug('Speaker profile saved to preferences');
 
       updateLoadingState(SpeechProfileLoadingState.personalizing);
@@ -549,6 +552,9 @@ class SpeechProfileProvider extends ChangeNotifier
   void completeAfterUploadFailure({required bool tooShort}) {
     uploadingProfile = false;
     notifyError(tooShort ? 'TOO_SHORT' : 'UPLOAD_FAILED');
+    PlatformManager.instance.analytics.speechProfileUploadFailed(
+      reason: tooShort ? 'TOO_SHORT' : 'UPLOAD_FAILED',
+    );
 
     // Still trigger conversation processing
     if (_processConversationCallback != null) {

@@ -1,16 +1,28 @@
+import hashlib
 import os
 import re
-from typing import Mapping, Optional, cast
+from typing import Any, Mapping, Optional, cast
 
+from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, Field
 
+from utils.byok import has_byok_keys
 from utils.llm.clients import get_llm
+from utils.llm.gateway_client import should_route_features_through_gateway
+from utils.llm.model_config import get_model_config
+from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, EXPLICIT_CACHE_OPTIONS, has_cacheable_prefix
 from utils.llm.temporal import current_date_in_tz
 import logging
 
 logger = logging.getLogger(__name__)
 
 Record = Mapping[str, object]
+
+# Kill switch for the gate's explicit prompt cache. Default on: the gate is the
+# single largest paid-tier OpenAI line and the whole point of the split prompt
+# below is that its prefix becomes readable. Set to a falsey value to fall back
+# to an unmarked (uncached, plain-input-rate) request without a deploy.
+MENTOR_GATE_PROMPT_CACHE_ENABLED_ENV = 'MENTOR_GATE_PROMPT_CACHE_ENABLED'
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +53,7 @@ class RelevanceResult(BaseModel):
     context_summary: str = Field(description="Brief summary of what user is discussing (1 sentence).")
 
 
-GATE_PROMPT = """You decide whether {user_name}'s current conversation contains something worth interrupting them about.
+GATE_PROMPT_STABLE = """You decide whether {user_name}'s current conversation contains something worth interrupting them about.
 
 Today is {current_date}. Treat this as the present when judging whether anything is upcoming, time-sensitive, or in the future. Dates in {current_date}'s year or later are normal and current; never decide a correctly stated date is wrong or in the future based on your own assumptions about the year.
 
@@ -67,11 +79,22 @@ IMPORTANT: Most conversations do NOT warrant a notification. Your default answer
 == {user_name}'S GOALS ==
 {goals_text}
 
-== CURRENT CONVERSATION ==
+"""
+
+# Everything after the goals block changes on every single gate call, so it must
+# live after the cache breakpoint. Splitting here is what makes the prefix above
+# readable at all: see utils/llm/prompt_cache.
+GATE_PROMPT_VOLATILE = """== CURRENT CONVERSATION ==
 {current_conversation}
 
 == RECENT NOTIFICATIONS (do not flag similar topics) ==
 {recent_notifications}"""
+
+# GATE_PROMPT is the concatenation of the two blocks above and is kept as the
+# single-string form the eval suites render. Production sends the two blocks as
+# separate content parts so the stable one can end on a cache breakpoint; the
+# bytes the model reads are identical either way.
+GATE_PROMPT = GATE_PROMPT_STABLE + GATE_PROMPT_VOLATILE
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +364,61 @@ def _format_recent_notifications(notifications: list[Record]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _env_flag_enabled(name: str, *, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
+
+
+def gate_cache_supported() -> bool:
+    """True only when the gate request actually reaches an OpenAI GPT-5.6 model.
+
+    The explicit-cache contract (``prompt_cache_options`` plus a
+    ``prompt_cache_breakpoint`` content part) is a GPT-5.6 request shape. A BYOK
+    user's key can reroute this feature to another provider entirely, and a
+    non-gateway deployment resolves the route from the QoS profile, so both are
+    checked before a provider-specific field is put on the wire.
+    """
+    if has_byok_keys():
+        return False
+    if should_route_features_through_gateway():
+        # generated_route_overrides.yaml pins the proactive_notification lane to
+        # openai/gpt-5.6-luna.
+        return True
+    model, provider = get_model_config('proactive_notification')
+    return provider == 'openai' and model.startswith('gpt-5.6')
+
+
+def gate_cache_enabled() -> bool:
+    return gate_cache_supported() and _env_flag_enabled(MENTOR_GATE_PROMPT_CACHE_ENABLED_ENV, default=True)
+
+
+def gate_cache_key(uid: str) -> str:
+    """Per-user routing key for the gate prefix.
+
+    Hashed rather than raw: the key is sent to the provider and only has to be
+    stable per user, not identifying. Versioned so a future prompt edit cannot
+    collide with prefixes written by the previous wording.
+    """
+    return f'omi-mentor-gate-v1-{hashlib.sha256(uid.encode("utf-8")).hexdigest()[:32]}'
+
+
+def build_gate_messages(stable: str, volatile: str, *, cache_enabled: bool) -> list[BaseMessage]:
+    """One user message whose stable half ends on an explicit cache breakpoint.
+
+    Two content parts of one message rather than two messages: the model reads
+    exactly the concatenated text it read before this change, while the provider
+    gains the boundary it needs to serve a read. Without the breakpoint the whole
+    prompt is one unbroken block, which is why this feature reports zero cached
+    tokens today (see utils/llm/prompt_cache).
+    """
+    stable_part: dict[str, Any] = {'type': 'text', 'text': stable}
+    if cache_enabled:
+        stable_part['prompt_cache_breakpoint'] = dict(EXPLICIT_CACHE_BREAKPOINT)
+    return [HumanMessage(content=[stable_part, {'type': 'text', 'text': volatile}])]
+
+
 def evaluate_relevance(
     user_name: str,
     user_facts: str,
@@ -348,23 +426,37 @@ def evaluate_relevance(
     current_messages: list[Record],
     recent_notifications: list[Record],
     current_date: Optional[str] = None,
+    uid: Optional[str] = None,
 ) -> RelevanceResult:
     """Cheap first pass: is this conversation worth generating a notification for?"""
     goals_text = _format_goals(goals)
     current_conversation = _format_current_conversation(current_messages, user_name)
     notifications_text = _format_recent_notifications(recent_notifications)
+    resolved_date = current_date or current_date_in_tz(None)
 
-    prompt = GATE_PROMPT.format(
+    stable = GATE_PROMPT_STABLE.format(
         user_name=user_name,
         user_facts=user_facts,
         goals_text=goals_text,
+        current_date=resolved_date,
+    )
+    volatile = GATE_PROMPT_VOLATILE.format(
         current_conversation=current_conversation,
         recent_notifications=notifications_text,
-        current_date=current_date or current_date_in_tz(None),
     )
 
-    with_parser = get_llm('proactive_notification').with_structured_output(RelevanceResult)
-    result = cast(RelevanceResult, with_parser.invoke(prompt))
+    # A prefix under the provider's floor is never served back, so marking it
+    # would buy a cache write nobody can read — strictly worse than plain input.
+    cache_enabled = bool(uid) and has_cacheable_prefix(stable) and gate_cache_enabled()
+    messages = build_gate_messages(stable, volatile, cache_enabled=cache_enabled)
+
+    llm = get_llm(
+        'proactive_notification',
+        cache_key=gate_cache_key(uid) if cache_enabled and uid else None,
+        prompt_cache_options=dict(EXPLICIT_CACHE_OPTIONS) if cache_enabled else None,
+    )
+    with_parser = llm.with_structured_output(RelevanceResult)
+    result = cast(RelevanceResult, with_parser.invoke(messages))
     return result
 
 
