@@ -71,8 +71,11 @@ class AudioCaptureService: @unchecked Sendable {
   private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
   private var deviceFormatListenerBlock: AudioObjectPropertyListenerBlock?
   private var isCapturing = false
-  /// When the current reconfiguration episode began; nil when not reconfiguring.
-  private var reconfigurationStartedAt: Date?
+  /// When the current reconfiguration episode began, on a monotonic clock; nil when not
+  /// reconfiguring. Deliberately not `Date`: this is a budget, and a wall clock can be
+  /// stepped by NTP or by the user mid-episode, which would either cut the retries short
+  /// or run them long. `DispatchTime` cannot move backwards.
+  private var reconfigurationStartedAt: DispatchTime?
   private var isTrackingOverrideDevice = false
 
   /// Optional explicit device to open instead of the system default input.
@@ -1004,7 +1007,7 @@ class AudioCaptureService: @unchecked Sendable {
     isReconfiguring = true
     // One clock per reconfiguration episode, not per attempt: the budget is how long the
     // device may take to come back, so it must span the whole retry chain.
-    reconfigurationStartedAt = Date()
+    reconfigurationStartedAt = DispatchTime.now()
 
     log("AudioCapture: Configuration changed, restarting with new device...")
     let routeHandler = onInputRouteChanged
@@ -1048,8 +1051,22 @@ class AudioCaptureService: @unchecked Sendable {
     retryCount: Int,
     elapsed: TimeInterval
   ) -> TimeInterval? {
-    guard elapsed < reconfigurationRetryWindow else { return nil }
-    return min(pow(2.0, Double(max(retryCount, 0))), maxReconfigurationRetryDelay)
+    let remaining = reconfigurationRetryWindow - elapsed
+    guard remaining > 0 else { return nil }
+    let backoff = min(pow(2.0, Double(max(retryCount, 0))), maxReconfigurationRetryDelay)
+    // Clamp to what is left: an unclamped backoff late in the episode schedules an attempt
+    // past the deadline the window is supposed to be, so the budget would mean one thing in
+    // the doc comment and another in the schedule.
+    return min(backoff, remaining)
+  }
+
+  /// Seconds between a monotonic mark and now. `DispatchTime` is unsigned and cannot run
+  /// backwards, so the only way `now` precedes `start` is a caller passing a future mark;
+  /// that reads as zero elapsed rather than underflowing into a vast interval.
+  nonisolated static func monotonicElapsed(since start: DispatchTime) -> TimeInterval {
+    let now = DispatchTime.now().uptimeNanoseconds
+    guard now > start.uptimeNanoseconds else { return 0 }
+    return TimeInterval(now - start.uptimeNanoseconds) / 1_000_000_000
   }
 
   private func reconfigureAfterChange(retryCount: Int) {
@@ -1153,7 +1170,7 @@ class AudioCaptureService: @unchecked Sendable {
   }
 
   private func retryOrGiveUp(retryCount: Int) {
-    let elapsed = reconfigurationStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+    let elapsed = reconfigurationStartedAt.map { Self.monotonicElapsed(since: $0) } ?? 0
     if let delay = Self.reconfigurationRetryDelay(retryCount: retryCount, elapsed: elapsed) {
       log("AudioCapture: Retrying in \(delay)s (\(Int(elapsed))s elapsed)...")
       audioQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
