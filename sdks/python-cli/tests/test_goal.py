@@ -185,6 +185,11 @@ def test_goal_delete(authed_profile, respx_mock, cli_runner) -> None:
         (["--clear-unit"], {"unit": None}),
         (["--title", "drink water"], {"title": "drink water"}),
         (["--clear-unit", "--current", "2"], {"unit": None, "current_value": 2.0}),
+        (["--clear-min"], {"min_value": None}),
+        (["--clear-max"], {"max_value": None}),
+        (["--clear-min", "--clear-max"], {"min_value": None, "max_value": None}),
+        (["--clear-min", "--max", "20"], {"min_value": None, "max_value": 20.0}),
+        (["--min", "1", "--clear-max"], {"min_value": 1.0, "max_value": None}),
     ],
 )
 def test_goal_update_unit_patch(authed_profile, respx_mock, cli_runner, options, expected) -> None:
@@ -206,4 +211,26 @@ def test_goal_update_rejects_set_and_clear_unit(authed_profile, respx_mock, monk
     error = json.loads(output.err)
     assert "--unit" in error["detail"]
     assert "--clear-unit" in error["detail"]
+    assert not respx_mock.calls
+
+
+@pytest.mark.parametrize(
+    ("argv_suffix", "flag", "clear_flag"),
+    [
+        (["--min", "1", "--clear-min"], "--min", "--clear-min"),
+        (["--max", "20", "--clear-max"], "--max", "--clear-max"),
+    ],
+)
+def test_goal_update_rejects_set_and_clear_bounds(
+    authed_profile, respx_mock, monkeypatch, capsys, argv_suffix, flag, clear_flag
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "goal", "update", "g1", *argv_suffix])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    output = capsys.readouterr()
+    assert output.out == ""
+    error = json.loads(output.err)
+    assert flag in error["detail"]
+    assert clear_flag in error["detail"]
     assert not respx_mock.calls
