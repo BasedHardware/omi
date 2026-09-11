@@ -10,9 +10,10 @@ extension AppState {
   /// (`RealtimeHubController+SessionDelegate`) reports a real-time
   /// transcription PROVIDER quota exhaustion (Deepgram/Soniox), a distinct
   /// axis from the AI chat provider. It must keep surfacing even when Local
-  /// chat is active but no self-hosted backend is configured for voice, so it
-  /// is intentionally excluded here. A future reason not in this set fails
-  /// closed (still shown) rather than silently swallowed.
+  /// chat is active, since voice always stays on Omi's Deepgram proxy
+  /// regardless of the active chat provider, so it is intentionally excluded
+  /// here. A future reason not in this set fails closed (still shown) rather
+  /// than silently swallowed.
   private static let freePlanPaywallReasons: Set<String> = [
     "trial_expired", "transcription", "ptt", "chat", "screen_capture",
   ]
@@ -32,9 +33,9 @@ extension AppState {
   ///   Local-specific clause exactly, so this backstop can never disagree
   ///   with the leaf gate it backstops (see `isScreenCaptureExemptFromPaywall`'s
   ///   doc comment for why cloud-assist re-introduces metering here).
-  /// - `"transcription"`: voice never runs through the local text model
-  ///   alone, only a configured self-hosted backend takes it off Omi's
-  ///   Deepgram proxy, so this needs `isLocalProviderWithSelfHostedBackend`.
+  /// - `"transcription"`: voice always runs through Omi's Deepgram proxy
+  ///   regardless of the active chat provider, so Local earns no exemption
+  ///   here either.
   /// - anything else (including `"trial_expired"`, `"realtime"`): no Local
   ///   exemption. `"trial_expired"` no longer has a Local-specific poster:
   ///   both `SystemCaptureControls` gates now post their own narrower reason,
@@ -46,8 +47,6 @@ extension AppState {
       return AIProvider.isLocalProviderActive
     case "screen_capture":
       return AIProvider.isLocalProviderFailingClosed
-    case "transcription":
-      return AIProvider.isLocalProviderWithSelfHostedBackend
     default:
       return false
     }
@@ -91,17 +90,12 @@ extension AppState {
     !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: .desktopIsPaywalled)
   }
 
-  /// True when transcription specifically is exempt from the paywall: either
-  /// the general BYOK exemption above, or because the local provider is
-  /// active with a self-hosted backend configured (Settings' "Local Backend
-  /// URL", see `AIProvider.isLocalProviderWithSelfHostedBackend`), which
-  /// routes voice transcription away from Omi's Deepgram proxy entirely.
-  /// Distinct from `isScreenCaptureExemptFromPaywall`: transcription needs the
-  /// extra backend-URL check because the Local provider alone only covers
-  /// text and screenshots, not the separate voice pipeline.
+  /// True when transcription specifically is exempt from the paywall: the
+  /// general BYOK exemption above. Voice always runs through Omi's Deepgram
+  /// proxy regardless of the active chat provider, so the Local provider
+  /// earns no exemption here, unlike `isScreenCaptureExemptFromPaywall`.
   nonisolated static var isTranscriptionExemptFromPaywall: Bool {
-    if !isPaywalledEffective { return true }
-    return AIProvider.isLocalProviderWithSelfHostedBackend
+    !isPaywalledEffective
   }
 
   /// True when screen capture / screenshot interpretation is exempt from the

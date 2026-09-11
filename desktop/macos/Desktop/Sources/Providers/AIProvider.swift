@@ -84,11 +84,6 @@ struct AIProvider: Identifiable {
   static let localBaseURLKey = "localLLMBaseURL"
   /// UserDefaults key for the local provider's model id.
   static let localModelIDKey = "localLLMModelID"
-  /// UserDefaults key for an optional self-hosted backend URL, used in place
-  /// of api.omi.me for voice transcription and memory/conversation sync when
-  /// the local provider is active. No default: empty/unset means "use the
-  /// normal cloud/dev resolution", same opt-in framing as the two keys above.
-  static let localBackendURLKey = "localBackendURL"
 
   /// UserDefaults key for the Local provider's "Context per turn" setting:
   /// how much of the kernel context snapshot the runtime sends on the first
@@ -236,9 +231,11 @@ struct AIProvider: Identifiable {
 
   /// Resolves the persisted `chatBridgeMode` UserDefaults value into a
   /// `ChatProvider.BridgeMode`, defaulting to `.piMono` the same way every
-  /// call site that reads this key already does. Single source of truth for
-  /// what was previously a 3-4 line lookup duplicated across ChatProvider,
-  /// TaskChatState, and (as of this fix) every background synthesis caller.
+  /// call site that reads this key already does. Replaces what was
+  /// previously a 3-4 line lookup duplicated across TaskChatState and every
+  /// background synthesis caller; a few older call sites in ChatProvider.swift
+  /// and AgentControlService.swift still read the raw key directly and have
+  /// not been migrated to this helper.
   static func resolveBridgeMode() -> ChatProvider.BridgeMode {
     let modeRaw =
       UserDefaults.standard.string(forKey: selectedProviderRawValueKey)
@@ -284,20 +281,6 @@ struct AIProvider: Identifiable {
   /// `VoiceTurnCoordinator`.
   static var voiceProviderResponseDeadline: TimeInterval? {
     isLocalProviderActive ? localVoiceProviderResponseDeadline : nil
-  }
-
-  /// True when the Local provider is active AND a self-hosted backend URL
-  /// (`localBackendURLKey`, Settings' "Local Backend URL") is configured:
-  /// the point at which voice transcription and memory/conversation sync
-  /// also leave Omi's cloud proxy path (see `DesktopBackendEnvironment`).
-  /// Narrower than `isLocalProviderActive`: a user who only pointed chat at
-  /// Local still sends audio to Omi's Deepgram proxy until this is also true.
-  /// The owner runs Local with this deliberately unset (no self-hosted
-  /// backend), which must stay a first-class, fully-supported configuration:
-  /// chat/PTT/screen-capture exemptions key off `isLocalProviderActive`
-  /// alone, and only transcription needs this narrower check.
-  static var isLocalProviderWithSelfHostedBackend: Bool {
-    isLocalProviderActive && !(UserDefaults.standard.string(forKey: localBackendURLKey) ?? "").isEmpty
   }
 
   /// Resolves the model id to use for an LLM call, given what it would use

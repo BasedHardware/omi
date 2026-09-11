@@ -67,7 +67,6 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
     [
       paywallKey,
       bridgeModeKey,
-      AIProvider.localBackendURLKey,
       AIProvider.connectorSynthesisModeKey,
       AIProvider.cloudAssistModeKey,
       AIProvider.contextBudgetPercentKey,
@@ -267,33 +266,14 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   /// bug: a user well within their trial can still exhaust the monthly
   /// question quota. PTT is exempt on `isLocalProviderActive` alone: the
   /// quota it enforces meters chat *questions*, and the completion a PTT turn
-  /// feeds always runs against the user's own server under Local regardless
-  /// of whether a self-hosted backend is configured for voice.
-  func testPushToTalkExemptWhenLocalProviderHasSelfHostedBackendConfigured() throws {
+  /// feeds always runs against the user's own server under Local.
+  func testPushToTalkExemptForLocalProvider() throws {
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
-    UserDefaults.standard.set("http://localhost:9999", forKey: AIProvider.localBackendURLKey)
     FloatingBarUsageLimiter.shared.applyQuota(try exhaustedFreeQuota())
 
     XCTAssertFalse(
       PushToTalkManager.shared.isPushToTalkUsageLimitBlocked,
-      "voice capture is local too once a self-hosted backend URL is configured, "
-        + "so PTT must not be blocked by the exhausted free-tier quota")
-  }
-
-  /// Local without a self-hosted backend still must not block PTT: the
-  /// question-quota this gate enforces is orthogonal to whether voice
-  /// transcription itself is local; that is `isTranscriptionExemptFromPaywall`'s
-  /// job, checked separately at transcription start. A chat completion fed by
-  /// PTT always runs against the user's own server under Local.
-  func testPushToTalkExemptForLocalProviderWithoutSelfHostedBackend() throws {
-    UserDefaults.standard.set("local", forKey: bridgeModeKey)
-    UserDefaults.standard.removeObject(forKey: AIProvider.localBackendURLKey)
-    FloatingBarUsageLimiter.shared.applyQuota(try exhaustedFreeQuota())
-
-    XCTAssertFalse(
-      PushToTalkManager.shared.isPushToTalkUsageLimitBlocked,
-      "the owner runs Local with no self-hosted backend URL configured at all, that must "
-        + "be a first-class configuration, and PTT's question quota does not apply to it")
+      "PTT's question quota does not apply under the Local provider")
   }
 
   /// Regression: the Omi provider is unaffected by this change.
@@ -589,76 +569,31 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
     await ownerFixture.restore()
   }
 
-  // MARK: - Launch-time race: predicate must not depend on the async model fetch
-
-  /// `isLocalProviderWithSelfHostedBackend`/`isLocalProviderActive` must read
-  /// true the instant `chatBridgeMode` and `localBackendURL` are persisted
-  /// (both plain synchronous `UserDefaults` strings), not after Settings'
-  /// async `{baseURL}/models` fetch resolves and picks a first
-  /// `localLLMModelID`. A fresh launch with a configured local base URL but
-  /// no model id yet (the fetch still in flight) must already be exempt.
-  /// This pins that no site can key its exemption off `localLLMModelID`
-  /// instead and reintroduce a launch-time window where a Local session is
-  /// wrongly paywalled.
-  func testHasLocalBackendConfiguredTrueBeforeModelIdIsEverFetched() {
-    UserDefaults.standard.set("local", forKey: bridgeModeKey)
-    UserDefaults.standard.set("http://localhost:9999", forKey: AIProvider.localBackendURLKey)
-    UserDefaults.standard.removeObject(forKey: AIProvider.localModelIDKey)
-
-    XCTAssertTrue(AIProvider.isLocalProviderActive)
-    XCTAssertTrue(
-      AIProvider.isLocalProviderWithSelfHostedBackend,
-      "the exemption predicate must not require a model id the async fetch hasn't set yet")
-  }
-
-  /// Parallel-review regression (paywall-review.md item 5): a self-hosted
-  /// backend URL left over from a prior Local session must not exempt an
-  /// active Omi/cloud session just because the URL string is still
-  /// persisted. `isLocalProviderWithSelfHostedBackend` always chains through
-  /// `isLocalProviderActive` first: pin that here so a future edit cannot
-  /// drop that clause without a test failing.
-  func testLocalProviderWithSelfHostedBackendFalseWhenConfiguredButOmiProviderActive() {
-    UserDefaults.standard.set("piMono", forKey: bridgeModeKey)
-    UserDefaults.standard.set("http://localhost:9999", forKey: AIProvider.localBackendURLKey)
-
-    XCTAssertFalse(AIProvider.isLocalProviderActive)
-    XCTAssertFalse(
-      AIProvider.isLocalProviderWithSelfHostedBackend,
-      "a configured backend URL must not exempt a session where Local isn't even the active provider")
-  }
-
   // MARK: - Central choke point: AppState.triggerUsageLimitPopup
 
-  /// The reason family this file's central check covers. A cached
-  /// `desktop_isPaywalled` flag left over from before the user switched to
-  /// Local (or before they configured a self-hosted backend) must not raise
-  /// the popup once Local is active with that backend configured. This is
-  /// the single choke point every `.showUsageLimitPopup` poster funnels
-  /// through (directly or via DesktopHomeView's notification listener).
-  /// "transcription" is the reason `SystemCaptureControls.setAudioRecording`
-  /// actually posts now (not "trial_expired", see the regression test below).
-  func testTriggerUsageLimitPopupSuppressedForTranscriptionWhenLocalBackendConfiguredEvenWithCachedTrialExpiredFlag() {
+  /// Regression: voice always runs through Omi's Deepgram proxy regardless of
+  /// the active chat provider, so "transcription" earns no Local exemption
+  /// here. "transcription" is the reason `SystemCaptureControls.setAudioRecording`
+  /// actually posts (not "trial_expired", see the regression test below).
+  func testTriggerUsageLimitPopupStaysForTranscriptionWhenLocalActive() {
     UserDefaults.standard.set(true, forKey: paywallKey)
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
-    UserDefaults.standard.set("http://localhost:9999", forKey: AIProvider.localBackendURLKey)
 
     let state = AppState()
     state.triggerUsageLimitPopup(reason: "transcription")
 
-    XCTAssertFalse(
+    XCTAssertTrue(
       state.showUsageLimitPopup,
-      "a stale cached trial_expired flag must not raise the transcription popup once "
-        + "Local has a self-hosted backend")
+      "transcription is not exempt under Local, it still goes through Omi's Deepgram proxy")
   }
 
   /// Regression: "trial_expired" no longer has a Local-specific poster (both
   /// `SystemCaptureControls` gates now post their own narrower reason), and
   /// must not get a free pass here just because Local happens to be active:
   /// it names genuine Omi-account trial state, which Local does not change.
-  func testTriggerUsageLimitPopupStaysForTrialExpiredReasonEvenWithLocalBackendConfigured() {
+  func testTriggerUsageLimitPopupStaysForTrialExpiredReasonEvenWhenLocalActive() {
     UserDefaults.standard.set(true, forKey: paywallKey)
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
-    UserDefaults.standard.set("http://localhost:9999", forKey: AIProvider.localBackendURLKey)
 
     let state = AppState()
     state.triggerUsageLimitPopup(reason: "trial_expired")
@@ -668,20 +603,19 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
       "trial_expired must not be silently exempted just because Local is active")
   }
 
-  /// "chat" and "ptt" are exempt on `isLocalProviderActive` alone, no
-  /// self-hosted backend required, since the completion they feed always
-  /// runs against the user's own server under Local.
-  func testTriggerUsageLimitPopupSuppressedForChatWhenLocalActiveWithoutBackendConfigured() {
+  /// "chat" and "ptt" are exempt on `isLocalProviderActive` alone, since the
+  /// completion they feed always runs against the user's own server under
+  /// Local.
+  func testTriggerUsageLimitPopupSuppressedForChatWhenLocalActive() {
     UserDefaults.standard.set(true, forKey: paywallKey)
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
-    UserDefaults.standard.removeObject(forKey: AIProvider.localBackendURLKey)
 
     let state = AppState()
     state.triggerUsageLimitPopup(reason: "chat")
 
     XCTAssertFalse(
       state.showUsageLimitPopup,
-      "chat must be exempt under Local even with no self-hosted backend configured at all")
+      "chat must be exempt under Local")
   }
 
   /// "screen_capture" mirrors `isScreenCaptureExemptFromPaywall` exactly: off
@@ -717,11 +651,9 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   /// Regression: the realtime-transcription-PROVIDER quota (Deepgram/Soniox
   /// exhaustion, `RealtimeHubController+SessionDelegate`) is a distinct axis
   /// from the AI chat provider and must keep surfacing even when Local chat
-  /// is active with a self-hosted backend configured. This central check
-  /// must never swallow it.
-  func testTriggerUsageLimitPopupStaysForRealtimeReasonEvenWithLocalBackendConfigured() {
+  /// is active. This central check must never swallow it.
+  func testTriggerUsageLimitPopupStaysForRealtimeReasonEvenWhenLocalActive() {
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
-    UserDefaults.standard.set("http://localhost:9999", forKey: AIProvider.localBackendURLKey)
 
     let state = AppState()
     state.triggerUsageLimitPopup(reason: "realtime")
@@ -744,14 +676,12 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
 
   // MARK: - freemium_threshold_reached (AppState+ListenEvents)
 
-  /// This server-pushed event used to check only transcription BYOK before
-  /// hard-stopping capture and setting the sticky `isPaywalled` flag. It must
-  /// also stand down once Local has a self-hosted backend configured. Voice
-  /// no longer runs through Omi's Deepgram proxy at all in that state, so a
-  /// stale/cached event must not stop transcription or raise the popup.
-  func testFreemiumThresholdEventIgnoredWhenLocalBackendConfigured() {
+  /// Regression: this server-pushed event checks only transcription BYOK
+  /// before hard-stopping capture and setting the sticky `isPaywalled` flag.
+  /// Voice always runs through Omi's Deepgram proxy regardless of the active
+  /// chat provider, so Local earns no exemption here either.
+  func testFreemiumThresholdEventStillHardStopsUnderLocalWithoutBYOK() {
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
-    UserDefaults.standard.set("http://localhost:9999", forKey: AIProvider.localBackendURLKey)
 
     let state = AppState()
     state.isPaywalled = false
@@ -760,10 +690,11 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
         type: "freemium_threshold_reached",
         raw: ["remaining_seconds": 0]))
 
-    XCTAssertFalse(
+    XCTAssertTrue(
       state.isPaywalled,
-      "Local with a self-hosted backend must not be hard-stopped by a freemium threshold event")
-    XCTAssertFalse(state.showUsageLimitPopup)
+      "Local without BYOK must still be hard-stopped by a freemium threshold event, "
+        + "voice always goes through Omi's Deepgram proxy")
+    XCTAssertTrue(state.showUsageLimitPopup)
   }
 
   // MARK: - Tool-call quota during a Local turn degrades gracefully
