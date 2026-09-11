@@ -832,6 +832,40 @@ function presentCanonicalFieldDisagrees(
   return Object.hasOwn(terminal, key) && terminal[key] !== message[key];
 }
 
+function attachmentCanonical(
+  attachment: NonNullable<ChatMessage["attachments"]>[number]
+): string {
+  return `{${(
+    [
+      ["contentReference", attachment.contentReference],
+      ["displayName", attachment.displayName],
+      ["id", attachment.id],
+      ["mediaType", attachment.mediaType],
+      ["sizeBytes", attachment.sizeBytes],
+    ] as const
+  )
+    .map(([key, value]) => `${JSON.stringify(key)}:${JSON.stringify(value)}`)
+    .join(",")}}`;
+}
+
+function presentAttachmentsDisagree(
+  terminal: ChatMessage,
+  message: ChatMessage
+): boolean {
+  if (!Object.hasOwn(terminal, "attachments")) return false;
+  const terminalAttachments = projectStoredChatAttachments(
+    terminal.attachments
+  );
+  const messageAttachments = projectStoredChatAttachments(message.attachments);
+  if (terminalAttachments === null || messageAttachments === null) return true;
+  if (terminalAttachments.length !== messageAttachments.length) return true;
+  return terminalAttachments.some(
+    (attachment, index) =>
+      attachmentCanonical(attachment) !==
+      attachmentCanonical(messageAttachments[index]!)
+  );
+}
+
 function historyOutcomeFromTerminal(
   events: GenerationEvent[],
   message: ChatMessage
@@ -848,7 +882,8 @@ function historyOutcomeFromTerminal(
     terminalMessage.sender !== "ai" ||
     TERMINAL_CANONICAL_KEYS.some((key) =>
       presentCanonicalFieldDisagrees(terminalMessage, message, key)
-    )
+    ) ||
+    presentAttachmentsDisagree(terminalMessage, message)
   ) {
     return null;
   }
