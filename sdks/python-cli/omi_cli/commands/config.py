@@ -93,6 +93,8 @@ def set_value(
         f"Set [bold]{escape(key)}[/bold] = {escape(display_value)} "
         f"on profile [bold]{escape(profile.name)}[/bold]."
     )
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit({"ok": True, "profile": profile.name, "key": key, "value": display_value})
 
 
 @profile_app.command("list", help="List all configured profiles.")
@@ -134,6 +136,8 @@ def profile_use(
     config.active_profile = name
     cfg.save(config)
     ctx.renderer.success(f"Active profile: [bold]{escape(name)}[/bold].")
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit({"ok": True, "active_profile": name})
 
 
 @profile_app.command("delete", help="Delete a profile and its credentials.")
@@ -151,3 +155,5 @@ def profile_delete(
     config.delete_profile(name)
     cfg.save(config)
     ctx.renderer.success(f"Deleted profile [bold]{escape(name)}[/bold].")
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit({"ok": True, "deleted_profile": name})
