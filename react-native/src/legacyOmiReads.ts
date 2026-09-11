@@ -249,8 +249,13 @@ export async function loadOmiMemories(
   const items = records.map(row => {
     const content = text(row.content),
       created = milliseconds(row.created_at);
+    const parsedConversationId =
+      row.conversation_id == null ? null : text(row.conversation_id);
     const conversation =
-      row.conversation_id == null ? null : id(row.conversation_id);
+      parsedConversationId === null ||
+      visibleDisplayText(parsedConversationId) === ''
+        ? null
+        : parsedConversationId;
     const ledgerSlot = visibleDisplayText(text(row.slot, ''));
     const ledgerKind = visibleDisplayText(text(row.kind, ''));
     const ledgerSchema = visibleDisplayText(

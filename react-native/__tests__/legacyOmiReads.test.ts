@@ -414,6 +414,45 @@ test('old empty memory content stays searchable instead of a blank row', async (
   });
 });
 
+test('old memories name empty GET conversation_id as omitted instead of hiding neighbors', async () => {
+  const {api} = backend([
+    {
+      id: 'empty-citation',
+      content: 'Prefers concise recaps.',
+      created_at: '2026-09-07T00:00:00Z',
+      conversation_id: '',
+    },
+    {
+      id: 'cited',
+      content: 'Likes walking.',
+      created_at: '2026-09-07T00:00:00Z',
+      conversation_id: 'old-conversation',
+    },
+  ]);
+  const result = await loadMemories(api);
+  expect(result.items).toHaveLength(2);
+  expect(result.items[0]).toMatchObject({
+    id: 'empty-citation',
+    citations: [],
+  });
+  expect(result.items[1]).toMatchObject({
+    id: 'cited',
+    citations: ['old-conversation'],
+  });
+  await expect(
+    loadMemories(
+      backend([
+        {
+          id: 'bad-citation',
+          content: 'Prefers concise recaps.',
+          created_at: '2026-09-07T00:00:00Z',
+          conversation_id: 1,
+        },
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi text is malformed');
+});
+
 test('old memories keep GET ledger slot, playbook body, baseline, and known devices', async () => {
   const {api} = backend([
     {
