@@ -430,41 +430,10 @@ class RewindViewModel: ObservableObject {
 
     searchTask = Task {
       do {
-        // Run FTS and vector search in parallel
-        async let ftsResults = RewindDatabase.shared.search(
-          query: trimmedQuery,
-          appFilter: selectedApp,
-          startDate: nil,
-          endDate: nil,
-          limit: 100
-        )
-        async let vectorResults = OCREmbeddingService.shared.searchSimilar(
-          query: trimmedQuery,
-          startDate: nil,
-          endDate: nil,
-          appFilter: selectedApp,
-          topK: 50
-        )
-
-        let fts = try await ftsResults
-        // Vector search failures are non-fatal — FTS results still show
-        let vector = (try? await vectorResults) ?? []
-        guard ownerSnapshot.isCurrent() else { return }
-
-        if !Task.isCancelled {
-          // Merge: FTS first, then add vector-only results above threshold
-          let ftsIds = Set(fts.compactMap { $0.id })
-          var merged = fts
-          for result in vector where result.similarity > 0.5 && !ftsIds.contains(result.screenshotId) {
-            if let screenshot = try? await RewindDatabase.shared.getScreenshot(id: result.screenshotId) {
-              guard ownerSnapshot.isCurrent() else { return }
-              merged.append(screenshot)
-            }
-          }
-          guard ownerSnapshot.isCurrent() else { return }
-          screenshots = merged
-          emitRewindSearchAnalytics(query: trimmedQuery, resultsCount: merged.count)
-        }
+        let merged = try await RewindScreenSearch.search(query: trimmedQuery, appFilter: selectedApp)
+        guard ownerSnapshot.isCurrent(), !Task.isCancelled else { return }
+        screenshots = merged
+        emitRewindSearchAnalytics(query: trimmedQuery, resultsCount: merged.count)
       } catch {
         if !Task.isCancelled {
           logError("RewindViewModel: Search failed: \(error)")

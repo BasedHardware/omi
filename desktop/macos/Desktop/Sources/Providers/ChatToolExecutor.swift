@@ -1783,7 +1783,7 @@ class ChatToolExecutor {
     let isLocal: Bool
   }
 
-  struct SemanticSearchDependencies: Sendable {
+  struct SemanticSearchDependencies: @unchecked Sendable {
     var runtime: LocalEmbeddingRuntime = .makeDefault()
     var legacySearch:
       @Sendable (String, Date, Date, String?, Int) async throws -> [(screenshotId: Int64, similarity: Float)] = {
@@ -1794,6 +1794,8 @@ class ChatToolExecutor {
     var screenshot: @Sendable (Int64) async throws -> Screenshot? = { id in
       try await RewindDatabase.shared.getScreenshot(id: id)
     }
+    var policy: ScreenEmbeddingPolicy? = nil
+    var defaults: UserDefaults? = .standard
   }
 
   /// Search screenshots using vector similarity
@@ -1819,7 +1821,9 @@ class ChatToolExecutor {
 
     do {
       let runtime = dependencies.runtime
-      let searchResults = try await ScreenHistorySearchRoute.search(runtime: runtime) { engine in
+      let searchResults = try await ScreenHistorySearchRoute.search(
+        runtime: runtime, policy: dependencies.policy, defaults: dependencies.defaults
+      ) { engine in
         guard let owner = RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else {
           throw LocalMutationAuthorizationError.revoked
         }

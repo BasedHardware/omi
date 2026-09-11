@@ -7,6 +7,7 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindOCRService.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindViewModel.swift
+  - desktop/macos/Desktop/Sources/Rewind/Services/RewindScreenSearch.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchBar.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchLayout.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindSurfaceLayout.swift
@@ -26,9 +27,10 @@ covers:
   # The span line, the retention note, and Older / Newer / Oldest capture — all inside the day
   # popover behind the timestamp pill, exercised by S2b.
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindHistoryReach.swift
-  # The blobs the semantic half of Rewind's search reads. S3c is the user-facing path into
-  # `OCREmbeddingService.searchSimilar` -> `readEmbeddingBatch`, which is the only caller; it runs
-  # unbounded and newest-first, so an all-time query is what proves the range and the ordering.
+  # The blobs the semantic half of Rewind's search reads on the paid/Gemini path.
+  # Free plans go through RewindScreenSearch → ScreenHistorySearchRoute (local/FTS)
+  # and never call OCREmbeddingService.searchSimilar. S3c is the user-facing path
+  # into search; paid still reaches `readEmbeddingBatch`.
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase+Embeddings.swift
   # Rewind is the page that holds keyboard focus itself so arrow keys work wherever the pointer is.
   # The track owns wheel/swipe input (S3b). The focus effect that came with it is what S3d looks for.
