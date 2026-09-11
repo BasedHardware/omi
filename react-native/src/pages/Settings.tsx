@@ -28,6 +28,11 @@ import {omiAuth, omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {parseSoftwarePlane, type SoftwarePlane} from '../v5BackendOrigin';
+import {
+  loadDesktopPreferences,
+  setDesktopPreference,
+  type LiveVoiceProvider,
+} from '../desktopSettingsClient';
 
 const sections = ['Account', 'Privacy', 'Developer'] as const;
 type SettingsSection = (typeof sections)[number];
@@ -120,6 +125,52 @@ function BackendPlaneRow({
   );
 }
 
+function LiveVoiceRow({
+  busy,
+  onSelect,
+  provider,
+}: {
+  busy: boolean;
+  onSelect: (provider: LiveVoiceProvider) => void;
+  provider: LiveVoiceProvider;
+}) {
+  const copy =
+    provider === 'gemini_live'
+      ? 'Uses models/gemini-3.1-flash-live-preview over Gemini Live. Fails closed if GEMINI_API_KEY is missing on the server.'
+      : 'Uses gpt-live-1 over OpenAI WebRTC. Fails closed if OPENAI_API_KEY is missing on the server.';
+  return (
+    <View style={styles.cloudRow}>
+      <View style={styles.cloudRowBody}>
+        <Text style={styles.cloudRowTitle}>Live voice</Text>
+        <Text style={styles.cloudRowMeta}>{copy}</Text>
+      </View>
+      <View>
+        {(
+          [
+            ['gpt_live', 'GPT Live 1'],
+            ['gemini_live', 'Gemini Live'],
+          ] as const
+        ).map(([value, label]) => (
+          <FocusPressable
+            accessibilityLabel={`Use ${label}`}
+            accessibilityRole="button"
+            accessibilityState={{selected: provider === value}}
+            disabled={busy}
+            key={value}
+            onPress={() => onSelect(value)}
+            style={({pressed}) => [
+              styles.cloudAction,
+              settingsStyles.touchAction,
+              pressed && styles.pressed,
+            ]}>
+            <Text style={styles.cloudActionText}>{label}</Text>
+          </FocusPressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export function SettingsPage({
   onSignIn,
   onSignOut,
@@ -146,11 +197,19 @@ export function SettingsPage({
     null,
   );
   const [stampedV5Origin, setStampedV5Origin] = useState<string | null>(null);
+  const [liveVoiceProvider, setLiveVoiceProvider] =
+    useState<LiveVoiceProvider>('gpt_live');
   const loadGeneration = useRef(0);
   const mounted = useRef(false);
 
   const reloadSoftwarePlane = useCallback(async () => {
     const backend = omiBackend;
+    try {
+      const prefs = await loadDesktopPreferences();
+      setLiveVoiceProvider(prefs.liveVoiceProvider);
+    } catch {
+      setLiveVoiceProvider('gpt_live');
+    }
     if (
       backend?.getSoftwarePlane === undefined ||
       backend.setSoftwarePlane === undefined
@@ -270,6 +329,22 @@ export function SettingsPage({
       const next = parseSoftwarePlane(await backend.setSoftwarePlane(plane));
       setSoftwarePlane(next);
       await reload();
+    } catch (reason) {
+      setActionError(desktopReadErrorCopy(reason));
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const selectLiveVoiceProvider = async (provider: LiveVoiceProvider) => {
+    if (pending !== null) {
+      return;
+    }
+    setPending('live-voice');
+    setActionError(null);
+    try {
+      const next = await setDesktopPreference('liveVoiceProvider', provider);
+      setLiveVoiceProvider(next.liveVoiceProvider);
     } catch (reason) {
       setActionError(desktopReadErrorCopy(reason));
     } finally {
@@ -520,6 +595,15 @@ export function SettingsPage({
           }}
           plane={softwarePlane}
           stampedOrigin={stampedV5Origin}
+        />
+      )}
+      {!browser && (
+        <LiveVoiceRow
+          busy={pending === 'live-voice'}
+          onSelect={provider => {
+            selectLiveVoiceProvider(provider).catch(() => undefined);
+          }}
+          provider={liveVoiceProvider}
         />
       )}
       <View accessibilityRole="tablist" style={styles.destinationTabs}>

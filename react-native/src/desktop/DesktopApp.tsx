@@ -25,6 +25,7 @@ import {DesktopHome, DesktopReadBanner} from './DesktopHome';
 import {AppsPage, LibraryPage, TasksPage} from './DesktopPages';
 import type {TaskMutationProps} from '../ui/TaskEditor';
 import {DesktopSettings} from './DesktopSettings';
+import type {DesktopPreferences} from '../desktopSettingsClient';
 import {DesktopChat} from './DesktopChat';
 import {DesktopRewind} from './DesktopRewind';
 import {useRewindCapture} from '../app/useRewindCapture';
@@ -85,6 +86,7 @@ type Props = TaskMutationProps & {
   onSend: () => void;
   onStop: () => void;
   onWorkspaceReload?: () => void;
+  onPreferencesChange?: (prefs: DesktopPreferences) => void;
 };
 
 export function DesktopApp({
@@ -111,6 +113,7 @@ export function DesktopApp({
   onCancelSignIn,
   onSignOut,
   onWorkspaceReload,
+  onPreferencesChange,
   outcomes,
   reads,
   readsPhase,
@@ -295,6 +298,7 @@ export function DesktopApp({
               onSignIn={onSignIn}
               onSignOut={onSignOut}
               onWorkspaceReload={onWorkspaceReload}
+              onPreferencesChange={onPreferencesChange}
               session={session}
               signingIn={signingIn}
               softwarePlaneLocked={chatBusy}

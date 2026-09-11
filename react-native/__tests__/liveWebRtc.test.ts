@@ -121,7 +121,11 @@ test('exchanges the SDP offer and follows the data channel lifecycle', async () 
     scope,
     async sdp => {
       offers.push(sdp);
-      return {sessionId: 'live_test', answerSdp: 'answer-sdp'};
+      return {
+        provider: 'gpt_live',
+        sessionId: 'live_test',
+        answerSdp: 'answer-sdp',
+      };
     },
     {onPhase: phase => phases.push(phase)},
   );
@@ -151,7 +155,11 @@ test('fails cleanly when microphone capture is rejected', async () => {
   const phases: LiveVoicePhase[] = [];
   const session = new LiveWebRtcSession(
     scope,
-    async () => ({sessionId: 'live_test', answerSdp: 'answer-sdp'}),
+    async () => ({
+      provider: 'gpt_live' as const,
+      sessionId: 'live_test',
+      answerSdp: 'answer-sdp',
+    }),
     {onPhase: phase => phases.push(phase)},
   );
   await session.start();

@@ -20,9 +20,11 @@ export const desktopPreferenceKeys = {
   vadGate: 'vadGateEnabled',
   openOmiShortcut: 'shortcut_askOmiEnabled',
   pushToTalk: 'shortcut_pttEnabled',
+  liveVoiceProvider: 'omi.live.voiceProvider',
 } as const;
 
 export type AudioRecordingMode = 'off' | 'always' | 'meetings';
+export type LiveVoiceProvider = 'gpt_live' | 'gemini_live';
 export type PermissionKind = 'screen' | 'microphone' | 'notifications';
 export type PermissionState = 'unknown' | 'granted' | 'denied';
 
@@ -40,6 +42,7 @@ export type DesktopPreferences = {
   vadGate: boolean;
   openOmiShortcut: boolean;
   pushToTalk: boolean;
+  liveVoiceProvider: LiveVoiceProvider;
   stampedV5Origin: string | null;
 };
 
@@ -67,6 +70,7 @@ const memoryPreferences: DesktopPreferences = {
   vadGate: true,
   openOmiShortcut: true,
   pushToTalk: true,
+  liveVoiceProvider: 'gpt_live',
   stampedV5Origin: null,
 };
 
@@ -79,6 +83,13 @@ export function parseAudioRecordingMode(value: unknown): AudioRecordingMode {
     return value;
   }
   return 'off';
+}
+
+export function parseLiveVoiceProvider(value: unknown): LiveVoiceProvider {
+  if (value === 'gemini_live') {
+    return 'gemini_live';
+  }
+  return 'gpt_live';
 }
 
 export function parseStampedV5Origin(value: unknown): string | null {
@@ -120,6 +131,7 @@ function snapshotFromRecord(
     vadGate: record.vadGate !== false,
     openOmiShortcut: record.openOmiShortcut !== false,
     pushToTalk: record.pushToTalk !== false,
+    liveVoiceProvider: parseLiveVoiceProvider(record.liveVoiceProvider),
     stampedV5Origin,
   };
 }

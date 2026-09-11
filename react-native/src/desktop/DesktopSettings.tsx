@@ -17,6 +17,7 @@ import {
   setDesktopPreference,
   type AudioRecordingMode,
   type DesktopPreferences,
+  type LiveVoiceProvider,
   type PermissionKind,
   type PermissionState,
 } from '../desktopSettingsClient';
@@ -39,6 +40,7 @@ type Props = {
   onSignIn: () => void;
   onSignOut: () => void | Promise<void>;
   onWorkspaceReload?: () => void;
+  onPreferencesChange?: (prefs: DesktopPreferences) => void;
   softwarePlaneLocked: boolean;
 };
 
@@ -180,6 +182,7 @@ export function DesktopSettings({
   onSignIn,
   onSignOut,
   onWorkspaceReload,
+  onPreferencesChange,
   session,
   signingIn,
   softwarePlaneLocked,
@@ -258,6 +261,7 @@ export function DesktopSettings({
       return;
     }
     setPrefs(next);
+    onPreferencesChange?.(next);
     reload().catch(() => undefined);
   };
 
@@ -293,35 +297,62 @@ export function DesktopSettings({
     return next;
   };
 
+  const liveVoiceLabel =
+    prefs.liveVoiceProvider === 'gemini_live' ? 'Gemini Live' : 'GPT Live 1';
   const advanced = (
-    <Row
-      copy={
-        softwarePlaneLocked
-          ? 'Stop the active response before switching backends.'
-          : prefs.softwarePlane === 'new'
-          ? prefs.stampedV5Origin != null
-            ? 'New sends v5 chat, capture, conversations, memories, tasks, and settings to the stamped origin. Account, apps, and privacy controls still use production api.omi.me.'
-            : 'New is selected, but no valid stamped v5 origin is configured.'
-          : 'Old backend uses your existing Omi account and api.omi.me.'
-      }
-      title="Backend"
-      trailing={
-        <Segmented
-          disabled={softwarePlaneLocked}
-          onChange={value => {
-            runAction(async () => {
-              await setPref(
-                'softwarePlane',
-                value === 'New backend' ? 'new' : 'old',
-              );
-              onWorkspaceReload?.();
-            });
-          }}
-          options={['Old backend', 'New backend'] as const}
-          value={prefs.softwarePlane === 'new' ? 'New backend' : 'Old backend'}
-        />
-      }
-    />
+    <>
+      <Row
+        copy={
+          softwarePlaneLocked
+            ? 'Stop the active response before switching backends.'
+            : prefs.softwarePlane === 'new'
+            ? prefs.stampedV5Origin != null
+              ? 'New sends v5 chat, capture, conversations, memories, tasks, and settings to the stamped origin. Account, apps, and privacy controls still use production api.omi.me.'
+              : 'New is selected, but no valid stamped v5 origin is configured.'
+            : 'Old backend uses your existing Omi account and api.omi.me.'
+        }
+        title="Backend"
+        trailing={
+          <Segmented
+            disabled={softwarePlaneLocked}
+            onChange={value => {
+              runAction(async () => {
+                await setPref(
+                  'softwarePlane',
+                  value === 'New backend' ? 'new' : 'old',
+                );
+                onWorkspaceReload?.();
+              });
+            }}
+            options={['Old backend', 'New backend'] as const}
+            value={
+              prefs.softwarePlane === 'new' ? 'New backend' : 'Old backend'
+            }
+          />
+        }
+      />
+      <Row
+        copy={
+          prefs.liveVoiceProvider === 'gemini_live'
+            ? 'Uses models/gemini-3.1-flash-live-preview over Gemini Live. Fails closed if GEMINI_API_KEY is missing on the server.'
+            : 'Uses gpt-live-1 over OpenAI WebRTC. Fails closed if OPENAI_API_KEY is missing on the server.'
+        }
+        title="Live voice"
+        trailing={
+          <Segmented
+            onChange={value => {
+              runAction(async () => {
+                const next: LiveVoiceProvider =
+                  value === 'Gemini Live' ? 'gemini_live' : 'gpt_live';
+                await setPref('liveVoiceProvider', next);
+              });
+            }}
+            options={['GPT Live 1', 'Gemini Live'] as const}
+            value={liveVoiceLabel}
+          />
+        }
+      />
+    </>
   );
 
   const general = (

@@ -24,6 +24,7 @@ static NSString *OmiDesktopDefaultsKey(NSString *preference) {
       @"vadGate" : @"vadGateEnabled",
       @"openOmiShortcut" : @"shortcut_askOmiEnabled",
       @"pushToTalk" : @"shortcut_pttEnabled",
+      @"liveVoiceProvider" : @"omi.live.voiceProvider",
     };
   });
   return keys[preference];
@@ -33,6 +34,7 @@ static NSDictionary *OmiDesktopPreferenceSnapshot(void) {
   NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
   NSString *audioMode = [defaults stringForKey:@"audioRecordingMode"] ?: @"off";
   NSString *softwarePlane = [defaults stringForKey:@"omi.backend.softwarePlane"];
+  NSString *liveVoiceProvider = [defaults stringForKey:@"omi.live.voiceProvider"] ?: @"gpt_live";
   NSString *stampedV5Origin = NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"];
   return @{
     @"softwarePlane" : softwarePlane ?: NSNull.null,
@@ -56,6 +58,7 @@ static NSDictionary *OmiDesktopPreferenceSnapshot(void) {
         ? YES : [defaults boolForKey:@"shortcut_askOmiEnabled"]),
     @"pushToTalk" : @([defaults objectForKey:@"shortcut_pttEnabled"] == nil
         ? YES : [defaults boolForKey:@"shortcut_pttEnabled"]),
+    @"liveVoiceProvider" : liveVoiceProvider,
   };
 }
 

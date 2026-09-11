@@ -481,8 +481,24 @@ export async function handleLiveSession(
       result.retryable
     );
   }
+  if (result.provider === "gemini_live") {
+    return json(
+      {
+        provider: "gemini_live",
+        session: { id: result.sessionId },
+        transport: {
+          type: "gemini_ws",
+          token: result.token,
+          model: result.model,
+          url: result.url,
+        },
+      },
+      201
+    );
+  }
   return json(
     {
+      provider: "gpt_live",
       session: { id: result.sessionId },
       transport: { type: "webrtc", sdp: result.answerSdp },
     },
