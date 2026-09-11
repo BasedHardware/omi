@@ -377,6 +377,7 @@ function firebaseUnavailableRetryAfter(
     return undefined;
   }
   if (method === "GET" && pathname === "/v1/chat-messages") return "60";
+  if (method === "POST" && pathname === "/v1/chat-messages") return "60";
   if (method === "GET" && pathname === "/v1/settings") return "60";
   if (
     method === "GET" &&

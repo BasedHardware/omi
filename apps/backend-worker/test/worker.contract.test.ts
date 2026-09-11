@@ -854,7 +854,7 @@ describe("worker request contract", () => {
         executionContext as never
       );
       expect(chatPost.status).toBe(503);
-      expect(chatPost.headers.get("retry-after")).toBeNull();
+      expect(chatPost.headers.get("retry-after")).toBe("60");
       expect((await chatPost.json()) as unknown).toEqual(unavailable);
       expect(accountCalls).toEqual([]);
     } finally {
