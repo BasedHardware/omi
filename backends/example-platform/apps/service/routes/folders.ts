@@ -10,7 +10,7 @@ import type { DevPrincipal } from "../auth/dev-token";
 import type { PreparedFoldersRead } from "../composition/folders-read";
 import {
   UnprojectableFolderRecordError,
-  assertProjectableFolderClock,
+  assertProjectableFolderIdentity,
   readFoldersPage,
 } from "../composition/folders-read";
 import type { ServedCounter } from "../observability/served-count";
@@ -121,7 +121,7 @@ export const registerFolderRoutes = (
     const folders = deps.store.listFolders(principal.uid);
     try {
       for (const record of folders) {
-        assertProjectableFolderClock(record);
+        assertProjectableFolderIdentity(record);
       }
     } catch (error) {
       if (error instanceof UnprojectableFolderRecordError) {

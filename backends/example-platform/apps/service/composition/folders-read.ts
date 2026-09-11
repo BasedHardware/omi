@@ -263,7 +263,7 @@ const isoToMs = (value: string): number => {
 export const assertProjectableFolderRecord = (
   record: OrderedFolderRecord["record"],
 ): void => {
-  if (!OPAQUE_REF_PATTERN.test(record.id)) throw new UnprojectableFolderRecordError();
+  assertProjectableFolderIdentity(record);
   if (typeof record.name !== "string") throw new UnprojectableFolderRecordError();
   if (record.description !== null && typeof record.description !== "string") {
     throw new UnprojectableFolderRecordError();
@@ -273,6 +273,12 @@ export const assertProjectableFolderRecord = (
   if (typeof record.order !== "number" || !Number.isFinite(record.order)) {
     throw new UnprojectableFolderRecordError();
   }
+};
+
+export const assertProjectableFolderIdentity = (
+  record: Pick<OrderedFolderRecord["record"], "id" | "created_at" | "updated_at">,
+): void => {
+  if (!OPAQUE_REF_PATTERN.test(record.id)) throw new UnprojectableFolderRecordError();
   assertProjectableFolderClock(record);
 };
 
