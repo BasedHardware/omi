@@ -3218,6 +3218,49 @@ test('keeps empty catalogue names instead of failing the Apps page', () => {
   );
 });
 
+test('names GET subscription quota integer strings instead of omitting Plan usage', () => {
+  expect(
+    parseCloudSubscription(
+      {
+        plan: 'plus',
+        status: 'active',
+        transcription_seconds_used: '90',
+        transcription_seconds_limit: '1800',
+        words_transcribed_used: '12',
+        words_transcribed_limit: '10000',
+        insights_gained_used: '3',
+        insights_gained_limit: '500',
+        chat_quota_used: '5.5',
+        chat_quota_unit: 'messages',
+        subscription: {
+          plan: 'plus',
+          status: 'active',
+          limits: {
+            chat_questions_per_month: '100',
+            chat_cost_usd_per_month: '20.5',
+          },
+        },
+      },
+      'Subscription response',
+    ),
+  ).toEqual(
+    expect.objectContaining({
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: 90,
+      transcriptionSecondsLimit: 1800,
+      wordsTranscribedUsed: 12,
+      wordsTranscribedLimit: 10000,
+      insightsGainedUsed: 3,
+      insightsGainedLimit: 500,
+      chatQuotaUsed: 5.5,
+      chatQuotaUnit: 'messages',
+      chatQuestionsPerMonth: 100,
+      chatCostUsdPerMonth: 20.5,
+    }),
+  );
+});
+
 test('keeps empty subscription plan tokens instead of failing Settings Plan', () => {
   expect(
     parseCloudSubscription({plan: '', status: ''}, 'Subscription response'),

@@ -115,12 +115,25 @@ function optionalBoolean(value: unknown): boolean | null {
 }
 
 function optionalInteger(value: unknown): number | null {
+  if (typeof value === 'string') {
+    if (!/^[+-]?[0-9]+$/.test(value)) {
+      return null;
+    }
+    return Number(value);
+  }
   return typeof value === 'number' && Number.isSafeInteger(value)
     ? value
     : null;
 }
 
 function optionalFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (value.trim() === '' || !Number.isFinite(parsed)) {
+      return null;
+    }
+    return parsed;
+  }
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
