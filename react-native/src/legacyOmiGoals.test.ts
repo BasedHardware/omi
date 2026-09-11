@@ -45,6 +45,36 @@ test('caps parsed GET goals at four after empty titles', () => {
   expect(rows.map(row => row.id)).toEqual(['g1', 'g2', 'g3', 'g4']);
 });
 
+test('does not omit a neighboring titled goal when stored metrics cannot project', () => {
+  const rows = parseOmiGoals(
+    JSON.stringify([
+      {
+        id: 'goal-read',
+        title: 'Read 20 books',
+        current_value: 3,
+        target_value: 10,
+      },
+      {
+        id: 'goal-string',
+        title: 'Walk daily',
+        current_value: '1.5',
+        target_value: '4',
+      },
+      {id: 'goal-missing', title: 'Missing metrics', target_value: 10},
+      {
+        id: 'goal-object',
+        title: 'Object metrics',
+        current_value: {value: 1},
+        target_value: 2,
+      },
+    ]),
+  );
+  expect(rows).toEqual([
+    {id: 'goal-read', title: 'Read 20 books', current: 3, target: 10},
+    {id: 'goal-string', title: 'Walk daily', current: 1.5, target: 4},
+  ]);
+});
+
 test('fails closed for malformed GET goals', () => {
   expect(() => parseOmiGoals(JSON.stringify({id: 'goal-1'}))).toThrow();
   expect(() =>
@@ -52,18 +82,6 @@ test('fails closed for malformed GET goals', () => {
       JSON.stringify([
         {id: 'goal-1', title: 1, current_value: 1, target_value: 2},
       ]),
-    ),
-  ).toThrow();
-  expect(() =>
-    parseOmiGoals(
-      JSON.stringify([
-        {id: 'goal-1', title: 'Read', current_value: '3', target_value: 10},
-      ]),
-    ),
-  ).toThrow();
-  expect(() =>
-    parseOmiGoals(
-      JSON.stringify([{id: 'goal-1', title: 'Read', target_value: 10}]),
     ),
   ).toThrow();
   expect(() =>
@@ -92,6 +110,29 @@ test('loadOmiGoals names resolved GET goals and omits failures', async () => {
   const backend = {request} as unknown as OmiBackend;
   expect(await loadOmiGoals(backend)).toEqual([
     {id: 'goal-read', title: 'Read 20 books', current: 3, target: 10},
+  ]);
+  request.mockResolvedValueOnce({
+    id: 'goals',
+    status: 200,
+    body: JSON.stringify([
+      {
+        id: 'goal-read',
+        title: 'Read 20 books',
+        current_value: 3,
+        target_value: 10,
+      },
+      {
+        id: 'goal-string',
+        title: 'Walk daily',
+        current_value: '1.5',
+        target_value: '4',
+      },
+      {id: 'goal-missing', title: 'Missing metrics', target_value: 10},
+    ]),
+  });
+  expect(await loadOmiGoals(backend)).toEqual([
+    {id: 'goal-read', title: 'Read 20 books', current: 3, target: 10},
+    {id: 'goal-string', title: 'Walk daily', current: 1.5, target: 4},
   ]);
   expect(request).toHaveBeenCalledWith({
     id: expect.any(String),

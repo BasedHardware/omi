@@ -30,11 +30,15 @@ function array(value: unknown, limit: number): unknown[] {
   return value;
 }
 
-function finiteNumber(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new GoalError();
+function goalMetric(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
   }
-  return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 export type OmiGoal = {
@@ -73,11 +77,16 @@ export function parseOmiGoals(body: string): OmiGoal[] {
     if (title === '') {
       continue;
     }
+    const current = goalMetric(row.current_value);
+    const target = goalMetric(row.target_value);
+    if (current === null || target === null) {
+      continue;
+    }
     items.push({
       id,
       title,
-      current: finiteNumber(row.current_value),
-      target: finiteNumber(row.target_value),
+      current,
+      target,
     });
   }
   return items;
