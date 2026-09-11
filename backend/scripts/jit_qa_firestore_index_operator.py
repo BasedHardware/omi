@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""Reconcile the bounded Firestore schema required by the isolated JIT QA path.
+"""Reconcile the Firestore composite schema required by the isolated JIT QA path.
 
-The checked-in manifest is the source of truth, but the QA database is a
-separate development database that must not receive the full production
-manifest merely to exercise JIT history and entity-timeline reads.  This
-operator validates the complete generated manifest, selects a bounded set of named query
-requirements from it, and delegates inventory/provisioning/waiting to the
-shared Firestore reconciler.
+The checked-in manifest is the source of truth.  The QA database is a separate
+development database, and the named QA app now runs the full shared desktop
+path against it for real working days, so every composite the registry
+declares must be servable there: each registry entry was added because a
+production query needs it, and a fresh database provisioned from a subset
+returns ``FailedPrecondition`` on the first read that reaches an unselected
+query (measured 2026-09-10 on ``action_items`` and 2026-09-11 on
+``chat_first_deferrals`` while the bounded plan reported "none missing").
+This operator validates the complete generated manifest, selects every
+registry composite from it, keeps the QA-only single-field target explicit,
+and delegates inventory/provisioning/waiting to the shared Firestore
+reconciler.  Project, database, and confirmation stay fixed.
 """
 
 from __future__ import annotations
@@ -22,25 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from database.firestore_index_registry import (
-    ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY,
-    ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
-    CURRENT_CHAT_SESSION_ORDERED_QUERY,
-    DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY,
-    DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY,
-    DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY,
-    DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY,
-    DAILY_SWEEP_ACTIVE_FACT_SUBJECT_CONTENT_QUERY,
-    DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY,
-    ENTITY_TIMELINE_CONVERSATIONS_QUERY,
-    FINALIZATION_OLDEST_NONTERMINAL_QUERY,
-    INDEX_ONLY_REQUIREMENTS,
-    MESSAGES_BY_APP_ORDERED_QUERY,
-    MESSAGES_BY_SESSION_ORDERED_QUERY,
-    UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
-    UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
-    UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
-)
+from database.firestore_index_registry import INDEX_REQUIREMENTS
 from scripts import reconcile_firestore_indexes as reconciler
 
 PROJECT = "based-hardware-dev"
@@ -77,46 +65,12 @@ class FieldIndexTarget:
         }
 
 
-def _index_only_requirement(identifier: str):
-    """Select a registry composite that no ``FirestoreQuerySpec`` builds (index-only)."""
-    for requirement in INDEX_ONLY_REQUIREMENTS:
-        if requirement.identifier == identifier:
-            return requirement
-    raise KeyError(f"index-only requirement {identifier} is not declared in the registry")
-
-
-TARGET_REQUIREMENTS = (
-    UNIVERSAL_CANONICAL_LIST_SCAN_QUERY.index_requirement,
-    ENTITY_TIMELINE_CONVERSATIONS_QUERY.index_requirement,
-    UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY.index_requirement,
-    UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY.index_requirement,
-    DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.index_requirement,
-    DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY.index_requirement,
-    DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY.index_requirement,
-    DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY.index_requirement,
-    DAILY_SWEEP_ACTIVE_FACT_SUBJECT_CONTENT_QUERY.index_requirement,
-    DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY.index_requirement,
-    # The backend startup health gauge runs this query even when QA leaves
-    # Cloud Tasks finalization dispatch in its safe inline default.
-    # Keep the existing production registry requirement in the bounded QA set.
-    FINALIZATION_OLDEST_NONTERMINAL_QUERY.index_requirement,
-    # The named QA app exercises the shared desktop/mobile chat path.  Include
-    # the timestamped session shape and both message scopes so a fresh QA
-    # database does not rely on production-only indexes. The legacy session
-    # fallback uses Firestore's automatic same-direction key index and is
-    # intentionally absent from the generated composite manifest.
-    CURRENT_CHAT_SESSION_ORDERED_QUERY.index_requirement,
-    MESSAGES_BY_APP_ORDERED_QUERY.index_requirement,
-    MESSAGES_BY_SESSION_ORDERED_QUERY.index_requirement,
-    # The named QA app's signed-in startup reads its task dashboard and scores
-    # through GET /v1/action-items (due-date and created-date ranges with the
-    # ``completed`` equality) and GET /v1/scores. Without these two composites
-    # every such read returned 500 on the isolated database while the JIT
-    # plan still reported "none missing" (measured 2026-09-10).
-    ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY.index_requirement,
-    ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY.index_requirement,
-    _index_only_requirement("action_items_completed_created_newest_first"),
-)
+# Every registry composite.  The registry is exactly the set production is
+# reconciled against, so selecting all of it makes the isolated QA database
+# serve whatever shared query the QA app reaches next instead of failing one
+# path per working day.  QA-only extras that must never reach production stay
+# in ``TARGET_FIELD_INDEXES`` below.
+TARGET_REQUIREMENTS = INDEX_REQUIREMENTS
 
 # Firestore returns COLLECTION_GROUP_ASC for this query as a single-field
 # collection-group configuration.  It must not be represented as a one-field
