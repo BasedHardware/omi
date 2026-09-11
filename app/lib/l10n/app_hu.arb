@@ -157,6 +157,7 @@
     "appAccessDesc": "A következő alkalmazások férhetnek hozzá az adataidhoz. Érintsd meg az alkalmazást az engedélyek kezeléséhez.",
     "noAppsExternalAccess": "Egyik telepített alkalmazás sem rendelkezik külső hozzáféréssel az adataidhoz.",
     "deviceName": "Eszköz neve",
+    "deviceNameStoredOnPhone": "Csak ezen a telefonon tárolva.",
     "deviceId": "Eszköz azonosító",
     "firmware": "Firmware",
     "sdCardSync": "SD kártya szinkronizálás",

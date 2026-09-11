@@ -633,6 +633,7 @@
         "description": "Empty state for app access"
     },
     "deviceName": "Pangalan ng Device",
+    "deviceNameStoredOnPhone": "Naka-save lang sa teleponong ito.",
     "@deviceName": {
         "description": "Device name label"
     },

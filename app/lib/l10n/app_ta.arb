@@ -633,6 +633,7 @@
         "description": "Empty state for app access"
     },
     "deviceName": "சாதன பெயர்",
+    "deviceNameStoredOnPhone": "இந்த தொலைபேசியில் மட்டுமே சேமிக்கப்படுகிறது.",
     "@deviceName": {
         "description": "Device name label"
     },

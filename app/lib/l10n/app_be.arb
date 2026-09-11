@@ -633,6 +633,7 @@
         "description": "Empty state for app access"
     },
     "deviceName": "Імя прылады",
+    "deviceNameStoredOnPhone": "Захоўваецца толькі на гэтым тэлефоне.",
     "@deviceName": {
         "description": "Device name label"
     },

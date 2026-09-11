@@ -499,6 +499,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deviceName => 'Názov zariadenia';
 
   @override
+  String get deviceNameStoredOnPhone => 'Uložené iba v tomto telefóne.';
+
+  @override
   String get deviceId => 'ID zariadenia';
 
   @override

@@ -498,6 +498,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deviceName => 'Enhedsnavn';
 
   @override
+  String get deviceNameStoredOnPhone => 'Gemt kun på denne telefon.';
+
+  @override
   String get deviceId => 'Enheds-ID';
 
   @override

@@ -496,6 +496,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceName => 'Laitteen nimi';
 
   @override
+  String get deviceNameStoredOnPhone => 'Tallennettu vain tähän puhelimeen.';
+
+  @override
   String get deviceId => 'Laitteen tunnus';
 
   @override

@@ -157,6 +157,7 @@
     "appAccessDesc": "De volgende apps hebben toegang tot je gegevens. Tik op een app om de machtigingen te beheren.",
     "noAppsExternalAccess": "Geen geïnstalleerde apps hebben externe toegang tot je gegevens.",
     "deviceName": "Apparaatnaam",
+    "deviceNameStoredOnPhone": "Alleen op deze telefoon opgeslagen.",
     "deviceId": "Apparaat-ID",
     "firmware": "Firmware",
     "sdCardSync": "SD-kaart synchronisatie",

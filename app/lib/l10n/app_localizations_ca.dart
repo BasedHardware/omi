@@ -500,6 +500,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deviceName => 'Nom del dispositiu';
 
   @override
+  String get deviceNameStoredOnPhone => 'Desat només en aquest telèfon.';
+
+  @override
   String get deviceId => 'ID del dispositiu';
 
   @override

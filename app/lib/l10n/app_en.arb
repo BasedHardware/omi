@@ -651,6 +651,10 @@
     "@deviceName": {
         "description": "Device name label"
     },
+    "deviceNameStoredOnPhone": "Stored on this phone only.",
+    "@deviceNameStoredOnPhone": {
+        "description": "Note under the rename dialog title saying the custom name is kept on this phone"
+    },
     "deviceId": "Device ID",
     "@deviceId": {
         "description": "Label for device ID field"

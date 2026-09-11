@@ -251,6 +251,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
     if (renamed == true && mounted) {
       setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.nameUpdatedSuccessfully)));
     }
   }
 

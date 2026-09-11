@@ -633,6 +633,7 @@
         "description": "Empty state for app access"
     },
     "deviceName": "ಸಾಧನ ಹೆಸರು",
+    "deviceNameStoredOnPhone": "ಈ ಫೋನ್‌ನಲ್ಲಿ ಮಾತ್ರ ಉಳಿಸಲಾಗಿದೆ.",
     "@deviceName": {
         "description": "Device name label"
     },

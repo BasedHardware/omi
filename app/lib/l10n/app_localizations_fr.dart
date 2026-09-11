@@ -501,6 +501,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get deviceName => 'Nom de l\'appareil';
 
   @override
+  String get deviceNameStoredOnPhone => 'Enregistré uniquement sur ce téléphone.';
+
+  @override
   String get deviceId => 'ID de l\'appareil';
 
   @override

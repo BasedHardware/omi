@@ -497,6 +497,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get deviceName => 'ডিভাইসের নাম';
 
   @override
+  String get deviceNameStoredOnPhone => 'শুধুমাত্র এই ফোনে সংরক্ষিত।';
+
+  @override
   String get deviceId => 'ডিভাইস ID';
 
   @override

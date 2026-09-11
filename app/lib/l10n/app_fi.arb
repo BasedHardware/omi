@@ -157,6 +157,7 @@
     "appAccessDesc": "Seuraavat sovellukset voivat käyttää tietojasi. Napauta sovellusta hallitaksesi sen käyttöoikeuksia.",
     "noAppsExternalAccess": "Yhdelläkään asennetulla sovelluksella ei ole ulkoista pääsyä tietoihisi.",
     "deviceName": "Laitteen nimi",
+    "deviceNameStoredOnPhone": "Tallennettu vain tähän puhelimeen.",
     "deviceId": "Laitteen tunnus",
     "firmware": "Laiteohjelmisto",
     "sdCardSync": "SD-kortin synkronointi",

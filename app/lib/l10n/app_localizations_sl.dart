@@ -497,6 +497,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get deviceName => 'Ime naprave';
 
   @override
+  String get deviceNameStoredOnPhone => 'Shranjeno samo v tem telefonu.';
+
+  @override
   String get deviceId => 'ID naprave';
 
   @override

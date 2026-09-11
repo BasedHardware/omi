@@ -498,6 +498,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deviceName => 'Název zařízení';
 
   @override
+  String get deviceNameStoredOnPhone => 'Uloženo pouze v tomto telefonu.';
+
+  @override
   String get deviceId => 'ID zařízení';
 
   @override

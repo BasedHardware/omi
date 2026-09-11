@@ -497,6 +497,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deviceName => 'ڈیوائس کا نام';
 
   @override
+  String get deviceNameStoredOnPhone => 'صرف اس فون پر محفوظ ہے۔';
+
+  @override
   String get deviceId => 'ڈیوائس کی نشانی';
 
   @override

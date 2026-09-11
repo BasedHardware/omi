@@ -498,6 +498,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get deviceName => 'Ime uređaja';
 
   @override
+  String get deviceNameStoredOnPhone => 'Spremljeno samo na ovom telefonu.';
+
+  @override
   String get deviceId => 'ID uređaja';
 
   @override

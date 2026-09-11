@@ -499,6 +499,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deviceName => 'Назва пристрою';
 
   @override
+  String get deviceNameStoredOnPhone => 'Зберігається лише на цьому телефоні.';
+
+  @override
   String get deviceId => 'ID пристрою';
 
   @override

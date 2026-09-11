@@ -116,4 +116,27 @@ void main() {
     expect(SharedPreferencesUtil().getDeviceCustomName(_deviceId), 'Studio Pendant');
     expect(results.single, isFalse);
   });
+
+  testWidgets('explains that the name is kept on this phone', (tester) async {
+    await openDialog(tester);
+
+    expect(find.text('Stored on this phone only.'), findsOneWidget);
+  });
+
+  testWidgets('hides the reset action when no custom name is stored', (tester) async {
+    await openDialog(tester);
+
+    expect(find.byKey(const Key('rename_device_reset')), findsNothing);
+  });
+
+  testWidgets('reset clears a stored custom name', (tester) async {
+    await SharedPreferencesUtil().setDeviceCustomName(_deviceId, 'Studio Pendant');
+
+    final results = await openDialog(tester);
+    await tester.tap(find.byKey(const Key('rename_device_reset')));
+    await tester.pumpAndSettle();
+
+    expect(SharedPreferencesUtil().getDeviceCustomName(_deviceId), isNull);
+    expect(results.single, isTrue);
+  });
 }

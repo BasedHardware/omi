@@ -499,6 +499,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get deviceName => 'డివైస్ పేరు';
 
   @override
+  String get deviceNameStoredOnPhone => 'ఈ ఫోన్‌లో మాత్రమే సేవ్ చేయబడింది.';
+
+  @override
   String get deviceId => 'డివైస్ ID';
 
   @override

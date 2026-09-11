@@ -157,6 +157,7 @@
     "appAccessDesc": "Les següents aplicacions poden accedir a les vostres dades. Toqueu una aplicació per gestionar els seus permisos.",
     "noAppsExternalAccess": "Cap aplicació instal·lada té accés extern a les vostres dades.",
     "deviceName": "Nom del dispositiu",
+    "deviceNameStoredOnPhone": "Desat només en aquest telèfon.",
     "deviceId": "ID del dispositiu",
     "firmware": "Microprogramari",
     "sdCardSync": "Sincronització de targeta SD",

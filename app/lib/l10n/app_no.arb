@@ -157,6 +157,7 @@
     "appAccessDesc": "Følgende apper har tilgang til dataene dine. Trykk på en app for å administrere tillatelsene.",
     "noAppsExternalAccess": "Ingen installerte apper har ekstern tilgang til dataene dine.",
     "deviceName": "Enhetsnavn",
+    "deviceNameStoredOnPhone": "Lagret bare på denne telefonen.",
     "deviceId": "Enhets-ID",
     "firmware": "Fastvare",
     "sdCardSync": "SD-kort synkronisering",

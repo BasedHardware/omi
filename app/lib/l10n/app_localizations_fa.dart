@@ -498,6 +498,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deviceName => 'نام دستگاه';
 
   @override
+  String get deviceNameStoredOnPhone => 'فقط در این تلفن ذخیره می‌شود.';
+
+  @override
   String get deviceId => 'شناسه دستگاه';
 
   @override

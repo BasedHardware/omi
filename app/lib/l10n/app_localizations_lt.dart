@@ -499,6 +499,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deviceName => 'Įrenginio pavadinimas';
 
   @override
+  String get deviceNameStoredOnPhone => 'Išsaugota tik šiame telefone.';
+
+  @override
   String get deviceId => 'Įrenginio ID';
 
   @override

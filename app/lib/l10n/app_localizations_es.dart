@@ -498,6 +498,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deviceName => 'Nombre del dispositivo';
 
   @override
+  String get deviceNameStoredOnPhone => 'Guardado solo en este teléfono.';
+
+  @override
   String get deviceId => 'ID del dispositivo';
 
   @override

@@ -488,6 +488,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceName => '기기 이름';
 
   @override
+  String get deviceNameStoredOnPhone => '이 휴대폰에만 저장됩니다.';
+
+  @override
   String get deviceId => '기기 ID';
 
   @override

@@ -633,6 +633,7 @@
         "description": "Empty state for app access"
     },
     "deviceName": "ڈیوائس کا نام",
+    "deviceNameStoredOnPhone": "صرف اس فون پر محفوظ ہے۔",
     "@deviceName": {
         "description": "Device name label"
     },

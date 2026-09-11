@@ -47,8 +47,25 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
     }
   }
 
+  Future<void> _reset() async {
+    setState(() => isSaving = true);
+    try {
+      await SharedPreferencesUtil().clearDeviceCustomName(widget.deviceId);
+    } catch (e) {
+      Logger.debug('Error resetting device name: $e');
+      if (mounted) {
+        setState(() => isSaving = false);
+      }
+      return;
+    }
+    if (mounted) {
+      Navigator.of(context).pop(true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final hasCustomName = SharedPreferencesUtil().getDeviceCustomName(widget.deviceId) != null;
     return PopScope(
       canPop: !isSaving,
       child: Dialog(
@@ -63,6 +80,11 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
               Text(
                 context.l10n.deviceName,
                 style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                context.l10n.deviceNameStoredOnPhone,
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
               ),
               const SizedBox(height: 20),
               Container(
@@ -135,6 +157,19 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
                   ),
                 ],
               ),
+              if (hasCustomName) ...[
+                const SizedBox(height: 12),
+                Center(
+                  child: GestureDetector(
+                    key: const Key('rename_device_reset'),
+                    onTap: isSaving ? null : _reset,
+                    child: Text(
+                      context.l10n.resetToDefault,
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 14, decoration: TextDecoration.underline),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

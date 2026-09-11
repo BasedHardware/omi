@@ -499,6 +499,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deviceName => 'Tên thiết bị';
 
   @override
+  String get deviceNameStoredOnPhone => 'Chỉ được lưu trên điện thoại này.';
+
+  @override
   String get deviceId => 'ID Thiết Bị';
 
   @override

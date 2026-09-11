@@ -499,6 +499,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceName => 'Ierīces nosaukums';
 
   @override
+  String get deviceNameStoredOnPhone => 'Saglabāts tikai šajā tālrunī.';
+
+  @override
   String get deviceId => 'Ierīces ID';
 
   @override

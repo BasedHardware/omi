@@ -633,6 +633,7 @@
         "description": "Empty state for app access"
     },
     "deviceName": "שם המכשיר",
+    "deviceNameStoredOnPhone": "נשמר רק בטלפון הזה.",
     "@deviceName": {
         "description": "Device name label"
     },

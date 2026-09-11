@@ -498,6 +498,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get deviceName => 'Nama Peranti';
 
   @override
+  String get deviceNameStoredOnPhone => 'Disimpan pada telefon ini sahaja.';
+
+  @override
   String get deviceId => 'ID Peranti';
 
   @override

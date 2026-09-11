@@ -157,6 +157,7 @@
     "appAccessDesc": "Următoarele aplicații pot accesa datele tale. Apasă pe o aplicație pentru a-i gestiona permisiunile.",
     "noAppsExternalAccess": "Nicio aplicație instalată nu are acces extern la datele tale.",
     "deviceName": "Nume dispozitiv",
+    "deviceNameStoredOnPhone": "Salvat doar pe acest telefon.",
     "deviceId": "ID dispozitiv",
     "firmware": "Firmware",
     "sdCardSync": "Sincronizare card SD",
