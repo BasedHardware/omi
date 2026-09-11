@@ -64,21 +64,45 @@ final class LocalProviderSettingsRestartTests: XCTestCase {
   /// restart must fire only after the model-list refetch settles (success or
   /// failure), which `fetchLocalModelOptions(onComplete:)` guarantees by
   /// running the callback in both its success and catch branches.
+  ///
+  /// Uses the same injected `localModelsFetcher` stub as
+  /// `testBaseURLCommitWithEmptyModelIdRestartsOnceAndShowsNoError` below
+  /// instead of the real `/models` HTTP request: a live network call made
+  /// this test hermetic-unsafe (it depended on whether anything happened to
+  /// answer on localhost:1234) and slower than it needed to be.
+  ///
+  /// A configured model id is required going in: `fetchLocalModelOptions`
+  /// only calls `onComplete` when a model was already configured (see its
+  /// doc comment), auto-selecting instead when it was empty, which needs a
+  /// live view hierarchy to observe (that path is
+  /// `testBaseURLCommitWithEmptyModelIdRestartsOnceAndShowsNoError`'s job).
   func testBaseURLFieldCommitRequestsARestartAfterTheModelListRefetch() async {
+    let defaults = UserDefaults.standard
+    let previousModelId = defaults.string(forKey: AIProvider.localModelIDKey)
+    defaults.set("existing-model", forKey: AIProvider.localModelIDKey)
+    defer {
+      if let previousModelId {
+        defaults.set(previousModelId, forKey: AIProvider.localModelIDKey)
+      } else {
+        defaults.removeObject(forKey: AIProvider.localModelIDKey)
+      }
+    }
+
     let spy = RestartSpyChatProvider()
     let restarted = expectation(description: "restart requested")
     spy.onRestart = { restarted.fulfill() }
-    let view = makeSettingsView(chatProvider: spy)
+    let view = makeSettingsView(
+      chatProvider: spy,
+      localModelsFetcher: { _ in ["existing-model", "stub-model-b"] }
+    )
 
     // Mirrors the Base URL TextField's onSubmit/focus-loss handler
-    // (SettingsContentView+FloatingBarAndChat.swift). Uses the default local
-    // base URL; regardless of whether anything answers on localhost:1234 in
-    // this environment, fetchLocalModelOptions calls onComplete on both its
-    // success and failure paths, so the restart assertion holds either way.
+    // (SettingsContentView+FloatingBarAndChat.swift). The stub fetcher above
+    // resolves instantly, so fetchLocalModelOptions calls onComplete without
+    // any real request or wait.
     view.fetchLocalModelOptions(onComplete: view.restartLocalBridgesIfActive)
 
-    // Bounded above the fetch's own 5s request timeout.
-    await fulfillment(of: [restarted], timeout: 6)
+    await fulfillment(of: [restarted], timeout: 2)
     XCTAssertEqual(spy.restartCallCount, 1)
   }
 
