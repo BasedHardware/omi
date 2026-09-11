@@ -47,10 +47,24 @@ function optionalCount(value: unknown): number | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
+  if (typeof value === 'string') {
+    if (!/^[0-9]+$/.test(value)) {
+      return undefined;
+    }
+    const parsed = Number(value);
+    return parsed === 0 ? undefined : parsed;
+  }
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-    throw new DailySummaryError();
+    return undefined;
   }
   return value === 0 ? undefined : value;
+}
+
+function optionalWireString(value: unknown, limit: number): string {
+  if (value === undefined || value === null || typeof value !== 'string') {
+    return '';
+  }
+  return visibleDisplayText(text(value, limit));
 }
 
 function summaryStats(value: unknown): {
@@ -63,7 +77,10 @@ function summaryStats(value: unknown): {
   if (value === undefined || value === null) {
     return {};
   }
-  const stats = object(value);
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  const stats = value as Record<string, unknown>;
   const conversations = optionalCount(stats.total_conversations);
   const actionItems = optionalCount(stats.action_items_count);
   const durationMinutes = optionalCount(stats.total_duration_minutes);
@@ -91,30 +108,21 @@ export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
       break;
     }
     const summary = object(raw);
-    const id = visibleDisplayText(text(summary.id, 256));
+    const id = optionalWireString(summary.id, 256);
     if (id === '') {
-      throw new DailySummaryError();
+      continue;
     }
     if (seen.has(id)) {
       throw new DailySummaryError();
     }
-    seen.add(id);
-    const headline = visibleDisplayText(text(summary.headline, 10000));
+    const headline = optionalWireString(summary.headline, 10000);
     if (headline === '') {
       continue;
     }
-    const date =
-      summary.date === undefined || summary.date === null
-        ? ''
-        : visibleDisplayText(text(summary.date, 32));
-    const dayEmoji =
-      summary.day_emoji === undefined || summary.day_emoji === null
-        ? ''
-        : visibleDisplayText(text(summary.day_emoji, 32));
-    const overview =
-      summary.overview === undefined || summary.overview === null
-        ? ''
-        : visibleDisplayText(text(summary.overview, 10000));
+    seen.add(id);
+    const date = optionalWireString(summary.date, 32);
+    const dayEmoji = optionalWireString(summary.day_emoji, 32);
+    const overview = optionalWireString(summary.overview, 10000);
     const stats = summaryStats(summary.stats);
     items.push({
       id,

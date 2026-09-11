@@ -60,74 +60,52 @@ test('parses GET daily summary headlines and omits empty headlines', () => {
   ]);
 });
 
+test('does not omit a neighboring daily summary when stored headline or stats cannot project', () => {
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {id: 'sum-kept', headline: 'Met with the team'},
+          {id: 'sum-headline-number', headline: 1},
+          {id: 'sum-headline-missing'},
+          {id: '', headline: 'Empty id'},
+          {id: 7, headline: 'Numeric id'},
+          {
+            id: 'sum-optional',
+            headline: 'Shipped the recap',
+            overview: 1,
+            date: 1,
+            day_emoji: 1,
+            stats: {total_conversations: '3', total_duration_minutes: 1.5},
+          },
+          {
+            id: 'sum-stats-object',
+            headline: 'Walked',
+            stats: 'nope',
+          },
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id: 'sum-kept', date: '', headline: 'Met with the team'},
+    {
+      id: 'sum-optional',
+      date: '',
+      headline: 'Shipped the recap',
+      conversations: 3,
+    },
+    {id: 'sum-stats-object', date: '', headline: 'Walked'},
+  ]);
+});
+
 test('fails closed for malformed GET daily summaries', () => {
   expect(() => parseOmiDailySummaries(JSON.stringify([]))).toThrow();
   expect(() =>
     parseOmiDailySummaries(
-      JSON.stringify({summaries: [{id: 'sum-1', headline: 1}]}),
-    ),
-  ).toThrow();
-  expect(() =>
-    parseOmiDailySummaries(
       JSON.stringify({
         summaries: [
-          {
-            id: 'sum-1',
-            headline: 'One',
-            stats: {total_conversations: '3'},
-          },
-        ],
-      }),
-    ),
-  ).toThrow();
-  expect(() =>
-    parseOmiDailySummaries(
-      JSON.stringify({
-        summaries: [
-          {
-            id: 'sum-1',
-            headline: 'One',
-            stats: {total_duration_minutes: 1.5},
-          },
-        ],
-      }),
-    ),
-  ).toThrow();
-  expect(() =>
-    parseOmiDailySummaries(
-      JSON.stringify({
-        summaries: [
-          {
-            id: 'sum-1',
-            headline: 'One',
-            stats: {watching_minutes: -1},
-          },
-        ],
-      }),
-    ),
-  ).toThrow();
-  expect(() =>
-    parseOmiDailySummaries(
-      JSON.stringify({
-        summaries: [
-          {
-            id: 'sum-1',
-            headline: 'One',
-            stats: {proactive_moments: '1'},
-          },
-        ],
-      }),
-    ),
-  ).toThrow();
-  expect(() =>
-    parseOmiDailySummaries(
-      JSON.stringify({
-        summaries: [
-          {
-            id: 'sum-1',
-            headline: 'One',
-            overview: 1,
-          },
+          {id: 'sum-1', headline: 'One'},
+          {id: 'sum-1', headline: 'Dup'},
         ],
       }),
     ),
