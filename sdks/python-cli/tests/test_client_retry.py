@@ -129,6 +129,29 @@ def test_cli_auth_error_with_markup_preserves_exit_code(
         assert detail in captured.err
 
 
+def test_empty_body_401_maps_to_auth_error(authed_profile, respx_mock) -> None:
+    """An empty-body 401 must still raise, not be treated like an empty 204 success."""
+    respx_mock.delete("/v1/dev/user/memories/abc").respond(401, content=b"")
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(AuthError):
+            client.delete("/v1/dev/user/memories/abc")
+
+
+def test_empty_body_404_maps_to_not_found(authed_profile, respx_mock) -> None:
+    respx_mock.delete("/v1/dev/user/memories/abc").respond(404, content=b"")
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(NotFoundError):
+            client.delete("/v1/dev/user/memories/abc")
+
+
+def test_204_delete_still_returns_none(authed_profile, respx_mock) -> None:
+    """Guard the success path the fix must not regress: empty 2xx bodies stay silent."""
+    respx_mock.delete("/v1/dev/user/memories/abc").respond(204, content=b"")
+    with OmiClient(authed_profile) as client:
+        result = client.delete("/v1/dev/user/memories/abc")
+    assert result is None
+
+
 def test_403_maps_to_auth_error(authed_profile, respx_mock) -> None:
     respx_mock.post("/v1/dev/user/memories").respond(
         403, json={"detail": "Insufficient permissions. Required scope: memories:write"}
@@ -158,6 +181,72 @@ def test_500_then_200_succeeds_after_retry(authed_profile, respx_mock) -> None:
     with OmiClient(authed_profile) as client:
         result = client.get("/v1/dev/user/goals")
     assert result == []
+
+
+@pytest.mark.parametrize(
+    ("retry_after", "expected_wait"),
+    [("3", 3.0), ("99999", 60.0), ("invalid", 0.25), (None, 0.25)],
+)
+def test_cli_503_uses_retry_after_or_backoff(
+    authed_profile, respx_mock, monkeypatch, cli_runner, retry_after, expected_wait
+) -> None:
+    """RFC 9110 section 10.2.3 permits Retry-After on Service Unavailable."""
+    import json
+
+    from omi_cli import client as client_module
+    from omi_cli.main import app
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+    monkeypatch.setattr(client_module, "_jittered_backoff", lambda _: 0.25)
+    headers = {"Retry-After": retry_after} if retry_after is not None else {}
+    route = respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[
+            httpx.Response(503, headers=headers, json={"detail": "Temporarily unavailable"}),
+            httpx.Response(200, json=[]),
+        ]
+    )
+
+    result = cli_runner.invoke(app, ["--json", "memory", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == []
+    assert route.call_count == 2
+    assert sleeps == [expected_wait]
+
+
+def test_503_retry_after_exhaustion_preserves_server_error(authed_profile, respx_mock, monkeypatch) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+    route = respx_mock.get("/v1/dev/user/goals").mock(
+        side_effect=[httpx.Response(503, headers={"Retry-After": "3"}, json={"detail": "Maintenance"})] * 4
+    )
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(ServerError) as info:
+            client.get("/v1/dev/user/goals")
+    assert route.call_count == 4
+    assert sleeps == [3.0, 3.0, 3.0]
+    assert info.value.exit_code == 3
+    assert info.value.detail == "Maintenance"
+
+
+def test_503_retry_after_http_date(authed_profile, respx_mock, monkeypatch) -> None:
+    from email.utils import formatdate
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+    future_date = formatdate(time.time() + 10.0, usegmt=True)
+    route = respx_mock.get("/v1/dev/user/goals").mock(
+        side_effect=[
+            httpx.Response(503, headers={"Retry-After": future_date}, json={"detail": "Maintenance"}),
+            httpx.Response(200, json=[]),
+        ]
+    )
+    with OmiClient(authed_profile) as client:
+        result = client.get("/v1/dev/user/goals")
+    assert result == []
+    assert len(sleeps) == 1
+    assert 8.0 <= sleeps[0] <= 11.0
 
 
 def test_429_surfaces_rate_limit_with_policy(authed_profile, respx_mock) -> None:

@@ -9979,4 +9979,7 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Převod řeči na text momentálně není dostupný. Zkontrolujte připojení k internetu a nastavení rozpoznávání řeči v zařízení a zkuste to znovu.';
+
+  @override
+  String get processingTakingLonger => 'Stále probíhá — trvá to déle než obvykle.';
 }

@@ -10005,4 +10005,7 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Penukaran pertuturan kepada teks tidak tersedia sekarang. Semak sambungan internet dan tetapan pengecaman pertuturan peranti anda, kemudian cuba lagi.';
+
+  @override
+  String get processingTakingLonger => 'Masih diproses — ini mengambil masa lebih lama daripada biasa.';
 }

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-suppression-latched-after-recovery-window",
+  "violated_contract": "A suppression that must keep interrupted-turn recovery from re-journaling a deliberately unwritten turn has to be standing before any failure path can read it, not only once the protected lifecycle completes. Silent Type armed `journalSuppressedContinuityKey` solely in the dictation delivery close path, so a realtime provider failure or a barge-in while the dictation was still finalizing reached `captureInterruptedTurnPayloadIfNeeded` with no receipt to stand down on: recovery awaited the language-identifier verdict and journaled the exact text the toggle exists to keep out of the chat.",
+  "canonical_prevention": "Arm the receipt at the boundary that opens the protected lifecycle — turn start — and derive every later decision in that lifecycle from the value read at that boundary, so a mid-flight flip cannot split the turn. End the suppression where the turn provably changes kind (a hub commit is a question, whose provider-failure continuity depends on recovery), not where the protected content first appears. Regression coverage drives the real recovery seam with the receipt armed at turn start and fails when the arm is removed.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+PushToTalk.swift",
+    "desktop/macos/Desktop/Tests/VoiceTypingSilentModeTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/**"
+  ],
+  "status": "open"
+}

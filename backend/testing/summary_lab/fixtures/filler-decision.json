@@ -1,0 +1,39 @@
+{
+  "id": "filler-decision",
+  "kind": "meeting",
+  "started_at": "2026-09-05T11:00:00-04:00",
+  "timezone": "America/New_York",
+  "language": "en",
+  "transcript": "[s1 0] Um, so, like, I think we should, you know, drop the OCR flag until Beta bakes.\n[s2 1] Uh, yeah. Keep it dev-only.\n[s1 0] Okay. That's the call.",
+  "expected_facts": ["drop the OCR flag", "Keep it dev-only"],
+  "must_not_contain": ["Um, so", "you know"],
+  "owner_threads": ["OCR stays dark"],
+  "token_estimate": {"input": 480, "output": 140},
+  "recorded": {
+    "notes_v2": {
+      "title": "OCR Flag Stays Dev-Only",
+      "overview": "They decided to drop the OCR flag until Beta bakes and keep it dev-only.",
+      "sections": [
+        {
+          "heading": "Decision",
+          "body_markdown": "- Drop the OCR flag until Beta bakes.\n- Keep it dev-only."
+        }
+      ],
+      "action_items": []
+    },
+    "legacy": {
+      "title": "Flag talk",
+      "overview": "Unclear discussion about a flag.",
+      "sections": [],
+      "action_items": []
+    },
+    "defective": {
+      "title": "Um Flag Chat",
+      "overview": "Um, so, like, you know, they kind of talked.",
+      "sections": [
+        {"heading": "Filler", "body_markdown": "- Um, so, like, you know, maybe a flag."}
+      ],
+      "action_items": []
+    }
+  }
+}

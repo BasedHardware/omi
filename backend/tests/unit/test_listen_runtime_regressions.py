@@ -1022,6 +1022,53 @@ async def test_custom_stt_flush_meters_speech_in_isolated_lane(monkeypatch):
     assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
 
 
+@pytest.mark.anyio
+async def test_flush_usage_meters_live_speech_seconds_exactly_once(monkeypatch):
+    """Live provider audio minutes come from the VAD speech delta consumed in
+    _flush_usage: each flushed millimeter of speech reaches the counter once,
+    and a zero delta (the periodic loop's next tick) emits nothing extra."""
+    import routers.listen.runtime as runtime_module
+
+    metered = []
+    speech_recorded = []
+    monkeypatch.setattr(
+        runtime_module,
+        'record_live_stt_audio_seconds',
+        lambda **kwargs: metered.append(kwargs),
+    )
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', True)
+    monkeypatch.setattr(
+        runtime_module, 'record_speech_ms', lambda uid, ms, source='realtime': speech_recorded.append((uid, ms))
+    )
+    monkeypatch.setattr(runtime_module, 'record_usage', lambda *a, **k: None)
+
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = SimpleNamespace(uid='listen-user')
+    runtime.use_custom_stt = False
+    runtime.persistence = _Persistence()
+    runtime.stt_service = STTService.soniox
+    runtime.client_device_context = SimpleNamespace(platform='android')
+    runtime.state = SimpleNamespace(
+        fair_use_track_dg_usage=False,
+        dg_usage_ms_pending=0,
+        last_usage_record_timestamp=123.0,
+        words_transcribed_since_last_record=0,
+        last_audio_received_time=124.0,
+    )
+    deltas = iter([4200, 0])
+    runtime.receiver = SimpleNamespace(vad_gate=SimpleNamespace(consume_speech_ms_delta=lambda: next(deltas)))
+
+    await runtime._flush_usage(final=False)
+    await runtime._flush_usage(final=True)
+
+    assert metered == [
+        {'provider': 'soniox', 'platform': 'android', 'seconds': 4.2},
+    ]
+    # Same single flush feeds the fair-use meter; the zero-delta final flush
+    # writes neither metric nor fair-use speech.
+    assert speech_recorded == [('listen-user', 4200)]
+
+
 def _heartbeat_runtime(send_text):
     from starlette.websockets import WebSocketState
 
