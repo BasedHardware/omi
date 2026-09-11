@@ -11,6 +11,7 @@ Global flags:
 * ``--api-base URL`` Override the API base URL (handy for staging/local).
 * ``-v/--verbose``   Log HTTP traffic to stderr.
 * ``--no-color``     Disable colored output (also honors ``NO_COLOR`` env var).
+* ``--timeout``      Per-operation HTTP timeout in seconds (default 30).
 """
 
 from __future__ import annotations
