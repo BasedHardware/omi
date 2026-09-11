@@ -684,10 +684,22 @@ class SharedPreferencesUtil {
 
   set showGetOmiCard(bool value) => saveBool('showGetOmiCard', value);
 
-  List<App> get appsList {
-    final apps = getStringList('appsList');
-    return App.fromJsonList(apps.map((e) => jsonDecode(e)).toList());
+  List<T> _decodeCachedList<T>(String key, T Function(Map<String, dynamic> json) fromJson) {
+    final items = <T>[];
+    for (final encoded in getStringList(key)) {
+      try {
+        final decoded = jsonDecode(encoded);
+        if (decoded is Map<String, dynamic>) {
+          items.add(fromJson(decoded));
+        }
+      } catch (e) {
+        Logger.debug('Skipping unreadable ${key.split(':').first} entry: ${e.runtimeType}');
+      }
+    }
+    return items;
   }
+
+  List<App> get appsList => _decodeCachedList('appsList', (json) => App.fromJson(json));
 
   set appsList(List<App> value) {
     final List<String> apps = value.map((e) => jsonEncode(e.toJson())).toList();
@@ -728,13 +740,11 @@ class SharedPreferencesUtil {
     if (getBool('migratedMemories')) {
       final cachedMemories = getStringList('cachedMemories');
       if (cachedMemories.isNotEmpty) {
-        final conversations = cachedMemories.map((e) => ServerConversation.fromJson(jsonDecode(e))).toList();
-        cachedConversations = conversations;
+        cachedConversations = _decodeCachedList('cachedMemories', (json) => ServerConversation.fromJson(json));
         saveBool('migratedMemories', true);
       }
     }
-    final conversations = getStringList('cachedConversations');
-    return conversations.map((e) => ServerConversation.fromJson(jsonDecode(e))).toList();
+    return _decodeCachedList('cachedConversations', (json) => ServerConversation.fromJson(json));
   }
 
   set cachedConversations(List<ServerConversation> value) {
@@ -742,10 +752,7 @@ class SharedPreferencesUtil {
     saveStringList('cachedConversations', conversations);
   }
 
-  List<ServerMessage> get cachedMessages {
-    final messages = getStringList('cachedMessages');
-    return messages.map((e) => ServerMessage.fromJson(jsonDecode(e))).toList();
-  }
+  List<ServerMessage> get cachedMessages => _decodeCachedList('cachedMessages', (json) => ServerMessage.fromJson(json));
 
   set cachedMessages(List<ServerMessage> value) {
     final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
@@ -757,8 +764,9 @@ class SharedPreferencesUtil {
     final ownerUid = uid;
     if (ownerUid.isEmpty) return [];
     _scopeLegacyUserData(ownerUid);
-    final memories = getStringList(_userScopedKey('pendingMemories', ownerUid));
-    return memories.map((e) => Memory.fromJson(jsonDecode(e))).where((memory) => memory.uid == ownerUid).toList();
+    return _decodeCachedList(_userScopedKey('pendingMemories', ownerUid), (json) => Memory.fromJson(json))
+        .where((memory) => memory.uid == ownerUid)
+        .toList();
   }
 
   set pendingMemories(List<Memory> value) {
@@ -777,13 +785,10 @@ class SharedPreferencesUtil {
   void removePendingMemory(String memoryId, {String? ownerUid}) {
     final owner = ownerUid ?? uid;
     if (owner.isEmpty) return;
-    final encoded = getStringList(_userScopedKey('pendingMemories', owner));
-    final memories = encoded.map((e) => Memory.fromJson(jsonDecode(e))).toList();
+    final key = _userScopedKey('pendingMemories', owner);
+    final memories = _decodeCachedList(key, (json) => Memory.fromJson(json));
     memories.removeWhere((m) => m.id == memoryId);
-    saveStringList(
-      _userScopedKey('pendingMemories', owner),
-      memories.map((memory) => jsonEncode(memory.toJson())).toList(),
-    );
+    saveStringList(key, memories.map((memory) => jsonEncode(memory.toJson())).toList());
   }
 
   void clearPendingMemories() {
@@ -792,10 +797,7 @@ class SharedPreferencesUtil {
     saveStringList(_userScopedKey('pendingMemories', ownerUid), []);
   }
 
-  List<Person> get cachedPeople {
-    final people = getStringList('cachedPeople');
-    return people.map((e) => Person.fromJson(jsonDecode(e))).toList();
-  }
+  List<Person> get cachedPeople => _decodeCachedList('cachedPeople', (json) => Person.fromJson(json));
 
   Person? getPersonById(String id) {
     return cachedPeople.firstWhereOrNull((element) => element.id == id);
@@ -834,7 +836,13 @@ class SharedPreferencesUtil {
   ServerConversation? get modifiedConversationDetails {
     final String conversation = getString('modifiedConversationDetails');
     if (conversation.isEmpty) return null;
-    return ServerConversation.fromJson(jsonDecode(conversation));
+    try {
+      final decoded = jsonDecode(conversation);
+      if (decoded is Map<String, dynamic>) return ServerConversation.fromJson(decoded);
+    } catch (e) {
+      Logger.debug('Skipping unreadable modifiedConversationDetails: ${e.runtimeType}');
+    }
+    return null;
   }
 
   set modifiedConversationDetails(ServerConversation? value) {
