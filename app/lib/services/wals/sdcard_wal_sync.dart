@@ -116,7 +116,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
     _wals.removeWhere((w) => w.id == wal.id);
 
-    if (_device != null) {
+    if (_device != null && wal.device == _device!.id) {
       await _writeToStorage(_device!.id, wal.fileNum, 1, 0);
     }
 

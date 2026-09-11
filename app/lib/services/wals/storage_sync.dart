@@ -224,7 +224,7 @@ class StorageSyncImpl implements StorageSync {
   @override
   Future deleteWal(Wal wal) async {
     if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
-    await _deleteWalsOnDevice([wal]);
+    if (wal.device == _device?.id) await _deleteWalsOnDevice([wal]);
     _wals = _wals.where((w) => w.id != wal.id).toList();
     listener.onWalUpdated();
   }

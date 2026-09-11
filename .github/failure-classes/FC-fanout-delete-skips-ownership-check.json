@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-fanout-delete-skips-ownership-check",
-  "violated_contract": "When one user action is fanned out to every handler regardless of which one owns the target, each handler must confirm it owns that exact target before doing anything irreversible. WalSyncs.deleteWal sends every recording delete to all five sub-syncs. The ring sync checks membership since #7218, but the SD card and storage syncs still sent their device delete for any wal, so deleting a phone recording with a DevKit connected cleared the audio on the DevKit's SD card.",
+  "violated_contract": "When one user action is fanned out to every handler regardless of which one owns the target, each handler must confirm it owns that exact target before doing anything irreversible. WalSyncs.deleteWal sends every recording delete to all five sub-syncs. The ring sync checks membership since #7218, but the SD card, storage and flash page syncs still ran their device action for any wal, so deleting a phone recording with a DevKit connected cleared the audio on the DevKit's SD card.",
   "canonical_prevention": "Guard each fan-out receiver's destructive path on ownership of the exact target, including the kind of storage it manages, because a copy can share the original's id. Cover it with a test that sends a target the receiver does not own and asserts the device or store is never touched, next to a control showing its own target still is.",
   "canonical_prevention_artifact": [
     "app/test/unit/wal_delete_cascade_test.dart"
