@@ -561,3 +561,23 @@ test('a complete session without endedAt cannot be accepted', async () => {
     ),
   ).rejects.toThrow('Device session response is incomplete');
 });
+
+test('an open session with endedAt cannot be accepted', async () => {
+  const input = {
+    captureId: '11111111-2222-4333-8444-555555555555',
+    deviceId: 'omi-1',
+    deviceName: 'Omi',
+    codec: 21,
+  };
+  await expect(
+    openDeviceSession(
+      backend(() => ({
+        status: 200,
+        body: JSON.stringify({
+          session: session({state: 'open', endedAt: 2}),
+        }),
+      })),
+      input,
+    ),
+  ).rejects.toThrow('Device session response is incomplete');
+});
