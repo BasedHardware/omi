@@ -148,9 +148,11 @@ final class SBOnboardingModel: ObservableObject {
   var openShortcutSelection: ShortcutSettings.KeyboardShortcut?
   var talkShortcutSelection: ShortcutSettings.KeyboardShortcut?
   var shortcutMonitors: [Any] = []
-  /// Main menu stashed while the shortcut step's key monitor is armed (menu key
-  /// equivalents like ⌘O would otherwise swallow the press before we see it).
-  var savedMainMenu: NSMenu?
+  /// Stands the app's own shortcut handlers down while this step's key monitor is armed — the Carbon
+  /// hotkeys, the main menu's key equivalents (⌘O would otherwise swallow the press before we see
+  /// it), and push-to-talk. Shared with the Settings recorder so the two cannot disagree about what
+  /// "recording a shortcut" suspends.
+  let shortcutCaptureSession = ShortcutCaptureSession()
 
   // Screen + voice demo
   @Published var screenThings: [String] = []
