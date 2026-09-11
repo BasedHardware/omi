@@ -1131,3 +1131,23 @@ test('conversation capture provenance is optional and never replaces server time
     ).rejects.toThrow('capturedAtMs');
   }
 });
+
+test('fails closed on duplicate memory IDs and oversized memory cursors', async () => {
+  await expect(
+    loadMemories(
+      backendFor(() => ({
+        status: 200,
+        body: JSON.stringify(
+          page([memory, {...memory}], 'recall-completeness-v1'),
+        ),
+      })),
+    ),
+  ).rejects.toThrow('Memory IDs are duplicated');
+
+  const backend = backendFor(() => {
+    throw new Error('unexpected request');
+  });
+  await expect(loadMemories(backend, 'x'.repeat(16385))).rejects.toThrow(
+    'Memory cursor is malformed',
+  );
+});

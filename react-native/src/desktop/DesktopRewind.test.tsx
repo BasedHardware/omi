@@ -503,6 +503,33 @@ test.each(['OMI_REWIND_AUTH', 'OMI_REWIND_OWNER_CHANGED'])(
   },
 );
 
+test('auth failure while paginating resets it so a later capture can refresh Recall', async () => {
+  mockRewind.listFrames.mockImplementation(async ({source, cursor}) => {
+    if (source === 'shipping') {
+      return {frames: [], nextCursor: null};
+    }
+    if (cursor) {
+      return {frames: [frame('captured:two')], nextCursor: null};
+    }
+    return {frames: firstPage(), nextCursor: 'next'};
+  });
+  const view = await render({captureRevision: 0});
+  expect(label(view, 'Load more history')).toBeDefined();
+
+  mockRewind.listFrames.mockRejectedValue({code: 'OMI_REWIND_AUTH'});
+  await press(view, 'Load more history');
+  expect(rows(view)).toEqual([]);
+
+  // The session returns and a new capture lands: the failed page must not
+  // keep the automatic refresh disabled forever.
+  mockRewind.listFrames.mockImplementation(async ({source}) => ({
+    frames: source === 'captured' ? [frame('captured:fresh')] : [],
+    nextCursor: null,
+  }));
+  await act(async () => view.update(<DesktopRewind captureRevision={1} />));
+  expect(rows(view)).toContain('Window captured:fresh');
+});
+
 test('a delayed preview cannot restore private bytes after refresh loses ownership', async () => {
   const preview = deferred<ReturnType<typeof image>>();
   mockRewind.readFrame.mockReturnValueOnce(preview.promise);
