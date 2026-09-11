@@ -28,7 +28,15 @@ actor LocalEmbeddingIndexer {
       if tasks.isEmpty { return }
       for task in tasks {
         if cancel { task.cancel() }
-        await task.value
+        do {
+          try await LocalEmbeddingCallBound.run(.seconds(5)) {
+            await task.value
+          }
+        } catch is LocalEmbeddingTimeoutError {
+          log("LocalEmbeddingIndexer: drain exceeded 5s; abandoning detached task")
+        } catch {
+          log("LocalEmbeddingIndexer: drain skipped")
+        }
       }
     }
   }
@@ -71,8 +79,10 @@ actor LocalEmbeddingIndexer {
   func indexFinalizedSession(sessionId: Int64, owner: RewindCaptureOwnerSnapshot? = nil) async {
     guard embeddingsAreActive else { return }
     guard let owner = owner ?? RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else { return }
+    guard !Task.isCancelled else { return }
     do {
       let store = try await RewindDatabase.shared.localEmbeddingStore(owner: owner)
+      guard !Task.isCancelled else { return }
       let authorization = LocalMutationAuthorization { owner.isCurrent() }
       try await indexSession(sessionId: sessionId, store: store, authorization: authorization)
     } catch {
@@ -87,8 +97,10 @@ actor LocalEmbeddingIndexer {
   func indexMemories(_ items: [(Int64, String)], owner: RewindCaptureOwnerSnapshot? = nil) async {
     guard embeddingsAreActive, !items.isEmpty else { return }
     guard let owner = owner ?? RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else { return }
+    guard !Task.isCancelled else { return }
     do {
       let store = try await RewindDatabase.shared.localEmbeddingStore(owner: owner)
+      guard !Task.isCancelled else { return }
       let authorization = LocalMutationAuthorization { owner.isCurrent() }
       try await embedTexts(items, sourceKind: .memory, store: store, authorization: authorization)
     } catch {
@@ -99,6 +111,7 @@ actor LocalEmbeddingIndexer {
   func backfillIfNeeded() async {
     guard embeddingsAreActive else { return }
     guard !isBackfillRunning else { return }
+    guard !Task.isCancelled else { return }
     isBackfillRunning = true
     defer { isBackfillRunning = false }
     guard !PowerMonitor.cachedBatteryState() else { return }
@@ -106,6 +119,7 @@ actor LocalEmbeddingIndexer {
     let authorization = LocalMutationAuthorization { owner.isCurrent() }
     do {
       let store = try await RewindDatabase.shared.localEmbeddingStore(owner: owner)
+      guard !Task.isCancelled else { return }
       let sessionIds = try store.sessionsNeedingTranscriptChunks(limit: 20)
       for sessionId in sessionIds {
         guard owner.isCurrent() else { return }
@@ -120,6 +134,7 @@ actor LocalEmbeddingIndexer {
   private func indexSession(
     sessionId: Int64, store: LocalEmbeddingStore, authorization: LocalMutationAuthorization
   ) async throws {
+    guard !Task.isCancelled else { return }
     guard let session = try await TranscriptionStorage.shared.getSession(id: sessionId) else {
       runtime.record("local_embeddings", "missing_session_origin")
       return
@@ -164,6 +179,7 @@ actor LocalEmbeddingIndexer {
     authorization: LocalMutationAuthorization, engine: (any LocalEmbeddingService)? = nil
   ) async throws {
     guard !items.isEmpty else { return }
+    guard !Task.isCancelled else { return }
     let selected: any LocalEmbeddingService
     if let engine {
       selected = engine
