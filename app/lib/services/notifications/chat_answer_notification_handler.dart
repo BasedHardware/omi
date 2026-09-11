@@ -30,11 +30,7 @@ class ChatAnswerNotificationHandler {
   /// in-app via ServerMessage; shade banners are for background delivery.
   /// Callers that may still invoke this while foregrounded (FCM listen path)
   /// must also gate on `!OmiVoicePlaybackService.instance.isSpeaking`.
-  static Future<void> handle(
-    Map<String, dynamic> data,
-    String channelKey, {
-    bool isAppInForeground = true,
-  }) async {
+  static Future<void> handle(Map<String, dynamic> data, String channelKey, {bool isAppInForeground = true}) async {
     // Explicit foreground semantics: do not create a local banner while the
     // user is inside the app (merge-handler pattern; #4375 review).
     if (isAppInForeground) {

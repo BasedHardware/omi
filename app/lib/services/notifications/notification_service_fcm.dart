@@ -251,13 +251,8 @@ class _FCMNotificationService implements NotificationInterface {
         // Click-to-talk / chat answers: BigText + navigate_to payload (#4375).
         // Keep ServerMessage emission above so in-app consumers still receive it.
         // Match the legacy foreground path: suppress shade noise while Omi speaks.
-        if (ChatAnswerNotificationHandler.isChatAnswerData(data) &&
-            !OmiVoicePlaybackService.instance.isSpeaking) {
-          ChatAnswerNotificationHandler.handle(
-            data,
-            channel.channelKey!,
-            isAppInForeground: true,
-          );
+        if (ChatAnswerNotificationHandler.isChatAnswerData(data) && !OmiVoicePlaybackService.instance.isSpeaking) {
+          ChatAnswerNotificationHandler.handle(data, channel.channelKey!, isAppInForeground: true);
           return;
         }
 

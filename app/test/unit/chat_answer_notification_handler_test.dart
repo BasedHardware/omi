@@ -6,10 +6,7 @@ void main() {
   group('ChatAnswerNotificationHandler.isChatAnswerData (#4375)', () {
     test('true when push_type is chat_answer', () {
       expect(
-        ChatAnswerNotificationHandler.isChatAnswerData(const {
-          'push_type': 'chat_answer',
-          'body': 'Hello from omi',
-        }),
+        ChatAnswerNotificationHandler.isChatAnswerData(const {'push_type': 'chat_answer', 'body': 'Hello from omi'}),
         isTrue,
       );
     });
@@ -37,10 +34,7 @@ void main() {
 
     test('false for action item reminders', () {
       expect(
-        ChatAnswerNotificationHandler.isChatAnswerData(const {
-          'type': 'action_item_reminder',
-          'action_item_id': 'abc',
-        }),
+        ChatAnswerNotificationHandler.isChatAnswerData(const {'type': 'action_item_reminder', 'action_item_id': 'abc'}),
         isFalse,
       );
     });
