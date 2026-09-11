@@ -292,6 +292,9 @@ export function DesktopSettings({
   const [integrationsError, setIntegrationsError] = useState<string | null>(
     null,
   );
+  const [taskIntegrationsError, setTaskIntegrationsError] = useState<
+    string | null
+  >(null);
   const [appChangelogs, setAppChangelogs] = useState<OmiAppChangelogRow[]>([]);
   const [usageMonthly, setUsageMonthly] = useState<OmiUsageStats | null>(null);
   const [usageYearly, setUsageYearly] = useState<OmiUsageStats | null>(null);
@@ -349,6 +352,7 @@ export function DesktopSettings({
     let nextTaskIntegrations: OmiTaskIntegration[] = [];
     let nextIntegrations: OmiIntegration[] = [];
     let nextIntegrationsError: string | null = null;
+    let nextTaskIntegrationsError: string | null = null;
     let nextAppChangelogs: OmiAppChangelogRow[] = [];
     let nextUsageMonthly: OmiUsageStats | null = null;
     let nextUsageYearly: OmiUsageStats | null = null;
@@ -371,8 +375,12 @@ export function DesktopSettings({
       const peopleTask = loadOmiPeopleNames(backend).catch(
         () => new Map<string, string>(),
       );
-      const taskIntegrationsTask = loadOmiTaskIntegrations(backend).catch(
-        () => [],
+      const taskIntegrationsTask = loadOmiTaskIntegrations(backend).then(
+        rows => ({rows, error: null as string | null}),
+        reason => ({
+          rows: [] as OmiTaskIntegration[],
+          error: desktopReadErrorCopy(reason),
+        }),
       );
       const integrationsTask = loadOmiIntegrations(backend).then(
         rows => ({rows, error: null as string | null}),
@@ -414,7 +422,9 @@ export function DesktopSettings({
         nextAccount = failedAccountSettings(desktopReadErrorCopy(reason));
       }
       nextPeople = peopleNameRows(await peopleTask);
-      nextTaskIntegrations = await taskIntegrationsTask;
+      const taskIntegrationsResult = await taskIntegrationsTask;
+      nextTaskIntegrations = taskIntegrationsResult.rows;
+      nextTaskIntegrationsError = taskIntegrationsResult.error;
       const integrationsResult = await integrationsTask;
       nextIntegrations = integrationsResult.rows;
       nextIntegrationsError = integrationsResult.error;
@@ -461,6 +471,7 @@ export function DesktopSettings({
     setAccount(nextAccount);
     setPeopleNames(nextPeople);
     setTaskIntegrations(nextTaskIntegrations);
+    setTaskIntegrationsError(nextTaskIntegrationsError);
     setIntegrations(nextIntegrations);
     setIntegrationsError(nextIntegrationsError);
     setAppChangelogs(nextAppChangelogs);
@@ -795,13 +806,17 @@ export function DesktopSettings({
       {peopleNames.map(person => (
         <Row copy={person.name} key={person.id} title="People" />
       ))}
-      {taskIntegrations.map(row => (
-        <Row
-          copy={taskIntegrationRowCopy(row)}
-          key={row.key}
-          title="Task integrations"
-        />
-      ))}
+      {taskIntegrationsError !== null ? (
+        <Row copy={taskIntegrationsError} title="Task integrations" />
+      ) : (
+        taskIntegrations.map(row => (
+          <Row
+            copy={taskIntegrationRowCopy(row)}
+            key={row.key}
+            title="Task integrations"
+          />
+        ))
+      )}
       {integrationsError !== null ? (
         <Row copy={integrationsError} title="Integrations" />
       ) : (

@@ -2031,6 +2031,23 @@ test('Settings names GET task integrations without Connect or a write sheet', as
   ).toBe(false);
 });
 
+test('Settings names a failed task-integrations GET instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/task-integrations') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Task integrations');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('Todoist');
+  expect(tree).not.toContain('secret-todoist');
+  expect(labelsOf(renderer).includes('Connect')).toBe(false);
+});
+
 test('Settings names GET integrations without Connect or a write sheet', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
