@@ -547,3 +547,17 @@ test('an out-of-range session endedAt cannot be accepted', async () => {
     ),
   ).rejects.toThrow('Device session response is incomplete');
 });
+
+test('a complete session without endedAt cannot be accepted', async () => {
+  await expect(
+    completeDeviceSession(
+      backend(() => ({
+        status: 200,
+        body: JSON.stringify({
+          session: session({state: 'complete', endedAt: null}),
+        }),
+      })),
+      '11111111-2222-3333-4444-555555555555',
+    ),
+  ).rejects.toThrow('Device session response is incomplete');
+});

@@ -71,7 +71,9 @@ function parseSession(value: unknown): DeviceSessionRecord {
     !Number.isSafeInteger(item.chunkCount) ||
     (item.chunkCount as number) < 0 ||
     !isCaptureTimestamp(item.startedAt) ||
-    (item.endedAt !== null && !isCaptureTimestamp(item.endedAt))
+    (item.state === 'complete'
+      ? !isCaptureTimestamp(item.endedAt)
+      : item.endedAt !== null && !isCaptureTimestamp(item.endedAt))
   ) {
     throw new Error('Device session response is incomplete');
   }
