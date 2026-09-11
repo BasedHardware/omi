@@ -103,6 +103,12 @@ const liveResponse = (sessionId = "live_123", sdp = "v=0\r\na=answer\r\n") =>
     { status: 201, headers: { "content-type": "application/json" } }
   );
 
+const geminiTokenResponse = (name = "auth_tokens/ephemeral-1") =>
+  new Response(JSON.stringify({ name }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+
 describe("live session provider request shape", () => {
   test("posts the gpt-live-1 WebRTC session with the api key only on the server", async () => {
     const { live } = await import("../src/live");
@@ -110,13 +116,16 @@ describe("live session provider request shape", () => {
     try {
       const result = await live.createLiveSession(
         { OPENAI_API_KEY: "test-openai-key" },
-        { sdp: "v=0\r\no=- offer\r\n" },
+        { provider: "gpt_live", sdp: "v=0\r\no=- offer\r\n" },
         "corr-live-1"
       );
       expect(result.kind).toBe("ok");
       if (result.kind === "ok") {
-        expect(result.sessionId).toBe("live_123");
-        expect(result.answerSdp).toBe("v=0\r\na=answer\r\n");
+        expect(result.provider).toBe("gpt_live");
+        if (result.provider === "gpt_live") {
+          expect(result.sessionId).toBe("live_123");
+          expect(result.answerSdp).toBe("v=0\r\na=answer\r\n");
+        }
       }
       expect(fetchMock.calls).toHaveLength(1);
       const request = fetchMock.calls[0];
@@ -148,7 +157,7 @@ describe("live session provider request shape", () => {
     }
   });
 
-  test("fails closed and retryable when OPENAI_API_KEY is unset", async () => {
+  test("fails closed and retryable when OPENAI_API_KEY is unset for gpt_live", async () => {
     const { live } = await import("../src/live");
     const fetchMock = captureFetch(() => liveResponse());
     try {
@@ -157,8 +166,69 @@ describe("live session provider request shape", () => {
       expect(live.liveConfigured({ OPENAI_API_KEY: "key" })).toBe(true);
       const result = await live.createLiveSession(
         {},
-        { sdp: "v=0\r\n" },
+        { provider: "gpt_live", sdp: "v=0\r\n" },
         "corr-live-2"
+      );
+      expect(result).toEqual({
+        kind: "error",
+        status: 503,
+        code: "provider_not_configured",
+        retryable: true,
+      });
+      expect(fetchMock.calls).toHaveLength(0);
+    } finally {
+      fetchMock.restore();
+    }
+  });
+
+  test("mints a Gemini ephemeral token without returning the project key", async () => {
+    const { live } = await import("../src/live");
+    const fetchMock = captureFetch(() =>
+      geminiTokenResponse("auth_tokens/secret-token")
+    );
+    try {
+      expect(live.geminiLiveConfigured({})).toBe(false);
+      expect(live.geminiLiveConfigured({ GEMINI_API_KEY: "gkey" })).toBe(true);
+      const result = await live.createLiveSession(
+        { GEMINI_API_KEY: "test-gemini-key" },
+        { provider: "gemini_live" },
+        "corr-gemini-1"
+      );
+      expect(result.kind).toBe("ok");
+      if (result.kind === "ok" && result.provider === "gemini_live") {
+        expect(result.token).toBe("auth_tokens/secret-token");
+        expect(result.model).toBe("models/gemini-3.1-flash-live-preview");
+        expect(result.url).toBe(live.GEMINI_LIVE_WS_URL);
+        expect(result.url).not.toContain("key=");
+        expect(typeof result.sessionId).toBe("string");
+        expect(result.sessionId.length).toBeGreaterThan(0);
+      }
+      expect(fetchMock.calls).toHaveLength(1);
+      const request = fetchMock.calls[0];
+      if (request === undefined) throw new Error("no fetch call captured");
+      expect(request.method).toBe("POST");
+      expect(request.url.startsWith(live.GEMINI_AUTH_TOKENS_URL)).toBe(true);
+      expect(new URL(request.url).searchParams.get("key")).toBe(
+        "test-gemini-key"
+      );
+      expect(request.headers.get("authorization")).toBeNull();
+      const body = (await request.json()) as Record<string, unknown>;
+      expect(body["uses"]).toBe(1);
+      expect(typeof body["expireTime"]).toBe("string");
+      expect(typeof body["newSessionExpireTime"]).toBe("string");
+    } finally {
+      fetchMock.restore();
+    }
+  });
+
+  test("fails closed when GEMINI_API_KEY is unset for gemini_live", async () => {
+    const { live } = await import("../src/live");
+    const fetchMock = captureFetch(() => geminiTokenResponse());
+    try {
+      const result = await live.createLiveSession(
+        { OPENAI_API_KEY: "openai-only" },
+        { provider: "gemini_live" },
+        "corr-gemini-2"
       );
       expect(result).toEqual({
         kind: "error",
@@ -179,7 +249,7 @@ describe("live session provider request shape", () => {
     try {
       const result = await live.createLiveSession(
         { OPENAI_API_KEY: "leak-me-never" },
-        { sdp: "v=0\r\nsecret-offer" },
+        { provider: "gpt_live", sdp: "v=0\r\nsecret-offer" },
         "corr-live-3"
       );
       expect(result).toEqual({
@@ -204,7 +274,7 @@ describe("live session provider request shape", () => {
     try {
       const result = await live.createLiveSession(
         { OPENAI_API_KEY: "test-openai-key" },
-        { sdp: "v=0\r\n" },
+        { provider: "gpt_live", sdp: "v=0\r\n" },
         "corr-live-4"
       );
       expect(result.kind).toBe("error");
@@ -233,6 +303,32 @@ describe("live session provider request shape", () => {
     ).toBeNull();
     expect(live.parseLiveSessionResponse({})).toBeNull();
     expect(live.parseLiveSessionResponse(null)).toBeNull();
+    expect(live.parseGeminiAuthToken({})).toBeNull();
+    expect(live.parseGeminiAuthToken({ name: "auth_tokens/ok" })).toBe(
+      "auth_tokens/ok"
+    );
+  });
+
+  test("parses provider-aware live session requests", async () => {
+    const { live } = await import("../src/live");
+    expect(live.parseLiveSessionRequest({ sdp: "v=0\r\n" })).toEqual({
+      provider: "gpt_live",
+      sdp: "v=0\r\n",
+    });
+    expect(
+      live.parseLiveSessionRequest({ provider: "gpt_live", sdp: "v=0\r\n" })
+    ).toEqual({ provider: "gpt_live", sdp: "v=0\r\n" });
+    expect(live.parseLiveSessionRequest({ provider: "gemini_live" })).toEqual({
+      provider: "gemini_live",
+    });
+    expect(
+      live.parseLiveSessionRequest({ provider: "gemini_live", sdp: "" })
+    ).toEqual({
+      provider: "gemini_live",
+    });
+    expect(live.parseLiveSessionRequest({ provider: "nope" })).toBeNull();
+    expect(live.parseLiveSessionRequest({ provider: "gpt_live" })).toBeNull();
+    expect(live.parseLiveSessionRequest({})).toBeNull();
   });
 });
 
@@ -245,10 +341,10 @@ describe("live session route", () => {
     expect(response.status).toBe(401);
   });
 
-  test("returns 503 provider_not_configured when the secret is missing", async () => {
+  test("returns 503 provider_not_configured when the gpt secret is missing", async () => {
     const response = await postLive(
       baseEnv,
-      JSON.stringify({ sdp: "v=0\r\n" })
+      JSON.stringify({ provider: "gpt_live", sdp: "v=0\r\n" })
     );
     expect(response.status).toBe(503);
     const body = (await response.json()) as Record<string, unknown>;
@@ -258,18 +354,66 @@ describe("live session route", () => {
     expect(error["action"]).toBe("retry");
   });
 
-  test("mints a session and returns the answer sdp", async () => {
+  test("returns 503 provider_not_configured when the gemini secret is missing", async () => {
+    const response = await postLive(
+      { ...baseEnv, OPENAI_API_KEY: "openai-only" },
+      JSON.stringify({ provider: "gemini_live" })
+    );
+    expect(response.status).toBe(503);
+    const body = (await response.json()) as Record<string, unknown>;
+    const error = body["error"] as Record<string, unknown>;
+    expect(error["code"]).toBe("provider_not_configured");
+  });
+
+  test("mints a gpt session and returns the answer sdp", async () => {
     const fetchMock = captureFetch(() => liveResponse("live_route", "answer"));
     try {
       const response = await postLive(
         { ...baseEnv, OPENAI_API_KEY: "test-openai-key" },
-        JSON.stringify({ sdp: "v=0\r\noffer" })
+        JSON.stringify({ provider: "gpt_live", sdp: "v=0\r\noffer" })
       );
       expect(response.status).toBe(201);
       expect((await response.json()) as unknown).toEqual({
+        provider: "gpt_live",
         session: { id: "live_route" },
         transport: { type: "webrtc", sdp: "answer" },
       });
+      expect(fetchMock.calls).toHaveLength(1);
+    } finally {
+      fetchMock.restore();
+    }
+  });
+
+  test("mints a gemini session and returns the constrained ws transport", async () => {
+    const { live } = await import("../src/live");
+    const fetchMock = captureFetch(() =>
+      geminiTokenResponse("auth_tokens/route-token")
+    );
+    try {
+      const response = await postLive(
+        { ...baseEnv, GEMINI_API_KEY: "test-gemini-key" },
+        JSON.stringify({ provider: "gemini_live" })
+      );
+      expect(response.status).toBe(201);
+      const body = (await response.json()) as {
+        provider: string;
+        session: { id: string };
+        transport: {
+          type: string;
+          token: string;
+          model: string;
+          url: string;
+        };
+      };
+      expect(body.provider).toBe("gemini_live");
+      expect(body.transport).toEqual({
+        type: "gemini_ws",
+        token: "auth_tokens/route-token",
+        model: "models/gemini-3.1-flash-live-preview",
+        url: live.GEMINI_LIVE_WS_URL,
+      });
+      expect(body.transport.url).not.toContain("key=");
+      expect(typeof body.session.id).toBe("string");
       expect(fetchMock.calls).toHaveLength(1);
     } finally {
       fetchMock.restore();
@@ -281,6 +425,9 @@ describe("live session route", () => {
       JSON.stringify({}),
       JSON.stringify({ sdp: "" }),
       JSON.stringify({ sdp: 42 }),
+      JSON.stringify({ provider: "gpt_live" }),
+      JSON.stringify({ provider: "gpt_live", sdp: "" }),
+      JSON.stringify({ provider: "nope" }),
       JSON.stringify({ sdp: "x".repeat(262_145) }),
       "not json",
     ]) {

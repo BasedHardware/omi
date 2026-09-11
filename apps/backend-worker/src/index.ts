@@ -30,6 +30,7 @@ type WorkerEnv = Omit<
   ObservabilityEnv & {
     API_TOKEN: string;
     OPENAI_API_KEY?: string;
+    GEMINI_API_KEY?: string;
     CANONICAL_SERVICE?: CoreEnv["CANONICAL_SERVICE"];
     FIREBASE_API_KEY?: string;
     DB?: D1Database;

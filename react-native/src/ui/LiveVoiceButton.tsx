@@ -3,9 +3,11 @@ import {StyleSheet, Text, View} from 'react-native';
 import Mic from 'lucide-react-native/icons/mic';
 import PhoneOff from 'lucide-react-native/icons/phone-off';
 import type {OmiBackend} from '../omiNativeTypes';
+import type {LiveVoiceProvider} from '../desktopSettingsClient';
 import {
   LiveUnsupportedError,
   liveErrorCopy,
+  liveGeminiSupported,
   requestLiveSession,
 } from '../liveClient';
 import {
@@ -13,6 +15,7 @@ import {
   resolveLiveWebRtcScope,
   type LiveVoicePhase,
 } from '../liveWebRtc';
+import {LiveGeminiSession, resolveLiveGeminiScope} from '../liveGemini';
 import {FocusPressable} from './Pressable';
 import {desktopTokens} from '../desktop/tokens';
 import {mobileColor} from '../mobile/mobileTokens';
@@ -21,16 +24,22 @@ type Props = {
   backend: OmiBackend | null | undefined;
   compact?: boolean;
   desktop?: boolean;
+  provider?: LiveVoiceProvider;
+};
+
+type ActiveSession = {
+  stop(): void;
 };
 
 export function LiveVoiceButton({
   backend,
   compact = false,
   desktop = false,
+  provider = 'gpt_live',
 }: Props) {
   const [phase, setPhase] = useState<LiveVoicePhase>('idle');
   const [message, setMessage] = useState<string | null>(null);
-  const sessionRef = useRef<LiveWebRtcSession | null>(null);
+  const sessionRef = useRef<ActiveSession | null>(null);
   const active =
     phase === 'connecting' || phase === 'live' || phase === 'stopping';
 
@@ -47,33 +56,92 @@ export function LiveVoiceButton({
     };
   }, []);
 
+  // Switching providers mid-call ends the active session honestly.
+  useEffect(() => {
+    if (sessionRef.current !== null) {
+      sessionRef.current.stop();
+      sessionRef.current = null;
+      setPhase('idle');
+      setMessage(null);
+    }
+  }, [provider]);
+
   const start = useCallback(async () => {
     if (backend === null || backend === undefined) {
       setMessage('Sign in again to use Live voice.');
       setPhase('error');
       return;
     }
+    setMessage(null);
+    setPhase('connecting');
+
+    const onPhase = (next: LiveVoicePhase, detail?: string) => {
+      setPhase(next);
+      setMessage(next === 'error' ? detail ?? null : null);
+      if (next === 'closed' || next === 'error') {
+        sessionRef.current = null;
+      }
+    };
+
+    if (provider === 'gemini_live') {
+      const scope = resolveLiveGeminiScope();
+      if (scope === null || !liveGeminiSupported()) {
+        setMessage(
+          liveErrorCopy(
+            new LiveUnsupportedError(
+              'Gemini Live needs microphone streaming on this device.',
+            ),
+            provider,
+          ),
+        );
+        setPhase('error');
+        return;
+      }
+      const session = new LiveGeminiSession(
+        scope,
+        async () => {
+          const minted = await requestLiveSession(backend, {
+            provider: 'gemini_live',
+          });
+          if (minted.provider !== 'gemini_live') {
+            throw new Error(
+              'Live session response used an unsupported transport',
+            );
+          }
+          return minted;
+        },
+        {onPhase},
+      );
+      sessionRef.current = session;
+      await session.start();
+      return;
+    }
+
     const scope = resolveLiveWebRtcScope();
     if (scope === null) {
-      setMessage(liveErrorCopy(new LiveUnsupportedError()));
+      setMessage(liveErrorCopy(new LiveUnsupportedError(), provider));
       setPhase('error');
       return;
     }
-    setMessage(null);
-    setPhase('connecting');
     const session = new LiveWebRtcSession(
       scope,
-      sdp => requestLiveSession(backend, sdp),
-      {
-        onPhase: (next, detail) => {
-          setPhase(next);
-          setMessage(next === 'error' ? detail ?? null : null);
-        },
+      async sdp => {
+        const minted = await requestLiveSession(backend, {
+          provider: 'gpt_live',
+          sdp,
+        });
+        if (minted.provider !== 'gpt_live') {
+          throw new Error(
+            'Live session response used an unsupported transport',
+          );
+        }
+        return minted;
       },
+      {onPhase},
     );
     sessionRef.current = session;
     await session.start();
-  }, [backend]);
+  }, [backend, provider]);
 
   const toggle = useCallback(() => {
     if (active) {

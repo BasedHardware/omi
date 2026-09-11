@@ -1,15 +1,30 @@
 import type {NativeHttpResponse, OmiBackend} from './omiNativeTypes';
+import type {LiveVoiceProvider} from './desktopSettingsClient';
 
-// GPT-Live-1 session minting. The Worker holds the OpenAI project key; this
-// client only ever sends an SDP offer and receives an SDP answer plus the
-// opaque session id. No secret ever reaches JavaScript.
+// Live session minting. The Worker holds provider keys; this client only ever
+// sends a provider choice (plus an SDP offer for GPT Live 1) and receives a
+// transport answer. No secret ever reaches JavaScript.
 export const LIVE_SESSION_PATH = '/v1/live/sessions';
 export const LIVE_MODEL = 'gpt-live-1';
+export const GEMINI_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
 
-export type LiveSession = {
+export type {LiveVoiceProvider};
+
+export type GptLiveSession = {
+  provider: 'gpt_live';
   sessionId: string;
   answerSdp: string;
 };
+
+export type GeminiLiveSession = {
+  provider: 'gemini_live';
+  sessionId: string;
+  token: string;
+  model: string;
+  url: string;
+};
+
+export type LiveSession = GptLiveSession | GeminiLiveSession;
 
 export class LiveSessionBackendError extends Error {
   constructor(
@@ -17,35 +32,47 @@ export class LiveSessionBackendError extends Error {
     readonly backendCode: string,
     readonly retryable: boolean,
     readonly action: string,
+    readonly provider?: LiveVoiceProvider,
   ) {
     super(`Live session backend failed (${status}:${backendCode})`);
   }
 }
 
 export class LiveUnsupportedError extends Error {
-  constructor() {
-    super('Live voice needs WebRTC on this device.');
+  constructor(message = 'Live voice needs WebRTC on this device.') {
+    super(message);
     this.name = 'LiveUnsupportedError';
   }
 }
 
-export function liveErrorCopy(error: unknown): string {
+export function liveErrorCopy(
+  error: unknown,
+  provider: LiveVoiceProvider = 'gpt_live',
+): string {
   if (error instanceof LiveUnsupportedError) {
     return error.message;
   }
   if (!(error instanceof LiveSessionBackendError)) {
-    return 'Live voice could not start. Check your connection and try again.';
+    return provider === 'gemini_live'
+      ? 'Gemini Live could not start. Check your connection and try again.'
+      : 'Live voice could not start. Check your connection and try again.';
   }
   if (error.action === 'reauthenticate' || error.status === 401) {
     return 'Sign in again to use Live voice.';
   }
   if (error.backendCode === 'provider_not_configured') {
-    return 'Live voice is not configured on this server yet.';
+    return provider === 'gemini_live'
+      ? 'Gemini Live is not configured on this server yet (missing GEMINI_API_KEY).'
+      : 'GPT Live 1 is not configured on this server yet (missing OPENAI_API_KEY).';
   }
   if (error.status === 503 || error.retryable) {
-    return 'Live voice is temporarily unavailable. Try again.';
+    return provider === 'gemini_live'
+      ? 'Gemini Live is temporarily unavailable. Try again.'
+      : 'Live voice is temporarily unavailable. Try again.';
   }
-  return 'Live voice could not start on this device.';
+  return provider === 'gemini_live'
+    ? 'Gemini Live could not start on this device.'
+    : 'Live voice could not start on this device.';
 }
 
 export function liveWebRtcSupported(): boolean {
@@ -55,6 +82,23 @@ export function liveWebRtcSupported(): boolean {
   };
   return (
     typeof scope.RTCPeerConnection === 'function' &&
+    typeof scope.navigator?.mediaDevices?.getUserMedia === 'function'
+  );
+}
+
+export function liveGeminiSupported(): boolean {
+  const scope = globalThis as {
+    WebSocket?: unknown;
+    AudioContext?: unknown;
+    webkitAudioContext?: unknown;
+    navigator?: {mediaDevices?: {getUserMedia?: unknown}};
+  };
+  const hasAudioContext =
+    typeof scope.AudioContext === 'function' ||
+    typeof scope.webkitAudioContext === 'function';
+  return (
+    typeof scope.WebSocket === 'function' &&
+    hasAudioContext &&
     typeof scope.navigator?.mediaDevices?.getUserMedia === 'function'
   );
 }
@@ -82,42 +126,84 @@ export function parseLiveSession(body: string | null): LiveSession {
   }
   const sessionId = (session as Record<string, unknown>).id;
   const transportType = (transport as Record<string, unknown>).type;
-  const answerSdp = (transport as Record<string, unknown>).sdp;
-  if (transportType !== undefined && transportType !== 'webrtc') {
-    throw new Error('Live session response used an unsupported transport');
-  }
   if (
     typeof sessionId !== 'string' ||
     sessionId.length === 0 ||
-    sessionId.length > 256 ||
-    typeof answerSdp !== 'string' ||
-    answerSdp.length === 0
+    sessionId.length > 256
   ) {
     throw new Error('Live session response is incomplete');
   }
-  return {sessionId, answerSdp};
+
+  if (transportType === 'gemini_ws' || record.provider === 'gemini_live') {
+    const token = (transport as Record<string, unknown>).token;
+    const model = (transport as Record<string, unknown>).model;
+    const url = (transport as Record<string, unknown>).url;
+    if (
+      typeof token !== 'string' ||
+      token.length === 0 ||
+      token.length > 2048 ||
+      typeof model !== 'string' ||
+      model.length === 0 ||
+      typeof url !== 'string' ||
+      !url.startsWith('wss://')
+    ) {
+      throw new Error('Live session response is incomplete');
+    }
+    return {
+      provider: 'gemini_live',
+      sessionId,
+      token,
+      model,
+      url,
+    };
+  }
+
+  if (transportType !== undefined && transportType !== 'webrtc') {
+    throw new Error('Live session response used an unsupported transport');
+  }
+  const answerSdp = (transport as Record<string, unknown>).sdp;
+  if (typeof answerSdp !== 'string' || answerSdp.length === 0) {
+    throw new Error('Live session response is incomplete');
+  }
+  return {provider: 'gpt_live', sessionId, answerSdp};
 }
+
+export type LiveSessionRequest =
+  | {provider: 'gpt_live'; sdp: string}
+  | {provider: 'gemini_live'};
 
 export async function requestLiveSession(
   backend: OmiBackend,
-  sdp: string,
+  input: LiveSessionRequest | string,
 ): Promise<LiveSession> {
-  if (typeof sdp !== 'string' || sdp.trim().length === 0) {
-    throw new Error('An SDP offer is required');
+  // Backward compatible: a bare SDP string is GPT Live 1.
+  const request: LiveSessionRequest =
+    typeof input === 'string' ? {provider: 'gpt_live', sdp: input} : input;
+  if (request.provider === 'gpt_live') {
+    if (typeof request.sdp !== 'string' || request.sdp.trim().length === 0) {
+      throw new Error('An SDP offer is required');
+    }
   }
+  const body =
+    request.provider === 'gpt_live'
+      ? JSON.stringify({provider: 'gpt_live', sdp: request.sdp})
+      : JSON.stringify({provider: 'gemini_live'});
   const response = await backend.request({
     id: 'live-session',
     method: 'POST',
     path: LIVE_SESSION_PATH,
-    body: JSON.stringify({sdp}),
+    body,
   });
   if (response.status !== 200 && response.status !== 201) {
-    throwBackendError(response);
+    throwBackendError(response, request.provider);
   }
   return parseLiveSession(response.body);
 }
 
-function throwBackendError(response: NativeHttpResponse): never {
+function throwBackendError(
+  response: NativeHttpResponse,
+  provider: LiveVoiceProvider,
+): never {
   let code = 'unknown';
   let retryable = false;
   let action = 'none';
@@ -137,5 +223,11 @@ function throwBackendError(response: NativeHttpResponse): never {
       }
     } catch {}
   }
-  throw new LiveSessionBackendError(response.status, code, retryable, action);
+  throw new LiveSessionBackendError(
+    response.status,
+    code,
+    retryable,
+    action,
+    provider,
+  );
 }

@@ -616,6 +616,7 @@ test('desktop settings persist preferences and request real macOS permissions', 
   expect(source).toContain('RCT_REMAP_METHOD(loadDesktopPreferences');
   expect(source).toContain('RCT_REMAP_METHOD(setDesktopPreference');
   expect(source).toContain('@"softwarePlane" : @"omi.backend.softwarePlane"');
+  expect(source).toContain('@"liveVoiceProvider" : @"omi.live.voiceProvider"');
   expect(source).toContain('environment[@"OMI_V5_BACKEND_URL"]');
   expect(source).toContain('screenAnalysisEnabled');
   expect(source).toContain('audioRecordingMode');

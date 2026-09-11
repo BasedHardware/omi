@@ -67,6 +67,10 @@ import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
 import {AppNav} from '../ui/AppNav';
 import {Composer} from '../ui/Composer';
 import {LiveVoiceButton} from '../ui/LiveVoiceButton';
+import {
+  loadDesktopPreferences,
+  type LiveVoiceProvider,
+} from '../desktopSettingsClient';
 import {DesktopApp, DesktopSessionProbe} from '../desktop/DesktopApp';
 import {
   MobileAppSurface,
@@ -209,6 +213,22 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [searchArmed, setSearchArmed] = useState(false);
   const [homeSearchFocusNonce, setHomeSearchFocusNonce] = useState(0);
   const [composerFocused, setComposerFocused] = useState(false);
+  const [liveVoiceProvider, setLiveVoiceProvider] =
+    useState<LiveVoiceProvider>('gpt_live');
+
+  useEffect(() => {
+    let cancelled = false;
+    loadDesktopPreferences()
+      .then(prefs => {
+        if (!cancelled) {
+          setLiveVoiceProvider(prefs.liveVoiceProvider);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const {
     deviceBusy,
     deviceScanMessage,
@@ -809,8 +829,20 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       : nativeSnapshot.bluetooth === 'poweredOn'
       ? '#45b79b'
       : '#d9826f';
-  const desktopLiveControl = <LiveVoiceButton backend={omiBackend} desktop />;
-  const mobileLiveControl = <LiveVoiceButton backend={omiBackend} compact />;
+  const desktopLiveControl = (
+    <LiveVoiceButton
+      backend={omiBackend}
+      desktop
+      provider={liveVoiceProvider}
+    />
+  );
+  const mobileLiveControl = (
+    <LiveVoiceButton
+      backend={omiBackend}
+      compact
+      provider={liveVoiceProvider}
+    />
+  );
   const currentItems = reads.slice(0, 2);
 
   const OnboardingSurface = macDesktop ? DesktopOnboarding : Onboarding;
@@ -1002,6 +1034,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           }}
           onSignOut={() => {
             return signOutAndRefresh();
+          }}
+          onPreferencesChange={prefs => {
+            setLiveVoiceProvider(prefs.liveVoiceProvider);
           }}
           onWorkspaceReload={() => {
             chatSessionEpochRef.current += 1;

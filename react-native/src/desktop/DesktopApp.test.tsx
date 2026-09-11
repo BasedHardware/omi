@@ -83,6 +83,7 @@ jest.mock('../desktopSettingsClient', () => {
     rewindRetentionDays: 14,
     screenCapture: false,
     softwarePlane: 'old',
+    liveVoiceProvider: 'gpt_live',
     stampedV5Origin: null,
     transcriptionAutoDetect: true,
     vadGate: true,
@@ -1254,6 +1255,9 @@ test('Settings opens the shipping multi-pane IA including Advanced', async () =>
   expect(advanced).toContain('Backend');
   expect(advanced).toContain('Old backend');
   expect(advanced).toContain('New backend');
+  expect(advanced).toContain('Live voice');
+  expect(advanced).toContain('GPT Live 1');
+  expect(advanced).toContain('Gemini Live');
   expect(advanced).not.toContain('workers.dev');
 });
 

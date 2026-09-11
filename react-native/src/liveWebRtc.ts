@@ -1,4 +1,4 @@
-import {LiveUnsupportedError, type LiveSession} from './liveClient';
+import {LiveUnsupportedError, type GptLiveSession} from './liveClient';
 
 // Browser/WebRTC runtime for GPT-Live-1. React Native native platforms do not
 // ship an RTCPeerConnection, so this module resolves a scope and reports
@@ -92,7 +92,7 @@ export class LiveWebRtcSession {
 
   constructor(
     private readonly scope: LiveWebRtcScope,
-    private readonly requestAnswer: (sdp: string) => Promise<LiveSession>,
+    private readonly requestAnswer: (sdp: string) => Promise<GptLiveSession>,
     private readonly callbacks: LiveVoiceCallbacks = {},
   ) {}
 
