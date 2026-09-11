@@ -12,6 +12,7 @@ import type { DevPrincipal } from "../auth/dev-token";
 import type { PreparedConversationsRead } from "../composition/conversations-read";
 import {
   UnprojectableConversationRecordError,
+  assertProjectableConversationRecord,
   readConversationsPage,
 } from "../composition/conversations-read";
 import type { ServedCounter } from "../observability/served-count";
@@ -136,8 +137,20 @@ export const registerConversationReadRoutes = (
       const limit = parseLimit(url.searchParams.get("limit"), DEFAULT_LIMIT);
       const offset = parseLimit(url.searchParams.get("offset"), 0);
       const records = deps.store.listRecords(principal.uid);
+      const page = records.slice(offset, offset + limit);
+      try {
+        for (const record of page) {
+          assertProjectableConversationRecord(record);
+        }
+      } catch (error) {
+        if (error instanceof UnprojectableConversationRecordError) {
+          deps.counter.recordDomainRead("failed");
+          return new Response(INTERNAL_BODY, { status: 500, headers: JSON_HEADERS });
+        }
+        throw error;
+      }
       deps.counter.recordDomainRead("served");
-      return jsonResponse(records.slice(offset, offset + limit));
+      return jsonResponse(page);
     }
     return serveConversationsEnvelope(context.req.raw, principal, deps);
   });

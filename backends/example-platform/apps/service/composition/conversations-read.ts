@@ -272,7 +272,15 @@ export const readConversationsPage = (
   return { canonical_json: JSON.stringify(page), served: items.length };
 };
 
-const projectRecord = (record: OrderedConversationRecord["record"], revision: string): unknown => {
+const isoToMs = (value: string): number => {
+  const ms = Date.parse(value);
+  if (!Number.isSafeInteger(ms)) throw new UnprojectableConversationRecordError();
+  return ms;
+};
+
+export const assertProjectableConversationRecord = (
+  record: OrderedConversationRecord["record"],
+): void => {
   if (!OPAQUE_REF_PATTERN.test(record.id)) throw new UnprojectableConversationRecordError();
   if (!VISIBILITIES.has(record.visibility)) throw new UnprojectableConversationRecordError();
   if (record.folder_id !== null && typeof record.folder_id !== "string") {
@@ -281,6 +289,14 @@ const projectRecord = (record: OrderedConversationRecord["record"], revision: st
   if (record.captured_at_ms !== undefined && (!Number.isSafeInteger(record.captured_at_ms)
     || record.captured_at_ms < 0 || record.captured_at_ms > 8640000000000000))
     throw new UnprojectableConversationRecordError();
+  isoToMs(record.created_at);
+  isoToMs(record.updated_at);
+  isoToMs(record.started_at);
+  isoToMs(record.finished_at);
+};
+
+const projectRecord = (record: OrderedConversationRecord["record"], revision: string): unknown => {
+  assertProjectableConversationRecord(record);
   return {
     id: record.id,
     title: record.structured.title,
@@ -299,12 +315,6 @@ const projectRecord = (record: OrderedConversationRecord["record"], revision: st
     folderId: record.folder_id,
     revision,
   };
-};
-
-const isoToMs = (value: string): number => {
-  const ms = Date.parse(value);
-  if (!Number.isSafeInteger(ms)) throw new UnprojectableConversationRecordError();
-  return ms;
 };
 
 const buildFrontiers = (
