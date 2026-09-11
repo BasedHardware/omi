@@ -20,10 +20,8 @@ void main() {
   });
 
   tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      packageInfoChannel,
-      null,
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(packageInfoChannel, null);
   });
 
   const valid = {
@@ -70,7 +68,10 @@ void main() {
   });
 
   test('firmware below the minimum still reports the zero sentinel', () async {
-    final result = await DeviceUtils.shouldUpdateFirmware(currentFirmware: '0.9.0', latestFirmwareDetails: valid);
+    final result = await DeviceUtils.shouldUpdateFirmware(
+      currentFirmware: '0.9.0',
+      latestFirmwareDetails: valid,
+    );
 
     expect(result.$1, '0');
     expect(result.$2, isFalse);
