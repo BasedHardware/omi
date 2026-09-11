@@ -245,7 +245,7 @@ actor AIUserProfileService {
       throw ProfileError.insufficientData
     }
     guard !AIProvider.shouldSkipConnectorSynthesis() else {
-      log("AIUserProfileService: skipping profile synthesis: Local provider, Connector synthesis is Off")
+      log("Skipping profile synthesis: Local provider, Connector synthesis is Off")
       throw ProfileError.connectorSynthesisDisabled
     }
 
