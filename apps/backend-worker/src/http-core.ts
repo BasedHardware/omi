@@ -2,6 +2,12 @@ import { SYNTHESIZED_READ_CONTRACT_VERSION } from "@omi-core/ratified-contracts/
 
 import { readHistory, readSettings, type Admission } from "./chat";
 import {
+  createLiveSession,
+  LIVE_REQUEST_MAX_BYTES,
+  parseLiveSessionRequest,
+  type LiveEnv,
+} from "./live";
+import {
   conversationPage,
   paginateConversations,
   readConversations,
@@ -77,6 +83,7 @@ export type AccountLocator = {
 
 export type CoreEnv = SignedUploadEnv &
   GatewayEnv &
+  LiveEnv &
   ObservabilityEnv & {
     ENVIRONMENT: string;
     API_TOKEN: string;
@@ -448,6 +455,38 @@ export async function handleSettings(context: CoreContext): Promise<Response> {
       context.env.STAGING_PLAN_LABEL,
       context.env.STAGING_CHAT_LIMIT
     )
+  );
+}
+
+export async function handleLiveSession(
+  context: CoreContext
+): Promise<Response> {
+  const parsed = await readBoundedJson(context.req.raw, LIVE_REQUEST_MAX_BYTES);
+  if (parsed.kind === "too_large")
+    return backendError("attachment_too_large", "edit_request", 413);
+  if (parsed.kind === "invalid")
+    return backendError("bad_request", "edit_request", 400);
+  const request = parseLiveSessionRequest(parsed.value);
+  if (request === null) return backendError("validation", "edit_request", 422);
+  const result = await createLiveSession(
+    context.env,
+    request,
+    context.get("requestId") || "unavailable"
+  );
+  if (result.kind === "error") {
+    return backendError(
+      result.code,
+      result.retryable ? "retry" : "edit_request",
+      result.status,
+      result.retryable
+    );
+  }
+  return json(
+    {
+      session: { id: result.sessionId },
+      transport: { type: "webrtc", sdp: result.answerSdp },
+    },
+    201
   );
 }
 
@@ -958,6 +997,7 @@ export const v1Routes: readonly CoreRoute[] = [
     handle: handleTranscription,
   },
   { method: "GET", path: "/v1/settings", handle: handleSettings },
+  { method: "POST", path: "/v1/live/sessions", handle: handleLiveSession },
   { method: "GET", path: "/v1/chat-messages", handle: handleChatHistory },
   { method: "POST", path: "/v1/chat-messages", handle: handleChatCreate },
   {

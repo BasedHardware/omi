@@ -33,6 +33,7 @@ Optional `CANONICAL_SERVICE` is a Worker service binding exposing the ratified `
 - `CLOUDFLARE_API_TOKEN`: the API token that owns the Worker and D1 database.
 - `CLOUDFLARE_ACCOUNT_ID`: the account that owns the Worker, D1 database, R2 bucket, and Queue.
 - Worker secrets set out-of-band: `API_TOKEN`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY`. The attachment route fails closed without all three; never place their values in repository files.
+- `OPENAI_API_KEY`: required for GPT-Live-1 voice (`POST /v1/live/sessions`). Set it with `wrangler secret put OPENAI_API_KEY` for staging. The route fails closed with `provider_not_configured` (503, retryable) when unset; no key is invented and no client ever receives it. The Live route still requires `API_TOKEN` authentication.
 - `STAGING_WORKER_URL`: the public URL used by `verify:release` after the deploy. Native capture (`/v1/device-sessions`) reads this origin from `OMI_V5_BACKEND_URL` (https only; loopback, `api.omi.me`, or `*.workers.dev`). The repository does not record a `workers.dev` default. Settings and connector reads stay on `https://api.omi.me` unless a loopback `OMI_LOCAL_BACKEND_URL` is selected.
 - `STAGING_OBSERVABILITY_SINK_MODE`: `cloudflare_only` or `better_stack`.
 - `STAGING_BETTER_STACK_EVIDENCE_ID`: an opaque operator evidence identifier required only for `better_stack`.

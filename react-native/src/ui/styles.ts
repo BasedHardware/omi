@@ -946,6 +946,7 @@ export const styles = StyleSheet.create({
   },
   composerWrap: {paddingBottom: 16, paddingHorizontal: 20, paddingTop: 12},
   composerWrapCompact: {paddingHorizontal: 16},
+  liveVoiceDock: {alignItems: 'center', paddingBottom: 8},
   composer: {
     alignSelf: 'center',
     backgroundColor: '#252525',

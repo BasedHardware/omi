@@ -66,6 +66,7 @@ import {OmiMark, bundledAssetSource} from '../ui/OmiMark';
 import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
 import {AppNav} from '../ui/AppNav';
 import {Composer} from '../ui/Composer';
+import {LiveVoiceButton} from '../ui/LiveVoiceButton';
 import {DesktopApp, DesktopSessionProbe} from '../desktop/DesktopApp';
 import {
   MobileAppSurface,
@@ -567,6 +568,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         );
         const withoutCanonical = current.filter(
           message =>
+            message.id !== localMessage.id &&
             message.id !== result.human.id &&
             message.id !== result.assistant?.id &&
             message.id !== pendingId,
@@ -667,16 +669,17 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       setOlderChatCursor(page.olderCursor);
       setHasOlderChat(page.hasOlder);
     } catch (error) {
-      if (
-        chatSessionEpochRef.current !== session ||
-        chatMutationSeqRef.current !== mutation
-      ) {
+      // A session change retires the page entirely. A newer send only fences
+      // the destructive 410 recovery (below); it must not swallow the terminal
+      // error, or a failed older page would look like it silently succeeded.
+      if (chatSessionEpochRef.current !== session) {
         return;
       }
       if (
         error instanceof ChatBackendError &&
         error.status === 410 &&
-        error.action === 'refresh_history'
+        error.action === 'refresh_history' &&
+        chatMutationSeqRef.current === mutation
       ) {
         try {
           const page = await loadNewestChatHistory(backend);
@@ -806,6 +809,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       : nativeSnapshot.bluetooth === 'poweredOn'
       ? '#45b79b'
       : '#d9826f';
+  const desktopLiveControl = <LiveVoiceButton backend={omiBackend} desktop />;
+  const mobileLiveControl = <LiveVoiceButton backend={omiBackend} compact />;
   const currentItems = reads.slice(0, 2);
 
   const OnboardingSurface = macDesktop ? DesktopOnboarding : Onboarding;
@@ -974,6 +979,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           hasOlderChat={hasOlderChat}
           loadingOlderChat={loadingOlderChat}
           loadingHistory={!chatHistorySettled}
+          liveVoiceControl={desktopLiveControl}
           messages={messages}
           onDraftChange={setDraft}
           onLoadOlderChat={() => {
@@ -1109,6 +1115,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         appsContent={
           <ConnectorsPage onSignIn={signInAndRefresh} signingIn={signingIn} />
         }
+        liveVoiceControl={mobileLiveControl}
         askValue={draft}
         capture={{
           active: nativeSnapshot?.capture === 'recording',
@@ -1582,6 +1589,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                 )}
               </View>
             </Animated.View>
+            {route === 'Home' && homeChatOpen && (
+              <View style={styles.liveVoiceDock}>{mobileLiveControl}</View>
+            )}
             {route === 'Home' && homeChatOpen && composer}
           </KeyboardAvoidingView>
         </View>

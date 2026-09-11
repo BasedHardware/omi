@@ -61,6 +61,7 @@ type Props = TaskMutationProps & {
   conversationNotice?: string | null;
   taskPagination?: React.ReactNode;
   deviceContent?: React.ReactNode;
+  liveVoiceControl?: React.ReactNode;
   activeGenerationId: string | null;
   authError: string | null;
   outcomes: DesktopReadOutcomes | null;
@@ -99,6 +100,7 @@ export function DesktopApp({
   hasOlderChat,
   loadingOlderChat,
   loadingHistory = false,
+  liveVoiceControl,
   messages,
   onDraftChange,
   onLoadOlderChat,
@@ -265,6 +267,7 @@ export function DesktopApp({
             hasOlder={hasOlderChat}
             loadingOlder={loadingOlderChat}
             loadingHistory={loadingHistory}
+            liveControl={liveVoiceControl}
             onLoadOlder={onLoadOlderChat}
           />
         ) : route === 'Conversations' ? (

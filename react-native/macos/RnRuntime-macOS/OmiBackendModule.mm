@@ -70,6 +70,7 @@ static NSString *OmiBackendRoute(NSString *path) {
 static BOOL OmiIsCaptureBackendPath(NSString *path) {
   NSString *route = OmiBackendRoute(path);
   return [route isEqualToString:@"/v1/settings"] ||
+      [route isEqualToString:@"/v1/live/sessions"] ||
       [route isEqualToString:@"/v1/chat-messages"] ||
       [route hasPrefix:@"/v1/chat-generations/"] ||
       [route isEqualToString:@"/v1/chat-attachments"] ||

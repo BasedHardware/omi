@@ -1080,6 +1080,91 @@ test('a send during an older-history load still keeps the earlier page', async (
   expect(labelsOf(renderer)).toContain('Load earlier messages');
 });
 
+test('a failed older-history page stays visible when a send happens mid-load', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+
+  const olderResolvers: Array<
+    (value: {id: string; status: number; body: string | null}) => void
+  > = [];
+  mockBackend.request.mockImplementation(
+    async (value: {id: string; path?: string}) => {
+      if (value.id === 'chat-history') {
+        if (value.path != null && value.path.includes('olderCursor=')) {
+          return new Promise(resolve => {
+            olderResolvers.push(resolve);
+          });
+        }
+        return {
+          id: value.id,
+          status: 200,
+          body: historyBody(
+            [
+              {
+                id: 'recent-1',
+                text: 'RECENT HISTORY',
+                sender: 'human',
+                createdAt: 10,
+                generationOutcome: null,
+              },
+            ],
+            {olderCursor: 'older-pending', hasOlder: true},
+          ),
+        };
+      }
+      return {id: value.id, status: 501, body: null};
+    },
+  );
+  mockBackend.generationEvents.mockResolvedValue({
+    id: 'gen',
+    status: 200,
+    body: `event: done\nid: terminal\ndata: ${JSON.stringify({
+      kind: 'done',
+      message: wireMessage({
+        id: 'gen',
+        text: 'reply while older failing',
+        sender: 'ai',
+        createdAt: 3,
+        generationOutcome: 'completed',
+      }),
+    })}\n\n`,
+  });
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  await openChat(renderer);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load earlier messages')
+      .props.onPress();
+    await flushAsyncQueue();
+  });
+  expect(olderResolvers.length).toBeGreaterThan(0);
+
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(node => node.props.placeholder === 'Ask about your day…')!;
+  act(() => {
+    omnibar.props.onChangeText('sent while older failing');
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send')
+      .props.onPress();
+    await flushAsyncQueue();
+  });
+
+  await act(async () => {
+    olderResolvers.splice(0).forEach(resolve => {
+      resolve({id: 'chat-history', status: 503, body: null});
+    });
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain('Older messages could not be loaded.');
+});
+
 test('signed-in macOS Settings exposes device scanning only after an explicit action', async () => {
   mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
   mockAuth.hasCloudSession.mockResolvedValue(true);
@@ -1385,6 +1470,9 @@ test('a failed history load reports even when a send bumped the session mutation
     await flushAsyncQueue();
   });
   expect(textOf(renderer)).toContain('raced reply');
+  // A canonical admission that does not echo the client id must replace the
+  // optimistic bubble, not render a duplicate human message.
+  expect(textOf(renderer).match(/raced send/g)).toHaveLength(1);
 
   // The original history load fails after the send bumped the mutation
   // counter. It must still surface its error instead of silently keeping a
