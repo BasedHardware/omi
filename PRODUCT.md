@@ -60,7 +60,7 @@ Free and unknown desktop entitlements use on-device screen vectors, degrading
 to keyword search when unavailable. Active paid plans retain Gemini screen
 uploads for phone-side search. The local-embedding hard kill restores the legacy
 Gemini route for every plan. Policy and rollback details live in
-[`LocalInference/ARCHITECTURE.md`](desktop/macos/Desktop/Sources/LocalInference/ARCHITECTURE.md).
+[`desktop/macos/Desktop/Sources/LocalInference/ARCHITECTURE.md`](desktop/macos/Desktop/Sources/LocalInference/ARCHITECTURE.md).
 
 ## Before you build
 
