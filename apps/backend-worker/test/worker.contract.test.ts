@@ -2992,6 +2992,87 @@ describe("worker request contract", () => {
     expect((await throughWorker.json()) as unknown).toEqual(unavailable);
   });
 
+  test("history GET of a stored createdAt that fails detach is production chat unavailable", async () => {
+    await insertChatMessage({
+      id: "readable-human",
+      accountId: "test-account",
+      text: "hello from you",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    const invalid = {
+      id: "negative-created-at",
+      text: "stored with a negative createdAt",
+      sender: "human",
+      type: "text",
+      createdAt: -1,
+      updatedAt: -1,
+      chatSessionId: null,
+      appId: null,
+      journalRevision: 0,
+      payloadHash: "sha256:test",
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      generationOutcome: null,
+      revision: "2",
+      attachments: [],
+    };
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)"
+      )
+      .bind(
+        invalid.id,
+        "test-account",
+        invalid.text,
+        invalid.sender,
+        2,
+        2,
+        JSON.stringify(invalid)
+      )
+      .run();
+
+    const response = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBe("60");
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+  });
+
+  test("history GET completes Date-overflow createdAt that production detach accepts", async () => {
+    await insertChatMessage({
+      id: "overflow-created-at",
+      accountId: "test-account",
+      text: "overflow createdAt",
+      createdAt: 8_640_000_000_000_001,
+      position: 1,
+      chatSessionId: null,
+    });
+
+    const response = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      messages: Array<{ id: string; createdAt: number }>;
+    };
+    expect(body.messages).toEqual([
+      expect.objectContaining({
+        id: "overflow-created-at",
+        createdAt: 8_640_000_000_000_001,
+      }),
+    ]);
+  });
+
   test("chat POST retryable 503 sends production chat retry-after", async () => {
     const missingDb = await handleChatCreate(
       coreContext({

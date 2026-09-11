@@ -610,6 +610,69 @@ function computePayloadHash(input: ChatCreate): string {
   });
 }
 
+const isNonNegativeSafeInteger = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+
+function projectStoredChatAttachments(
+  attachments: unknown
+): ChatMessage["attachments"] | null {
+  if (attachments === undefined) return [];
+  if (!Array.isArray(attachments)) return null;
+  for (const attachment of attachments) {
+    if (
+      attachment === null ||
+      typeof attachment !== "object" ||
+      typeof attachment.displayName !== "string" ||
+      typeof attachment.mediaType !== "string" ||
+      typeof attachment.id !== "string" ||
+      attachment.id.length === 0 ||
+      !isNonNegativeSafeInteger(attachment.sizeBytes) ||
+      !(
+        attachment.contentReference === null ||
+        (typeof attachment.contentReference === "string" &&
+          attachment.contentReference.length > 0)
+      )
+    ) {
+      return null;
+    }
+  }
+  return attachments as ChatMessage["attachments"];
+}
+
+function projectStoredChatMessage(message: ChatMessage): ChatMessage | null {
+  if (
+    typeof message.id !== "string" ||
+    message.id.length === 0 ||
+    typeof message.text !== "string" ||
+    typeof message.sender !== "string" ||
+    message.sender.length === 0 ||
+    typeof message.type !== "string" ||
+    message.type.length === 0 ||
+    !isNonNegativeSafeInteger(message.createdAt) ||
+    !isNonNegativeSafeInteger(message.updatedAt) ||
+    !(
+      message.chatSessionId === null || typeof message.chatSessionId === "string"
+    ) ||
+    !(message.appId === null || typeof message.appId === "string") ||
+    !isNonNegativeSafeInteger(message.journalRevision) ||
+    typeof message.payloadHash !== "string" ||
+    typeof message.messageSource !== "string" ||
+    !(
+      message.rating === null ||
+      (typeof message.rating === "number" && Number.isFinite(message.rating))
+    ) ||
+    typeof message.reported !== "boolean" ||
+    !(message.revision === null || typeof message.revision === "string")
+  ) {
+    return null;
+  }
+  const attachments = projectStoredChatAttachments(message.attachments);
+  if (attachments === null) return null;
+  return attachments === message.attachments
+    ? message
+    : { ...message, attachments };
+}
+
 async function projectHistoryMessage(
   db: D1Database,
   accountId: string,
@@ -624,12 +687,18 @@ async function projectHistoryMessage(
     const events = await readGenerationEvents(db, accountId, row.id);
     if (events === "unreadable") return null;
     const outcome = historyOutcomeFromTerminal(events, message);
-    return outcome === null ? null : { ...message, generationOutcome: outcome };
+    return outcome === null
+      ? null
+      : projectStoredChatMessage({ ...message, generationOutcome: outcome });
   }
   if (message.sender === "human") {
-    return { ...message, sender: "human", generationOutcome: null };
+    return projectStoredChatMessage({
+      ...message,
+      sender: "human",
+      generationOutcome: null,
+    });
   }
-  return { ...message, sender: "unknown" };
+  return projectStoredChatMessage({ ...message, sender: "unknown" });
 }
 
 function overlayCreateFields(
