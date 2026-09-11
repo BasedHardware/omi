@@ -142,6 +142,79 @@ final class LocalEmbeddingRuntimeTests: XCTestCase {
     XCTAssertFalse(probe.assetsAvailable)
     XCTAssertFalse(probe.permits(engine, budget: .seconds(2)))
   }
+
+  func testConcurrentSelectEngineProbesOnce() async {
+    let engine = HashEmbeddingEngine()
+    let cache = LocalEmbeddingProbeCache()
+    let probes = ProbeCallCounter()
+    let gate = ProbeHoldGate()
+    var runtime = LocalEmbeddingRuntime(
+      engines: [engine], defaultEngineID: engine.engineID, probeCache: cache, record: { _, _ in })
+    runtime.probe = { _ in
+      probes.increment()
+      await gate.hold()
+      return LocalEmbeddingProbe(
+        appleSilicon: true, assetsAvailable: true, fixtureSucceeded: true, elapsed: .zero, dimension: 8)
+    }
+    async let first = runtime.selectEngine()
+    async let second = runtime.selectEngine()
+    await gate.waitUntilHeld()
+    XCTAssertEqual(probes.count, 1)
+    await gate.release()
+    let results = await (first, second)
+    guard case .engine = results.0, case .engine = results.1 else {
+      return XCTFail("coordinated probe must still select the engine")
+    }
+    XCTAssertEqual(probes.count, 1)
+  }
+
+  func testSelectEngineBoundsInjectedProbe() async {
+    let engine = HashEmbeddingEngine()
+    var runtime = LocalEmbeddingRuntime(
+      engines: [engine], defaultEngineID: engine.engineID, record: { _, _ in })
+    runtime.probeBudget = .milliseconds(20)
+    runtime.probe = { _ in
+      _ = try? await NeverReturningEmbeddingEngine().embed(["probe"], task: .document)
+      return LocalEmbeddingProbe(
+        appleSilicon: true, assetsAvailable: true, fixtureSucceeded: true, elapsed: .zero, dimension: 8)
+    }
+    guard case .none = await runtime.selectEngine() else {
+      return XCTFail("over-budget injected probe must fail closed")
+    }
+  }
+}
+
+private actor ProbeHoldGate {
+  private var held = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+  private var holders: [CheckedContinuation<Void, Never>] = []
+
+  func hold() async {
+    held = true
+    let waiting = waiters
+    waiters.removeAll()
+    waiting.forEach { $0.resume() }
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      holders.append(continuation)
+    }
+  }
+
+  func waitUntilHeld() async {
+    if held { return }
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      if held {
+        continuation.resume()
+      } else {
+        waiters.append(continuation)
+      }
+    }
+  }
+
+  func release() {
+    let pending = holders
+    holders.removeAll()
+    pending.forEach { $0.resume() }
+  }
 }
 
 @MainActor

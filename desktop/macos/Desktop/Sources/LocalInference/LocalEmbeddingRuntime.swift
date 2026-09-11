@@ -56,16 +56,23 @@ struct LocalEmbeddingRuntime: Sendable {
       disabled: killSwitches.isDisabled,
       forcedEngine: killSwitches.forcedEngineRaw ?? "")
     let now = clock()
-    let cached = await probeCache.get(key, ttl: probeTTL, now: now)
-    let result: LocalEmbeddingProbe
-    if let cached {
-      result = cached
-    } else {
-      let probed = await probe(engine)
-      await probeCache.store(key, probe: probed, now: now)
-      result = probed
+    let result = await probeCache.getOrCompute(key, ttl: probeTTL, now: now) {
+      do {
+        return try await LocalEmbeddingCallBound.run(probeBudget) {
+          await probe(engine)
+        }
+      } catch is CancellationError {
+        return LocalEmbeddingProbe(
+          appleSilicon: true, assetsAvailable: false, fixtureSucceeded: false, elapsed: probeBudget,
+          dimension: 0, reason: "cancelled")
+      } catch {
+        return LocalEmbeddingProbe(
+          appleSilicon: true, assetsAvailable: false, fixtureSucceeded: false, elapsed: probeBudget,
+          dimension: 0, reason: "engine_timeout")
+      }
     }
-    guard !Task.isCancelled, result.permits(engine, budget: probeBudget) else {
+    guard !Task.isCancelled, result.reason != "cancelled" else { return .none }
+    guard result.permits(engine, budget: probeBudget) else {
       record("local_embeddings", result.reason.isEmpty ? "capability_mismatch" : result.reason)
       return .none
     }
