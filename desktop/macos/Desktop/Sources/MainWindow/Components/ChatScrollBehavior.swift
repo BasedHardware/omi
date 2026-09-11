@@ -170,6 +170,10 @@ final class ChatFollowGlide {
   private var timer: Timer?
   private var isGliding = false
 
+  #if DEBUG
+    var debugRunLoopTimer: Timer? { timer }
+  #endif
+
   /// True while a glide is moving the viewport. Reader input checks this the
   /// same way it checks a pending scroll.
   var isActive: Bool { isGliding }
@@ -218,6 +222,16 @@ final class ChatFollowGlide {
     isGliding = false
   }
 
+  deinit {
+    // The run loop retains the timer independently of this object. Without an
+    // invalidate here, SwiftUI dropping a transcript (or a test releasing the
+    // glide) leaves a 60 Hz `.common` source on `RunLoop.main` that ends later
+    // `run(mode:before:)` drains before queued main-async work can run.
+    if Thread.isMainThread {
+      MainActor.assumeIsolated { cancel() }
+    }
+  }
+
   private func moveTo(_ origin: NSPoint, in clipView: NSClipView) {
     clipView.setBoundsOrigin(origin)
     if let scrollView = clipView.enclosingScrollView {
@@ -254,6 +268,10 @@ final class ChatLiveEdgePinner {
   private(set) var isPinning = false
   private var track: (() -> Void)?
 
+  #if DEBUG
+    var debugRunLoopTimer: Timer? { timer }
+  #endif
+
   var isActive: Bool { isPinning }
 
   /// Begin (or keep) pinning. An already-armed pinner keeps its cadence and
@@ -280,6 +298,14 @@ final class ChatLiveEdgePinner {
     timer = nil
     isPinning = false
     track = nil
+  }
+
+  deinit {
+    // Same run-loop ownership as `ChatFollowGlide`: `RunLoop.main.add(_:forMode: .common)`
+    // keeps the tick alive after this object is gone unless we invalidate it.
+    if Thread.isMainThread {
+      MainActor.assumeIsolated { cancel() }
+    }
   }
 }
 
