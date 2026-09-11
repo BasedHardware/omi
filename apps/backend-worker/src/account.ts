@@ -291,7 +291,13 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
         );
         this.notifyWaiters(generationId, event);
       }
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof TypeError &&
+        error.message === "invalid chat message record"
+      ) {
+        throw error;
+      }
       const event = await failGeneration(this.env.DB, accountId, generationId);
       this.notifyWaiters(generationId, event);
     }

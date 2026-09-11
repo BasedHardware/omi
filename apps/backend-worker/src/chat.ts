@@ -396,6 +396,10 @@ export async function completeGeneration(
 
   const human = await readMessage(db, accountId, admission.messageId);
   if (human === null) return failGeneration(db, accountId, generationId);
+  const detached = projectStoredChatMessage(human);
+  if (detached === null) {
+    throw new TypeError("invalid chat message record");
+  }
   if (!isVisibleGenerationText(text)) {
     return failGeneration(db, accountId, generationId);
   }
@@ -408,14 +412,14 @@ export async function completeGeneration(
     type: "text",
     createdAt,
     updatedAt: createdAt,
-    chatSessionId: human.chatSessionId,
-    appId: human.appId,
-    journalRevision: human.journalRevision,
+    chatSessionId: detached.chatSessionId,
+    appId: detached.appId,
+    journalRevision: detached.journalRevision,
     payloadHash: chatMessagePayloadHash({
       text,
       sender: "ai",
-      appId: human.appId,
-      sessionId: human.chatSessionId,
+      appId: detached.appId,
+      sessionId: detached.chatSessionId,
       metadata: null,
       messageSource: "assistant_generation",
       attachmentIds: [],
