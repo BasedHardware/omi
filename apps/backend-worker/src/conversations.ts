@@ -188,6 +188,15 @@ export async function readConversations(
       assertProjectableTimestamp(recording.ended_at);
     if (recording.captured_at_ms != null)
       assertProjectableTimestamp(recording.captured_at_ms);
+    if (
+      recording.ended_at !== null &&
+      recording.ended_at < recording.started_at
+    ) {
+      throw new UnprojectableConversationRecordError();
+    }
+    if (recording.updated_at < recording.started_at) {
+      throw new UnprojectableConversationRecordError();
+    }
     conversations.push({
       id: `recording:${recording.id}`,
       title: recordingExcerpt(speech).slice(0, 80),

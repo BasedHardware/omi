@@ -153,6 +153,30 @@ describe("GET /v1/conversations", () => {
       db.close();
     }
   });
+
+  test("offset GET does not omit a neighboring row when finished_at precedes started_at", async () => {
+    const { db, stores, request } = boot();
+    try {
+      expect(
+        stores.conversations.upsert(
+          OWNER,
+          row("conversation-inverted", {
+            started_at: MUTATED,
+            finished_at: CREATED,
+            updated_at: MUTATED,
+          }),
+        ).stored,
+      ).toBe(true);
+      const envelope = await request("/v1/conversations?limit=25");
+      expect(envelope.status).toBe(500);
+      expect(await body(envelope)).toEqual({ error: "internal_server_error" });
+      const offset = await request("/v1/conversations?offset=0");
+      expect(offset.status).toBe(500);
+      expect(await body(offset)).toEqual({ error: "internal_server_error" });
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("conversation mutation compatibility conformance", () => {

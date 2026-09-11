@@ -290,9 +290,12 @@ export const assertProjectableConversationRecord = (
     || record.captured_at_ms < 0 || record.captured_at_ms > 8640000000000000))
     throw new UnprojectableConversationRecordError();
   isoToMs(record.created_at);
-  isoToMs(record.updated_at);
-  isoToMs(record.started_at);
-  isoToMs(record.finished_at);
+  const startedAt = isoToMs(record.started_at);
+  const finishedAt = isoToMs(record.finished_at);
+  const updatedAt = isoToMs(record.updated_at);
+  if (finishedAt < startedAt || updatedAt < startedAt) {
+    throw new UnprojectableConversationRecordError();
+  }
 };
 
 const projectRecord = (record: OrderedConversationRecord["record"], revision: string): unknown => {
