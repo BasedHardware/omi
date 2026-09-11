@@ -290,6 +290,24 @@ export async function readHistory(
   };
 }
 
+export async function chatHistoryIsUnprojectable(
+  db: D1Database,
+  accountId: string
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `SELECT id, text, sender, created_at AS createdAt, generation_outcome AS generationOutcome, position, payload
+       FROM chat_messages WHERE account_id = ?
+         AND ${recoveredPayloadTextKeySql("chat_messages", "appId")} IS NULL`
+    )
+    .bind(accountId)
+    .all<StoredMessage>();
+  for (const row of result.results) {
+    if ((await projectHistoryMessage(db, accountId, row)) === null) return true;
+  }
+  return false;
+}
+
 export async function readSettings(
   db: D1Database,
   accountId: string,

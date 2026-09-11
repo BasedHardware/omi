@@ -1445,6 +1445,176 @@ describe("worker request contract", () => {
     });
   });
 
+  test("conversations GET does not omit a neighboring row when a chat payload createdAt fails detach", async () => {
+    await insertChatMessage({
+      id: "readable-payload-created",
+      accountId: "test-account",
+      text: "readable createdAt",
+      createdAt: 1_000,
+      position: 1,
+      chatSessionId: "readable-payload-created",
+    });
+    const invalid = {
+      id: "payload-negative-created",
+      text: "payload negative createdAt",
+      sender: "human",
+      type: "text",
+      createdAt: -1,
+      updatedAt: -1,
+      chatSessionId: "payload-negative-created",
+      appId: null,
+      journalRevision: 0,
+      payloadHash: "sha256:test",
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      generationOutcome: null,
+      revision: "2",
+      attachments: [],
+    };
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)"
+      )
+      .bind(
+        invalid.id,
+        "test-account",
+        invalid.text,
+        invalid.sender,
+        2,
+        2,
+        JSON.stringify(invalid)
+      )
+      .run();
+
+    const envelope = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(envelope.status).toBe(500);
+    expect(envelope.headers.get("retry-after")).toBeNull();
+    expect((await envelope.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+
+    const offset = await fetchWorker("/v1/conversations?limit=50&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    expect(offset.status).toBe(500);
+    expect(offset.headers.get("retry-after")).toBeNull();
+    expect((await offset.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+  });
+
+  test("conversations GET does not omit a neighboring row when assistant terminal events are unreadable", async () => {
+    await insertChatMessage({
+      id: "readable-event-neighbor",
+      accountId: "test-account",
+      text: "readable neighbor",
+      createdAt: 1_000,
+      position: 1,
+      chatSessionId: "readable-event-neighbor",
+    });
+    const id = "broken-event-list-assistant";
+    const createdAt = 2;
+    const message = {
+      id,
+      text: "invented answer",
+      sender: "ai" as const,
+      type: "text",
+      createdAt,
+      updatedAt: createdAt,
+      chatSessionId: "broken-event-list",
+      appId: null,
+      journalRevision: 0,
+      payloadHash: "sha256:test",
+      messageSource: "assistant_generation",
+      rating: null,
+      reported: false,
+      generationOutcome: "completed" as const,
+      revision: "2",
+      attachments: [],
+    };
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'ai', ?, 'completed', 2, ?)"
+      )
+      .bind(id, "test-account", message.text, createdAt, JSON.stringify(message))
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '2', 2, ?)"
+      )
+      .bind(id, "test-account", "{broken")
+      .run();
+
+    const envelope = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(envelope.status).toBe(500);
+    expect(envelope.headers.get("retry-after")).toBeNull();
+    expect((await envelope.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+
+    const offset = await fetchWorker("/v1/conversations?limit=50&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    expect(offset.status).toBe(500);
+    expect(offset.headers.get("retry-after")).toBeNull();
+    expect((await offset.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+  });
+
+  test("conversations GET keeps a chat session when payload JSON is unreadable", async () => {
+    await insertChatMessage({
+      id: "readable-unreadable-json",
+      accountId: "test-account",
+      text: "readable neighbor",
+      createdAt: 1_000,
+      position: 1,
+      chatSessionId: "readable-unreadable-json",
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+      )
+      .bind(
+        "broken-payload-list",
+        "test-account",
+        "stored beside unreadable json",
+        2,
+        2,
+        "{broken"
+      )
+      .run();
+
+    const listed = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(listed.status).toBe(200);
+    const page = (await listed.json()) as {
+      items: Array<{ id: string; title: string }>;
+    };
+    expect(
+      page.items.find((item) => item.id === "chat:readable-unreadable-json")
+    ).toEqual(
+      expect.objectContaining({
+        id: "chat:readable-unreadable-json",
+        title: "readable neighbor",
+      })
+    );
+    expect(
+      page.items.find((item) => item.id === "chat:chat-main")
+    ).toEqual(
+      expect.objectContaining({
+        id: "chat:chat-main",
+        title: "stored beside unreadable json",
+      })
+    );
+  });
+
   test("conversations GET does not omit a neighboring row when completed segments JSON is unreadable", async () => {
     await d1Mock
       .prepare(

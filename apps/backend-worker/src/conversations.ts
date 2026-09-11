@@ -1,3 +1,4 @@
+import { chatHistoryIsUnprojectable } from "./chat";
 import {
   parseStoredTranscriptSegments,
   projectDeviceTranscription,
@@ -92,6 +93,9 @@ export async function readConversations(
   db: D1Database,
   accountId: string
 ): Promise<ConversationProjection[]> {
+  if (await chatHistoryIsUnprojectable(db, accountId)) {
+    throw new UnprojectableConversationRecordError();
+  }
   // ponytail: summaries scale with conversation count; paginate in SQL for larger accounts.
   const result = await db
     .prepare(
