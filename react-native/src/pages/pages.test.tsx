@@ -1362,6 +1362,23 @@ test('Settings names GET fair use without Upgrade or a write sheet', async () =>
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names a failed fair use GET instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/fair-use/status') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Fair Use');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('Restricted');
+  expect(tree).not.toContain('FU-1');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names GET daily summaries without regenerate or a write sheet', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

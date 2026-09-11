@@ -308,6 +308,7 @@ export function DesktopSettings({
     null,
   );
   const [fairUse, setFairUse] = useState<ReturnType<typeof fairUseCopy>>(null);
+  const [fairUseError, setFairUseError] = useState<string | null>(null);
   const [dailySummaries, setDailySummaries] = useState<
     ReturnType<typeof dailySummaryCopy>
   >([]);
@@ -370,6 +371,7 @@ export function DesktopSettings({
     let nextUsageYearlyError: string | null = null;
     let nextUsageAllTimeError: string | null = null;
     let nextFairUse: ReturnType<typeof fairUseCopy> = null;
+    let nextFairUseError: string | null = null;
     let nextDailySummaries: ReturnType<typeof dailySummaryCopy> = [];
     let nextDailySummarySchedule: ReturnType<typeof dailySummaryScheduleCopy> =
       [];
@@ -427,7 +429,13 @@ export function DesktopSettings({
           error: desktopReadErrorCopy(reason),
         }),
       );
-      const fairUseTask = loadOmiFairUseStatus(backend).catch(() => null);
+      const fairUseTask = loadOmiFairUseStatus(backend).then(
+        status => ({status, error: null as string | null}),
+        reason => ({
+          status: null,
+          error: desktopReadErrorCopy(reason),
+        }),
+      );
       const dailySummariesTask = loadOmiDailySummaries(backend).catch(() => []);
       const dailySummaryScheduleTask = loadOmiDailySummarySchedule(
         backend,
@@ -468,7 +476,9 @@ export function DesktopSettings({
       const usageAllTimeResult = await usageAllTimeTask;
       nextUsageAllTime = usageAllTimeResult.stats;
       nextUsageAllTimeError = usageAllTimeResult.error;
-      nextFairUse = fairUseCopy(await fairUseTask);
+      const fairUseResult = await fairUseTask;
+      nextFairUse = fairUseCopy(fairUseResult.status);
+      nextFairUseError = fairUseResult.error;
       nextDailySummaries = dailySummaryCopy(await dailySummariesTask);
       nextDailySummarySchedule = dailySummaryScheduleCopy(
         await dailySummaryScheduleTask,
@@ -519,6 +529,7 @@ export function DesktopSettings({
     setUsageYearlyError(nextUsageYearlyError);
     setUsageAllTimeError(nextUsageAllTimeError);
     setFairUse(nextFairUse);
+    setFairUseError(nextFairUseError);
     setDailySummaries(nextDailySummaries);
     setDailySummarySchedule(nextDailySummarySchedule);
     setNotificationFrequency(nextNotificationFrequency);
@@ -880,9 +891,13 @@ export function DesktopSettings({
           <Row copy={row.name} key={row.key} title="Integrations" />
         ))
       )}
-      {fairUse?.map((row, index) => (
-        <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
-      ))}
+      {fairUseError !== null ? (
+        <Row copy={fairUseError} title="Fair Use" />
+      ) : (
+        fairUse?.map((row, index) => (
+          <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
+        ))
+      )}
       {notificationFrequency.map((row, index) => (
         <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
       ))}

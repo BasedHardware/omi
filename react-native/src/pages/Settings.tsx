@@ -233,6 +233,7 @@ export function SettingsPage({
     null,
   );
   const [fairUse, setFairUse] = useState<ReturnType<typeof fairUseCopy>>(null);
+  const [fairUseError, setFairUseError] = useState<string | null>(null);
   const [dailySummaries, setDailySummaries] = useState<
     ReturnType<typeof dailySummaryCopy>
   >([]);
@@ -319,6 +320,7 @@ export function SettingsPage({
       setUsageYearlyError(null);
       setUsageAllTimeError(null);
       setFairUse(null);
+      setFairUseError(null);
       setDailySummaries([]);
       setDailySummarySchedule([]);
       setNotificationFrequency([]);
@@ -380,6 +382,7 @@ export function SettingsPage({
         setUsageYearlyError(null);
         setUsageAllTimeError(null);
         setFairUse(null);
+        setFairUseError(null);
         setDailySummaries([]);
         setDailySummarySchedule([]);
         setNotificationFrequency([]);
@@ -410,6 +413,7 @@ export function SettingsPage({
         setUsageYearlyError(null);
         setUsageAllTimeError(null);
         setFairUse(null);
+        setFairUseError(null);
         setDailySummaries([]);
         setDailySummarySchedule([]);
         setNotificationFrequency([]);
@@ -467,7 +471,13 @@ export function SettingsPage({
         error: desktopReadErrorCopy(reason),
       }),
     );
-    const fairUseTask = loadOmiFairUseStatus(backend).catch(() => null);
+    const fairUseTask = loadOmiFairUseStatus(backend).then(
+      status => ({status, error: null as string | null}),
+      reason => ({
+        status: null,
+        error: desktopReadErrorCopy(reason),
+      }),
+    );
     const dailySummariesTask = loadOmiDailySummaries(backend).catch(() => []);
     const dailySummaryScheduleTask = loadOmiDailySummarySchedule(backend).catch(
       () => null,
@@ -508,7 +518,7 @@ export function SettingsPage({
     const usageMonthlyResult = await usageMonthlyTask;
     const usageYearlyResult = await usageYearlyTask;
     const usageAllTimeResult = await usageAllTimeTask;
-    const status = await fairUseTask;
+    const fairUseResult = await fairUseTask;
     const summaries = await dailySummariesTask;
     const schedule = await dailySummaryScheduleTask;
     const frequency = await notificationFrequencyTask;
@@ -533,7 +543,8 @@ export function SettingsPage({
     setUsageMonthlyError(usageMonthlyResult.error);
     setUsageYearlyError(usageYearlyResult.error);
     setUsageAllTimeError(usageAllTimeResult.error);
-    setFairUse(fairUseCopy(status));
+    setFairUse(fairUseCopy(fairUseResult.status));
+    setFairUseError(fairUseResult.error);
     setDailySummaries(dailySummaryCopy(summaries));
     setDailySummarySchedule(dailySummaryScheduleCopy(schedule));
     setNotificationFrequency(
@@ -772,13 +783,17 @@ export function SettingsPage({
             <SettingRow copy={row.name} key={row.key} title="Integrations" />
           ))
         )}
-        {fairUse?.map((row, index) => (
-          <SettingRow
-            copy={row.copy}
-            key={`${row.title}-${index}`}
-            title={row.title}
-          />
-        ))}
+        {fairUseError !== null ? (
+          <SettingRow copy={fairUseError} title="Fair Use" />
+        ) : (
+          fairUse?.map((row, index) => (
+            <SettingRow
+              copy={row.copy}
+              key={`${row.title}-${index}`}
+              title={row.title}
+            />
+          ))
+        )}
         {notificationFrequency.map((row, index) => (
           <SettingRow
             copy={row.copy}
