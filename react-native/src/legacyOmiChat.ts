@@ -497,6 +497,13 @@ function parseContentBlock(
   }
   const row = raw as Record<string, unknown>;
   const type = wireString(row, 'type');
+  if (type === 'followUp' || type === 'follow_up') {
+    const text = wireString(row, 'text');
+    if (text === undefined) {
+      return [];
+    }
+    return [contentBlockChrome(visibleDisplayText(text))];
+  }
   const id = wireString(row, 'id');
   if (type === undefined || id === undefined) {
     return [];

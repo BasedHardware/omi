@@ -142,6 +142,53 @@ test('conversation-detail history names unanswered GET questionCard option label
   expect(copy).not.toContain('Open in Goals');
 });
 
+test('conversation-detail history names GET followUp text without send chips', () => {
+  mockChat.mockReturnValue({
+    result: {
+      status: 'loaded',
+      messages: [
+        {
+          id: 'ai-follow',
+          sender: 'ai',
+          text: 'Here is what I found.',
+          createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+          generationOutcome: 'completed',
+          contentBlocks: [{eyebrow: 'Want me to draft the recap next?'}],
+        },
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    },
+    reload: jest.fn(),
+    loadingOlder: false,
+    loadOlder: jest.fn(),
+    olderNotice: null,
+    olderRetryable: true,
+  });
+  const view = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+  });
+  const copy = text(view);
+  expect(copy).toContain('Want me to draft the recap next?');
+  expect(copy).toContain('Here is what I found.');
+  expect(copy).not.toContain('preparedAnswer');
+  expect(copy).not.toContain('Open in Goals');
+  expect(
+    view.root.findAll(
+      node =>
+        node.props.accessibilityRole === 'button' &&
+        String(node.props.accessibilityLabel ?? '').includes(
+          'Want me to draft the recap next?',
+        ),
+    ),
+  ).toHaveLength(0);
+});
+
 test('conversation-detail history names GET content_blocks without inventing write actions', () => {
   mockChat.mockReturnValue({
     result: {

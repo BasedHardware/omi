@@ -1899,6 +1899,54 @@ test('a chat message names unanswered GET questionCard option labels without sen
   });
 });
 
+test('a chat message names GET followUp text without send chips', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-follow',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        contentBlocks: [{eyebrow: 'Want me to draft the recap next?'}],
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Want me to draft the recap next?');
+  expect(copies).toContain('Here is what I found.');
+  expect(copies).not.toContain('preparedAnswer');
+  expect(copies).not.toContain('Open in Goals');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityRole === 'button' &&
+        String(node.props.accessibilityLabel ?? '').includes(
+          'Want me to draft the recap next?',
+        ),
+    ),
+  ).toHaveLength(0);
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('an empty chat bubble names GET content_block fallbacks instead of Message text unavailable', () => {
   const fallback = render(
     <ChatMessageRow

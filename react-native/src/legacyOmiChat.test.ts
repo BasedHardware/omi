@@ -706,9 +706,9 @@ test('old chat history names empty-text GET tool thinking and citation fallbacks
   ).toBe('Thinking');
   const copy = JSON.stringify(page.messages);
   expect(copy).not.toContain('Should stay omitted');
-  expect(page.messages.find(row => row.id === 'fallback-1')?.text).not.toContain(
-    'task-1',
-  );
+  expect(
+    page.messages.find(row => row.id === 'fallback-1')?.text,
+  ).not.toContain('task-1');
   expect(copy).not.toContain('Show more');
 });
 
@@ -826,4 +826,76 @@ test('old chat history names GET memory review cards without inventing writes', 
   expect(copy).not.toContain("'Fix'");
   expect(copy).not.toContain('mem-work');
   expect(copy).not.toContain('Should not appear');
+});
+
+test('old chat history names GET followUp text and omits empty or send chips', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'follow-1',
+        sender: 'ai',
+        text: 'Here is what I found.',
+        created_at: '2026-09-07T01:02:03Z',
+        content_blocks: [
+          {
+            type: 'followUp',
+            text: 'Want me to draft the recap next?',
+          },
+        ],
+      },
+      {
+        id: 'follow-snake',
+        sender: 'ai',
+        text: 'Also this.',
+        created_at: '2026-09-07T01:02:04Z',
+        content_blocks: [
+          {
+            type: 'follow_up',
+            id: 'fu-2',
+            text: '  Should I schedule standup?  ',
+          },
+        ],
+      },
+      {
+        id: 'follow-empty',
+        sender: 'ai',
+        text: 'No invite.',
+        created_at: '2026-09-07T01:02:05Z',
+        content_blocks: [{type: 'followUp', text: ' \t'}],
+      },
+      {
+        id: 'follow-fallback',
+        sender: 'ai',
+        text: '',
+        created_at: '2026-09-07T01:02:06Z',
+        content_blocks: [
+          {
+            type: 'follow_up',
+            text: 'Want me to draft the recap next?',
+          },
+        ],
+      },
+    ]),
+    0,
+  );
+  expect(
+    page.messages.find(row => row.id === 'follow-1')?.contentBlocks,
+  ).toEqual([{eyebrow: 'Want me to draft the recap next?'}]);
+  expect(
+    page.messages.find(row => row.id === 'follow-snake')?.contentBlocks,
+  ).toEqual([{eyebrow: 'Should I schedule standup?'}]);
+  expect(
+    page.messages.find(row => row.id === 'follow-empty')?.contentBlocks,
+  ).toBeUndefined();
+  expect(page.messages.find(row => row.id === 'follow-empty')?.text).toBe(
+    'No invite.',
+  );
+  const fallback = page.messages.find(row => row.id === 'follow-fallback');
+  expect(fallback?.text).toBe('');
+  expect(fallback?.contentBlocks).toEqual([
+    {eyebrow: 'Want me to draft the recap next?'},
+  ]);
+  const serialized = JSON.stringify(page.messages);
+  expect(serialized).not.toContain('preparedAnswer');
+  expect(serialized).not.toContain('onSend');
 });
