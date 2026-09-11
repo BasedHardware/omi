@@ -104,6 +104,14 @@ def _format_weather_code(code: Optional[int]) -> str:
 def _format_observed_at(current: dict[str, Any], payload: dict[str, Any]) -> str:
     """Render the observation time with the response timezone/offset when present."""
     observed = current.get("time") or "unknown time"
+    # Keep prior minute-precision normalization for display consistency.
+    if observed != "unknown time":
+        try:
+            from datetime import datetime
+
+            observed = datetime.fromisoformat(str(observed)).isoformat(timespec="minutes")
+        except ValueError:
+            pass
     tz = payload.get("timezone") or ""
     offset = payload.get("utc_offset_seconds")
     suffix_parts = []
@@ -111,11 +119,10 @@ def _format_observed_at(current: dict[str, Any], payload: dict[str, Any]) -> str
         suffix_parts.append(tz)
     if offset is not None:
         try:
-            hours = int(offset) / 3600
-            sign = "+" if hours >= 0 else "-"
-            hours_abs = abs(hours)
-            whole = int(hours_abs)
-            minutes = int(round((hours_abs - whole) * 60))
+            total_minutes = int(round(int(offset) / 60))
+            sign = "+" if total_minutes >= 0 else "-"
+            total_minutes = abs(total_minutes)
+            whole, minutes = divmod(total_minutes, 60)
             suffix_parts.append(f"UTC{sign}{whole:02d}:{minutes:02d}")
         except (TypeError, ValueError):
             pass
