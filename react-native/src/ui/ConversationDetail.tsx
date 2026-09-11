@@ -167,11 +167,15 @@ export function ConversationDetail({
   return (
     <>
       <Text style={[styles.conversationDetailTitle, ink]}>
-        {conversationDisplayTitle(conversation)}
+        {conversation.discarded
+          ? 'Discarded Conversation'
+          : conversationDisplayTitle(conversation)}
       </Text>
-      <Text style={[styles.conversationDetailSummary, ink]}>
-        {conversationDisplaySummary(conversation)}
-      </Text>
+      {conversation.discarded ? null : (
+        <Text style={[styles.conversationDetailSummary, ink]}>
+          {conversationDisplaySummary(conversation)}
+        </Text>
+      )}
       {sessionId !== null ? (
         <RecordingConversationFields
           conversation={conversation}
@@ -320,17 +324,21 @@ function LegacyConversationBody({
       <Text
         accessibilityRole="header"
         style={[styles.conversationDetailTitle, ink]}>
-        {conversationDisplayTitle({
-          title: detail.title,
-          status: conversation.status,
-        })}
+        {conversation.discarded
+          ? 'Discarded Conversation'
+          : conversationDisplayTitle({
+              title: detail.title,
+              status: conversation.status,
+            })}
       </Text>
-      <Text selectable style={[styles.conversationDetailSummary, ink]}>
-        {conversationDisplaySummary({
-          summary: detail.summary,
-          status: conversation.status,
-        })}
-      </Text>
+      {conversation.discarded ? null : (
+        <Text selectable style={[styles.conversationDetailSummary, ink]}>
+          {conversationDisplaySummary({
+            summary: detail.summary,
+            status: conversation.status,
+          })}
+        </Text>
+      )}
       {appSummaryName === '' ? null : (
         <Text style={[styles.conversationDetailField, ink]}>
           {appSummaryName}
@@ -394,7 +402,9 @@ function LegacyConversationBody({
       {folderName === '' ? null : (
         <Text style={[styles.conversationDetailField, ink]}>{folderName}</Text>
       )}
-      {detail.sections.flatMap((section, index) => {
+      {conversation.discarded
+        ? null
+        : detail.sections.flatMap((section, index) => {
         const heading = visibleDisplayText(section.heading);
         const bodyMarkdown = visibleDisplayText(section.bodyMarkdown);
         if (heading === '' && bodyMarkdown === '') {

@@ -979,6 +979,55 @@ test('legacy conversation details name GET app result content', () => {
   expect(discarded).not.toContain('Saves notes from calls');
 });
 
+test('legacy discarded details name Discarded Conversation instead of structured title', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary that Flutter hides',
+        locked: false,
+        sections: [{heading: 'Hidden notes', bodyMarkdown: 'Full notes'}],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', discarded: true},
+    }),
+  );
+  expect(copy).toContain('Discarded Conversation');
+  expect(copy).toContain('Discarded');
+  expect(copy).not.toContain('A real conversation');
+  expect(copy).not.toContain('Summary that Flutter hides');
+  expect(copy).not.toContain('Hidden notes');
+  expect(copy).not.toContain('Full notes');
+  expect(copy).not.toContain('want to retry');
+});
+
+test('canonical discarded details name Discarded Conversation instead of structured title', () => {
+  const copy = text(
+    render({
+      conversation: {
+        ...conversation,
+        discarded: true,
+        title: 'Planning',
+        summary: 'Summary that Flutter hides',
+      },
+    }),
+  );
+  expect(copy).toContain('Discarded Conversation');
+  expect(copy).toContain('Discarded');
+  expect(copy).not.toContain('Planning');
+  expect(copy).not.toContain('Summary that Flutter hides');
+  expect(copy).not.toContain('want to retry');
+});
+
 test('conversation details name GET shared or public visibility and omit private', () => {
   mockLegacy.mockReturnValue({
     result: {
