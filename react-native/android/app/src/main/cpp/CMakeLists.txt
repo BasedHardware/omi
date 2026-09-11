@@ -8,6 +8,7 @@ add_library(omi_native SHARED
   omi/jni_bridge.cpp
   ../../../../../../native-core/src/omi_native_boundary.cpp
   ../../../../../../native-core/src/omi_backend_policy.cpp
+  ../../../../../../native-core/src/omi_backend_http.cpp
 )
 
 target_include_directories(omi_native PRIVATE

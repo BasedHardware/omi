@@ -36,11 +36,59 @@ public final class OmiBackendTransport {
 
   private static native boolean nativeExamplePlatformSupported(String method, String path);
 
-  public static int readTimeoutMillis(String method, String path) {
-    if (HAS_NATIVE_POLICY) {
-      return nativeRequestTimeoutSeconds(method, path) * 1000;
+  private static native boolean nativeHttpRequestValid(String method, String path);
+
+  private static native boolean nativeRecordingPathOwned(String method, String path, String sessionId);
+
+  private static native String nativeRecordingJournalRelpath(String partitionHex, String captureId);
+
+  public static final class RequestPlan {
+    public final boolean valid;
+    public final int timeoutMillis;
+    public final boolean capturePath;
+
+    RequestPlan(boolean valid, int timeoutMillis, boolean capturePath) {
+      this.valid = valid;
+      this.timeoutMillis = timeoutMillis;
+      this.capturePath = capturePath;
     }
-    return mirrorRequestTimeoutSeconds(method, path) * 1000;
+  }
+
+  public static RequestPlan planRequest(String method, String path) {
+    if (HAS_NATIVE_POLICY) {
+      boolean valid = nativeHttpRequestValid(method, path);
+      return new RequestPlan(
+        valid,
+        valid ? nativeRequestTimeoutSeconds(method, path) * 1000 : 0,
+        valid && nativeIsCapturePath(path));
+    }
+    boolean valid = mirrorHttpRequestValid(method, path);
+    return new RequestPlan(
+      valid,
+      valid ? mirrorRequestTimeoutSeconds(method, path) * 1000 : 0,
+      valid && mirrorIsCapturePath(path));
+  }
+
+  public static int readTimeoutMillis(String method, String path) {
+    return planRequest(method, path).timeoutMillis;
+  }
+
+  public static boolean httpRequestValid(String method, String path) {
+    return planRequest(method, path).valid;
+  }
+
+  public static boolean recordingPathOwned(String method, String path, String sessionId) {
+    if (HAS_NATIVE_POLICY) {
+      return nativeRecordingPathOwned(method, path, sessionId);
+    }
+    return mirrorRecordingPathOwned(method, path, sessionId);
+  }
+
+  public static String recordingJournalRelpath(String partitionHex, String captureId) {
+    if (HAS_NATIVE_POLICY) {
+      return nativeRecordingJournalRelpath(partitionHex, captureId);
+    }
+    return mirrorRecordingJournalRelpath(partitionHex, captureId);
   }
 
   public static HttpURLConnection openConnection(URL url) throws IOException {
@@ -68,6 +116,31 @@ public final class OmiBackendTransport {
       return nativeIsCapturePath(path);
     }
     return mirrorIsCapturePath(path);
+  }
+
+  static boolean mirrorHttpRequestValid(String method, String path) {
+    if (method == null || path == null) return false;
+    if (!method.equals("GET") && !method.equals("POST") && !method.equals("PATCH") && !method.equals("DELETE")) {
+      return false;
+    }
+    return path.startsWith("/") && !path.startsWith("//") && !path.contains("://");
+  }
+
+  static boolean mirrorRecordingPathOwned(String method, String path, String sessionId) {
+    if ("POST".equals(method) && "/v1/device-sessions".equals(path)) return true;
+    if (sessionId == null || !sessionId.matches("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")) {
+      return false;
+    }
+    String base = "/v1/device-sessions/" + sessionId;
+    return ("POST".equals(method) && (path.equals(base + "/audio") || path.equals(base + "/complete") || path.equals(base + "/transcribe")))
+      || ("GET".equals(method) && (path.equals(base) || path.equals(base + "/transcript")));
+  }
+
+  static String mirrorRecordingJournalRelpath(String partitionHex, String captureId) {
+    if (partitionHex == null || captureId == null) return null;
+    if (!partitionHex.matches("[0-9a-f]{64}")) return null;
+    if (!captureId.matches("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")) return null;
+    return partitionHex + "/" + captureId + ".journal";
   }
 
   public static boolean examplePlatformSupported(String method, String path) {

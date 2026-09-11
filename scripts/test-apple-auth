@@ -22,8 +22,11 @@ xcrun clang++ -fobjc-arc -std=c++20 -framework Foundation -I"$repo_root/native-c
 xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation -framework Security \
   "$repo_root/react-native/apple/OmiRecordingLogTest.mm" -o "$build_dir/recording-log"
 "$build_dir/recording-log"
-xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation -framework Security \
-  "$repo_root/react-native/apple/OmiRecordingJournalsTest.mm" -o "$build_dir/recording-journals"
+xcrun clang++ -fobjc-arc -std=c++20 -framework Foundation -framework Security \
+  -I"$repo_root/native-core/include" \
+  "$repo_root/react-native/apple/OmiRecordingJournalsTest.mm" \
+  "$repo_root/native-core/src/omi_backend_policy.cpp" \
+  "$repo_root/native-core/src/omi_backend_http.cpp" -o "$build_dir/recording-journals"
 "$build_dir/recording-journals"
 xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
   "$repo_root/react-native/apple/OmiRecordingPolicyTest.mm" -o "$build_dir/recording-policy"
@@ -36,7 +39,9 @@ for platform_source in 0 1; do
 done
 xcrun clang++ -fobjc-arc -std=c++20 -framework Foundation -framework Security -framework LocalAuthentication -Wno-nullability-completeness \
   -I"$repo_root/react-native/apple/tests" -I"$repo_root/native-core/include" \
-  "$repo_root/react-native/apple/tests/OmiBackendDisposalTest.mm" "$repo_root/native-core/src/omi_backend_policy.cpp" -o "$build_dir/backend-disposal"
+  "$repo_root/react-native/apple/tests/OmiBackendDisposalTest.mm" \
+  "$repo_root/native-core/src/omi_backend_policy.cpp" \
+  "$repo_root/native-core/src/omi_backend_http.cpp" -o "$build_dir/backend-disposal"
 "$build_dir/backend-disposal"
 xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation -framework AVFoundation -framework CoreImage -framework ImageIO -framework CoreGraphics -framework CoreMedia -framework CoreVideo -lsqlite3 \
   "$repo_root/react-native/macos/Tests/OmiRewindStoreTest.mm" -o "$build_dir/rewind-store"

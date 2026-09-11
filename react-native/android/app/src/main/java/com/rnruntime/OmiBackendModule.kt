@@ -460,8 +460,8 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     val method = value.getString("method").orEmpty()
     val path = value.getString("path").orEmpty()
     val body = if (value.hasKey("body")) value.getString("body") else null
-    val methods = setOf("GET", "POST", "PATCH", "DELETE")
-    if (requestId.isEmpty() || method !in methods || !path.startsWith("/") || path.startsWith("//") || path.contains("://")) {
+    val plan = OmiBackendTransport.planRequest(method, path)
+    if (requestId.isEmpty() || !plan.valid) {
       throw TransportException("OMI_HTTP_INVALID_REQUEST", "Native HTTP request is invalid")
     }
     if (policy.kind == CredentialKind.ExamplePlatform && !examplePlatformSupported(method, path)) {
@@ -472,7 +472,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
         putNull("retryAfterSeconds")
       }
     }
-    val base = requestBaseURL(policy, path)
+    val base = (if (plan.capturePath && policy.captureOriginRequired) policy.captureUrl else policy.url)
       ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Native HTTP configuration is unavailable")
     val url = URL(base.toURL(), path)
     if (!sameOrigin(url, base.toURL())) {
@@ -487,7 +487,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
       connection.apply {
       requestMethod = method
       connectTimeout = 15_000
-      readTimeout = OmiBackendTransport.readTimeoutMillis(method, path)
+      readTimeout = plan.timeoutMillis
       doInput = true
       setRequestProperty("authorization", "Bearer ${policy.token}")
       setRequestProperty("x-omi-contract-version", CONTRACT_VERSION)

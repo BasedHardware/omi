@@ -11,6 +11,10 @@ target_include_directories(omi_native_boundary PUBLIC include)
 add_library(omi_backend_policy STATIC src/omi_backend_policy.cpp)
 target_include_directories(omi_backend_policy PUBLIC include)
 
+add_library(omi_backend_http STATIC src/omi_backend_http.cpp)
+target_include_directories(omi_backend_http PUBLIC include)
+target_link_libraries(omi_backend_http PUBLIC omi_backend_policy)
+
 enable_testing()
 add_executable(test_omi_native_boundary tests/test_omi_native_boundary.cpp)
 target_link_libraries(test_omi_native_boundary PRIVATE omi_native_boundary)
@@ -19,3 +23,7 @@ add_test(NAME NativeBoundaryHostTest COMMAND test_omi_native_boundary)
 add_executable(test_omi_backend_policy tests/test_omi_backend_policy.cpp)
 target_link_libraries(test_omi_backend_policy PRIVATE omi_backend_policy)
 add_test(NAME BackendPolicyHostTest COMMAND test_omi_backend_policy)
+
+add_executable(test_omi_backend_http tests/test_omi_backend_http.cpp)
+target_link_libraries(test_omi_backend_http PRIVATE omi_backend_http)
+add_test(NAME BackendHttpHostTest COMMAND test_omi_backend_http)

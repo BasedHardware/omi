@@ -56,12 +56,15 @@ internal class OmiRecordingJournals(
       && Regex("capture1\\.[0-9a-f]{64}\\.[0-9a-f]{64}").matches(owner.receipt))
   }
   private fun open(owner: OmiRecordingOwner, id: String): OmiRecordingLog {
-    val directory = File(root, partition(owner))
+    val rel = OmiBackendTransport.recordingJournalRelpath(partition(owner), id)
+      ?: throw IllegalArgumentException("Invalid recording journal path")
+    val file = File(root, rel)
+    val directory = file.parentFile ?: throw IllegalStateException("Recording journal path is unavailable")
     check(directory.mkdirs() || directory.isDirectory)
     sync(context.noBackupFilesDir)
     sync(root)
     val binding = MessageDigest.getInstance("SHA-256").digest("${partition(owner)}\u0000$id".toByteArray())
-    return OmiRecordingLog(File(directory, "$id.journal"), key(), binding, ::sync)
+    return OmiRecordingLog(file, key(), binding, ::sync)
   }
   private fun state(entry: Entry, includeEntries: Boolean = true): WritableMap = Arguments.createMap().apply {
     putString("handle", entry.id)
@@ -152,9 +155,7 @@ internal class OmiRecordingJournals(
         && body.getInt("codec") == entry.input.getInt("codec")
         && OmiRecordingPolicy.capturedAtMatches(entry.input.opt("capturedAtMs"), body.opt("capturedAtMs")) && body.optString("deviceName", null) == entry.input.optString("deviceName", null))
     } else {
-      val base = "/v1/device-sessions/${entry.sessionId ?: error("Recording session is not acknowledged") }"
-      require((method == "POST" && path in setOf("$base/audio", "$base/complete", "$base/transcribe"))
-        || (method == "GET" && path in setOf(base, "$base/transcript")))
+      require(OmiBackendTransport.recordingPathOwned(method, path, entry.sessionId))
     }
     return entry.owner
   }
