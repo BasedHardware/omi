@@ -19,6 +19,7 @@ actor LocalEmbeddingIndexer {
       let tasks = Self.detachedWork.takeAll()
       if tasks.isEmpty { return }
       for task in tasks {
+        task.cancel()
         await task.value
       }
     }
@@ -102,14 +103,19 @@ actor LocalEmbeddingIndexer {
   private func indexSession(
     sessionId: Int64, store: LocalEmbeddingStore, authorization: LocalMutationAuthorization
   ) async throws {
+    guard let session = try await TranscriptionStorage.shared.getSession(id: sessionId) else {
+      runtime.record("local_embeddings", "missing_session_origin")
+      return
+    }
     let segments = try await TranscriptionStorage.shared.getSegments(sessionId: sessionId)
-    let origin = (try? await TranscriptionStorage.shared.getSession(id: sessionId))?.startedAt ?? Date()
+    let origin = session.startedAt
     let chunkInput = segments.map {
       TranscriptChunker.Segment(
         text: $0.text, order: $0.segmentOrder, startedAt: origin.addingTimeInterval($0.startTime))
     }
     let chunks = TranscriptChunker.chunks(sessionId: sessionId, segments: chunkInput)
-    let stored = try await store.upsertTranscriptChunks(chunks, authorization: authorization)
+    let stored = try await store.replaceTranscriptChunks(
+      sessionId: sessionId, chunks: chunks, authorization: authorization)
     try await embedTexts(
       stored.compactMap { chunk in
         guard let id = chunk.id else { return nil }
@@ -157,7 +163,7 @@ actor LocalEmbeddingIndexer {
       for (item, vector) in zip(slice, vectors) {
         try await store.write(
           sourceKind: sourceKind, sourceId: item.0, modelID: selected.modelID, text: item.1, vector: vector,
-          authorization: authorization)
+          dimension: selected.dimension, authorization: authorization)
       }
     }
   }
