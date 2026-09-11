@@ -74,24 +74,34 @@ describe('shouldSendKeepalive (silence keepalive — C1 socket starvation)', () 
   it('sends when a conversation socket is OPEN and has been idle past the threshold', () => {
     // The regression: without keepalives, a >90s silent stretch let the backend
     // close /v4/listen (1001) and silently killed live transcription.
-    expect(shouldSendKeepalive('conversation', OPEN, 30_000)).toBe(true)
-    expect(shouldSendKeepalive('conversation', OPEN, 120_000)).toBe(true)
+    expect(shouldSendKeepalive('conversation', OPEN, 30_000, false)).toBe(true)
+    expect(shouldSendKeepalive('conversation', OPEN, 120_000, false)).toBe(true)
+  })
+
+  it('keeps a long-lived transcribe-stream lane alive through gated silence', () => {
+    // Live bug: a meeting's VAD-gated system-audio lane sent nothing while the
+    // remote side was silent, the backend closed transcribe-stream after 60s
+    // ("Idle timeout: no audio for 60s", 1008), and meeting capture stopped.
+    // The keepalive fires at 30s idle — before that 60s timeout.
+    expect(shouldSendKeepalive('transcribe', OPEN, 30_000, false)).toBe(true)
   })
 
   it('does NOT send before the idle threshold (real audio is flowing)', () => {
-    expect(shouldSendKeepalive('conversation', OPEN, 0)).toBe(false)
-    expect(shouldSendKeepalive('conversation', OPEN, 29_999)).toBe(false)
+    expect(shouldSendKeepalive('conversation', OPEN, 0, false)).toBe(false)
+    expect(shouldSendKeepalive('conversation', OPEN, 29_999, false)).toBe(false)
+    expect(shouldSendKeepalive('transcribe', OPEN, 29_999, false)).toBe(false)
   })
 
   it('does NOT send while still connecting (buffered pre-OPEN, not starving)', () => {
-    expect(shouldSendKeepalive('conversation', CONNECTING, 120_000)).toBe(false)
+    expect(shouldSendKeepalive('conversation', CONNECTING, 120_000, false)).toBe(false)
   })
 
-  it('only the long-lived conversation socket keepalives — never ptt/transcribe', () => {
-    // PTT/transcribe are short and explicitly finalized; injecting silence frames
-    // would corrupt their trailing-segment flush and wall-clock timestamps.
-    expect(shouldSendKeepalive('ptt', OPEN, 120_000)).toBe(false)
-    expect(shouldSendKeepalive('transcribe', OPEN, 120_000)).toBe(false)
+  it('never keepalives a short PTT hold or a finalized transcribe stream', () => {
+    // PTT holds are short and batch-backed. After 'finalize' the backend closes a
+    // transcribe stream on the next audio frame ("Transcription already finalized"),
+    // so a keepalive there would cut the trailing segment.
+    expect(shouldSendKeepalive('ptt', OPEN, 120_000, false)).toBe(false)
+    expect(shouldSendKeepalive('transcribe', OPEN, 120_000, true)).toBe(false)
   })
 })
 

@@ -1,6 +1,6 @@
 {
   "changes": [
-    "Meeting capture no longer stops with \"Capture stopped\" when the other side of the call goes quiet for a minute — Omi reconnects the call audio on its own and keeps transcribing.",
+    "Meeting capture no longer stops with \"Capture stopped\" when the other side of the call goes quiet for a minute. Omi now keeps the call-audio connection alive through quiet stretches, and reconnects it if it drops.",
     "When a meeting capture does stop because of an account limit, the notice now says so (free transcription used up, or the daily voice transcription limit reached) instead of asking you to check your sign-in, internet, and microphone."
   ]
 }
