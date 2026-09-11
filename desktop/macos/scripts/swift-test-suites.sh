@@ -329,9 +329,9 @@ print_batch_diagnostics() {
   local log_path="$1"
   local label="$2"
   echo "--- $label: last XCTest progress lines ---"
-  grep -E "^Test (Case|Suite) '.*' (started|passed|failed)" "$log_path" 2>/dev/null | tail -n 12
+  grep -E "^Test (Case|Suite) '.*' (started|passed|failed)" "$log_path" 2>/dev/null | tail -n 12 || true
   echo "--- $label: failures and crashes ---"
-  grep -E "error: |: failed - |Fatal error|Exited with unexpected signal|Executed [0-9]+ tests" "$log_path" 2>/dev/null | tail -n 20
+  grep -E "error: |: failed - |Fatal error|Exited with unexpected signal|Executed [0-9]+ tests" "$log_path" 2>/dev/null | tail -n 20 || true
   echo "--- end $label ---"
 }
 
