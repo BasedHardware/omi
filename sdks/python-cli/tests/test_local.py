@@ -331,6 +331,27 @@ def test_sql_json_structures_single_column_table_text(config_path: Path, cli_run
     }
 
 
+def test_sql_json_falls_back_to_raw_text_when_cells_contain_pipes_or_newlines(config_path: Path, cli_runner) -> None:
+    _configure_local_profile(config_path)
+    # Cell with pipe delimiter in single column output
+    sql_text_pipe = "value\n-----\na|b\n\n1 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(sql_text_pipe)))
+        result = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT 'a|b' AS value"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"text": sql_text_pipe}
+
+    # Multiline cell resulting in row count mismatch
+    sql_text_newline = "value\n-----\na\nb\n\n1 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(sql_text_newline)))
+        result_nl = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT 'a\\nb' AS value"])
+
+    assert result_nl.exit_code == 0, result_nl.output
+    assert json.loads(result_nl.stdout) == {"text": sql_text_newline}
+
+
 def test_task_commands_route_to_local_tools(config_path: Path, cli_runner) -> None:
     _configure_local_profile(config_path)
     with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
