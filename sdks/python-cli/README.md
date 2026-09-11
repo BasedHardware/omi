@@ -209,7 +209,7 @@ omi
 │   ├── list [--limit N] [--offset N] [--categories ...]
 │   ├── get <id>
 │   ├── create <content> [--category ...] [--visibility ...] [--tag ...]
-│   ├── update <id> [--content ...] [--category ...] [--visibility ...] [--tag ...]
+│   ├── update <id> [--content ...] [--category ...] [--visibility ...] [--tag ...] [--clear-tags]
 │   └── delete <id> [-y]
 ├── conversation
 │   ├── list [--limit N] [--start-date ...] [--end-date ...] [--include-transcript]
