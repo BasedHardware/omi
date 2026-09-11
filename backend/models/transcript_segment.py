@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, Optional, List, Tuple, cast
 import uuid
 import re
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 from pydantic.json_schema import SkipJsonSchema
 
 from models.other import Person
@@ -52,11 +52,19 @@ class TranscriptSegment(BaseModel):
     # document them) stay intact.
     speaker_id_scope: SkipJsonSchema[Optional[str]] = None
     speaker_identity_status: SkipJsonSchema[str] = SpeakerIdentityStatus.unknown
+    # In-memory only: True when neither speaker nor speaker_id was in the
+    # construction payload, so speaker_id is the SPEAKER_00 default rather
+    # than persisted diarization. Not dumped; a stored synthesized 0 still
+    # looks real after a round-trip.
+    _speaker_id_synthesized: bool = PrivateAttr(default=False)
 
     def __init__(self, **data: Any):
         if 'speaker_identity_status' not in data and data.get('is_user') is True:
             data['speaker_identity_status'] = SpeakerIdentityStatus.user
+        speaker_in_payload = data.get('speaker') is not None
+        speaker_id_in_payload = data.get('speaker_id') is not None
         super().__init__(**data)
+        self._speaker_id_synthesized = not speaker_in_payload and not speaker_id_in_payload
         if not self.id:
             self.id = str(uuid.uuid4())
 

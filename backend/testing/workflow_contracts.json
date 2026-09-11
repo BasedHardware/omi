@@ -643,7 +643,8 @@
         "backend/testing/release_fixtures/transcription-release-probe.json",
         "backend/testing/release_fixtures/transcription-release-probe.wav",
         "backend/scripts/verify_pusher_dev_observability.py",
-        "backend/scripts/verify_pusher_source_closure.py"
+        "backend/scripts/verify_pusher_source_closure.py",
+        "backend/scripts/verify_pusher_cohost_env_diff.py"
       ],
       "tests": [
         "tests/unit/test_verify_pusher_rollout_budget.py",
@@ -655,7 +656,9 @@
         "tests/unit/test_pusher_semantic_probe.py",
         "tests/unit/test_verify_pusher_live_alert_route.py",
         "tests/unit/test_backend_runtime_env_validator.py",
-        "tests/unit/test_pusher_static_capability_admission.py"
+        "tests/unit/test_pusher_static_capability_admission.py",
+        "tests/unit/test_verify_pusher_cohost_env_diff.py",
+        "tests/unit/test_conversation_notes_v2_beta_rollout.py"
       ],
       "checks": [],
       "invariants": [
@@ -671,7 +674,8 @@
         "rollback remains absent until a complete image, config, schema, and protocol compatibility receipt exists; the workflow never blindly rolls back to the prior revision",
         "the live deployment gate rejects missing matching-node surge capacity before Helm can mutate the release",
         "the prod freshness check compares the full Dockerfile COPY source closure so a post-qualification change to any shared backend module cannot ship a stale digest",
-        "the live capacity gate has a confirm-and-reason break-glass hatch that records a tracking issue, matching the repo's gated-surface contract"
+        "the live capacity gate has a confirm-and-reason break-glass hatch that records a tracking issue, matching the repo's gated-surface contract",
+        "pusher and backend-listen explicit env key sets cannot gain an unexplained divergence; required process_conversation rollout flags must resolve identically"
       ]
     },
     {

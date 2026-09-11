@@ -257,6 +257,11 @@ enum FloatingBarNotificationAction: Equatable {
   /// the conversation to share and the calendar-detected recipients a
   /// one-click "Send to …" email would go to (empty = no send button).
   case meetingSummaryShare(conversationID: String, recipients: [ConversationShareRecipient])
+  /// The daily recap's announcement card. The recap never journals a transcript
+  /// turn (INV-CHAT-1), so the generic open-notification-chat fallthrough has no
+  /// stored message to resolve — the card carries its own destination instead:
+  /// the recap page the in-chat recap row opens, by the same route identity.
+  case openDailyRecap(DailyRecapRouteRef)
   /// Open the main chat with `prompt` already in the composer, focused and
   /// **not sent**. Raised by the first-real-app card, whose whole purpose is to
   /// turn a dead-end notch card into the user's first question — they still

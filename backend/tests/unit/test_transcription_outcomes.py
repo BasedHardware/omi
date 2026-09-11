@@ -3,7 +3,12 @@ from unittest.mock import MagicMock, patch
 import httpx
 
 from config.prerecorded_stt import PrerecordedSTTConfigurationError
-from utils.observability.transcription import LiveSTTAttempt, TranscriptionAttempt, record_live_stt_failure
+from utils.observability.transcription import (
+    LiveSTTAttempt,
+    TranscriptionAttempt,
+    record_live_stt_audio_seconds,
+    record_live_stt_failure,
+)
 from utils.stt.outcomes import (
     TranscriptionFailure,
     TranscriptionOutcome,
@@ -187,3 +192,125 @@ def test_live_failure_labels_are_bounded(mock_counter):
         'phase': 'unknown',
     }
     child.inc.assert_called_once_with()
+
+
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_LATENCY_SECONDS')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_COMPLETED_TOTAL')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_ACCEPTED_TOTAL')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_AUDIO_SECONDS_TOTAL')
+def test_attempt_records_measured_audio_seconds_on_finish(mock_audio, mock_accepted, mock_completed, mock_latency):
+    audio_child = MagicMock()
+    latency_child = MagicMock()
+    mock_audio.labels.return_value = audio_child
+    mock_latency.labels.return_value = latency_child
+
+    attempt = TranscriptionAttempt(route='voice_rest_pcm', provider='parakeet', platform='desktop', audio_seconds=12.5)
+    attempt.finish(TranscriptionOutcome.SUCCESS)
+
+    assert mock_audio.labels.call_args.kwargs == {
+        'route': 'voice_rest_pcm',
+        'provider': 'parakeet',
+        'outcome': 'success',
+        'client_platform': 'desktop',
+    }
+    audio_child.inc.assert_called_once_with(12.5)
+    # Wall-clock latency stays a separate signal on the same terminal.
+    latency_child.observe.assert_called_once()
+
+
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_LATENCY_SECONDS')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_COMPLETED_TOTAL')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_ACCEPTED_TOTAL')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_AUDIO_SECONDS_TOTAL')
+def test_finish_uses_audio_duration_not_wallclock_latency(mock_audio, mock_accepted, mock_completed, mock_latency):
+    audio_child = MagicMock()
+    latency_child = MagicMock()
+    mock_audio.labels.return_value = audio_child
+    mock_latency.labels.return_value = latency_child
+
+    attempt = TranscriptionAttempt(
+        route='voice_rest_multipart', provider='modulate', platform='ios', audio_seconds=187.5
+    )
+    attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
+
+    observed_latency = latency_child.observe.call_args.args[0]
+    # Constructor-to-finish wall clock is microseconds; if finish ever wires
+    # latency into the audio-seconds counter this exact-args assert fails.
+    assert 0.0 <= observed_latency < 1.0
+    audio_child.inc.assert_called_once_with(187.5)
+
+
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_LATENCY_SECONDS')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_COMPLETED_TOTAL')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_ACCEPTED_TOTAL')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_AUDIO_SECONDS_TOTAL')
+def test_attempt_without_measured_duration_records_no_audio_seconds(
+    mock_audio, mock_accepted, mock_completed, mock_latency
+):
+    attempt = TranscriptionAttempt(route='voice_chat_sse', provider='modulate', platform=None)
+    attempt.finish(TranscriptionOutcome.INVALID_INPUT)
+
+    mock_audio.labels.assert_not_called()
+
+
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_LATENCY_SECONDS')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_COMPLETED_TOTAL')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_ACCEPTED_TOTAL')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_AUDIO_SECONDS_TOTAL')
+def test_audio_seconds_labels_bound_unknown_provider_route_and_platform(
+    mock_audio, mock_accepted, mock_completed, mock_latency
+):
+    mock_audio.labels.return_value = MagicMock()
+
+    attempt = TranscriptionAttempt(route='brand-new-route', provider='brand-new-stt', platform='Web', audio_seconds=5.0)
+    attempt.finish(TranscriptionOutcome.EMPTY_UNEXPECTED)
+
+    assert mock_audio.labels.call_args.kwargs == {
+        'route': 'other',
+        'provider': 'unknown',
+        'outcome': 'empty_unexpected',
+        'client_platform': 'web',
+    }
+
+
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_LATENCY_SECONDS')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_COMPLETED_TOTAL')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_ACCEPTED_TOTAL')
+@patch('utils.observability.transcription.OMI_TRANSCRIPTION_AUDIO_SECONDS_TOTAL')
+def test_negative_audio_seconds_emit_nothing(mock_audio, mock_accepted, mock_completed, mock_latency):
+    attempt = TranscriptionAttempt(route='voice_rest_pcm', provider='deepgram', platform='ios', audio_seconds=-9.0)
+    attempt.finish(TranscriptionOutcome.SUCCESS)
+
+    mock_audio.labels.assert_not_called()
+
+
+def test_bounded_provider_maps_the_stt_provider_vocabulary():
+    from utils.stt.outcomes import bounded_provider
+
+    for token in ('modulate', 'parakeet', 'deepgram', 'soniox', 'deepgram_cloud'):
+        assert bounded_provider(token) == token
+    assert bounded_provider('brand-new-stt') == 'unknown'
+    assert bounded_provider(None) == 'unknown'
+
+
+@patch('utils.observability.transcription.OMI_LIVE_STT_AUDIO_SECONDS_TOTAL')
+def test_record_live_stt_audio_seconds_uses_bounded_labels(mock_audio):
+    child = MagicMock()
+    mock_audio.labels.return_value = child
+
+    record_live_stt_audio_seconds(provider='soniox', platform='android', seconds=4.2)
+
+    assert mock_audio.labels.call_args.kwargs == {
+        'provider': 'soniox',
+        'client_platform': 'android',
+        'deployment_environment': 'unknown',
+    }
+    child.inc.assert_called_once_with(4.2)
+
+
+@patch('utils.observability.transcription.OMI_LIVE_STT_AUDIO_SECONDS_TOTAL')
+def test_record_live_stt_audio_seconds_skips_nonpositive_deltas(mock_audio):
+    record_live_stt_audio_seconds(provider='deepgram', platform='ios', seconds=0)
+    record_live_stt_audio_seconds(provider='deepgram', platform='ios', seconds=-3.0)
+
+    mock_audio.labels.assert_not_called()

@@ -232,6 +232,11 @@ class PromotionFlexRunRouter:
             <= BACKGROUND_FLEX_JOB_BUDGET_SECONDS - BACKGROUND_FLEX_JOB_SAFETY_SECONDS
         )
 
+    def require_job_budget(self) -> None:
+        """Stop in-UID TTL/outbox work when the same one-hour clock is gone."""
+        if not self.job_budget_fits():
+            raise PromotionFlexDeferred("job_budget")
+
     def invoke_flex(
         self,
         *,

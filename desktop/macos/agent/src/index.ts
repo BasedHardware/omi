@@ -180,6 +180,10 @@ import type {
   ConversationTurnOrigin,
   ConversationTurnStatus,
 } from "./runtime/types.js";
+import {
+  conversationEvidenceRelayDiagnostic,
+  type ConversationEvidence,
+} from "./runtime/conversation-evidence.js";
 import { createStdoutLineSender } from "./stdout-line-sender.js";
 import { loadLocalMcpConfig, type UserMcpServer } from "./runtime/user-extensions.js";
 
@@ -893,6 +897,18 @@ function relayError(code: string, message: string): string {
   return JSON.stringify({ ok: false, error: { code, message } });
 }
 
+function journalLocalReadToolRelayFailure(
+  canonicalToolName: string,
+): { code: string; message: string } {
+  if (canonicalToolName === "search_chat_history") {
+    return { code: "chat_history_search_failed", message: "Chat history search could not be completed" };
+  }
+  if (canonicalToolName === "read_conversation_evidence") {
+    return conversationEvidenceRelayDiagnostic("read_conversation_evidence");
+  }
+  return conversationEvidenceRelayDiagnostic("search_conversation_evidence");
+}
+
 function controlToolInvocationOutcome(result: string): "succeeded" | "failed" {
   return finalizedToolResultOutcome(result);
 }
@@ -1082,24 +1098,41 @@ function startOmiToolsRelay(): Promise<string> {
                 continue;
               }
 
-              if (authorized.canonicalToolName === "search_chat_history") {
+              if (
+                authorized.canonicalToolName === "search_chat_history" ||
+                authorized.canonicalToolName === "read_conversation_evidence" ||
+                authorized.canonicalToolName === "search_conversation_evidence"
+              ) {
                 void (async () => {
                   let result: string;
                   let outcome: "succeeded" | "failed" = "succeeded";
                   try {
                     if (!runtimeKernel) throw new Error("Agent runtime kernel is not ready");
                     runtimeKernel.markRunToolInvocationDispatched(authorized);
-                    const search = runtimeKernel.searchAuthorizedChatHistory({
-                      invocation: authorized,
-                      toolInput: routedProposal.toolInput,
-                      activeOwnerId: () => currentOwnerId,
-                    });
-                    result = JSON.stringify(search);
+                    const value = authorized.canonicalToolName === "search_chat_history"
+                      ? runtimeKernel.searchAuthorizedChatHistory({
+                        invocation: authorized,
+                        toolInput: routedProposal.toolInput,
+                        activeOwnerId: () => currentOwnerId,
+                      })
+                      : authorized.canonicalToolName === "read_conversation_evidence"
+                        ? runtimeKernel.readAuthorizedConversationEvidence({
+                          invocation: authorized,
+                          toolInput: routedProposal.toolInput,
+                          activeOwnerId: () => currentOwnerId,
+                        })
+                        : runtimeKernel.searchAuthorizedConversationEvidence({
+                          invocation: authorized,
+                          toolInput: routedProposal.toolInput,
+                          activeOwnerId: () => currentOwnerId,
+                        });
+                    result = JSON.stringify(value);
                   } catch {
                     outcome = "failed";
                     // Search results and journal details are transcript data.
                     // Keep relay diagnostics shape-only even on malformed input.
-                    result = relayError("chat_history_search_failed", "Chat history search could not be completed");
+                    const failure = journalLocalReadToolRelayFailure(authorized.canonicalToolName);
+                    result = relayError(failure.code, failure.message);
                   }
                   const finalizedResult = finalizeRelayResult(msg.callId, result, authorized, outcome);
                   const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
@@ -2392,6 +2425,65 @@ async function main(): Promise<void> {
             break;
           }
 
+          if (
+            authorized.canonicalToolName === "read_conversation_evidence" ||
+            authorized.canonicalToolName === "search_conversation_evidence"
+          ) {
+            kernel.markRunToolInvocationDispatched(authorized);
+            let result: string;
+            let outcome: "succeeded" | "failed" = "succeeded";
+            try {
+              const value = authorized.canonicalToolName === "read_conversation_evidence"
+                ? kernel.readAuthorizedConversationEvidence({
+                  invocation: authorized,
+                  toolInput: routed.toolInput,
+                  activeOwnerId: establishedOwnerId,
+                })
+                : kernel.searchAuthorizedConversationEvidence({
+                  invocation: authorized,
+                  toolInput: routed.toolInput,
+                  activeOwnerId: establishedOwnerId,
+                });
+              result = JSON.stringify(value);
+            } catch {
+              outcome = "failed";
+              const failure = journalLocalReadToolRelayFailure(authorized.canonicalToolName);
+              result = relayError(failure.code, failure.message);
+            }
+            const finalizedResult = finalizeRelayResult(requestId, result, authorized, outcome);
+            const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
+            kernel.completeRunToolInvocation({
+              invocationId: authorized.invocationId,
+              ownerId: authorized.ownerId,
+              sessionId: authorized.sessionId,
+              runId: authorized.runId,
+              attemptId: authorized.attemptId,
+              profileGeneration: authorized.profileGeneration,
+              manifestVersion: authorized.manifestVersion,
+              manifestDigest: authorized.manifestDigest,
+              daemonBootEpoch: authorized.daemonBootEpoch,
+              executionGeneration: authorized.executionGeneration,
+              inputHash: authorized.inputHash,
+              capabilityRef: authorized.capabilityRef,
+              activeOwnerId: currentOwnerId,
+              outcome: finalizedOutcome,
+              result: finalizedResult,
+            });
+            send({
+              type: "external_surface_tool_result",
+              requestId,
+              clientId,
+              ownerId: authorized.ownerId,
+              sessionId: authorized.sessionId,
+              runId: authorized.runId,
+              attemptId: authorized.attemptId,
+              invocationId: authorized.invocationId,
+              ok: true,
+              result: finalizedResult,
+            });
+            break;
+          }
+
           kernel.markRunToolInvocationDispatched(authorized);
           registerPendingExternalToolCall(request, authorized);
           send({
@@ -2479,7 +2571,27 @@ async function main(): Promise<void> {
             terminalStatus: result.terminalStatus,
             duplicate: result.duplicate,
             finalTextPersisted: result.finalTextPersisted,
+            journalMaterialized: result.journalMaterialized,
           });
+          for (const change of result.journalChanges) {
+            const range = listJournalTurns(store, {
+              ownerId: change.ownerId,
+              conversationId: change.conversationId,
+              afterTurnSeq: Math.max(0, change.turn.turnSeq - 1),
+              limit: 1,
+            });
+            send({
+              type: "journal_turn_changed",
+              ownerId: change.ownerId,
+              conversationGeneration: range.generation,
+              generationBaseTurnSeq: range.generationBaseTurnSeq,
+              surfaceKind: change.surfaceKind,
+              externalRefKind: change.externalRefKind,
+              externalRefId: change.externalRefId,
+              turn: journalTurnProjection(change.turn),
+            });
+          }
+          if (result.journalChanges.length > 0) pumpJournalOutbox();
         } catch (error) {
           send({
             type: "external_surface_run_complete_result",
@@ -2748,6 +2860,9 @@ async function main(): Promise<void> {
               : undefined,
             appendResources: Array.isArray(update.appendResources)
               ? update.appendResources as ConversationResource[]
+              : undefined,
+            appendEvidence: Array.isArray(update.appendEvidence)
+              ? update.appendEvidence as ConversationEvidence[]
               : undefined,
             metadataJson: typeof update.metadataJson === "string" ? update.metadataJson : undefined,
             terminalRevision: update.terminalRevision === true,

@@ -31,6 +31,7 @@ LLM_GATEWAY_SERVICE = "llm-gateway-jit-qa"
 TYPESENSE_SERVICE = "typesense-jit-qa"
 TYPESENSE_API_SECRET = "jit-qa-typesense-api-key"
 TYPESENSE_COLLECTION = "jit_qa_canonical_memory_atoms"
+BACKEND_MEMORY = "4Gi"
 TYPESENSE_READINESS_COLLECTION = "jit_qa_typesense_readiness"
 TYPESENSE_ENTRYPOINT = "/usr/local/bin/jit-qa-typesense-entrypoint"
 TYPESENSE_CPU = "1"
@@ -86,6 +87,13 @@ _ALLOWED_SECRET_BINDINGS = {
     "REDIS_DB_PASSWORD": "jit-qa-redis-password:latest",
     "OMI_LLM_GATEWAY_SERVICE_TOKEN": "jit-qa-gateway-token:latest",
     "TYPESENSE_API_KEY": "jit-qa-typesense-api-key:latest",
+}
+# Batch Gemini embeddings intentionally remain on the AI Studio route because
+# Vertex's batch wire shape is incompatible. Keep this key as a desktop-only
+# secret binding; the backend and gateway must never receive it as an env entry.
+_DESKTOP_SECRET_BINDINGS = {
+    **_ALLOWED_SECRET_BINDINGS,
+    "GEMINI_API_KEY": "GEMINI_API_KEY:latest",
 }
 _GATEWAY_SECRET_BINDINGS = {
     "OPENAI_API_KEY": "OPENAI_API_KEY:latest",
@@ -320,6 +328,7 @@ def validate_cloud_run_resource(
     expected_secret_bindings: Mapping[str, str] | None = None,
     expected_name: str | None = None,
     expected_service_account: str = RUNTIME_SERVICE_ACCOUNT,
+    expected_memory: str | None = None,
     gateway_url: str | None = None,
     redis_host: str | None = None,
     typesense_host: str | None = None,
@@ -335,6 +344,14 @@ def validate_cloud_run_resource(
     container = _containers(resource, kind=kind)[0]
     if container.get("image") != expected_image:
         raise JITQAContractError("Cloud Run resource image does not match the admitted digest")
+    if expected_memory is not None:
+        resources = container.get("resources")
+        limits = resources.get("limits") if isinstance(resources, Mapping) else None
+        actual_memory = limits.get("memory") if isinstance(limits, Mapping) else None
+        if actual_memory != expected_memory:
+            raise JITQAContractError(
+                f"Cloud Run {kind} must declare memory limit {expected_memory!r}; got {actual_memory!r}"
+            )
     expected_secret_bindings = dict(expected_secret_bindings or {})
     expected_names = set(expected_environment) | set(expected_secret_bindings)
     seen_names: set[str] = set()
@@ -611,7 +628,7 @@ def resource_environment(
                 "REDIS_DB_PORT": "6379",
                 **typesense_environment,
             },
-            dict(_ALLOWED_SECRET_BINDINGS),
+            dict(_DESKTOP_SECRET_BINDINGS if profile == "desktop" else _ALLOWED_SECRET_BINDINGS),
         )
     if profile == "gateway":
         return (
@@ -621,6 +638,11 @@ def resource_environment(
                 "OMI_JIT_QA_UID_ALLOWLIST": QA_UID,
                 "OMI_LLM_GATEWAY_PROD": "false",
                 "LLM_GATEWAY_ALLOWED_CALLERS": "backend,desktop",
+                # QA cost evidence reads the gateway's durable attempt ledger;
+                # keep its explicit accounting gate in the exact resource
+                # contract so post-deploy validation cannot reject it as an
+                # unapproved extra environment entry.
+                "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
                 "OMI_LLM_GATEWAY_BUILD_IDENTITY": "jit-qa",
                 "OMI_JIT_PROACTIVITY_BUDGET_CONTRACT": "jit-cloud-qa-v1",
             },
@@ -785,6 +807,7 @@ def main() -> int:
                 expected_environment=expected_environment,
                 expected_secret_bindings=expected_secret_bindings,
                 expected_name=args.expected_name,
+                expected_memory=BACKEND_MEMORY if args.profile == "backend" else None,
                 gateway_url=args.gateway_url if args.profile in {"backend", "desktop"} else None,
                 redis_host=args.redis_host if args.profile in {"backend", "desktop"} else None,
                 typesense_host=args.typesense_host if args.profile in {"backend", "desktop"} else None,

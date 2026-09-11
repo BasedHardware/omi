@@ -54,6 +54,7 @@ import {
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
+import { DEFAULT_PLAN_FEATURES } from '@/lib/planFeatures';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
   CLAUDE_CONNECTOR_OAUTH,
@@ -999,14 +1000,6 @@ function UsageSectionContent({
 
   const selectedOption = cachedPlans?.find((p) => p.id === selectedPriceId);
 
-  // Default features for unlimited plan
-  const defaultFeatures = [
-    'Unlimited conversations',
-    'Unlimited memories',
-    'Priority processing',
-    'Advanced insights',
-  ];
-
   const handleSubscribe = async () => {
     if (!selectedPriceId) return;
 
@@ -1489,7 +1482,7 @@ function UsageSectionContent({
               <div className="space-y-2">
                 <h4 className="text-sm font-medium text-text-secondary">Features:</h4>
                 <ul className="space-y-2">
-                  {defaultFeatures.map((feature, idx) => (
+                  {DEFAULT_PLAN_FEATURES.map((feature, idx) => (
                     <li key={idx} className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-text-secondary flex-shrink-0 mt-0.5" />
                       <span className="text-sm text-text-tertiary">{feature}</span>

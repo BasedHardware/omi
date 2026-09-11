@@ -11,6 +11,19 @@ and background processing.
 - `process_conversation.py` is the synchronous enrichment coordinator. It
   persists the completed conversation and delegates expensive child work to the
   named executor lanes.
+- `owner_attribution.py` owns typed source-cluster evidence for memory writes.
+  A passive memory may be attributed to the account owner only when the
+  transcript identifies exactly one owner speaker cluster, keyed by
+  `(speaker_id_scope, speaker_id)` so merged conversations cannot collapse
+  distinct sources. Segment `is_user` labels and model-authored `about=user`
+  cannot override that evidence, including for quote promotion. Legacy
+  transcripts without cluster IDs fail closed: a `TranscriptSegment` that
+  only materialized `speaker_id` from the SPEAKER_00 default is not
+  cluster evidence.
+  `transcript_for_llm.memory_transcript_from_segments` is the memory-only
+  renderer: when owner evidence is untrusted it suppresses owner names and
+  prefixes an explicit UNTRUSTED header. Summary and action-item rendering keep
+  their existing presentation.
 - `wake_word.py` owns the pure, end-of-conversation matcher and trusted inline
   prompt marker. It has no realtime state, I/O, or speaker-identity gate. The
   independent invocation classifier lives in `utils/llm/`; task-intelligence
@@ -22,12 +35,27 @@ and background processing.
 - `meeting_treatment.py` owns the post-capture meeting policy. It uses durable
   conversation timestamps plus the union of transcribed-speech intervals, so
   dual microphone/system-audio transcripts cannot double-count speech.
+- `duration.py` owns the single conversation-duration rule shared with the
+  Flutter and macOS clients: the transcript span (largest validated segment
+  `end`), falling back to the wall window when no segment survives validation —
+  whether the record is transcript-free or its segments are all malformed
+  (the malformed-doc branch records a fallback so ops can see the degradation).
+  `started_at` is the streaming-session origin, so no caller may recompute
+  `finished_at - started_at` as a user-visible or policy duration.
+
 - `overview_markdown.py` renders notes-v2 `structured.overview` markdown to a
   closed HTML subset for the share-email body (headings, lists, emphasis,
   `http(s)` links; every text node escaped).
 - `meeting_receipt.py` is the sole writer of the final meeting verdict. It
   records reason and measured inputs on the finalization job, projects the
   verdict to the conversation, and attaches the deterministic Chat intent.
+- `typesense_index.py` owns the first-party Typesense projection of the
+  durable conversation store. It is called fail-open from the conversation
+  write/delete choke points (`database/conversations.py` durable mutations,
+  `lifecycle.delete_empty_recording_conversation`, and the account-deletion
+  purge), never from routers. Dual-writes on top of the still-installed
+  Firebase extension `firestore-typesense-conversations`; the extension is
+  removed only after this writer has baked (see the module runbook note).
 - The old orphaned WAV retranscription util (`postprocess_conversation.py`) was
   removed: the historical Flutter upload (`memoryPostProcessing`) and
   `POST /v1/memories/{id}/post-processing` router were removed and nothing

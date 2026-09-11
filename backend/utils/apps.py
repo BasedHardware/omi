@@ -80,12 +80,13 @@ from utils.llm.persona import condense_conversations, condense_memories, generat
 from utils.llm.usage_tracker import track_usage, Features
 from utils.executors import run_blocking, db_executor, llm_executor
 from utils.social import get_twitter_timeline
+from utils.marketplace_reviewers import parse_marketplace_reviewers, is_marketplace_reviewer
 import logging
 
 logger = logging.getLogger(__name__)
 
 _reviewers_env: Optional[str] = os.getenv('MARKETPLACE_APP_REVIEWERS')
-MarketplaceAppReviewUIDs: List[str] = _reviewers_env.split(',') if _reviewers_env else []
+MarketplaceAppReviewUIDs: List[str] = parse_marketplace_reviewers(_reviewers_env)
 
 
 def _records_with_ids(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -316,13 +317,15 @@ def get_popular_apps() -> List[App]:
             set_generic_cache(cache_key, reduced_apps, 60 * 30)  # 30 minutes cached
             popular_apps = reduced_apps
 
+        usable_apps = _records_with_ids(popular_apps)
+
         # Process apps (add installs, reviews, ratings)
-        app_ids = [app['id'] for app in popular_apps]
+        app_ids = [app['id'] for app in usable_apps]
         apps_install = get_apps_installs_count(app_ids)
         apps_reviews = get_apps_reviews(app_ids)
 
         apps: List[App] = []
-        for app in popular_apps:
+        for app in usable_apps:
             app_dict = app
             app_dict['installs'] = apps_install.get(app['id'], 0)
             reviews = apps_reviews.get(app['id'], {})
@@ -727,15 +730,14 @@ def upsert_app_payment_link(
 
 
 def get_is_user_paid_app(app_id: str, uid: str):
-    if uid in MarketplaceAppReviewUIDs:
+    if is_marketplace_reviewer(uid) or uid in MarketplaceAppReviewUIDs:
         return True
     return get_user_paid_app(app_id, uid) is not None
 
 
 def is_permit_payment_plan_get(uid: str):
-    if uid in MarketplaceAppReviewUIDs:
+    if is_marketplace_reviewer(uid) or uid in MarketplaceAppReviewUIDs:
         return False
-
     return True
 
 

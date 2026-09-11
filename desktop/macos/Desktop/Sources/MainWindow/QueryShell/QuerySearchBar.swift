@@ -31,6 +31,9 @@ struct QuerySearchBar: View {
         guard focus == nil else { return }
         reportFocus(focused)
       }
+      // Typing on the page with nothing focused starts a search here. The bar is not focused ahead
+      // of time — no caret, no stroke — until the first key arrives (`StrayTypingRouter`).
+      .straysTypingHere(focus ?? $internalFocus)
   }
 
   private func reportFocus(_ focused: Bool) {

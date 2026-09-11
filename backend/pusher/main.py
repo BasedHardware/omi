@@ -21,6 +21,7 @@ from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.http_client import close_all_clients
 from utils.executors import drain_background_tasks, log_executor_health, start_background_task
 from utils.readiness import ReadinessGate
+from utils.stt.streaming import validate_streaming_stt_env
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -45,6 +46,7 @@ def _validate_static_capabilities(env: Mapping[str, str] | None = None) -> None:
             'pusher static capability admission failed: '
             'conversation.finalize.persisted requires memory.canonical.mutate'
         )
+    validate_streaming_stt_env(env)
 
 
 async def startup_event() -> None:

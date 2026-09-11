@@ -3246,5 +3246,16 @@
     "chatBlockUnavailable": "Inte längre tillgänglig",
     "chatBlockRecommendedNextSteps": "Rekommenderade nästa steg",
     "couldNotLoadMemories": "Kunde inte läsa in minnen",
-    "couldNotLoadKnowledgeGraph": "Kunde inte läsa in kunskapsgrafen"
+    "couldNotLoadKnowledgeGraph": "Kunde inte läsa in kunskapsgrafen",
+    "speechProfileOwnerTitle": "Röstprofil för {name}",
+    "play": "Spela upp",
+    "redo": "Spela in igen",
+    "answerWithYourVoice": "Svara med din röst:",
+    "speechProfileTopicLocation": "Var bor du?",
+    "speechProfileTopicWork": "Vad jobbar du med?",
+    "speechProfileTopicGoal": "Vad är ditt långsiktiga mål?",
+    "speechToTextUnavailableDesc": "Tal till text är inte tillgängligt just nu. Kontrollera internetanslutningen och enhetens inställningar för taligenkänning och försök igen.",
+    "memoryHistoryPartial": "En del av minneshistoriken är inte tillgänglig. Visar historiken som har tagits emot hittills.",
+    "tapPlusToStartRecording": "Tryck på + för att börja spela in",
+    "processingTakingLonger": "Fortfarande igång — det tar längre tid än vanligt."
 }

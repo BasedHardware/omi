@@ -408,6 +408,7 @@ describe("protocol v2", () => {
       terminalStatus: "completed",
       duplicate: false,
       finalTextPersisted: true,
+      journalMaterialized: true,
     };
     expect([begin, invoke, complete] satisfies InboundMessage[]).toHaveLength(3);
     expect([began, invoked, completed] satisfies OutboundMessage[]).toHaveLength(3);

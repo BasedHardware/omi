@@ -82,15 +82,17 @@ jobs:
 
       - name: Verify live finalization alert route before publishing
         env:
-          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+          # Dest ops Grafana (monitor.omiapi.com). Do not use GRAFANA_TOKEN; that
+          # token belongs to the TV Cloud Run instance.
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
           set -euo pipefail
           umask 077
           token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-token.XXXXXX")"
-          cleanup() { rm -f "$token_file"; unset GRAFANA_TOKEN; }
+          cleanup() { rm -f "$token_file"; unset MONITOR_GRAFANA_TOKEN; }
           trap cleanup EXIT
-          test -n "$GRAFANA_TOKEN"
-          printf '%s' "$GRAFANA_TOKEN" > "$token_file"
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          printf '%s' "$MONITOR_GRAFANA_TOKEN" > "$token_file"
           python3 backend/scripts/verify_pusher_live_alert_route.py \
             --grafana-url https://monitor.omiapi.com \
             --token-file "$token_file" \
@@ -119,6 +121,7 @@ jobs:
         run: |
           python3 backend/scripts/verify_pusher_rollout_budget.py
           python3 backend/scripts/verify_pusher_rollout_gate.py preflight
+          python3 backend/scripts/verify_pusher_cohost_env_diff.py
           python3 backend/scripts/verify_pusher_dev_observability.py
 
       - name: Get GKE credentials
@@ -165,15 +168,15 @@ jobs:
 
       - name: Verify deployed development finalization telemetry and alert route
         env:
-          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
           set -euo pipefail
           umask 077
           token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-postrollout-token.XXXXXX")"
-          cleanup() { rm -f "$token_file"; unset GRAFANA_TOKEN; }
+          cleanup() { rm -f "$token_file"; unset MONITOR_GRAFANA_TOKEN; }
           trap cleanup EXIT
-          test -n "$GRAFANA_TOKEN"
-          printf '%s' "$GRAFANA_TOKEN" > "$token_file"
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          printf '%s' "$MONITOR_GRAFANA_TOKEN" > "$token_file"
           python3 backend/scripts/verify_pusher_live_alert_route.py \
             --grafana-url https://monitor.omiapi.com \
             --token-file "$token_file" \

@@ -6,7 +6,12 @@
   "canonical_prevention_artifact": [
     "backend/utils/memory/canonical_consolidation.py",
     "backend/tests/unit/test_canonical_consolidation.py",
-    "backend/tests/unit/test_canonical_short_term_maintenance_cron.py"
+    "backend/tests/unit/test_canonical_short_term_maintenance_cron.py",
+    "backend/utils/memory/short_term_promotion.py",
+    "backend/utils/memory/promotion_flex.py",
+    "backend/modal/memory_maintenance_job.py",
+    "backend/tests/unit/test_short_term_maintenance_job_budget.py",
+    "backend/tests/unit/test_notifications_job_orchestrator.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

@@ -1863,9 +1863,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get openSettings => 'Mở cài đặt';
 
   @override
-  String get wantDifferentName => 'Muốn được gọi bằng tên khác?';
-
-  @override
   String get whatsYourName => 'Tên bạn là gì?';
 
   @override
@@ -2045,7 +2042,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get memoryDeleted => 'Đã xóa ký ức.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Một phần lịch sử ký ức không khả dụng. Đang hiển thị lịch sử đã nhận được cho đến nay.';
 
   @override
   String get undo => 'Hoàn tác';
@@ -9909,10 +9907,33 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Hồ sơ giọng nói của $name';
+  }
+
+  @override
+  String get play => 'Phát';
+
+  @override
+  String get redo => 'Ghi âm lại';
+
+  @override
+  String get answerWithYourVoice => 'Trả lời bằng giọng nói của bạn:';
+
+  @override
+  String get speechProfileTopicLocation => 'Bạn sống ở đâu?';
+
+  @override
+  String get speechProfileTopicWork => 'Bạn làm công việc gì?';
+
+  @override
+  String get speechProfileTopicGoal => 'Mục tiêu dài hạn của bạn là gì?';
+
+  @override
   String get transcriptionNoAudio => 'Bản ghi âm không nhận được âm thanh';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Nhấn + để bắt đầu ghi âm';
 
   @override
   String get chatBlockTask => 'Nhiệm vụ';
@@ -9949,4 +9970,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Không thể tải đồ thị tri thức';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Hiện không thể chuyển giọng nói thành văn bản. Hãy kiểm tra kết nối internet và cài đặt nhận dạng giọng nói trên thiết bị rồi thử lại.';
+
+  @override
+  String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
 }

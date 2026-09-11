@@ -283,6 +283,17 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('completed'), _asc('created_at'), _asc('__name__')),
     ),
+    # GET /v1/action-items?start_date=...&completed=... orders created_at
+    # newest-first (``_apply_action_item_date_filters``). The ascending
+    # composite above serves the ``get_scores`` count but not that ordering;
+    # a database provisioned from this manifest alone (isolated jit-qa,
+    # 2026-09-10) failed the read with FailedPrecondition until this existed.
+    FirestoreIndexRequirement(
+        'action_items_completed_created_newest_first',
+        'action_items',
+        'COLLECTION',
+        (_asc('completed'), _desc('created_at'), _desc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'action_items_conversation_due',
         'action_items',
@@ -1027,6 +1038,10 @@ ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY = FirestoreQuerySpec(
         FirestoreQueryFilter('created_at', '<', 'end'),
         FirestoreQueryFilter('completed', '==', 'completed'),
     ),
+    # ``build`` is the ``get_scores`` weekly count aggregation (no ordering),
+    # which Firestore serves only from the ascending composite; the
+    # newest-first list read in ``_apply_action_item_date_filters`` is a
+    # different composite, declared as ``action_items_completed_created_newest_first``.
     index_fields=(_asc('completed'), _asc('created_at'), _asc('__name__')),
 )
 
@@ -1299,6 +1314,22 @@ DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('discarded'), _asc('status'), _asc('created_at'), _asc('__name__')),
 )
 
+# Hourly daily-summary cron: Firestore returns only recipients for (enabled, local
+# hour, timezone chunk) instead of scanning every user with a time_zone and
+# filtering preferences in Python. Equality on the two preference fields is
+# only valid once they are always-present (write-time defaults + backfill).
+DAILY_SUMMARY_RECIPIENTS_QUERY = FirestoreQuerySpec(
+    identifier='daily_summary_recipients_by_hour_and_zone',
+    collection_group='users',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('daily_summary_enabled', '==', 'enabled'),
+        FirestoreQueryFilter('daily_summary_hour_local', '==', 'hour_local'),
+        FirestoreQueryFilter('time_zone', 'in', 'time_zones'),
+    ),
+    index_fields=(_asc('daily_summary_enabled'), _asc('daily_summary_hour_local'), _asc('time_zone'), _asc('__name__')),
+)
+
 
 CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
     identifier='conversation_photos_name_range_export',
@@ -1379,6 +1410,7 @@ QUERY_SPECS = (
     DAY3_REENGAGEMENT_SIGNUP_COHORT_QUERY,
     DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY,
     DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY,
+    DAILY_SUMMARY_RECIPIENTS_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

@@ -188,6 +188,15 @@ _FOREGROUND_TIMEOUT_FEATURES = frozenset(
         'conv_structure',
         'conv_app_result',
         'daily_summary',
+        # Fifth instance of the class, 2026-09-05: the L1 memory extractor
+        # (`get_llm('memory_l1')` behind extract_l1_memory_archive_items_from_text)
+        # runs in conversation finalization with strict=True, so every extraction
+        # that outlived the 15s background gateway deadline raised
+        # APITimeoutError and dropped that conversation's whole memory batch —
+        # prod pusher 2026-09-01..05: "Error extracting memory L1 archive items:
+        # invoke_failed:APITimeoutError" 9-21×/day, no retry. The extractor reads
+        # the whole transcript in one structured call, like its siblings above.
+        'memory_l1',
     }
 )
 

@@ -195,6 +195,118 @@ final class FloatingBarNotchCardSizingTests: XCTestCase {
     }
   }
 
+  // MARK: - Closing the conversation over a mounted card
+
+  /// Agent chat opens over a mounted card without dismissing it
+  /// (`openAgentInChat` never touches `currentNotification`), so the card
+  /// outlives the conversation by design. The close used to substitute the
+  /// bare idle lobe for whatever the surface was showing, leaving the card
+  /// mounted inside a scrunched panel — indefinitely, for persistent cards.
+  func testClosingTheConversationKeepsAMountedCardWhole() {
+    withNotchMode {
+      let window = makeWindow()
+      defer { window.close() }
+      window.makeKeyAndOrderFront(nil)
+
+      window.showNotification(card(), animated: false)
+      let mounted = window.frame
+
+      window.state.showingAIConversation = true
+      // The voice-handoff close is the live path that leaves listening and
+      // the mounted card untouched (`cancelsInFlightWork` is false).
+      window.closeAIConversation(intent: .voiceHandoff)
+
+      // The close animates and its settle snap lands one settle delay later.
+      // omi-test-quality: wall-clock-wait -- the close settle is a real
+      // main-queue asyncAfter + NSAnimationContext completion on the window
+      // with no injectable clock; the 0.4s wait is enqueued after the 0.16s
+      // settle on the same main queue, so the signal is sequenced, not raced.
+      let settled = expectation(description: "close settle snap")
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { settled.fulfill() }
+      wait(for: [settled], timeout: 2)
+
+      XCTAssertGreaterThanOrEqual(
+        window.frame.width, mounted.width,
+        "closing the conversation must not narrow the panel under a mounted card")
+      XCTAssertGreaterThanOrEqual(
+        window.frame.height, mounted.height,
+        "closing the conversation must not clip the card body")
+      XCTAssertNotNil(window.state.currentNotification, "the card must still be mounted")
+    }
+  }
+
+  // MARK: - Dismissal under an open conversation
+
+  /// A card auto-dismissing underneath an open conversation must leave the
+  /// chat's frame alone: the conversation surface owns the window until it
+  /// closes, and closeAIConversation recomposes from live state.
+  func testDismissingACardUnderAnOpenConversationLeavesTheChatFrameAlone() {
+    withNotchMode {
+      let window = makeWindow()
+      defer { window.close() }
+      window.makeKeyAndOrderFront(nil)
+
+      window.showNotification(card(), animated: false)
+      let mounted = window.frame
+
+      window.state.showingAIConversation = true
+      window.dismissNotification(animated: false)
+
+      XCTAssertNil(window.state.currentNotification)
+      XCTAssertEqual(
+        window.frame.width, mounted.width,
+        "the open conversation owns the frame; the dismissal must not crush it to the island")
+    }
+  }
+
+  /// Replacement swaps unmount the old card with `resize: false` so the
+  /// newcomer's presentation is the single transition — the old dismiss-then-
+  /// present sequence snapped the panel to the bare island before animating
+  /// back out, the visible scrunch pulse.
+  func testUnmountingForReplacementLeavesTheFrameToTheReplacement() {
+    withNotchMode {
+      let window = makeWindow()
+      defer { window.close() }
+      window.makeKeyAndOrderFront(nil)
+
+      window.showNotification(card(), animated: false)
+      let mounted = window.frame
+
+      window.dismissNotification(animated: false, resize: false)
+
+      XCTAssertNil(window.state.currentNotification)
+      XCTAssertEqual(window.frame.width, mounted.width)
+    }
+  }
+
+  // MARK: - The release edge
+
+  /// Releasing PTT lands on the *composed* closed surface: thinking or
+  /// response-waiting keeps the wider island. Collapsing to the bare idle
+  /// lobe dipped the notch below the thinking width between the release and
+  /// the lifecycle-driven syncActiveIsland resize.
+  func testPTTReleaseWhileThinkingKeepsTheWiderIsland() {
+    withNotchMode {
+      let window = makeWindow()
+      defer { window.close() }
+      window.makeKeyAndOrderFront(nil)
+
+      let presenter = FloatingControlBarState.PTTBarPresenter(
+        barState: window.state,
+        resizeForPTT: { [weak window] in window?.resizeForPTTState(expanded: $0) }
+      )
+      presenter.apply(.idle)
+      let idle = window.pushToTalkSurfaceSize(expanded: false)
+
+      presenter.apply(VoiceTurnUIProjection(isThinking: true))
+      let thinking = window.pushToTalkSurfaceSize(expanded: false)
+
+      XCTAssertGreaterThan(
+        thinking.width, idle.width,
+        "the release edge must not dip the island below the thinking width")
+    }
+  }
+
   // MARK: - The pure rule
 
   func testNotificationPreservingSurfaceSizeKeepsTheCardWhole() {

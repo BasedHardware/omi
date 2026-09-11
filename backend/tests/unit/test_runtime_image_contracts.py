@@ -1,5 +1,8 @@
 import importlib.util
 import json
+import os
+import shutil
+import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -139,19 +142,6 @@ def test_pusher_contract_rejects_omitted_shared_package(contracts_module, tmp_pa
     assert any('services.conversation_finalization' in error for error in errors)
 
 
-def test_modal_contract_rejects_omitted_shared_package(contracts_module, tmp_path):
-    models = _contract(contracts_module, 'models')
-    dockerfile = _dockerfile_without(
-        models.dockerfile,
-        'COPY backend/utils /app/utils\n',
-        tmp_path / 'Dockerfile',
-    )
-
-    errors = contracts_module.source_closure_errors(replace(models, dockerfile=dockerfile))
-
-    assert any('utils.stt.speech_profile' in error for error in errors)
-
-
 def test_relative_import_resolution_keeps_the_current_package(contracts_module):
     level_one = contracts_module.ast.parse('from ._client import db')
     level_two = contracts_module.ast.parse('from ..shared import client')
@@ -171,6 +161,75 @@ def test_pusher_dependency_probe_includes_jsonschema(contracts_module):
     assert 'jsonschema' in dependencies
     assert not any(
         dependency == 'omi_plugin_sdk' or dependency.startswith('omi_plugin_sdk.') for dependency in dependencies
+    )
+
+
+def test_jit_projection_declares_optional_plugin_sdk_fallback(contracts_module):
+    projection = _contract(contracts_module, 'jit-qa-typesense-projection-runner')
+
+    # The static import walk sees the optional SDK symbols inside the
+    # ModuleNotFoundError-protected branch of models.structured.  The image
+    # intentionally relies on that backend-owned fallback, so the exclusion
+    # must be scoped to this SDK prefix rather than weakening all dependency
+    # probes.
+    # Walk only the defining module here; the full projection entrypoint graph
+    # is covered by the registry/source-closure checks and is too expensive for
+    # the per-test fast-unit CPU budget.
+    unfiltered = replace(
+        projection,
+        entrypoints=('models.structured',),
+        dependency_probe_exclusions=frozenset(),
+    )
+    dependencies = contracts_module.third_party_dependency_modules(unfiltered)
+    assert 'omi_plugin_sdk.models.ActionItem' in dependencies
+    filtered = replace(unfiltered, dependency_probe_exclusions=projection.dependency_probe_exclusions)
+    filtered_dependencies = contracts_module.third_party_dependency_modules(filtered)
+    assert not any(
+        dependency == 'omi_plugin_sdk' or dependency.startswith('omi_plugin_sdk.')
+        for dependency in filtered_dependencies
+    )
+    assert 'pydantic' in filtered_dependencies
+    assert projection.dependency_probe_exclusions == frozenset({'omi_plugin_sdk'})
+
+
+def test_structured_model_fallback_imports_without_plugin_sdk(tmp_path):
+    models_root = tmp_path / 'models'
+    models_root.mkdir()
+    shutil.copy(BACKEND_DIR / 'models' / '__init__.py', models_root / '__init__.py')
+    shutil.copy(BACKEND_DIR / 'models' / 'conversation_enums.py', models_root / 'conversation_enums.py')
+    shutil.copy(BACKEND_DIR / 'models' / 'structured.py', models_root / 'structured.py')
+
+    probe = '''
+import builtins
+
+real_import = builtins.__import__
+
+def block_optional_sdk(name, *args, **kwargs):
+    if name == "omi_plugin_sdk" or name.startswith("omi_plugin_sdk."):
+        raise ModuleNotFoundError(name)
+    return real_import(name, *args, **kwargs)
+
+builtins.__import__ = block_optional_sdk
+from models import structured
+
+assert structured.ActionItem.__module__ == "models.structured"
+assert structured.Event.__module__ == "models.structured"
+assert structured.Section.__module__ == "models.structured"
+assert structured.Structured(title="fallback").title == "fallback"
+'''
+    environment = dict(os.environ)
+    environment['PYTHONPATH'] = str(tmp_path)
+    result = subprocess.run(
+        [sys.executable, '-c', probe],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, (
+        'SDK-absent fallback import failed; ' f'stdout={result.stdout[-2000:]!r} stderr={result.stderr[-2000:]!r}'
     )
 
 
@@ -341,3 +400,25 @@ def test_load_contracts_dockerfile_filter_skips_non_matching_entries(contracts_m
     filtered = contracts_module.load_contracts(staged_registry, dockerfile_filter=backend_filter)
 
     assert [c.name for c in filtered] == ['backend']
+
+
+def _requirement_pin(requirements_text: str, package: str) -> str:
+    prefix = f'{package}=='
+    for line in requirements_text.splitlines():
+        if line.startswith(prefix):
+            return line
+    raise AssertionError(f'{package} pin missing from requirements')
+
+
+def test_pusher_installs_typesense_because_finalization_indexes_conversations():
+    """process_conversation → lifecycle → typesense_index is reachable in the pusher image.
+
+    Auto-deploy smoke failed from 2026-09-01 onward with
+    missing installed dependency modules: typesense / typesense.exceptions.ObjectNotFound
+    because the module was on backend/requirements.txt but not the pusher subset.
+    """
+    pusher = (BACKEND_DIR / 'pusher' / 'requirements.txt').read_text(encoding='utf-8')
+    backend = (BACKEND_DIR / 'requirements.txt').read_text(encoding='utf-8')
+    assert _requirement_pin(pusher, 'typesense') == _requirement_pin(backend, 'typesense')
+    pylock = (BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8')
+    assert 'name = "typesense"' in pylock

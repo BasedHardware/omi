@@ -99,6 +99,18 @@ struct JITAmbientRuntimeContext: Equatable, Sendable {
     !id.isEmpty && semanticFingerprint.count == 64 && locallyRelevant && !boundedEvidence.isEmpty
   }
 
+  /// Planned matching reads validated facts as observation text. Ambient nano
+  /// still requires positive worthiness through `locallyRelevant`.
+  static func fromSnapshot(_ snapshot: ContextBucketSnapshot) -> JITAmbientRuntimeContext {
+    JITAmbientRuntimeContext(
+      id: snapshot.bucketID,
+      semanticFingerprint: semanticFingerprint(
+        contextID: snapshot.bucketID, validatedFacts: snapshot.validatedFacts),
+      locallyRelevant: snapshot.notifyWorthiness > 0,
+      boundedEvidence: snapshot.validatedFacts.prefix(20).map { String($0.prefix(400)) }
+        .joined(separator: "\n"))
+  }
+
   static func semanticFingerprint(contextID: String, validatedFacts: [String]) -> String {
     let facts = validatedFacts.map {
       $0.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()

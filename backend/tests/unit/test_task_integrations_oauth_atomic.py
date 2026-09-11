@@ -4,7 +4,7 @@ Same single-use requirement as the routers/integrations.py copy: a separate GET 
 concurrent callbacks carrying the same state both read the value before either delete runs, which
 weakens replay protection. It now uses an atomic Redis GETDEL, so only one caller receives the value
 and a second consume of the same state returns None. (This handler parses the stored value with
-ast.literal_eval, so the fixture stores a Python repr rather than JSON.)
+json.loads, so the fixture stores JSON rather than a Python repr.)
 
 routers/task_integrations.py has a heavy import graph, so it is imported under a stub finder that
 auto-mocks those namespaces (keeping models/fastapi/pydantic real), then the helper is called
@@ -101,9 +101,12 @@ finally:
     _restore(_snap)
 
 
+import json
+
+
 def test_consume_uses_atomic_getdel_not_get_then_delete():
     fake_r = MagicMock()
-    fake_r.getdel.return_value = repr({'uid': 'u1', 'app_key': 'a1'}).encode()
+    fake_r.getdel.return_value = json.dumps({'uid': 'u1', 'app_key': 'a1'}).encode()
     with patch.object(ti.redis_db, 'r', fake_r):
         result = ti.validate_and_consume_oauth_state('tok')
 
@@ -114,7 +117,7 @@ def test_consume_uses_atomic_getdel_not_get_then_delete():
 
 
 def test_consume_is_single_use():
-    store = {'oauth_state:tok': repr({'uid': 'u1', 'app_key': 'a1'}).encode()}
+    store = {'oauth_state:tok': json.dumps({'uid': 'u1', 'app_key': 'a1'}).encode()}
     fake_r = MagicMock()
     fake_r.getdel.side_effect = lambda key: store.pop(key, None)
 

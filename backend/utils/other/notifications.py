@@ -6,12 +6,14 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from time import monotonic
 from typing import Any, Dict, List, Optional, Tuple
+from uuid import uuid4
 
 import pytz
 
 import database.conversations as conversations_db
 from database.durable_queue import ProcessOutcome, drain_isolated_async
 import database.notifications as notification_db
+import database.redis_db as redis_db
 from database.redis_db import release_daily_summary_lock, try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
@@ -268,6 +270,14 @@ DAILY_SUMMARY_JOB_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_JOB_BUDGET_SECONDS'
 # One account cannot own the job. A recap is one LLM call plus Firestore reads;
 # 90s is generous for that and still bounds a wedged provider call.
 DAILY_SUMMARY_USER_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_USER_BUDGET_SECONDS', 90.0)
+# The webhook's own slice of that per-user budget. Running it inline gave it an owner
+# but also moved its cost onto the user: day_summary_webhook posts through the shared
+# client (30s read timeout, retries at 1/5/30s), so a slow receiver could burn most of
+# the 90s and get a user whose push had already been delivered marked
+# reason=user_budget_exceeded -- which counts toward DAILY_SUMMARY_MAX_ABANDONED_USERS
+# and can abort the rest of the hour group. A developer webhook must never be able to
+# cost anyone else their recap, so it is bounded well inside the budget it now shares.
+DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS = _env_float('DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS', 20.0)
 # Rendered-character budget for the conversation material fed to the summary
 # prompt. ~360k chars is roughly 90k tokens, comfortably inside the 272k-token
 # model limit even alongside the prompt scaffolding and the user's memories.
@@ -276,6 +286,30 @@ DAILY_SUMMARY_MAX_HISTORY_CHARS = _env_int('DAILY_SUMMARY_MAX_HISTORY_CHARS', su
 # A per-user timeout abandons (it cannot cancel) a worker thread. Stop the run
 # once enough threads are abandoned that the pool would starve the rest.
 DAILY_SUMMARY_MAX_ABANDONED_USERS = _env_int('DAILY_SUMMARY_MAX_ABANDONED_USERS', 12)
+
+# --- Recipient selection for the hourly daily-summary tick (#13210) --------
+# Each execution used to read every user with a time_zone and filter preferences
+# in Python. After the backfill, Firestore can return only recipients. The
+# env knob stages that cutover; unknown values fall back to today's behaviour.
+#   legacy  — current full-pass query (default until the backfill has run)
+#   shadow  — legacy result is authoritative for sending; the indexed query also
+#             runs and one log line per hour group reports set diffs
+#   indexed — indexed query only
+_DAILY_SUMMARY_SELECTION_MODES = frozenset({'legacy', 'shadow', 'indexed'})
+
+
+def _selection_mode_from_env() -> str:
+    raw = os.getenv('DAILY_SUMMARY_SELECTION_MODE')
+    if raw is None:
+        return 'legacy'
+    mode = raw.strip().lower()
+    if mode in _DAILY_SUMMARY_SELECTION_MODES:
+        return mode
+    logger.warning('daily_summary_selection_mode_unknown value=%r falling_back=legacy', raw)
+    return 'legacy'
+
+
+DAILY_SUMMARY_SELECTION_MODE = _selection_mode_from_env()
 
 _BATCH_SIZE = 8
 
@@ -342,10 +376,36 @@ async def start_cron_job() -> None:
     Main cron job entry point. Runs at the top of every UTC hour.
     """
     logger.info(f'start_cron_job at UTC hour {datetime.now(pytz.utc).hour}')
-    await send_daily_notification()
-    summary_outcome = await send_daily_summary_notification()
-    if not summary_outcome.ok:
-        logger.error('Daily summary cron run failed: %s', summary_outcome.error_text)
+    token = uuid4().hex
+    acquired = False
+    try:
+        try:
+            acquired = await run_blocking(db_executor, redis_db.try_acquire_notifications_job_run_lock, token)
+        except Exception as error:
+            # Fail open: a Redis outage must not silence every recap for the hour. The cost
+            # is a possible duplicate pass, which the per-user day locks already bound.
+            logger.warning('notifications_job_run_lock_acquire_failed error=%s', error)
+            _record_daily_summary_fallback(
+                from_mode='run_locked', to_mode='run_unlocked', reason='other', outcome='degraded'
+            )
+        else:
+            if not acquired:
+                logger.warning(
+                    'notifications_job_run_skipped reason=overlap utc_hour=%s',
+                    datetime.now(pytz.utc).hour,
+                )
+                return
+
+        # Wear FCM has no per-send idempotency on the bulk path. Never ride
+        # job-lock fail-open (Redis maxmemory). Summaries still fail-open.
+        if acquired:
+            await send_daily_notification()
+        summary_outcome = await send_daily_summary_notification()
+        if not summary_outcome.ok:
+            logger.error('Daily summary cron run failed: %s', summary_outcome.error_text)
+    finally:
+        if acquired:
+            await run_blocking(db_executor, redis_db.release_notifications_job_run_lock, token)
 
 
 async def send_daily_summary_notification() -> DailySummaryCronOutcome:
@@ -498,6 +558,52 @@ async def _checkpoint(cursor_key: str, target_hour: Optional[int], uid: Optional
     )
 
 
+async def _query_daily_summary_chunks(selector: Any, timezone_chunks: List[List[str]], target_hour: int):
+    return await asyncio.gather(
+        *[run_blocking(db_executor, selector, chunk, target_hour) for chunk in timezone_chunks],
+        return_exceptions=True,
+    )
+
+
+def _reduce_daily_summary_chunks(
+    chunk_results: List[Any], target_hour: int
+) -> Tuple[List[Tuple[str, List[str], Any]], Optional[BaseException], bool]:
+    users: List[Tuple[str, List[str], Any]] = []
+    chunk_errors: List[BaseException] = []
+    every_chunk_read = True
+    for chunk_index, chunk in enumerate(chunk_results):
+        if isinstance(chunk, BaseException):
+            every_chunk_read = False
+            logger.error(
+                'daily_summary_user_query_chunk_failed hour=%s chunk=%d error=%s', target_hour, chunk_index, chunk
+            )
+            chunk_errors.append(chunk)
+            continue
+        users.extend(chunk)
+    return users, chunk_errors[0] if chunk_errors else None, every_chunk_read
+
+
+def _log_daily_summary_selection_shadow(
+    target_hour: int,
+    legacy_users: List[Tuple[str, List[str], Any]],
+    indexed_users: List[Tuple[str, List[str], Any]],
+) -> None:
+    legacy_uids = {uid for uid, _tokens, _tz in legacy_users}
+    indexed_uids = {uid for uid, _tokens, _tz in indexed_users}
+    only_legacy = sorted(legacy_uids - indexed_uids)
+    only_indexed = sorted(indexed_uids - legacy_uids)
+    logger.info(
+        'daily_summary_selection_shadow hour=%s legacy=%d indexed=%d only_legacy=%d only_indexed=%d sample_only_legacy=%s sample_only_indexed=%s',
+        target_hour,
+        len(legacy_uids),
+        len(indexed_uids),
+        len(only_legacy),
+        len(only_indexed),
+        only_legacy[:5],
+        only_indexed[:5],
+    )
+
+
 async def _get_users_for_daily_summary(
     timezones: List[str], target_hour: int
 ) -> Tuple[List[Tuple[str, List[str], Any]], Optional[BaseException], bool]:
@@ -513,26 +619,32 @@ async def _get_users_for_daily_summary(
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
     # return_exceptions: one failing timezone chunk degrades that chunk's users,
     # it does not throw away the chunks that did read successfully.
-    chunk_results = await asyncio.gather(
-        *[
-            run_blocking(db_executor, notification_db.get_users_for_daily_summary, chunk, target_hour)
-            for chunk in timezone_chunks
-        ],
-        return_exceptions=True,
-    )
-    users: List[Tuple[str, List[str], Any]] = []
-    chunk_errors: List[BaseException] = []
-    every_chunk_read = True
-    for chunk_index, chunk in enumerate(chunk_results):
-        if isinstance(chunk, BaseException):
-            every_chunk_read = False
-            logger.error(
-                'daily_summary_user_query_chunk_failed hour=%s chunk=%d error=%s', target_hour, chunk_index, chunk
+    selector = notification_db.get_users_for_daily_summary
+    if DAILY_SUMMARY_SELECTION_MODE == 'indexed':
+        selector = notification_db.get_users_for_daily_summary_indexed
+    chunk_results = await _query_daily_summary_chunks(selector, timezone_chunks, target_hour)
+    users, query_error, every_chunk_read = _reduce_daily_summary_chunks(chunk_results, target_hour)
+
+    if DAILY_SUMMARY_SELECTION_MODE == 'shadow':
+        try:
+            indexed_results = await _query_daily_summary_chunks(
+                notification_db.get_users_for_daily_summary_indexed, timezone_chunks, target_hour
             )
-            chunk_errors.append(chunk)
-            continue
-        users.extend(chunk)
-    return users, chunk_errors[0] if chunk_errors else None, every_chunk_read
+            indexed_users: List[Tuple[str, List[str], Any]] = []
+            indexed_error: Optional[BaseException] = None
+            for indexed_chunk in indexed_results:
+                if isinstance(indexed_chunk, BaseException):
+                    indexed_error = indexed_chunk
+                    break
+                indexed_users.extend(indexed_chunk)
+            if indexed_error is not None:
+                logger.warning('daily_summary_selection_shadow_failed hour=%s error=%s', target_hour, indexed_error)
+            else:
+                _log_daily_summary_selection_shadow(target_hour, users, indexed_users)
+        except Exception as error:
+            logger.warning('daily_summary_selection_shadow_failed hour=%s error=%s', target_hour, error)
+
+    return users, query_error, every_chunk_read
 
 
 def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
@@ -577,18 +689,53 @@ def _deliver_current_day_summary(uid, date_str: str, summary_data: dict, tokens)
         content_blocks=[review_block] if review_block else None,
     )
 
-    # Also send webhook with the full summary data (day_summary_webhook is async, so wrap in asyncio.run).
-    # ``summary`` is the legacy str(...) form, kept for backward compatibility; ``summary_json``
-    # carries the same payload as a real JSON object for receivers to migrate to.
-    postprocess_executor.submit(asyncio.run, day_summary_webhook(uid, str(summary_data), summary_data))
-
-    if not tokens:
+    if tokens:
+        send_notification(
+            uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
+        )
+    else:
         logger.info(f"Skipping daily summary push for uid={uid}: no FCM tokens")
-        return
 
-    send_notification(
-        uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
-    )
+
+def _deliver_day_summary_webhook(uid, summary_data: dict) -> None:
+    """Send the developer webhook for a freshly generated day.
+
+    Runs inline rather than submitted (#12530). The old
+    ``postprocess_executor.submit(asyncio.run, ...)`` had two defects:
+    ``_send_summary_notification`` is already executing *on* postprocess_executor
+    (dispatched through ``run_blocking``), so the submit made the function its own
+    child on that pool -- the arrangement backend/AGENTS.md forbids -- and nothing
+    owned the result, so a webhook still queued when the Cloud Run Job exited was
+    never scheduled at all. That is the "coroutine 'day_summary_webhook' was never
+    awaited" logged immediately before container exit in #12530's evidence.
+
+    Called *after* the backfill walk, and last in the per-user budget. Inline
+    execution moved the webhook's cost onto the user, and this function shares the
+    90s ``DAILY_SUMMARY_USER_BUDGET_SECONDS`` with the owner's own work. Running it
+    before the backfill let a slow receiver spend seconds the owner's missing days
+    needed, which is the opposite of the rule this fix exists to uphold: a
+    developer webhook must never cost the owner their recap. Last means it can only
+    ever spend budget nobody else still wants.
+
+    Bounded, contained and logged for the same reason. day_summary_webhook handles
+    its own HTTP failures but not the work around them (URL assembly, the
+    webhook-status reads); left bare, one of those would propagate out of a user
+    whose push had already been delivered and count them as failed. The discarded
+    Future used to provide that containment by accident -- this makes it a decision,
+    and reports it, where the old path reported nothing at all.
+
+    ``summary`` is the legacy str(...) form, kept for backward compatibility;
+    ``summary_json`` carries the same payload as a real JSON object.
+    """
+    try:
+        asyncio.run(
+            asyncio.wait_for(
+                day_summary_webhook(uid, str(summary_data), summary_data),
+                timeout=DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS,
+            )
+        )
+    except Exception as e:
+        logger.error('daily_summary_webhook_failed uid=%s error=%s', uid, e, exc_info=e)
 
 
 def _backfill_recent_daily_summaries(uid, display_date, tz_name: Optional[str]) -> None:
@@ -625,27 +772,39 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     date_str = display_date.strftime('%Y-%m-%d')
 
     summary_data, created, declined = _generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc)
+    pending_webhook: Optional[dict] = None
     if created and summary_data:
         tokens = user_data[1] if len(user_data) > 1 else None
         _deliver_current_day_summary(uid, date_str, summary_data, tokens)
+        # Deferred to the end of this user's work. See _deliver_day_summary_webhook.
+        pending_webhook = summary_data
 
-    # Backfill only for owners who are actually still recording. Dropping the FCM-token filter in
-    # get_users_for_daily_summary widened this fan-out to every user in the timezone, and an
-    # unconditional 7-day walk would spend 7 lock writes + 7 by-date reads + 7 conversation queries
-    # per dormant account per day chasing holes it can never fill.
-    #
-    # The reason comes from the attempt above rather than from a second query: re-reading
-    # conversations here would undo the "lose the lock, do no work" guarantee that keeps a
-    # contended user from being read twice.
-    #
-    # Only an *empty* window means dormant. A day whose conversations were all `is_locked`, or
-    # carried no transcript, still proves the owner was recording — those are the accounts whose
-    # earlier days most need walking back — so `_DECLINE_NOTHING_TO_SUMMARIZE` is deliberately
-    # absent from this set.
-    if declined in (_DECLINE_LOCKED, _DECLINE_NO_CONVERSATIONS):
-        return
+    try:
 
-    _backfill_recent_daily_summaries(uid, display_date, user_tz_name)
+        # Backfill only for owners who are actually still recording. Dropping the FCM-token filter in
+        # get_users_for_daily_summary widened this fan-out to every user in the timezone, and an
+        # unconditional 7-day walk would spend 7 lock writes + 7 by-date reads + 7 conversation queries
+        # per dormant account per day chasing holes it can never fill.
+        #
+        # The reason comes from the attempt above rather than from a second query: re-reading
+        # conversations here would undo the "lose the lock, do no work" guarantee that keeps a
+        # contended user from being read twice.
+        #
+        # Only an *empty* window means dormant. A day whose conversations were all `is_locked`, or
+        # carried no transcript, still proves the owner was recording — those are the accounts whose
+        # earlier days most need walking back — so `_DECLINE_NOTHING_TO_SUMMARIZE` is deliberately
+        # absent from this set.
+        if declined in (_DECLINE_LOCKED, _DECLINE_NO_CONVERSATIONS):
+            return
+
+        _backfill_recent_daily_summaries(uid, display_date, user_tz_name)
+    finally:
+        # finally, not a trailing call: the dormant-owner branch above returns early
+        # and backfill can raise. Either would drop the webhook for a user whose
+        # summary was already stored and pushed, which is the exact loss this fix
+        # exists to stop -- just moved to a different exit.
+        if pending_webhook is not None:
+            _deliver_day_summary_webhook(uid, pending_webhook)
 
 
 async def _send_bulk_summary_notification(
@@ -749,13 +908,44 @@ async def _send_bulk_summary_notification(
     return True
 
 
+def should_send_wear_device_reminder() -> bool:
+    """Daily "wear your Omi" blast.
+
+    Issue #3328: current devices record onboard when BLE drops, so a morning
+    wear/disconnect nag does not recover lost audio and causes notification
+    fatigue. Keep the helper so the cron can be re-enabled without hunting
+    copy. Wear FCM is skipped unless the job run lock was acquired, and
+    capped at one send per uid per UTC day even if this flag is re-enabled.
+    """
+    return False
+
+
 async def send_daily_notification() -> None:
     try:
+        if not should_send_wear_device_reminder():
+            logger.info('Skipping daily wear reminder (#3328)')
+            return None
+
         morning_alert_title = "omi says"
         morning_alert_body = "Wear your omi and capture your conversations today."
         morning_target_time = "08:00"
+        date_str = datetime.now(pytz.utc).strftime('%Y-%m-%d')
 
-        await _send_notification_for_time(morning_target_time, morning_alert_title, morning_alert_body)
+        recipients = await _get_wear_recipients(morning_target_time)
+        send_tokens: List[str] = []
+        locked_users = 0
+        for uid, tokens, _tz in recipients:
+            if not tokens:
+                continue
+            got = await run_blocking(db_executor, redis_db.try_acquire_daily_wear_lock, uid, date_str)
+            if not got:
+                continue
+            locked_users += 1
+            send_tokens.extend(tokens)
+
+        logger.info('notification_blast kind=wear users=%s tokens=%s', locked_users, len(send_tokens))
+        if send_tokens:
+            await send_bulk_notification(send_tokens, morning_alert_title, morning_alert_body)
 
     except Exception as e:
         logger.error(e)
@@ -763,22 +953,16 @@ async def send_daily_notification() -> None:
         return None
 
 
-async def _send_notification_for_time(target_time: str, title: str, body: str) -> Any:
-    user_in_time_zone = await _get_users_in_timezone(target_time)
-    if not user_in_time_zone:
-        logger.info("No users found in time zone")
-        return None
-    await send_bulk_notification(user_in_time_zone, title, body)
-    return user_in_time_zone
-
-
-async def _get_users_in_timezone(target_time: str) -> Any:
+async def _get_wear_recipients(target_time: str) -> List[Any]:
     timezones_in_time = _get_timezones_at_time(target_time)
     timezone_chunks = [timezones_in_time[i : i + 30] for i in range(0, len(timezones_in_time), 30)]
     chunk_results = await asyncio.gather(
-        *[run_blocking(db_executor, notification_db.get_users_token_in_timezones, chunk) for chunk in timezone_chunks]
+        *[run_blocking(db_executor, notification_db.get_users_id_in_timezones, chunk) for chunk in timezone_chunks]
     )
-    return [token for chunk in chunk_results for token in chunk]
+    users: List[Any] = []
+    for chunk in chunk_results:
+        users.extend(chunk)
+    return users
 
 
 def _get_timezones_at_time(target_time: str) -> List[str]:

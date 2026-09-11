@@ -130,6 +130,7 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
       (GeminiClient.GeminiClientError.apiError("HTTP 503: upstream body", retryable: true), .httpStatus5xx),
       (GeminiClient.GeminiClientError.apiError("HTTP 400: prompt leaked", retryable: false), .httpStatus4xx),
       (GeminiClient.GeminiClientError.missingAPIKey, .other),
+      (GeminiClient.GeminiClientError.planGated, .other),
     ]
     for (error, expected) in classified {
       XCTAssertEqual(SuggestionAssistantTelemetry.EvaluationFailureReason(error), expected, String(describing: error))

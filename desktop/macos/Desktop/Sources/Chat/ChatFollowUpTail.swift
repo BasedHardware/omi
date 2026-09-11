@@ -116,13 +116,14 @@ enum ChatFollowUpTail {
     if let range = text.range(of: delimiter) {
       return String(text[text.startIndex..<range.lowerBound])
     }
-    let characters = Array(text)
-    let delimiterCharacters = Array(delimiter)
-    let maxHold = min(characters.count, delimiterCharacters.count - 1)
+    // Only the last few characters can be a partial delimiter; copying the
+    // whole answer into an array to look at them ran on every streaming flush.
+    let tail = text.suffix(delimiter.count - 1)
+    let maxHold = tail.count
     if maxHold >= 3 {
       for length in stride(from: maxHold, through: 3, by: -1) {
-        if Array(characters.suffix(length)) == Array(delimiterCharacters.prefix(length)) {
-          return String(characters.prefix(characters.count - length))
+        if tail.suffix(length).elementsEqual(delimiter.prefix(length)) {
+          return String(text.dropLast(length))
         }
       }
     }

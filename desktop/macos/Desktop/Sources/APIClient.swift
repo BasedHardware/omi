@@ -392,7 +392,8 @@ actor APIClient {
     contextPlanID: String = "",
     stableCacheIdentity: String = "",
     dynamicContextIdentity: String = "",
-    contextCacheReplaced: Bool = false
+    contextCacheReplaced: Bool = false,
+    turnId: String = ""
   ) async {
     let base = rustBackendURL
     guard !base.isEmpty else { return }
@@ -405,25 +406,60 @@ actor APIClient {
     do {
       let headers = try await buildHeaders(requireAuth: true)
       for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-      let body: [String: Any] = [
-        "provider": provider,
-        "model": model,
-        "input_text_tokens": inputText,
-        "input_audio_tokens": inputAudio,
-        "input_cached_tokens": inputCached,
-        "output_text_tokens": outputText,
-        "output_audio_tokens": outputAudio,
-        // Opaque hashes/plan identifiers only; no rendered context or user text.
-        "context_plan_id": contextPlanID,
-        "stable_cache_identity": stableCacheIdentity,
-        "dynamic_context_identity": dynamicContextIdentity,
-        "context_cache_replaced": contextCacheReplaced,
-      ]
+      let body = Self.realtimeUsageReportBody(
+        provider: provider,
+        model: model,
+        inputText: inputText,
+        inputAudio: inputAudio,
+        inputCached: inputCached,
+        outputText: outputText,
+        outputAudio: outputAudio,
+        contextPlanID: contextPlanID,
+        stableCacheIdentity: stableCacheIdentity,
+        dynamicContextIdentity: dynamicContextIdentity,
+        contextCacheReplaced: contextCacheReplaced,
+        turnId: turnId)
       request.httpBody = try JSONSerialization.data(withJSONObject: body)
       _ = try await session.data(for: request)
     } catch {
       log("APIClient: realtime usage report failed: \(error.localizedDescription)")
     }
+  }
+
+  /// Opaque turn identity only. Empty `turnId` is omitted so retries without a
+  /// turn stay on the backend's empty-string default.
+  static func realtimeUsageReportBody(
+    provider: String,
+    model: String,
+    inputText: Int,
+    inputAudio: Int,
+    inputCached: Int,
+    outputText: Int,
+    outputAudio: Int,
+    contextPlanID: String,
+    stableCacheIdentity: String,
+    dynamicContextIdentity: String,
+    contextCacheReplaced: Bool,
+    turnId: String
+  ) -> [String: Any] {
+    var body: [String: Any] = [
+      "provider": provider,
+      "model": model,
+      "input_text_tokens": inputText,
+      "input_audio_tokens": inputAudio,
+      "input_cached_tokens": inputCached,
+      "output_text_tokens": outputText,
+      "output_audio_tokens": outputAudio,
+      // Opaque hashes/plan identifiers only; no rendered context or user text.
+      "context_plan_id": contextPlanID,
+      "stable_cache_identity": stableCacheIdentity,
+      "dynamic_context_identity": dynamicContextIdentity,
+      "context_cache_replaced": contextCacheReplaced,
+    ]
+    if !turnId.isEmpty {
+      body["turn_id"] = turnId
+    }
+    return body
   }
 
   func performVoidRequest(

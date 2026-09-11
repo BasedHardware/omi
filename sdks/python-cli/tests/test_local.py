@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import sqlite3
 from pathlib import Path
 
 import httpx
@@ -100,6 +101,22 @@ def test_local_call_accepts_args_json(config_path: Path, cli_runner) -> None:
         "arguments": {"query": "deck", "days": 3},
     }
     assert json.loads(result.stdout) == {"ok": True}
+
+
+@pytest.mark.parametrize("json_mode", [False, True])
+def test_local_call_preserves_fields_from_later_result_rows(config_path: Path, cli_runner, json_mode: bool) -> None:
+    _configure_local_profile(config_path)
+    rows = [{"id": "first"}, {"id": "second", "detail": "later-value"}]
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(rows)))
+        result = cli_runner.invoke(app, (["--json"] if json_mode else []) + ["local", "call", "test_tool"])
+
+    assert result.exit_code == 0, result.output
+    if json_mode:
+        assert json.loads(result.stdout) == rows
+    else:
+        assert "detail" in result.stdout
+        assert "later-value" in result.stdout
 
 
 def test_local_call_exits_nonzero_when_api_reports_error(config_path: Path, cli_runner) -> None:
@@ -227,7 +244,44 @@ def test_search_screen_exact_fallback_constrains_app_filter(config_path: Path, c
 
     assert result.exit_code == 0, result.output
     fallback_query = json.loads(route.calls[1].request.content)["arguments"]["query"]
-    assert "WHERE (appName LIKE '%Discord%') AND" in fallback_query
+    assert "WHERE (appName LIKE '%Discord%' ESCAPE '!') AND" in fallback_query
+
+
+@pytest.mark.parametrize("literal,decoy", [("50%", "500"), ("a_b", "axb"), ("a!b", "ab"), ("it's", "its")])
+@pytest.mark.parametrize("field", ["appName", "windowTitle", "ocrText", "app_filter"])
+def test_search_screen_fallback_matches_literal_text(
+    config_path: Path, cli_runner, literal: str, decoy: str, field: str
+) -> None:
+    _configure_local_profile(config_path)
+    with sqlite3.connect(":memory:") as db:
+        db.row_factory = sqlite3.Row
+        db.execute(
+            "CREATE TABLE screenshots (id INTEGER, timestamp TEXT, appName TEXT, windowTitle TEXT, ocrText TEXT, isIndexed INTEGER)"
+        )
+        for row_id, value in enumerate((literal, decoy), start=1):
+            values = {"appName": "Browser", "windowTitle": "notes", "ocrText": "notes"}
+            values["appName" if field == "app_filter" else field] = value
+            db.execute(
+                "INSERT INTO screenshots VALUES (?, ?, ?, ?, ?, ?)",
+                (row_id, "2026-09-07T00:00:00Z", values["appName"], values["windowTitle"], values["ocrText"], 1),
+            )
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            if body["name"] == "search_screen_history":
+                return httpx.Response(200, json=_tool_response("No matching screen-history results"))
+            assert body["name"] == "execute_sql"
+            rows = [dict(row) for row in db.execute(body["arguments"]["query"])]
+            return httpx.Response(200, json=_tool_response({"rows": rows}))
+
+        args = ["--json", "local", "search-screen", "notes" if field == "app_filter" else literal]
+        if field == "app_filter":
+            args.extend(["--app", literal])
+        with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+            router.post("/v1/local/tool").mock(side_effect=respond)
+            result = cli_runner.invoke(app, args)
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.stdout)["suggested_screenshot_ids"] == [1]
 
 
 def test_sql_routes_to_execute_sql_with_env_overrides(config_path: Path, cli_runner, monkeypatch) -> None:
@@ -336,6 +390,83 @@ def test_screenshot_writes_base64_output_and_keeps_json_stdout(config_path: Path
     assert payload["result"]["image_base64_redacted"] is True
 
 
+def test_screenshot_exports_long_text_response(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    """Text fallback must not fail merely because the text is too long for a filename."""
+    _configure_local_profile(config_path)
+    text = "Screenshot description " * 100
+    output = tmp_path / "shot.txt"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(text)))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "9", "--output", str(output)])
+
+    assert result.exit_code == 0, repr(result.exception)
+    assert output.read_text() == text
+    assert json.loads(result.stdout)["bytes"] == len(text.encode())
+
+
+def test_screenshot_copies_existing_file_response(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    _configure_local_profile(config_path)
+    source = tmp_path / "source.jpg"
+    source.write_bytes(b"synthetic-image")
+    output = tmp_path / "copy.jpg"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(str(source))))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "9", "--output", str(output)])
+
+    assert result.exit_code == 0, repr(result.exception)
+    assert output.read_bytes() == source.read_bytes()
+
+
+def test_screenshot_same_source_and_output_is_noop(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    """Writing a screenshot onto its own source path must not raise SameFileError."""
+    _configure_local_profile(config_path)
+    source = tmp_path / "shot.jpg"
+    source.write_bytes(b"synthetic-image")
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(str(source))))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "9", "--output", str(source)])
+
+    assert result.exit_code == 0, repr(result.exception)
+    assert source.read_bytes() == b"synthetic-image"
+    assert json.loads(result.stdout)["bytes"] == len(b"synthetic-image")
+
+
+def test_screenshot_same_source_and_output_is_noop_mapping_path(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    """Same-file no-op must also hold for the mapping-with-path response shape."""
+    _configure_local_profile(config_path)
+    source = tmp_path / "shot.jpg"
+    source.write_bytes(b"synthetic-image")
+    # The Desktop tool may return a structured mapping (path/file_path/...)
+    # rather than a bare path string; the API envelope's result field is then
+    # an object, not a JSON-encoded string.
+    response = {"ok": True, "name": "tool", "content_type": "text/plain", "result": {"path": str(source)}}
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=response))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "9", "--output", str(source)])
+
+    assert result.exit_code == 0, repr(result.exception)
+    assert source.read_bytes() == b"synthetic-image"
+    assert json.loads(result.stdout)["bytes"] == len(b"synthetic-image")
+
+
+def test_screenshot_hard_link_output_is_noop(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    """Writing a screenshot to a hard link of its source must not raise SameFileError."""
+    _configure_local_profile(config_path)
+    import os
+
+    source = tmp_path / "shot.jpg"
+    source.write_bytes(b"synthetic-image")
+    link = tmp_path / "shot-link.jpg"
+    os.link(source, link)
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(str(source))))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "9", "--output", str(link)])
+
+    assert result.exit_code == 0, repr(result.exception)
+    assert link.read_bytes() == b"synthetic-image"
+    assert json.loads(result.stdout)["bytes"] == len(b"synthetic-image")
+
+
 def test_screenshot_preserves_structured_local_api_error_in_json(config_path: Path, cli_runner, tmp_path: Path) -> None:
     _configure_local_profile(config_path)
     output = tmp_path / "pending.jpg"
@@ -376,6 +507,67 @@ def test_non_json_error_escapes_structured_extra_markup(capsys: pytest.CaptureFi
     captured = capsys.readouterr()
     assert "hint: Use [safe] text" in captured.err
     assert "[danger]: <value>" in captured.err
+
+
+def test_unwrap_tool_response_raises_on_embedded_failure(config_path: Path) -> None:
+    """A structured Desktop failure inside the result JSON must raise, not pass through."""
+    from omi_cli.errors import CliError
+    from omi_cli.local_client import _unwrap_tool_response
+
+    failure = {
+        "ok": False,
+        "database_available": False,
+        "screen_history_available": False,
+        "message": "Failed to read local Omi status: test",
+    }
+    envelope = {
+        "ok": True,
+        "name": "get_local_status",
+        "content_type": "text/plain",
+        "result": json.dumps(failure),
+    }
+    with pytest.raises(CliError) as excinfo:
+        _unwrap_tool_response(envelope)
+    assert "Failed to read local Omi status" in str(excinfo.value)
+    assert excinfo.value.exit_code == 1
+
+
+def test_unwrap_tool_response_passes_healthy_result(config_path: Path) -> None:
+    """A healthy embedded result must still unwrap to its parsed value."""
+    from omi_cli.local_client import _unwrap_tool_response
+
+    envelope = {
+        "ok": True,
+        "name": "get_local_status",
+        "content_type": "text/plain",
+        "result": json.dumps({"ok": True, "database_available": True, "screen_history_available": True}),
+    }
+    result = _unwrap_tool_response(envelope)
+    assert isinstance(result, dict)
+    assert result["ok"] is True
+    assert result["database_available"] is True
+
+
+def test_unwrap_tool_response_extracts_message_from_structured_error(config_path: Path) -> None:
+    """A structured error object must surface its message, not the whole mapping."""
+    from omi_cli.errors import CliError
+    from omi_cli.local_client import _unwrap_tool_response
+
+    failure = {
+        "ok": False,
+        "error": {"message": "Desktop backend unavailable", "code": "ERR_DESKTOP_DOWN"},
+    }
+    envelope = {
+        "ok": True,
+        "name": "get_local_status",
+        "content_type": "text/plain",
+        "result": json.dumps(failure),
+    }
+    with pytest.raises(CliError) as excinfo:
+        _unwrap_tool_response(envelope)
+    # The human message is the extracted error.message, not the whole mapping.
+    assert "Desktop backend unavailable" in excinfo.value.message
+    assert not excinfo.value.message.startswith("{")
 
 
 def test_local_api_error_preserves_not_found_subclass(config_path: Path) -> None:

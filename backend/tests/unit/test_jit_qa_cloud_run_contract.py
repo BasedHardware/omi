@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -39,9 +40,13 @@ def _resource(profile: str, kind: str, image: str) -> dict:
         for name, reference in secrets.items()
     )
     if kind == "service":
+        resources = {"limits": {"memory": CONTRACT.BACKEND_MEMORY}} if profile == "backend" else None
+        container = {"image": image, "env": env}
+        if resources is not None:
+            container["resources"] = resources
         template = {
             "spec": {
-                "containers": [{"image": image, "env": env}],
+                "containers": [container],
                 "serviceAccountName": CONTRACT.RUNTIME_SERVICE_ACCOUNT,
             }
         }
@@ -150,6 +155,47 @@ def test_environment_requires_profile_specific_drain_allowlist():
         )
 
 
+def test_desktop_profile_requires_ai_studio_batch_embedding_key_without_leaking_it_to_backend_or_gateway():
+    _, desktop_secrets = CONTRACT.resource_environment("desktop")
+    _, backend_secrets = CONTRACT.resource_environment("backend")
+    _, gateway_secrets = CONTRACT.resource_environment("gateway")
+
+    assert desktop_secrets["GEMINI_API_KEY"] == "GEMINI_API_KEY:latest"
+    assert "GEMINI_API_KEY" not in backend_secrets
+    assert "GEMINI_API_KEY" not in gateway_secrets
+    assert CONTRACT.RUNTIME_SERVICE_ACCOUNT.endswith("@based-hardware-dev.iam.gserviceaccount.com")
+
+
+def test_desktop_resource_rejects_missing_batch_embedding_key():
+    image = "gcr.io/based-hardware-dev/desktop-backend-jit-qa@sha256:" + "a" * 64
+    resource = _resource("desktop", "service", image)
+    resource["metadata"]["name"] = CONTRACT.DESKTOP_BACKEND_SERVICE
+    expected_environment, expected_secret_bindings = CONTRACT.resource_environment("desktop")
+
+    CONTRACT.validate_cloud_run_resource(
+        resource,
+        kind="service",
+        expected_image=image,
+        expected_environment=expected_environment,
+        expected_secret_bindings=expected_secret_bindings,
+        expected_name=CONTRACT.DESKTOP_BACKEND_SERVICE,
+        gateway_url=CONTRACT.DEFAULT_GATEWAY_URL,
+        redis_host=CONTRACT.DEFAULT_REDIS_HOST,
+    )
+
+    env = resource["spec"]["template"]["spec"]["containers"][0]["env"]
+    env.remove(next(entry for entry in env if entry["name"] == "GEMINI_API_KEY"))
+    with pytest.raises(CONTRACT.JITQAContractError, match="missing required environment"):
+        CONTRACT.validate_cloud_run_resource(
+            resource,
+            kind="service",
+            expected_image=image,
+            expected_environment=expected_environment,
+            expected_secret_bindings=expected_secret_bindings,
+            expected_name=CONTRACT.DESKTOP_BACKEND_SERVICE,
+        )
+
+
 def test_cloud_run_resource_requires_exact_image_env_secrets_name_and_identity():
     image = "gcr.io/based-hardware-dev/backend-jit-qa@sha256:" + "b" * 64
     resource = _resource("backend", "service", image)
@@ -161,6 +207,7 @@ def test_cloud_run_resource_requires_exact_image_env_secrets_name_and_identity()
         expected_environment=CONTRACT.resource_environment("backend")[0],
         expected_secret_bindings=CONTRACT.resource_environment("backend")[1],
         expected_name=CONTRACT.BACKEND_SERVICE,
+        expected_memory=CONTRACT.BACKEND_MEMORY,
     )
     resource["spec"]["template"]["spec"]["containers"][0]["image"] = image.replace("@sha256:", ":")
     with pytest.raises(CONTRACT.JITQAContractError):
@@ -170,6 +217,29 @@ def test_cloud_run_resource_requires_exact_image_env_secrets_name_and_identity()
             expected_image=image,
             expected_environment=CONTRACT.resource_environment("backend")[0],
             expected_secret_bindings=CONTRACT.resource_environment("backend")[1],
+            expected_memory=CONTRACT.BACKEND_MEMORY,
+        )
+
+
+@pytest.mark.parametrize("memory", ["512Mi", None])
+def test_backend_resource_requires_explicit_four_gib_memory(memory):
+    image = "gcr.io/based-hardware-dev/backend-jit-qa@sha256:" + "a" * 64
+    resource = _resource("backend", "service", image)
+    resource["metadata"]["name"] = CONTRACT.BACKEND_SERVICE
+    limits = resource["spec"]["template"]["spec"]["containers"][0]["resources"]["limits"]
+    if memory is None:
+        resource["spec"]["template"]["spec"]["containers"][0].pop("resources")
+    else:
+        limits["memory"] = memory
+    with pytest.raises(CONTRACT.JITQAContractError, match="memory limit"):
+        CONTRACT.validate_cloud_run_resource(
+            resource,
+            kind="service",
+            expected_image=image,
+            expected_environment=CONTRACT.resource_environment("backend")[0],
+            expected_secret_bindings=CONTRACT.resource_environment("backend")[1],
+            expected_name=CONTRACT.BACKEND_SERVICE,
+            expected_memory=CONTRACT.BACKEND_MEMORY,
         )
 
 
@@ -256,6 +326,7 @@ def test_cloud_run_v1_nested_service_fixture_is_supported():
         expected_environment=literals,
         expected_secret_bindings=secrets,
         expected_name=CONTRACT.BACKEND_SERVICE,
+        expected_memory=CONTRACT.BACKEND_MEMORY,
         gateway_url=CONTRACT.DEFAULT_GATEWAY_URL,
         redis_host=CONTRACT.DEFAULT_REDIS_HOST,
     )
@@ -277,6 +348,50 @@ def test_gateway_resource_is_fenced_to_the_fixed_qa_uid():
     literals, _ = CONTRACT.resource_environment("gateway")
     assert literals["OMI_JIT_QA_AUTH_ONLY"] == "true"
     assert literals["OMI_JIT_QA_UID_ALLOWLIST"] == CONTRACT.QA_UID
+
+
+def test_gateway_resource_requires_accounting_enabled():
+    image = "gcr.io/based-hardware-dev/llm-gateway-jit-qa@sha256:" + "b" * 64
+    resource = _resource("gateway", "service", image)
+    resource["metadata"]["name"] = CONTRACT.LLM_GATEWAY_SERVICE
+    expected_environment, expected_secret_bindings = CONTRACT.resource_environment("gateway")
+    assert expected_environment["LLM_GATEWAY_ACCOUNTING_ENABLED"] == "true"
+
+    CONTRACT.validate_cloud_run_resource(
+        resource,
+        kind="service",
+        expected_image=image,
+        expected_environment=expected_environment,
+        expected_secret_bindings=expected_secret_bindings,
+        expected_name=CONTRACT.LLM_GATEWAY_SERVICE,
+    )
+
+    accounting = next(
+        entry
+        for entry in resource["spec"]["template"]["spec"]["containers"][0]["env"]
+        if entry["name"] == "LLM_GATEWAY_ACCOUNTING_ENABLED"
+    )
+    accounting["value"] = "false"
+    with pytest.raises(CONTRACT.JITQAContractError, match="unexpected value"):
+        CONTRACT.validate_cloud_run_resource(
+            resource,
+            kind="service",
+            expected_image=image,
+            expected_environment=expected_environment,
+            expected_secret_bindings=expected_secret_bindings,
+            expected_name=CONTRACT.LLM_GATEWAY_SERVICE,
+        )
+
+    resource["spec"]["template"]["spec"]["containers"][0]["env"].remove(accounting)
+    with pytest.raises(CONTRACT.JITQAContractError, match="missing required environment"):
+        CONTRACT.validate_cloud_run_resource(
+            resource,
+            kind="service",
+            expected_image=image,
+            expected_environment=expected_environment,
+            expected_secret_bindings=expected_secret_bindings,
+            expected_name=CONTRACT.LLM_GATEWAY_SERVICE,
+        )
 
 
 def _typesense_resource(image: str) -> dict:
@@ -417,6 +532,8 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "based-hardware-dev" in text
     assert "backend-jit-qa" in text
     assert "desktop-backend-jit-qa" in text
+    assert 'if [[ "$service" == "$QA_SERVICE" ]]' in text
+    assert "resource_flags+=(--memory=4Gi)" in text
     assert "llm-gateway-jit-qa" in text
     assert "knowledge-ledger-drain-qa-job" in text
     assert "daily-memory-sweep-qa-job" in text
@@ -432,14 +549,32 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "--set-env-vars \"$drain_env\"" in text
     assert 'LLM_GATEWAY_ALLOWED_CALLERS=backend,desktop' in text
     assert 'LLM_GATEWAY_ACCOUNTING_ENABLED=true' in text
+    gateway_environment, _ = CONTRACT.resource_environment("gateway")
+    assert gateway_environment["LLM_GATEWAY_ACCOUNTING_ENABLED"] == "true"
     assert 'gcloud firestore databases describe --database "$QA_FIRESTORE_DATABASE"' in text
     assert 'gcloud redis instances describe "$QA_REDIS_INSTANCE"' in text
     assert "POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest" in text
+    assert 'gcloud secrets versions describe latest --secret "$secret"' in text
+    assert "GEMINI_API_KEY \"$QA_ANTHROPIC_SECRET\"" in text
+    assert (
+        'for secret in ENCRYPTION_SECRET OPENAI_API_KEY POSTHOG_PROJECT_API_KEY GEMINI_API_KEY "$QA_ANTHROPIC_SECRET" "$QA_PERPLEXITY_SECRET" "$QA_REDIS_SECRET" "$QA_GATEWAY_TOKEN_SECRET";'
+        in text
+    )
+    assert (
+        'gcloud secrets add-iam-policy-binding "$secret" --project "$QA_PROJECT" --member="serviceAccount:${QA_RUNTIME_SERVICE_ACCOUNT}"'
+        in text
+    )
+    assert 'service_secrets="$service_secrets,GEMINI_API_KEY=GEMINI_API_KEY:latest"' in text
     assert "RUN_MODEL_EXPERIMENT" not in text
     assert "MODEL_CONFIRMATION_INPUT" not in text
     assert "gcr.io/${QA_PROJECT}" in text
     assert "vars.GCP_PROJECT_ID" not in text
     assert "environment: prod" not in text
+
+
+def test_workflow_backend_memory_literal_matches_contract():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert f"resource_flags+=(--memory={CONTRACT.BACKEND_MEMORY})" in text
 
 
 def test_qa_workflows_admit_only_proven_merged_ancestors():
@@ -463,6 +598,8 @@ def test_typesense_workflow_smokes_images_before_publish_and_has_unready_bootstr
     assert "unauthenticated_status" in text
     assert '"$smoke_url/collections/jit_qa_smoke/documents/export?include_fields=id,content"' in text
     assert 'scripts/jit_qa_typesense_projection.py --help' in text
+    import_smoke_secrets = re.findall(r"-e ENCRYPTION_SECRET=([A-Za-z0-9_-]+)", text)
+    assert import_smoke_secrets and all(len(secret) >= 32 for secret in import_smoke_secrets)
     assert "if: ${{ inputs.mode == 'prove' }}" in text
     assert "if: ${{ inputs.mode == 'bootstrap' }}" in text
     assert '"status": "not_qualified"' in text
@@ -579,9 +716,78 @@ def test_qa_cloud_run_renders_typesense_host_and_key_into_both_http_services():
     assert "@TYPESENSE_HOST=typesense-jit-qa-1031333818730.us-central1.run.app@" in common
     assert "@MEMORY_TYPESENSE_COLLECTION=jit_qa_canonical_memory_atoms@" in common
     assert "@MEMORY_TYPESENSE_READINESS_SOURCE_SHA=" + "b" * 40 in common
-    deploy_line = next(line for line in text.splitlines() if "--set-secrets" in line and "TYPESENSE_API_KEY" in line)
     assert 'for pair in "$QA_SERVICE:$BACKEND_IMAGE" "$QA_DESKTOP_SERVICE:$DESKTOP_IMAGE"' in text
-    assert "TYPESENSE_API_KEY=${QA_TYPESENSE_SECRET}:latest" in deploy_line
+    assert "TYPESENSE_API_KEY=${QA_TYPESENSE_SECRET}:latest" in text
+    assert "GEMINI_API_KEY=GEMINI_API_KEY:latest" in text
+
+
+def test_qa_cloud_run_service_secret_rendering_is_scoped_per_service():
+    """Run the deploy shell with a fake gcloud and inspect each rendered binding."""
+
+    text = WORKFLOW.read_text(encoding="utf-8")
+    marker = "      - name: Deploy QA HTTP services with gateway-only routing\n"
+    start = text.index("        run: |\n", text.index(marker)) + len("        run: |\n")
+    end = text.index("\n      - name: Deploy gates-closed maintenance jobs", start)
+    rendered = textwrap.dedent(text[start:end]).replace("${{ needs.admit.outputs.source_sha }}", "b" * 40)
+    env = {
+        "QA_PROJECT": "based-hardware-dev",
+        "QA_REGION": "us-central1",
+        "QA_FIRESTORE_DATABASE": "jit-qa",
+        "QA_AUTH_PROJECT": "based-hardware",
+        "QA_NETWORK": "default",
+        "QA_SERVICE": "backend-jit-qa",
+        "QA_DESKTOP_SERVICE": "desktop-backend-jit-qa",
+        "QA_RUNTIME_SERVICE_ACCOUNT": "jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com",
+        "QA_UID": CONTRACT.QA_UID,
+        "QA_TYPESENSE_COLLECTION": CONTRACT.TYPESENSE_COLLECTION,
+        "QA_TYPESENSE_READINESS_COLLECTION": CONTRACT.TYPESENSE_READINESS_COLLECTION,
+        "QA_REDIS_SECRET": "jit-qa-redis-password",
+        "QA_GATEWAY_TOKEN_SECRET": "jit-qa-gateway-token",
+        "QA_TYPESENSE_SECRET": "jit-qa-typesense-api-key",
+        "BACKEND_IMAGE": "gcr.io/based-hardware-dev/backend-jit-qa@sha256:" + "a" * 64,
+        "DESKTOP_IMAGE": "gcr.io/based-hardware-dev/desktop-backend-jit-qa@sha256:" + "b" * 64,
+        "GATEWAY_URL": "https://llm-gateway-jit-qa-abc.run.app",
+        "REDIS_HOST": "10.0.0.10",
+        "TYPESENSE_HOST": "typesense-jit-qa-1031333818730.us-central1.run.app",
+        "SOURCE_SHA": "b" * 40,
+    }
+
+    with tempfile.TemporaryDirectory() as directory:
+        directory_path = Path(directory)
+        log_path = directory_path / "gcloud-args.log"
+        fake_gcloud = directory_path / "gcloud"
+        fake_gcloud.write_text(
+            "#!/usr/bin/env bash\n"
+            "printf '%s\\034' \"$@\" >> \"$GCLOUD_LOG\"\n"
+            "printf '\\035' >> \"$GCLOUD_LOG\"\n",
+            encoding="utf-8",
+        )
+        fake_gcloud.chmod(0o755)
+        result = subprocess.run(
+            ["bash", "-c", rendered],
+            env={**os.environ, **env, "PATH": f"{directory}:{os.environ['PATH']}", "GCLOUD_LOG": str(log_path)},
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        records = log_path.read_bytes().split(b"\035")
+        calls = [record.decode().split("\034")[:-1] for record in records if record]
+        deploys = {call[2]: call for call in calls if call[:2] == ["run", "deploy"]}
+        assert set(deploys) == {"backend-jit-qa", "desktop-backend-jit-qa"}
+
+        def secrets_for(service):
+            call = deploys[service]
+            value = call[call.index("--set-secrets") + 1]
+            return dict(item.split("=", 1) for item in value.split(","))
+
+        backend_secrets = secrets_for("backend-jit-qa")
+        desktop_secrets = secrets_for("desktop-backend-jit-qa")
+        assert backend_secrets["TYPESENSE_API_KEY"] == "jit-qa-typesense-api-key:latest"
+        assert desktop_secrets["TYPESENSE_API_KEY"] == "jit-qa-typesense-api-key:latest"
+        assert "GEMINI_API_KEY" not in backend_secrets
+        assert desktop_secrets["GEMINI_API_KEY"] == "GEMINI_API_KEY:latest"
 
 
 def test_typesense_entrypoint_uses_environment_key_without_secret_argument():

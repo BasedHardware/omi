@@ -1863,9 +1863,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get openSettings => 'Atvērt iestatījumus';
 
   @override
-  String get wantDifferentName => 'Vēlaties, lai jūs uzrunā citādi?';
-
-  @override
   String get whatsYourName => 'Kā tevi sauc?';
 
   @override
@@ -2047,7 +2044,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get memoryDeleted => 'Atmiņa izdzēsta.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Daļa atmiņu vēstures nav pieejama. Tiek rādīta līdz šim saņemtā vēsture.';
 
   @override
   String get undo => 'Atsaukt';
@@ -9938,10 +9935,33 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name balss profils';
+  }
+
+  @override
+  String get play => 'Atskaņot';
+
+  @override
+  String get redo => 'Ierakstīt vēlreiz';
+
+  @override
+  String get answerWithYourVoice => 'Atbildiet ar balsi:';
+
+  @override
+  String get speechProfileTopicLocation => 'Kur jūs dzīvojat?';
+
+  @override
+  String get speechProfileTopicWork => 'Kādu darbu jūs darāt?';
+
+  @override
+  String get speechProfileTopicGoal => 'Kāds ir jūsu ilgtermiņa mērķis?';
+
+  @override
   String get transcriptionNoAudio => 'Transkripcija nesaņem audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Pieskarieties +, lai sāktu ierakstīšanu';
 
   @override
   String get chatBlockTask => 'Uzdevums';
@@ -9978,4 +9998,11 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Neizdevās ielādēt zināšanu grafu';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.';
+
+  @override
+  String get processingTakingLonger => 'Joprojām notiek — tas aizņem ilgāk nekā parasti.';
 }

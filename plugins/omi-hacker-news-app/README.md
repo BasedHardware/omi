@@ -19,6 +19,19 @@ uvicorn main:app --reload --port 8080
 
 Open `http://localhost:8080/.well-known/omi-tools.json` to inspect the Omi tools manifest.
 
+## Tests
+
+From the repository root, run the hermetic discussion regressions:
+
+```bash
+python3 plugins/omi-hacker-news-app/test_main.py
+```
+
+The tests import the production module with framework-only stubs and exercise the
+real text cleaner and discussion handler without network access. They cover
+escaped literal angle brackets, real provider markup, code formatting, and text
+preservation in both post and comment output.
+
 ## Deployment
 
 Deploy this folder as a standalone FastAPI service. No environment variables are required.
