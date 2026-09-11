@@ -3154,9 +3154,24 @@ test('parses catalogue, enabled, owned, and service app records without inventin
   ).toEqual(
     expect.objectContaining({
       ratingAvg: null,
-      ratingCount: null,
+      ratingCount: 0,
       installs: 0,
       image: '',
+    }),
+  );
+  expect(
+    parseCloudApp(
+      {
+        id: 'catalog-app-rated-omitted-count',
+        name: 'Rated without count',
+        rating_avg: 4.5,
+      },
+      'App omitted count',
+    ),
+  ).toEqual(
+    expect.objectContaining({
+      ratingAvg: 4.5,
+      ratingCount: 0,
     }),
   );
   expect(
