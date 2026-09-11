@@ -977,6 +977,9 @@ actor TranscriptionStorage {
         log("TranscriptionStorage: Upserted \(conversation.transcriptSegments.count) segments for session \(sessionId)")
       }
     }
+    if let session = try await getSession(id: sessionId), session.status == .completed {
+      LocalEmbeddingIndexer.scheduleFinalizedSessionIndex(sessionId: sessionId)
+    }
   }
 
   /// Sync a full ServerConversation (session + segments) to local storage
