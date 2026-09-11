@@ -1708,6 +1708,46 @@ test('Settings names GET developer webhook URLs without enable writes', async ()
   ).toBe(false);
 });
 
+test('Settings names a failed developer webhook URLs GET instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/developer/webhooks/status') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          memory_created: true,
+          realtime_transcript: false,
+          audio_bytes: true,
+          day_summary: true,
+        }),
+      };
+    }
+    if (request.path.startsWith('/v1/users/developer/webhook/')) {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Developer Webhooks');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('https://example.test/conversation');
+  expect(mockBackend.request.mock.calls.some(call => call[0].method === 'POST')).toBe(
+    false,
+  );
+  expect(
+    mockBackend.request.mock.calls.some(
+      call => call[0].path === '/v1/users/developer/webhook/button_event',
+    ),
+  ).toBe(false);
+});
+
 test('Settings names GET developer and MCP keys without revoke or a full secret', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

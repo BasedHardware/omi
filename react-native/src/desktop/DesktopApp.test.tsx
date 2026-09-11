@@ -5078,6 +5078,12 @@ test('Settings keeps an honest empty developer webhook catalogue', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;
   };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  omiBackend.request.mockImplementation(async request => {
+    return {id: request.id, status: 404, body: null};
+  });
   loadAccountSettings.mockResolvedValueOnce({
     profile: null,
     profileError: null,
@@ -5117,6 +5123,12 @@ test('Settings developer webhook titles are not raw API keys', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;
   };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  omiBackend.request.mockImplementation(async request => {
+    return {id: request.id, status: 404, body: null};
+  });
   loadAccountSettings.mockResolvedValueOnce({
     profile: null,
     profileError: null,
@@ -5175,6 +5187,12 @@ test('Settings developer webhook URLs omit empty or whitespace values', async ()
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;
   };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  omiBackend.request.mockImplementation(async request => {
+    return {id: request.id, status: 404, body: null};
+  });
   loadAccountSettings.mockResolvedValueOnce({
     profile: null,
     profileError: null,
@@ -5293,6 +5311,65 @@ test('Settings names GET developer webhook URLs without enable writes', async ()
   expect(tree).toContain('https://example.test/audio');
   expect(tree).toContain('5s');
   expect(tree).not.toContain('https://example.test/audio,5');
+  expect(
+    omiBackend.request.mock.calls.some(call => call[0].method === 'POST'),
+  ).toBe(false);
+  expect(
+    omiBackend.request.mock.calls.some(
+      call => call[0].path === '/v1/users/developer/webhook/button_event',
+    ),
+  ).toBe(false);
+});
+
+test('Settings names a failed developer webhook URLs GET instead of empty success', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: [
+      {type: 'memory_created', enabled: true, url: null},
+      {type: 'realtime_transcript', enabled: false, url: null},
+      {type: 'audio_bytes', enabled: true, url: null},
+      {type: 'day_summary', enabled: true, url: null},
+    ],
+    webhooksError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path.startsWith('/v1/users/developer/webhook/')) {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Developer Webhooks');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('https://example.test/conversation');
   expect(
     omiBackend.request.mock.calls.some(call => call[0].method === 'POST'),
   ).toBe(false);

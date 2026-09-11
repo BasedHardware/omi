@@ -354,6 +354,7 @@ export function DesktopSettings({
   const [webhookUrls, setWebhookUrls] = useState<
     Map<OmiWebhookUrlType, OmiWebhookUrl>
   >(new Map());
+  const [webhookUrlsError, setWebhookUrlsError] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
     Record<PrivacyWriteKind, boolean>
@@ -413,6 +414,7 @@ export function DesktopSettings({
     let nextImportJobs: OmiImportJobRow[] = [];
     let nextImportJobsError: string | null = null;
     let nextWebhookUrls = new Map<OmiWebhookUrlType, OmiWebhookUrl>();
+    let nextWebhookUrlsError: string | null = null;
     if (backend !== undefined && backend !== null && session === 'ready') {
       const peopleTask = loadOmiPeopleNames(backend).then(
         names => ({names, error: null as string | null}),
@@ -525,8 +527,12 @@ export function DesktopSettings({
           error: desktopReadErrorCopy(reason),
         }),
       );
-      const webhookUrlsTask = loadOmiWebhookUrls(backend).catch(
-        () => new Map<OmiWebhookUrlType, OmiWebhookUrl>(),
+      const webhookUrlsTask = loadOmiWebhookUrls(backend).then(
+        urls => ({urls, error: null as string | null}),
+        reason => ({
+          urls: new Map<OmiWebhookUrlType, OmiWebhookUrl>(),
+          error: desktopReadErrorCopy(reason),
+        }),
       );
       try {
         nextAccount = await loadAccountSettings(backend);
@@ -596,7 +602,9 @@ export function DesktopSettings({
       const importJobsResult = await importJobsTask;
       nextImportJobs = importJobsCopy(importJobsResult.jobs);
       nextImportJobsError = importJobsResult.error;
-      nextWebhookUrls = await webhookUrlsTask;
+      const webhookUrlsResult = await webhookUrlsTask;
+      nextWebhookUrls = webhookUrlsResult.urls;
+      nextWebhookUrlsError = webhookUrlsResult.error;
     } else {
       nextAccount = failedAccountSettings(
         session !== 'ready'
@@ -640,6 +648,7 @@ export function DesktopSettings({
     setImportJobs(nextImportJobs);
     setImportJobsError(nextImportJobsError);
     setWebhookUrls(nextWebhookUrls);
+    setWebhookUrlsError(nextWebhookUrlsError);
   }, [backend, session]);
 
   useEffect(() => {
@@ -967,10 +976,7 @@ export function DesktopSettings({
             copy={transcriptionPreferencesError}
             title="Automatic translation"
           />
-          <Row
-            copy={transcriptionPreferencesError}
-            title="Custom vocabulary"
-          />
+          <Row copy={transcriptionPreferencesError} title="Custom vocabulary" />
         </>
       ) : (
         <>
@@ -1019,31 +1025,44 @@ export function DesktopSettings({
         <Row copy={fairUseError} title="Fair Use" />
       ) : (
         fairUse?.map((row, index) => (
-          <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
+          <Row
+            copy={row.copy}
+            key={`${row.title}-${index}`}
+            title={row.title}
+          />
         ))
       )}
       {notificationFrequencyError !== null ? (
-        <Row
-          copy={notificationFrequencyError}
-          title="Notification frequency"
-        />
+        <Row copy={notificationFrequencyError} title="Notification frequency" />
       ) : (
         notificationFrequency.map((row, index) => (
-          <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
+          <Row
+            copy={row.copy}
+            key={`${row.title}-${index}`}
+            title={row.title}
+          />
         ))
       )}
       {dailySummaryScheduleError !== null ? (
         <Row copy={dailySummaryScheduleError} title="Daily summaries" />
       ) : (
         dailySummarySchedule.map((row, index) => (
-          <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
+          <Row
+            copy={row.copy}
+            key={`${row.title}-${index}`}
+            title={row.title}
+          />
         ))
       )}
       {dailySummariesError !== null ? (
         <Row copy={dailySummariesError} title="Daily summary" />
       ) : (
         dailySummaries.map((row, index) => (
-          <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
+          <Row
+            copy={row.copy}
+            key={`${row.title}-${index}`}
+            title={row.title}
+          />
         ))
       )}
       {appChangelogsError !== null ? (
@@ -1250,6 +1269,8 @@ export function DesktopSettings({
           }
           title="Developer Webhooks"
         />
+      ) : webhookUrlsError !== null ? (
+        <Row copy={webhookUrlsError} title="Developer Webhooks" />
       ) : account.webhooks.length === 0 ? (
         <Row
           copy="No developer webhooks were returned."

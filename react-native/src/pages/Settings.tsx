@@ -279,6 +279,7 @@ export function SettingsPage({
   const [webhookUrls, setWebhookUrls] = useState<
     Map<OmiWebhookUrlType, OmiWebhookUrl>
   >(new Map());
+  const [webhookUrlsError, setWebhookUrlsError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
@@ -358,6 +359,7 @@ export function SettingsPage({
       setImportJobs([]);
       setImportJobsError(null);
       setWebhookUrls(new Map());
+      setWebhookUrlsError(null);
       setError(cloudSessionUnavailableCopy(backend));
       setPhase('error');
       return;
@@ -428,6 +430,7 @@ export function SettingsPage({
         setImportJobs([]);
         setImportJobsError(null);
         setWebhookUrls(new Map());
+        setWebhookUrlsError(null);
         setError(desktopBackendServiceCopy);
         setSettingsCanRetry(true);
         setPhase('error');
@@ -467,6 +470,7 @@ export function SettingsPage({
         setImportJobs([]);
         setImportJobsError(null);
         setWebhookUrls(new Map());
+        setWebhookUrlsError(null);
         setError(desktopBackendUnauthorizedCopy);
         setPhase('signed-out');
         return;
@@ -581,8 +585,12 @@ export function SettingsPage({
         error: desktopReadErrorCopy(reason),
       }),
     );
-    const webhookUrlsTask = loadOmiWebhookUrls(backend).catch(
-      () => new Map<OmiWebhookUrlType, OmiWebhookUrl>(),
+    const webhookUrlsTask = loadOmiWebhookUrls(backend).then(
+      urls => ({urls, error: null as string | null}),
+      reason => ({
+        urls: new Map<OmiWebhookUrlType, OmiWebhookUrl>(),
+        error: desktopReadErrorCopy(reason),
+      }),
     );
     try {
       const account = await loadAccountSettings(backend);
@@ -616,7 +624,7 @@ export function SettingsPage({
     const developerKeysResult = await developerKeysTask;
     const mcpKeysResult = await mcpKeysTask;
     const importJobsResult = await importJobsTask;
-    const nextWebhookUrls = await webhookUrlsTask;
+    const webhookUrlsResult = await webhookUrlsTask;
     if (!current()) {
       return;
     }
@@ -673,7 +681,8 @@ export function SettingsPage({
     setMcpKeysError(mcpKeysResult.error);
     setImportJobs(importJobsCopy(importJobsResult.jobs));
     setImportJobsError(importJobsResult.error);
-    setWebhookUrls(nextWebhookUrls);
+    setWebhookUrls(webhookUrlsResult.urls);
+    setWebhookUrlsError(webhookUrlsResult.error);
   }, [browser]);
 
   useEffect(() => {
@@ -889,10 +898,7 @@ export function SettingsPage({
           ))
         )}
         {taskIntegrationsError !== null ? (
-          <SettingRow
-            copy={taskIntegrationsError}
-            title="Task integrations"
-          />
+          <SettingRow copy={taskIntegrationsError} title="Task integrations" />
         ) : (
           taskIntegrations.map(row => (
             <SettingRow
@@ -1106,6 +1112,8 @@ export function SettingsPage({
             {snapshot.webhooksError ??
               'Developer webhook status is unavailable.'}
           </Text>
+        ) : webhookUrlsError !== null ? (
+          <SettingRow copy={webhookUrlsError} title="Developer Webhooks" />
         ) : snapshot.webhooks.length === 0 ? (
           <Text style={styles.projectionEmptyCopy}>
             No developer webhooks were returned.
