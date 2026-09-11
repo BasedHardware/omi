@@ -157,8 +157,8 @@ export async function readConversations(
         : parseStoredTranscriptSegments(recording.segments);
     if (
       recording.state === "completed" &&
-      recording.segments !== null &&
-      parsed === null
+      (typeof recording.text !== "string" ||
+        (recording.segments !== null && parsed === null))
     ) {
       throw new UnprojectableConversationRecordError();
     }
