@@ -13,6 +13,7 @@ export const PostHogManager = {
     if (isInitialized || typeof window === 'undefined' || !POSTHOG_KEY) return;
     posthog.init(POSTHOG_KEY, {
       api_host: POSTHOG_HOST,
+      autocapture: false,
       capture_pageview: false,
       persistence: 'localStorage',
       person_profiles: 'identified_only',
@@ -20,25 +21,33 @@ export const PostHogManager = {
     isInitialized = true;
   },
   identify(userId: string, properties?: { name?: string; email?: string }) {
-    if (!isInitialized || typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return;
+    this.init();
+    if (!isInitialized) return;
     const person: Record<string, string> = { Platform: 'web' };
     if (properties?.name) person.name = properties.name;
     if (properties?.email) person.email = properties.email;
     posthog.identify(userId, person);
   },
   track(event: string, properties?: Record<string, unknown>) {
-    if (!isInitialized || typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return;
+    this.init();
+    if (!isInitialized) return;
     posthog.capture(event, properties);
   },
   pageView(pageName: string) {
     this.track(`${pageName} Page Viewed`);
   },
   reset() {
-    if (!isInitialized || typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return;
+    this.init();
+    if (!isInitialized) return;
     posthog.reset();
   },
   setUserProperty(key: string, value: unknown) {
-    if (!isInitialized || typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return;
+    this.init();
+    if (!isInitialized) return;
     posthog.setPersonProperties({ [key]: value });
   },
 };

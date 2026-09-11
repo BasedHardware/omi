@@ -497,16 +497,18 @@ export default function HomePage() {
   const BOTS_PER_PAGE = 50;
 
   useEffect(() => {
-    // Identify the user first
-    PostHog.identify();
-
-    // Then track the page view
+    // Track the page view
     PostHog.track('Page View', {
       page: 'Home',
       url: window.location.pathname,
       timestamp: new Date().toISOString(),
     });
   }, []);
+
+  useEffect(() => {
+    // Identify once the Firebase uid is available.
+    if (currentUserUid) PostHog.identify(currentUserUid);
+  }, [currentUserUid]);
 
   const fetchChatbots = async (isInitial = true) => {
     try {

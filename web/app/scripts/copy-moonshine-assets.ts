@@ -32,6 +32,7 @@ export function buildPublicEnvironment(
       'NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID',
       'NEXT_PUBLIC_FIREBASE_VAPID_KEY',
       'NEXT_PUBLIC_POSTHOG_KEY',
+      'NEXT_PUBLIC_POSTHOG_HOST',
     ].map((key) => [key, environment[key] ?? '']),
   );
   publicEnvironment.NEXT_PUBLIC_WS_BASE_URL = webSocketBaseUrl;

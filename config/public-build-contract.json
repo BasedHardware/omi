@@ -232,6 +232,22 @@
           "allowed_scopes": [
             "repository"
           ]
+        },
+        {
+          "name": "NEXT_PUBLIC_POSTHOG_KEY",
+          "required": true,
+          "source": "repository_config",
+          "allowed_scopes": [
+            "repository"
+          ]
+        },
+        {
+          "name": "NEXT_PUBLIC_POSTHOG_HOST",
+          "required": false,
+          "source": "repository_config",
+          "allowed_scopes": [
+            "repository"
+          ]
         }
       ],
       "candidate_acceptance": {
@@ -398,6 +414,7 @@
           "NEXT_PUBLIC_FIREBASE_API_KEY",
           "NEXT_PUBLIC_FIREBASE_APP_ID",
           "NEXT_PUBLIC_FIREBASE_VAPID_KEY",
+          "NEXT_PUBLIC_MIXPANEL_TOKEN",
           "NEXT_PUBLIC_POSTHOG_KEY",
           "NEXT_PUBLIC_RAPIDAPI_KEY",
           "NEXT_PUBLIC_RAPIDAPI_HOST",
@@ -469,6 +486,14 @@
         {
           "name": "NEXT_PUBLIC_POSTHOG_KEY",
           "required": true,
+          "source": "repository_config",
+          "allowed_scopes": [
+            "repository"
+          ]
+        },
+        {
+          "name": "NEXT_PUBLIC_POSTHOG_HOST",
+          "required": false,
           "source": "repository_config",
           "allowed_scopes": [
             "repository"
