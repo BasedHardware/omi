@@ -439,6 +439,38 @@ test('a zero conversation start time on Home and Library rows says Duration unav
   }
 });
 
+test('discarded Home and Library rows name GET transcript span instead of Duration unavailable', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:discarded-timed',
+    title: 'Speaker 1: Hello from the recording',
+    summary: 'Saved words',
+    searchableText: 'Speaker 1: Hello from the recording\nSaved words',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: true,
+    transcriptEndSeconds: 120,
+  };
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  let library!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    home = ReactTestRenderer.create(<ReadRow item={item} />);
+    library = ReactTestRenderer.create(<ConversationRow item={item} />);
+  });
+  for (const copy of [textOf(home), textOf(library)]) {
+    expect(copy).toContain('2 min');
+    expect(copy).not.toContain('Duration unavailable');
+  }
+});
+
 function taskItem(dueAt: number | null, completed = false): TaskProjection {
   return {
     kind: 'task',
@@ -519,9 +551,11 @@ test('Home and Tasks rows keep GET indent instead of a flat list', () => {
   expect(nestedLead.length).toBeGreaterThan(0);
   expect(
     nested.root.findAll(node =>
-      [node.props.style].flat(Infinity).some(
-        (entry: {paddingLeft?: number} | null) => entry?.paddingLeft === 56,
-      ),
+      [node.props.style]
+        .flat(Infinity)
+        .some(
+          (entry: {paddingLeft?: number} | null) => entry?.paddingLeft === 56,
+        ),
     ).length,
   ).toBeGreaterThan(0);
   expect(

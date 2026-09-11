@@ -3,6 +3,7 @@ import {
   conversationDiscardedTranscriptCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
+  conversationTranscriptEndSeconds,
   memoryCaptureDeviceCopy,
   taskDisplayTitle,
   taskExportCopy,
@@ -166,10 +167,14 @@ export async function loadOmiConversations(
     const structuredTitle = text(structured.title, ''),
       summary = text(structured.overview, '');
     const discarded = bool(row.discarded);
+    const discardedSegments = discarded
+      ? discardedTranscriptSegments(row.transcript_segments)
+      : [];
     const discardedExcerpt = discarded
-      ? conversationDiscardedTranscriptCopy(
-          discardedTranscriptSegments(row.transcript_segments),
-        )
+      ? conversationDiscardedTranscriptCopy(discardedSegments)
+      : null;
+    const transcriptEndSeconds = discarded
+      ? conversationTranscriptEndSeconds(discardedSegments)
       : null;
     const title =
       discardedExcerpt !== null ? discardedExcerpt : structuredTitle;
@@ -212,6 +217,7 @@ export async function loadOmiConversations(
       ...(row.captured_at_ms === undefined
         ? {}
         : {capturedAtMs: row.captured_at_ms}),
+      ...(transcriptEndSeconds === null ? {} : {transcriptEndSeconds}),
     };
   });
   return {apiContract: 'omi', items, page: page(start, items.length)};

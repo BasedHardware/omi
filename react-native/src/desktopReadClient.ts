@@ -28,6 +28,7 @@ export type ConversationProjection = {
   emoji?: string;
   photoCount?: number;
   category?: string;
+  transcriptEndSeconds?: number;
 };
 
 export function visibleDisplayText(value: string): string {
@@ -500,6 +501,59 @@ export function formatConversationDuration(
   return remainingMinutes === 0
     ? `${hours} hr`
     : `${hours} hr ${remainingMinutes} min`;
+}
+
+export function formatConversationDurationSeconds(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return 'Duration unavailable';
+  }
+  if (seconds < 60) {
+    return '< 1 min';
+  }
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes === 0
+    ? `${hours} hr`
+    : `${hours} hr ${remainingMinutes} min`;
+}
+
+export function conversationListDurationCopy(item: {
+  startedAt: string | null;
+  finishedAt: string | null;
+  transcriptEndSeconds?: number;
+}): string {
+  const fromClocks = formatConversationDuration(item.startedAt, item.finishedAt);
+  if (fromClocks !== 'Duration unavailable') {
+    return fromClocks;
+  }
+  if (typeof item.transcriptEndSeconds !== 'number') {
+    return fromClocks;
+  }
+  return formatConversationDurationSeconds(item.transcriptEndSeconds);
+}
+
+export function conversationTranscriptEndSeconds(
+  segments: readonly {end: number}[] | null | undefined,
+): number | null {
+  if (segments == null || segments.length === 0) {
+    return null;
+  }
+  let lastEnd = 0;
+  for (const segment of segments) {
+    if (
+      typeof segment.end === 'number' &&
+      Number.isFinite(segment.end) &&
+      segment.end > lastEnd
+    ) {
+      lastEnd = segment.end;
+    }
+  }
+  const seconds = Math.trunc(lastEnd);
+  return seconds > 0 ? seconds : null;
 }
 
 export function conversationTranscriptDurationCopy(

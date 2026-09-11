@@ -114,6 +114,50 @@ test('old discarded conversations name GET transcript_segments as the list title
   expect(result.items[3].title).toBe('Real title');
 });
 
+test('old discarded conversations keep GET transcript span seconds when clocks are missing', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'discarded-timed',
+      discarded: true,
+      finished_at: null,
+      transcript_segments: [
+        {
+          text: 'Hello from the recording',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 0,
+          end: 120,
+        },
+      ],
+    },
+    {
+      ...conversation,
+      id: 'discarded-empty-clocks',
+      discarded: true,
+      transcript_segments: [],
+    },
+    {
+      ...conversation,
+      id: 'kept-timed',
+      discarded: false,
+      transcript_segments: [
+        {
+          text: 'Should not become list duration',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 0,
+          end: 120,
+        },
+      ],
+    },
+  ]);
+  const result = await loadConversations(api);
+  expect(result.items[0]).toMatchObject({transcriptEndSeconds: 120});
+  expect(result.items[1]).not.toHaveProperty('transcriptEndSeconds');
+  expect(result.items[2]).not.toHaveProperty('transcriptEndSeconds');
+});
+
 test('old conversations keep wire-non-empty category and omit whitespace', async () => {
   const {api} = backend([
     {

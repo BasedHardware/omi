@@ -18,7 +18,7 @@ import {
   conversationListUsesListenOverview,
   conversationRecapTitle,
   conversationHasFinishClock,
-  formatConversationDuration,
+  conversationListDurationCopy,
   memoryCitationCopy,
   memoryDisplayTitle,
   memorySynthesisCopy,
@@ -248,10 +248,7 @@ export const ProjectionRow = memo(function ProjectionRow({
       ) : null}
       {conversation !== null && conversationHasFinishClock(conversation) ? (
         <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
-          {formatConversationDuration(
-            conversation.startedAt,
-            conversation.finishedAt,
-          )}
+          {conversationListDurationCopy(conversation)}
         </Text>
       ) : null}
     </View>

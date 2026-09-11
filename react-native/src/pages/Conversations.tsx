@@ -16,6 +16,7 @@ import {
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationHasFinishClock,
+  conversationListDurationCopy,
   conversationListEmoji,
   conversationListNewCopy,
   conversationListStatusCopy,
@@ -26,7 +27,6 @@ import {
   conversationGroupLabel,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
-  formatConversationDuration,
   visibleDisplayText,
   type ConversationProjection,
   type DesktopReadProjection,
@@ -164,7 +164,7 @@ const ConversationRow = memo(function ConversationRow({
       )}
       {conversationHasFinishClock(item) ? (
         <Text style={styles.conversationRowDuration}>
-          {formatConversationDuration(item.startedAt, item.finishedAt)}
+          {conversationListDurationCopy(item)}
         </Text>
       ) : null}
     </FocusPressable>

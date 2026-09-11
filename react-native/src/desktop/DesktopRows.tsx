@@ -9,13 +9,13 @@ import {
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationHasFinishClock,
+  conversationListDurationCopy,
   conversationListEmoji,
   conversationListNewCopy,
   conversationListStatusCopy,
   conversationListTag,
   conversationListUsesListenOverview,
   conversationRecapTitle,
-  formatConversationDuration,
   formatTaskDue,
   memoryCitationCopy,
   memoryDisplayBody,
@@ -111,9 +111,7 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
         <Text style={styles.rowMeta}>{photosCopy}</Text>
       ) : null}
       {conversationHasFinishClock(item) ? (
-        <Text style={styles.rowMeta}>
-          {formatConversationDuration(item.startedAt, item.finishedAt)}
-        </Text>
+        <Text style={styles.rowMeta}>{conversationListDurationCopy(item)}</Text>
       ) : null}
     </View>
   );
