@@ -14,10 +14,10 @@ actor AppleNLContextualEmbeddingEngine: LocalEmbeddingService {
   private let assetTimeout: Duration
   private let english: NLContextualEmbedding?
   private let multilingual: NLContextualEmbedding?
-  private var requestedAssets = false
+  private var requestedAssetModels: Set<String> = []
   private var loadedEnglish = false
   private var loadedMultilingual = false
-  private let prepareOverride: (@Sendable () async -> LocalEmbeddingAssetStatus)?
+  private let prepareOverride: (@Sendable (Bool) async -> LocalEmbeddingAssetStatus)?
   private let vectorsOverride: (@Sendable (String, Bool) throws -> [[Float]])?
 
   nonisolated static let defaultEngineID = "apple_nlce"
@@ -46,7 +46,7 @@ actor AppleNLContextualEmbeddingEngine: LocalEmbeddingService {
     dimension: Int,
     maxSequenceLength: Int,
     assetTimeout: Duration = .milliseconds(1500),
-    prepare: @escaping @Sendable () async -> LocalEmbeddingAssetStatus,
+    prepare: @escaping @Sendable (Bool) async -> LocalEmbeddingAssetStatus,
     tokenVectors: @escaping @Sendable (String, Bool) throws -> [[Float]]
   ) {
     self.english = nil
@@ -62,17 +62,24 @@ actor AppleNLContextualEmbeddingEngine: LocalEmbeddingService {
   }
 
   func prepareAssets() async -> LocalEmbeddingAssetStatus {
+    await prepareAssets(englishDominant: true)
+  }
+
+  func prepareAssets(englishDominant: Bool) async -> LocalEmbeddingAssetStatus {
     if let prepareOverride {
-      return await prepareOverride()
+      return await prepareOverride(englishDominant)
     }
-    guard let english else { return .assetsUnavailable }
-    if english.hasAvailableAssets { return .available }
-    guard !requestedAssets else { return .assetsUnavailable }
-    requestedAssets = true
+    guard let embedding = (englishDominant ? english : multilingual) ?? english else {
+      return .assetsUnavailable
+    }
+    if embedding.hasAvailableAssets { return .available }
+    let modelKey = embedding.modelIdentifier
+    guard !requestedAssetModels.contains(modelKey) else { return .assetsUnavailable }
+    requestedAssetModels.insert(modelKey)
     let timeout = assetTimeout
     let box = LocalEmbeddingAssetResume()
     let ready = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-      english.requestAssets { result, _ in
+      embedding.requestAssets { result, _ in
         box.resume(continuation, result == .available)
       }
       Task {
@@ -100,16 +107,16 @@ actor AppleNLContextualEmbeddingEngine: LocalEmbeddingService {
   }
 
   private func tokenVectors(for text: String, englishDominant: Bool) async throws -> [[Float]] {
+    let status = await prepareAssets(englishDominant: englishDominant)
+    guard status == .available else {
+      throw LocalInferenceError.engineFailed("assets_unavailable")
+    }
     if let vectorsOverride {
       var collected: [[Float]] = []
       for chunk in Self.chunks(text, maxLength: maxSequenceLength) {
         collected.append(contentsOf: try vectorsOverride(chunk, englishDominant))
       }
       return collected
-    }
-    let status = await prepareAssets()
-    guard status == .available else {
-      throw LocalInferenceError.engineFailed("assets_unavailable")
     }
     guard let embedding = (englishDominant ? english : multilingual) ?? english else {
       throw LocalInferenceError.engineFailed("apple nlce missing")

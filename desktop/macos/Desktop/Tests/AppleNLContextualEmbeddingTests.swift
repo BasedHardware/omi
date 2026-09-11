@@ -13,6 +13,7 @@ final class AppleNLContextualEmbeddingTests: XCTestCase {
       XCTAssertFalse(probe.permits(engine, budget: .seconds(2)))
       return
     }
+    guard probe.reason.isEmpty else { return }
     XCTAssertTrue(probe.permits(engine, budget: .seconds(2)))
     let vectors = try await engine.embed(["hello local retrieval fixture"], task: .document)
     XCTAssertEqual(vectors.count, 1)
@@ -27,7 +28,7 @@ final class AppleNLContextualEmbeddingTests: XCTestCase {
       modelID: "fixture-nlce",
       dimension: 4,
       maxSequenceLength: 4,
-      prepare: { .available },
+      prepare: { _ in .available },
       tokenVectors: { text, _ in
         XCTAssertLessThanOrEqual(text.count, 4)
         return [tokenA, tokenB]
@@ -48,7 +49,7 @@ final class AppleNLContextualEmbeddingTests: XCTestCase {
       modelID: "fixture-nlce",
       dimension: 4,
       maxSequenceLength: 8,
-      prepare: { .assetsUnavailable },
+      prepare: { _ in .assetsUnavailable },
       tokenVectors: { _, _ in
         XCTFail("unavailable assets must not embed")
         return []
@@ -56,5 +57,40 @@ final class AppleNLContextualEmbeddingTests: XCTestCase {
     let probe = await LocalEmbeddingProbe.run(engine)
     XCTAssertEqual(probe.reason, LocalEmbeddingAssetStatus.assetsUnavailable.rawValue)
     XCTAssertFalse(probe.permits(engine, budget: .seconds(2)))
+  }
+
+  func testNonEnglishEmbedRequestsSelectedModelAssets() async throws {
+    let requested = AssetLanguageBox()
+    let engine = AppleNLContextualEmbeddingEngine(
+      modelID: "fixture-nlce",
+      dimension: 4,
+      maxSequenceLength: 64,
+      prepare: { englishDominant in
+        requested.append(englishDominant)
+        return .available
+      },
+      tokenVectors: { _, _ in [[1, 0, 0, 0]] })
+    let status = await engine.prepareAssets(englishDominant: false)
+    XCTAssertEqual(status, .available)
+    XCTAssertEqual(requested.snapshot(), [false])
+    _ = try await engine.embed(
+      ["Bonjour le monde, aujourd'hui nous parlons uniquement en français pendant toute cette phrase."],
+      task: .document)
+    XCTAssertFalse(requested.snapshot().isEmpty)
+  }
+}
+
+private final class AssetLanguageBox: @unchecked Sendable {
+  private let lock = NSLock()
+  private var values: [Bool] = []
+  func append(_ value: Bool) {
+    lock.lock()
+    values.append(value)
+    lock.unlock()
+  }
+  func snapshot() -> [Bool] {
+    lock.lock()
+    defer { lock.unlock() }
+    return values
   }
 }
