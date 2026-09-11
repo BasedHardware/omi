@@ -23,6 +23,64 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_KEYWORD_STOPWORDS = frozenset(
+    {
+        'a',
+        'an',
+        'the',
+        'and',
+        'or',
+        'of',
+        'in',
+        'on',
+        'at',
+        'to',
+        'for',
+        'with',
+        'was',
+        'were',
+        'is',
+        'are',
+        'be',
+        'been',
+        'i',
+        'me',
+        'my',
+        'we',
+        'you',
+        'that',
+        'this',
+        'when',
+        'where',
+        'what',
+        'which',
+        'who',
+        'how',
+        'did',
+        'do',
+        'does',
+        'last',
+        'from',
+        'it',
+        'as',
+        'by',
+        'if',
+        'not',
+        'so',
+        'than',
+        'then',
+        'too',
+        'very',
+        'can',
+        'just',
+        'about',
+        'into',
+        'over',
+        'after',
+        'before',
+    }
+)
+
 try:
     from utils.retrieval.agentic import agent_config_context
 except ImportError:
@@ -396,6 +454,7 @@ def _keyword_screen_matches(
         payload_from_snapshot=lambda snapshot: {**snapshot.to_dict(), '_document_id': snapshot.id},
     )
     tokens = set(re.findall(r'[^\W_]+', query.casefold()))
+    tokens = {token for token in tokens if token not in _KEYWORD_STOPWORDS and len(token) > 1}
     ranked = []
     for row in rows:
         sid = _validated_screen_evidence_id(row.get('_document_id'))
@@ -469,8 +528,9 @@ def search_screen_activity_tool(
     """
     Search the user's screen/computer activity using vectors when available, otherwise keywords.
 
-    Vector search can find related concepts. Keyword fallback requires every query term and scans
-    at most 500 recent screens in the date window (default last 7 days). Use concise keywords.
+    Vector search can find related concepts. Keyword fallback matches content terms
+    (stopwords ignored) and scans at most 500 recent screens in the date window
+    (default last 7 days). Use concise keywords.
 
     **When to use:**
     - "When was I last working on the budget spreadsheet?"

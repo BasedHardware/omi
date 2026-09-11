@@ -385,6 +385,15 @@ def test_keyword_fallback_records_provider_switch(monkeypatch, sa):
     )
 
 
+def test_keyword_natural_language_query_ignores_stopwords(monkeypatch, sa):
+    _keyword_setup(monkeypatch, sa)
+    matches, scanned = sa._keyword_screen_matches('u1', 'when was I last at the budget', None, 1_789_027_200, 10)
+    assert scanned >= 1
+    ids = [match['screenshot_id'] for match in matches]
+    assert 'both' in ids
+    assert 'title' in ids
+
+
 def test_keyword_finds_document_written_at_normalized_window_edge(monkeypatch, sa):
     end = datetime(2026, 9, 10, 0, 0, 0, tzinfo=timezone.utc)
     edge = normalize_screen_activity_timestamp(end, end_of_second=True)
