@@ -3332,8 +3332,37 @@ test('keeps empty subscription plan tokens instead of failing Settings Plan', ()
       'Subscription response',
     ),
   ).toEqual(expect.objectContaining({plan: 'plus', status: 'active'}));
-  expect(() =>
+  expect(
     parseCloudSubscription({status: 'active'}, 'Subscription response'),
+  ).toEqual(expect.objectContaining({plan: 'basic', status: 'active'}));
+  expect(
+    parseCloudSubscription({plan: 'plus'}, 'Subscription response'),
+  ).toEqual(expect.objectContaining({plan: 'plus', status: 'active'}));
+  expect(
+    parseCloudSubscription(
+      {
+        transcription_seconds_used: 90,
+        transcription_seconds_limit: 1800,
+        subscription: {status: 'active'},
+      },
+      'Subscription response',
+    ),
+  ).toEqual(
+    expect.objectContaining({
+      plan: 'basic',
+      status: 'active',
+      transcriptionSecondsUsed: 90,
+      transcriptionSecondsLimit: 1800,
+    }),
+  );
+  expect(() =>
+    parseCloudSubscription({plan: 1, status: 'active'}, 'Subscription response'),
+  ).toThrow('Subscription response is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {plan: null, status: 'active'},
+      'Subscription response',
+    ),
   ).toThrow('Subscription response is malformed');
 });
 

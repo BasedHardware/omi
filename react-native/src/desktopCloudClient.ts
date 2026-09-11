@@ -390,10 +390,19 @@ export function parseCloudSubscription(
     record.subscription === undefined
       ? record
       : object(record.subscription, `${label} subscription`);
-  if (
-    typeof subscription.plan !== 'string' ||
-    typeof subscription.status !== 'string'
-  ) {
+  const plan =
+    subscription.plan === undefined
+      ? 'basic'
+      : typeof subscription.plan === 'string'
+      ? subscription.plan
+      : null;
+  const status =
+    subscription.status === undefined
+      ? 'active'
+      : typeof subscription.status === 'string'
+      ? subscription.status
+      : null;
+  if (plan === null || status === null) {
     throw new Error(`${label} is malformed`);
   }
   const rawLimits = subscription.limits;
@@ -407,8 +416,8 @@ export function parseCloudSubscription(
   const chatQuotaUnit =
     typeof record.chat_quota_unit === 'string' ? record.chat_quota_unit : null;
   return {
-    plan: subscription.plan,
-    status: subscription.status,
+    plan,
+    status,
     transcriptionSecondsUsed: optionalInteger(
       record.transcription_seconds_used,
     ),
