@@ -2136,6 +2136,34 @@ describe("completeGeneration visibility", () => {
     expect(event.message).not.toHaveProperty("fromColumns");
   });
 
+  test("completeGeneration stamps the same revision on the done event and stored row", async () => {
+    await seedAdmittedHuman(db, "acct-a", "msg-revision", "gen-revision");
+    const event = await completeGeneration(db, "acct-a", "gen-revision", "ok");
+    expect(event.kind).toBe("done");
+    if (event.kind !== "done") throw new Error("expected done event");
+    const stored = await db
+      .prepare(
+        "SELECT payload FROM chat_messages WHERE account_id = ? AND sender = 'ai'"
+      )
+      .bind("acct-a")
+      .first<{ payload: string }>();
+    const eventRow = await db
+      .prepare(
+        "SELECT payload FROM chat_generation_events WHERE generation_id = ? AND event_id = '2'"
+      )
+      .bind("gen-revision")
+      .first<{ payload: string }>();
+    expect(stored).not.toBeNull();
+    expect(eventRow).not.toBeNull();
+    const storedMessage = JSON.parse(stored!.payload) as { revision: unknown };
+    const eventPayload = JSON.parse(eventRow!.payload) as {
+      message: { revision: unknown };
+    };
+    expect(typeof storedMessage.revision).toBe("string");
+    expect(event.message.revision).toBe(storedMessage.revision);
+    expect(eventPayload.message.revision).toBe(storedMessage.revision);
+  });
+
   test("completeGeneration of a stored createdAt that fails detach is unavailable", async () => {
     const human = {
       id: "msg-negative-created-at-complete",

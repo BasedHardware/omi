@@ -455,11 +455,11 @@ export async function completeGeneration(
       .bind(
         generationId,
         accountId,
-        JSON.stringify({ id: "2", kind: "done", message })
+        JSON.stringify({ id: "2", kind: "done", message: stored })
       ),
   ]);
 
-  return { id: "2", kind: "done", message };
+  return { id: "2", kind: "done", message: stored };
 }
 
 export async function failGeneration(
@@ -821,6 +821,7 @@ const TERMINAL_CANONICAL_KEYS = [
   "messageSource",
   "rating",
   "reported",
+  "revision",
 ] as const satisfies readonly (keyof ChatMessage)[];
 
 function presentCanonicalFieldDisagrees(
