@@ -78,12 +78,16 @@ final class ShortcutCaptureSession {
     suspendGlobalShortcuts(false)
   }
 
-  deinit {
-    // A recorder torn down mid-capture — its view dismissed, its window closed — must not leave the
-    // Mac without its menu bar and without Ask Omi. `isActive` is the session's own state and
-    // `isCapturing` is the app's, so this restores both rather than assuming a caller will.
-    MainActor.assumeIsolated {
-      end()
-    }
+  /// A recorder torn down mid-capture — its view dismissed, its window closed — must not leave the
+  /// Mac without its menu bar and without Ask Omi. `isActive` is the session's own state and
+  /// `isCapturing` is the app's, so this restores both rather than assuming a caller will.
+  ///
+  /// `isolated` rather than a bare `deinit` calling `MainActor.assumeIsolated`: a `deinit` is
+  /// **not** isolated to its class's actor by default, so the assuming version is a trap — literally,
+  /// `assumeIsolated` fatalErrors — on any release that happens off the main thread. Nothing here
+  /// guarantees the last reference is dropped there; a stray retain from a capture, a SwiftUI
+  /// teardown off the main queue, and the safety net becomes the crash.
+  isolated deinit {
+    end()
   }
 }
