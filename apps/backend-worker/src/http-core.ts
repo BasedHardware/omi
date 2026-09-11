@@ -744,19 +744,25 @@ export async function handleGenerationEvents(
   const generationId = context.req.param("id");
   const target = new URL("https://account.internal/events");
   target.searchParams.set("generationId", generationId);
-  const response = await account(context).fetch(
-    new Request(target, { headers: context.req.raw.headers })
-  );
-  if (response.status === 404)
-    return json({ error: { code: "not_found", retryable: false } }, 404);
-  if (lastEventId === "")
-    return backendError("bad_request", "edit_request", 400);
-  if (response.status === 503) {
-    const headers = new Headers(response.headers);
-    if (!headers.has("retry-after")) headers.set("retry-after", "60");
-    return new Response(response.body, { status: 503, headers });
+  try {
+    const response = await account(context).fetch(
+      new Request(target, { headers: context.req.raw.headers })
+    );
+    if (response.status === 404)
+      return json({ error: { code: "not_found", retryable: false } }, 404);
+    if (lastEventId === "")
+      return backendError("bad_request", "edit_request", 400);
+    if (response.status === 503) {
+      const headers = new Headers(response.headers);
+      if (!headers.has("retry-after")) headers.set("retry-after", "60");
+      return new Response(response.body, { status: 503, headers });
+    }
+    return response;
+  } catch {
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "60",
+    });
   }
-  return response;
 }
 
 export async function handleGenerationCancel(

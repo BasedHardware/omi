@@ -17,6 +17,7 @@ import {
   handleChatCreate,
   handleChatHistory,
   handleConversations,
+  handleGenerationEvents,
   handleSettings,
   handleTasks,
 } from "../src/http-core";
@@ -4828,6 +4829,38 @@ describe("ratified generation wire", () => {
     expect(unreadable.headers.get("retry-after")).toBe("60");
     expect(unreadable.headers.get("cache-control")).toBe("no-store");
     expect((await unreadable.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+  });
+
+  test("generation events GET store throw is production chat unavailable", async () => {
+    const storeThrow = await handleGenerationEvents(
+      coreContext({
+        env: {
+          ...env,
+          ACCOUNTS: {
+            getByName: () => ({
+              fetch: async () => {
+                throw new Error("events store failed");
+              },
+            }),
+          },
+        } as never,
+        request: new Request(
+          "https://worker.test/v1/chat-generations/store-throw/events"
+        ),
+        routePath: "/v1/chat-generations/:id/events",
+        params: { id: "store-throw" },
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(storeThrow.status).toBe(503);
+    expect(storeThrow.headers.get("retry-after")).toBe("60");
+    expect((await storeThrow.json()) as unknown).toEqual({
       error: {
         code: "service_unavailable",
         retryable: true,
