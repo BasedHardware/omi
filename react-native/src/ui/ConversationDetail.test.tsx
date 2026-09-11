@@ -1258,6 +1258,56 @@ test('legacy conversation details name GET discarded photos and analyzing captio
   expect(copy).toContain('Analyzing...');
 });
 
+test('legacy conversation details paint GET photo base64 without a viewer', () => {
+  const uri =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        photoCount: 2,
+        photoCaptions: ['Whiteboard notes'],
+        photoRows: [
+          {caption: 'Whiteboard notes', imageUri: uri},
+          {caption: 'Stored elsewhere'},
+        ],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  const copy = text(view);
+  expect(copy).toContain('2 photos');
+  expect(copy).toContain('Whiteboard notes');
+  expect(copy).toContain('Stored elsewhere');
+  expect(
+    view.root.findAll(node => node.props.source?.uri === uri).length,
+  ).toBeGreaterThan(0);
+  expect(
+    view.root.findAll(
+      node =>
+        typeof node.props.source?.uri === 'string' &&
+        node.props.source.uri.startsWith('data:image/') &&
+        node.props.source.uri !== uri,
+    ),
+  ).toHaveLength(0);
+  expect(
+    view.root.findAll(node => node.props.source?.uri === uri)[0]?.props
+      .onPress,
+  ).toBeUndefined();
+});
+
 test('legacy conversation details name GET folder name and omit unresolved folders', () => {
   mockLegacy.mockReturnValue({
     result: {

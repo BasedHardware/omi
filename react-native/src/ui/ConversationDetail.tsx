@@ -1,5 +1,5 @@
 import React from 'react';
-import {ActivityIndicator, Text, View} from 'react-native';
+import {ActivityIndicator, Image, Text, View} from 'react-native';
 import {
   clockLabel,
   conversationCaptureCopy,
@@ -391,17 +391,33 @@ function LegacyConversationBody({
           {`${detail.photoCount} photos`}
         </Text>
       ) : null}
-      {(detail.photoCaptions ?? []).flatMap((caption, index) => {
-        const copy = visibleDisplayText(caption);
-        return copy === ''
-          ? []
-          : [
-              <Text
-                key={`photo-caption-${index}`}
-                style={[styles.conversationDetailField, ink]}>
-                {copy}
-              </Text>,
-            ];
+      {(
+        detail.photoRows ??
+        (detail.photoCaptions ?? []).map(caption => ({caption}))
+      ).flatMap((photo, index) => {
+        const caption = visibleDisplayText(photo.caption ?? '');
+        const imageUri = photo.imageUri;
+        const nodes: React.JSX.Element[] = [];
+        if (imageUri !== undefined && imageUri !== '') {
+          nodes.push(
+            <Image
+              key={`photo-image-${index}`}
+              accessibilityLabel={caption === '' ? 'Photo' : caption}
+              source={{uri: imageUri}}
+              style={styles.chatAttachmentImage}
+            />,
+          );
+        }
+        if (caption !== '') {
+          nodes.push(
+            <Text
+              key={`photo-caption-${index}`}
+              style={[styles.conversationDetailField, ink]}>
+              {caption}
+            </Text>,
+          );
+        }
+        return nodes;
       })}
       {folderName === '' ? null : (
         <Text style={[styles.conversationDetailField, ink]}>{folderName}</Text>

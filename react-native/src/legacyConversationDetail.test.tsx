@@ -382,6 +382,80 @@ test('names GET discarded photos and photos still analyzing', async () => {
   );
 });
 
+test('keeps GET photo base64 inline and omits empty, invalid, or storage-only photos', async () => {
+  const png =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: [
+        {
+          description: 'Whiteboard notes',
+          base64: png,
+          content_type: 'image/png',
+        },
+        {description: 'No bytes', base64: ''},
+        {description: 'Whitespace', base64: ' \t'},
+        {description: 'Corrupt', base64: '!!!!'},
+        {
+          id: 'stored',
+          storage_id: 'storage-1',
+          description: 'Stored elsewhere',
+        },
+      ],
+    }),
+  );
+  const value = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(value).toMatchObject({
+    photoCount: 5,
+    photoCaptions: [
+      'Whiteboard notes',
+      'No bytes',
+      'Whitespace',
+      'Corrupt',
+      'Stored elsewhere',
+    ],
+    photoRows: [
+      {
+        caption: 'Whiteboard notes',
+        imageUri: `data:image/png;base64,${png}`,
+      },
+      {caption: 'No bytes'},
+      {caption: 'Whitespace'},
+      {caption: 'Corrupt'},
+      {caption: 'Stored elsewhere'},
+    ],
+  });
+  expect(
+    mockRequest.mock.calls.map(call => (call[0] as {path: string}).path),
+  ).toEqual(['/v1/conversations/conversation%2Fone']);
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: [{description: 'Notes', base64: png}],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      photoRows: [
+        {
+          caption: 'Notes',
+          imageUri: `data:image/jpeg;base64,${png}`,
+        },
+      ],
+    },
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: [{base64: 1}],
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+});
+
 test('fails closed for malformed GET photos', async () => {
   mockRequest.mockResolvedValue(
     response({

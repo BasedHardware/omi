@@ -5,6 +5,7 @@ import {
 } from './legacyOmiReads';
 import {isOptionalCaptureTimestamp} from './captureTimestamp';
 import type {OmiBackend} from './omiNative';
+import {decodeBase64} from './base64';
 
 export type ConversationProjection = {
   capturedAtMs?: number;
@@ -434,6 +435,25 @@ export function conversationPhotoChrome(photo: {
   }
   const caption = visibleDisplayText(photo.description);
   return caption === '' ? undefined : caption;
+}
+
+export function conversationPhotoDataUri(
+  base64: string,
+  contentType?: string | null,
+): string | undefined {
+  if (base64 === '') {
+    return undefined;
+  }
+  try {
+    decodeBase64(base64);
+  } catch {
+    return undefined;
+  }
+  const mime =
+    contentType != null && /^image\/[a-z0-9.+-]+$/i.test(contentType)
+      ? contentType
+      : 'image/jpeg';
+  return `data:${mime};base64,${base64}`;
 }
 
 export function conversationHasFinishClock(conversation: {

@@ -1,6 +1,7 @@
 import type {OmiBackend} from './omiNativeTypes';
 import {
   conversationPhotoChrome,
+  conversationPhotoDataUri,
   transcriptSttProviderCopy,
   visibleDisplayText,
 } from './desktopReadClient';
@@ -27,6 +28,7 @@ export type LegacyConversationDetail = {
   };
   photoCount?: number;
   photoCaptions?: string[];
+  photoRows?: {caption?: string; imageUri?: string}[];
   folderName?: string;
   externalText?: string;
   transcript:
@@ -197,6 +199,7 @@ function conversationPhotos(value: unknown):
   | {
       count: number;
       captions: string[];
+      rows: {caption?: string; imageUri?: string}[];
     }
   | undefined {
   if (value === undefined || value === null) {
@@ -206,21 +209,40 @@ function conversationPhotos(value: unknown):
   if (rows.length === 0) {
     return undefined;
   }
-  const captions = rows.flatMap(raw => {
+  const items = rows.map(raw => {
     const photo = object(raw);
     const discarded =
       photo.discarded === undefined || photo.discarded === null
         ? false
         : boolean(photo.discarded);
-    if (photo.description === undefined || photo.description === null) {
-      const copy = conversationPhotoChrome({discarded});
-      return copy === undefined ? [] : [copy];
-    }
-    const description = text(photo.description, 10000);
-    const copy = conversationPhotoChrome({discarded, description});
-    return copy === undefined ? [] : [copy];
+    const caption =
+      photo.description === undefined || photo.description === null
+        ? conversationPhotoChrome({discarded})
+        : conversationPhotoChrome({
+            discarded,
+            description: text(photo.description, 10000),
+          });
+    const imageUri =
+      photo.base64 === undefined || photo.base64 === null
+        ? undefined
+        : conversationPhotoDataUri(
+            text(photo.base64, 20_000_000),
+            photo.content_type === undefined || photo.content_type === null
+              ? undefined
+              : text(photo.content_type, 256),
+          );
+    return {
+      ...(caption === undefined ? {} : {caption}),
+      ...(imageUri === undefined ? {} : {imageUri}),
+    };
   });
-  return {count: rows.length, captions};
+  return {
+    count: rows.length,
+    captions: items.flatMap(item =>
+      item.caption === undefined ? [] : [item.caption],
+    ),
+    rows: items,
+  };
 }
 
 export async function loadLegacyConversationDetail(
@@ -411,6 +433,7 @@ export async function loadLegacyConversationDetail(
           ...(photos.captions.length === 0
             ? {}
             : {photoCaptions: photos.captions}),
+          photoRows: photos.rows,
         }),
     ...(folderName === undefined ? {} : {folderName}),
     ...(integrationText === undefined ? {} : {externalText: integrationText}),
