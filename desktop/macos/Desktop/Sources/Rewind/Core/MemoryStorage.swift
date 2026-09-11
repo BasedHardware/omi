@@ -641,9 +641,7 @@ actor MemoryStorage {
     if inserted > 0 {
       HomeKnowledgeCountInvalidation.post()
     }
-    for item in index {
-      LocalEmbeddingIndexer.scheduleMemoryIndex(id: item.0, content: item.1)
-    }
+    LocalEmbeddingIndexer.scheduleMemoryIndex(items: index)
   }
 
   /// Upsert a server snapshot, then tombstone synced locals whose backendId is absent.

@@ -182,6 +182,66 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
     XCTAssertEqual(completed, 0, "batch memory sync must not await NLCE")
   }
 
+  func testUnchangedMemoryRefreshDoesNotReembed() async throws {
+    let counter = EmbedCallCounter()
+    let engine = CountingEmbeddingEngine(counter: counter)
+    var runtime = LocalEmbeddingRuntime(
+      engines: [engine], defaultEngineID: engine.engineID, record: { _, _ in })
+    runtime.probe = { _ in
+      LocalEmbeddingProbe(
+        appleSilicon: true, assetsAvailable: true, fixtureSucceeded: true, elapsed: .zero, dimension: 8)
+    }
+    await LocalEmbeddingIndexer.shared.setRuntimeForTesting(runtime)
+
+    let backendId = "memory-reembed-\(UUID().uuidString)"
+    try await MemoryStorage.shared.syncServerMemories([
+      Self.serverMemory(id: backendId, content: "unchanged synthetic memory", updatedAt: 1)
+    ])
+    await LocalEmbeddingIndexer.shared.awaitDetachedForTesting()
+    XCTAssertEqual(counter.snapshot(), 1)
+
+    try await MemoryStorage.shared.syncServerMemories([
+      Self.serverMemory(id: backendId, content: "unchanged synthetic memory", updatedAt: 2)
+    ])
+    await LocalEmbeddingIndexer.shared.awaitDetachedForTesting()
+    XCTAssertEqual(counter.snapshot(), 1, "already-indexed unchanged memory must not re-embed")
+
+    try await MemoryStorage.shared.syncServerMemories([
+      Self.serverMemory(id: backendId, content: "changed synthetic memory", updatedAt: 3)
+    ])
+    await LocalEmbeddingIndexer.shared.awaitDetachedForTesting()
+    XCTAssertEqual(counter.snapshot(), 2)
+  }
+
+  private static func serverMemory(id: String, content: String, updatedAt: TimeInterval) -> ServerMemory {
+    ServerMemory(
+      id: id,
+      content: content,
+      category: .system,
+      tier: .shortTerm,
+      tierIsExplicit: true,
+      createdAt: Date(timeIntervalSince1970: 1),
+      updatedAt: Date(timeIntervalSince1970: updatedAt),
+      conversationId: nil,
+      reviewed: false,
+      userReview: nil,
+      visibility: "private",
+      manuallyAdded: false,
+      scoring: nil,
+      source: "desktop",
+      confidence: nil,
+      sourceApp: nil,
+      contextSummary: nil,
+      isRead: false,
+      isDismissed: false,
+      tags: [],
+      reasoning: nil,
+      currentActivity: nil,
+      inputDeviceName: nil,
+      windowTitle: nil,
+      headline: nil)
+  }
+
   func testMissingSessionOriginSkipsIndexing() async throws {
     let reasons = CapturePathReasonBox()
     let engine = HashEmbeddingEngine()
