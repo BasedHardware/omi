@@ -803,6 +803,27 @@ async function withBoundHistoryAttachments(
   };
 }
 
+const TERMINAL_CANONICAL_KEYS = [
+  "type",
+  "createdAt",
+  "updatedAt",
+  "chatSessionId",
+  "appId",
+  "journalRevision",
+  "payloadHash",
+  "messageSource",
+  "rating",
+  "reported",
+] as const satisfies readonly (keyof ChatMessage)[];
+
+function presentCanonicalFieldDisagrees(
+  terminal: ChatMessage,
+  message: ChatMessage,
+  key: (typeof TERMINAL_CANONICAL_KEYS)[number]
+): boolean {
+  return Object.hasOwn(terminal, key) && terminal[key] !== message[key];
+}
+
 function historyOutcomeFromTerminal(
   events: GenerationEvent[],
   message: ChatMessage
@@ -811,17 +832,15 @@ function historyOutcomeFromTerminal(
   if (terminals.length !== 1) return null;
   const terminal = terminals[0]!;
   if (terminal.kind !== "done" && terminal.kind !== "cancelled") return null;
-  if (terminal.message === null || terminal.message === undefined) return null;
+  const terminalMessage = terminal.message;
+  if (terminalMessage === null || terminalMessage === undefined) return null;
   if (
-    terminal.message.id !== message.id ||
-    terminal.message.text !== message.text ||
-    terminal.message.sender !== "ai" ||
-    (typeof terminal.message.type === "string" &&
-      terminal.message.type !== message.type) ||
-    (typeof terminal.message.createdAt === "number" &&
-      terminal.message.createdAt !== message.createdAt) ||
-    (typeof terminal.message.updatedAt === "number" &&
-      terminal.message.updatedAt !== message.updatedAt)
+    terminalMessage.id !== message.id ||
+    terminalMessage.text !== message.text ||
+    terminalMessage.sender !== "ai" ||
+    TERMINAL_CANONICAL_KEYS.some((key) =>
+      presentCanonicalFieldDisagrees(terminalMessage, message, key)
+    )
   ) {
     return null;
   }
