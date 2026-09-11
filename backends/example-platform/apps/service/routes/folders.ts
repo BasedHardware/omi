@@ -10,6 +10,7 @@ import type { DevPrincipal } from "../auth/dev-token";
 import type { PreparedFoldersRead } from "../composition/folders-read";
 import {
   UnprojectableFolderRecordError,
+  assertProjectableFolderClock,
   readFoldersPage,
 } from "../composition/folders-read";
 import type { ServedCounter } from "../observability/served-count";
@@ -118,6 +119,17 @@ export const registerFolderRoutes = (
       return serveFoldersEnvelope(context.req.raw, principal, deps);
     }
     const folders = deps.store.listFolders(principal.uid);
+    try {
+      for (const record of folders) {
+        assertProjectableFolderClock(record);
+      }
+    } catch (error) {
+      if (error instanceof UnprojectableFolderRecordError) {
+        deps.counter.recordDomainRead("failed");
+        return new Response(INTERNAL_BODY, { status: 500, headers: JSON_HEADERS });
+      }
+      throw error;
+    }
     deps.counter.recordDomainRead("served");
     return jsonResponse(folders);
   });

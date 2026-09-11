@@ -254,7 +254,15 @@ export const readFoldersPage = (
   return { canonical_json: JSON.stringify(page), served: items.length };
 };
 
-const projectRecord = (record: OrderedFolderRecord["record"]): unknown => {
+const isoToMs = (value: string): number => {
+  const ms = Date.parse(value);
+  if (!Number.isSafeInteger(ms)) throw new UnprojectableFolderRecordError();
+  return ms;
+};
+
+export const assertProjectableFolderRecord = (
+  record: OrderedFolderRecord["record"],
+): void => {
   if (!OPAQUE_REF_PATTERN.test(record.id)) throw new UnprojectableFolderRecordError();
   if (typeof record.name !== "string") throw new UnprojectableFolderRecordError();
   if (record.description !== null && typeof record.description !== "string") {
@@ -265,6 +273,18 @@ const projectRecord = (record: OrderedFolderRecord["record"]): unknown => {
   if (typeof record.order !== "number" || !Number.isFinite(record.order)) {
     throw new UnprojectableFolderRecordError();
   }
+  assertProjectableFolderClock(record);
+};
+
+export const assertProjectableFolderClock = (
+  record: Pick<OrderedFolderRecord["record"], "created_at" | "updated_at">,
+): void => {
+  isoToMs(record.created_at);
+  isoToMs(record.updated_at);
+};
+
+const projectRecord = (record: OrderedFolderRecord["record"]): unknown => {
+  assertProjectableFolderRecord(record);
   return {
     id: record.id,
     name: record.name,
@@ -278,12 +298,6 @@ const projectRecord = (record: OrderedFolderRecord["record"]): unknown => {
     isSystem: record.is_system,
     revision: null,
   };
-};
-
-const isoToMs = (value: string): number => {
-  const ms = Date.parse(value);
-  if (!Number.isSafeInteger(ms)) throw new UnprojectableFolderRecordError();
-  return ms;
 };
 
 const buildFrontiers = (prepared: PreparedFoldersRead, declaredFrontier: string): unknown => {
