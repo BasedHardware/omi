@@ -238,7 +238,11 @@ async def get_pubmed_article(request: Request):
             summaries = await _fetch_summaries(client, [pmid])
             if pmid in summaries:
                 # Prefer a real efetch abstract; ESummary never includes one.
-                abstract = await _fetch_abstract(client, pmid)
+                # Abstract enrichment is optional so ESummary still works if efetch fails.
+                try:
+                    abstract = await _fetch_abstract(client, pmid)
+                except Exception:
+                    abstract = ""
                 if abstract:
                     summaries[pmid]["abstract"] = abstract
 
