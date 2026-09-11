@@ -233,6 +233,7 @@ class SharedPreferencesUtil {
       if (decoded is Map<String, dynamic>) {
         return BtDevice.fromJson(decoded);
       }
+      Logger.debug('Stored device is not a JSON object: ${decoded.runtimeType}');
     } catch (e) {
       Logger.debug('Error decoding stored device: $e');
     }
