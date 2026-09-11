@@ -197,6 +197,26 @@ describe("GET /v1/conversations", () => {
       db.close();
     }
   });
+
+  test("offset GET does not omit a neighboring row when a stored id is not a string", async () => {
+    const { db, stores, request } = boot();
+    try {
+      expect(
+        stores.conversations.upsert(
+          OWNER,
+          row("conversation-numeric", { id: 7 as unknown as string }),
+        ).stored,
+      ).toBe(true);
+      const envelope = await request("/v1/conversations?limit=25");
+      expect(envelope.status).toBe(500);
+      expect(await body(envelope)).toEqual({ error: "internal_server_error" });
+      const offset = await request("/v1/conversations?offset=0");
+      expect(offset.status).toBe(500);
+      expect(await body(offset)).toEqual({ error: "internal_server_error" });
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("conversation mutation compatibility conformance", () => {

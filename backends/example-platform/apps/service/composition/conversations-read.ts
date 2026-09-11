@@ -281,7 +281,7 @@ const isoToMs = (value: string): number => {
 export const assertProjectableConversationRecord = (
   record: OrderedConversationRecord["record"],
 ): void => {
-  if (!OPAQUE_REF_PATTERN.test(record.id)) throw new UnprojectableConversationRecordError();
+  if (typeof record.id !== "string" || !OPAQUE_REF_PATTERN.test(record.id)) throw new UnprojectableConversationRecordError();
   if (typeof record.structured.title !== "string") throw new UnprojectableConversationRecordError();
   if (typeof record.structured.overview !== "string") throw new UnprojectableConversationRecordError();
   if (typeof record.source !== "string") throw new UnprojectableConversationRecordError();

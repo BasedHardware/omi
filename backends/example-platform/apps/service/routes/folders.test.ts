@@ -136,6 +136,24 @@ describe("GET /v1/folders", () => {
     }
   });
 
+  test("bare GET does not omit a neighboring row when a stored id is not a string", async () => {
+    const { db, request, stores } = boot();
+    try {
+      stores.folders.upsert(
+        OWNER,
+        folder("folder-numeric", { id: 7 as unknown as string }),
+      );
+      const envelope = await request("/v1/folders?limit=25");
+      expect(envelope.status).toBe(500);
+      expect(await body(envelope)).toEqual({ error: "internal_server_error" });
+      const bare = await request("/v1/folders");
+      expect(bare.status).toBe(500);
+      expect(await body(bare)).toEqual({ error: "internal_server_error" });
+    } finally {
+      db.close();
+    }
+  });
+
   test("bare GET does not omit a neighboring row when stored folder flags cannot project", async () => {
     const { db, request, stores } = boot();
     try {

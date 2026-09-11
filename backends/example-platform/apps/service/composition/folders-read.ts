@@ -278,7 +278,7 @@ export const assertProjectableFolderRecord = (
 export const assertProjectableFolderIdentity = (
   record: Pick<OrderedFolderRecord["record"], "id" | "created_at" | "updated_at" | "is_default" | "is_system">,
 ): void => {
-  if (!OPAQUE_REF_PATTERN.test(record.id)) throw new UnprojectableFolderRecordError();
+  if (typeof record.id !== "string" || !OPAQUE_REF_PATTERN.test(record.id)) throw new UnprojectableFolderRecordError();
   if (typeof record.is_default !== "boolean") throw new UnprojectableFolderRecordError();
   if (typeof record.is_system !== "boolean") throw new UnprojectableFolderRecordError();
   assertProjectableFolderClock(record);
