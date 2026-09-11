@@ -249,6 +249,9 @@ export function SettingsPage({
   const [notificationFrequency, setNotificationFrequency] = useState<
     ReturnType<typeof mentorNotificationFrequencyCopy>
   >([]);
+  const [notificationFrequencyError, setNotificationFrequencyError] = useState<
+    string | null
+  >(null);
   const [automaticTranslation, setAutomaticTranslation] = useState<
     ReturnType<typeof automaticTranslationCopy>
   >([]);
@@ -332,6 +335,7 @@ export function SettingsPage({
       setDailySummarySchedule([]);
       setDailySummaryScheduleError(null);
       setNotificationFrequency([]);
+      setNotificationFrequencyError(null);
       setAutomaticTranslation([]);
       setCustomVocabulary([]);
       setDeveloperKeys([]);
@@ -396,6 +400,7 @@ export function SettingsPage({
         setDailySummarySchedule([]);
         setDailySummaryScheduleError(null);
         setNotificationFrequency([]);
+        setNotificationFrequencyError(null);
         setAutomaticTranslation([]);
         setCustomVocabulary([]);
         setDeveloperKeys([]);
@@ -429,6 +434,7 @@ export function SettingsPage({
         setDailySummarySchedule([]);
         setDailySummaryScheduleError(null);
         setNotificationFrequency([]);
+        setNotificationFrequencyError(null);
         setAutomaticTranslation([]);
         setCustomVocabulary([]);
         setDeveloperKeys([]);
@@ -506,7 +512,13 @@ export function SettingsPage({
     );
     const notificationFrequencyTask = loadOmiMentorNotificationSettings(
       backend,
-    ).catch(() => null);
+    ).then(
+      settings => ({settings, error: null as string | null}),
+      reason => ({
+        settings: null,
+        error: desktopReadErrorCopy(reason),
+      }),
+    );
     const transcriptionPreferencesTask = loadOmiTranscriptionPreferences(
       backend,
     ).catch(() => null);
@@ -543,7 +555,7 @@ export function SettingsPage({
     const fairUseResult = await fairUseTask;
     const dailySummariesResult = await dailySummariesTask;
     const dailySummaryScheduleResult = await dailySummaryScheduleTask;
-    const frequency = await notificationFrequencyTask;
+    const notificationFrequencyResult = await notificationFrequencyTask;
     const transcription = await transcriptionPreferencesTask;
     const nextDeveloperKeys = await developerKeysTask;
     const nextMcpKeys = await mcpKeysTask;
@@ -574,8 +586,11 @@ export function SettingsPage({
     );
     setDailySummaryScheduleError(dailySummaryScheduleResult.error);
     setNotificationFrequency(
-      mentorNotificationFrequencyCopy(frequency?.frequency),
+      mentorNotificationFrequencyCopy(
+        notificationFrequencyResult.settings?.frequency,
+      ),
     );
+    setNotificationFrequencyError(notificationFrequencyResult.error);
     setAutomaticTranslation(
       automaticTranslationCopy(transcription?.singleLanguageMode),
     );
@@ -820,13 +835,20 @@ export function SettingsPage({
             />
           ))
         )}
-        {notificationFrequency.map((row, index) => (
+        {notificationFrequencyError !== null ? (
           <SettingRow
-            copy={row.copy}
-            key={`${row.title}-${index}`}
-            title={row.title}
+            copy={notificationFrequencyError}
+            title="Notification frequency"
           />
-        ))}
+        ) : (
+          notificationFrequency.map((row, index) => (
+            <SettingRow
+              copy={row.copy}
+              key={`${row.title}-${index}`}
+              title={row.title}
+            />
+          ))
+        )}
         {dailySummaryScheduleError !== null ? (
           <SettingRow
             copy={dailySummaryScheduleError}

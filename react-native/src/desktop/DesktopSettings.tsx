@@ -324,6 +324,9 @@ export function DesktopSettings({
   const [notificationFrequency, setNotificationFrequency] = useState<
     ReturnType<typeof mentorNotificationFrequencyCopy>
   >([]);
+  const [notificationFrequencyError, setNotificationFrequencyError] = useState<
+    string | null
+  >(null);
   const [automaticTranslation, setAutomaticTranslation] = useState<
     ReturnType<typeof automaticTranslationCopy>
   >([]);
@@ -386,6 +389,7 @@ export function DesktopSettings({
     let nextNotificationFrequency: ReturnType<
       typeof mentorNotificationFrequencyCopy
     > = [];
+    let nextNotificationFrequencyError: string | null = null;
     let nextAutomaticTranslation: ReturnType<typeof automaticTranslationCopy> =
       [];
     let nextCustomVocabulary: ReturnType<typeof customVocabularyCopy> = [];
@@ -462,7 +466,13 @@ export function DesktopSettings({
       );
       const notificationFrequencyTask = loadOmiMentorNotificationSettings(
         backend,
-      ).catch(() => null);
+      ).then(
+        settings => ({settings, error: null as string | null}),
+        reason => ({
+          settings: null,
+          error: desktopReadErrorCopy(reason),
+        }),
+      );
       const transcriptionPreferencesTask = loadOmiTranscriptionPreferences(
         backend,
       ).catch(() => null);
@@ -507,9 +517,11 @@ export function DesktopSettings({
         dailySummaryScheduleResult.settings,
       );
       nextDailySummaryScheduleError = dailySummaryScheduleResult.error;
+      const notificationFrequencyResult = await notificationFrequencyTask;
       nextNotificationFrequency = mentorNotificationFrequencyCopy(
-        (await notificationFrequencyTask)?.frequency,
+        notificationFrequencyResult.settings?.frequency,
       );
+      nextNotificationFrequencyError = notificationFrequencyResult.error;
       const transcription = await transcriptionPreferencesTask;
       nextAutomaticTranslation = automaticTranslationCopy(
         transcription?.singleLanguageMode,
@@ -559,6 +571,7 @@ export function DesktopSettings({
     setDailySummarySchedule(nextDailySummarySchedule);
     setDailySummaryScheduleError(nextDailySummaryScheduleError);
     setNotificationFrequency(nextNotificationFrequency);
+    setNotificationFrequencyError(nextNotificationFrequencyError);
     setAutomaticTranslation(nextAutomaticTranslation);
     setCustomVocabulary(nextCustomVocabulary);
     setDeveloperKeys(nextDeveloperKeys);
@@ -924,9 +937,16 @@ export function DesktopSettings({
           <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
         ))
       )}
-      {notificationFrequency.map((row, index) => (
-        <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
-      ))}
+      {notificationFrequencyError !== null ? (
+        <Row
+          copy={notificationFrequencyError}
+          title="Notification frequency"
+        />
+      ) : (
+        notificationFrequency.map((row, index) => (
+          <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
+        ))
+      )}
       {dailySummaryScheduleError !== null ? (
         <Row copy={dailySummaryScheduleError} title="Daily summaries" />
       ) : (
