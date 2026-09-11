@@ -49,6 +49,7 @@ class GeneratedKnowledgeGraphResponse {
   final int nodeCount;
   final int? nodeLimit;
   final List<Map<String, dynamic>> nodes;
+  final Map<String, dynamic>? rebuild;
   final bool truncated;
 
   const GeneratedKnowledgeGraphResponse({
@@ -58,6 +59,7 @@ class GeneratedKnowledgeGraphResponse {
     this.nodeCount = 0,
     this.nodeLimit,
     required this.nodes,
+    this.rebuild,
     this.truncated = false,
   });
 
@@ -69,6 +71,7 @@ class GeneratedKnowledgeGraphResponse {
       nodeCount: _required(_readFieldValue<int>(_readField(json, const ["node_count"]), "node_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "node_count"),
       nodeLimit: _readFieldValue<int>(_readField(json, const ["node_limit"]), "node_limit", _readInt, requiredField: false, nullable: true),
       nodes: _required(_readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["nodes"]), "nodes", _readMapList, requiredField: true, nullable: false), "nodes"),
+      rebuild: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["rebuild"]), "rebuild", _readMap, requiredField: false, nullable: true),
       truncated: _required(_readFieldValue<bool>(_readField(json, const ["truncated"]), "truncated", _readBool, requiredField: false, nullable: false, defaultValue: false), "truncated"),
     );
   }
@@ -81,6 +84,7 @@ class GeneratedKnowledgeGraphResponse {
       'node_count': nodeCount,
       'node_limit': nodeLimit,
       'nodes': nodes,
+      'rebuild': rebuild,
       'truncated': truncated,
     };
   }
@@ -89,11 +93,13 @@ class GeneratedKnowledgeGraphResponse {
 class GeneratedRebuildResponse {
   final int edgesCount;
   final int nodesCount;
+  final String? rebuildId;
   final String status;
 
   const GeneratedRebuildResponse({
     required this.edgesCount,
     required this.nodesCount,
+    this.rebuildId,
     required this.status,
   });
 
@@ -101,6 +107,7 @@ class GeneratedRebuildResponse {
     return GeneratedRebuildResponse(
       edgesCount: _required(_readFieldValue<int>(_readField(json, const ["edges_count"]), "edges_count", _readInt, requiredField: true, nullable: false), "edges_count"),
       nodesCount: _required(_readFieldValue<int>(_readField(json, const ["nodes_count"]), "nodes_count", _readInt, requiredField: true, nullable: false), "nodes_count"),
+      rebuildId: _readFieldValue<String>(_readField(json, const ["rebuild_id"]), "rebuild_id", _readString, requiredField: false, nullable: true),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
@@ -109,6 +116,7 @@ class GeneratedRebuildResponse {
     return {
       'edges_count': edgesCount,
       'nodes_count': nodesCount,
+      'rebuild_id': rebuildId,
       'status': status,
     };
   }

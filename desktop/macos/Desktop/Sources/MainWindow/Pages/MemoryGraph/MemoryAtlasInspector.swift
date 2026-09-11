@@ -12,6 +12,11 @@ struct MemoryAtlasEvidence: Identifiable, Equatable {
   let id: String
   let content: String
   let createdAt: Date?
+  /// Whether the row goes somewhere when pressed. A memory opens on the
+  /// Memories page and a conversation in its transcript; the whole-account
+  /// sources (the people list, the goals) name where an entity came from and
+  /// have no single record to open.
+  var isOpenable = true
 
   /// Resolves cited memory ids against whatever the memories layer has loaded,
   /// preserving that order so the inspector reads newest-first like the list.
@@ -23,6 +28,64 @@ struct MemoryAtlasEvidence: Identifiable, Equatable {
     guard !wanted.isEmpty else { return [] }
     return memories.filter { wanted.contains($0.id) }.map {
       MemoryAtlasEvidence(id: $0.id, content: $0.content, createdAt: $0.createdAt)
+    }
+  }
+
+  /// What a citation id names. The server rebuilds the map from more than
+  /// memories, and prefixes every other source so a client can tell what it
+  /// is citing; a bare id is a memory, which is what it always was.
+  enum Citation: Equatable {
+    case memory(String)
+    case conversation(String)
+    /// The account's saved people, cited as one source.
+    case people
+    /// The account's active goals, cited as one source.
+    case goals
+
+    static let conversationPrefix = "conversation:"
+    static let peopleID = "people:directory"
+    static let goalsID = "goals:active"
+
+    init(_ id: String) {
+      if id.hasPrefix(Self.conversationPrefix) {
+        self = .conversation(String(id.dropFirst(Self.conversationPrefix.count)))
+      } else if id == Self.peopleID {
+        self = .people
+      } else if id == Self.goalsID {
+        self = .goals
+      } else {
+        self = .memory(id)
+      }
+    }
+  }
+
+  /// One conversation as evidence: its title, then its summary, dated by when
+  /// it happened. The id keeps the citation's prefix so opening it goes to a
+  /// conversation and not to a memory that does not exist.
+  static func conversation(id: String, title: String, overview: String, createdAt: Date?) -> MemoryAtlasEvidence {
+    let heading = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    let summary = overview.trimmingCharacters(in: .whitespacesAndNewlines)
+    let content: String
+    switch (heading.isEmpty, summary.isEmpty) {
+    case (false, false): content = "\(heading) — \(summary)"
+    case (false, true): content = heading
+    case (true, false): content = summary
+    case (true, true): content = "Conversation"
+    }
+    return MemoryAtlasEvidence(id: Citation.conversationPrefix + id, content: content, createdAt: createdAt)
+  }
+
+  /// The two whole-account sources, so an entity that came from the people
+  /// list or a goal says so instead of reporting a missing memory.
+  static func source(for citation: Citation) -> MemoryAtlasEvidence? {
+    switch citation {
+    case .people:
+      return MemoryAtlasEvidence(
+        id: Citation.peopleID, content: "From the people you have saved", createdAt: nil, isOpenable: false)
+    case .goals:
+      return MemoryAtlasEvidence(id: Citation.goalsID, content: "From your goals", createdAt: nil, isOpenable: false)
+    case .memory, .conversation:
+      return nil
     }
   }
 }
@@ -146,8 +209,17 @@ struct MemoryAtlasDetailPanel: View {
         .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
     } else {
-      ForEach(evidence) { item in
+      ForEach(evidence.filter(\.isOpenable)) { item in
         evidenceRow(item)
+      }
+      // The whole-account sources say where an entity came from; they are
+      // plain statements, not rows that pretend to open something.
+      ForEach(evidence.filter { !$0.isOpenable }) { item in
+        Text(item.content)
+          .scaledFont(size: 11)
+          .foregroundColor(Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+          .accessibilityIdentifier("memory_atlas_evidence_source")
       }
       if unresolvedEvidenceCount > 0 {
         // Evidence resolves against the full local cache, so a remaining gap

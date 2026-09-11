@@ -16,6 +16,9 @@ knowledge_nodes_collection = 'knowledge_nodes'
 knowledge_edges_collection = 'knowledge_edges'
 memory_graph_assertions_collection = 'memory_graph_assertions'
 memory_items_collection = 'memory_items'
+#: Per-account metadata about the shared graph itself, apart from its records.
+knowledge_graph_meta_collection = 'knowledge_graph_meta'
+KNOWLEDGE_GRAPH_REBUILD_STATUS_DOCUMENT = 'rebuild'
 
 # GET /v1/knowledge-graph feeds force-graph UIs, so a compact snapshot is both
 # cheaper to read and more usable than thousands of rendered entities. The
@@ -569,6 +572,197 @@ def _authoritative_legacy_citation_ids(
     return authoritative_ids, len(cited_ids) > len(bounded_ids)
 
 
+class SharedKnowledgeGraph(TypedDict):
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]]
+    #: Legacy citations that canonical item state already owns; the merge strips them.
+    authoritative_memory_ids: set[str]
+    truncated: bool
+
+
+def get_shared_knowledge_graph(uid: str, *, db_client: Any = None) -> SharedKnowledgeGraph:
+    """The bounded shared (rebuilt) graph, ready to merge under canonical assertions.
+
+    This is the store a Brain Map rebuild writes: entities extracted from the
+    account's conversations, people, goals and memories. Canonical assertions
+    stay authoritative for the memories they cover — ``authoritative_memory_ids``
+    is what ``merge_knowledge_graph_records`` uses to make them win.
+    """
+    client = _firestore_client(db_client)
+    legacy_nodes = get_knowledge_nodes(uid, db_client=client, limit=MAX_KNOWLEDGE_GRAPH_NODES + 1)
+    legacy_edges = get_knowledge_edges(uid, db_client=client, limit=MAX_KNOWLEDGE_GRAPH_EDGES + 1)
+    node_page = legacy_nodes[:MAX_KNOWLEDGE_GRAPH_NODES]
+    edge_page = legacy_edges[:MAX_KNOWLEDGE_GRAPH_EDGES]
+    authoritative_ids, fences_truncated = _authoritative_legacy_citation_ids(
+        uid,
+        legacy_nodes=node_page,
+        legacy_edges=edge_page,
+        db_client=client,
+    )
+    return {
+        'nodes': node_page,
+        'edges': edge_page,
+        'authoritative_memory_ids': authoritative_ids,
+        'truncated': (
+            len(legacy_nodes) > MAX_KNOWLEDGE_GRAPH_NODES
+            or len(legacy_edges) > MAX_KNOWLEDGE_GRAPH_EDGES
+            or fences_truncated
+        ),
+    }
+
+
+def merge_shared_graph_records(
+    canonical_graph: Dict[str, Any],
+    shared: SharedKnowledgeGraph,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """A canonical graph page with the shared rebuilt store merged under it.
+
+    Canonical wins: a shared node whose label or alias names a canonical node
+    lands on the canonical id, keeps the canonical label and type, and only adds
+    its citations. Shared citations of memories canonical already owns are
+    stripped, and a node or edge left with none is dropped — that content is
+    already on the map through its assertion.
+    """
+    authoritative_ids = set(shared['authoritative_memory_ids'])
+    raw_nodes = canonical_graph.get('nodes')
+    raw_edges = canonical_graph.get('edges')
+    canonical_nodes = cast(List[Any], raw_nodes) if isinstance(raw_nodes, list) else []
+    canonical_edges = cast(List[Any], raw_edges) if isinstance(raw_edges, list) else []
+
+    nodes_by_id: Dict[str, Dict[str, Any]] = {}
+    node_ids_by_term: Dict[str, set[str]] = {}
+    for raw_node in canonical_nodes:
+        if not isinstance(raw_node, dict):
+            continue
+        node = cast(Dict[str, Any], raw_node)
+        node_id = node.get('id')
+        if not isinstance(node_id, str) or not node_id:
+            continue
+        nodes_by_id[node_id] = dict(node)
+        for term in _node_terms(node):
+            node_ids_by_term.setdefault(term, set()).add(node_id)
+
+    shared_id_map: Dict[str, str] = {}
+    for raw_node in sorted(
+        shared['nodes'],
+        key=lambda node: (str(node.get('id') or ''), str(node.get('label') or '')),
+    ):
+        node_id = raw_node.get('id')
+        if not isinstance(node_id, str) or not node_id:
+            continue
+        original_memory_ids = _string_values(raw_node.get('memory_ids'))
+        memory_ids = [memory_id for memory_id in original_memory_ids if memory_id not in authoritative_ids]
+        if original_memory_ids and not memory_ids:
+            continue
+        matching_ids = {other for term in _node_terms(raw_node) for other in node_ids_by_term.get(term, set())}
+        resolved_id = node_id if node_id in nodes_by_id else min(matching_ids, default=node_id)
+        shared_id_map[node_id] = resolved_id
+        incoming = {**raw_node, 'id': resolved_id, 'memory_ids': memory_ids}
+        nodes_by_id[resolved_id] = _merge_node(nodes_by_id.get(resolved_id), incoming)
+        for term in _node_terms(nodes_by_id[resolved_id]):
+            node_ids_by_term.setdefault(term, set()).add(resolved_id)
+
+    edges_by_key: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+    # Canonical edges are already referentially closed and deduplicated; one
+    # without a label has no merge key and is kept exactly as served.
+    unkeyed_edges: List[Dict[str, Any]] = []
+    for raw_edge in canonical_edges:
+        if not isinstance(raw_edge, dict):
+            continue
+        edge = cast(Dict[str, Any], raw_edge)
+        key = _edge_key(edge)
+        if key is None:
+            unkeyed_edges.append(dict(edge))
+            continue
+        edges_by_key[key] = _merge_edge(edges_by_key.get(key), dict(edge), canonical=True)
+    for raw_edge in sorted(
+        shared['edges'],
+        key=lambda edge: (
+            str(edge.get('source_id') or ''),
+            str(edge.get('target_id') or ''),
+            str(edge.get('label') or ''),
+            str(edge.get('id') or ''),
+        ),
+    ):
+        original_memory_ids = _string_values(raw_edge.get('memory_ids'))
+        memory_ids = [memory_id for memory_id in original_memory_ids if memory_id not in authoritative_ids]
+        if original_memory_ids and not memory_ids:
+            continue
+        source_id = shared_id_map.get(str(raw_edge.get('source_id') or ''))
+        target_id = shared_id_map.get(str(raw_edge.get('target_id') or ''))
+        label = raw_edge.get('label')
+        if not source_id or not target_id or not isinstance(label, str) or not label:
+            continue
+        incoming = {
+            **raw_edge,
+            'source_id': source_id,
+            'target_id': target_id,
+            'memory_ids': memory_ids,
+        }
+        if not isinstance(incoming.get('id'), str) or not incoming.get('id'):
+            incoming['id'] = _deterministic_edge_id(source_id, target_id, label)
+        key = (source_id, target_id, label)
+        edges_by_key[key] = _merge_edge(edges_by_key.get(key), incoming, canonical=False)
+
+    nodes = [nodes_by_id[node_id] for node_id in sorted(nodes_by_id)]
+    edges = unkeyed_edges + [
+        edges_by_key[key]
+        for key in sorted(edges_by_key, key=lambda item: (item[0], item[1], item[2], edges_by_key[item].get('id', '')))
+    ]
+    return {'nodes': nodes, 'edges': edges}
+
+
+def write_knowledge_graph_rebuild_status(
+    uid: str,
+    status: Dict[str, Any],
+    *,
+    db_client: Any = None,
+    only_for_rebuild_id: Optional[str] = None,
+) -> bool:
+    """Record where a Brain Map rebuild is, so a client can wait for the one it asked for.
+
+    Every status carries the ``rebuild_id`` of the rebuild that wrote it. A
+    rebuild starting always claims the document: whatever is there belongs to an
+    earlier rebuild, and the latest rebuild is the one clients wait on. The
+    claim also self-heals a rebuild that crashed leaving ``running`` behind —
+    fenced claims would lock every later rebuild out of reporting. A finish,
+    though, is only written while the document still belongs to that rebuild
+    (pass ``only_for_rebuild_id``): two rebuilds can run at once (the limit is
+    two an hour), and the earlier one finishing must not overwrite the later
+    one's ``running`` with its own ``complete``.
+    """
+    client = _firestore_client(db_client)
+    ref = (
+        client.collection(users_collection)
+        .document(uid)
+        .collection(knowledge_graph_meta_collection)
+        .document(KNOWLEDGE_GRAPH_REBUILD_STATUS_DOCUMENT)
+    )
+    if only_for_rebuild_id is not None and status.get('status') != 'running':
+        snapshot = ref.get()
+        current = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+        current_id = current.get('rebuild_id') if isinstance(current, dict) else None
+        if isinstance(current_id, str) and current_id and current_id != only_for_rebuild_id:
+            return False
+    ref.set({**status, 'updated_at': datetime.now(timezone.utc)})
+    return True
+
+
+def read_knowledge_graph_rebuild_status(uid: str, *, db_client: Any = None) -> Optional[Dict[str, Any]]:
+    client = _firestore_client(db_client)
+    ref = (
+        client.collection(users_collection)
+        .document(uid)
+        .collection(knowledge_graph_meta_collection)
+        .document(KNOWLEDGE_GRAPH_REBUILD_STATUS_DOCUMENT)
+    )
+    snapshot = ref.get()
+    if not getattr(snapshot, 'exists', False):
+        return None
+    payload = snapshot.to_dict()
+    return dict(payload) if isinstance(payload, dict) else None
+
+
 def has_stored_memory_graph_assertions(uid: str, *, db_client: Any = None) -> bool:
     """Return whether any assertion document exists using a one-document probe."""
     client = _firestore_client(db_client)
@@ -643,9 +837,12 @@ def _merge_edge(
     existing_id = merged.get('id')
     if canonical and isinstance(incoming_id, str) and incoming_id:
         merged['id'] = incoming_id
-    elif isinstance(incoming_id, str) and incoming_id:
-        ids = [item for item in (existing_id, incoming_id) if isinstance(item, str) and item]
-        merged['id'] = min(ids)
+    elif not (isinstance(existing_id, str) and existing_id) and isinstance(incoming_id, str) and incoming_id:
+        # The first edge on a key names it. Canonical edges come first, so a
+        # shared edge over the same relationship keeps the canonical id the
+        # client already knows; between shared edges the sorted iteration
+        # makes the first the lowest id.
+        merged['id'] = incoming_id
     merged['source_id'] = incoming['source_id']
     merged['target_id'] = incoming['target_id']
     merged['label'] = incoming['label']

@@ -26,4 +26,24 @@ enum MemoryAtlasSurfacePresentation {
     if isLoading || !hasAttemptedLoad { return .loading }
     return .empty
   }
+
+  /// Whether the Canvas alone should paint the map for this frame.
+  ///
+  /// While the camera moves with nothing on the map that needs view-level
+  /// emphasis — no selection, no search matches — the interactive SwiftUI
+  /// overlay (glass marks, name labels, hit targets) steps aside and the
+  /// Canvas paints the cohort's marks and admitted names itself, exactly the
+  /// same inputs the render-plan cache gates on. Repositioning a few hundred
+  /// composed views every gesture frame is the difference between the map
+  /// tracking the hand and lagging behind it; a selection or search keeps the
+  /// overlay up because emphasis is the point of those states, and their
+  /// gestures bypass the plan cache anyway.
+  static func canvasOwnsMarks(
+    isCameraMoving: Bool,
+    selectedNodeID: String?,
+    matchingNodeIDs: Set<String>?,
+    matchingEdges: [MemoryAtlasEdgePlacement]?
+  ) -> Bool {
+    isCameraMoving && selectedNodeID == nil && matchingNodeIDs == nil && matchingEdges == nil
+  }
 }

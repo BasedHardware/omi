@@ -32,6 +32,18 @@ LEGACY_GRAPH = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _no_shared_graph(monkeypatch):
+    # The routes merge the shared rebuilt store under the canonical page; these
+    # tests are about which store answers, so the shared store is empty here.
+    monkeypatch.setattr(
+        kg_db,
+        "get_shared_knowledge_graph",
+        lambda uid, **_kw: {"nodes": [], "edges": [], "authoritative_memory_ids": set(), "truncated": False},
+    )
+    monkeypatch.setattr(kg_db, "read_knowledge_graph_rebuild_status", lambda uid, **_kw: None)
+
+
 @pytest.fixture
 def client(monkeypatch):
     app = FastAPI()

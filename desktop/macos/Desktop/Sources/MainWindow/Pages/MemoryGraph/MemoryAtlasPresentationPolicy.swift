@@ -31,6 +31,16 @@ struct MemoryAtlasNodePlacement: Identifiable {
 }
 
 enum MemoryAtlasNodeVisualPolicy {
+  /// How much bigger an entity is drawn for the connections it has.
+  ///
+  /// Square root, so a hub with a hundred connections is a landmark and not a
+  /// planet, and capped so the account holder does not swallow the map. One
+  /// connection is the base size; the scale only ever adds.
+  static func degreeScale(_ degree: Int) -> CGFloat {
+    let scale = 1 + 0.32 * CGFloat(max(degree - 1, 0)).squareRoot()
+    return min(max(scale, 1), 3.2)
+  }
+
   /// Deep inspection keeps dots at a stable, usable size. The dynamic maximum
   /// zoom adds label fidelity; it must not make a node harder to see or target.
   static func radius(

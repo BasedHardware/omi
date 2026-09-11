@@ -6067,6 +6067,23 @@
             },
             "title": "Nodes",
             "type": "array"
+          },
+          "rebuild": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rebuild"
+          },
+          "shared_truncated": {
+            "default": false,
+            "title": "Shared Truncated",
+            "type": "boolean"
           }
         },
         "required": [
@@ -16255,6 +16272,18 @@
             "title": "Nodes",
             "type": "array"
           },
+          "rebuild": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rebuild"
+          },
           "truncated": {
             "default": false,
             "title": "Truncated",
@@ -21451,6 +21480,17 @@
           "nodes_count": {
             "title": "Nodes Count",
             "type": "integer"
+          },
+          "rebuild_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rebuild Id"
           },
           "status": {
             "title": "Status",

@@ -97,6 +97,9 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(snapshot.nodeByID[catalogNode.id]?.isCatalog, true)
     XCTAssertNotEqual(snapshot.nodeByID[catalogNode.id]?.clusterRank, 0)
     XCTAssertEqual(snapshot.edges.count, 1)
+    // Zoom and label policy size themselves by the entities, not by the
+    // catalog records that are neither drawn nor selectable.
+    XCTAssertEqual(snapshot.entityCount, 2)
   }
 
   func testCatalogSearchMatchesWinTheirTierWithoutIDPrefixCoupling() {
@@ -547,214 +550,6 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(first.nodeByID["orphan"]?.normalizedPosition, second.nodeByID["orphan"]?.normalizedPosition)
   }
 
-  func testTimelineSpansCreatedAtRangeAndCountsEveryEntity() {
-    let base = Date(timeIntervalSince1970: 1_700_000_000)
-    let graph = KnowledgeGraphResponse(
-      nodes: [
-        KnowledgeGraphNode(id: "david", label: "David", nodeType: .person, createdAt: base),
-        KnowledgeGraphNode(id: "omi", label: "Omi", nodeType: .thing, createdAt: base.addingTimeInterval(86_400)),
-        KnowledgeGraphNode(
-          id: "openai", label: "OpenAI", nodeType: .organization, createdAt: base.addingTimeInterval(2 * 86_400)),
-      ],
-      edges: []
-    )
-
-    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
-    let timeline = try? XCTUnwrap(snapshot.timeline)
-
-    XCTAssertEqual(timeline?.start, base)
-    XCTAssertEqual(timeline?.end, base.addingTimeInterval(2 * 86_400))
-    XCTAssertEqual(timeline?.buckets.reduce(0, +), snapshot.nodes.count)
-  }
-
-  func testTimelineSpreadsAZeroRangeImportWithoutInventingDates() throws {
-    let stamp = Date(timeIntervalSince1970: 1_700_000_000)
-    let graph = KnowledgeGraphResponse(
-      nodes: [
-        KnowledgeGraphNode(id: "david", label: "David", nodeType: .person, createdAt: stamp),
-        KnowledgeGraphNode(id: "omi", label: "Omi", nodeType: .thing, createdAt: stamp),
-      ],
-      edges: []
-    )
-
-    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
-    let timeline = try XCTUnwrap(snapshot.timeline)
-
-    XCTAssertFalse(timeline.hasChronologicalRange)
-    XCTAssertEqual(timeline.buckets.reduce(0, +), snapshot.nodes.count)
-    XCTAssertEqual(timeline.date(atFraction: 0.25), stamp)
-    XCTAssertEqual(timeline.date(atFraction: 0.75), stamp)
-    XCTAssertEqual(timeline.entries.map(\.playbackFraction), [0, 1])
-  }
-
-  func testDensityAwareTimelineExpandsImportedClusterButKeepsDateOrder() throws {
-    let base = Date(timeIntervalSince1970: 1_700_000_000)
-    let imported = (0..<24).map { index in
-      KnowledgeGraphNode(
-        id: String(format: "import-%02d", index),
-        label: String(format: "Imported %02d", index),
-        nodeType: .concept,
-        createdAt: base.addingTimeInterval(86_400)
-      )
-    }
-    let graph = KnowledgeGraphResponse(
-      nodes: [
-        KnowledgeGraphNode(id: "david", label: "David", nodeType: .person, createdAt: base),
-        KnowledgeGraphNode(
-          id: "later", label: "Later", nodeType: .organization,
-          createdAt: base.addingTimeInterval(30 * 86_400)
-        ),
-      ] + imported,
-      edges: []
-    )
-
-    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
-    let timeline = try XCTUnwrap(snapshot.timeline)
-    let importedEntries = timeline.entries.filter { $0.nodeID.hasPrefix("import-") }
-    let firstImportedEntry = try XCTUnwrap(importedEntries.first)
-    let lastImportedEntry = try XCTUnwrap(importedEntries.last)
-
-    XCTAssertEqual(importedEntries.map(\.createdAt), Array(repeating: base.addingTimeInterval(86_400), count: 24))
-    XCTAssertGreaterThan(
-      lastImportedEntry.playbackFraction - firstImportedEntry.playbackFraction,
-      0.5,
-      "a dense import should have room to grow during replay"
-    )
-    XCTAssertEqual(timeline.buckets.reduce(0, +), snapshot.nodes.count)
-    XCTAssertLessThan(
-      timeline.buckets.max() ?? Int.max, 8, "the histogram should not collapse the import into one burst")
-
-    let plan = MemoryAtlasRenderPlanner.makePlan(
-      snapshot: snapshot,
-      viewportSize: CGSize(width: 900, height: 640),
-      zoom: 1,
-      pan: .zero,
-      compact: false,
-      selectedNodeID: nil,
-      matchingNodeIDs: nil,
-      timeline: timeline,
-      timeCursor: 0.45
-    )
-    XCTAssertGreaterThan(plan.visibleNodes.count, 2)
-    XCTAssertLessThan(plan.visibleNodes.count, snapshot.nodes.count)
-  }
-
-  func testTimelineIsNilForOneEntity() {
-    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
-      graph: KnowledgeGraphResponse(
-        nodes: [KnowledgeGraphNode(id: "david", label: "David", nodeType: .person)],
-        edges: []
-      ),
-      userName: "David"
-    )
-
-    XCTAssertNil(snapshot.timeline)
-  }
-
-  func testDensityReplayNeverShowsAnEdgeBeforeBothEndpointsAreBorn() throws {
-    let base = Date(timeIntervalSince1970: 1_700_000_000)
-    let graph = KnowledgeGraphResponse(
-      nodes: [
-        KnowledgeGraphNode(id: "david", label: "David", nodeType: .person, createdAt: base),
-        KnowledgeGraphNode(
-          id: "future", label: "Future project", nodeType: .concept,
-          createdAt: base.addingTimeInterval(86_400)
-        ),
-      ],
-      edges: [
-        KnowledgeGraphEdge(
-          id: "future-edge", sourceId: "david", targetId: "future", label: "works_on", createdAt: base
-        )
-      ]
-    )
-    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
-    let timeline = try XCTUnwrap(snapshot.timeline)
-
-    let earlyPlan = MemoryAtlasRenderPlanner.makePlan(
-      snapshot: snapshot,
-      viewportSize: CGSize(width: 800, height: 600),
-      zoom: 1,
-      pan: .zero,
-      compact: false,
-      selectedNodeID: nil,
-      matchingNodeIDs: nil,
-      timeline: timeline,
-      timeCursor: 0
-    )
-    XCTAssertEqual(Set(earlyPlan.visibleNodes.map(\.id)), ["david"])
-    XCTAssertTrue(earlyPlan.visibleEdges.isEmpty)
-
-    let completePlan = MemoryAtlasRenderPlanner.makePlan(
-      snapshot: snapshot,
-      viewportSize: CGSize(width: 800, height: 600),
-      zoom: 1,
-      pan: .zero,
-      compact: false,
-      selectedNodeID: nil,
-      matchingNodeIDs: nil,
-      timeline: timeline,
-      timeCursor: 1
-    )
-    XCTAssertEqual(Set(completePlan.visibleEdges.map(\.id)), ["future-edge"])
-  }
-
-  func testDensityReplayUsesStableIDOrderForEqualTimestamps() throws {
-    let stamp = Date(timeIntervalSince1970: 1_700_000_000)
-    let entities = [
-      KnowledgeGraphNode(id: "zebra", label: "Zebra", nodeType: .thing, createdAt: stamp),
-      KnowledgeGraphNode(id: "david", label: "David", nodeType: .person, createdAt: stamp),
-      KnowledgeGraphNode(id: "alpha", label: "Alpha", nodeType: .concept, createdAt: stamp),
-    ]
-    let first = try XCTUnwrap(
-      MemoryAtlasLayoutEngine.makeSnapshot(
-        graph: KnowledgeGraphResponse(nodes: entities, edges: []), userName: "David"
-      ).timeline
-    )
-    let second = try XCTUnwrap(
-      MemoryAtlasLayoutEngine.makeSnapshot(
-        graph: KnowledgeGraphResponse(nodes: Array(entities.reversed()), edges: []), userName: "David"
-      ).timeline
-    )
-
-    XCTAssertEqual(first.entries.map(\.nodeID), ["alpha", "david", "zebra"])
-    XCTAssertEqual(first.entries, second.entries)
-  }
-
-  func testAsOfCursorHidesEntitiesBornAfterTheCursorButKeepsAnchor() {
-    let base = Date(timeIntervalSince1970: 1_700_000_000)
-    let graph = KnowledgeGraphResponse(
-      nodes: [
-        KnowledgeGraphNode(
-          id: "david", label: "David", nodeType: .person, createdAt: base.addingTimeInterval(3 * 86_400)),
-        KnowledgeGraphNode(id: "early", label: "Early", nodeType: .concept, createdAt: base),
-        KnowledgeGraphNode(
-          id: "late", label: "Late", nodeType: .concept, createdAt: base.addingTimeInterval(2 * 86_400)),
-      ],
-      edges: []
-    )
-
-    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
-    let plan = MemoryAtlasRenderPlanner.makePlan(
-      snapshot: snapshot,
-      viewportSize: CGSize(width: 800, height: 600),
-      zoom: 1,
-      pan: .zero,
-      compact: false,
-      selectedNodeID: nil,
-      matchingNodeIDs: nil,
-      asOf: base.addingTimeInterval(86_400)
-    )
-
-    let ids = Set(plan.visibleNodes.map(\.id))
-    XCTAssertTrue(ids.contains("early"), "entity born before the cursor is visible")
-    XCTAssertFalse(ids.contains("late"), "entity born after the cursor is hidden")
-    // The anchor is exempt from time filtering — "you" are always present, even
-    // though David's own createdAt is after this cursor.
-    XCTAssertTrue(ids.contains("david"), "anchor is always visible regardless of time cursor")
-  }
-
-  // MARK: - The account holder's own connections
-
   /// Everything is connected to the account holder, so drawing those lines like
   /// any other relationship puts a few hundred straight spokes across every
   /// neighbourhood and the map reads as a star regardless of where its entities
@@ -866,25 +661,20 @@ final class MemoryAtlasLayoutTests: XCTestCase {
       "Twenty-four entities in pairs have no neighbourhoods, and saying otherwise is noise")
   }
 
-  /// Territories survive zooming in, and give way only to a more specific
-  /// question.
+  /// Territories survive every zoom level and every selection.
   ///
-  /// They used to stop at neighbourhood zoom, on the theory that close up the
-  /// entities speak for themselves. What that actually did was delete the
-  /// island a person had just decided to look at, at the moment they looked at
-  /// it — and take its name with it, so there was no longer anything on screen
-  /// saying where they were. Only picking one entity, or reading every label at
-  /// inspect zoom, replaces the question territories answer.
-  func testRegionNamesGiveWayToWhateverTheUserIsActuallyLookingAt() {
+  /// They used to stop at neighbourhood zoom, then at inspect zoom and on
+  /// selection, each on the theory that something more specific had replaced
+  /// them. Each time what a person saw was the place they were looking at
+  /// vanish under them, and the map read as changing its mind with the camera.
+  /// The ground stays; the redesign asked for it explicitly.
+  func testRegionsStayThroughEveryZoomAndSelection() {
     let visible = MemoryAtlasNeighbourhoodLabels.areVisible
 
-    XCTAssertTrue(visible(.overview, false, false))
-    XCTAssertTrue(visible(.neighborhood, false, false))
-    XCTAssertTrue(visible(.detail, false, false), "Zooming into a place must not delete the place")
-    XCTAssertTrue(visible(.focus, false, false))
-    XCTAssertFalse(
-      visible(.inspect, false, false), "Every entity is named here; a region name is noise")
-    XCTAssertFalse(visible(.overview, true, false), "A selection is a more specific question")
+    for level in [MemoryAtlasDetailLevel.overview, .neighborhood, .detail, .focus, .inspect] {
+      XCTAssertTrue(visible(level, false, false), "\(level)")
+      XCTAssertTrue(visible(level, true, false), "\(level) with a selection")
+    }
   }
 
   /// The place you went into is still there once you start looking inside it.
@@ -1477,48 +1267,6 @@ final class MemoryAtlasLayoutTests: XCTestCase {
         isFullyLabelled: false, isInspect: false, isFocus: false, isSmallAtlas: false
       )
     )
-  }
-
-  /// STATIC CHECKER, not behavioral coverage: the timeline footer regressed by
-  /// growing a flexible child, and SwiftUI gives no seam to measure a rendered
-  /// subview's height from a unit test. A bare `Spacer()` inside the footer's
-  /// VStack expands vertically and takes the height away from the atlas canvas
-  /// — that is exactly how the bar came to fill roughly 40% of the window.
-  func testStaticCheckerTimelineFooterHasNoVerticallyExpandingChild() throws {
-    let source = try atlasSource()
-
-    guard let start = source.range(of: "private var timelineBar: some View {"),
-      let end = source.range(of: "private var timelineTrack: some View {")
-    else {
-      return XCTFail("Could not locate the timelineBar declaration")
-    }
-    let body = String(source[start.upperBound..<end.lowerBound])
-
-    XCTAssertFalse(
-      body.contains("Spacer()"),
-      """
-      A bare Spacer() in the timeline footer expands to fill and steals canvas \
-      from the atlas. Use Spacer(minLength:) inside a horizontal row instead.
-      """
-    )
-    XCTAssertTrue(
-      body.contains("Spacer(minLength:"),
-      "The header row should still push its trailing controls to the edge."
-    )
-  }
-
-  private func atlasSource() throws -> String {
-    let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-    let packageDirectory = testsDirectory.deletingLastPathComponent()
-    let sourceURL =
-      packageDirectory
-      .appendingPathComponent("Sources")
-      .appendingPathComponent("MainWindow")
-      .appendingPathComponent("Pages")
-      .appendingPathComponent("MemoryGraph")
-      .appendingPathComponent("CanonicalMemoryAtlasView.swift")
-    // omi-test-quality: source-inspection -- static contract: a SwiftUI subview's rendered height is not observable from a unit test, so the footer's no-flexible-child rule is asserted on source; the layout behavior itself is covered by the placement tests above.
-    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
   private func fiveTypeGraph() -> KnowledgeGraphResponse {

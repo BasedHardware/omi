@@ -19,6 +19,44 @@ enum MemoryAtlasCitationOpen {
   }
 }
 
+/// Turns the citations on a Brain Map selection into readable evidence.
+///
+/// A rebuilt map cites conversations, the people directory and goals as well
+/// as memories. Memories come from the memories layer's cache; a conversation
+/// is fetched by id, which is a bounded number of reads per selection; the two
+/// whole-account sources describe themselves.
+enum MemoryAtlasCitationEvidence {
+  static func resolve(
+    _ ids: [String],
+    memories: @Sendable ([String]) async -> [ServerMemory],
+    conversation: @Sendable (String) async -> ServerConversation?
+  ) async -> [MemoryAtlasEvidence] {
+    var memoryIDs: [String] = []
+    var conversationIDs: [String] = []
+    var sources: [MemoryAtlasEvidence] = []
+    for id in ids {
+      let citation = MemoryAtlasEvidence.Citation(id)
+      switch citation {
+      case .memory(let memoryID): memoryIDs.append(memoryID)
+      case .conversation(let conversationID): conversationIDs.append(conversationID)
+      case .people, .goals:
+        if let source = MemoryAtlasEvidence.source(for: citation) { sources.append(source) }
+      }
+    }
+    var evidence = MemoryAtlasEvidence.resolve(memoryIDs, in: await memories(memoryIDs))
+    for conversationID in conversationIDs {
+      guard let record = await conversation(conversationID) else { continue }
+      evidence.append(
+        MemoryAtlasEvidence.conversation(
+          id: record.id,
+          title: record.structured.title,
+          overview: record.structured.overview,
+          createdAt: record.startedAt ?? record.createdAt))
+    }
+    return evidence + sources
+  }
+}
+
 /// Isolated page content switch — does NOT observe AppState or ViewModelContainer
 /// as @ObservedObject, so pages like TasksPage won't re-render when unrelated
 /// AppState properties (conversations, permissions, etc.) change.
@@ -206,7 +244,8 @@ struct MemoryHubPage: View {
         graphViewModel: viewModelContainer.memoryGraphViewModel,
         memoriesViewModel: memoriesViewModel,
         searchText: $brainMapSearchText,
-        onLeave: { destinationRawValue = MemoryHubDestination.memories.rawValue }
+        onLeave: { destinationRawValue = MemoryHubDestination.memories.rawValue },
+        onOpenConversation: openConversation
       )
     case .legacyBrainMap:
       MemoryGraphPage(
@@ -239,17 +278,29 @@ struct MemoryHubPage: View {
     let memoriesViewModel: MemoriesViewModel
     @Binding var searchText: String
     let onLeave: () -> Void
+    /// Opens a cited conversation the way the host opens any conversation.
+    let onOpenConversation: (String) -> Void
 
     var body: some View {
       CanonicalMemoryAtlasTabView(
         viewModel: graphViewModel,
-        evidenceProvider: { memoryIDs in
-          MemoryAtlasEvidence.resolve(memoryIDs, in: await memoriesViewModel.memories(withIDs: memoryIDs))
+        evidenceProvider: { citationIDs in
+          await MemoryAtlasCitationEvidence.resolve(
+            citationIDs,
+            memories: { await memoriesViewModel.memories(withIDs: $0) },
+            conversation: { try? await APIClient.shared.getConversation(id: $0) })
         },
-        onOpenMemory: { memoryID in
-          Task { @MainActor in
-            await MemoryAtlasCitationOpen.open(
-              id: memoryID, in: memoriesViewModel, leave: onLeave)
+        onOpenMemory: { citationID in
+          switch MemoryAtlasEvidence.Citation(citationID) {
+          case .conversation(let conversationID):
+            onOpenConversation(conversationID)
+          case .memory(let memoryID):
+            Task { @MainActor in
+              await MemoryAtlasCitationOpen.open(
+                id: memoryID, in: memoriesViewModel, leave: onLeave)
+            }
+          case .people, .goals:
+            break
           }
         },
         searchText: $searchText,

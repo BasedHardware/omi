@@ -2640,6 +2640,7 @@ actor RewindDatabase {
 
     Self.registerMemoryLedgerEvidenceMigrations(on: &migrator)
     Self.registerFabricatedActionItemTombstoneRepair(on: &migrator)
+    LocalKGSchema.registerMigrations(on: &migrator)
     JITTriggerMirrorSchema.registerMigration(on: &migrator)
     KnowledgeLedgerMirrorStagingSchema.registerMigration(on: &migrator)
     Self.registerClientProcessingProjectionMigration(on: &migrator)

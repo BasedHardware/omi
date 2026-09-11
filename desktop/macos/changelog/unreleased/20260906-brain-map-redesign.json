@@ -1,0 +1,3 @@
+{
+  "change": "Redesigned the Brain Map: it sits on the app's own light glass instead of a black mat, draws entities as monochrome glass circles sized by how connected they are, drops the timeline, the replay animation and the territory zones so the map is always complete, keeps names on screen while you pan and zoom, adds a reset-view button, and its Rebuild button rebuilds the map from all of your conversations, people, goals and memories with a progress bar while it works"
+}

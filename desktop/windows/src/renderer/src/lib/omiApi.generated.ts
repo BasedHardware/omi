@@ -939,6 +939,8 @@ export interface CanonicalKnowledgeGraphResponse {
   has_more: boolean;
   next_cursor?: string | null;
   nodes: Array<Record<string, unknown>>;
+  rebuild?: Record<string, unknown> | null;
+  shared_truncated?: boolean;
 }
 
 export interface CaptureLinkSpec {
@@ -2607,6 +2609,7 @@ export interface KnowledgeGraphResponse {
   node_count?: number;
   node_limit?: number | null;
   nodes: Array<Record<string, unknown>>;
+  rebuild?: Record<string, unknown> | null;
   truncated?: boolean;
 }
 
@@ -3482,6 +3485,7 @@ export interface RateMessageRequest {
 export interface RebuildResponse {
   edges_count: number;
   nodes_count: number;
+  rebuild_id?: string | null;
   status: string;
 }
 

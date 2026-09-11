@@ -93,8 +93,8 @@ final class MemoryAtlasSnapshotCache: @unchecked Sendable {
       hasher.combine(node.nodeType)
       hasher.combine(node.aliases)
       hasher.combine(node.memoryIds)
-      // The replay timeline is built from these, so they are part of the
-      // snapshot even though they never move a node.
+      // Timestamps are part of the snapshot's identity even though they never
+      // move a node: the inspector's evidence is dated by them.
       hasher.combine(node.createdAt)
       hasher.combine(node.updatedAt)
     }

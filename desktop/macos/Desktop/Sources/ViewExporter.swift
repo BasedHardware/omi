@@ -118,6 +118,12 @@ enum ViewExporter {
         { MemoryAtlasExportPreview.connectionInspectorSurface() },
         CGSize(width: 1400, height: 820)
       ),
+
+      (
+        "20-brain-map-building",
+        { MemoryAtlasExportPreview.buildingSurface() },
+        CGSize(width: 1200, height: 820)
+      ),
     ]
 
     guard index >= 0 && index < views.count else { return nil }
@@ -127,7 +133,7 @@ enum ViewExporter {
 
   /// Must equal the number of entries in the `standaloneViewAt` registry above;
   /// `runBatch` iterates `0..<count`, so a mismatch spawns failing "unknown-N" exports.
-  static var standaloneViewCount: Int { 14 }
+  static var standaloneViewCount: Int { 13 }
 
   // MARK: - Full page registry (sidebar + content)
 

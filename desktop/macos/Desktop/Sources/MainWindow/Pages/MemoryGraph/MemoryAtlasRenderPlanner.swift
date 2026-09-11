@@ -11,20 +11,17 @@ enum MemoryAtlasRenderPlanner {
     compact: Bool,
     selectedNodeID: String?,
     matchingNodeIDs: Set<String>?,
-    matchingEdges: [MemoryAtlasEdgePlacement]? = nil,
-    asOf: Date? = nil,
-    timeline: MemoryAtlasTimeline? = nil,
-    timeCursor: Double? = nil
+    matchingEdges: [MemoryAtlasEdgePlacement]? = nil
   ) -> MemoryAtlasRenderPlan {
     let fullyLabelledZoom = MemoryAtlasZoomPolicy.fullyLabelledZoom(
-      nodeCount: snapshot.nodes.count
+      nodeCount: snapshot.entityCount
     )
     let isFullyLabelled = !compact && zoom >= fullyLabelledZoom
     let usesCanvasLabels =
       !compact
       && zoom
         >= MemoryAtlasZoomPolicy.automaticCanvasLabelZoom(
-          nodeCount: snapshot.nodes.count
+          nodeCount: snapshot.entityCount
         )
     let detailLevel: MemoryAtlasDetailLevel =
       if zoom < MemoryAtlasZoomPolicy.neighborhoodZoom {
@@ -45,7 +42,7 @@ enum MemoryAtlasRenderPlanner {
     // only add more of it as fidelity increases.
     let maximumNodeLimit: Int =
       if isFullyLabelled {
-        snapshot.nodes.count
+        snapshot.entityCount
       } else {
         switch detailLevel {
         case .overview: 1_200
@@ -73,30 +70,33 @@ enum MemoryAtlasRenderPlanner {
     // These budgets exist to keep a multi-thousand-entity graph legible. An
     // atlas small enough to name in full needs no rationing: withholding
     // labels there just leaves unreadable dots on an empty canvas. Collision
-    // admission still decides what actually fits.
-    let isSmallAtlas = !compact && snapshot.nodes.count <= MemoryAtlasZoomPolicy.smallAtlasCeiling
+    // admission still decides what actually fits, which is why the budgets
+    // past overview are generous: zooming in is asking for names, and the
+    // smaller circles should get theirs as soon as there is room beside them
+    // rather than at the last level.
+    let isSmallAtlas = !compact && snapshot.entityCount <= MemoryAtlasZoomPolicy.smallAtlasCeiling
     let labelsPerCluster: Int =
       if isSmallAtlas {
-        snapshot.nodes.count
+        snapshot.entityCount
       } else {
         switch detailLevel {
         case .overview: compact ? 2 : 3
-        case .neighborhood: compact ? 4 : 7
-        case .detail: compact ? 5 : 11
-        case .focus: compact ? 5 : 24
-        case .inspect: compact ? 5 : 96
+        case .neighborhood: compact ? 4 : 16
+        case .detail: compact ? 5 : 40
+        case .focus: compact ? 5 : 96
+        case .inspect: compact ? 5 : 200
         }
       }
     let labelLimit: Int =
       if isSmallAtlas {
-        snapshot.nodes.count
+        snapshot.entityCount
       } else {
         switch detailLevel {
         case .overview: 12
-        case .neighborhood: 24
-        case .detail: 36
-        case .focus: 72
-        case .inspect: 96
+        case .neighborhood: 48
+        case .detail: 110
+        case .focus: 180
+        case .inspect: 240
         }
       }
 
@@ -106,29 +106,18 @@ enum MemoryAtlasRenderPlanner {
       relatedNodeIDs.insert(selectedNodeID)
     }
 
-    // The time cursor is a visibility filter layered over the stable layout: a
-    // node keeps its position and simply has not been "born" yet. The anchor is
-    // always present — "you" are the constant the rest of the memory accretes
-    // around.
-    let timeFilteredNodes: [MemoryAtlasNodePlacement]
-    if let timeline, let timeCursor, timeCursor < 0.9995 {
-      timeFilteredNodes = snapshot.nodes.filter { placement in
-        placement.id == snapshot.anchorNodeID || timeline.isVisible(nodeID: placement.id, at: timeCursor)
-      }
-    } else if let asOf {
-      timeFilteredNodes = snapshot.nodes.filter { placement in
-        placement.id == snapshot.anchorNodeID || placement.node.createdAt <= asOf
-      }
-    } else {
-      timeFilteredNodes = snapshot.nodes
-    }
+    // Catalog records are memories that produced no entity or relationship.
+    // Drawn, they were unlabeled grey dots beside the account holder that
+    // nothing on the map explained. The map shows entities; the memories
+    // themselves are on the Memories page, one chip away.
+    let candidates = snapshot.nodes.filter { !$0.isCatalog }
 
     // Camera movement changes where a node is painted, not whether it belongs
     // to the rendered cohort. Canvas clipping handles off-screen content while
     // this stable source order guarantees that zoom never drops entities just
     // because a threshold or viewport candidate set changed.
     let visibleNodes = priorityOrderedPrefix(
-      timeFilteredNodes,
+      candidates,
       limit: maximumNodeLimit,
       anchorNodeID: snapshot.anchorNodeID,
       selectedNodeID: selectedNodeID,
@@ -155,16 +144,7 @@ enum MemoryAtlasRenderPlanner {
     let visibleEdges = Array(
       edgeCandidates.lazy
         .filter { edge in
-          let isWithinTimeline =
-            timeline.flatMap { timeline in
-              timeCursor.map { cursor in
-                cursor >= 0.9995 || timeline.fraction(for: edge.edge.createdAt) <= cursor
-              }
-            } ?? true
-          let isBeforeAsOf = asOf.map { edge.edge.createdAt <= $0 } ?? true
-          return isWithinTimeline
-            && isBeforeAsOf
-            && visibleNodeIDs.contains(edge.edge.sourceId) && visibleNodeIDs.contains(edge.edge.targetId)
+          visibleNodeIDs.contains(edge.edge.sourceId) && visibleNodeIDs.contains(edge.edge.targetId)
         }
         .prefix(selectedEdgeLimit)
     )
@@ -222,7 +202,7 @@ enum MemoryAtlasRenderPlanner {
     edgeLimit: Int = 24
   ) -> MemoryAtlasRenderPlan {
     let visibleNodes = priorityOrderedPrefix(
-      snapshot.nodes,
+      snapshot.nodes.filter { !$0.isCatalog },
       limit: nodeLimit,
       anchorNodeID: snapshot.anchorNodeID,
       selectedNodeID: nil,
@@ -249,6 +229,20 @@ enum MemoryAtlasRenderPlanner {
       isFullyLabelled: false,
       relatedNodeIDs: [],
       detailLevel: .overview
+    )
+  }
+
+  /// The inverse of `renderedPoint`: where on the map a point on screen is.
+  static func normalizedPoint(
+    for rendered: CGPoint,
+    viewportSize: CGSize,
+    zoom: CGFloat,
+    pan: CGSize
+  ) -> CGPoint {
+    let span = max(MemoryAtlasLayoutEngine.projectionSpan(of: viewportSize) * zoom, 0.0001)
+    return CGPoint(
+      x: (rendered.x - viewportSize.width / 2 - pan.width) / span + 0.5,
+      y: (rendered.y - viewportSize.height / 2 - pan.height) / span + 0.5
     )
   }
 

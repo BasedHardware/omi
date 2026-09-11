@@ -226,9 +226,13 @@ class MemoryGraphViewModel: ObservableObject {
   typealias CanonicalGraphFetcher =
     (RuntimeOwnerAuthorizationSnapshot) async throws -> KnowledgeGraphResponse
   typealias OwnerNameProvider = () -> String?
+  /// The Brain Map this Mac rebuilt itself, merged under every server read.
+  typealias LocalGraphProvider = @Sendable () async -> KnowledgeGraphResponse
 
   @Published var isLoading = false
   @Published var isRebuilding = false
+  /// How far the running rebuild has got, 0...1, for the bar in the toolbar.
+  @Published private(set) var rebuildFraction: Double = 0
   @Published var isEmpty = true
   @Published var selectedNodeId: String?
   @Published private(set) var searchMatchCount: Int?
@@ -260,8 +264,15 @@ class MemoryGraphViewModel: ObservableObject {
   private var loadedGraphSignature: Int?
   private var activeSearchQuery = ""
   private var sessionGeneration = 0
+  /// Every graph read takes the next number when it starts; a read is shown
+  /// only if nothing that started later has been shown already. A refresh
+  /// that began before a rebuild replaced the local graph, and returned after
+  /// the rebuild had shown the new one, would otherwise put the old map back.
+  private var graphFetchSequence = 0
+  private var lastShownGraphFetch = 0
   private let canonicalGraphFetcher: CanonicalGraphFetcher
   private let ownerNameProvider: OwnerNameProvider
+  private let localGraphProvider: LocalGraphProvider
 
   private static func hasAtlasContent(_ response: KnowledgeGraphResponse) -> Bool {
     !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true)
@@ -273,6 +284,7 @@ class MemoryGraphViewModel: ObservableObject {
         authorizationSnapshot: authorizationSnapshot)
     }
     ownerNameProvider = Self.currentOwnerName
+    localGraphProvider = { await BrainMapLocalRebuilder.storedGraph() }
     setupCamera()
     setupLighting()
   }
@@ -287,13 +299,17 @@ class MemoryGraphViewModel: ObservableObject {
       ownerNameProvider: Self.currentOwnerName)
   }
 
+  /// Test seam: the fetcher stands in for the server and the local store is
+  /// empty unless a test supplies one, so no test touches the Rewind database.
   init(
     canonicalGraphFetcher: @escaping CanonicalGraphFetcher,
     initialGraphResponse: KnowledgeGraphResponse,
-    ownerNameProvider: @escaping OwnerNameProvider
+    ownerNameProvider: @escaping OwnerNameProvider,
+    localGraphProvider: @escaping LocalGraphProvider = { KnowledgeGraphResponse(nodes: [], edges: []) }
   ) {
     self.canonicalGraphFetcher = canonicalGraphFetcher
     self.ownerNameProvider = ownerNameProvider
+    self.localGraphProvider = localGraphProvider
     graphResponse = initialGraphResponse
     isEmpty = !Self.hasAtlasContent(initialGraphResponse)
     setupCamera()
@@ -425,10 +441,11 @@ class MemoryGraphViewModel: ObservableObject {
         !Task.isCancelled
       else { return }
       do {
-        let response = try await canonicalGraphFetcher(authorizationSnapshot)
+        let fetched = try await fetchGraphWithLocalRebuild(authorizationSnapshot)
         guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
           return
         }
+        let response = fetched.response
         let hasContent = Self.hasAtlasContent(response)
         var projection: MemoryAtlasProjection?
         if hasContent {
@@ -440,13 +457,10 @@ class MemoryGraphViewModel: ObservableObject {
             return
           }
         }
-        canonicalAtlasProjection = projection
-        graphResponse = response
-        isEmpty = !hasContent
-        hasLoadedCanonicalAtlas = true
         hasAttemptedCanonicalAtlasLoad = true
-        lastLoadedAt = Date()
-        log("Memory atlas: \(response.atlasNodes.count) nodes, \(response.edges.count) edges")
+        if show(fetched, projection: projection) {
+          log("Memory atlas: \(response.atlasNodes.count) nodes, \(response.edges.count) edges")
+        }
         return
       } catch is CancellationError {
         return
@@ -462,66 +476,231 @@ class MemoryGraphViewModel: ObservableObject {
     }
   }
 
-  /// Rebuild the canonical atlas graph, polling until the replacement appears.
+  /// How long a rebuild may take before the button gives up waiting. A rebuild
+  /// reads every conversation the account has and runs an extraction per
+  /// source, so on a full account this is minutes, not seconds.
+  static let rebuildPollInterval: TimeInterval = 5
+  static let rebuildPollBudget: TimeInterval = 10 * 60
+  /// What a server rebuild usually takes; the bar paces itself against it.
+  static let rebuildTypicalDuration: TimeInterval = 4 * 60
+  /// HTTP answers that mean "not on the server, not now": conflict, rate
+  /// limit, and a server without the route at all.
+  static let serverRebuildRefusals: Set<Int> = [404, 405, 409, 429]
+
+  /// Rebuild the atlas graph from everything the account knows, waiting for
+  /// the rebuild this call started.
   ///
-  /// The backend rebuild is a background task; a fixed 2-second sleep (as used
-  /// by the legacy `rebuildGraph`) receives an empty or stale graph whenever
-  /// processing the account takes longer. This polls until the new graph has
-  /// at least one node or the poll budget is exhausted.
+  /// The backend rebuild is a background task and the old graph stays readable
+  /// while it runs, so "the graph is non-empty" cannot mean "the rebuild is
+  /// done". Every graph read carries the server's rebuild status instead; this
+  /// polls until that status reports the rebuild it started (by id, or by
+  /// timestamps on a server that predates ids) as finished, or the budget
+  /// runs out.
+  ///
+  /// Posts `desktopAutomationMemoryAtlasRebuildAcknowledged` at once, so a
+  /// caller can tell a refused request from one nobody was mounted to take,
+  /// and `desktopAutomationMemoryAtlasRebuildFinished` when an accepted one ends.
   @discardableResult
   func rebuildCanonicalAtlas() async -> Bool {
+    // One rebuild at a time: the button, the automation bridge and a second
+    // mounted surface can all ask, and the server allows two an hour.
+    guard !isRebuilding else {
+      Self.acknowledgeRebuild(accepted: false, reason: "already_rebuilding")
+      return false
+    }
     let generation = sessionGeneration
     guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
       log("Memory atlas: canonical rebuild skipped while owner authorization is unavailable")
+      Self.acknowledgeRebuild(accepted: false, reason: "no_authorization")
       return false
     }
+    Self.acknowledgeRebuild(accepted: true, reason: nil)
     isRebuilding = true
+    rebuildFraction = 0
     defer {
       if generation == sessionGeneration {
         isRebuilding = false
+        rebuildFraction = 0
       }
     }
 
+    let outcome = await performRebuild(generation: generation, authorizationSnapshot: authorizationSnapshot)
+    NotificationCenter.default.post(
+      name: .desktopAutomationMemoryAtlasRebuildFinished, object: nil, userInfo: ["outcome": outcome])
+    return outcome.succeeded
+  }
+
+  private static func acknowledgeRebuild(accepted: Bool, reason: String?) {
+    var userInfo: [String: Any] = ["accepted": accepted]
+    if let reason { userInfo["reason"] = reason }
+    NotificationCenter.default.post(
+      name: .desktopAutomationMemoryAtlasRebuildAcknowledged, object: nil, userInfo: userInfo)
+  }
+
+  private func performRebuild(
+    generation: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async -> MemoryAtlasRebuildOutcome {
+    func outcome(_ succeeded: Bool, _ path: MemoryAtlasRebuildOutcome.Path, _ detail: String)
+      -> MemoryAtlasRebuildOutcome
+    {
+      MemoryAtlasRebuildOutcome(
+        succeeded: succeeded, path: path, nodeCount: graphResponse.atlasNodes.count,
+        edgeCount: graphResponse.edges.count, detail: detail)
+    }
     do {
-      _ = try await APIClient.shared.rebuildKnowledgeGraph(
-        authorizationSnapshot: authorizationSnapshot)
-
-      // Poll for the replacement graph — the backend rebuild is async.
-      let maxAttempts = 10
-      for attempt in 1...maxAttempts {
-        try await Task.sleep(nanoseconds: 3_000_000_000)
-        guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
-          return false
-        }
-
-        let response = try await canonicalGraphFetcher(authorizationSnapshot)
-        guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
-          return false
-        }
-
-        if !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true) {
-          let ownerName = ownerNameProvider()
-          let projection = await Task.detached(priority: .userInitiated) {
-            MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName)
-          }.value
-          guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
-            return false
-          }
-          canonicalAtlasProjection = projection
-          graphResponse = response
-          isEmpty = !Self.hasAtlasContent(response)
-          hasLoadedCanonicalAtlas = true
-          lastLoadedAt = Date()
-          log("Memory atlas: rebuilt graph loaded after \(attempt) poll(s), \(response.atlasNodes.count) nodes")
-          return true
-        }
+      let requestedAt = Date()
+      let rebuildID: String?
+      do {
+        rebuildID = try await APIClient.shared.rebuildKnowledgeGraph(authorizationSnapshot: authorizationSnapshot)
+          .rebuildId
+      } catch APIError.httpError(statusCode: let statusCode, _)
+        where Self.serverRebuildRefusals.contains(statusCode)
+      {
+        // A server that will not rebuild this account right now — it refuses
+        // assertion-backed accounts, it is out of rebuilds for the hour, or it
+        // predates the route — leaves the desktop path: the same sources,
+        // read and extracted from here.
+        return await rebuildLocally(generation: generation, authorizationSnapshot: authorizationSnapshot)
       }
 
-      log("Memory atlas: rebuild poll budget exhausted, graph still empty after \(maxAttempts) attempts")
-      return false
+      let deadline = requestedAt.addingTimeInterval(Self.rebuildPollBudget)
+      var attempt = 0
+      while Date() < deadline {
+        attempt += 1
+        try await Task.sleep(nanoseconds: UInt64(Self.rebuildPollInterval * 1_000_000_000))
+        guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+          return outcome(false, .server, "cancelled")
+        }
+
+        let fetched = try await fetchGraphWithLocalRebuild(authorizationSnapshot)
+        let response = fetched.response
+        guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+          return outcome(false, .server, "cancelled")
+        }
+        // A server that predates the status field answers the old way: the
+        // first non-empty graph is taken as the rebuilt one.
+        let finished =
+          response.rebuild?.finished(since: requestedAt, rebuildID: rebuildID) ?? Self.hasAtlasContent(response)
+        guard finished else {
+          // The server reports no fraction, so the bar advances with time
+          // against a typical rebuild and waits near the end for the answer.
+          let elapsed = Date().timeIntervalSince(requestedAt)
+          rebuildFraction = 0.05 + 0.85 * min(1, elapsed / Self.rebuildTypicalDuration)
+          continue
+        }
+        rebuildFraction = 1
+
+        let ownerName = ownerNameProvider()
+        let projection = await Task.detached(priority: .userInitiated) {
+          MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName)
+        }.value
+        guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+          return outcome(false, .server, "cancelled")
+        }
+        show(fetched, projection: projection)
+        let status = response.rebuild?.status ?? "unknown"
+        log(
+          "Memory atlas: rebuilt graph loaded after \(attempt) poll(s), \(response.atlasNodes.count) nodes, status=\(status)"
+        )
+        return outcome(response.rebuild?.phase != .failed, .server, status)
+      }
+
+      log("Memory atlas: rebuild poll budget exhausted after \(attempt) attempts")
+      return outcome(false, .server, "poll_budget_exhausted")
     } catch {
       log("Failed to rebuild memory atlas: \(error.localizedDescription)")
+      return outcome(false, .server, error.localizedDescription)
+    }
+  }
+
+  /// One graph read, numbered so `show` can refuse it once a later read has
+  /// been shown.
+  private struct FetchedGraph {
+    let response: KnowledgeGraphResponse
+    let sequence: Int
+  }
+
+  /// The server graph with this Mac's own rebuild folded under it.
+  private func fetchGraphWithLocalRebuild(
+    _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> FetchedGraph {
+    graphFetchSequence += 1
+    let sequence = graphFetchSequence
+    let server = try await canonicalGraphFetcher(authorizationSnapshot)
+    let local = await localGraphProvider()
+    return FetchedGraph(response: BrainMapLocalGraphMerge.merge(server: server, local: local), sequence: sequence)
+  }
+
+  /// Puts a read on screen, unless a read that started later already is.
+  @discardableResult
+  private func show(_ fetched: FetchedGraph, projection: MemoryAtlasProjection?) -> Bool {
+    guard fetched.sequence > lastShownGraphFetch else {
+      log("Memory atlas: dropped graph read #\(fetched.sequence); #\(lastShownGraphFetch) is newer")
       return false
+    }
+    lastShownGraphFetch = fetched.sequence
+    canonicalAtlasProjection = projection
+    graphResponse = fetched.response
+    isEmpty = !Self.hasAtlasContent(fetched.response)
+    hasLoadedCanonicalAtlas = true
+    lastLoadedAt = Date()
+    return true
+  }
+
+  /// Rebuild on this Mac from everything the account knows, then reload.
+  ///
+  /// Used when the server will not rebuild this account. Reads conversations,
+  /// memories, people and goals, extracts entities through the server's
+  /// return-only extract endpoint in a bounded number of batches, stores the
+  /// result locally and shows it merged under the server graph. A rebuild
+  /// that cannot read a source or extract every batch changes nothing.
+  private func rebuildLocally(
+    generation: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async -> MemoryAtlasRebuildOutcome {
+    func outcome(_ succeeded: Bool, _ detail: String) -> MemoryAtlasRebuildOutcome {
+      MemoryAtlasRebuildOutcome(
+        succeeded: succeeded, path: .local, nodeCount: graphResponse.atlasNodes.count,
+        edgeCount: graphResponse.edges.count, detail: detail)
+    }
+    do {
+      let report = try await BrainMapLocalRebuilder.run(
+        reads: .live(authorizationSnapshot: authorizationSnapshot),
+        isAuthorizationCurrent: { RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) },
+        progress: { [weak self] progress in
+          log("Memory atlas: local rebuild — \(progress.label)")
+          self?.rebuildFraction = progress.fraction
+        }
+      )
+      log(
+        "Memory atlas: local rebuild read \(report.conversations) conversations, \(report.memories) memories, \(report.people) people, \(report.goals) goals in \(report.batches) batches (\(report.retriedBatches) retried) -> \(report.nodes) nodes, \(report.edges) edges"
+      )
+      guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+        return outcome(false, "cancelled")
+      }
+      rebuildFraction = 0.96
+      let fetched = try await fetchGraphWithLocalRebuild(authorizationSnapshot)
+      guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+        return outcome(false, "cancelled")
+      }
+      let ownerName = ownerNameProvider()
+      let response = fetched.response
+      let projection = await Task.detached(priority: .userInitiated) {
+        MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName)
+      }.value
+      guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+        return outcome(false, "cancelled")
+      }
+      rebuildFraction = 1
+      show(fetched, projection: projection)
+      return outcome(true, "\(report.batches) batches")
+    } catch let failure as BrainMapLocalRebuilder.Failure {
+      log("Memory atlas: local rebuild left the map as it was: \(failure.localizedDescription)")
+      return outcome(false, failure.localizedDescription)
+    } catch {
+      log("Memory atlas: local rebuild failed: \(error.localizedDescription)")
+      return outcome(false, error.localizedDescription)
     }
   }
 

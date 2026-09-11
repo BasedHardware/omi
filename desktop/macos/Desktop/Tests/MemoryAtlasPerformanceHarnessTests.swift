@@ -60,7 +60,7 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     let plan = makePlan(snapshot: snapshot, zoom: 1.5)
 
     XCTAssertEqual(plan.detailLevel, .neighborhood)
-    assertWorkBudgets(plan, nodes: 1_600, edges: 2_400, labels: 24)
+    assertWorkBudgets(plan, nodes: 1_600, edges: 2_400, labels: 48)
     XCTAssertEqual(plan.visibleNodes.count, 1_600)
   }
 
@@ -69,7 +69,7 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     let plan = makePlan(snapshot: snapshot, zoom: 2.2)
 
     XCTAssertEqual(plan.detailLevel, .detail)
-    assertWorkBudgets(plan, nodes: 2_400, edges: 3_000, labels: 36)
+    assertWorkBudgets(plan, nodes: 2_400, edges: 3_000, labels: 110)
     XCTAssertEqual(plan.visibleNodes.count, snapshot.nodes.count)
   }
 
@@ -84,7 +84,7 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     XCTAssertEqual(MemoryAtlasZoomPolicy.maximumZoom(nodeCount: snapshot.nodes.count, compact: true), 1.35)
     XCTAssertEqual(automaticCanvasLabelZoom, 45)
     XCTAssertEqual(plan.detailLevel, .inspect)
-    assertWorkBudgets(plan, nodes: 3_200, edges: 4_200, labels: 96)
+    assertWorkBudgets(plan, nodes: 3_200, edges: 4_200, labels: 240)
     XCTAssertEqual(plan.visibleNodes.count, snapshot.nodes.count)
     XCTAssertLessThan(plan.interactiveNodes.count, plan.visibleNodes.count)
     XCTAssertTrue(plan.labelNodeIDs.isEmpty)
@@ -136,7 +136,7 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     XCTAssertEqual(plan.visibleNodes.count, snapshot.nodes.count)
     XCTAssertEqual(Set(plan.canvasLabelNodes.map(\.id)), Set(plan.visibleNodes.map(\.id)))
     XCTAssertTrue(plan.labelNodeIDs.isEmpty)
-    XCTAssertLessThanOrEqual(plan.interactiveNodes.count, 96)
+    XCTAssertLessThanOrEqual(plan.interactiveNodes.count, 240)
   }
 
   func testCenterAnchoredDeepZoomKeepsTheFocusedEntityInView() {
@@ -220,7 +220,10 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     )
 
     XCTAssertLessThanOrEqual(plan.visibleEdges.count, 80)
-    XCTAssertLessThanOrEqual(plan.labelNodeIDs.count, 36)
+    // The detail-level label budget; names for the selection's neighbourhood
+    // are still bounded, just by the generous budget that names smaller
+    // circles earlier.
+    XCTAssertLessThanOrEqual(plan.labelNodeIDs.count, 110)
     XCTAssertTrue(
       plan.visibleEdges.allSatisfy { edge in
         edge.edge.sourceId == "owner" || edge.edge.targetId == "owner"
@@ -261,8 +264,13 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
       let edgeLimit = frame.isMultiple(of: 3) ? min(baseEdgeLimit, 80) : baseEdgeLimit
       XCTAssertLessThanOrEqual(plan.visibleNodes.count, nodeLimit)
       XCTAssertLessThanOrEqual(plan.visibleEdges.count, edgeLimit)
+      // The SwiftUI label overlay is what these bound; the planner's budgets
+      // past overview are deliberately generous so smaller circles are named
+      // as soon as there is room (collision admission decides the rest).
       let labelLimit =
-        zoom >= MemoryAtlasZoomPolicy.inspectModeZoom ? 96 : (zoom >= MemoryAtlasZoomPolicy.focusModeZoom ? 72 : 36)
+        zoom >= MemoryAtlasZoomPolicy.inspectModeZoom
+        ? 240
+        : (zoom >= MemoryAtlasZoomPolicy.focusModeZoom ? 180 : (zoom >= 1.9 ? 110 : (zoom >= 1.35 ? 48 : 12)))
       XCTAssertLessThanOrEqual(plan.interactiveNodes.count, labelLimit)
     }
   }
@@ -288,7 +296,6 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
         selectedNodeID: nil,
         matchingNodeIDs: nil,
         matchingEdges: nil,
-        asOf: nil,
         isCameraMoving: true
       )
       if frame == 0 {
@@ -311,10 +318,37 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
       selectedNodeID: nil,
       matchingNodeIDs: nil,
       matchingEdges: nil,
-      asOf: nil,
       isCameraMoving: false
     )
     XCTAssertEqual(cache.plannerInvocationCount, 2)
+  }
+
+  func testTheInteractiveOverlayStepsAsideOnlyForCleanCameraMoves() {
+    // The overlay's per-frame repositioning is the render cost a gesture
+    // cannot afford on production-scale graphs, so the same inputs that admit
+    // the cached render plan must admit canvas-only painting — and a selection
+    // or search (whose emphasis lives in the overlay, and whose gestures
+    // bypass the plan cache) must keep the overlay up.
+    XCTAssertTrue(
+      MemoryAtlasSurfacePresentation.canvasOwnsMarks(
+        isCameraMoving: true, selectedNodeID: nil, matchingNodeIDs: nil, matchingEdges: nil)
+    )
+    XCTAssertFalse(
+      MemoryAtlasSurfacePresentation.canvasOwnsMarks(
+        isCameraMoving: false, selectedNodeID: nil, matchingNodeIDs: nil, matchingEdges: nil),
+      "The overlay is the thing that receives clicks; it must be up at rest"
+    )
+    XCTAssertFalse(
+      MemoryAtlasSurfacePresentation.canvasOwnsMarks(
+        isCameraMoving: true, selectedNodeID: "node-2", matchingNodeIDs: nil, matchingEdges: nil),
+      "Selection emphasis is drawn by the overlay"
+    )
+    XCTAssertFalse(
+      MemoryAtlasSurfacePresentation.canvasOwnsMarks(
+        isCameraMoving: true, selectedNodeID: nil, matchingNodeIDs: Set(["node-2"]),
+        matchingEdges: nil),
+      "Search-match emphasis is drawn by the overlay"
+    )
   }
 
   func testProjectionKeepsTheSnapshotAndGestureCacheAcrossViewTransactions() {
@@ -324,8 +358,6 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
 
     XCTAssertEqual(projection.snapshot.nodes.count, productionScaleNodeCount)
     XCTAssertEqual(projection.snapshot.edges.count, productionScaleEdgeCount)
-    XCTAssertEqual(projection.connectionBirthFractions.count, productionScaleEdgeCount)
-    XCTAssertEqual(projection.connectionBirthFractions, projection.connectionBirthFractions.sorted())
 
     for frame in 0..<120 {
       _ = projection.renderPlanCache.makePlan(
@@ -336,7 +368,6 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
         selectedNodeID: nil,
         matchingNodeIDs: nil,
         matchingEdges: nil,
-        asOf: nil,
         isCameraMoving: true
       )
     }

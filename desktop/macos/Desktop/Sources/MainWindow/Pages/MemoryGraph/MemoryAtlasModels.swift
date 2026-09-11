@@ -133,6 +133,10 @@ struct MemoryAtlasNeighbourhood: Identifiable, Equatable {
 
 struct MemoryAtlasSnapshot {
   let nodes: [MemoryAtlasNodePlacement]
+  /// How many of `nodes` are entities. Catalog records are memories that
+  /// produced no entity; they are neither drawn nor selectable, so every zoom
+  /// and label policy sized by "how big is this map" counts entities only.
+  let entityCount: Int
   let edges: [MemoryAtlasEdgePlacement]
   let anchorNodeID: String?
   /// Largest first. Empty on maps too small or too sparse to have regions.
@@ -148,8 +152,6 @@ struct MemoryAtlasSnapshot {
   let detailEdges: [MemoryAtlasEdgePlacement]
   let edgesByNodeID: [String: [MemoryAtlasEdgePlacement]]
   let neighborIDsByNodeID: [String: Set<String>]
-  /// The time axis for this graph, or `nil` when timestamps carry no spread.
-  let timeline: MemoryAtlasTimeline?
 
   init(
     nodes: [MemoryAtlasNodePlacement],
@@ -159,12 +161,12 @@ struct MemoryAtlasSnapshot {
     neighbourhoods: [MemoryAtlasNeighbourhood] = []
   ) {
     self.nodes = nodes
+    self.entityCount = nodes.count(where: { !$0.isCatalog })
     self.edges = edges
     self.anchorNodeID = anchorNodeID
     self.neighbourhoods = neighbourhoods
     self.activeClusters = MemoryAtlasCluster.allCases.filter { clusterCenters[$0] != nil }
     self.clusterCenters = clusterCenters
-    self.timeline = MemoryAtlasTimeline.make(from: nodes.map(\.node))
     let indexedNodes = Dictionary(lastWriteWins: nodes.map { ($0.id, $0) })
     nodeByID = indexedNodes
 

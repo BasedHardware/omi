@@ -465,9 +465,17 @@ def test_canonical_graph_rejects_tampered_and_stale_cursors(monkeypatch):
         kg.get_canonical_knowledge_graph(UID, db_client=db, limit=1, cursor=cursor)
 
 
-def test_both_graph_routes_use_canonical_assertions_with_compatible_response_shapes(
-    monkeypatch,
-):
+@pytest.fixture
+def empty_shared_graph(monkeypatch):
+    monkeypatch.setattr(
+        kg_db,
+        "get_shared_knowledge_graph",
+        lambda uid, **_kw: {"nodes": [], "edges": [], "authoritative_memory_ids": set(), "truncated": False},
+    )
+    monkeypatch.setattr(kg_db, "read_knowledge_graph_rebuild_status", lambda uid, **_kw: None)
+
+
+def test_both_graph_routes_use_canonical_assertions_with_compatible_response_shapes(monkeypatch, empty_shared_graph):
     canonical_payload = {
         "nodes": [{"id": "canonical-node"}],
         "edges": [],
@@ -497,12 +505,95 @@ def test_both_graph_routes_use_canonical_assertions_with_compatible_response_sha
         "edge_count": 0,
         "node_limit": kg_router.canonical_graph_service.MAX_CANONICAL_GRAPH_PAGE_LIMIT,
         "edge_limit": kg_router.canonical_graph_service.MAX_CANONICAL_GRAPH_PAGE_LIMIT,
+        "rebuild": None,
     }
     assert canonical_response.status_code == 200
-    assert canonical_response.json() == canonical_payload
+    assert canonical_response.json() == {**canonical_payload, "rebuild": None, "shared_truncated": False}
 
 
-def test_legacy_graph_route_filters_edges_to_returned_nodes_and_marks_truncation(monkeypatch):
+def test_first_graph_page_merges_the_shared_rebuilt_store_under_canonical(monkeypatch):
+    # A Brain Map rebuild writes what it extracts from conversations, people and
+    # goals into the shared store. The first page carries it, canonical winning
+    # on overlap; later pages are fenced canonical pages only.
+    canonical_page = SimpleNamespace(
+        nodes=[{"id": "ada", "label": "Ada", "node_type": "person", "aliases": [], "memory_ids": ["m1"]}],
+        edges=[],
+        catalog_nodes=[],
+        has_more=True,
+        next_cursor="v3.opaque.signed",
+    )
+    monkeypatch.setattr(
+        kg_router.canonical_graph_service,
+        "get_canonical_knowledge_graph",
+        lambda *_args, **_kwargs: canonical_page,
+    )
+    shared = {
+        "nodes": [
+            {
+                "id": "omi",
+                "label": "Omi",
+                "node_type": "organization",
+                "aliases": [],
+                "memory_ids": ["conversation:c1"],
+            },
+            # The same person the assertion knows, extracted again from a conversation:
+            # lands on the canonical id and only adds its citation.
+            {"id": "ada-2", "label": "ada", "node_type": "person", "aliases": [], "memory_ids": ["conversation:c1"]},
+            # Cites a memory canonical already owns: the merge strips that citation and,
+            # with nothing else backing the node, drops it rather than double-counting.
+            {"id": "stale", "label": "Stale", "node_type": "concept", "aliases": [], "memory_ids": ["m1"]},
+        ],
+        "edges": [
+            {
+                "id": "e1",
+                "source_id": "ada-2",
+                "target_id": "omi",
+                "label": "works at",
+                "memory_ids": ["conversation:c1"],
+            },
+            {"id": "e2", "source_id": "stale", "target_id": "omi", "label": "relates to", "memory_ids": ["m1"]},
+        ],
+        "authoritative_memory_ids": {"m1"},
+        # The shared store was cut at its read bound: the first page must say so,
+        # because no later canonical page will carry what was cut.
+        "truncated": True,
+    }
+    monkeypatch.setattr(kg_db, "get_shared_knowledge_graph", lambda uid, **_kw: shared)
+    finished = NOW.replace(minute=5)
+    monkeypatch.setattr(
+        kg_db,
+        "read_knowledge_graph_rebuild_status",
+        lambda uid, **_kw: {"status": "complete", "started_at": NOW, "finished_at": finished, "updated_at": finished},
+    )
+    app = FastAPI()
+    app.include_router(kg_router.router)
+    app.dependency_overrides[kg_router.auth.get_current_user_uid] = lambda: UID
+    client = TestClient(app)
+
+    first_page = client.get("/v1/knowledge-graph/canonical?limit=200").json()
+    later_page = client.get("/v1/knowledge-graph/canonical?limit=200&cursor=v3.opaque.signed").json()
+    legacy_shape = client.get("/v1/knowledge-graph").json()
+
+    assert {node["id"] for node in first_page["nodes"]} == {"ada", "omi"}
+    ada = next(node for node in first_page["nodes"] if node["id"] == "ada")
+    assert ada["label"] == "Ada" and sorted(ada["memory_ids"]) == ["conversation:c1", "m1"]
+    assert [(edge["source_id"], edge["target_id"], edge["label"]) for edge in first_page["edges"]] == [
+        ("ada", "omi", "works at")
+    ]
+    assert first_page["rebuild"] == {
+        "status": "complete",
+        "started_at": NOW.isoformat(),
+        "finished_at": finished.isoformat(),
+    }
+    assert first_page["shared_truncated"] is True
+    assert [node["id"] for node in later_page["nodes"]] == ["ada"]
+    assert later_page["rebuild"] is None
+    assert later_page["shared_truncated"] is False
+    assert {node["id"] for node in legacy_shape["nodes"]} == {"ada", "omi"}
+    assert legacy_shape["rebuild"]["status"] == "complete"
+
+
+def test_legacy_graph_route_filters_edges_to_returned_nodes_and_marks_truncation(monkeypatch, empty_shared_graph):
     canonical_payload = {
         "nodes": [{"id": "node-a"}, {"id": "node-b"}],
         "edges": [
@@ -620,3 +711,47 @@ def test_canonical_graph_fails_after_bounded_revision_retry_exhausted(monkeypatc
         kg.get_canonical_knowledge_graph(UID, db_client=db, limit=10)
 
     assert revision_reads == 4
+
+
+def test_a_shared_edge_over_a_canonical_relationship_keeps_the_canonical_edge_id():
+    # The client already holds the canonical edge id (selection, inspector
+    # traversal); a rebuild that re-extracts the same relationship adds its
+    # citations under that id rather than renaming the edge to its own.
+    canonical = {
+        "nodes": [
+            {"id": "ada", "label": "Ada", "node_type": "person", "aliases": [], "memory_ids": ["m1"]},
+            {"id": "omi", "label": "Omi", "node_type": "organization", "aliases": [], "memory_ids": ["m1"]},
+        ],
+        "edges": [
+            {"id": "zzz-canonical", "source_id": "ada", "target_id": "omi", "label": "works at", "memory_ids": ["m1"]}
+        ],
+    }
+    shared = {
+        "nodes": [
+            {"id": "ada-2", "label": "ada", "node_type": "person", "aliases": [], "memory_ids": ["conversation:c1"]},
+            {
+                "id": "omi-2",
+                "label": "omi",
+                "node_type": "organization",
+                "aliases": [],
+                "memory_ids": ["conversation:c1"],
+            },
+        ],
+        "edges": [
+            {
+                "id": "aaa-shared",
+                "source_id": "ada-2",
+                "target_id": "omi-2",
+                "label": "works at",
+                "memory_ids": ["conversation:c1"],
+            }
+        ],
+        "authoritative_memory_ids": set(),
+        "truncated": False,
+    }
+
+    merged = kg_db.merge_shared_graph_records(canonical, shared)
+
+    assert [(edge["id"], sorted(edge["memory_ids"])) for edge in merged["edges"]] == [
+        ("zzz-canonical", ["conversation:c1", "m1"])
+    ]

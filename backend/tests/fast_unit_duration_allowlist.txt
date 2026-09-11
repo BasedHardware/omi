@@ -340,3 +340,6 @@ tests/unit/test_client_processing_trust_boundary.py
 # First route test in its file: amortizes the routers.users FastAPI/pydantic import into its call
 # phase. Structural (the file-isolation runner model), not a per-test regression.
 tests/unit/test_daily_summary_generation.py::test_create_route_happy_path
+# routers/knowledge_graph no longer imports the LLM extractor eagerly (Brain Map rebuild reads sources
+# lazily), so the first test touching utils.llm.knowledge_graph pays that module import.
+tests/unit/test_knowledge_graph_canonical_mutation_routes.py::test_the_legacy_rebuild_still_clears_the_graph_itself
