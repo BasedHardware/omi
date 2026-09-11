@@ -54,8 +54,8 @@ class Structured {
         final Map<String, dynamic>? sectionJson = section is Map<String, dynamic>
             ? section
             : section is Map
-                ? Map<String, dynamic>.from(section)
-                : null;
+            ? Map<String, dynamic>.from(section)
+            : null;
         if (sectionJson == null) continue;
         // Section.fromJson throws a FormatException on a missing or mistyped
         // `heading` / `body_markdown`. Skip the bad entry the way the
@@ -75,10 +75,15 @@ class Structured {
         if (item is String) {
           if (item.isEmpty) continue;
           structured.actionItems.add(ActionItem(item));
-        } else if (item is Map<String, dynamic>) {
-          structured.actionItems.add(ActionItem.fromJson(item));
         } else if (item is Map) {
-          structured.actionItems.add(ActionItem.fromJson(Map<String, dynamic>.from(item)));
+          final itemJson = item is Map<String, dynamic> ? item : Map<String, dynamic>.from(item);
+          try {
+            structured.actionItems.add(ActionItem.fromJson(itemJson));
+          } on FormatException {
+            continue;
+          } on TypeError {
+            continue;
+          }
         }
       }
     }
@@ -87,10 +92,15 @@ class Structured {
     if (events is List) {
       for (final event in events) {
         if (event is Map && event.isEmpty) continue;
-        if (event is Map<String, dynamic>) {
-          structured.events.add(Event.fromJson(event));
-        } else if (event is Map) {
-          structured.events.add(Event.fromJson(Map<String, dynamic>.from(event)));
+        if (event is Map) {
+          final eventJson = event is Map<String, dynamic> ? event : Map<String, dynamic>.from(event);
+          try {
+            structured.events.add(Event.fromJson(eventJson));
+          } on FormatException {
+            continue;
+          } on TypeError {
+            continue;
+          }
         }
       }
     }
@@ -172,11 +182,7 @@ class ActionItem {
 
   static fromJson(Map<String, dynamic> json) {
     final generated = wire.GeneratedActionItem.fromJson(json);
-    return ActionItem(
-      generated.description,
-      completed: generated.completed,
-      deleted: json['deleted'] ?? false,
-    );
+    return ActionItem(generated.description, completed: generated.completed, deleted: json['deleted'] ?? false);
   }
 
   wire.GeneratedActionItem toGenerated() {

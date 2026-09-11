@@ -34,6 +34,25 @@ struct CapturePlaybackFile: Equatable, Sendable {
   let duration: TimeInterval
 }
 
+/// Where a capture's only audio part sits on the capture's wall clock, taken
+/// from the conversation document exactly the way the server's merge job
+/// stamps a span: the part's first chunk timestamp minus `started_at`. Each
+/// part is silence-filled between chunks, so from that anchor its media time
+/// is wall time. With this, one cached part is as exact as the aggregate.
+struct CaptureSolePartTiming: Equatable, Sendable {
+  let fileID: String
+  let wallOffset: TimeInterval
+
+  /// Nil unless the capture has exactly one audio part with chunk timestamps
+  /// and a known start; anything less cannot place the part honestly.
+  static func from(capture: ServerConversation) -> CaptureSolePartTiming? {
+    guard capture.audioFiles.count == 1, let part = capture.audioFiles.first,
+      let firstChunk = part.firstChunkTimestamp, let startedAt = capture.startedAt
+    else { return nil }
+    return CaptureSolePartTiming(fileID: part.id, wallOffset: firstChunk - startedAt.timeIntervalSince1970)
+  }
+}
+
 struct CapturePlaybackArtifact: Equatable, Sendable {
   let signedURL: URL
   let duration: TimeInterval
@@ -54,6 +73,16 @@ struct CapturePlaybackArtifact: Equatable, Sendable {
     return span.artifactOffset + (wallOffset - span.wallOffset)
   }
 
+  /// The same media with a single identity span: wall time is media time.
+  var onMediaClock: CapturePlaybackArtifact {
+    CapturePlaybackArtifact(
+      signedURL: signedURL, duration: duration,
+      spans: [
+        CaptureAudioURLSpan(fileID: spans.first?.fileID ?? "", wallOffset: 0, artifactOffset: 0, length: duration)
+      ]
+    )
+  }
+
   /// Converts the aggregate player's media time back to the source capture's
   /// wall-clock time so the transcript can follow playback without drifting
   /// across gaps between captured audio spans.
@@ -70,6 +99,20 @@ struct CapturePlaybackArtifact: Equatable, Sendable {
   }
 }
 
+extension CapturePlaybackResolution {
+  /// Media offset for a transcript moment, or nil when this resolution cannot
+  /// place the moment exactly. Mirrors `CaptureTranscriptFollowPolicy`, which
+  /// already treats a sole-part fallback's media time as capture time.
+  func playbackOffset(forWallOffset wallOffset: TimeInterval) -> TimeInterval? {
+    switch self {
+    case .readyAggregate(let artifact):
+      return artifact.artifactOffset(forWallOffset: wallOffset)
+    case .fileFallback, .pending, .locked, .unavailable, .noAudio:
+      return nil
+    }
+  }
+}
+
 enum CaptureTranscriptFollowPolicy {
   static func wallOffset(
     forPlaybackOffset playbackOffset: TimeInterval,
@@ -82,6 +125,20 @@ enum CaptureTranscriptFollowPolicy {
       // The fallback is exposed only as a single capture part, whose media
       // timeline begins at the capture's first transcript timestamp.
       return max(0, playbackOffset)
+    case .pending, .locked, .unavailable, .noAudio:
+      return nil
+    }
+  }
+
+  /// Where the capture's audio ends on its own clock, so the transport can
+  /// count in the same time the transcript bubbles show. Collapsed gaps make
+  /// this longer than the media, which is exactly what the transcript reads.
+  static func wallDuration(resolution: CapturePlaybackResolution) -> TimeInterval? {
+    switch resolution {
+    case .readyAggregate(let artifact):
+      return artifact.spans.map { $0.wallOffset + $0.length }.max() ?? artifact.duration
+    case .fileFallback(let file):
+      return file.duration
     case .pending, .locked, .unavailable, .noAudio:
       return nil
     }
@@ -113,6 +170,23 @@ enum CaptureFocusAcknowledgementPolicy {
   }
 }
 
+/// Pure geometry for the transport scrubber so a drag maps to media time the
+/// same way in tests and on screen.
+enum CapturePlaybackScrubPolicy {
+  /// Fraction of the track the current position occupies, clamped to 0...1.
+  static func progress(currentTime: TimeInterval, duration: TimeInterval) -> Double {
+    guard duration > 0, currentTime.isFinite else { return 0 }
+    return min(max(currentTime / duration, 0), 1)
+  }
+
+  /// Media offset for a pointer location along a track of the given width.
+  static func playbackOffset(forLocationX x: CGFloat, width: CGFloat, duration: TimeInterval) -> TimeInterval {
+    guard width > 0, duration > 0 else { return 0 }
+    let fraction = min(max(Double(x / width), 0), 1)
+    return fraction * duration
+  }
+}
+
 struct LiveCapturePlaybackProvider: CapturePlaybackProviding {
   func resolvePlayback(for capture: ServerConversation) async -> CapturePlaybackResolution {
     guard !capture.isLocked else { return .locked }
@@ -122,7 +196,7 @@ struct LiveCapturePlaybackProvider: CapturePlaybackProviding {
       let precache = try await APIClient.shared.precacheCaptureAudio(conversationID: capture.id)
       if precache.status == "no_audio" { return .noAudio }
       let response = try await APIClient.shared.captureAudioURLs(conversationID: capture.id)
-      return Self.resolution(from: response)
+      return Self.resolution(from: response, solePart: CaptureSolePartTiming.from(capture: capture))
     } catch let APIError.httpError(statusCode, _) where statusCode == 402 {
       return .locked
     } catch {
@@ -133,7 +207,10 @@ struct LiveCapturePlaybackProvider: CapturePlaybackProviding {
     }
   }
 
-  static func resolution(from response: CaptureAudioURLsResponse) -> CapturePlaybackResolution {
+  static func resolution(
+    from response: CaptureAudioURLsResponse,
+    solePart: CaptureSolePartTiming? = nil
+  ) -> CapturePlaybackResolution {
     if let artifact = response.conversationAudio {
       switch artifact.status {
       case "cached":
@@ -159,6 +236,21 @@ struct LiveCapturePlaybackProvider: CapturePlaybackProviding {
     if let file = response.audioFiles.first(where: { $0.status == "cached" && $0.signedURL != nil }),
       let signedURL = file.signedURL
     {
+      // The only part, placed on the wall clock: the same single-span artifact
+      // the server's merge job would build, so moments seek exactly. Device
+      // captures often stamp their opening segment a few milliseconds before
+      // zero; the span starts at max(0, …) so that moment still resolves.
+      if response.audioFiles.count == 1, let solePart, solePart.fileID == file.id {
+        return .readyAggregate(
+          CapturePlaybackArtifact(
+            signedURL: signedURL,
+            duration: file.duration,
+            spans: [
+              CaptureAudioURLSpan(
+                fileID: file.id, wallOffset: solePart.wallOffset, artifactOffset: 0, length: file.duration)
+            ]
+          ))
+      }
       return .fileFallback(CapturePlaybackFile(id: file.id, signedURL: signedURL, duration: file.duration))
     }
 
@@ -182,21 +274,38 @@ final class CapturePlaybackController: ObservableObject {
   @Published private(set) var currentTime: TimeInterval = 0
   @Published private(set) var duration: TimeInterval = 0
   @Published private(set) var playbackError: String?
+  /// True while the user drags the scrubber. The periodic time observer must
+  /// not overwrite the dragged position with the player's stale one.
+  @Published private(set) var isScrubbing = false
 
   private let provider: any CapturePlaybackProviding
+  /// Seeks that AVFoundation has not confirmed yet. Observer ticks are ignored
+  /// meanwhile so the transport never snaps back to the pre-seek position.
+  private var inFlightSeeks = 0
   private var player: AVPlayer?
   private var timeObserver: Any?
   private var playerCancellables: Set<AnyCancellable> = []
   private var activeCaptureID: String?
   private var activeResolutionToken: UUID?
+  /// Counts seeks so a failed one restores the position only while it is still
+  /// the latest; a seek AVFoundation abandoned for a newer one must not undo it.
+  private var seekGeneration = 0
+  /// The aggregate as the server described it, with its wall-clock spans. Kept
+  /// beside `resolution` because a transcript on the media clock is seeked with
+  /// identity spans, while the alignment that puts it there needs these.
+  private(set) var serverClockArtifact: CapturePlaybackArtifact?
 
   init(provider: any CapturePlaybackProviding = LiveCapturePlaybackProvider()) {
     self.provider = provider
   }
 
+  /// `transcriptOnMediaClock`: the transcript was re-synced on this machine and
+  /// its times are already seconds into the media, so server spans (which map
+  /// the conversation's clock) must not be applied a second time.
   func prepare(
     for capture: ServerConversation,
-    forceRefresh: Bool = false
+    forceRefresh: Bool = false,
+    transcriptOnMediaClock: Bool = false
   ) async -> CapturePlaybackResolution? {
     if !forceRefresh, activeCaptureID == capture.id, let resolution { return resolution }
     let token = UUID()
@@ -209,8 +318,16 @@ final class CapturePlaybackController: ObservableObject {
       }
     }
 
-    let next = await provider.resolvePlayback(for: capture)
+    var next = await provider.resolvePlayback(for: capture)
     guard activeResolutionToken == token, activeCaptureID == capture.id, !Task.isCancelled else { return nil }
+    if case .readyAggregate(let artifact) = next {
+      serverClockArtifact = artifact
+      if transcriptOnMediaClock {
+        next = .readyAggregate(artifact.onMediaClock)
+      }
+    } else {
+      serverClockArtifact = nil
+    }
     resolution = next
     resetPlaybackStatus()
     switch next {
@@ -230,6 +347,7 @@ final class CapturePlaybackController: ObservableObject {
     activeResolutionToken = nil
     activeCaptureID = nil
     resolution = nil
+    serverClockArtifact = nil
     isResolving = false
     resetPlaybackStatus()
     removePlayer()
@@ -267,20 +385,86 @@ final class CapturePlaybackController: ObservableObject {
     return true
   }
 
-  /// Returns true only when an aggregate artifact translated the requested
-  /// wall offset and AVFoundation confirmed the exact seek completed.
+  /// Returns true only when the resolution placed the requested wall offset
+  /// exactly (aggregate artifact, or a sole-part fallback) and AVFoundation
+  /// confirmed the seek completed.
   func seekToMoment(wallOffset: TimeInterval) async -> Bool {
-    guard case .readyAggregate(let artifact) = resolution,
-      let target = artifact.artifactOffset(forWallOffset: wallOffset),
-      let player
-    else { return false }
+    guard let target = resolution?.playbackOffset(forWallOffset: wallOffset), player != nil else { return false }
+    return await seek(toPlaybackOffset: target)
+  }
+
+  /// Swaps the spans a transcript is seeked with, leaving the player where it
+  /// is: the media is the same file either way, only the clock its bubbles are
+  /// on has changed.
+  func setTranscriptOnMediaClock(_ onMediaClock: Bool) {
+    guard let serverClockArtifact, case .readyAggregate = resolution else { return }
+    resolution = .readyAggregate(onMediaClock ? serverClockArtifact.onMediaClock : serverClockArtifact)
+  }
+
+  /// A transcript bubble tap: jump to that moment and make sure audio is
+  /// playing. A seek that cannot be translated changes nothing, so a tap on a
+  /// gap never restarts playback somewhere unrelated — and a tap whose seek
+  /// outlives the selection must not start whichever capture replaced it.
+  @discardableResult
+  func playFromMoment(wallOffset: TimeInterval) async -> Bool {
+    let token = activeResolutionToken
+    guard await seekToMoment(wallOffset: wallOffset) else { return false }
+    guard token != nil, activeResolutionToken == token else { return false }
+    if !isPlaybackRequested {
+      playOrPause()
+    }
+    return true
+  }
+
+  /// Seeks the media timeline directly. Works for the aggregate artifact and
+  /// the single-file fallback alike because the offset is already media time.
+  /// The new position is published before AVFoundation confirms it so the
+  /// transport and transcript highlight respond to the gesture, not the codec;
+  /// if AVFoundation then declines, the optimistic position is taken back so
+  /// the transport does not point at a moment the audio never reached.
+  @discardableResult
+  func seek(toPlaybackOffset offset: TimeInterval) async -> Bool {
+    guard let player else { return false }
+    let previous = currentTime
+    let target = clampedPlaybackOffset(offset)
+    currentTime = target
+    inFlightSeeks += 1
+    seekGeneration += 1
+    let generation = seekGeneration
+    defer { inFlightSeeks -= 1 }
 
     let time = CMTime(seconds: target, preferredTimescale: 600)
-    return await withCheckedContinuation { continuation in
+    let finished = await withCheckedContinuation { continuation in
       player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { finished in
         continuation.resume(returning: finished)
       }
     }
+    // A seek superseded by a newer one reports `false` too; only the latest
+    // seek owns the published position, so only it restores.
+    if !finished, generation == seekGeneration, self.player === player {
+      currentTime = previous
+    }
+    return finished
+  }
+
+  /// Scrub gesture: the thumb follows the pointer immediately; the real seek
+  /// happens once when the drag ends so AVFoundation is not flooded.
+  func scrub(toPlaybackOffset offset: TimeInterval) {
+    guard player != nil else { return }
+    isScrubbing = true
+    currentTime = clampedPlaybackOffset(offset)
+  }
+
+  @discardableResult
+  func endScrubbing(atPlaybackOffset offset: TimeInterval) async -> Bool {
+    isScrubbing = false
+    return await seek(toPlaybackOffset: offset)
+  }
+
+  private func clampedPlaybackOffset(_ offset: TimeInterval) -> TimeInterval {
+    guard offset.isFinite else { return 0 }
+    let upperBound = duration > 0 ? duration : offset
+    return min(max(offset, 0), max(0, upperBound))
   }
 
   private func installPlayer(url: URL, expectedDuration: TimeInterval) {
@@ -362,7 +546,7 @@ final class CapturePlaybackController: ObservableObject {
       queue: .main
     ) { [weak self] time in
       Task { @MainActor [weak self] in
-        guard let self else { return }
+        guard let self, !self.isScrubbing, self.inFlightSeeks == 0 else { return }
         let seconds = time.seconds
         if seconds.isFinite {
           self.currentTime = max(0, seconds)
@@ -378,6 +562,10 @@ final class CapturePlaybackController: ObservableObject {
     timeObserver = nil
     playerCancellables.removeAll()
     player?.pause()
+    // A seek still in flight completes with `finished == false` now rather
+    // than whenever the item is torn down, so its awaiting caller returns
+    // promptly and never acts on the capture that replaced this one.
+    player?.currentItem?.cancelPendingSeeks()
     player = nil
   }
 
@@ -388,5 +576,6 @@ final class CapturePlaybackController: ObservableObject {
     currentTime = 0
     duration = 0
     playbackError = nil
+    isScrubbing = false
   }
 }

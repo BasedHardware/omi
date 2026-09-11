@@ -1945,7 +1945,7 @@ struct MemoriesPage: View {
           QuerySearchBar(
             text: $viewModel.searchText,
             accessibilityID: "memories-search-field",
-            placeholder: "Search memories…", searchSurface: .memories
+            placeholder: "Search memories", searchSurface: .memories
           )
         },
         content: { pageContent }

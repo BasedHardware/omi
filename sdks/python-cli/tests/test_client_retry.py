@@ -129,6 +129,29 @@ def test_cli_auth_error_with_markup_preserves_exit_code(
         assert detail in captured.err
 
 
+def test_empty_body_401_maps_to_auth_error(authed_profile, respx_mock) -> None:
+    """An empty-body 401 must still raise, not be treated like an empty 204 success."""
+    respx_mock.delete("/v1/dev/user/memories/abc").respond(401, content=b"")
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(AuthError):
+            client.delete("/v1/dev/user/memories/abc")
+
+
+def test_empty_body_404_maps_to_not_found(authed_profile, respx_mock) -> None:
+    respx_mock.delete("/v1/dev/user/memories/abc").respond(404, content=b"")
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(NotFoundError):
+            client.delete("/v1/dev/user/memories/abc")
+
+
+def test_204_delete_still_returns_none(authed_profile, respx_mock) -> None:
+    """Guard the success path the fix must not regress: empty 2xx bodies stay silent."""
+    respx_mock.delete("/v1/dev/user/memories/abc").respond(204, content=b"")
+    with OmiClient(authed_profile) as client:
+        result = client.delete("/v1/dev/user/memories/abc")
+    assert result is None
+
+
 def test_403_maps_to_auth_error(authed_profile, respx_mock) -> None:
     respx_mock.post("/v1/dev/user/memories").respond(
         403, json={"detail": "Insufficient permissions. Required scope: memories:write"}
@@ -162,7 +185,7 @@ def test_500_then_200_succeeds_after_retry(authed_profile, respx_mock) -> None:
 
 @pytest.mark.parametrize(
     ("retry_after", "expected_wait"),
-    [("3", 3.0), ("99999", 60.0), ("invalid", 0.25), (None, 0.25)],
+    [("3", 3.0), ("invalid", 0.25), (None, 0.25)],
 )
 def test_cli_503_uses_retry_after_or_backoff(
     authed_profile, respx_mock, monkeypatch, cli_runner, retry_after, expected_wait
@@ -224,7 +247,6 @@ def test_503_retry_after_http_date(authed_profile, respx_mock, monkeypatch) -> N
     assert result == []
     assert len(sleeps) == 1
     assert 8.0 <= sleeps[0] <= 11.0
-
 
 
 def test_429_surfaces_rate_limit_with_policy(authed_profile, respx_mock) -> None:
@@ -291,25 +313,79 @@ def test_429_with_retry_after_waits_at_least_that_long(authed_profile, respx_moc
     assert sleeps[0] == 3.0
 
 
-def test_429_retry_after_is_capped(authed_profile, respx_mock, monkeypatch) -> None:
-    """A pathologically large Retry-After value must be capped so the CLI
-    doesn't pin for hours on a misbehaving upstream."""
-    import time
+@pytest.mark.parametrize(
+    ("method", "path", "status", "json_body", "error_type"),
+    [
+        ("GET", "/v1/dev/user/memories", 429, None, RateLimitError),
+        ("GET", "/v1/dev/user/goals", 503, None, ServerError),
+        ("POST", "/v1/dev/user/conversations", 429, {"text": "x"}, RateLimitError),
+    ],
+)
+def test_long_retry_after_aborts_automatic_retries(
+    authed_profile, respx_mock, monkeypatch, method, path, status, json_body, error_type
+) -> None:
+    """Retry-After values above MAX_RETRY_AFTER_SECONDS must not sleep or retry early."""
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+
+    responses = [
+        httpx.Response(status, headers={"Retry-After": "300"}, json={"detail": "synthetic cooldown"}),
+        httpx.Response(200, json={"synthetic": True}),
+    ]
+    route = getattr(respx_mock, method.lower())(path).mock(side_effect=responses)
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(error_type) as info:
+            if method == "GET":
+                client.get(path)
+            else:
+                client.post(path, json_body=json_body)
+    assert route.call_count == 1
+    assert sleeps == []
+    if error_type is RateLimitError:
+        assert info.value.retry_after_seconds == 300.0
+
+
+def test_long_retry_after_http_date_aborts_automatic_retries(authed_profile, respx_mock, monkeypatch) -> None:
+    from email.utils import formatdate
 
     sleeps: list[float] = []
-    monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
-
-    from omi_cli import client as client_module
-
-    respx_mock.get("/v1/dev/user/memories").mock(
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+    future_date = formatdate(time.time() + 300.0, usegmt=True)
+    route = respx_mock.get("/v1/dev/user/goals").mock(
         side_effect=[
-            httpx.Response(429, headers={"Retry-After": "99999"}, json={"detail": "wait"}),
+            httpx.Response(503, headers={"Retry-After": future_date}, json={"detail": "Maintenance"}),
             httpx.Response(200, json=[]),
         ]
     )
-    with OmiClient(authed_profile) as cli:
-        cli.get("/v1/dev/user/memories")
-    assert sleeps[0] == client_module.MAX_RETRY_AFTER_SECONDS
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(ServerError):
+            client.get("/v1/dev/user/goals")
+    assert route.call_count == 1
+    assert sleeps == []
+
+
+def test_retry_after_at_cap_still_retries(authed_profile, respx_mock, monkeypatch) -> None:
+    """Retry-After exactly at MAX_RETRY_AFTER_SECONDS keeps the wait-then-retry path."""
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+
+    from omi_cli import client as client_module
+
+    route = respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[
+            httpx.Response(
+                429,
+                headers={"Retry-After": str(int(client_module.MAX_RETRY_AFTER_SECONDS))},
+                json={"detail": "slow down"},
+            ),
+            httpx.Response(200, json=[]),
+        ]
+    )
+    with OmiClient(authed_profile) as client:
+        result = client.get("/v1/dev/user/memories")
+    assert result == []
+    assert route.call_count == 2
+    assert sleeps == [client_module.MAX_RETRY_AFTER_SECONDS]
 
 
 def test_validation_error_detail_string_is_formatted(authed_profile, respx_mock) -> None:

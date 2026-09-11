@@ -368,48 +368,55 @@ run_batch() {
   # log files — and let those results stand. If none of them reproduces the
   # failure, the batch hit an order dependence between two suites that share a
   # process; the run stays green, matching the isolated verdict, and this line
-  # is the trail back to it. Batches larger than FALLBACK_BISECT_MIN bisect
-  # first: each half re-runs as its own batch (one invocation settles a green
-  # half) and only a still-red half of at most FALLBACK_BISECT_MIN members
-  # descends to isolated singles, up to ISOLATION_PARALLEL at a time on
-  # copy-on-write clones of this worker's scratch (a serial fallback on one
-  # SwiftPM lock cost ~20 min; a straight 50-member parallel fallback cost ~10
-  # min per flaky batch on run 34301327490).
+  # is the trail back to it. A TOP-LEVEL batch larger than FALLBACK_BISECT_MIN
+  # bisects exactly once: each half re-runs as its own batch (one invocation
+  # settles a green half), and a still-red half — like every red sub-batch —
+  # descends straight to isolated singles, up to ISOLATION_PARALLEL at a time
+  # on copy-on-write clones. Deeper bisection is deliberately not attempted:
+  # a wedged co-resident invocation burns its whole scaled budget at EVERY
+  # level (run 34395704115: a 35-suite half hung for its full 1320s budget,
+  # then an 18-suite quarter hung for 810s — ~38 min for one chain, caught
+  # red by the step budget guard), while isolated singles dodge the hang
+  # entirely and are capped by the per-suite budget (300s, 3-way parallel).
   echo "--- BATCH $batch_id exited $status; re-running its ${batch_size} suite(s) in isolation ---"
   echo "batch suites: ${batch_suites[@]}"
   local fallback_dir="$log_dir/.fallback-$batch_id"
   mkdir -p "$fallback_dir"
 
-  if [ "$batch_size" -gt "$FALLBACK_BISECT_MIN" ]; then
-    local mid=$(((batch_size + 1) / 2))
-    local -a left_suites=("${batch_suites[@]:0:$mid}")
-    local -a right_suites=("${batch_suites[@]:$mid}")
-    local -a half_suites=()
-    local half_index half_id half_build half_runtime
-    # Halves run sequentially on their own clones so they cannot contend on
-    # this worker's scratch while the worker may already be running its next
-    # batch. Recursion terminates: each __run_batch invocation re-enters this
-    # same rule with a strictly smaller member count.
-    for half_index in 0 1; do
-      if [ "$half_index" = 0 ]; then
-        half_suites=("${left_suites[@]}")
-      else
-        half_suites=("${right_suites[@]}")
+  case "$batch_id" in
+    *-h*) ;; # a bisect half: fall through to singles below
+    *)
+      if [ "$batch_size" -gt "$FALLBACK_BISECT_MIN" ]; then
+        local mid=$(((batch_size + 1) / 2))
+        local -a left_suites=("${batch_suites[@]:0:$mid}")
+        local -a right_suites=("${batch_suites[@]:$mid}")
+        local -a half_suites=()
+        local half_index half_id half_build half_runtime
+        # Halves run sequentially on their own clones so they cannot contend
+        # on this worker's scratch while the worker may already be running
+        # its next batch.
+        for half_index in 0 1; do
+          if [ "$half_index" = 0 ]; then
+            half_suites=("${left_suites[@]}")
+          else
+            half_suites=("${right_suites[@]}")
+          fi
+          [ "${#half_suites[@]}" -gt 0 ] || continue
+          half_id="$batch_id-h$half_index"
+          half_build="$fallback_dir/$half_id.build"
+          half_runtime="$fallback_dir/$half_id.runtime"
+          if [ "$PREBUILD" = "1" ]; then
+            cp -cR "$build_path" "$half_build"
+          else
+            mkdir -p "$half_build"
+          fi
+          mkdir -p "$half_runtime/home" "$half_runtime/tmp"
+          "$SCRIPT_PATH" __run_batch "$log_dir" "$half_id" "$half_build" "$half_runtime" "${half_suites[@]}" || true
+        done
+        exit 0
       fi
-      [ "${#half_suites[@]}" -gt 0 ] || continue
-      half_id="$batch_id-h$half_index"
-      half_build="$fallback_dir/$half_id.build"
-      half_runtime="$fallback_dir/$half_id.runtime"
-      if [ "$PREBUILD" = "1" ]; then
-        cp -cR "$build_path" "$half_build"
-      else
-        mkdir -p "$half_build"
-      fi
-      mkdir -p "$half_runtime/home" "$half_runtime/tmp"
-      "$SCRIPT_PATH" __run_batch "$log_dir" "$half_id" "$half_build" "$half_runtime" "${half_suites[@]}" || true
-    done
-    exit 0
-  fi
+      ;;
+  esac
 
   printf '%s\n' "${batch_suites[@]}" \
     | xargs -P "$ISOLATION_PARALLEL" -I{} "$SCRIPT_PATH" __isolated_fallback_suite "$log_dir" {} "$build_path" "$fallback_dir"

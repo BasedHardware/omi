@@ -120,8 +120,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
     });
   }
 
-  Future<BleAudioCodec> _getAudioCodec() async {
-    var connection = ServiceManager.instance().device.connection;
+  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
+    var connection = ServiceManager.instance().device.connectionFor(deviceId);
     if (connection == null) {
       return BleAudioCodec.pcm8;
     }
@@ -142,7 +142,11 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
     } else if (icon != null) {
       child = Icon(icon, color: Colors.white);
     } else {
-      child = Text(text!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white));
+      child = Text(
+        text!,
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: Colors.white),
+      );
     }
 
     final button = MaterialButton(
@@ -170,20 +174,13 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
       // tall (so the card below stays put) and grows if the
       // rendered lines run taller than that estimate.
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          minHeight: MediaQuery.textScalerOf(context).scale(18) * 1.4 * 3,
-        ),
+        constraints: BoxConstraints(minHeight: MediaQuery.textScalerOf(context).scale(18) * 1.4 * 3),
         child: Align(
           alignment: Alignment.bottomCenter,
           child: FadeInWordsText(
             text: text,
             visibleLines: 3,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w400,
-              height: 1.4,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w400, height: 1.4),
           ),
         ),
       ),
@@ -323,7 +320,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
       final currentDevice = provider.device;
       if (currentDevice != null) {
         try {
-          BleAudioCodec codec = await _getAudioCodec();
+          BleAudioCodec codec = await _getAudioCodec(currentDevice.id);
           if (!codec.isOpusSupported()) {
             // Device doesn't support opus, use phone mic
             usePhoneMic = true;
@@ -351,12 +348,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
         await restartDeviceRecording();
         return;
       }
-      provider.forceCompletionTimer = Timer(
-        Duration(seconds: provider.maxDuration),
-        () {
-          provider.finalize();
-        },
-      );
+      provider.forceCompletionTimer = Timer(Duration(seconds: provider.maxDuration), () {
+        provider.finalize();
+      });
       provider.updateStartedRecording(true);
     }
 
@@ -666,57 +660,57 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
                               ],
                             )
                           : !provider.startedRecording
-                              // Has a profile already and hasn't started re-recording:
-                              // its play/redo buttons live under the title instead, and
-                              // this section (recording/question/complete UI) doesn't
-                              // apply yet.
-                              ? const SizedBox.shrink()
-                              // The finished recording (final words, card, full bar) stays
-                              // on screen through the upload and a short hold, then
-                              // cross-fades into the All done button.
-                              : AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 450),
-                                  switchInCurve: Curves.easeIn,
-                                  switchOutCurve: Curves.easeOut,
-                                  child: _allDoneVisible
-                                      ? Padding(
-                                          key: const ValueKey('speech-profile-done'),
-                                          padding: const EdgeInsets.symmetric(horizontal: 40),
-                                          child: _capsuleButton(
-                                            text: context.l10n.allDone,
-                                            onPressed: () {
-                                              // Conversation processing already triggered in finalize()
-                                              Navigator.pop(context);
-                                            },
+                          // Has a profile already and hasn't started re-recording:
+                          // its play/redo buttons live under the title instead, and
+                          // this section (recording/question/complete UI) doesn't
+                          // apply yet.
+                          ? const SizedBox.shrink()
+                          // The finished recording (final words, card, full bar) stays
+                          // on screen through the upload and a short hold, then
+                          // cross-fades into the All done button.
+                          : AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 450),
+                              switchInCurve: Curves.easeIn,
+                              switchOutCurve: Curves.easeOut,
+                              child: _allDoneVisible
+                                  ? Padding(
+                                      key: const ValueKey('speech-profile-done'),
+                                      padding: const EdgeInsets.symmetric(horizontal: 40),
+                                      child: _capsuleButton(
+                                        text: context.l10n.allDone,
+                                        onPressed: () {
+                                          // Conversation processing already triggered in finalize()
+                                          Navigator.pop(context);
+                                        },
+                                      ),
+                                    )
+                                  : Column(
+                                      key: const ValueKey('speech-profile-recording'),
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (recordingText.isNotEmpty) _transcript(recordingText),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                                          child: Column(
+                                            children: [
+                                              const SpeechTopicsCard(),
+                                              const SizedBox(height: 12),
+                                              SpeechProgressBar(progress: recordingProgress),
+                                            ],
                                           ),
-                                        )
-                                      : Column(
-                                          key: const ValueKey('speech-profile-recording'),
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            if (recordingText.isNotEmpty) _transcript(recordingText),
-                                            Padding(
-                                              padding: const EdgeInsets.symmetric(horizontal: 24),
-                                              child: Column(
-                                                children: [
-                                                  const SpeechTopicsCard(),
-                                                  const SizedBox(height: 12),
-                                                  SpeechProgressBar(progress: recordingProgress),
-                                                ],
-                                              ),
-                                            ),
-                                            if (showMicDisclaimer)
-                                              Padding(
-                                                padding: const EdgeInsets.only(top: 16),
-                                                child: Text(
-                                                  context.l10n.noDeviceConnectedUseMic,
-                                                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                                                  textAlign: TextAlign.center,
-                                                ),
-                                              ),
-                                          ],
                                         ),
-                                ),
+                                        if (showMicDisclaimer)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 16),
+                                            child: Text(
+                                              context.l10n.noDeviceConnectedUseMic,
+                                              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                            ),
                     ),
                   ),
                 ],

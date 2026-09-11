@@ -98,8 +98,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
 
   DeviceProvider({BleDiagnosticsLoader? bleDiagnosticsLoader, FindDeviceRunner? findDeviceRunner})
-      : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
-        _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner {
+    : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
+      _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner {
     ServiceManager.instance().device.subscribe(this, this);
     BleBridge.instance.pairingLostCallback = _showPairingLostDialog;
   }
@@ -254,18 +254,20 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   static Future<bool> _defaultFindDeviceRunner(BtDevice device) async {
-    final connection = await ServiceManager.instance().device.ensureConnection(device.id).timeout(
-      const Duration(seconds: 5),
-      onTimeout: () {
-        Logger.debug('DeviceProvider: Timed out finding the active device connection');
-        return null;
-      },
-    );
+    final connection = await ServiceManager.instance().device
+        .ensureConnection(device.id)
+        .timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            Logger.debug('DeviceProvider: Timed out finding the active device connection');
+            return null;
+          },
+        );
     return await connection?.playFindDevicePattern() ?? false;
   }
 
   Future _bleDisconnectDevice(BtDevice btDevice) async {
-    await ServiceManager.instance().device.disconnectDevice();
+    await ServiceManager.instance().device.disconnectDevice(btDevice.id);
   }
 
   Future<int> _retrieveBatteryLevel(String deviceId) async {
@@ -396,8 +398,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed =
-        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed = _lastBatteryNotifyTime == null
+        ? const Duration(minutes: 999)
+        : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =

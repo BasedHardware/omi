@@ -283,6 +283,17 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('completed'), _asc('created_at'), _asc('__name__')),
     ),
+    # GET /v1/action-items?start_date=...&completed=... orders created_at
+    # newest-first (``_apply_action_item_date_filters``). The ascending
+    # composite above serves the ``get_scores`` count but not that ordering;
+    # a database provisioned from this manifest alone (isolated jit-qa,
+    # 2026-09-10) failed the read with FailedPrecondition until this existed.
+    FirestoreIndexRequirement(
+        'action_items_completed_created_newest_first',
+        'action_items',
+        'COLLECTION',
+        (_asc('completed'), _desc('created_at'), _desc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'action_items_conversation_due',
         'action_items',
@@ -1027,6 +1038,10 @@ ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY = FirestoreQuerySpec(
         FirestoreQueryFilter('created_at', '<', 'end'),
         FirestoreQueryFilter('completed', '==', 'completed'),
     ),
+    # ``build`` is the ``get_scores`` weekly count aggregation (no ordering),
+    # which Firestore serves only from the ascending composite; the
+    # newest-first list read in ``_apply_action_item_date_filters`` is a
+    # different composite, declared as ``action_items_completed_created_newest_first``.
     index_fields=(_asc('completed'), _asc('created_at'), _asc('__name__')),
 )
 
