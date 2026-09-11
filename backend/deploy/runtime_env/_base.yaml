@@ -612,6 +612,18 @@ environment_shared:
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
             category: rollout
+          # Cloud Tasks conversation-finalization writes process_conversation here
+          # (pendant/phone). Declaring the rollout flags only on backend-listen /
+          # pusher / Cloud Run backend makes live capture disagree with regenerate.
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'false'
+            category: rollout
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+            value: 'false'
+            category: rollout
+          CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
             value: '555'

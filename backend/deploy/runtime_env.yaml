@@ -690,6 +690,15 @@ environments:
             MEMORY_BELIEF_MODEL_ENABLED:
               value: 'true'
               category: rollout
+            CONVERSATION_NOTES_V2_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_OCR_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -1927,6 +1936,15 @@ environments:
               category: memory_rollout
               value: 'on'
             MEMORY_BELIEF_MODEL_ENABLED:
+              value: 'false'
+              category: rollout
+            CONVERSATION_NOTES_V2_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+              value: 'false'
+              category: rollout
+            CONVERSATION_OCR_CONTEXT_ENABLED:
               value: 'false'
               category: rollout
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
