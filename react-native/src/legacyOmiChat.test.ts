@@ -585,7 +585,11 @@ test('old chat history names GET content_blocks without inventing writes', () =>
     {eyebrow: 'Goal', title: 'Ship the release notes'},
     {eyebrow: 'Conversation', title: 'Standup recap'},
     {eyebrow: 'Recommended next steps', title: 'Send the agenda'},
-    {eyebrow: 'Question', title: 'Schedule the follow-up?'},
+    {
+      eyebrow: 'Question',
+      title: 'Schedule the follow-up?',
+      detail: 'Yes, schedule it · Not now',
+    },
     {
       eyebrow: 'Processing',
       title: 'Draft recap',

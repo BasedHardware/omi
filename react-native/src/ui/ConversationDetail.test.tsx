@@ -95,6 +95,52 @@ test('canonical recording and named chat reuse their existing detail readers', (
   expect(mockLegacy).not.toHaveBeenCalled();
 });
 
+test('conversation-detail history names unanswered GET questionCard option labels', () => {
+  mockChat.mockReturnValue({
+    result: {
+      status: 'loaded',
+      messages: [
+        {
+          id: 'ai-question',
+          sender: 'ai',
+          text: 'Here is what I found.',
+          createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+          generationOutcome: 'completed',
+          contentBlocks: [
+            {
+              eyebrow: 'Question',
+              title: 'Schedule the follow-up?',
+              detail: 'Yes, schedule it · Not now',
+            },
+          ],
+        },
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    },
+    reload: jest.fn(),
+    loadingOlder: false,
+    loadOlder: jest.fn(),
+    olderNotice: null,
+    olderRetryable: true,
+  });
+  const copy = text(
+    render({
+      conversation: {
+        ...conversation,
+        id: 'chat:chat-main',
+        source: 'chat',
+        title: 'Main chat',
+      },
+    }),
+  );
+  expect(copy).toContain('Question');
+  expect(copy).toContain('Schedule the follow-up?');
+  expect(copy).toContain('Yes, schedule it · Not now');
+  expect(copy).not.toContain('preparedAnswer');
+  expect(copy).not.toContain('Open in Goals');
+});
+
 test('conversation-detail history names GET content_blocks without inventing write actions', () => {
   mockChat.mockReturnValue({
     result: {

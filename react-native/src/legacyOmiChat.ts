@@ -439,6 +439,39 @@ function parseQuestionSelectedLabel(
   return undefined;
 }
 
+function parseQuestionOptionLabels(
+  row: Record<string, unknown>,
+): string | undefined {
+  const selectedId = wireString(row, 'selectedOptionId', 'selected_option_id');
+  if (selectedId !== undefined) {
+    return parseQuestionSelectedLabel(row);
+  }
+  const rawOptions = row.options;
+  if (!Array.isArray(rawOptions)) {
+    return undefined;
+  }
+  const labels: string[] = [];
+  for (const entry of rawOptions.slice(0, 20)) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      continue;
+    }
+    const option = entry as Record<string, unknown>;
+    if (wireString(option, 'optionId', 'option_id') === undefined) {
+      continue;
+    }
+    const label = wireString(option, 'label');
+    if (label === undefined) {
+      continue;
+    }
+    const visible = visibleDisplayText(label);
+    if (visible === '') {
+      continue;
+    }
+    labels.push(visible);
+  }
+  return labels.length === 0 ? undefined : labels.join(' · ');
+}
+
 function questionHasOptions(row: Record<string, unknown>): boolean {
   const rawOptions = row.options;
   if (!Array.isArray(rawOptions)) {
@@ -500,7 +533,7 @@ function parseContentBlock(
         return [];
       }
       return [
-        contentBlockChrome('Question', text, parseQuestionSelectedLabel(row)),
+        contentBlockChrome('Question', text, parseQuestionOptionLabels(row)),
       ];
     }
     case 'goalLink':

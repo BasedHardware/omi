@@ -1772,6 +1772,52 @@ test('a chat message names GET content_blocks without inventing write actions', 
   });
 });
 
+test('a chat message names unanswered GET questionCard option labels without send chips', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-question',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        contentBlocks: [
+          {
+            eyebrow: 'Question',
+            title: 'Schedule the follow-up?',
+            detail: 'Yes, schedule it · Not now',
+          },
+        ],
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Question');
+  expect(copies).toContain('Schedule the follow-up?');
+  expect(copies).toContain('Yes, schedule it · Not now');
+  expect(copies).not.toContain('preparedAnswer');
+  expect(copies).not.toContain('Open in Goals');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('an empty chat bubble names GET content_block fallbacks instead of Message text unavailable', () => {
   const fallback = render(
     <ChatMessageRow
