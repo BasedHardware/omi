@@ -857,6 +857,10 @@ package struct InkGlassPanelModifier: ViewModifier {
           // `maxHeight` frame first, so the band's *own* frame is the whole panel, and only then the
           // clip — a `clipShape` evaluated inside a 1 pt box degenerates to a straight bar and is what
           // squared the corners in the first place. Order is the whole fix.
+          //
+          // The band no longer spans the full width — `InkGlass.sheenWidth` stops it where the corner
+          // starts — so it cannot reach a corner to square one off. The clip stays as the second
+          // guard the paragraph above earned, not as the only thing keeping the highlight in shape.
           if InkGlass.showsMaterial(reduceTransparency: reduceTransparency) {
             // The width is the panel's straight top run (`InkGlass.sheenWidth`), read from the
             // panel rather than assumed, so the line stops where the corner starts instead of
