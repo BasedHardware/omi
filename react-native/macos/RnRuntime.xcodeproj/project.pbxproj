@@ -24,6 +24,7 @@
 		976153F7B9245696A8FEEA7A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 42B252A9C22C38646AC0EFED /* PrivacyInfo.xcprivacy */; };
 		9B6348701CA8A259BF932BD8 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 42B252A9C22C38646AC0EFED /* PrivacyInfo.xcprivacy */; };
 		A10401000000000000000001 /* OmiBackendModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10401000000000000000002 /* OmiBackendModule.mm */; };
+		A10409000000000000000001 /* omi_backend_policy.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A10409000000000000000002 /* omi_backend_policy.cpp */; };
 		A10402000000000000000001 /* OmiDesktopCommandsModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10402000000000000000002 /* OmiDesktopCommandsModule.mm */; };
 		A10403000000000000000001 /* OmiGlassPanelView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10403000000000000000002 /* OmiGlassPanelView.mm */; };
 		A10404000000000000000001 /* OmiSFSymbolView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10404000000000000000002 /* OmiSFSymbolView.mm */; };
@@ -61,6 +62,7 @@
 		514201592437B4B40078DB4F /* RnRuntime.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RnRuntime.entitlements; sourceTree = "<group>"; };
 		8C7DEB25EEE8A944361796CD /* Pods-RnRuntime-macOS.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RnRuntime-macOS.release.xcconfig"; path = "Target Support Files/Pods-RnRuntime-macOS/Pods-RnRuntime-macOS.release.xcconfig"; sourceTree = "<group>"; };
 		A10401000000000000000002 /* OmiBackendModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiBackendModule.mm; sourceTree = "<group>"; };
+		A10409000000000000000002 /* omi_backend_policy.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = omi_backend_policy.cpp; path = "../../native-core/src/omi_backend_policy.cpp"; sourceTree = "<group>"; };
 		A10401000000000000000003 /* OmiBackendModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiBackendModule.h; sourceTree = "<group>"; };
 		A10402000000000000000002 /* OmiDesktopCommandsModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiDesktopCommandsModule.mm; sourceTree = "<group>"; };
 		A10402000000000000000003 /* OmiDesktopCommandsModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiDesktopCommandsModule.h; sourceTree = "<group>"; };
@@ -157,6 +159,7 @@
 				514201592437B4B40078DB4F /* RnRuntime.entitlements */,
 				A10401000000000000000003 /* OmiBackendModule.h */,
 				A10401000000000000000002 /* OmiBackendModule.mm */,
+				A10409000000000000000002 /* omi_backend_policy.cpp */,
 				A10402000000000000000003 /* OmiDesktopCommandsModule.h */,
 				A10402000000000000000002 /* OmiDesktopCommandsModule.mm */,
 				A10510000000000000000002,
@@ -402,6 +405,7 @@
 				514201582437B4B40078DB4F /* main.m in Sources */,
 				5142014D2437B4B30078DB4F /* AppDelegate.mm in Sources */,
 				A10401000000000000000001 /* OmiBackendModule.mm in Sources */,
+				A10409000000000000000001 /* omi_backend_policy.cpp in Sources */,
 				A10402000000000000000001 /* OmiDesktopCommandsModule.mm in Sources */,
 				A10510000000000000000001,
 				A10511000000000000000001,
@@ -477,6 +481,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = NO;
 				CODE_SIGN_ENTITLEMENTS = "RnRuntime-macOS/RnRuntime.entitlements";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../native-core/include",
+				);
 				INFOPLIST_FILE = "RnRuntime-macos/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
@@ -501,6 +509,10 @@
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				CODE_SIGN_ENTITLEMENTS = "RnRuntime-macOS/RnRuntime.entitlements";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../native-core/include",
+				);
 				INFOPLIST_FILE = "RnRuntime-macos/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
