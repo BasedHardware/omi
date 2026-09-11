@@ -73,7 +73,7 @@ enum DesktopBackendEnvironment {
     // transcription and memory/conversation sync then hit that backend
     // instead of api.omi.me. Checked only here, not in the pure/testable
     // overload below, so existing unit tests are unaffected.
-    if UserDefaults.standard.string(forKey: "chatBridgeMode") == "local",
+    if UserDefaults.standard.string(forKey: DefaultsKey.chatBridgeMode) == "local",
       let override = normalizedURL(UserDefaults.standard.string(forKey: AIProvider.localBackendURLKey))
     {
       return override

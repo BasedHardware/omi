@@ -193,12 +193,13 @@ final class PiMonoWiringTests: XCTestCase {
   // After #6594, the response must NOT contain anthropic_api_key.
 
   func testApiKeysResponseDecodesWithoutAnthropicKey() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "firebase_api_key": "AIza-test",
         "google_calendar_api_key": "cal-key"
       }
-      """.data(using: .utf8)!
+      """.utf8)
     let response = try JSONDecoder().decode(APIClient.ApiKeysResponse.self, from: json)
     XCTAssertEqual(response.firebaseApiKey, "AIza-test")
     XCTAssertEqual(response.googleCalendarApiKey, "cal-key")
@@ -206,13 +207,14 @@ final class PiMonoWiringTests: XCTestCase {
 
   func testApiKeysResponseIgnoresUnknownAnthropicField() throws {
     // If the backend ever sends anthropic_api_key, the client must ignore it
-    let json = """
+    let json = Data(
+      """
       {
         "firebase_api_key": "AIza-test",
         "anthropic_api_key": "sk-ant-LEAKED",
         "google_calendar_api_key": "cal-key"
       }
-      """.data(using: .utf8)!
+      """.utf8)
     let response = try JSONDecoder().decode(APIClient.ApiKeysResponse.self, from: json)
     XCTAssertEqual(response.firebaseApiKey, "AIza-test")
     // Verify no property named anthropicApiKey exists on the response
@@ -338,7 +340,8 @@ final class PiMonoWiringTests: XCTestCase {
     // Captured verbatim (trimmed) from a live `curl .../v1/models` against
     // an actual LM Studio server, locks in the real response shape rather
     // than a guessed one.
-    let json = """
+    let json = Data(
+      """
       {
         "data": [
           {"id": "qwen2.5-7b-instruct", "object": "model", "owned_by": "organization_owner"},
@@ -347,19 +350,19 @@ final class PiMonoWiringTests: XCTestCase {
         ],
         "object": "list"
       }
-      """.data(using: .utf8)!
+      """.utf8)
     let decoded = try JSONDecoder().decode(AIProvider.LocalModelsResponse.self, from: json)
     XCTAssertEqual(decoded.data.map(\.id), ["qwen2.5-7b-instruct", "qwen3.8-27b-optiq", "qwen3.8-27b-mlx@6bit"])
   }
 
   func testLocalModelsResponseDecodesEmptyList() throws {
-    let json = "{\"data\": [], \"object\": \"list\"}".data(using: .utf8)!
+    let json = Data("{\"data\": [], \"object\": \"list\"}".utf8)
     let decoded = try JSONDecoder().decode(AIProvider.LocalModelsResponse.self, from: json)
     XCTAssertTrue(decoded.data.isEmpty)
   }
 
   func testLocalModelsResponseFailsOnMissingDataKey() {
-    let json = "{\"object\": \"list\"}".data(using: .utf8)!
+    let json = Data("{\"object\": \"list\"}".utf8)
     XCTAssertThrowsError(try JSONDecoder().decode(AIProvider.LocalModelsResponse.self, from: json))
   }
 

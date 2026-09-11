@@ -31,8 +31,9 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
       return Self._statusCode
     }
     guard
+      let url = request.url,
       let response = HTTPURLResponse(
-        url: request.url!, statusCode: statusCode, httpVersion: nil,
+        url: url, statusCode: statusCode, httpVersion: nil,
         headerFields: ["Content-Type": "application/json"])
     else {
       client?.urlProtocol(self, didFailWithError: URLError(.badURL))
