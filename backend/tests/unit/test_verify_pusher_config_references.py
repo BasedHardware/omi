@@ -184,6 +184,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
         "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
+        "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
         "MEMORY_BELIEF_MODEL_ENABLED": "true",
         "MEMORY_ENABLED": "on",
         "OMI_ENV_STAGE": "dev",
