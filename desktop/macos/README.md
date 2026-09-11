@@ -23,6 +23,8 @@ Chat runs through one of three providers, chosen in Settings > AI Provider:
 
   Named dev bundles (`OMI_APP_NAME=omi-*`) keep their Local provider selection across `./run.sh` relaunches: the settings seed (`scripts/omi-settings-seed.sh`) never mirrors the AI Provider choice over a bundle already set to Local, because Local's endpoint keys (`localLLMBaseURL` and friends) are bundle-local and would otherwise be left pointing nowhere.
 
+  A **Context per turn** picker (25%, 50%, 75%, 100% default) trims how much of the kernel context snapshot the runtime sends on the first turn of a chat, keeping fewer recent journal turns and trimming the largest context sources on the local model; changing it restarts the local bridge.
+
 ## Development
 
 Requires macOS 14.0+, Python 3.11 with uv, and code signing with an Apple Developer ID.

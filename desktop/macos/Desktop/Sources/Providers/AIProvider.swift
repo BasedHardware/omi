@@ -95,6 +95,40 @@ struct AIProvider: Identifiable {
   /// normal cloud/dev resolution", same opt-in framing as the two keys above.
   static let localBackendURLKey = "localBackendURL"
 
+  /// UserDefaults key for the Local provider's "Context per turn" setting:
+  /// how much of the kernel context snapshot the runtime sends on the first
+  /// turn of a chat. Only meaningful under Local: every other provider
+  /// always sends the full (100%) context.
+  static let contextBudgetPercentKey = "localContextBudgetPercent"
+
+  /// Values for `contextBudgetPercentKey`. The raw value is the percentage
+  /// the kernel scales retained journal turns and per-source payload caps
+  /// by; 100 is byte-identical to today's behavior. Follow-up turns already
+  /// send only what changed, so this only shortens the first turn of a chat.
+  enum ContextBudgetPercent: Int, CaseIterable {
+    case quarter = 25
+    case half = 50
+    case threeQuarters = 75
+    case full = 100
+
+    var displayName: String {
+      switch self {
+      case .quarter: return "25%"
+      case .half: return "50%"
+      case .threeQuarters: return "75%"
+      case .full: return "100% (default)"
+      }
+    }
+  }
+
+  /// The persisted context-budget choice, defaulting to `.full` and falling
+  /// back to `.full` for any malformed stored value (missing, non-integer,
+  /// or an int that isn't one of the four cases) without ever persisting
+  /// that fallback.
+  static var localContextBudgetPercent: ContextBudgetPercent {
+    ContextBudgetPercent(rawValue: UserDefaults.standard.integer(forKey: contextBudgetPercentKey)) ?? .full
+  }
+
   /// Pre-unification key: connector synthesis (Apple Notes/Calendar/Gmail +
   /// AI-profile) used to have its own standalone on/off toggle before it was
   /// folded into `cloudAssistModeKey` below. Read once, by
@@ -227,6 +261,17 @@ struct AIProvider: Identifiable {
   /// `localCloudAssistMode == .cloud`, see `localCloudAssistEnabled`).
   static var isLocalProviderActive: Bool {
     resolveBridgeMode() == .local
+  }
+
+  /// The value to pass the runtime as `OMI_CONTEXT_BUDGET_PERCENT`, or nil
+  /// when the env var should simply be absent: every provider other than
+  /// Local, and Local at the 100% default (byte-identical to today, so
+  /// there is nothing to signal). Changing this needs a runtime restart:
+  /// the value is baked into the runtime environment at spawn, see
+  /// AgentRuntimeProcess.
+  static var contextBudgetPercentForRuntime: Int? {
+    guard isLocalProviderActive, localContextBudgetPercent != .full else { return nil }
+    return localContextBudgetPercent.rawValue
   }
 
   /// A local model's time to first token is dominated by prompt prefill on

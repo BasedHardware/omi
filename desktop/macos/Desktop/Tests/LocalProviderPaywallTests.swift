@@ -64,6 +64,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
     UserDefaults.standard.removeObject(forKey: AIProvider.localBackendURLKey)
     UserDefaults.standard.removeObject(forKey: AIProvider.connectorSynthesisModeKey)
     UserDefaults.standard.removeObject(forKey: AIProvider.cloudAssistModeKey)
+    UserDefaults.standard.removeObject(forKey: AIProvider.contextBudgetPercentKey)
     UserDefaults.standard.removeObject(forKey: notificationFrequencyKey)
     UserDefaults.standard.removeObject(forKey: notificationMasterEnabledKey)
     for p in BYOKProvider.allCases {
@@ -369,6 +370,52 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
     UserDefaults.standard.removeObject(forKey: AIProvider.connectorSynthesisModeKey)
 
     XCTAssertEqual(AIProvider.localCloudAssistMode, .off)
+  }
+
+  // MARK: - Context budget (AIProvider.localContextBudgetPercent / contextBudgetPercentForRuntime)
+
+  func testLocalContextBudgetPercentDefaultsToFull() {
+    UserDefaults.standard.removeObject(forKey: AIProvider.contextBudgetPercentKey)
+    XCTAssertEqual(AIProvider.localContextBudgetPercent, .full)
+  }
+
+  func testLocalContextBudgetPercentReadsStoredHalf() {
+    UserDefaults.standard.set(50, forKey: AIProvider.contextBudgetPercentKey)
+    XCTAssertEqual(AIProvider.localContextBudgetPercent, .half)
+  }
+
+  /// A stored int that isn't one of the four cases must fail closed to
+  /// `.full` without overwriting the stored value, so a legitimate future
+  /// case for that int is never frozen out.
+  func testLocalContextBudgetPercentFallsBackToFullOnMalformedIntWithoutPersisting() {
+    UserDefaults.standard.set(33, forKey: AIProvider.contextBudgetPercentKey)
+    XCTAssertEqual(AIProvider.localContextBudgetPercent, .full)
+    XCTAssertEqual(
+      UserDefaults.standard.integer(forKey: AIProvider.contextBudgetPercentKey), 33,
+      "the fallback to .full must not overwrite the stored malformed value")
+  }
+
+  func testLocalContextBudgetPercentFallsBackToFullOnMalformedStringValue() {
+    UserDefaults.standard.set("not-a-number", forKey: AIProvider.contextBudgetPercentKey)
+    XCTAssertEqual(AIProvider.localContextBudgetPercent, .full)
+  }
+
+  func testContextBudgetPercentForRuntimeNilUnderOmiProviderEvenWithFiftyStored() {
+    UserDefaults.standard.set("piMono", forKey: bridgeModeKey)
+    UserDefaults.standard.set(50, forKey: AIProvider.contextBudgetPercentKey)
+    XCTAssertNil(AIProvider.contextBudgetPercentForRuntime)
+  }
+
+  func testContextBudgetPercentForRuntimeNilUnderLocalAtFullDefault() {
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    UserDefaults.standard.set(100, forKey: AIProvider.contextBudgetPercentKey)
+    XCTAssertNil(AIProvider.contextBudgetPercentForRuntime)
+  }
+
+  func testContextBudgetPercentForRuntimeReturnsFiftyUnderLocalWithFiftyStored() {
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    UserDefaults.standard.set(50, forKey: AIProvider.contextBudgetPercentKey)
+    XCTAssertEqual(AIProvider.contextBudgetPercentForRuntime, 50)
   }
 
   // MARK: - Cloud-assisted features: fail-closed gates
