@@ -116,6 +116,7 @@ def update_memory(
     category: Optional[MemoryCategory] = typer.Option(None, "--category", help="New category."),
     visibility: Optional[MemoryVisibility] = typer.Option(None, "--visibility", help="public or private."),
     tag: Optional[list[str]] = typer.Option(None, "--tag", help="Replace tags (repeat for multiple)."),
+    clear_tags: bool = typer.Option(False, "--clear-tags", help="Remove all tags from the memory."),
 ) -> None:
     ctx = _ctx(typer_ctx)
     body: dict[str, object] = {}
@@ -125,11 +126,16 @@ def update_memory(
         body["category"] = category.value
     if visibility is not None:
         body["visibility"] = visibility.value
-    if tag is not None:
+    if clear_tags and tag is not None:
+        raise UsageError(message="Choose one tag operation", detail="Use either --tag or --clear-tags, not both.")
+    if clear_tags:
+        body["tags"] = []
+    elif tag is not None:
         body["tags"] = list(tag)
     if not body:
         raise UsageError(
-            message="No fields to update", detail="Provide at least one of --content/--category/--visibility/--tag."
+            message="No fields to update",
+            detail="Provide at least one of --content/--category/--visibility/--tag/--clear-tags.",
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/memories/{memory_id}", json_body=body)
