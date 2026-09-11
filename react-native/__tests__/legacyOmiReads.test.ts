@@ -209,6 +209,52 @@ test('old conversations keep wire-non-empty category and omit whitespace', async
   expect(result.items[1]).not.toHaveProperty('category');
 });
 
+test('old conversations name empty GET visibility as private instead of hiding neighbors', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'empty-visibility',
+      visibility: '',
+    },
+    {
+      ...conversation,
+      id: 'unknown-visibility',
+      visibility: 'secret',
+    },
+    {
+      ...conversation,
+      id: 'public-visibility',
+      visibility: 'public',
+    },
+    {
+      ...conversation,
+      id: 'shared-visibility',
+      visibility: 'shared',
+    },
+  ]);
+  const result = await loadConversations(api);
+  expect(result.items).toHaveLength(4);
+  expect(result.items[0]).toMatchObject({
+    id: 'empty-visibility',
+    visibility: 'private',
+  });
+  expect(result.items[1]).toMatchObject({
+    id: 'unknown-visibility',
+    visibility: 'private',
+  });
+  expect(result.items[2]).toMatchObject({
+    id: 'public-visibility',
+    visibility: 'public',
+  });
+  expect(result.items[3]).toMatchObject({
+    id: 'shared-visibility',
+    visibility: 'shared',
+  });
+  await expect(
+    loadConversations(backend([{...conversation, visibility: 1}]).api),
+  ).rejects.toThrow('Omi text is malformed');
+});
+
 test('old conversations keep GET source wire values', async () => {
   const {api} = backend([
     {

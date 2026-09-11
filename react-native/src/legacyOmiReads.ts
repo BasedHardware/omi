@@ -198,9 +198,10 @@ export async function loadOmiConversations(
     const createdAt = date(row.created_at);
     if (createdAt === null)
       throw new Error('Omi conversation creation time is malformed');
-    const visibility = text(row.visibility, 'private');
-    if (!['private', 'public', 'shared'].includes(visibility))
-      throw new Error('Omi visibility is malformed');
+    const namedVisibility = text(row.visibility, 'private');
+    const visibility = ['private', 'public', 'shared'].includes(namedVisibility)
+      ? namedVisibility
+      : 'private';
     const status = text(row.status, 'completed');
     const photos = photoCount(row.photos);
     if (!isOptionalCaptureTimestamp(row.captured_at_ms)) {
