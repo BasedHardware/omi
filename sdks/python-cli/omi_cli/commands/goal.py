@@ -129,7 +129,9 @@ def create_goal(
     if why_it_matters is not None:
         body["why_it_matters"] = why_it_matters
     if success_criterion:
-        body["success_criteria"] = list(success_criterion)
+        criteria = [c for c in success_criterion if c and c.strip()]
+        if criteria:
+            body["success_criteria"] = criteria
     if horizon_at is not None:
         body["horizon_at"] = horizon_at.isoformat()
     # No metric options given: send a qualitative goal (the API supports omitting all metric fields).
