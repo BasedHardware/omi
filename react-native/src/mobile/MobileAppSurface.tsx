@@ -72,6 +72,7 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   settingsContent?: React.ReactNode;
   conversationContent?: React.ReactNode;
   appsContent?: React.ReactNode;
+  liveVoiceControl?: React.ReactNode;
   tasks: readonly MobileTask[];
   taskStatus: MobileProjectionStatus;
   recaps: readonly MobileRecap[];
@@ -251,6 +252,7 @@ export function MobileAppSurface({
   settingsContent,
   conversationContent,
   appsContent,
+  liveVoiceControl,
   mindMapStatus,
   onAskChange,
   onAskSubmit,
@@ -562,6 +564,7 @@ export function MobileAppSurface({
               style={styles.roundButton}>
               <Phone color={mobileColor.text} size={20} />
             </Pressable>
+            {liveVoiceControl}
           </View>
           <Pressable
             accessibilityLabel="Open settings"

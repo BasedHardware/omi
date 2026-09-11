@@ -16,6 +16,7 @@ type Props = {
   hasOlder: boolean;
   loadingOlder: boolean;
   loadingHistory?: boolean;
+  liveControl?: React.ReactNode;
   onLoadOlder: () => void;
   onClose: () => void;
 };
@@ -27,6 +28,7 @@ export function DesktopChat({
   hasOlder,
   loadingOlder,
   loadingHistory = false,
+  liveControl,
   onLoadOlder,
   onClose,
 }: Props) {
@@ -131,6 +133,7 @@ export function DesktopChat({
   return (
     <View style={styles.root} accessibilityLabel="Chat with Omi">
       <View style={styles.header}>
+        {liveControl}
         <FocusPressable
           accessibilityRole="button"
           accessibilityLabel="Close chat"
@@ -232,7 +235,11 @@ const styles = StyleSheet.create({
   title: {fontSize: 24, color: token.color.ink, fontWeight: '600'},
   muted: {fontSize: 13, lineHeight: 20, color: token.color.inkMuted},
   earlier: {alignSelf: 'center', padding: 10},
-  header: {alignItems: 'flex-end'},
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   close: {
     width: 32,
     height: 32,

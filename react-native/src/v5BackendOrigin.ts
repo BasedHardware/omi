@@ -81,6 +81,7 @@ export function isCaptureBackendPath(path: string): boolean {
   const route = path.split(/[?#]/, 1)[0];
   return (
     route === '/v1/settings' ||
+    route === '/v1/live/sessions' ||
     route === '/v1/chat-messages' ||
     route.startsWith('/v1/chat-generations/') ||
     route === '/v1/chat-attachments' ||

@@ -43,6 +43,7 @@ public final class OmiBackendTransport {
     }
     if (route == null) return false;
     return route.equals("/v1/settings") ||
+      route.equals("/v1/live/sessions") ||
       route.equals("/v1/chat-messages") ||
       route.startsWith("/v1/chat-generations/") ||
       route.equals("/v1/chat-attachments") ||

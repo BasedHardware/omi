@@ -14,7 +14,7 @@ public final class BackendTransportTest {
     assert OmiBackendTransport.readTimeoutMillis("POST", "/v1/device-sessions/id/complete") == 30_000;
     assert OmiBackendTransport.readTimeoutMillis("POST", "/v1/device-sessions//transcribe") == 30_000;
     for (String path : new String[] {
-      "/v1/settings", "/v1/chat-messages", "/v1/chat-generations/id/events",
+      "/v1/settings", "/v1/live/sessions", "/v1/chat-messages", "/v1/chat-generations/id/events",
       "/v1/chat-generations/id", "/v1/chat-attachments", "/v1/chat-attachments/id/complete",
       "/v1/device-sessions", "/v1/device-sessions/id/audio", "/v1/conversations",
       "/v1/memories", "/v1/tasks", "/v1/tasks/ops"
@@ -23,7 +23,8 @@ public final class BackendTransportTest {
       assert OmiBackendTransport.isV5BackendPath(path + "?limit=10") : path;
     }
     for (String path : new String[] {
-      "/v1/users/me", "/v1/tasks/one", "/v1/tasks-extra", "/v1/device-sessions-extra"
+      "/v1/users/me", "/v1/tasks/one", "/v1/tasks-extra", "/v1/device-sessions-extra",
+      "/v1/live/sessions-extra"
     }) {
       assert !OmiBackendTransport.isV5BackendPath(path) : path;
     }
