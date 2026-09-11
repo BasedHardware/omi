@@ -82,6 +82,8 @@ struct LocalEmbeddingStore: Sendable {
             text TEXT NOT NULL,
             textSha256 TEXT NOT NULL,
             startedAt DATETIME NOT NULL,
+            sourceSegmentCount INTEGER NOT NULL DEFAULT 0,
+            sourceMaxSegmentId INTEGER NOT NULL DEFAULT 0,
             UNIQUE(sessionId, chunkIndex)
           );
           CREATE INDEX transcript_chunks_session ON transcript_chunks(sessionId, chunkIndex);
@@ -124,7 +126,9 @@ struct LocalEmbeddingStore: Sendable {
           CREATE TRIGGER local_embeddings_memory_delete AFTER DELETE ON memories BEGIN
             DELETE FROM local_embeddings WHERE sourceKind = 'memory' AND sourceId = old.id;
           END;
-          CREATE TRIGGER local_embeddings_memory_text_update AFTER UPDATE OF content ON memories BEGIN
+          CREATE TRIGGER local_embeddings_memory_text_update AFTER UPDATE OF content ON memories
+          WHEN old.content IS NOT new.content
+          BEGIN
             DELETE FROM local_embeddings WHERE sourceKind = 'memory' AND sourceId = old.id;
           END;
           INSERT INTO memories_fts(memories_fts) VALUES('rebuild');
@@ -387,34 +391,98 @@ struct LocalEmbeddingStore: Sendable {
   func sessionsNeedingTranscriptChunks(limit: Int = 20) throws -> [Int64] {
     try pool.read { db in
       let bound = max(0, min(limit, 50))
-      let hasStatus = try db.columns(in: "transcription_sessions").contains { $0.name == "status" }
-      let sql =
-        hasStatus
-        ? """
-        SELECT s.id FROM transcription_sessions s
-        WHERE s.status = 'completed'
-          AND (
-            EXISTS (SELECT 1 FROM transcription_segments g WHERE g.sessionId = s.id)
-            OR EXISTS (SELECT 1 FROM transcript_chunks c WHERE c.sessionId = s.id)
-          )
-        ORDER BY s.id DESC LIMIT ?
-        """
-        : """
-        SELECT s.id FROM transcription_sessions s
-        WHERE EXISTS (SELECT 1 FROM transcription_segments g WHERE g.sessionId = s.id)
-          OR EXISTS (SELECT 1 FROM transcript_chunks c WHERE c.sessionId = s.id)
-        ORDER BY s.id DESC LIMIT ?
-        """
-      let ids = try Int64.fetchAll(db, sql: sql, arguments: [bound])
       var needed: [Int64] = []
-      needed.reserveCapacity(ids.count)
-      for id in ids {
-        if try Self.sessionChunksNeedRewrite(sessionId: id, db: db) {
+      var seen = Set<Int64>()
+      func appendUnique(_ ids: [Int64]) {
+        for id in ids where seen.insert(id).inserted {
           needed.append(id)
-          if needed.count >= bound { break }
+        }
+      }
+      let hasSegments = try db.tableExists("transcription_segments")
+      let hasStatus = try db.columns(in: "transcription_sessions").contains { $0.name == "status" }
+      if hasSegments {
+        let completed =
+          hasStatus
+          ? "AND s.status = 'completed'\n            "
+          : ""
+        let unchunked = try Int64.fetchAll(
+          db,
+          sql: """
+            SELECT s.id FROM transcription_sessions s
+            WHERE EXISTS (SELECT 1 FROM transcription_segments g WHERE g.sessionId = s.id)
+              AND NOT EXISTS (SELECT 1 FROM transcript_chunks c WHERE c.sessionId = s.id)
+              \(completed)
+            ORDER BY s.id DESC LIMIT ?
+            """,
+          arguments: [bound])
+        appendUnique(unchunked)
+      }
+      let hasFingerprint = try db.columns(in: "transcript_chunks").contains {
+        $0.name == "sourceSegmentCount"
+      }
+      if hasSegments {
+        let completedPred = hasStatus ? "s.status = 'completed' AND " : ""
+        let mismatch: String
+        if hasFingerprint {
+          mismatch = """
+            (
+                NOT EXISTS (SELECT 1 FROM transcription_segments g WHERE g.sessionId = s.id)
+                OR (SELECT COUNT(*) FROM transcription_segments g WHERE g.sessionId = s.id)
+                   != (SELECT c.sourceSegmentCount FROM transcript_chunks c WHERE c.sessionId = s.id LIMIT 1)
+                OR COALESCE((SELECT MAX(g.id) FROM transcription_segments g WHERE g.sessionId = s.id), 0)
+                   != (SELECT c.sourceMaxSegmentId FROM transcript_chunks c WHERE c.sessionId = s.id LIMIT 1)
+              )
+            """
+        } else {
+          mismatch = "NOT EXISTS (SELECT 1 FROM transcription_segments g WHERE g.sessionId = s.id)"
+        }
+        let stale = try Int64.fetchAll(
+          db,
+          sql: """
+            SELECT s.id FROM transcription_sessions s
+            WHERE \(completedPred)EXISTS (SELECT 1 FROM transcript_chunks c WHERE c.sessionId = s.id)
+              AND \(mismatch)
+            ORDER BY s.id DESC LIMIT ?
+            """,
+          arguments: [bound])
+        for id in stale where seen.insert(id).inserted {
+          if try Self.sessionChunksNeedRewrite(sessionId: id, db: db) {
+            needed.append(id)
+          }
         }
       }
       return needed
+    }
+  }
+
+  func filterNeedingEmbedding(
+    items: [(Int64, String)], sourceKind: LocalEmbeddingSourceKind, modelID: String
+  ) throws -> [(Int64, String)] {
+    guard !items.isEmpty, !modelID.isEmpty else { return [] }
+    return try pool.read { db in
+      var storedHash: [Int64: String] = [:]
+      var uniqueIds: [Int64] = []
+      var seen = Set<Int64>()
+      for item in items where seen.insert(item.0).inserted {
+        uniqueIds.append(item.0)
+      }
+      for start in stride(from: 0, to: uniqueIds.count, by: 400) {
+        let slice = Array(uniqueIds[start..<min(start + 400, uniqueIds.count)])
+        let placeholders = slice.map { _ in "?" }.joined(separator: ",")
+        var args: [DatabaseValueConvertible] = [sourceKind.rawValue, modelID]
+        args.append(contentsOf: slice)
+        let rows = try Row.fetchAll(
+          db,
+          sql: """
+            SELECT sourceId, textSha256 FROM local_embeddings
+            WHERE sourceKind = ? AND modelId = ? AND sourceId IN (\(placeholders))
+            """,
+          arguments: StatementArguments(args))
+        for row in rows {
+          storedHash[row["sourceId"]] = row["textSha256"]
+        }
+      }
+      return items.filter { storedHash[$0.0] != Self.textHash($0.1) }
     }
   }
 
@@ -462,14 +530,25 @@ struct LocalEmbeddingStore: Sendable {
   {
     var stored: [TranscriptChunkRecord] = []
     stored.reserveCapacity(chunks.count)
+    var fingerprintBySession: [Int64: (count: Int, maxId: Int64)] = [:]
     for chunk in chunks {
+      let fingerprint: (count: Int, maxId: Int64)
+      if let cached = fingerprintBySession[chunk.sessionId] {
+        fingerprint = cached
+      } else {
+        let computed = try Self.segmentSourceFingerprint(sessionId: chunk.sessionId, db: db)
+        fingerprintBySession[chunk.sessionId] = computed
+        fingerprint = computed
+      }
       try db.execute(
         sql: """
-          INSERT INTO transcript_chunks(sessionId, chunkIndex, text, textSha256, startedAt)
-          VALUES (?, ?, ?, ?, ?)
+          INSERT INTO transcript_chunks(
+            sessionId, chunkIndex, text, textSha256, startedAt, sourceSegmentCount, sourceMaxSegmentId)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
           """,
         arguments: [
           chunk.sessionId, chunk.chunkIndex, chunk.text, chunk.textSha256, chunk.startedAt,
+          fingerprint.count, fingerprint.maxId,
         ])
       let id = try Int64.fetchOne(
         db,
@@ -481,6 +560,18 @@ struct LocalEmbeddingStore: Sendable {
           text: chunk.text, textSha256: chunk.textSha256, startedAt: chunk.startedAt))
     }
     return stored
+  }
+
+  private static func segmentSourceFingerprint(sessionId: Int64, db: Database) throws -> (count: Int, maxId: Int64) {
+    guard try db.tableExists("transcription_segments") else { return (0, 0) }
+    let count =
+      try Int.fetchOne(
+        db, sql: "SELECT COUNT(*) FROM transcription_segments WHERE sessionId = ?", arguments: [sessionId]) ?? 0
+    let maxId =
+      try Int64.fetchOne(
+        db, sql: "SELECT COALESCE(MAX(id), 0) FROM transcription_segments WHERE sessionId = ?", arguments: [sessionId]
+      ) ?? 0
+    return (count, maxId)
   }
 
   private static func sessionChunksNeedRewrite(sessionId: Int64, db: Database) throws -> Bool {

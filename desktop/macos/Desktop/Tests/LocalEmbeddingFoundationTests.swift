@@ -394,4 +394,43 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
     }
     XCTAssertEqual(leftover, 0)
   }
+
+  func testUnchunkedOlderSessionIsPickedUpPastTheBound() async throws {
+    let (store, directory) = try fixture()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let origin = Date(timeIntervalSince1970: 20)
+    try await store.pool.write { db in
+      try db.execute(sql: "ALTER TABLE transcription_sessions ADD COLUMN status TEXT")
+      try db.execute(sql: "ALTER TABLE transcription_sessions ADD COLUMN startedAt DATETIME")
+      try db.execute(
+        sql: """
+          CREATE TABLE transcription_segments (
+            id INTEGER PRIMARY KEY, sessionId INTEGER, text TEXT, segmentOrder INTEGER, startTime DOUBLE)
+          """)
+      for sessionId in 1...21 {
+        try db.execute(
+          sql: "INSERT INTO transcription_sessions(id, status, startedAt) VALUES (?, 'completed', ?)",
+          arguments: [sessionId, origin])
+        for order in 0..<8 {
+          try db.execute(
+            sql: """
+              INSERT INTO transcription_segments(sessionId, text, segmentOrder, startTime)
+              VALUES (?, ?, ?, 0)
+              """,
+            arguments: [sessionId, "session \(sessionId) segment \(order)", order])
+        }
+      }
+    }
+    for sessionId in 2...21 {
+      let chunks = TranscriptChunker.chunks(
+        sessionId: Int64(sessionId),
+        segments: (0..<8).map {
+          TranscriptChunker.Segment(
+            text: "session \(sessionId) segment \($0)", order: $0, startedAt: origin)
+        })
+      _ = try await store.replaceTranscriptChunks(
+        sessionId: Int64(sessionId), chunks: chunks, authorization: .unrestricted)
+    }
+    XCTAssertEqual(try store.sessionsNeedingTranscriptChunks(limit: 20), [1])
+  }
 }
