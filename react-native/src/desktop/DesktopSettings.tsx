@@ -934,9 +934,18 @@ export function DesktopSettings({
           title="Current plan"
         />
       )}
-      {usageStatsCopy(account?.usage)?.map(row => (
-        <Row copy={row.copy} key={row.title} title={row.title} />
-      ))}
+      {account != null && account.usageError != null ? (
+        <>
+          <Row copy={account.usageError} title="Listening" />
+          <Row copy={account.usageError} title="Understanding" />
+          <Row copy={account.usageError} title="Providing" />
+          <Row copy={account.usageError} title="Remembering" />
+        </>
+      ) : (
+        usageStatsCopy(account?.usage)?.map(row => (
+          <Row copy={row.copy} key={row.title} title={row.title} />
+        ))
+      )}
       {usageMonthlyError !== null ? (
         <Row copy={usageMonthlyError} title="This month" />
       ) : (
@@ -961,7 +970,7 @@ export function DesktopSettings({
       {subscriptionPeriodCopy(account?.subscription)?.map(row => (
         <Row copy={row.copy} key={row.title} title={row.title} />
       ))}
-      {account != null && account.languageError !== null ? (
+      {account != null && account.languageError != null ? (
         <Row copy={account.languageError} title="Primary language" />
       ) : primaryLanguageCopy(account?.language, account?.languageNames) !==
         null ? (

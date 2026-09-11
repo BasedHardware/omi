@@ -2761,6 +2761,65 @@ test('Settings names GET usage today without Upgrade', async () => {
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names a failed usage today GET instead of empty success', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: 90,
+      transcriptionSecondsLimit: 3600,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+    usage: null,
+    usageError: desktopBackendServiceCopy,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Listening');
+  expect(tree).toContain('Understanding');
+  expect(tree).toContain('Providing');
+  expect(tree).toContain('Remembering');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('2 minutes');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names GET usage monthly yearly all-time without Upgrade', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;

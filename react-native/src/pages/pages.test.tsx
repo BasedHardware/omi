@@ -1210,6 +1210,25 @@ test('Settings names GET usage today without Upgrade', async () => {
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names a failed usage today GET instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/usage?period=today') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Listening');
+  expect(tree).toContain('Understanding');
+  expect(tree).toContain('Providing');
+  expect(tree).toContain('Remembering');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('2 minutes');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names GET subscription period quotas without Upgrade', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

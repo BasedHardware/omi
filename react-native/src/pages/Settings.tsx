@@ -824,9 +824,18 @@ export function SettingsPage({
             title="Plan"
           />
         )}
-        {usageStatsCopy(snapshot.usage)?.map(row => (
-          <SettingRow copy={row.copy} key={row.title} title={row.title} />
-        ))}
+        {snapshot.usageError != null ? (
+          <>
+            <SettingRow copy={snapshot.usageError} title="Listening" />
+            <SettingRow copy={snapshot.usageError} title="Understanding" />
+            <SettingRow copy={snapshot.usageError} title="Providing" />
+            <SettingRow copy={snapshot.usageError} title="Remembering" />
+          </>
+        ) : (
+          usageStatsCopy(snapshot.usage)?.map(row => (
+            <SettingRow copy={row.copy} key={row.title} title={row.title} />
+          ))
+        )}
         {usageMonthlyError !== null ? (
           <SettingRow copy={usageMonthlyError} title="This month" />
         ) : (
@@ -851,7 +860,7 @@ export function SettingsPage({
         {subscriptionPeriodCopy(snapshot.subscription)?.map(row => (
           <SettingRow copy={row.copy} key={row.title} title={row.title} />
         ))}
-        {snapshot.languageError !== null ? (
+        {snapshot.languageError != null ? (
           <SettingRow copy={snapshot.languageError} title="Primary language" />
         ) : primaryLanguageCopy(snapshot.language, snapshot.languageNames) !==
           null ? (
