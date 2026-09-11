@@ -75,6 +75,10 @@ export function DesktopRewind({
       imageEpoch.current += 1;
       timeline.current = null;
       loading.current = false;
+      // The list is cleared, so a prior "load more" must not keep the
+      // automatic refresh disabled forever: without this, Recall stays frozen
+      // on the auth error after the session returns.
+      paginated.current = false;
       setBusy(false);
       setFrames([]);
       setHasMore(false);
