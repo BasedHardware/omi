@@ -341,6 +341,29 @@ extension SettingsContentView {
         }
       }
 
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+        Text("Context per turn")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundColor(Ink.secondary)
+
+        Picker("", selection: $localContextBudgetPercent) {
+          ForEach(AIProvider.ContextBudgetPercent.allCases, id: \.rawValue) { option in
+            Text(option.displayName).tag(option.rawValue)
+          }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .onChange(of: localContextBudgetPercent) { _, _ in
+          restartLocalBridgesIfActive()
+        }
+
+        Text(
+          "100% (default) sends the same context as every other provider. Lower values shorten the first turn of a chat by keeping fewer recent journal turns and trimming the largest context sources (workspace, memories) on the local model. Follow-up turns already send only what changed. Applies only to the Local provider."
+        )
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+      }
+
       Text("An OpenAI-compatible endpoint (e.g. LM Studio, Ollama). Never routed through Omi's servers.")
         .scaledFont(size: OmiType.caption)
         .foregroundColor(Ink.secondary)

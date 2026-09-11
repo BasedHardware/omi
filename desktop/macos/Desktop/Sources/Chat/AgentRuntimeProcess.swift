@@ -2622,8 +2622,16 @@ actor AgentRuntimeProcess {
       if !localVisionModelID.isEmpty {
         env["OMI_LOCAL_VISION_MODEL_ID"] = localVisionModelID
       }
+      // Context budget: scales retained journal turns and per-source
+      // payload caps in the kernel context snapshot on the first turn of a
+      // chat. Omitted entirely at the 100% default, so the env var is
+      // simply absent, byte-identical to today.
+      let contextBudgetPercent = AIProvider.contextBudgetPercentForRuntime
+      if let contextBudgetPercent {
+        env["OMI_CONTEXT_BUDGET_PERCENT"] = String(contextBudgetPercent)
+      }
       log(
-        "AgentRuntimeProcess: piMono provider=omi-local baseURL=\(localBaseURL) model=\(localModelID) visionModel=\(localVisionModelID.isEmpty ? "none" : localVisionModelID)"
+        "AgentRuntimeProcess: piMono provider=omi-local baseURL=\(localBaseURL) model=\(localModelID) visionModel=\(localVisionModelID.isEmpty ? "none" : localVisionModelID) contextBudget=\(contextBudgetPercent ?? 100)%"
       )
     } else if preferredAdapterId == .piMono {
       log("AgentRuntimeProcess: piMono provider=omi")

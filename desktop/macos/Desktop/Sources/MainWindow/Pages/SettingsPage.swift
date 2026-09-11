@@ -372,6 +372,7 @@ struct SettingsContentView: View {
   @AppStorage(AIProvider.localBackendURLKey) var localBackendURL: String = ""
   @AppStorage(AIProvider.cloudAssistModeKey) var localCloudAssistMode: String =
     AIProvider.CloudAssistMode.off.rawValue
+  @AppStorage(AIProvider.contextBudgetPercentKey) var localContextBudgetPercent: Int = 100
   @State var localModelOptions: [String] = []
   @State var isFetchingLocalModels = false
   @State var localModelsFetchFailed = false
