@@ -212,6 +212,11 @@ def parse_datetime(dt_str: str) -> tuple[datetime, bool]:
             # If no year in format, use current year
             if "%Y" not in fmt:
                 parsed = parsed.replace(year=today.year)
+            # Normalize any explicit offset to UTC wall time before callers
+            # attach timeZone: UTC.
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone(timezone.utc)
+                parsed = parsed.replace(tzinfo=None)
             # If no time in format, it's an all-day event
             is_all_day = "%H" not in fmt and "%I" not in fmt
             return parsed, is_all_day
