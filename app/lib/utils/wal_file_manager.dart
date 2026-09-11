@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:pool/pool.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -16,6 +17,7 @@ class WalFileManager {
 
   static File? _walFile;
   static File? _walBackupFile;
+  static final _saveLock = Pool(1);
 
   static Future<void> init() async {
     final directory = await getApplicationDocumentsDirectory();
@@ -55,7 +57,9 @@ class WalFileManager {
     return Wal.fromJsonList(walsList);
   }
 
-  static Future<bool> saveWals(List<Wal> wals) async {
+  static Future<bool> saveWals(List<Wal> wals) => _saveLock.withResource(() => _saveWals(wals));
+
+  static Future<bool> _saveWals(List<Wal> wals) async {
     if (_walFile == null) {
       await init();
     }
@@ -85,10 +89,15 @@ class WalFileManager {
   static Future<void> _createBackup() async {
     try {
       if (_walFile != null && _walFile!.existsSync() && _walBackupFile != null) {
+        final content = await _walFile!.readAsString();
+        if (content.isEmpty) return;
+        jsonDecode(content);
         await _walFile!.copy(_walBackupFile!.path);
       }
     } on FileSystemException catch (e) {
       Logger.debug('WalFileManager: Failed to create backup: $e');
+    } on FormatException catch (e) {
+      Logger.debug('WalFileManager: Not backing up unreadable WAL file: $e');
     }
   }
 

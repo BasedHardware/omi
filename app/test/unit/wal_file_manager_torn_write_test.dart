@@ -21,6 +21,9 @@ class _TornWriteFile implements File {
   bool existsSync() => _real.existsSync();
 
   @override
+  Future<String> readAsString({Encoding encoding = utf8}) => _real.readAsString(encoding: encoding);
+
+  @override
   Future<File> copy(String newPath) => _real.copy(newPath);
 
   @override
@@ -109,5 +112,26 @@ void main() {
     expect(backupFile.existsSync(), isFalse);
 
     expect(await WalFileManager.loadWals(), isEmpty);
+  });
+
+  test('overlapping saves both complete and the later one wins', () async {
+    await Future.wait([
+      WalFileManager.saveWals([_wal(1000)]),
+      WalFileManager.saveWals([_wal(1000), _wal(2000)]),
+    ]);
+
+    expect((await WalFileManager.loadWals()).map((w) => w.timerStart), [1000, 2000]);
+  });
+
+  test('saving after an empty index keeps the good backup', () async {
+    await WalFileManager.saveWals([_wal(1000)]);
+    await WalFileManager.saveWals([_wal(1000), _wal(2000)]);
+    walFile.writeAsStringSync('');
+
+    final recovered = await WalFileManager.loadWals();
+    await WalFileManager.saveWals([...recovered, _wal(3000)]);
+
+    final backup = jsonDecode(backupFile.readAsStringSync()) as Map<String, dynamic>;
+    expect((backup['wals'] as List).map((w) => w['timer_start']), [1000]);
   });
 }
