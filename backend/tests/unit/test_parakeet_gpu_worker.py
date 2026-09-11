@@ -160,6 +160,20 @@ class TestGPUWorkerLifecycle:
         nemo_asr.models.ASRModel.from_pretrained.side_effect = None
         worker.stop()
 
+    def test_stream_mode_loads_diarizer_without_batch_asr_model(self):
+        nemo_asr = _get_nemo_asr()
+        nemo_asr.models.ASRModel.from_pretrained.reset_mock()
+        worker = GPUWorker(service_mode="stream")
+        worker._load_stream_diarizer = MagicMock()
+
+        worker._load_model()
+
+        worker._load_stream_diarizer.assert_called_once_with()
+        nemo_asr.models.ASRModel.from_pretrained.assert_not_called()
+        assert worker.has_batch_model is False
+        assert worker.service_mode == "stream"
+        worker.stop()
+
 
 class TestGPUWorkerFatalCUDA:
     def test_typed_accelerator_error_is_fatal_without_known_message(self):

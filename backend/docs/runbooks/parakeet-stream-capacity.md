@@ -7,12 +7,11 @@ outage.
 
 **Owner:** speech-processing / platform team.
 
-The `/v3/stream` server owns a hard per-pod admission gate. Every one of the
-27 backend-listen replicas connects to that boundary, and each Parakeet pod
+The `/v3/stream` server owns a hard per-pod admission gate. Backend-listen replicas connect to that boundary, and each Parakeet pod
 runs one Uvicorn process for its GPU, so listener count cannot multiply the
 configured limit. Rejected handshakes close with code `1013` and reason
 `capacity_full` or `allocation_rejected`; listeners may then connect to
-Modulate before accepting audio.
+Modulate and then Deepgram before accepting audio.
 
 ## Deployment settings
 
@@ -20,7 +19,7 @@ The Parakeet Helm values and `backend/deploy/runtime_env.yaml` explicitly own:
 
 | Setting | Production value | Meaning |
 | --- | --- | --- |
-| `PARAKEET_STREAM_CAPACITY` | `25` | Maximum admitted `/v3/stream` sessions in one Parakeet pod. |
+| `PARAKEET_STREAM_CAPACITY` | `10` | Maximum admitted `/v3/stream` sessions in one Parakeet pod. |
 | `PARAKEET_STREAM_ALLOCATION_PERCENT` | `100` | Percentage of new Parakeet handshakes eligible for admission. |
 
 Both settings are validated at service startup and the server fails to start
@@ -35,7 +34,7 @@ GPU utilization, queue duration, request latency, and request errors.
 **PromQL:**
 
 ```promql
-sum(parakeet_active_streams{container="parakeet", namespace="prod-omi-backend"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment="prod-omi-parakeet", namespace="prod-omi-backend"}), 1)
+sum(parakeet_active_streams{container="parakeet", namespace="prod-omi-backend", pod=~"prod-omi-parakeet-stream-.*"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment="prod-omi-parakeet-stream", namespace="prod-omi-backend"}), 1)
 ```
 
 The metric is the sum of active WebSocket streams divided by ready deployment
@@ -45,12 +44,12 @@ is catching up.
 
 | Alert | Threshold | Duration | Meaning |
 | --- | --- | --- | --- |
-| Warning | 15 active streams per ready replica | 5 minutes | Headroom is reduced; confirm HPA progress and pod readiness. |
-| Critical | 20 active streams per ready replica | 2 minutes | Near the configured 25-stream per-replica hard limit; act after corroborating the dashboard. |
+| Warning | 6 active streams per ready replica | 5 minutes | Headroom is reduced; confirm HPA progress and pod readiness. |
+| Critical | 8 active streams per ready replica | 2 minutes | Near the configured 10-stream per-replica hard limit; act after corroborating the dashboard. |
 
-No data is healthy for these capacity alerts. Missing metrics are not proof of
-saturation; investigate scrape, deployment, or readiness separately if the
-dashboard is unexpectedly empty.
+Missing metrics do not establish health or saturation. Investigate scrape,
+adapter and readiness when the dashboard is empty. The release gate must see
+current per-pod custom metrics before primary routing changes.
 
 ## First checks
 
@@ -70,3 +69,22 @@ dashboard is unexpectedly empty.
 Do not force-scale, change alert thresholds, or state that users are affected
 from this metric alone. The alert measures serving headroom; request errors,
 latency, and queueing provide the user-path corroboration.
+
+## Dedicated realtime deployment
+
+Apply the environment's stream overlay after its base Parakeet values. The
+production floor/ceiling is 99/125, and the node pool needs room for 126 GPUs
+including rolling surge; development uses 2/4 and five nodes. The deployment
+must verify actual warm replicas and metric availability before routing.
+The target of 8 streams and admission cap of 10 require exact-image GPU
+qualification; desired replicas are not usable capacity.
+
+`parakeet_stream_demand` adds recent `capacity_full` admission decisions to
+active streams. Compare this pressure with `parakeet_active_streams`, HPA
+conditions and available node capacity. Excess sessions use vendor fallback.
+Do not disable vendors or raise admission limits to silence pressure alerts.
+
+For planned termination, the chart invokes the loopback drain endpoint and
+withdraws readiness before sending termination. Sessions longer than the drain
+deadline rely on listener failover. Keep vendor quota available for the entire
+eligible workload and verify transcript continuity after a rollout.

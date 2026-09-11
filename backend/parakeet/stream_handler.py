@@ -54,6 +54,7 @@ from transcribe import (
     transcribe_file,
     _stream_model as _asr_model_raw,  # type: ignore[reportPrivateUsage,reportUnknownVariableType]
     INFERENCE_MODE as _INFERENCE_MODE,
+    SERVICE_MODE as _SERVICE_MODE,
     has_builtin_embedding,
     report_gpu_inference_error,
     wav_bytes_to_waveform,
@@ -66,6 +67,8 @@ logger = logging.getLogger(__name__)
 SPEECH_THRESHOLD = float(os.getenv("PARAKEET_VAD_THRESHOLD", "0.5"))
 MIN_SPEECH_DURATION_S = float(os.getenv("PARAKEET_MIN_SPEECH_S", "0.5"))
 MAX_SPEECH_DURATION_S = float(os.getenv("PARAKEET_MAX_SPEECH_S", "30.0"))
+# Retained audio must stay bounded if a live decoder stops producing words.
+MAX_PENDING_SPEECH_S = max(60.0, 2 * MAX_SPEECH_DURATION_S)
 AGC_TARGET_PEAK = float(os.getenv("PARAKEET_AGC_TARGET", "0.8"))
 HANGOVER_S = float(os.getenv("PARAKEET_HANGOVER_S", "0.8"))
 CHUNK_SECONDS = float(os.getenv("PARAKEET_CHUNK_S", "2.0"))
@@ -73,6 +76,9 @@ LEFT_CONTEXT_SECONDS = float(os.getenv("PARAKEET_LEFT_CONTEXT_S", "10.0"))
 RIGHT_CONTEXT_SECONDS = float(os.getenv("PARAKEET_RIGHT_CONTEXT_S", "2.0"))
 SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
 MIN_EMBEDDING_AUDIO_S = 0.5
+# Keep the one-time Torch Hub fetch reproducible across pod restarts. This is
+# the official Silero VAD v6.2.1 tag (commit 7e30209a3e90).
+SILERO_VAD_REPO = "snakers4/silero-vad:7e30209a3e901f9842f81b225f3e93d8199902b1"
 
 
 _vad_model: Any = None
@@ -113,7 +119,7 @@ def _cfg_set(cfg: Any, path: str, value: Any) -> None:
         setattr(cur, parts[-1], value)
 
 
-def warmup_rnnt_decoder(sample_rate: int = 16000) -> None:
+def warmup_rnnt_decoder(sample_rate: int = 16000) -> bool:
     """Run a dummy chunk through the RNNT decoder to pre-compile CUDA kernels.
 
     Call once at service startup to eliminate 15-20s cold-start latency
@@ -121,12 +127,12 @@ def warmup_rnnt_decoder(sample_rate: int = 16000) -> None:
     """
     if _asr_model is None or _INFERENCE_MODE == "nim":
         logger.info("RNNT warmup skipped (no stream model or NIM mode)")
-        return
+        return False
 
     asr_decoding = getattr(_asr_model, "decoding", None)
     if not hasattr(_asr_model, 'decoding') or not hasattr(getattr(asr_decoding, 'decoding', None), 'decoding_computer'):
         logger.info("RNNT warmup skipped (model does not support RNNT streaming)")
-        return
+        return False
 
     logger.info("RNNT warmup: running dummy chunk to pre-compile CUDA kernels...")
     try:
@@ -140,12 +146,14 @@ def warmup_rnnt_decoder(sample_rate: int = 16000) -> None:
         dummy_pcm = b'\x00' * int(sample_rate * 2 * 3)
         decoder.decode_pcm(dummy_pcm, is_last_chunk=True)
         logger.info("RNNT warmup complete")
+        return True
     except Exception as e:
         if report_gpu_inference_error(e):
             logger.error("RNNT warmup hit a fatal CUDA error; GPU worker is unavailable")
             raise
         else:
             logger.warning(f"RNNT warmup failed (non-fatal): {e}")
+            return False
 
 
 class _NemoRNNTStreamingDecoder:
@@ -217,6 +225,11 @@ class _NemoRNNTStreamingDecoder:
                 _cfg_set(decoding_cfg, "greedy.preserve_alignments", False)
                 _cfg_set(decoding_cfg, "fused_batch_size", -1)
                 _cfg_set(decoding_cfg, "beam.return_best_hypothesis", True)
+                # TDT models may carry token-duration computation enabled in
+                # their checkpoint config. Streaming consumers only need
+                # text, and inherited duration state can make chunked
+                # decoding retain stale alignment data across emissions.
+                _cfg_set(decoding_cfg, "tdt_include_token_duration", False)
                 try:
                     _cfg_set(decoding_cfg, "greedy.use_cuda_graph_decoder", False)
                 except Exception:
@@ -349,7 +362,18 @@ class _NemoRNNTStreamingDecoder:
             return self._text
 
 
-def _get_vad_model() -> Any:
+def _reset_vad_model_state(model: Any) -> None:
+    """Reset recurrent Silero state before a model is used by one stream."""
+
+    reset_states = getattr(model, "reset_states", None)
+    if not callable(reset_states):
+        raise RuntimeError("Silero VAD model does not expose reset_states()")
+    reset_states()
+
+
+def _load_vad_model_template() -> Any:
+    """Load one CPU Silero template; never return it to a live session."""
+
     global _vad_model
     if _vad_model is not None:
         return _vad_model
@@ -359,14 +383,90 @@ def _get_vad_model() -> Any:
         if _torch is None:
             logger.warning("torch not available, VAD disabled")
             return None
+
         try:
-            model, _ = _torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', trust_repo=True)
+            model, _ = _torch.hub.load(repo_or_dir=SILERO_VAD_REPO, model='silero_vad', trust_repo=True)
+            to_cpu = getattr(model, "cpu", None)
+            if callable(to_cpu):
+                model = to_cpu()
+            eval_model = getattr(model, "eval", None)
+            if callable(eval_model):
+                eval_model()
+            _reset_vad_model_state(model)
             _vad_model = model
             logger.info("Silero VAD model loaded")
             return _vad_model
         except Exception as e:
             logger.warning(f"Could not load Silero VAD: {e}")
             return None
+
+
+def _get_vad_model() -> Any:
+    """Return an independent stateful Silero VAD model for one stream.
+
+    The template is loaded once so sessions do not perform network/model IO.
+    Deepcopy is intentionally done while holding the initialization lock: the
+    template is a read-only CPU TorchScript module, while each returned clone
+    owns its recurrent state.
+    """
+
+    template = _load_vad_model_template()
+    if template is None:
+        return None
+    with _vad_lock:
+        try:
+            model = copy.deepcopy(template)
+            _reset_vad_model_state(model)
+            return model
+        except Exception as exc:
+            raise RuntimeError("Could not clone an isolated Silero VAD model for the stream") from exc
+
+
+def warmup_vad(sample_rate: int = 16000) -> bool:
+    """Load Silero VAD and execute one frame before admitting streams."""
+
+    model = _get_vad_model()
+    if model is None or _torch is None:
+        return False
+    try:
+        audio = _torch.frombuffer(b'\x00' * (512 * 2), dtype=_torch.int16).float() / 32768.0
+        model(audio, sample_rate)
+        logger.info("Silero VAD warmup complete")
+        return True
+    except Exception as exc:
+        logger.warning("Silero VAD warmup failed (exception_type=%s)", type(exc).__name__)
+        return False
+    finally:
+        try:
+            _reset_vad_model_state(model)
+        except Exception:
+            logger.debug("Silero VAD warmup state reset failed", exc_info=True)
+
+
+def warmup_diarizer() -> bool:
+    """Warm the speaker model required by this service mode.
+
+    A stream fleet must be self-contained: an external embedding URL can stay
+    configured for mixed mode, but it cannot make a stream pod ready because a
+    provider outage would otherwise be hidden until after admission.
+    """
+
+    if _SERVICE_MODE == "stream" and not has_builtin_embedding():
+        logger.warning("Streaming readiness requires the built-in diarizer model")
+        return False
+
+    if has_builtin_embedding():
+        worker: Any = cast(Any, _transcribe_mod)._gpu_worker
+        warmup = getattr(worker, "warmup_embedding", None)
+        if warmup is None:
+            return False
+        try:
+            return bool(warmup())
+        except Exception:
+            return False
+    # The external diarizer is intentionally request-scoped; making a network
+    # call during readiness would turn a provider blip into a pod outage.
+    return bool(SPEAKER_EMBEDDING_URL)
 
 
 class StreamSession:
@@ -402,15 +502,27 @@ class StreamSession:
         self._pending_audio: bytearray = bytearray()
         self._asr_audio_buf: bytearray = bytearray()
         self._streaming_decoder: Any = None
+        self._decoder_has_audio: bool = False
+        self._decoder_finalized: bool = False
+        self._flush_complete: bool = False
+        self._finalization_audio: bytes = b""
+        self._finalization_start_s: Optional[float] = None
         self._streaming_failed: bool = False
         self._streaming_text: str = ""
         self._last_emitted_text: str = ""
+        # Streaming decoder tails are retained for final-word recovery. Keep
+        # their acoustic bytes for speaker assignment, but never let the
+        # recovered segment move the transcript clock backwards into an
+        # already emitted interval.
+        self._last_emitted_end_s: Optional[float] = None
 
         self._spk_centroids: List[np.ndarray[Any, Any]] = []
         self._spk_counts: List[int] = []
         self._last_speaker: int = 0
 
         self._vad: Any = _get_vad_model()
+        if self._vad is None:
+            raise RuntimeError("Silero VAD session initialization failed")
 
     @staticmethod
     def _normalize_pcm16(pcm: bytes) -> bytes:
@@ -454,25 +566,50 @@ class StreamSession:
                         speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
                         result: List[Dict[str, Any]] = []
                         if speech_dur >= MIN_SPEECH_DURATION_S:
-                            await self._drain_streaming_asr(pad_partial=True)
-                            result = await self._transcribe_utterance(trim_trailing_word=True)
+                            # A VAD endpoint is a real utterance boundary. It
+                            # must finalize held right-context text before the
+                            # next utterance can acquire a new speaker/time
+                            # window; max-duration splits remain non-final.
+                            if self._streaming_enabled():
+                                await self._drain_streaming_asr(force=True)
+                            result = await self._transcribe_utterance()
                             segments.extend(result)
                         self._is_speaking = False
-                        if result or not self._streaming_enabled():
-                            self._pending_audio.clear()
-                            self._speech_start_s = None
+                        self._pending_audio.clear()
+                        self._speech_start_s = None
+                        if self._streaming_enabled():
+                            self._reset_streaming_decoder()
                         self._silence_count = 0
 
             if self._is_speaking:
                 speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
                 if speech_dur >= MAX_SPEECH_DURATION_S:
-                    await self._drain_streaming_asr(pad_partial=True)
+                    # A max-window emission is an intermediate observation,
+                    # not an end-of-stream marker. Do not inject zero padding
+                    # into the persistent NeMo streaming buffer here.
+                    await self._drain_streaming_asr()
                     result = await self._transcribe_utterance(trim_trailing_word=True)
                     segments.extend(result)
-                    self._pending_audio.clear()
-                    self._is_speaking = False
-                    self._speech_start_s = None
+                    if result or not self._streaming_enabled():
+                        # A forced streaming emission can legitimately have no
+                        # complete word yet (or no new decoder delta). Keep the
+                        # pending audio and speech anchor in that case; dropping
+                        # them here loses the text between max-window splits.
+                        self._pending_audio.clear()
+                        # Keep VAD speech state alive across an intermediate
+                        # max-window emission so immediate silence still
+                        # reaches the true utterance endpoint and finalizes
+                        # held decoder text before the next speaker.
+                        if self._streaming_enabled():
+                            self._is_speaking = True
+                            self._speech_start_s = self._stream_offset_s + chunk_dur
+                        else:
+                            self._is_speaking = False
+                            self._speech_start_s = None
                     self._silence_count = 0
+
+            if len(self._pending_audio) > MAX_PENDING_SPEECH_S * self._sr * self._bytes_per_sample:
+                raise RuntimeError("Parakeet stream exceeded its pending speech budget without emitting text")
 
             self._stream_offset_s += chunk_dur
 
@@ -483,7 +620,7 @@ class StreamSession:
             and self._pending_audio
             and self._speech_start_s is not None
         ):
-            await self._drain_streaming_asr(pad_partial=True)
+            await self._drain_streaming_asr()
             result = await self._transcribe_utterance(trim_trailing_word=True)
             if result:
                 segments.extend(result)
@@ -493,22 +630,58 @@ class StreamSession:
         return segments
 
     async def flush(self) -> List[Dict[str, Any]]:
+        if self._flush_complete:
+            return []
+        # feed() works in VAD frames; preserve the final real sub-frame too.
+        if self._pcm_buf:
+            tail = self._normalize_pcm16(bytes(self._pcm_buf))
+            self._pcm_buf.clear()
+            self._asr_audio_buf.extend(tail)
+            if self._speech_start_s is not None:
+                self._pending_audio.extend(tail)
+            elif self._finalization_audio and self._finalization_start_s is not None:
+                tail_end = self._finalization_start_s + len(self._finalization_audio) / (
+                    self._sr * self._bytes_per_sample
+                )
+                if abs(tail_end - self._stream_offset_s) < 1 / self._sr:
+                    self._finalization_audio += tail
+            self._stream_offset_s += len(tail) / (self._sr * self._bytes_per_sample)
         if self._streaming_enabled():
             await self._drain_streaming_asr(force=True)
+            if not self._pending_audio and self._new_streaming_text_since_last_emit():
+                # A trimmed emission may have cleared the pending utterance
+                # while the decoder still held its final word/right context.
+                self._pending_audio.extend(self._finalization_audio)
+                self._speech_start_s = self._finalization_start_s
+                # The retained tail now belongs to the pending utterance;
+                # avoid prepending it a second time in _transcribe_utterance.
+                self._finalization_audio = b""
+                self._finalization_start_s = None
         if not self._pending_audio or self._speech_start_s is None:
+            self._flush_complete = True
             return []
         speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
         if speech_dur < MIN_SPEECH_DURATION_S:
+            self._flush_complete = True
             return []
-        return await self._transcribe_utterance()
+        result = await self._transcribe_utterance()
+        self._flush_complete = True
+        return result
 
     def cleanup(self) -> None:
-        self._pcm_buf.clear()
-        self._audio_buf.clear()
-        self._pending_audio.clear()
-        self._asr_audio_buf.clear()
-        self._spk_centroids.clear()
-        self._spk_counts.clear()
+        try:
+            if self._vad is not None:
+                _reset_vad_model_state(self._vad)
+        finally:
+            self._pcm_buf.clear()
+            self._audio_buf.clear()
+            self._pending_audio.clear()
+            self._asr_audio_buf.clear()
+            self._finalization_audio = b""
+            self._finalization_start_s = None
+            self._last_emitted_end_s = None
+            self._spk_centroids.clear()
+            self._spk_counts.clear()
 
     def _run_vad(self, chunk: bytes) -> bool:
         if self._vad is None or _torch is None:
@@ -526,6 +699,18 @@ class StreamSession:
             return False
         asr_decoding = getattr(_asr_model, "decoding", None)
         return hasattr(_asr_model, 'decoding') and hasattr(getattr(asr_decoding, 'decoding', None), 'decoding_computer')
+
+    def _reset_streaming_decoder(self) -> None:
+        """Start a fresh cumulative decoder after a VAD-confirmed utterance."""
+
+        self._streaming_decoder = None
+        self._decoder_has_audio = False
+        self._decoder_finalized = False
+        self._asr_audio_buf.clear()
+        self._streaming_text = ""
+        self._last_emitted_text = ""
+        self._finalization_audio = b""
+        self._finalization_start_s = None
 
     def _get_streaming_decoder(self) -> Any:
         if self._streaming_decoder is None:
@@ -548,6 +733,12 @@ class StreamSession:
             if report_gpu_inference_error(e):
                 logger.error("RNNT streaming decode hit a fatal CUDA error; closing the stream")
                 raise
+            if _SERVICE_MODE == "stream":
+                # Stream-only pods have no batch engine to complete the
+                # utterance. Let the outer WebSocket handler close promptly so
+                # the backend can fail over to its next provider.
+                logger.error("RNNT streaming decode failed in stream mode; closing the stream")
+                raise
             logger.warning(f"RNNT streaming decode failed, falling back to VAD utterance transcribe: {e}")
             self._streaming_decoder = None
             self._streaming_failed = True
@@ -555,6 +746,8 @@ class StreamSession:
             self._asr_audio_buf.clear()
 
     def _drain_streaming_asr_sync(self, force: bool, pad_partial: bool = False) -> None:
+        if self._decoder_finalized:
+            return
         decoder = self._get_streaming_decoder()
         while True:
             required_bytes = decoder.next_input_bytes(self._bytes_per_sample)
@@ -563,6 +756,7 @@ class StreamSession:
             chunk = bytes(self._asr_audio_buf[:required_bytes])
             del self._asr_audio_buf[:required_bytes]
             self._streaming_text = decoder.decode_pcm(chunk, is_last_chunk=False)
+            self._decoder_has_audio = True
 
         if self._asr_audio_buf:
             if force:
@@ -574,6 +768,13 @@ class StreamSession:
                 chunk = bytes(self._asr_audio_buf) + b'\x00' * (required_bytes - len(self._asr_audio_buf))
                 self._asr_audio_buf.clear()
                 self._streaming_text = decoder.decode_pcm(chunk, is_last_chunk=False)
+        elif force and self._decoder_has_audio:
+            # Exact chunk boundaries still leave real audio in NeMo's right
+            # context. Finalize it once, with end-of-stream silence only here.
+            chunk = bytes(decoder.next_input_bytes(self._bytes_per_sample))
+            self._streaming_text = decoder.decode_pcm(chunk, is_last_chunk=True)
+        if force:
+            self._decoder_finalized = True
 
     def _new_streaming_text_since_last_emit(self) -> str:
         text = (self._streaming_text or "").strip()
@@ -595,7 +796,7 @@ class StreamSession:
 
     async def _transcribe_utterance(self, trim_trailing_word: bool = False) -> List[Dict[str, Any]]:
         speech_pcm = bytes(self._pending_audio)
-        speech_start: float = self._speech_start_s or self._stream_offset_s
+        speech_start: float = self._speech_start_s if self._speech_start_s is not None else self._stream_offset_s
 
         if self._streaming_enabled():
             text = self._new_streaming_text_since_last_emit()
@@ -611,7 +812,25 @@ class StreamSession:
             else:
                 self._last_emitted_text = self._streaming_text.strip()
             dur = len(speech_pcm) / (self._sr * self._bytes_per_sample)
-            return self._build_segments(text, speech_start, dur, speech_pcm)
+            # A max-window emission trims the final decoder word and retains
+            # the acoustic tail for the real VAD endpoint. The endpoint's
+            # pending buffer normally contains only hangover silence, so use
+            # the retained tail for speaker assignment and timeline bounds;
+            # otherwise a held word can be attributed from silence (or to a
+            # speaker who starts after the utterance ended).
+            segment_pcm = speech_pcm
+            segment_start = speech_start
+            if not trim_trailing_word and self._finalization_audio and self._finalization_start_s is not None:
+                segment_pcm = self._finalization_audio + speech_pcm
+                segment_start = self._finalization_start_s
+                dur = len(segment_pcm) / (self._sr * self._bytes_per_sample)
+            segments = self._build_segments(text, segment_start, dur, segment_pcm)
+            if trim_trailing_word and segments:
+                tail_bytes = int((CHUNK_SECONDS + RIGHT_CONTEXT_SECONDS) * self._sr * self._bytes_per_sample)
+                self._finalization_audio = speech_pcm[-tail_bytes:]
+                tail_duration = len(self._finalization_audio) / (self._sr * self._bytes_per_sample)
+                self._finalization_start_s = speech_start + dur - tail_duration
+            return segments
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(_asr_executor, self._transcribe_pcm, speech_pcm)
@@ -657,6 +876,7 @@ class StreamSession:
                     "detected_language": detected_lang,
                 }
             )
+            self._last_emitted_end_s = max(self._last_emitted_end_s or 0.0, abs_end)
 
         return output
 
@@ -676,11 +896,21 @@ class StreamSession:
             except LangDetectException:
                 pass
         speaker = self._assign_speaker(pcm, 0, dur_s)
+        # A final decoder word may be recovered from retained audio that was
+        # already used for an earlier trimmed emission. Its speaker window
+        # remains the full acoustic tail, while its transcript interval starts
+        # at the last committed endpoint to preserve monotonic output.
+        emitted_start = start_s
+        if self._last_emitted_end_s is not None:
+            emitted_start = max(emitted_start, self._last_emitted_end_s)
+        acoustic_end = start_s + dur_s
+        emitted_end = max(emitted_start, acoustic_end)
+        self._last_emitted_end_s = emitted_end
         return [
             {
                 "text": text.strip(),
-                "start": round(start_s, 2),
-                "end": round(start_s + dur_s, 2),
+                "start": round(emitted_start, 2),
+                "end": round(emitted_end, 2),
                 "speaker": speaker,
                 "is_user": False,
                 "person_id": None,

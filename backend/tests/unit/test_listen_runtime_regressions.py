@@ -214,8 +214,8 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     )
     selected_multi_language_options = []
 
-    def select_stt(language, *, multi_lang_enabled, preferred_service=None):
-        selected_multi_language_options.append((language, multi_lang_enabled, preferred_service))
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None, exclude=frozenset()):
+        selected_multi_language_options.append((language, multi_lang_enabled, preferred_service, exclude))
         return 'test-stt', 'es', 'test-model'
 
     monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
@@ -237,7 +237,7 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
 
     assert await runtime._bootstrap() is True
     await runtime.task_supervisor.drain_all(timeout=1.0, cancel=False)
-    assert selected_multi_language_options == [('es', False, None)]
+    assert selected_multi_language_options == [('es', False, None, frozenset())]
 
 
 @pytest.mark.anyio
@@ -577,8 +577,8 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
         fair_use_dg_budget_exhausted=False,
     )
 
-    def select_stt(language, *, multi_lang_enabled, preferred_service=None):
-        assert (language, multi_lang_enabled, preferred_service) == ('es', True, 'parakeet')
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None, exclude=frozenset()):
+        assert (language, multi_lang_enabled, preferred_service, exclude) == ('es', True, 'parakeet', frozenset())
         return STTService.modulate, 'multi', 'velma-2'
 
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.test')
@@ -594,6 +594,68 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
         'multi',
         'velma-2',
     )
+
+
+@pytest.mark.anyio
+async def test_bootstrap_excludes_parakeet_for_two_channel_explicit_request(monkeypatch):
+    """Channel count is known before selection, so the mono Parakeet stream is never opened."""
+    import routers.listen.runtime as runtime_module
+    from config.stt_provider_policy import PARAKEET_PROVIDER
+
+    request = ListenRequest(
+        websocket=SimpleNamespace(),
+        uid='multi-channel-routing-user',
+        language='en',
+        channels=2,
+        stt_service='parakeet',
+    )
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.use_custom_stt = False
+    runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None)
+
+    async def bootstrap_persistence_call(*_args, **_kwargs):
+        return False
+
+    runtime.persistence = SimpleNamespace(call=bootstrap_persistence_call)
+    runtime.is_multi_channel = request.channels >= 2
+    runtime.has_speech_profile = False
+    runtime._build_components = lambda: None
+
+    base = ListenConnectBase(
+        user_exists=True,
+        user_has_credits=True,
+        transcription_prefs={'single_language_mode': False, 'uses_custom_stt': False},
+        fair_use_init_stage=None,
+        fair_use_track_dg_usage=False,
+        fair_use_dg_budget_exhausted=False,
+    )
+
+    selected = {}
+
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None, exclude=frozenset()):
+        selected.update(
+            language=language,
+            multi_lang_enabled=multi_lang_enabled,
+            preferred_service=preferred_service,
+            exclude=exclude,
+        )
+        return STTService.modulate, language, 'velma-2'
+
+    monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+    monkeypatch.setattr(runtime_module, 'get_stt_service_for_language', select_stt)
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
+    monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
+
+    assert await runtime._bootstrap() is True
+    assert selected == {
+        'language': 'en',
+        'multi_lang_enabled': True,
+        'preferred_service': 'parakeet',
+        'exclude': frozenset({PARAKEET_PROVIDER}),
+    }
+    assert runtime.stt_service == STTService.modulate
 
 
 def test_runtime_emits_speaker_suggestion_event(monkeypatch):

@@ -13,6 +13,8 @@ overlay:
           category: service_discovery
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omiapi.com
+        HOSTED_PARAKEET_STREAM_API_URL:
+          value: http://dev-omi-parakeet-stream.dev-omi-backend.svc.cluster.local:8080
         HOSTED_TRANSLATION_API_URL:
           value: http://nllb.omiapi.com
         OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
@@ -138,7 +140,7 @@ overlay:
           value: parakeet,modulate-velma-2
           category: stt_policy
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,dg-nova-3,parakeet
+          value: parakeet,modulate-velma-2,dg-nova-3
           category: stt_policy
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
@@ -216,7 +218,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,dg-nova-3,parakeet
+          value: parakeet,modulate-velma-2,dg-nova-3
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:

@@ -5,7 +5,17 @@ metadata:
   labels:
     {{- include "parakeet.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
+  {{- $serviceMode := include "parakeet.serviceMode" . }}
+  {{- if and (ne $serviceMode "mixed") (ne $serviceMode "batch") (ne $serviceMode "stream") }}
+  {{- fail "serviceMode must be mixed, batch, or stream" }}
+  {{- end }}
+  {{- if .Values.autoscaling.enabled }}
+  {{- if .Release.IsInstall }}
+  # Seed the first install at the HPA warm floor. Subsequent upgrades omit
+  # replicas so the HPA remains the sole owner of the live replica count.
+  replicas: {{ .Values.autoscaling.minReplicas }}
+  {{- end }}
+  {{- else }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
@@ -35,22 +45,42 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "parakeet.serviceAccountName" . }}
+      {{- with .Values.runtimeClassName }}
+      runtimeClassName: {{ . | quote }}
+      {{- end }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
+          {{- with .Values.lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: "{{ required "image.repository is required" .Values.image.repository }}:{{ required "image.tag is required" .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- with .Values.env }}
-          env:
-            {{- toYaml . | nindent 12 }}
+          {{- $repository := required "image.repository is required" .Values.image.repository }}
+          {{- $digest := .Values.image.digest | default "" }}
+          {{- if $digest }}
+          {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" $digest) }}{{- fail "image.digest must be sha256:<64 lowercase hex characters>" }}{{- end }}
+          {{- if .Values.image.tag }}{{- fail "image.tag must be empty when image.digest is set" }}{{- end }}
+          image: "{{ $repository }}@{{ $digest }}"
+          {{- else }}
+          {{- if .Values.image.requireDigest }}{{- fail "image.digest is required for this release" }}{{- end }}
+          image: "{{ $repository }}:{{ required "image.tag is required when image.digest is absent" .Values.image.tag }}"
           {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PARAKEET_SERVICE_MODE
+              value: {{ $serviceMode | quote }}
+            {{- range .Values.env }}
+            {{- if and (ne .name "PARAKEET_SERVICE_MODE") (not (and (eq $serviceMode "stream") (eq .name "PARAKEET_MODEL"))) (not (and (eq $serviceMode "batch") (eq .name "PARAKEET_STREAM_MODEL"))) }}
+            {{- toYaml (list .) | nindent 12 }}
+            {{- end }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}

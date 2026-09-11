@@ -1282,7 +1282,10 @@ def test_production_cloud_run_only_boundary_smokes_serving_after_promotion():
     assert 'transactional GKE/config rollback parity does not exist' not in boundary
     assert workflow.index('validate-production-boundary') < workflow.index('  firestore_readiness:')
     assert 'needs: validate-production-boundary' in workflow
-    assert 'needs: [validate-production-boundary, firestore_readiness, record_break_glass]' in workflow
+    assert (
+        'needs: [validate-production-boundary, firestore_readiness, record_break_glass, parakeet_qualification]'
+        in workflow
+    )
     for forbidden in ('actions/checkout', 'google-github-actions/auth', 'docker build', 'docker push', 'gcloud run'):
         assert forbidden not in boundary
 

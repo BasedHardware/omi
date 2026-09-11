@@ -155,8 +155,10 @@ def test_explicit_parakeet_preference_fallback_records_when_live_mode_is_incapab
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.test')
     monkeypatch.setattr(streaming_mod, 'stt_service_models', ['parakeet', 'modulate-velma-2'])
 
+    # Spanish is supported by TDTv3's multilingual mode. Chinese is not, so
+    # this remains a real capability-mismatch fallback.
     service, lang, model = streaming_mod.get_stt_service_for_language(
-        'es', multi_lang_enabled=True, preferred_service='parakeet'
+        'zh', multi_lang_enabled=True, preferred_service='parakeet'
     )
 
     assert (service, lang, model) == (streaming_mod.STTService.modulate, 'multi', 'velma-2')
@@ -182,7 +184,9 @@ def test_automatic_parakeet_capability_fallback_records_when_live_mode_is_incapa
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.test')
     monkeypatch.setattr(streaming_mod, 'stt_service_models', ['parakeet', 'modulate-velma-2'])
 
-    service, lang, model = streaming_mod.get_stt_service_for_language('es', multi_lang_enabled=True)
+    # Arabic is outside TDTv3's 25-language capability set; the resolved
+    # provider language is still ``multi`` for Velma auto-detection.
+    service, lang, model = streaming_mod.get_stt_service_for_language('ar', multi_lang_enabled=True)
 
     assert (service, lang, model) == (streaming_mod.STTService.modulate, 'multi', 'velma-2')
     assert counter.increments == [

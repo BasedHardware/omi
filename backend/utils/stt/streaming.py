@@ -24,10 +24,11 @@ from config.stt_provider_policy import (
     default_models_for_surface,
     modulate_supports_language,
     normalized_stt_language,
-    parakeet_supports_language,
     provider_for_model_token,
     provider_is_enabled,
-    supports_live_multilingual_mode,
+    requested_stt_language as _requested_stt_language,
+    parakeet_supports_language_request as _parakeet_supports_language_request,
+    models_with_preferred_service as _models_with_preferred_service,
 )
 from utils.async_tasks import create_named_task
 from utils.byok import get_byok_key
@@ -228,6 +229,7 @@ async def connect_stt_socket_with_fallback(
     connect_modulate: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
     connect_deepgram: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
     connect_parakeet: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
+    exclude: frozenset[str] = frozenset(),
 ) -> Tuple[STTSocket, STTService]:
     """Connect the selected primary before audio starts, walking the configured fallbacks.
 
@@ -241,6 +243,8 @@ async def connect_stt_socket_with_fallback(
     Modulate is a primary as well as a fallback: a deployment listing
     ``modulate-velma-2,dg-nova-3,parakeet`` lost 100% of its sessions for ~50
     minutes because a Modulate primary bypassed this helper entirely (#11752).
+
+    ``exclude`` prevents a rebuild from retrying providers that already died.
 
     The circuit is deliberately process-local and never owns capacity. The
     Parakeet service rejects excess streams at its GPU boundary; this helper
@@ -289,8 +293,25 @@ async def connect_stt_socket_with_fallback(
         (STTService.deepgram, connect_deepgram),
         (STTService.parakeet, connect_parakeet),
     ]
+
+    def is_excluded(service: STTService) -> bool:
+        if service == STTService.deepgram:
+            # A model token resolves to the hosted identity even when this
+            # process is pointed at self-hosted Deepgram. Excluding either
+            # identity keeps a failed Deepgram leg from being retried.
+            return bool(exclude.intersection(DEEPGRAM_PROVIDERS))
+        if service == STTService.modulate:
+            return MODULATE_PROVIDER in exclude
+        if service == STTService.parakeet:
+            return PARAKEET_PROVIDER in exclude
+        if service == STTService.soniox:
+            return SONIOX_PROVIDER in exclude
+        return False
+
     candidates: List[Tuple[STTService, Callable[[], Awaitable[Optional[STTSocket]]]]] = [
-        (service, connect) for service, connect in ordered if connect is not None and service != primary_service
+        (service, connect)
+        for service, connect in ordered
+        if connect is not None and service != primary_service and not is_excluded(service)
     ]
 
     from_mode = primary_service.value
@@ -483,6 +504,15 @@ def modulate_is_configured_fallback(language: Optional[str]) -> bool:
     )
 
 
+def parakeet_stream_api_url() -> Optional[str]:
+    """Return the live Parakeet endpoint, preferring its dedicated service URL.
+
+    The historical shared endpoint remains a compatibility fallback until a
+    dedicated streaming URL is configured.
+    """
+    return os.getenv('HOSTED_PARAKEET_STREAM_API_URL') or os.getenv('HOSTED_PARAKEET_API_URL')
+
+
 def deepgram_fallback_model(language: Optional[str]) -> Optional[str]:
     """Return the Deepgram model that may take over a session whose primary failed.
 
@@ -504,19 +534,15 @@ def deepgram_fallback_model(language: Optional[str]) -> Optional[str]:
     return None
 
 
-def parakeet_is_configured_fallback(language: Optional[str]) -> bool:
-    """Return whether Parakeet may take over a session whose earlier providers failed.
-
-    Same contract as ``modulate_is_configured_fallback``, one provider further
-    down the ordered ``STT_SERVICE_MODELS`` preference: the deployment must list
-    Parakeet, the policy must serve it, its endpoint must be configured, and it
-    must support the session's resolved provider language.
-    """
+def parakeet_is_configured_fallback(language: Optional[str], *, base_language: Optional[str] = None) -> bool:
+    """Check configured fallback capability, retaining the original picker language."""
+    requested_language = normalized_stt_language(language) or 'en'
+    capability_language = normalized_stt_language(base_language) or requested_language
     return (
         STTService.parakeet.value in (model.strip() for model in stt_service_models)
         and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.STREAMING)
-        and bool(os.getenv('HOSTED_PARAKEET_API_URL'))
-        and parakeet_supports_language(STTServingSurface.STREAMING, language or 'en')
+        and bool(parakeet_stream_api_url())
+        and _parakeet_supports_language_request(STTServingSurface.STREAMING, capability_language, requested_language)
     )
 
 
@@ -526,37 +552,6 @@ def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
     if any(m.strip() for m in stt_service_models):
         return 'configured'
     return 'none'
-
-
-def _requested_stt_language(
-    language: Optional[str], base_lang: str, *, multi_lang_enabled: bool, surface: STTServingSurface
-) -> str:
-    """Resolve the provider language while retaining PTT's explicit input language.
-
-    Live sessions with multi-language enabled must select a provider's auto-detect
-    mode. PTT does not load the user's transcription preference, so it keeps its
-    explicit language unless the client itself sends the ``multi`` sentinel.
-    """
-    if base_lang == 'multi' or (
-        surface == STTServingSurface.STREAMING
-        and multi_lang_enabled
-        and language
-        and supports_live_multilingual_mode(language)
-    ):
-        return 'multi'
-    return base_lang
-
-
-def _models_with_preferred_service(
-    models: List[str] | Tuple[str, ...], *, preferred_service: Optional[str]
-) -> Tuple[str, ...]:
-    """Honor a recognized client engine preference within the serving policy."""
-    normalized_preference = (preferred_service or '').strip().lower()
-    if normalized_preference != STTService.parakeet.value:
-        return tuple(models)
-    return tuple(model for model in models if model.strip() == STTService.parakeet.value) + tuple(
-        model for model in models if model.strip() != STTService.parakeet.value
-    )
 
 
 def get_stt_service_for_language(
@@ -608,8 +603,8 @@ def get_stt_service_for_language(
                     return (STTService.deepgram, language, dg_model), parakeet_fallback_reason
                 continue
             if model == 'parakeet':
-                if provider_is_enabled(PARAKEET_PROVIDER, surface) and os.getenv('HOSTED_PARAKEET_API_URL'):
-                    if parakeet_supports_language(surface, requested_language):
+                if provider_is_enabled(PARAKEET_PROVIDER, surface) and parakeet_stream_api_url():
+                    if _parakeet_supports_language_request(surface, base_lang, requested_language):
                         return (STTService.parakeet, requested_language, 'parakeet'), parakeet_fallback_reason
                     else:
                         parakeet_fallback_reason = 'capability_mismatch'
@@ -640,7 +635,7 @@ def get_stt_service_for_language(
                 reason=parakeet_fallback_reason
                 or (
                     'capability_mismatch'
-                    if not parakeet_supports_language(surface, requested_language)
+                    if not _parakeet_supports_language_request(surface, base_lang, requested_language)
                     else 'config_incomplete'
                 ),
                 outcome='degraded',
@@ -1819,9 +1814,9 @@ async def process_audio_parakeet(
     Server-side VAD + diarization — the backend just relays PCM chunks
     and receives speaker-labeled segments.
     """
-    api_url = os.getenv('HOSTED_PARAKEET_API_URL')
+    api_url = parakeet_stream_api_url()
     if not api_url:
-        logger.error('process_audio_parakeet: HOSTED_PARAKEET_API_URL not set')
+        logger.error('process_audio_parakeet: Parakeet streaming endpoint is not configured')
         return None
 
     ws_url = api_url.replace('http://', 'ws://').replace('https://', 'wss://').rstrip('/') + '/v3/stream'

@@ -42,6 +42,15 @@ spec:
           type: AverageValue
           averageValue: "{{ .Values.autoscaling.streamsPerPod }}"
     {{- end }}
+    {{- if .Values.autoscaling.streamDemandPerPod }}
+    - type: Pods
+      pods:
+        metric:
+          name: parakeet_stream_demand
+        target:
+          type: AverageValue
+          averageValue: "{{ .Values.autoscaling.streamDemandPerPod }}"
+    {{- end }}
     {{- if .Values.autoscaling.requestsPerPod }}
     - type: Pods
       pods:

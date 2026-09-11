@@ -579,7 +579,10 @@ check_backend_unit_tests_if_needed() {
     for file in "${CHANGED_FILES[@]}"; do
       case "$file" in
         backend/tests/*.py|backend/tests/**/*.py)
-          if [ -f "$file" ]; then
+          # Keep the fallback inside the selector's discovered unit catalog.
+          # GPU/container tests are executed by their owning live-test lane,
+          # even when their changed path caused broad unit selection.
+          if [ -f "$file" ] && grep -Fqx "${file#backend/}" "$SELECTED_BACKEND_TESTS"; then
             printf '%s\n' "${file#backend/}" >> "$FAST_BACKEND_TESTS"
           fi
           ;;

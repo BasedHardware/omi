@@ -29,11 +29,12 @@ cat > "$WORK/fake-python" <<'STUB'
 set -euo pipefail
 output=""
 reason_output=""
+changed_files=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --output) output="$2"; shift 2 ;;
     --reason-output) reason_output="$2"; shift 2 ;;
-    --changed-files) shift 2 ;;
+    --changed-files) changed_files="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
@@ -43,6 +44,12 @@ while [ "$i" -lt "${STUB_SELECTED_COUNT:-0}" ]; do
   printf 'tests/selector_%03d_test.py\n' "$i" >> "$output"
   i=$((i + 1))
 done
+while IFS= read -r changed; do
+  case "$changed" in
+    backend/tests/container/*) ;;
+    backend/tests/*.py) printf '%s\n' "${changed#backend/}" >> "$output" ;;
+  esac
+done < "$changed_files"
 printf '%s\n' "${STUB_REASON:-broad selector fallout}" > "$reason_output"
 STUB
 chmod +x "$WORK/fake-python"
@@ -62,7 +69,7 @@ STUB
 
 # $1 = number of changed backend test files in the diff, $2 = cap
 run_case() {
-  local changed_test_files="$1" cap="$2" i
+  local changed_test_files="$1" cap="$2" include_gpu="${3:-0}" i
   rm -f "$WORK/ran_count" "$WORK/ran_list"
   rm -f "$WORK/repo/backend/tests/"*.py
   local -a changed=()
@@ -71,6 +78,11 @@ run_case() {
     touch "$WORK/repo/$name"
     changed+=("$name")
   done
+  if [ "$include_gpu" = "1" ]; then
+    mkdir -p "$WORK/repo/backend/tests/container"
+    touch "$WORK/repo/backend/tests/container/test_live_gpu.py"
+    changed+=("backend/tests/container/test_live_gpu.py")
+  fi
 
   (
     cd "$WORK/repo"
@@ -133,7 +145,15 @@ test "$(cat "$WORK/ran_count")" = "4"
 grep -q "running 4 changed backend test file(s) instead; cap is $CAP" <<<"$output" || {
   echo "FAIL: under-cap fallback message regressed" >&2; echo "$output" >&2; exit 1; }
 
-# No changed backend test files still skips the broad suite entirely.
+# A changed live GPU test must not enter the unit fallback catalog.
+output="$(run_case 4 "$CAP" 1)"
+test "$(cat "$WORK/ran_count")" = "4"
+if grep -q 'container/test_live_gpu.py' "$WORK/ran_list"; then
+  echo "FAIL: bounded unit fallback selected a live GPU test outside the unit catalog" >&2
+  exit 1
+fi
+
+# No changed backend unit test files still skips the broad suite entirely.
 output="$(run_case 0 "$CAP")"
 test ! -f "$WORK/ran_count"
 grep -q "Skipping broad backend unit suite in pre-push" <<<"$output" || {

@@ -1,19 +1,65 @@
-name: Parakeet GPU Tests (Smoke + DER + WER + Concurrency)
+name: Parakeet GPU Tests (Smoke + DER + WER + Concurrency + TDT ASR Capacity)
 
 on:
   workflow_dispatch:
     inputs:
       image_tag:
         description: 'Docker image tag to test (e.g. abc1234)'
-        required: true
-      der_report_only:
-        description: 'DER benchmark report-only mode (true = no fail gate)'
         required: false
-        default: 'false'
-      wer_report_only:
-        description: 'WER gate report-only mode (true = no fail gate)'
+        default: ''
+      source_sha:
+        description: 'Exact source commit to check out and record in the qualification artifact'
         required: false
-        default: 'false'
+        default: ''
+      build_source:
+        description: 'Build and push this exact checked-out source commit before testing'
+        required: false
+        type: boolean
+        default: false
+      stream_capacity:
+        description: 'Expected per-pod TDT streaming ASR capacity for the qualification gate'
+        required: false
+        default: '10'
+  workflow_call:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to test when source build is disabled'
+        required: false
+        type: string
+        default: ''
+      source_sha:
+        description: 'Exact source commit to check out and record in the qualification artifact'
+        required: false
+        type: string
+        default: ''
+      build_source:
+        description: 'Build and push the checked-out source commit before testing'
+        required: false
+        type: boolean
+        default: true
+      stream_capacity:
+        description: 'Expected per-pod TDT streaming ASR capacity for the qualification gate'
+        required: false
+        type: string
+        default: '10'
+    secrets:
+      GCP_CREDENTIALS:
+        # The jobs bind the development environment themselves. GitHub does
+        # not forward environment secrets through workflow_call, so requiring
+        # a caller secret here would reject the call before that environment
+        # can supply its own credential. Authentication still fails closed if
+        # the development environment has no GCP_CREDENTIALS secret.
+        required: false
+    outputs:
+      image_ref:
+        description: 'Immutable image reference used by the GPU test job'
+        value: ${{ jobs.gpu-tests.outputs.image_ref }}
+      source_sha:
+        description: 'Checked-out source commit used by the GPU test job'
+        value: ${{ jobs.gpu-tests.outputs.source_sha }}
+      artifact_name:
+        description: 'Uploaded stream capacity qualification artifact name'
+        value: ${{ jobs.gpu-tests.outputs.artifact_name }}
   schedule:
     # Nightly at 03:00 UTC — tests latest dev image
     - cron: '0 3 * * *'
@@ -22,21 +68,68 @@ env:
   SERVICE: parakeet
   REGION: us-central1
   NAMESPACE: dev-omi-backend
-  JOB_NAME: parakeet-gpu-test-${{ github.run_id }}
+  JOB_NAME: parakeet-gpu-test-${{ github.run_id }}-${{ github.run_attempt }}
+  CLUSTER_NAME: dev-omi-gke
+  GCP_PROJECT: based-hardware-dev
+  NODE_POOL: parakeet-test-${{ github.run_id }}-${{ github.run_attempt }}
+  NODE_LOCATION: us-central1-a
 
 jobs:
   gpu-tests:
     environment: development
+    outputs:
+      image_ref: ${{ steps.image.outputs.image_ref }}
+      source_sha: ${{ steps.source.outputs.source_sha }}
+      artifact_name: parakeet-stream-capacity-${{ github.run_id }}-${{ github.run_attempt }}
     permissions:
       contents: 'read'
       id-token: 'write'
 
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    # Source-image builds and model pulls happen before the task-owned GPU Job.
+    # The Job itself remains hard-bounded to 45 minutes below; this outer bound
+    # leaves time for build, log/artifact collection, and the separate cleanup job.
+    timeout-minutes: 120
 
     steps:
+      # The NGC NeMo base is large and the existing speech-model build
+      # workflow removes this preinstalled cache to avoid "no space left on
+      # device".
+      - name: Free runner disk for source image build
+        if: inputs.build_source == true
+        run: |
+          set -euo pipefail
+          before=$(df -h / | awk 'NR == 2 { print $4 }')
+          rm -rf /opt/hostedtoolcache
+          after=$(df -h / | awk 'NR == 2 { print $4 }')
+          echo "Runner free space: $before -> $after"
+
       - name: Checkout
+        id: checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Verify checked-out source identity
+        id: source
+        env:
+          REQUESTED_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          CHECKED_OUT_SHA=$(git rev-parse HEAD)
+          if [[ -n "$REQUESTED_SOURCE_SHA" ]]; then
+            [[ "$REQUESTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "source_sha must be a lowercase full commit SHA" >&2
+              exit 1
+            }
+            [[ "$CHECKED_OUT_SHA" == "$REQUESTED_SOURCE_SHA" ]] || {
+              echo "checked out $CHECKED_OUT_SHA instead of requested $REQUESTED_SOURCE_SHA" >&2
+              exit 1
+            }
+          fi
+          echo "source_sha=$CHECKED_OUT_SHA" >> "$GITHUB_OUTPUT"
+          echo "Checked-out source: $CHECKED_OUT_SHA"
 
       - name: Google Auth
         id: auth
@@ -47,25 +140,152 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
 
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker --quiet
+
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v3
         with:
-          cluster_name: dev-omi-gke
+          cluster_name: ${{ env.CLUSTER_NAME }}
           location: ${{ env.REGION }}
-          project_id: based-hardware-dev
+          project_id: ${{ env.GCP_PROJECT }}
 
       - name: Resolve image tag
         id: tag
+        env:
+          REQUESTED_IMAGE_TAG: ${{ inputs.image_tag }}
+          BUILD_SOURCE: ${{ inputs.build_source }}
+          CHECKED_OUT_SHA: ${{ steps.source.outputs.source_sha }}
+          REQUESTED_SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
-          if [[ -n "${{ github.event.inputs.image_tag }}" ]]; then
-            echo "tag=${{ github.event.inputs.image_tag }}" >> "$GITHUB_OUTPUT"
-          else
-            # Nightly: use latest dev image tag from running deployment
-            TAG=$(kubectl -n ${{ env.NAMESPACE }} get deploy dev-omi-parakeet \
-              -o jsonpath='{.spec.template.spec.containers[0].image}' | cut -d: -f2)
-            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          SOURCE_SHA=""
+          if [[ "$BUILD_SOURCE" == "true" || -n "$REQUESTED_SOURCE_SHA" ]]; then
+            SOURCE_SHA="$CHECKED_OUT_SHA"
           fi
-          echo "Using image tag: $(cat $GITHUB_OUTPUT | grep tag | cut -d= -f2)"
+          if [[ "$BUILD_SOURCE" == "true" ]]; then
+            # Include the run id so a second build of the same commit cannot
+            # accidentally resolve a previous registry tag.
+            TAG="pr-${CHECKED_OUT_SHA}-${GITHUB_RUN_ID}"
+            SOURCE_SHA="$CHECKED_OUT_SHA"
+          elif [[ -n "$REQUESTED_IMAGE_TAG" ]]; then
+            TAG="$REQUESTED_IMAGE_TAG"
+            [[ "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || {
+              echo "image_tag contains unsupported characters" >&2
+              exit 1
+            }
+          else
+            # Nightly: use the current dev deployment. Preserve a digest-pinned
+            # image as-is instead of parsing the digest as a tag.
+            DEPLOYED=$(kubectl -n "$NAMESPACE" get deploy dev-omi-parakeet \
+              -o jsonpath='{.spec.template.spec.containers[0].image}')
+            if [[ "$DEPLOYED" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
+              DEPLOYED_REPOSITORY="${DEPLOYED%@*}"
+              [[ "$DEPLOYED_REPOSITORY" != *:* ]] || {
+                echo "deployed digest image unexpectedly contains a tag or registry port: $DEPLOYED" >&2
+                exit 1
+              }
+              echo "image_ref=$DEPLOYED" >> "$GITHUB_OUTPUT"
+              echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+              echo "Using deployment's immutable image: $DEPLOYED"
+              exit 0
+            fi
+            TAG="${DEPLOYED##*:}"
+            [[ "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || {
+              echo "deployed image did not contain a valid tag: $DEPLOYED" >&2
+              exit 1
+            }
+          fi
+          test -n "$TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "Using image tag: $TAG"
+
+      - name: Build and push exact source image
+        if: inputs.build_source == true
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          IMAGE="gcr.io/${GCP_PROJECT}/${SERVICE}:${IMAGE_TAG}"
+          docker build --file backend/parakeet/Dockerfile --tag "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Resolve immutable image digest
+        id: image
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
+          DEPLOYED_IMAGE_REF: ${{ steps.tag.outputs.image_ref }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$DEPLOYED_IMAGE_REF" ]]; then
+            IMAGE_REF="$DEPLOYED_IMAGE_REF"
+          else
+            IMAGE_REPOSITORY="gcr.io/${GCP_PROJECT}/${SERVICE}"
+            IMAGE="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
+            DIGEST=$(gcloud container images describe "$IMAGE" \
+              --project "$GCP_PROJECT" --format='value(image_summary.digest)')
+            [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+            IMAGE_REF="${IMAGE_REPOSITORY}@${DIGEST}"
+          fi
+          [[ "$IMAGE_REF" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]
+          IMAGE_REPOSITORY="${IMAGE_REF%@*}"
+          [[ "$IMAGE_REPOSITORY" != *:* ]] || {
+            echo "immutable image reference unexpectedly contains a tag or registry port: $IMAGE_REF" >&2
+            exit 1
+          }
+          echo "image_ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
+          echo "Testing immutable image: $IMAGE_REF"
+
+      - name: Validate stream capacity input
+        id: capacity
+        env:
+          REQUESTED_STREAM_CAPACITY: ${{ inputs.stream_capacity }}
+        run: |
+          set -euo pipefail
+          CAPACITY="${REQUESTED_STREAM_CAPACITY:-10}"
+          [[ "$CAPACITY" =~ ^[1-9][0-9]{0,2}$ ]] || {
+            echo "stream_capacity must be a positive integer from 1 to 64" >&2
+            exit 1
+          }
+          (( CAPACITY <= 64 )) || {
+            echo "stream_capacity must be no greater than 64" >&2
+            exit 1
+          }
+          TARGET_STREAMS=$(( CAPACITY * 80 / 100 ))
+          (( TARGET_STREAMS < 1 )) && TARGET_STREAMS=1
+          STREAM_LEVELS="$({
+            for LEVEL in 1 5 10 20 25 "$TARGET_STREAMS" "$CAPACITY"; do
+              if (( LEVEL <= CAPACITY )); then
+                echo "$LEVEL"
+              fi
+            done
+          } | sort -n -u | paste -sd, -)"
+          test -n "$STREAM_LEVELS"
+          echo "stream_capacity=$CAPACITY" >> "$GITHUB_OUTPUT"
+          echo "stream_levels=$STREAM_LEVELS" >> "$GITHUB_OUTPUT"
+          echo "target_streams=$TARGET_STREAMS" >> "$GITHUB_OUTPUT"
+          echo "Using expected stream capacity: $CAPACITY"
+          echo "Using stream levels: $STREAM_LEVELS (target: $TARGET_STREAMS)"
+
+      - name: Create task-owned GPU node pool
+        run: |
+          set -euo pipefail
+          gcloud container node-pools create "$NODE_POOL" \
+            --cluster "$CLUSTER_NAME" \
+            --region "$REGION" \
+            --project "$GCP_PROJECT" \
+            --machine-type=g2-standard-8 \
+            --accelerator=type=nvidia-l4,count=1,gpu-driver-version=default \
+            --num-nodes=1 \
+            --node-locations="$NODE_LOCATION" \
+            --node-labels="parakeet-test-run=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT},service=parakeet,env=dev" \
+            --node-taints="parakeet-test-run=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}:NoSchedule" \
+            --enable-autorepair \
+            --quiet
+          kubectl wait --for=condition=Ready \
+            --timeout=600s \
+            -l "parakeet-test-run=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" nodes
 
       - name: Clean up previous test job
         run: |
@@ -74,7 +294,10 @@ jobs:
 
       - name: Create GPU test job
         run: |
-          cat <<'JOBEOF' | envsubst '$JOB_NAME $NAMESPACE $IMAGE_TAG $DER_REPORT_ONLY $WER_REPORT_ONLY' | kubectl apply -f -
+          # envsubst receives the exact allowlist; keep it single-quoted so
+          # this runner does not expand the Job template before Kubernetes sees it.
+          # shellcheck disable=SC2016
+          cat <<'JOBEOF' | envsubst '$JOB_NAME $NAMESPACE $IMAGE_REF $RUN_ID $STREAM_CAPACITY $STREAM_LEVELS $TARGET_STREAMS $SOURCE_SHA' | kubectl apply -f -
           apiVersion: batch/v1
           kind: Job
           metadata:
@@ -86,41 +309,102 @@ jobs:
             template:
               spec:
                 restartPolicy: Never
+                automountServiceAccountToken: false
+                tolerations:
+                  - key: parakeet-test-run
+                    operator: Equal
+                    value: "${RUN_ID}"
+                    effect: NoSchedule
                 containers:
                   - name: gpu-test
-                    image: gcr.io/based-hardware-dev/parakeet:${IMAGE_TAG}
+                    image: ${IMAGE_REF}
                     command:
                       - bash
                       - -c
                       - |
                         set -e
                         echo "=== Parakeet GPU Test Suite ==="
-                        echo "Image: gcr.io/based-hardware-dev/parakeet:${IMAGE_TAG}"
+                        echo "Image: ${IMAGE_REF}"
                         echo ""
 
                         echo "--- Phase 1: Container Smoke Tests (CPU) ---"
+                        set +e
                         python -m pytest tests/container/test_parakeet_smoke.py -v \
                           -k "not TestGPUInference" \
                           --tb=short 2>&1
+                        CPU_SMOKE_EXIT=$?
+                        set -e
                         echo ""
 
                         echo "--- Phase 2: Contract Tests ---"
+                        set +e
                         python -m pytest tests/container/test_parakeet_contract.py -v \
                           --tb=short 2>&1
+                        CONTRACT_EXIT=$?
+                        set -e
                         echo ""
 
                         echo "--- Phase 3: GPU Smoke Tests ---"
+                        set +e
                         python -m pytest tests/container/test_parakeet_smoke.py -v \
                           -k "TestGPUInference" \
                           --tb=short 2>&1
+                        GPU_SMOKE_EXIT=$?
+                        set -e
                         echo ""
 
-                        echo "--- Phase 4: DER Regression Gate (synthetic) ---"
+                        echo "--- Phase 4: Realtime TDT ASR Stream Capacity ---"
+                        echo "Starting fresh streaming-only Parakeet server..."
+                        PARAKEET_SERVICE_MODE=stream \
+                        PARAKEET_STREAM_CAPACITY=${STREAM_CAPACITY} \
+                        PARAKEET_STREAM_ALLOCATION_PERCENT=100 \
+                        uvicorn main:app --host 127.0.0.1 --port 8080 --loop uvloop &
+                        STREAM_SERVER_PID=$!
+                        STREAM_HEALTHY=false
+                        for i in $(seq 1 180); do
+                          if python -c "import json, urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8080/health'); body=json.load(r); assert body.get('ready') is True" 2>/dev/null; then
+                            echo "Streaming server ready after ${i}s"
+                            STREAM_HEALTHY=true
+                            break
+                          fi
+                          sleep 1
+                        done
+                        if [ "$STREAM_HEALTHY" != "true" ]; then
+                          echo "Streaming server did not report TDT ASR/VAD/diarizer readiness within 180s"
+                          python -c 'import json, os; from pathlib import Path; p=Path("/tmp/parakeet-gpu-artifacts"); p.mkdir(parents=True, exist_ok=True); (p / "stream-capacity-results.json").write_text(json.dumps({"schema_version": 1, "status": "error", "endpoint": "/v3/stream", "image_ref": os.environ.get("PARAKEET_TEST_IMAGE_REF"), "source_sha": os.environ.get("PARAKEET_TEST_SOURCE_SHA") or None, "expected_model_identity": {"stream_model": "nvidia/parakeet-tdt-0.6b-v3", "backend": "nemo", "decoder_family": "tdt", "language_support": "multilingual", "model_revision": "541d1f99c6b0c3cd0b11a95167540bb8edefd82b"}, "coverage": {"fixture_language": "en", "multilingual_accuracy": "not_qualified"}, "gpu": {"type": "nvidia-l4", "target_streams": 20}, "error": "stream service did not report ready=true for TDT ASR/VAD/diarizer", "qualification": {"stream_readiness": False, "model_identity": False}}, indent=2) + "\n")'
+                          kill $STREAM_SERVER_PID 2>/dev/null || true
+                          wait $STREAM_SERVER_PID 2>/dev/null || true
+                          STREAM_EXIT=1
+                        else
+                          set +e
+                          PARAKEET_URL=http://127.0.0.1:8080 \
+                          PARAKEET_STREAM_EXPECTED_CAPACITY=${STREAM_CAPACITY} \
+                          PARAKEET_STREAM_RESULTS=/tmp/parakeet-gpu-artifacts/stream-capacity-results.json \
+                          python -m pytest tests/container/test_parakeet_stream_capacity.py -v -s \
+                            --tb=short 2>&1
+                          STREAM_EXIT=$?
+                          set -e
+                        fi
+                        echo "--- Stream Capacity Artifact ---"
+                        if [ -f /tmp/parakeet-gpu-artifacts/stream-capacity-results.json ]; then
+                          echo "STREAM_CAPACITY_JSON_BEGIN"
+                          cat /tmp/parakeet-gpu-artifacts/stream-capacity-results.json
+                          echo "STREAM_CAPACITY_JSON_END"
+                        else
+                          echo "Stream capacity artifact was not produced"
+                        fi
+                        kill $STREAM_SERVER_PID 2>/dev/null || true
+                        wait $STREAM_SERVER_PID 2>/dev/null || true
+
+                        echo "--- Phase 5: DER Regression Gate (synthetic) ---"
+                        set +e
                         python -m pytest tests/container/test_parakeet_der_gate.py -v -s \
                           --tb=short 2>&1
+                        SYNTH_DER_EXIT=$?
+                        set -e
                         echo ""
 
-                        echo "--- Phase 5: Real-speech DER Benchmark (VoxConverse) ---"
+                        echo "--- Phase 6: Real-speech DER Benchmark (VoxConverse) ---"
                         echo "Starting uvicorn for benchmark..."
                         uvicorn main:app --host 127.0.0.1 --port 8080 --loop uvloop &
                         SERVER_PID=$!
@@ -133,11 +417,11 @@ jobs:
                         done
 
                         set +e
-                        DER_REPORT_ONLY=${DER_REPORT_ONLY:-false} \
+                        DER_REPORT_ONLY=false \
                         DER_RESULTS_PATH=/tmp/parakeet-gpu-artifacts/der-benchmark-results.json \
                         python -m pytest tests/container/test_parakeet_der_benchmark.py -v -s \
                           --tb=short 2>&1
-                        BENCH_EXIT=$?
+                        DER_EXIT=$?
                         echo "--- DER Diagnostics Artifact ---"
                         if [ -f /tmp/parakeet-gpu-artifacts/der-benchmark-results.json ]; then
                           echo "DER_DIAGNOSTICS_JSON_BEGIN"
@@ -148,15 +432,12 @@ jobs:
                         fi
                         set -e
 
-                        if [ $BENCH_EXIT -ne 0 ]; then
-                          echo "DER benchmark failed (exit=$BENCH_EXIT)"
-                          kill $SERVER_PID 2>/dev/null || true
-                          wait $SERVER_PID 2>/dev/null || true
-                          exit $BENCH_EXIT
+                        if [ $DER_EXIT -ne 0 ]; then
+                          echo "DER benchmark failed (exit=$DER_EXIT); continuing to stream qualification"
                         fi
                         echo ""
 
-                        echo "--- Phase 6: Concurrency Stress Test ---"
+                        echo "--- Phase 7: Concurrency Stress Test ---"
                         set +e
                         CONCURRENCY_LEVEL=8 CONCURRENCY_ROUNDS=3 \
                         python -m pytest tests/container/test_parakeet_concurrency.py -v -s \
@@ -165,30 +446,24 @@ jobs:
                         set -e
 
                         if [ $CONC_EXIT -ne 0 ]; then
-                          echo "Concurrency test failed (exit=$CONC_EXIT)"
-                          kill $SERVER_PID 2>/dev/null || true
-                          wait $SERVER_PID 2>/dev/null || true
-                          exit $CONC_EXIT
+                          echo "Concurrency test failed (exit=$CONC_EXIT); continuing to stream qualification"
                         fi
                         echo ""
 
-                        echo "--- Phase 7: WER Regression Gate (LibriSpeech) ---"
+                        echo "--- Phase 8: WER Regression Gate (LibriSpeech) ---"
                         set +e
-                        WER_REPORT_ONLY=${WER_REPORT_ONLY:-false} \
+                        WER_REPORT_ONLY=false \
                         python -m pytest tests/container/test_parakeet_wer_gate.py -v -s \
                           --tb=short 2>&1
                         WER_EXIT=$?
                         set -e
 
                         if [ $WER_EXIT -ne 0 ]; then
-                          echo "WER gate failed (exit=$WER_EXIT)"
-                          kill $SERVER_PID 2>/dev/null || true
-                          wait $SERVER_PID 2>/dev/null || true
-                          exit $WER_EXIT
+                          echo "WER gate failed (exit=$WER_EXIT); continuing to stream qualification"
                         fi
                         echo ""
 
-                        echo "--- Phase 8: High-Concurrency Stress Test ---"
+                        echo "--- Phase 9: High-Concurrency Stress Test ---"
                         set +e
                         HIGH_CONCURRENCY_LEVEL=16 HIGH_CONCURRENCY_ROUNDS=5 \
                         python -m pytest tests/container/test_parakeet_high_concurrency.py -v -s \
@@ -196,7 +471,7 @@ jobs:
                         HCONC_EXIT=$?
                         set -e
 
-                        echo "--- Phase 9: VRAM Stress Test ---"
+                        echo "--- Phase 10: VRAM Stress Test ---"
                         set +e
                         python -m pytest tests/container/test_parakeet_vram_stress.py -v -s \
                           --tb=short 2>&1
@@ -207,15 +482,28 @@ jobs:
                         wait $SERVER_PID 2>/dev/null || true
 
                         if [ $HCONC_EXIT -ne 0 ]; then
-                          echo "High-concurrency test failed (exit=$HCONC_EXIT)"
-                          exit $HCONC_EXIT
+                          echo "High-concurrency test failed (exit=$HCONC_EXIT); continuing to stream qualification"
                         fi
                         if [ $VRAM_EXIT -ne 0 ]; then
-                          echo "VRAM stress test failed (exit=$VRAM_EXIT)"
-                          exit $VRAM_EXIT
+                          echo "VRAM stress test failed (exit=$VRAM_EXIT); continuing to stream qualification"
                         fi
                         echo ""
 
+                        declare -a PHASE_EXITS=(
+                          "$CPU_SMOKE_EXIT" "$CONTRACT_EXIT" "$GPU_SMOKE_EXIT"
+                          "$STREAM_EXIT" "$SYNTH_DER_EXIT" "$DER_EXIT" "$CONC_EXIT"
+                          "$WER_EXIT" "$HCONC_EXIT" "$VRAM_EXIT"
+                        )
+                        FINAL_EXIT=0
+                        for phase_exit in "${PHASE_EXITS[@]}"; do
+                          if [ "$phase_exit" -ne 0 ]; then
+                            FINAL_EXIT=1
+                          fi
+                        done
+                        if [ "$FINAL_EXIT" -ne 0 ]; then
+                          echo "GPU qualification failed: phase exits ${PHASE_EXITS[*]}"
+                          exit 1
+                        fi
                         echo "=== ALL TESTS PASSED ==="
                     env:
                       - name: HUGGINGFACE_TOKEN
@@ -225,21 +513,37 @@ jobs:
                             key: HUGGINGFACE_TOKEN
                       - name: PARAKEET_MODEL
                         value: "nvidia/parakeet-tdt-0.6b-v3"
+                      - name: PARAKEET_STREAM_MODEL
+                        value: "nvidia/parakeet-tdt-0.6b-v3"
                       - name: PARAKEET_INFERENCE_MODE
                         value: "nemo"
+                      - name: PARAKEET_MAX_SPEECH_S
+                        value: "5"
                       - name: NVIDIA_VISIBLE_DEVICES
                         value: "all"
-                      - name: DER_REPORT_ONLY
-                        value: "${DER_REPORT_ONLY}"
-                      - name: WER_REPORT_ONLY
-                        value: "${WER_REPORT_ONLY}"
+                      - name: PARAKEET_STREAM_CAPACITY
+                        value: "${STREAM_CAPACITY}"
+                      - name: PARAKEET_STREAM_ALLOCATION_PERCENT
+                        value: "100"
+                      - name: PARAKEET_STREAM_LEVELS
+                        value: "${STREAM_LEVELS}"
+                      - name: PARAKEET_TARGET_STREAMS
+                        value: "${TARGET_STREAMS}"
+                      - name: PARAKEET_CUDA_GRAPHS
+                        value: "false"
+                      - name: PARAKEET_TEST_IMAGE_REF
+                        value: "${IMAGE_REF}"
+                      - name: PARAKEET_TEST_SOURCE_SHA
+                        value: "${SOURCE_SHA}"
+                      - name: PARAKEET_GPU_TYPE
+                        value: "nvidia-l4"
                     resources:
                       requests:
-                        cpu: 1
+                        cpu: 4
                         memory: 8Gi
                         nvidia.com/gpu: 1
                       limits:
-                        cpu: 2
+                        cpu: 6
                         memory: 20Gi
                         nvidia.com/gpu: 1
                 affinity:
@@ -255,11 +559,18 @@ jobs:
                               operator: In
                               values:
                                 - dev
+                            - key: parakeet-test-run
+                              operator: In
+                              values:
+                                - "${RUN_ID}"
           JOBEOF
         env:
-          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
-          DER_REPORT_ONLY: ${{ github.event.inputs.der_report_only || 'false' }}
-          WER_REPORT_ONLY: ${{ github.event.inputs.wer_report_only || 'false' }}
+          IMAGE_REF: ${{ steps.image.outputs.image_ref }}
+          SOURCE_SHA: ${{ steps.tag.outputs.source_sha }}
+          RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          STREAM_CAPACITY: ${{ steps.capacity.outputs.stream_capacity }}
+          STREAM_LEVELS: ${{ steps.capacity.outputs.stream_levels }}
+          TARGET_STREAMS: ${{ steps.capacity.outputs.target_streams }}
 
       # Without this gate an unschedulable pod (no free nvidia.com/gpu on the
       # parakeet node pool) sits Pending until activeDeadlineSeconds expires,
@@ -398,6 +709,36 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+      - name: Extract stream capacity artifact
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          log_path = Path("artifacts/parakeet/gpu-test.log")
+          output_path = Path("artifacts/parakeet/stream-capacity-results.json")
+          text = log_path.read_text() if log_path.exists() else ""
+          start = "STREAM_CAPACITY_JSON_BEGIN"
+          end = "STREAM_CAPACITY_JSON_END"
+          start_index = text.find(start)
+          end_index = text.find(end, start_index + len(start)) if start_index != -1 else -1
+          if start_index == -1 or end_index == -1:
+              print("Stream capacity JSON markers not found in order; skipping artifact extraction")
+              raise SystemExit(0)
+          json_text = text[start_index + len(start) : end_index].strip()
+          output_path.write_text(json_text + "\n")
+          print(f"Wrote {output_path}")
+          PY
+
+      - name: Upload stream capacity artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: parakeet-stream-capacity-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/parakeet/stream-capacity-results.json
+          if-no-files-found: ignore
+          retention-days: 30
+
       - name: Check job result
         run: |
           SUCCEEDED=$(kubectl -n ${{ env.NAMESPACE }} get job ${{ env.JOB_NAME }} \
@@ -414,7 +755,44 @@ jobs:
             exit 1
           fi
 
-      - name: Clean up test job
-        if: always()
+  cleanup:
+    if: always()
+    needs: gpu-tests
+    environment: development
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Google Auth
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ env.CLUSTER_NAME }}
+          location: ${{ env.REGION }}
+          project_id: ${{ env.GCP_PROJECT }}
+
+      - name: Delete task-owned test resources
         run: |
-          kubectl -n ${{ env.NAMESPACE }} delete job ${{ env.JOB_NAME }} --ignore-not-found=true
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" delete job "$JOB_NAME" --ignore-not-found=true
+          # A permission/API failure must surface as failed cleanup, rather
+          # than being mistaken for an absent pool while GPU charges continue.
+          pool_name=$(gcloud container node-pools list \
+            --cluster "$CLUSTER_NAME" --region "$REGION" --project "$GCP_PROJECT" \
+            --filter="name=$NODE_POOL" --format='value(name)')
+          if [[ "$pool_name" == "$NODE_POOL" ]]; then
+            gcloud container node-pools delete "$NODE_POOL" \
+              --cluster "$CLUSTER_NAME" --region "$REGION" --project "$GCP_PROJECT" --quiet
+          else
+            echo "Task-owned node pool $NODE_POOL was not created or is already gone"
+          fi

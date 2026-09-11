@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
+from config.stt_provider_policy import PARAKEET_PROVIDER
 from database.firestore_read_metrics import FirestoreReadSite
 from models.message_event import (
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
@@ -369,10 +370,15 @@ class ListenSessionRuntime:
         )
         # Retained so a mid-session failover reselects under the same language policy.
         self.multi_lang_enabled = not single_language_mode
+        # Parakeet's streaming model is mono-only. The request channel count is
+        # known here, before provider selection, so a multi-channel session keeps
+        # the existing vendor route even when Parakeet leads the global defaults.
+        stt_selection_exclude = frozenset({PARAKEET_PROVIDER}) if self.is_multi_channel else frozenset()
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
             self.language,
             multi_lang_enabled=self.multi_lang_enabled,
             preferred_service=request.stt_service,
+            exclude=stt_selection_exclude,
         )
         # The provider the serving policy chose, captured before `_create_stt_socket`
         # can walk the fallback chain. Only the *selected* value is safe to hold onto:

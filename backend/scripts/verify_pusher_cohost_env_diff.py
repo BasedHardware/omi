@@ -43,6 +43,10 @@ REQUIRED_IDENTICAL_LITERALS = (
 # Explained listen-only residuals. New listen-only keys fail until added here
 # *or* declared on pusher. Do not copy secret refs onto pusher from this list
 # without an ExternalSecret inventory (#12298).
+#
+# HOSTED_PARAKEET_STREAM_API_URL is intentionally listen-only: backend-listen
+# owns live STT and opens the Parakeet WebSocket; pusher only receives already
+# transcribed audio/transcript events and has no streaming STT connection path.
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
@@ -70,6 +74,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "GOOGLE_APPLICATION_CREDENTIALS",
             "GOOGLE_CALENDAR_AUTO_LINK_ENABLED",
             "GROQ_API_KEY",
+            "HOSTED_PARAKEET_STREAM_API_URL",
             "HOSTED_PUSHER_API_URL",
             "HOSTED_TRANSLATION_API_URL",
             "HOSTED_VAD_API_URL",
@@ -133,6 +138,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "GCP_LOCATION",
             "GEMINI_API_KEY",
             "GOOGLE_APPLICATION_CREDENTIALS",
+            "HOSTED_PARAKEET_STREAM_API_URL",
             "HOSTED_PUSHER_API_URL",
             "HOSTED_TRANSLATION_API_URL",
             "HOSTED_VAD_API_URL",

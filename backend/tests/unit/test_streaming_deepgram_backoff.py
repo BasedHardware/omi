@@ -1064,12 +1064,12 @@ class TestGetSttServiceForLanguage:
 
     def test_retired_configuration_uses_non_deepgram_defaults(self):
         with patch('utils.stt.streaming.stt_service_models', ['dg-nova-3']), patch.dict(
-            'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+            'os.environ', {'HOSTED_PARAKEET_STREAM_API_URL': 'http://parakeet-stream.test'}
         ):
             service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
 
-        # After #10048 fix: Deepgram retirement is subtractive; Modulate is the safe primary
-        assert (service, lang, model) == (STTService.modulate, 'en', 'velma-2')
+        # A stale Deepgram-only runtime list falls back to the policy-owned Parakeet primary.
+        assert (service, lang, model) == (STTService.parakeet, 'en', 'parakeet')
 
     def test_unsupported_language_fails_closed(self):
         with patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2']):
@@ -1087,16 +1087,17 @@ class TestGetSttServiceForLanguage:
 @pytest.mark.parametrize(
     ('language', 'multi_lang_enabled', 'surface', 'preferred_service', 'expected'),
     [
-        ('multi', False, STTServingSurface.STREAMING, None, (STTService.modulate, 'multi', 'velma-2')),
-        ('en', True, STTServingSurface.STREAMING, None, (STTService.modulate, 'multi', 'velma-2')),
-        ('en', True, STTServingSurface.STREAMING, 'parakeet', (STTService.modulate, 'multi', 'velma-2')),
-        ('es', True, STTServingSurface.STREAMING, 'parakeet', (STTService.modulate, 'multi', 'velma-2')),
+        ('multi', False, STTServingSurface.STREAMING, None, (STTService.parakeet, 'multi', 'parakeet')),
+        ('en', True, STTServingSurface.STREAMING, None, (STTService.parakeet, 'multi', 'parakeet')),
+        ('en', True, STTServingSurface.STREAMING, 'parakeet', (STTService.parakeet, 'multi', 'parakeet')),
+        ('fr', True, STTServingSurface.STREAMING, None, (STTService.parakeet, 'multi', 'parakeet')),
+        ('es', True, STTServingSurface.STREAMING, 'parakeet', (STTService.parakeet, 'multi', 'parakeet')),
         ('zh-TW', True, STTServingSurface.STREAMING, None, (STTService.modulate, 'multi', 'velma-2')),
         ('ar', True, STTServingSurface.STREAMING, None, (STTService.modulate, 'multi', 'velma-2')),
-        ('es', False, STTServingSurface.STREAMING, None, (STTService.modulate, 'es', 'velma-2')),
-        ('es', False, STTServingSurface.STREAMING, 'parakeet', (STTService.modulate, 'es', 'velma-2')),
+        ('es', False, STTServingSurface.STREAMING, None, (STTService.parakeet, 'es', 'parakeet')),
+        ('es', False, STTServingSurface.STREAMING, 'parakeet', (STTService.parakeet, 'es', 'parakeet')),
         ('en', False, STTServingSurface.STREAMING, 'parakeet', (STTService.parakeet, 'en', 'parakeet')),
-        ('es', True, STTServingSurface.PTT, None, (STTService.modulate, 'es', 'velma-2')),
+        ('es', True, STTServingSurface.PTT, None, (STTService.parakeet, 'multi', 'parakeet')),
     ],
 )
 def test_selection_respects_model_capability_and_live_multilingual_mode(
@@ -1329,13 +1330,14 @@ class TestIsSttAvailable:
         # The breakers are module-level singletons shared with real streaming
         # code; leaving one open would poison unrelated tests/requests in the
         # same process.
-        from utils.stt.streaming import _deepgram_circuit, _modulate_circuit
+        from utils.stt.streaming import _deepgram_circuit, _modulate_circuit, _parakeet_circuit, _soniox_circuit
 
-        _deepgram_circuit.record_success()
-        _modulate_circuit.record_success()
+        circuits = (_deepgram_circuit, _modulate_circuit, _parakeet_circuit, _soniox_circuit)
+        for circuit in circuits:
+            circuit.record_success()
         yield
-        _deepgram_circuit.record_success()
-        _modulate_circuit.record_success()
+        for circuit in circuits:
+            circuit.record_success()
 
     def test_tracks_configured_primary_not_a_fixed_provider(self, monkeypatch):
         """The default deployment config leads with Modulate; the check must
@@ -1355,6 +1357,17 @@ class TestIsSttAvailable:
             _deepgram_circuit.record_failure()
 
         # Modulate leads and is healthy; a down Deepgram (not the primary) is irrelevant.
+        assert is_stt_available() is True
+
+    def test_parakeet_primary_availability_follows_its_breaker(self, monkeypatch):
+        from utils.stt.streaming import _parakeet_circuit, is_stt_available
+
+        monkeypatch.setattr('utils.stt.streaming.stt_service_models', ['parakeet', 'modulate-velma-2', 'dg-nova-3'])
+        assert is_stt_available() is True
+        for _ in range(_parakeet_circuit._failure_threshold):
+            _parakeet_circuit.record_failure()
+        assert is_stt_available() is False
+        _parakeet_circuit.record_success()
         assert is_stt_available() is True
 
     def test_available_when_circuit_closed(self):

@@ -1,0 +1,152 @@
+# Dedicated production realtime Parakeet release.
+# Apply after prod_omi_parakeet_values.yaml. The cap 10 / target 8 envelope is
+# provisional pending sustained qualification. The 99-pod warm floor is the
+# conservative envelope for 600 eligible peak streams at target 8, with 30%
+# demand reserve and one lost replica: ceil(600*1.30/8)+1 = 99.
+#
+# The load balancer IP is intentionally unset. Deployment automation must
+# reserve/read a regional internal address and pass service.loadBalancerIP; no
+# private address is committed to source.
+
+serviceMode: stream
+
+image:
+  # The deployment helper resolves the pushed image digest and passes it with
+  # --set-string=image.digest. A mutable tag is rejected for this release.
+  digest: ""
+  tag: ""
+  requireDigest: true
+
+capacityPlan:
+  peakConcurrentStreams: 600
+  headroomPercent: 30
+  failureReplicas: 1
+
+replicaCount: 99
+
+service:
+  type: LoadBalancer
+  port: 8080
+  loadBalancerIP: ""
+  annotations:
+    networking.gke.io/load-balancer-type: "Internal"
+  neg:
+    enabled: false
+
+backendConfig:
+  enabled: true
+  name: prod-omi-parakeet-stream-backend-config
+  timeoutSec: 45
+  drainingTimeoutSec: 35
+
+ingress:
+  enabled: false
+
+autoscaling:
+  enabled: true
+  minReplicas: 99
+  maxReplicas: 125
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 600
+      selectPolicy: Min
+  # Active streams is retained as a direct capacity signal. Demand includes
+  # recent admission pressure and is the authoritative scale-up signal once
+  # the cluster adapter exposes parakeet_stream_demand.
+  streamsPerPod: 8
+  streamDemandPerPod: 8
+  requestsPerPod: null
+  targetGPUUtilization: null
+  requestLatencyP99: null
+
+podDisruptionBudget:
+  minAvailable: 98
+
+# Budget: curl timeout 5 + preStop wait 30 + uvicorn graceful shutdown 30 +
+# runtime drain/flush 35 + five seconds of margin.
+terminationGracePeriodSeconds: 105
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 3
+  periodSeconds: 10
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 1
+  periodSeconds: 10
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  # Model download plus CUDA/RNNT/VAD/diarizer warmup can take ten minutes;
+  # do not let liveness recycle a pod while startup is still progressing.
+  failureThreshold: 90
+  periodSeconds: 10
+lifecycle:
+  preStop:
+    exec:
+      command:
+        - sh
+        - -c
+        - >-
+          curl -sf -m 5 -X POST http://127.0.0.1:8080/__internal/drain || true;
+          sleep 30
+
+resources:
+  requests:
+    cpu: 4
+    memory: 8Gi
+    nvidia.com/gpu: 1
+  limits:
+    cpu: 6
+    memory: 20Gi
+    nvidia.com/gpu: 1
+
+nodeSelector:
+  cloud.google.com/gke-accelerator: nvidia-l4
+  service: parakeet-stream
+  env: prod
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: cloud.google.com/gke-accelerator
+              operator: In
+              values:
+                - nvidia-l4
+            - key: service
+              operator: In
+              values:
+                - parakeet-stream
+            - key: env
+              operator: In
+              values:
+                - prod
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: parakeet
+        topologyKey: kubernetes.io/hostname
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1

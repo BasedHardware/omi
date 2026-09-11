@@ -4370,7 +4370,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet\", namespace=\"prod-omi-backend\"}), 1)",
+          "expr": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\", pod=~\"prod-omi-parakeet-stream-.*\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet-stream\", namespace=\"prod-omi-backend\"}), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -4432,7 +4432,7 @@
             {
               "evaluator": {
                 "params": [
-                  15
+                  6
                 ],
                 "type": "gt"
               },
@@ -4476,7 +4476,7 @@
       "scope": "Production Parakeet streaming pods; active streams are averaged across ready replicas.",
       "verification": "Compare active streams and ready replicas in the Parakeet dashboard and confirm the condition persists for the alert duration.",
       "safe_next_action": "Allow the HPA to add healthy replicas first; investigate capacity only after checking replica readiness and the dashboard.",
-      "threshold": "15 active streams per ready replica",
+      "threshold": "6 active streams per ready replica",
       "runbook": "backend/docs/runbooks/parakeet-stream-capacity.md"
     },
     "labels": {
@@ -4513,7 +4513,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet\", namespace=\"prod-omi-backend\"}), 1)",
+          "expr": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\", pod=~\"prod-omi-parakeet-stream-.*\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet-stream\", namespace=\"prod-omi-backend\"}), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -4575,7 +4575,7 @@
             {
               "evaluator": {
                 "params": [
-                  20
+                  8
                 ],
                 "type": "gt"
               },
@@ -4619,7 +4619,7 @@
       "scope": "Production Parakeet streaming pods; active streams are averaged across ready replicas.",
       "verification": "Compare active streams and ready replicas in the Parakeet dashboard and confirm the condition persists for the alert duration.",
       "safe_next_action": "Allow the HPA to add healthy replicas first; investigate capacity only after checking replica readiness and the dashboard.",
-      "threshold": "20 active streams per ready replica",
+      "threshold": "8 active streams per ready replica",
       "runbook": "backend/docs/runbooks/parakeet-stream-capacity.md"
     },
     "labels": {

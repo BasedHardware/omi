@@ -96,6 +96,17 @@ def with_backend_pusher_env(payload: str) -> str:
     )
 
 
+def with_backend_parakeet_stream_env(payload: str) -> str:
+    """Cloud Run state fixtures carry the deployment-supplied stream ILB URL."""
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "HOSTED_PARAKEET_STREAM_API_URL", "value": "http://172.16.0.25"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_conversation_notes_v2_env(payload: str) -> str:
     """The summary rollout flags are declared on the Cloud Run `backend` service too.
 
@@ -223,11 +234,13 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             with_meeting_receipt_reconciler_env(
                 with_conversation_notes_v2_env(
                     with_backend_pusher_env(
-                        with_parity_pack_env(
-                            with_listen_finalization_orphan_env(
-                                with_belief_model_env(
-                                    with_memory_env(
-                                        with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload))
+                        with_backend_parakeet_stream_env(
+                            with_parity_pack_env(
+                                with_listen_finalization_orphan_env(
+                                    with_belief_model_env(
+                                        with_memory_env(
+                                            with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload))
+                                        )
                                     )
                                 )
                             )
@@ -1160,7 +1173,7 @@ def test_deployment_stt_models_must_match_the_central_serving_policy():
         ),
         validator.ValidationError(
             'prod/gke/backend-listen',
-            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'modulate-velma-2,dg-nova-3,parakeet', got 'modulate-velma-2'",
+            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'parakeet,modulate-velma-2,dg-nova-3', got 'modulate-velma-2'",
         ),
     ]
 
@@ -2022,6 +2035,8 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
 def test_memory_maintenance_job_contract_rejects_daily_sweep_host_and_requires_posthog(env, tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    # This mutation validates one environment; avoid serializing and parsing the unrelated one.
+    manifest['environments'] = {env: manifest['environments'][env]}
     job = manifest['environments'][env]['cloud_run']['jobs']['memory-maintenance-job']
     job['env']['MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED'] = {'value': 'true'}
     job['env']['POSTHOG_HOST'] = {'value': 'https://app.posthog.com'}
@@ -2490,7 +2505,11 @@ def test_sync_backfill_co_deploy_is_required_per_workflow(tmp_path):
     )
 
 
-_ILB_ENV_VARS = ['HOSTED_PARAKEET_API_URL', 'HOSTED_TRANSLATION_API_URL']
+_ILB_ENV_VARS = [
+    'HOSTED_PARAKEET_API_URL',
+    'HOSTED_PARAKEET_STREAM_API_URL',
+    'HOSTED_TRANSLATION_API_URL',
+]
 
 
 @pytest.mark.parametrize('env_name', ['dev', 'prod'])

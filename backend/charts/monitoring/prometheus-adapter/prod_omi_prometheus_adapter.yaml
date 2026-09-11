@@ -2,6 +2,29 @@ prometheus:
   url: http://prod-omi-kube-prometheus-s-prometheus.{{ .Release.Namespace }}.svc
 rules:
   default: false
+  custom:
+    # Per-pod metrics keep the two Parakeet releases isolated. Never coerce
+    # absent scrapes to zero: HPA must retain its warm floor on metric loss.
+    - seriesQuery: 'parakeet_active_streams{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^parakeet_active_streams$"
+        as: "parakeet_active_streams"
+      metricsQuery: 'max(parakeet_active_streams{<<.LabelMatchers>>}) by (<<.GroupBy>>)'
+    - seriesQuery: 'parakeet_active_streams{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^parakeet_active_streams$"
+        as: "parakeet_stream_demand"
+      # A rejected session is demand even though it never obtains a GPU lease.
+      # This is a bounded one-minute pressure signal, not billed audio volume.
+      metricsQuery: 'max(parakeet_active_streams{<<.LabelMatchers>>}) by (<<.GroupBy>>) + sum(increase(parakeet_stream_admission_total{<<.LabelMatchers>>,reason="capacity_full"}[1m])) by (<<.GroupBy>>)'
   external:
     - name:
         as: "backend_listen_active_ws_connections_per_pod"

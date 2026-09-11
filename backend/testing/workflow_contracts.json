@@ -762,6 +762,37 @@
         "unmapped backend production paths cannot be hidden by adding one direct test",
         "desktop-only pushes do not require a backend virtual environment"
       ]
+    },
+    {
+      "id": "parakeet_primary_release",
+      "risk": "high",
+      "sources": [
+        "backend/parakeet/**",
+        "backend/scripts/deploy_parakeet_stream.py",
+        ".github/workflows/parakeet_gpu_tests.yml",
+        ".github/workflows/gcp_backend.yml",
+        ".github/workflows/gcp_backend_auto_dev.yml",
+        ".github/workflows/gcp_backend_listen_helm.yml",
+        ".github/actions/deploy-backend-stack/action.yml",
+        "backend/scripts/parakeet_stream_contract.py"
+      ],
+      "tests": [
+        "tests/unit/test_deploy_parakeet_stream.py",
+        "tests/unit/test_parakeet_release_workflow_contract.py",
+        "tests/unit/test_parakeet_service_mode.py",
+        "tests/unit/test_parakeet_service_admission.py",
+        "tests/unit/test_parakeet_endpoints.py",
+        "tests/unit/test_parakeet_helm_contract.py",
+        "tests/unit/test_parakeet_listener_workflow_contract.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "streaming readiness requires the configured ASR model, VAD and built-in speaker warmup and excludes batch inference",
+        "qualified image identity and warm GPU capacity precede publishing Parakeet-primary configuration",
+        "regional GPU pool sizing uses total limits and retains one rolling surge GPU",
+        "missing or stale per-pod metrics cannot pass the release gate",
+        "GPU test resources are isolated in development and cleanup runs after test job failure"
+      ]
     }
   ]
 }

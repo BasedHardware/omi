@@ -31,7 +31,7 @@ on:
           - deploy
           - rollback
       image_tag:
-        description: 'Short-SHA image to deploy (blank keeps the running image). Prod requires an ancestor of main.'
+        description: 'Short-SHA image to deploy (blank builds or resolves the admitted source image). Prod requires an ancestor of main.'
         required: false
         default: ''
       helm_revision:
@@ -90,11 +90,188 @@ env:
   REGION: us-central1
 
 jobs:
+  backend_source:
+    # Source admission and image identity are isolated from the deployment job so
+    # the qualification job can consume one immutable source SHA.  Rollback is a
+    # Helm-only recovery path and deliberately skips this job.
+    if: >-
+      github.event_name != 'workflow_dispatch' || github.event.inputs.mode == 'deploy'
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+      image_tag: ${{ steps.image.outputs.image_tag }}
+      image_ref: ${{ steps.image.outputs.image_ref }}
+      image_digest: ${{ steps.image.outputs.image_digest }}
+    steps:
+      - name: Validate deployment input before source or registry work
+        env:
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment || 'development' }}
+        run: |
+          set -euo pipefail
+          if [[ "$DEPLOY_ENVIRONMENT" != development && "$DEPLOY_ENVIRONMENT" != prod ]]; then
+            echo "ERROR: environment must be development or prod, got $DEPLOY_ENVIRONMENT." >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_EVENT_NAME" == push && "$DEPLOY_ENVIRONMENT" == prod ]]; then
+            echo "ERROR: production deployment requires workflow_dispatch." >&2
+            exit 1
+          fi
+
+      - name: Fetch requested source
+        env:
+          FETCH_REF: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod') && 'main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.ref) }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git -c http.extraheader="AUTHORIZATION: bearer ${GH_TOKEN}" fetch --no-tags origin "$FETCH_REF"
+          git checkout --detach FETCH_HEAD
+
+      - name: Admit exact backend source
+        id: source
+        env:
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment || 'development' }}
+          REQUESTED_IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == push && "$DEPLOY_ENVIRONMENT" == prod ]]; then
+            echo "ERROR: production deployment requires workflow_dispatch." >&2
+            exit 1
+          fi
+          CHECKED_OUT_SHA="$(git rev-parse HEAD)"
+          [[ "$CHECKED_OUT_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "ERROR: checkout did not resolve a full commit SHA." >&2
+            exit 1
+          }
+          if [[ "$DEPLOY_ENVIRONMENT" == prod ]]; then
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          fi
+
+          if [[ -n "$REQUESTED_IMAGE_TAG" ]]; then
+            if ! git cat-file -e "${REQUESTED_IMAGE_TAG}^{commit}" 2>/dev/null; then
+              echo "ERROR: image_tag $REQUESTED_IMAGE_TAG is not a commit in this repository." >&2
+              exit 1
+            fi
+            SOURCE_SHA="$(git rev-parse "${REQUESTED_IMAGE_TAG}^{commit}")"
+          else
+            SOURCE_SHA="$CHECKED_OUT_SHA"
+          fi
+          if [[ "$DEPLOY_ENVIRONMENT" == prod ]] && ! git merge-base --is-ancestor "$SOURCE_SHA" origin/main; then
+            echo "ERROR: admitted source $SOURCE_SHA is not an ancestor of fresh origin/main $(git rev-parse origin/main)." >&2
+            exit 1
+          fi
+          printf 'source_sha=%s\n' "$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "Admitted backend source: $SOURCE_SHA"
+
+      - name: Google Auth
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker --quiet
+
+      - name: Resolve or build exact backend image
+        id: image
+        env:
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment || 'development' }}
+          REQUESTED_IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          IMAGE_REPOSITORY="gcr.io/${GCP_PROJECT_ID}/backend"
+          RESOLVED_IMAGE_TAG="$(git rev-parse --short=7 "$SOURCE_SHA")"
+          IMAGE="${IMAGE_REPOSITORY}:${RESOLVED_IMAGE_TAG}"
+          if [[ -n "$REQUESTED_IMAGE_TAG" ]]; then
+            REQUESTED_RESOLVED="$(git rev-parse --short=7 "${REQUESTED_IMAGE_TAG}^{commit}")"
+            [[ "$REQUESTED_RESOLVED" == "$RESOLVED_IMAGE_TAG" ]] || {
+              echo "ERROR: requested image tag resolves to $REQUESTED_RESOLVED, admitted source resolves to $RESOLVED_IMAGE_TAG." >&2
+              exit 1
+            }
+          fi
+
+          DESCRIBE_ERROR="$RUNNER_TEMP/backend-image-describe.err"
+          if gcloud container images describe "$IMAGE" --project "$GCP_PROJECT_ID" > /dev/null 2> "$DESCRIBE_ERROR"; then
+            # A source-derived tag is the lineage contract.  Resolve the tag to
+            # its immutable digest before passing identity to later jobs.
+            DIGEST="$(gcloud container images describe "$IMAGE" --project "$GCP_PROJECT_ID" --format='value(image_summary.digest)')"
+            TAGS="$(gcloud container images describe "$IMAGE" --project "$GCP_PROJECT_ID" --format='value(image_summary.tags)')"
+            [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+              echo "ERROR: registry image $IMAGE did not resolve to a sha256 digest." >&2
+              exit 1
+            }
+            grep -Eq "(^|[[:space:],])${RESOLVED_IMAGE_TAG}([[:space:],]|$)" <<<"$TAGS" || {
+              echo "ERROR: registry image $IMAGE has no exact source-derived tag ${RESOLVED_IMAGE_TAG}." >&2
+              exit 1
+            }
+            echo "Using existing immutable registry image ${IMAGE}@${DIGEST} for source ${SOURCE_SHA}."
+          else
+            if ! grep -Eiq "not found|does not exist|does not have" "$DESCRIBE_ERROR"; then
+              echo "ERROR: could not determine whether registry image $IMAGE exists." >&2
+              cat "$DESCRIBE_ERROR" >&2
+              exit 1
+            fi
+            echo "No registry image for ${IMAGE}; building and smoking the admitted source."
+            docker build --file backend/Dockerfile --tag "$IMAGE" .
+            python3 backend/scripts/runtime_image_contracts.py smoke \
+              --dockerfile backend/Dockerfile \
+              --image "$IMAGE"
+            docker push "$IMAGE"
+            DIGEST="$(gcloud container images describe "$IMAGE" --project "$GCP_PROJECT_ID" --format='value(image_summary.digest)')"
+            [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+              echo "ERROR: pushed image $IMAGE did not resolve to a sha256 digest." >&2
+              exit 1
+            }
+          fi
+          {
+            printf 'image_tag=%s\n' "$RESOLVED_IMAGE_TAG"
+            printf 'image_digest=%s\n' "$DIGEST"
+            printf 'image_ref=%s@%s\n' "$IMAGE" "$DIGEST"
+          } >> "$GITHUB_OUTPUT"
+
+  parakeet_qualification:
+    needs: backend_source
+    if: >-
+      needs.backend_source.result == 'success' &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.mode == 'deploy')
+    uses: ./.github/workflows/parakeet_gpu_tests.yml
+    with:
+      source_sha: ${{ needs.backend_source.outputs.source_sha }}
+      # The reusable job builds an image from this exact source SHA and exposes
+      # its immutable digest plus the same-run capacity artifact.
+      build_source: true
+      stream_capacity: '10'
+    permissions:
+      contents: read
+      id-token: write
+    secrets: inherit
+
   helm-upgrade:
+    needs: [backend_source, parakeet_qualification]
+    if: >-
+      always() &&
+      (
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'rollback') ||
+        (
+          (github.event_name != 'workflow_dispatch' || github.event.inputs.mode == 'deploy') &&
+          needs.backend_source.result == 'success' &&
+          needs.parakeet_qualification.result == 'success'
+        )
+      )
     # On manual dispatch use the chosen environment; on auto push only deploy
     # to dev (prod still requires an explicit workflow_dispatch for safety).
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
+      actions: 'read'
       contents: 'read'
       id-token: 'write'
 
@@ -113,6 +290,20 @@ jobs:
           ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}
           fetch-depth: 0
 
+      - name: Select admitted backend source
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        env:
+          ADMITTED_SOURCE_SHA: ${{ needs.backend_source.outputs.source_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$ADMITTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "ERROR: source admission did not return a full commit SHA." >&2
+            exit 1
+          }
+          git -c http.extraheader="AUTHORIZATION: bearer ${GH_TOKEN}" fetch --no-tags origin "$ADMITTED_SOURCE_SHA"
+          git checkout --detach "$ADMITTED_SOURCE_SHA"
+
       - name: Admit checked-out production source and image identity
         run: |
           set -euo pipefail
@@ -127,6 +318,15 @@ jobs:
           IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")
           echo "Admitted deployment source: $CHECKED_OUT_SHA"
           echo "CHECKED_OUT_SHA=$CHECKED_OUT_SHA" >> "$GITHUB_ENV"
+          # Deploy mode is admitted by backend_source and its reusable GPU
+          # qualification. Rollback keeps the old chart-only source path.
+          if [[ "${{ github.event.inputs.mode || 'deploy' }}" == deploy ]]; then
+            EXPECTED_SHA="${{ needs.backend_source.outputs.source_sha }}"
+            [[ "$CHECKED_OUT_SHA" == "$EXPECTED_SHA" ]] || {
+              echo "ERROR: listener checkout $CHECKED_OUT_SHA differs from admitted source $EXPECTED_SHA." >&2
+              exit 1
+            }
+          fi
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
 
       - name: Install Helm
@@ -154,47 +354,75 @@ jobs:
           helm -n ${{ vars.ENV }}-omi-backend history ${{ vars.ENV }}-omi-backend-listen --max 20 \
             || echo "No existing release found"
 
-      - name: Resolve backend-listen image tag
+      - name: Download exact Parakeet GPU qualification artifact
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
-        env:
-          REQUESTED_TAG: ${{ github.event.inputs.image_tag }}
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.parakeet_qualification.outputs.artifact_name }}
+          path: ${{ runner.temp }}/parakeet-qualification
+
+      - name: Resolve Parakeet qualification evidence path
+        id: parakeet-qualification-evidence
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        shell: bash
         run: |
           set -euo pipefail
-          IMAGE="$(kubectl -n ${{ vars.ENV }}-omi-backend get deploy/${{ vars.ENV }}-omi-backend-listen -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
-          RUNNING_TAG="${IMAGE##*:}"
-          if [[ -z "${REQUESTED_TAG}" ]]; then
-            # Chart-only upgrade: keep whatever is serving. This is the auto-push path.
-            if [[ -z "$RUNNING_TAG" || "$RUNNING_TAG" == "$IMAGE" || "$RUNNING_TAG" == "latest" ]]; then
-              echo "ERROR: backend-listen is not pinned to an immutable tag (${IMAGE:-<missing>}) and no image_tag was given." >&2
-              echo "Pass image_tag=<short-sha> to set one explicitly." >&2
-              exit 1
-            fi
-            echo "Keeping the running image tag: $RUNNING_TAG"
-            echo "BACKEND_LISTEN_IMAGE_TAG=$RUNNING_TAG" >> "$GITHUB_ENV"
-            exit 0
-          fi
+          mapfile -t evidence < <(find "$RUNNER_TEMP/parakeet-qualification" -type f -name 'stream-capacity-results.json' -print)
+          [[ "${#evidence[@]}" == 1 ]] || {
+            echo "Expected exactly one Parakeet stream qualification artifact, found ${#evidence[@]}." >&2
+            exit 1
+          }
+          echo "path=${evidence[0]}" >> "$GITHUB_OUTPUT"
 
-          # An explicit tag advances or rewinds the deployed code, so it must be a
-          # reviewed commit. Prod admits only ancestors of main; the same rule the
-          # source checkout is held to above.
-          if ! git cat-file -e "${REQUESTED_TAG}^{commit}" 2>/dev/null; then
-            echo "ERROR: image_tag ${REQUESTED_TAG} is not a commit in this repository." >&2
+      - name: Provision and verify Parakeet stream fleet
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        env:
+          QUALIFIED_IMAGE_REF: ${{ needs.parakeet_qualification.outputs.image_ref }}
+          QUALIFIED_SOURCE_SHA: ${{ needs.parakeet_qualification.outputs.source_sha }}
+          ADMITTED_SOURCE_SHA: ${{ needs.backend_source.outputs.source_sha }}
+          QUALIFICATION_EVIDENCE: ${{ steps.parakeet-qualification-evidence.outputs.path }}
+        run: |
+          set -euo pipefail
+          [[ "$QUALIFIED_SOURCE_SHA" == "$ADMITTED_SOURCE_SHA" ]] || {
+            echo "ERROR: Parakeet qualification source $QUALIFIED_SOURCE_SHA differs from admitted backend source $ADMITTED_SOURCE_SHA." >&2
             exit 1
-          fi
-          if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
-            if ! git merge-base --is-ancestor "${REQUESTED_TAG}" origin/main; then
-              echo "ERROR: image_tag ${REQUESTED_TAG} is not an ancestor of origin/main." >&2
-              exit 1
-            fi
-          fi
-          RESOLVED_TAG=$(git rev-parse --short=7 "${REQUESTED_TAG}^{commit}")
-          if ! gcloud container images describe "gcr.io/${{ vars.GCP_PROJECT_ID }}/backend:${RESOLVED_TAG}" >/dev/null 2>&1; then
-            echo "ERROR: gcr.io/${{ vars.GCP_PROJECT_ID }}/backend:${RESOLVED_TAG} does not exist." >&2
-            echo "The image is built by the backend deploy workflow; run that for this commit first." >&2
+          }
+          [[ "$QUALIFIED_IMAGE_REF" =~ ^([^@[:space:]]+)@(sha256:[0-9a-f]{64})$ ]] || {
+            echo "ERROR: Parakeet qualification did not return an immutable image reference." >&2
             exit 1
-          fi
-          echo "Deploying image tag ${RESOLVED_TAG} (currently ${RUNNING_TAG:-<none>})"
-          echo "BACKEND_LISTEN_IMAGE_TAG=$RESOLVED_TAG" >> "$GITHUB_ENV"
+          }
+          IMAGE_REPOSITORY="${BASH_REMATCH[1]}"
+          IMAGE_DIGEST="${BASH_REMATCH[2]}"
+          test -s "$QUALIFICATION_EVIDENCE"
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/deploy_parakeet_stream.py \
+            --environment "${{ vars.ENV }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --cluster "${{ vars.GKE_CLUSTER }}" \
+            --region "${REGION}" \
+            --image-repository "$IMAGE_REPOSITORY" \
+            --image-digest "$IMAGE_DIGEST" \
+            --adapter-values-file "backend/charts/monitoring/prometheus-adapter/${{ vars.ENV }}_omi_prometheus_adapter.yaml" \
+            --adapter-release "${{ vars.ENV }}-omi-prometheus-adapter" \
+            --qualification-evidence "$QUALIFICATION_EVIDENCE" \
+            --source-sha "$ADMITTED_SOURCE_SHA" \
+            --allow-node-pool-provision \
+            --apply
+
+      - name: Use admitted backend image tag
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        run: |
+          set -euo pipefail
+          ADMITTED_TAG="${{ needs.backend_source.outputs.image_tag }}"
+          [[ "$ADMITTED_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || {
+            echo "ERROR: source admission did not return a valid backend image tag." >&2
+            exit 1
+          }
+          # The source job resolved or built this exact source-derived tag. Do
+          # not retain a stale listener image when chart changes make Parakeet
+          # primary.
+          echo "Deploying admitted backend-listen image tag: $ADMITTED_TAG"
+          echo "BACKEND_LISTEN_IMAGE_TAG=$ADMITTED_TAG" >> "$GITHUB_ENV"
 
       - name: Carry forward config this workflow does not own
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}

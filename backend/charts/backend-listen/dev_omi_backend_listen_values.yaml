@@ -259,6 +259,8 @@ env:
         key: ADMIN_KEY
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omiapi.com"
+  - name: HOSTED_PARAKEET_STREAM_API_URL
+    value: "http://dev-omi-parakeet-stream.dev-omi-backend.svc.cluster.local:8080"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: DEEPGRAM_API_KEY
@@ -269,7 +271,7 @@ env:
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,dg-nova-3,parakeet"
+    value: "parakeet,modulate-velma-2,dg-nova-3"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL

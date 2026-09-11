@@ -414,10 +414,22 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.AUTO_WORKFLOW_PATH,
-            "    needs: firestore_readiness\n",
-            "    needs: firestore_readiness\n    if: always()\n",
+            "    needs: [firestore_readiness, parakeet_qualification]\n",
+            "    needs: [firestore_readiness, parakeet_qualification]\n    if: always()\n",
         )
         self.assertIn("auto backend deploy must not override source-admission dependency", CHECKER.validate(root))
+
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.AUTO_WORKFLOW_PATH,
+            "    needs: [firestore_readiness, parakeet_qualification]\n",
+            "    needs: [firestore_readiness, parakeet_qualification] || true\n",
+        )
+        self.assertIn(
+            "auto backend deploy must depend on source admission and Parakeet qualification",
+            CHECKER.validate(root),
+        )
 
     def test_auto_workflow_rejects_steps_outside_the_source_admission_sequence(self) -> None:
         cases = (
@@ -517,10 +529,12 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
-            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      true\n",
+            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass, parakeet_qualification]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      needs.parakeet_qualification.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
+            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass, parakeet_qualification]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      needs.parakeet_qualification.result == 'success' &&\n      true\n",
         )
-        self.assertIn("manual deployment must gate break-glass deploys on a successful audit record", CHECKER.validate(root))
+        self.assertIn(
+            "manual deployment must gate break-glass deploys on a successful audit record", CHECKER.validate(root)
+        )
 
     def test_manual_workflow_rejects_boundary_dependency_bypasses(self) -> None:
         root = self.fixture_root()
@@ -539,11 +553,11 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "needs: [validate-production-boundary, firestore_readiness, record_break_glass]",
+            "needs: [validate-production-boundary, firestore_readiness, record_break_glass, parakeet_qualification]",
             "needs: firestore_readiness",
         )
         self.assertIn(
-            "manual deployment must depend on production-boundary validation, source admission, and break-glass audit",
+            "manual deployment must depend on production-boundary validation, source admission, Parakeet qualification, and break-glass audit",
             CHECKER.validate(root),
         )
 

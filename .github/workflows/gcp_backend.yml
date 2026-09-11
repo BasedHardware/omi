@@ -374,14 +374,30 @@ jobs:
               "" \
               "The gate being unusable is the defect. Fix the gate, then close this.")"
 
+  parakeet_qualification:
+    needs: [firestore_readiness, record_break_glass]
+    if: >-
+      always() && needs.firestore_readiness.result == 'success' &&
+      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/parakeet_gpu_tests.yml
+    with:
+      source_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+      build_source: true
+      stream_capacity: '10'
+    secrets: inherit
+
   deploy:
-    needs: [validate-production-boundary, firestore_readiness, record_break_glass]
+    needs: [validate-production-boundary, firestore_readiness, record_break_glass, parakeet_qualification]
     if: >-
       always() &&
       github.ref == 'refs/heads/main' &&
       github.event.inputs.mode == 'deploy' &&
       needs.validate-production-boundary.result == 'success' &&
       needs.firestore_readiness.result == 'success' &&
+      needs.parakeet_qualification.result == 'success' &&
       (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
@@ -393,10 +409,30 @@ jobs:
       - name: Checkout workflow dispatch surface for composite action
         uses: actions/checkout@v7
 
+      - name: Download exact Parakeet GPU qualification artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ needs.parakeet_qualification.outputs.artifact_name }}
+          path: ${{ runner.temp }}/parakeet-qualification
+
+      - name: Resolve Parakeet qualification evidence path
+        id: parakeet-qualification-evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t evidence < <(find "$RUNNER_TEMP/parakeet-qualification" -type f -name 'stream-capacity-results.json' -print)
+          [[ "${#evidence[@]}" == 1 ]] || {
+            echo "Expected exactly one Parakeet stream qualification artifact, found ${#evidence[@]}." >&2
+            exit 1
+          }
+          echo "path=${evidence[0]}" >> "$GITHUB_OUTPUT"
+
       - name: Deploy backend stack
         uses: ./.github/actions/deploy-backend-stack
         with:
           deploy_profile: manual
+          parakeet_image_ref: ${{ needs.parakeet_qualification.outputs.image_ref }}
+          parakeet_qualification_evidence: ${{ steps.parakeet-qualification-evidence.outputs.path }}
           admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
           environment: ${{ github.event.inputs.environment }}
           deploy_targets: ${{ github.event.inputs.deploy_targets }}

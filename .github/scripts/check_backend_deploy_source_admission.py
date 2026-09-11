@@ -32,6 +32,7 @@ AUTO_SOURCE_ADMISSION_CONDITION = "\n".join(
         "github.event.workflow_run.head_repository.full_name == github.repository",
     )
 )
+AUTO_DEPLOY_JOB_NEEDS = "needs: [firestore_readiness, parakeet_qualification]"
 MANUAL_DEPLOY_CONDITION = "\n".join(
     (
         "github.ref == 'refs/heads/main' &&",
@@ -44,7 +45,9 @@ MANUAL_TRAFFIC_REPAIR_CONDITION = "\n".join(
         "github.event.inputs.mode == 'repair-traffic-only'",
     )
 )
-MANUAL_DEPLOY_JOB_NEEDS = "needs: [validate-production-boundary, firestore_readiness, record_break_glass]"
+MANUAL_DEPLOY_JOB_NEEDS = (
+    "needs: [validate-production-boundary, firestore_readiness, record_break_glass, parakeet_qualification]"
+)
 MANUAL_DEPLOY_JOB_CONDITION = "\n".join(
     (
         "always() &&",
@@ -52,6 +55,7 @@ MANUAL_DEPLOY_JOB_CONDITION = "\n".join(
         "github.event.inputs.mode == 'deploy' &&",
         "needs.validate-production-boundary.result == 'success' &&",
         "needs.firestore_readiness.result == 'success' &&",
+        "needs.parakeet_qualification.result == 'success' &&",
         "(needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
     )
 )
@@ -64,6 +68,17 @@ def deploy_backend_stack_action_text(root: Path = ROOT) -> str:
 def require_fragment(errors: list[str], text: str, fragment: str, message: str) -> None:
     if fragment not in text:
         errors.append(message)
+
+
+def exact_job_needs(job: str, expected: str) -> bool:
+    """Return whether a job has exactly the expected dependency declaration.
+
+    Keep this anchored to the complete YAML line. A substring check would let
+    a future ``needs: ... || ...`` mutation retain a required dependency in
+    the source text while changing the actual guard semantics.
+    """
+
+    return re.search(rf"(?m)^    {re.escape(expected)}$", job) is not None
 
 
 def mapping_block(text: str, key: str, indent: int) -> str | None:
@@ -348,8 +363,8 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
             errors.append("admitted-source checkout must run before read-only Firestore authentication")
 
     deploy_job = mapping_block(text, "deploy", 2)
-    if deploy_job is None or "    needs: firestore_readiness" not in (deploy_job or ""):
-        errors.append("auto backend deploy must depend on the source-admission job")
+    if deploy_job is None or not exact_job_needs(deploy_job, AUTO_DEPLOY_JOB_NEEDS):
+        errors.append("auto backend deploy must depend on source admission and Parakeet qualification")
     elif re.search(r"(?m)^    if:", deploy_job):
         errors.append("auto backend deploy must not override source-admission dependency")
 
@@ -487,12 +502,11 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
     if deploy_job is None:
         errors.append("manual backend deploy is missing its deployment job")
     else:
-        require_fragment(
-            errors,
-            deploy_job,
-            MANUAL_DEPLOY_JOB_NEEDS,
-            "manual deployment must depend on production-boundary validation, source admission, and break-glass audit",
-        )
+        if not exact_job_needs(deploy_job, MANUAL_DEPLOY_JOB_NEEDS):
+            errors.append(
+                "manual deployment must depend on production-boundary validation, source admission, "
+                "Parakeet qualification, and break-glass audit"
+            )
         if folded_job_condition(deploy_job) != MANUAL_DEPLOY_JOB_CONDITION:
             errors.append("manual deployment must gate break-glass deploys on a successful audit record")
         require_fragment(

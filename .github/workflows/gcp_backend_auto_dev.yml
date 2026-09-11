@@ -282,10 +282,24 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  deploy:
+  parakeet_qualification:
     needs: firestore_readiness
+    if: needs.firestore_readiness.result == 'success'
+    uses: ./.github/workflows/parakeet_gpu_tests.yml
+    with:
+      source_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+      build_source: true
+      stream_capacity: '10'
+    permissions:
+      contents: read
+      id-token: write
+    secrets: inherit
+
+  deploy:
+    needs: [firestore_readiness, parakeet_qualification]
     environment: development
     permissions:
+      actions: 'read'
       contents: 'read'
       id-token: 'write'
 
@@ -293,6 +307,24 @@ jobs:
     steps:
       - name: Checkout workflow dispatch surface for composite action
         uses: actions/checkout@v7
+
+      - name: Download exact Parakeet GPU qualification artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ needs.parakeet_qualification.outputs.artifact_name }}
+          path: ${{ runner.temp }}/parakeet-qualification
+
+      - name: Resolve Parakeet qualification evidence path
+        id: parakeet-qualification-evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t evidence < <(find "$RUNNER_TEMP/parakeet-qualification" -type f -name 'stream-capacity-results.json' -print)
+          [[ "${#evidence[@]}" == 1 ]] || {
+            echo "Expected exactly one Parakeet stream qualification artifact, found ${#evidence[@]}." >&2
+            exit 1
+          }
+          echo "path=${evidence[0]}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy backend stack
         uses: ./.github/actions/deploy-backend-stack
@@ -308,3 +340,5 @@ jobs:
           region: ${{ env.REGION }}
           service: ${{ env.SERVICE }}
           candidate_tag: ${{ env.CANDIDATE_TAG }}
+          parakeet_image_ref: ${{ needs.parakeet_qualification.outputs.image_ref }}
+          parakeet_qualification_evidence: ${{ steps.parakeet-qualification-evidence.outputs.path }}

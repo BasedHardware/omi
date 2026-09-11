@@ -10,14 +10,25 @@ from langdetect import detect as _langdetect_detect_raw  # type: ignore[reportUn
 from langdetect.lang_detect_exception import LangDetectException
 from scipy.cluster.hierarchy import fcluster, linkage
 from speaker_math import SPEAKER_CLUSTERING_MAX_SPEAKERS, cosine_distance as cosine_distance
+from service_mode import (
+    DEFAULT_STREAM_MODEL_NAME,
+    DEFAULT_STREAM_MODEL_ARTIFACT,
+    DEFAULT_STREAM_MODEL_REVISION,
+    get_service_mode,
+    get_stream_model_name,
+    stream_model_identity,
+)
 
 logger = logging.getLogger(__name__)
 
 BATCH_MODEL_NAME: str = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
-STREAM_MODEL_NAME: str = os.getenv("PARAKEET_STREAM_MODEL", "")
+STREAM_MODEL_NAME: str = get_stream_model_name(os.environ)
 INFERENCE_MODE: str = os.getenv("PARAKEET_INFERENCE_MODE", "nemo")
+SERVICE_MODE: str = get_service_mode(os.environ)
+STREAM_MODEL_IDENTITY: Dict[str, Any] = stream_model_identity(STREAM_MODEL_NAME)
 
 _stream_model: Optional[Any] = None
+_stream_decoder_family: Optional[str] = None
 _nim_url: Optional[str] = None
 _gpu_worker: Optional[Any] = None
 
@@ -31,12 +42,30 @@ try:
 except ImportError:
     _torch_mod = None
 
+try:
+    from huggingface_hub import hf_hub_download as _hf_hub_download_raw  # type: ignore[reportMissingImports]
+except ImportError:
+    _hf_hub_download_raw = None
+
 # Untyped / uninstalled libraries aliased as Any so member access does not
 # cascade into reportUnknownMemberType warnings.
 nemo_asr: Any = _nemo_asr
 _torch: Any = cast(Any, _torch_mod)
+_hf_hub_download: Any = cast(Any, _hf_hub_download_raw)
 # langdetect ships partial type information; alias to Any for a clean str return.
 langdetect_detect: Any = cast(Any, _langdetect_detect_raw)
+
+
+def get_stream_model_health() -> Dict[str, Any]:
+    """Return a JSON-safe stream model identity for health/readiness output."""
+
+    identity = dict(STREAM_MODEL_IDENTITY)
+    if _stream_decoder_family is not None:
+        identity["loaded_decoder_family"] = _stream_decoder_family
+        identity["model_loaded"] = _stream_model is not None
+    else:
+        identity["model_loaded"] = _stream_model is not None
+    return identity
 
 
 def has_builtin_embedding() -> bool:
@@ -79,45 +108,64 @@ def report_gpu_inference_error(error: BaseException) -> bool:
     return bool(reporter(error))
 
 
-def _load_nemo_model(model_name: str) -> Any:
+def _finish_nemo_model_load(model: Any, model_name: str) -> Any:
+    use_bf16: Any = (
+        os.getenv("PARAKEET_BF16", "1") == "1" and _torch.cuda.is_available() and _torch.cuda.is_bf16_supported()
+    )
+    if use_bf16:
+        logger.info(f"Converting {model_name} to BF16 (halves GPU memory)")
+        model = model.to(_torch.bfloat16)
+    model = model.cuda() if _torch.cuda.is_available() else model
+    model.eval()
+    if _torch.cuda.is_available():
+        _torch.cuda.empty_cache()
+    return model
+
+
+def _load_nemo_model(model_name: str, model_path: Optional[str] = None) -> Any:
     if nemo_asr is None:
         raise RuntimeError("nemo_toolkit[asr] is not installed")
 
     logger.info(f"Loading NeMo model: {model_name}")
 
-    model_classes: List[Any] = [
-        nemo_asr.models.ASRModel,
-    ]
-    try:
-        model_classes.insert(0, nemo_asr.models.EncDecRNNTBPEModel)
-    except AttributeError:
-        pass
-    try:
-        model_classes.insert(0, nemo_asr.models.EncDecCTCModelBPE)
-    except AttributeError:
-        pass
-    try:
-        model_classes.insert(0, nemo_asr.models.EncDecMultiTaskModel)
-    except AttributeError:
-        pass
+    if model_path is not None:
+        # A pinned local artifact is restored through NeMo's checkpoint path so
+        # startup cannot silently replace an admitted weights revision with a
+        # newer Hub snapshot.
+        restore_from = getattr(nemo_asr.models.ASRModel, "restore_from", None)
+        if not callable(restore_from):
+            raise RuntimeError("NeMo ASRModel.restore_from is required for pinned stream checkpoints")
+        model = restore_from(restore_path=model_path, map_location="cpu")
+        model = _finish_nemo_model_load(model, model_name)
+        logger.info("Model %s restored from pinned artifact %s", model_name, model_path)
+        return model
 
-    use_bf16: Any = (
-        os.getenv("PARAKEET_BF16", "1") == "1" and _torch.cuda.is_available() and _torch.cuda.is_bf16_supported()
-    )
+    # ASRModel.from_pretrained resolves the checkpoint's concrete class from
+    # its serialized config.  This is required for Parakeet TDT: the v3 model
+    # card documents this loader, while the concrete class may still be an
+    # EncDecRNNTBPEModel because TDT is selected by its loss/decoding config.
+    # Keep the older concrete-class fallbacks for custom checkpoints.
+    model_classes: List[Any] = [nemo_asr.models.ASRModel]
+    try:
+        model_classes.append(nemo_asr.models.EncDecRNNTBPEModel)
+    except AttributeError:
+        pass
+    try:
+        model_classes.append(nemo_asr.models.EncDecCTCModelBPE)
+    except AttributeError:
+        pass
+    try:
+        model_classes.append(nemo_asr.models.EncDecMultiTaskModel)
+    except AttributeError:
+        pass
 
     last_err: Optional[BaseException] = None
     for cls in model_classes:
         try:
             logger.info(f"Trying {cls.__name__}.from_pretrained({model_name})")
             model: Any = cls.from_pretrained(model_name=model_name, map_location="cpu")
-            if use_bf16:
-                logger.info(f"Converting {model_name} to BF16 (halves GPU memory)")
-                model = model.to(_torch.bfloat16)
-            model = model.cuda() if _torch.cuda.is_available() else model
-            model.eval()
-            if _torch.cuda.is_available():
-                _torch.cuda.empty_cache()
-            logger.info(f"Model {model_name} loaded via {cls.__name__} (bf16={use_bf16})")
+            model = _finish_nemo_model_load(model, model_name)
+            logger.info(f"Model {model_name} loaded via {cls.__name__}")
             return model
         except (TypeError, Exception) as e:
             last_err = e
@@ -127,12 +175,97 @@ def _load_nemo_model(model_name: str) -> Any:
     raise RuntimeError(f"Could not load model {model_name} with any NeMo class: {last_err}")
 
 
+def _resolve_stream_model_path(model_name: str) -> Optional[str]:
+    """Resolve the production TDT stream artifact at an immutable revision."""
+
+    if model_name != DEFAULT_STREAM_MODEL_NAME:
+        return None
+    if _hf_hub_download is None:
+        raise RuntimeError("huggingface_hub is required to resolve the pinned Parakeet stream artifact")
+    return cast(
+        str,
+        _hf_hub_download(
+            repo_id=DEFAULT_STREAM_MODEL_NAME,
+            filename=DEFAULT_STREAM_MODEL_ARTIFACT,
+            revision=DEFAULT_STREAM_MODEL_REVISION,
+        ),
+    )
+
+
+def _model_decoder_family(model: Any) -> Optional[str]:
+    """Infer the loaded NeMo transducer family from decoder state/config."""
+
+    decoding = getattr(model, "decoding", None)
+    decoding_impl = getattr(decoding, "decoding", None)
+    model_type = getattr(decoding_impl, "_model_type", None)
+    value = getattr(model_type, "value", model_type)
+    if isinstance(value, str):
+        value = value.strip().lower()
+        if value in {"tdt", "rnnt", "multiblank"}:
+            return value
+
+    # RNNTDecoding in the pinned NeMo fork derives TDT from its duration list.
+    # This fallback handles models whose enum is not exposed publicly.
+    durations = getattr(decoding_impl, "durations", None)
+    if durations is not None:
+        try:
+            if len(durations) > 0:
+                return "tdt"
+        except (TypeError, AttributeError):
+            pass
+
+    if decoding_impl is not None and hasattr(decoding_impl, "_is_tdt"):
+        try:
+            if bool(getattr(decoding_impl, "_is_tdt")):
+                return "tdt"
+        except Exception:
+            pass
+    if decoding_impl is not None and getattr(decoding_impl, "decoding_computer", None) is not None:
+        # A decoding computer without TDT metadata is the ordinary RNNT path.
+        return "rnnt"
+    return None
+
+
+def _validate_stream_model(model: Any, model_name: str) -> str:
+    """Fail closed unless the checkpoint exposes the buffered stream seams."""
+
+    required = ("preprocessor", "encoder", "tokenizer", "change_decoding_strategy")
+    missing = [attribute for attribute in required if not hasattr(model, attribute)]
+    if missing:
+        raise RuntimeError(
+            f"Streaming model {model_name} is not a NeMo transducer checkpoint; missing {', '.join(missing)}"
+        )
+
+    decoder_family = _model_decoder_family(model)
+    expected_family = stream_model_identity(model_name)["decoder_family"]
+    if decoder_family is None:
+        raise RuntimeError(f"Streaming model {model_name} does not expose a NeMo RNNT/TDT decoder")
+    if expected_family in {"tdt", "rnnt"} and decoder_family != expected_family:
+        raise RuntimeError(
+            f"Streaming model {model_name} declares {expected_family} but loaded decoder is {decoder_family}"
+        )
+    if decoder_family not in {"tdt", "rnnt"}:
+        raise RuntimeError(f"Streaming model {model_name} uses unsupported decoder family {decoder_family}")
+    return decoder_family
+
+
 def _init_stream_model() -> None:
-    global _stream_model
+    global _stream_model, _stream_decoder_family
+    if SERVICE_MODE == "batch":
+        logger.info("Batch-only service mode: streaming model load skipped")
+        return
     if not STREAM_MODEL_NAME:
         logger.info("No PARAKEET_STREAM_MODEL set, streaming will be unavailable")
         return
-    _stream_model = _load_nemo_model(STREAM_MODEL_NAME)
+    model_path = _resolve_stream_model_path(STREAM_MODEL_NAME)
+    model = _load_nemo_model(STREAM_MODEL_NAME, model_path=model_path)
+    _stream_decoder_family = _validate_stream_model(model, STREAM_MODEL_NAME)
+    _stream_model = model
+    logger.info(
+        "Streaming model ready for NeMo buffered chunks (model=%s, decoder_family=%s)",
+        STREAM_MODEL_NAME,
+        _stream_decoder_family,
+    )
 
 
 def _init_nim() -> None:

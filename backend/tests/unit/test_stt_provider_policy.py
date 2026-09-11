@@ -11,6 +11,8 @@ from config.stt_provider_policy import (
     MODULATE_PROVIDER,
     PARAKEET_MODEL_BY_SURFACE,
     PARAKEET_PROVIDER,
+    PARAKEET_TDT_V3_MODEL,
+    PARAKEET_TDT_V3_SUPPORTED_LANGUAGES,
     STTServingSurface,
     canonical_model_config,
     deepgram_provider_for_runtime,
@@ -53,9 +55,9 @@ def test_self_hosted_deepgram_is_explicitly_limited_to_streaming():
 
 def test_policy_owns_the_safe_model_order_for_every_serving_surface():
     expected = {
-        STTServingSurface.STREAMING: 'modulate-velma-2,dg-nova-3,parakeet',
+        STTServingSurface.STREAMING: 'parakeet,modulate-velma-2,dg-nova-3',
         STTServingSurface.PRERECORDED: 'parakeet,modulate-velma-2',
-        STTServingSurface.PTT: 'modulate-velma-2,parakeet',
+        STTServingSurface.PTT: 'parakeet,modulate-velma-2',
     }
     for surface, model_order in expected.items():
         assert canonical_model_config(surface) == model_order
@@ -75,10 +77,17 @@ def test_deepgram_token_is_admissible_while_either_deployment_serves_the_surface
 
 
 def test_parakeet_capability_tracks_the_model_selected_for_each_surface():
+    assert len(PARAKEET_TDT_V3_SUPPORTED_LANGUAGES) == 25
+    assert all(model == PARAKEET_TDT_V3_MODEL for model in PARAKEET_MODEL_BY_SURFACE.values())
     assert parakeet_supports_language(STTServingSurface.STREAMING, 'en')
-    assert not parakeet_supports_language(STTServingSurface.STREAMING, 'es')
+    assert parakeet_supports_language(STTServingSurface.STREAMING, 'fr')
+    assert parakeet_supports_language(STTServingSurface.STREAMING, 'es-419')
+    assert parakeet_supports_language(STTServingSurface.STREAMING, 'multi')
+    assert not parakeet_supports_language(STTServingSurface.STREAMING, 'zh')
     assert parakeet_supports_language(STTServingSurface.PTT, 'en')
-    assert not parakeet_supports_language(STTServingSurface.PTT, 'multi')
+    assert parakeet_supports_language(STTServingSurface.PTT, 'fr')
+    assert parakeet_supports_language(STTServingSurface.PTT, 'multi')
+    assert not parakeet_supports_language(STTServingSurface.PTT, 'zh')
     assert parakeet_supports_language(STTServingSurface.PRERECORDED, 'es')
     assert parakeet_supports_language(STTServingSurface.PRERECORDED, 'multi')
 
@@ -98,6 +107,42 @@ def test_live_multilingual_policy_normalizes_supported_locales_and_rejects_unkno
     assert supports_live_multilingual_mode('ar')
     assert modulate_supports_language('es-419')
     assert not supports_live_multilingual_mode('xx-unsupported')
+
+
+def test_stream_and_ptt_routes_keep_parakeet_primary_with_model_capabilities():
+    """The default order changes only for surfaces that can connect to Parakeet.
+
+    Parakeet's TDTv3 streaming model supports the same 25 languages as batch.
+    The selector must still skip it for an explicit language outside that set,
+    including when live auto-detection is enabled. PTT has no Deepgram
+    connector, so its policy intentionally contains no Deepgram token.
+    """
+    assert canonical_model_config(STTServingSurface.STREAMING) == 'parakeet,modulate-velma-2,dg-nova-3'
+    assert canonical_model_config(STTServingSurface.PTT) == 'parakeet,modulate-velma-2'
+    assert not model_is_enabled('dg-nova-3', STTServingSurface.PTT)
+    assert parakeet_supports_language(STTServingSurface.STREAMING, 'en')
+    assert parakeet_supports_language(STTServingSurface.STREAMING, 'fr')
+    assert parakeet_supports_language(STTServingSurface.STREAMING, 'es')
+    assert not parakeet_supports_language(STTServingSurface.STREAMING, 'zh')
+
+
+@pytest.mark.parametrize(
+    'values_path',
+    (
+        ROOT / 'backend/charts/backend-listen/dev_omi_backend_listen_values.yaml',
+        ROOT / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml',
+    ),
+)
+def test_backend_listen_values_split_batch_and_stream_parakeet_endpoints(values_path: Path):
+    """Batch keeps its legacy endpoint while live listener uses stream DNS."""
+    assert _chart_env_value(values_path, 'HOSTED_PARAKEET_API_URL') in {
+        'http://parakeet.omiapi.com',
+        'http://parakeet.omi.me',
+    }
+    stream_url = _chart_env_value(values_path, 'HOSTED_PARAKEET_STREAM_API_URL')
+    assert stream_url is not None
+    assert '-omi-backend.svc.cluster.local:8080' in stream_url
+    assert '-omi-parakeet-stream.' in stream_url
 
 
 # ---------------------------------------------------------------------------

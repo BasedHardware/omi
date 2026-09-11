@@ -19,7 +19,7 @@ GENERATED_HEADER = '# generated — do not edit; run: python3 backend/deploy/com
 ConfigDict = dict[str, Any]
 ENVIRONMENTS = ('dev', 'prod')
 _CLOUD_RUN_SERVICE_ORDER = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
-_GKE_SERVICE_ORDER = ('backend-listen', 'parakeet', 'pusher')
+_GKE_SERVICE_ORDER = ('backend-listen', 'parakeet', 'parakeet-stream', 'pusher')
 
 
 def _load_yaml(path: Path) -> ConfigDict:

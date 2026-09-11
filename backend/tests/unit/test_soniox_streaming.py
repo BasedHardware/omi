@@ -218,7 +218,7 @@ def test_soniox_serves_streaming_only_and_is_opt_in():
 
     streaming = default_models_for_surface(STTServingSurface.STREAMING)
     assert 'soniox' not in streaming
-    assert streaming == ('modulate-velma-2', 'dg-nova-3', 'parakeet')
+    assert streaming == ('parakeet', 'modulate-velma-2', 'dg-nova-3')
     for surface in (STTServingSurface.PRERECORDED, STTServingSurface.PTT):
         assert 'soniox' not in default_models_for_surface(surface)
 

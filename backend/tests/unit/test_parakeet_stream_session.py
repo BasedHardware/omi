@@ -1,10 +1,11 @@
 """Unit tests for Parakeet StreamSession (VAD + ASR + diarization)."""
 
 import asyncio
+from contextlib import nullcontext
 import os
 import sys
 import types
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch, AsyncMock, call
 
 import numpy as np
 import pytest
@@ -53,6 +54,7 @@ def _stream_handler_module():
     mock_transcribe._model = None
     mock_transcribe._gpu_worker = None
     mock_transcribe.INFERENCE_MODE = "nemo"
+    mock_transcribe.SERVICE_MODE = "mixed"
     mock_transcribe.has_builtin_embedding = MagicMock(return_value=False)
     mock_transcribe.report_gpu_inference_error = MagicMock(return_value=False)
     mock_transcribe.wav_bytes_to_waveform = _mock_wav_bytes_to_waveform
@@ -100,9 +102,37 @@ def _stream_handler_module():
         def __truediv__(self, value):
             return _TorchArray(self.value / value)
 
+    class _VadProbability:
+        def __init__(self, value):
+            self.value = value
+
+        def item(self):
+            return self.value
+
+    class _StatefulFakeVAD:
+        """Small stateful stand-in for Silero's recurrent stream wrapper."""
+
+        def __init__(self):
+            self.state = 0
+            self.reset_calls = 0
+
+        def cpu(self):
+            return self
+
+        def eval(self):
+            return self
+
+        def reset_states(self):
+            self.state = 0
+            self.reset_calls += 1
+
+        def __call__(self, _audio, _sample_rate):
+            self.state += 1
+            return _VadProbability(self.state)
+
     _torch.frombuffer = lambda buffer, dtype: _TorchArray(np.frombuffer(buffer, dtype=dtype))
     _torch.hub = MagicMock()
-    _torch.hub.load.side_effect = RuntimeError("torch hub unavailable in unit tests")
+    _torch.hub.load.return_value = (_StatefulFakeVAD(), object())
 
     _nemo_rnnt_decoding = MagicMock()
     _nemo_rnnt_utils = MagicMock()
@@ -136,6 +166,7 @@ def _stream_handler_module():
         g = globals()
         g["sh"] = sh
         g["speaker_math"] = speaker_math
+        g["StatefulFakeVAD"] = _StatefulFakeVAD
         yield sh
 
 
@@ -153,6 +184,18 @@ class TestCosineDistance:
 
 
 class TestRNNTWarmup:
+    def test_stream_readiness_requires_builtin_diarizer(self):
+        with patch.object(sh, '_SERVICE_MODE', 'stream'), patch.object(
+            sh, 'has_builtin_embedding', return_value=False
+        ), patch.object(sh, 'SPEAKER_EMBEDDING_URL', 'http://external-diarizer'):
+            assert sh.warmup_diarizer() is False
+
+    def test_mixed_readiness_can_use_configured_external_diarizer(self):
+        with patch.object(sh, '_SERVICE_MODE', 'mixed'), patch.object(
+            sh, 'has_builtin_embedding', return_value=False
+        ), patch.object(sh, 'SPEAKER_EMBEDDING_URL', 'http://external-diarizer'):
+            assert sh.warmup_diarizer() is True
+
     def test_fatal_cuda_error_aborts_startup(self):
         fatal_error = RuntimeError("CUDA error: operation not permitted when stream is capturing")
         model = MagicMock()
@@ -180,7 +223,6 @@ class TestStreamSessionFeed:
 
     def test_silence_produces_no_segments(self):
         session = sh.StreamSession(sample_rate=16000)
-        session._vad = None
         silent = b'\x00' * 3200
         result = asyncio.run(session.feed(silent))
         assert result == []
@@ -199,6 +241,91 @@ class TestStreamSessionFeed:
                 result = asyncio.run(session.feed(silence))
 
             assert mock_trans.called or len(result) > 0
+
+    def test_stalled_decoder_fails_before_pending_speech_grows_unbounded(self):
+        session = sh.StreamSession(sample_rate=16000)
+        session._vad = None
+        with patch.object(sh, "MAX_SPEECH_DURATION_S", 0.2), patch.object(
+            sh, "MAX_PENDING_SPEECH_S", 1.0
+        ), patch.object(session, "_streaming_enabled", return_value=True), patch.object(
+            session, "_drain_streaming_asr", new_callable=AsyncMock
+        ), patch.object(
+            session, "_transcribe_utterance", new_callable=AsyncMock, return_value=[]
+        ):
+            with pytest.raises(RuntimeError, match="pending speech budget"):
+                asyncio.run(session.feed(_make_pcm(2.0)))
+        assert len(session._pending_audio) <= int(1.04 * 16000 * 2)
+
+    def test_max_speech_split_keeps_audio_when_streaming_delta_is_empty(self):
+        """A forced window must not discard audio before the decoder emits a word."""
+        session = sh.StreamSession(sample_rate=16000)
+        session._vad = None
+        segment = {"text": "recovered", "start": 0.0, "end": 1.0, "speaker": "SPEAKER_0"}
+
+        with patch.object(sh, "MAX_SPEECH_DURATION_S", 0.99), patch.object(
+            session, "_streaming_enabled", return_value=True
+        ), patch.object(session, "_drain_streaming_asr", new_callable=AsyncMock) as drain, patch.object(
+            session, "_transcribe_utterance", new_callable=AsyncMock, side_effect=[[], [segment]]
+        ) as transcribe:
+            first = asyncio.run(session.feed(_make_pcm(1.0)))
+
+            assert first == []
+            assert session._pending_audio
+            assert session._speech_start_s is not None
+            assert session._is_speaking is True
+
+            second = asyncio.run(session.feed(_make_pcm(0.032)))
+
+        assert second == [segment]
+        assert transcribe.await_count == 2
+        assert all(call.kwargs.get("pad_partial") is not True for call in drain.await_args_list)
+        assert session._pending_audio == bytearray()
+        assert session._speech_start_s is not None
+        assert session._is_speaking is True
+
+    def test_max_split_followed_by_silence_finalizes_before_next_utterance(self):
+        session = sh.StreamSession(sample_rate=16000)
+        session._vad = None
+        split = {"text": "first", "start": 0.0, "end": 1.0, "speaker": "SPEAKER_0"}
+        final = {"text": "held", "start": 1.0, "end": 1.0, "speaker": "SPEAKER_0"}
+
+        with patch.object(sh, "MAX_SPEECH_DURATION_S", 0.99), patch.object(
+            session, "_streaming_enabled", return_value=True
+        ), patch.object(session, "_drain_streaming_asr", new_callable=AsyncMock) as drain, patch.object(
+            session, "_transcribe_utterance", new_callable=AsyncMock, side_effect=[[split], [final]]
+        ) as transcribe, patch.object(
+            session, "_run_vad", side_effect=[True] * 32 + [False] * 64
+        ):
+            asyncio.run(session.feed(_make_pcm(1.0)))
+            asyncio.run(session.feed(b"\x00" * (16000 * 2 * 2)))
+
+        assert any(call.kwargs.get("force") is True for call in drain.await_args_list)
+        assert transcribe.await_count == 2
+        assert session._streaming_decoder is None
+
+
+class TestStreamSessionVADIsolation:
+
+    def test_25_interleaved_sessions_keep_independent_vad_state(self):
+        # Silero's official wrapper carries recurrent state and exposes
+        # reset_states(): https://github.com/snakers4/silero-vad/blob/master/src/silero_vad/utils_vad.py
+        load_calls = sh._torch.hub.load.call_count
+        sessions = [sh.StreamSession(sample_rate=16000) for _ in range(25)]
+        assert sh._torch.hub.load.call_count == load_calls
+        assert len({id(session._vad) for session in sessions}) == 25
+        assert all(session._vad is not sh._vad_model for session in sessions)
+
+        chunk = b'\x00' * 1024
+        for _ in range(3):
+            for session in sessions:
+                assert session._run_vad(chunk) is True
+
+        assert all(session._vad.state == 3 for session in sessions)
+
+    def test_session_rejects_vad_clone_failure(self):
+        with patch.object(sh, '_get_vad_model', side_effect=RuntimeError('vad clone failed')):
+            with pytest.raises(RuntimeError, match='vad clone failed'):
+                sh.StreamSession(sample_rate=16000)
 
 
 class TestStreamSessionFlush:
@@ -231,6 +358,68 @@ class TestStreamSessionFlush:
 
 class TestStreamSessionRNNTStreaming:
 
+    def test_streaming_decoder_disables_inherited_tdt_token_durations(self):
+        inherited_decoding = types.SimpleNamespace(
+            strategy="greedy",
+            tdt_include_token_duration=True,
+            greedy=types.SimpleNamespace(loop_labels=False, preserve_alignments=True),
+            beam=types.SimpleNamespace(return_best_hypothesis=False),
+        )
+
+        class FakeModel:
+            def __init__(self):
+                self.cfg = types.SimpleNamespace(
+                    decoding=inherited_decoding,
+                    preprocessor=types.SimpleNamespace(sample_rate=16000, window_stride=0.01),
+                    encoder=types.SimpleNamespace(att_context_style=None),
+                )
+                self.encoder = types.SimpleNamespace(subsampling_factor=1)
+                self.preprocessor = types.SimpleNamespace(featurizer=types.SimpleNamespace())
+                self.device = "cpu"
+                self.decoding = types.SimpleNamespace(decoding=types.SimpleNamespace(decoding_computer=object()))
+                self.changed_configs = []
+
+            def freeze(self):
+                return None
+
+            def eval(self):
+                return self
+
+            def change_decoding_strategy(self, config):
+                self.changed_configs.append(config)
+
+        class FakeContextSize:
+            def __init__(self, left, chunk, right):
+                self.left = left
+                self.chunk = chunk
+                self.right = right
+
+        class FakeBuffer:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+        model = FakeModel()
+        decoder = sh._NemoRNNTStreamingDecoder(
+            model=model,
+            sample_rate=16000,
+            chunk_seconds=2.0,
+            left_context_seconds=10.0,
+            right_context_seconds=2.0,
+        )
+
+        with patch.object(sh, "_rnnt_model_initialized", False), patch.object(
+            sh, "_open_dict", lambda _config: nullcontext()
+        ), patch.object(sh, "_ContextSize", FakeContextSize), patch.object(
+            sh, "_StreamingBatchedAudioBuffer", FakeBuffer
+        ), patch.object(
+            sh._torch, "float32", object(), create=True
+        ):
+            decoder._ensure_initialized()
+
+        assert len(model.changed_configs) == 1
+        assert model.changed_configs[0].tdt_include_token_duration is False
+        assert inherited_decoding.tdt_include_token_duration is True
+
     def test_drain_streaming_asr_decodes_available_chunks(self):
         class FakeDecoder:
             def __init__(self):
@@ -254,6 +443,134 @@ class TestStreamSessionRNNTStreaming:
         assert decoder.calls == [(b"abcd", False), (b"ef", False)]
         assert session._streaming_text == "hello world"
         assert session._asr_audio_buf == bytearray()
+
+    @pytest.mark.parametrize("real_tail", [b"", b"ef"])
+    def test_flush_emits_trimmed_final_word_and_preserves_real_subframe(self, real_tail):
+        session = sh.StreamSession(sample_rate=16000)
+        decoder = MagicMock()
+        decoder.next_input_bytes.return_value = 4
+        decoder.decode_pcm.return_value = "hello world"
+        session._streaming_decoder = decoder
+        session._decoder_has_audio = True
+        session._streaming_text = "hello world"
+        session._pending_audio = bytearray(_make_pcm(1.0))
+        session._speech_start_s = 0.0
+        session._stream_offset_s = 1.0
+        with patch.object(session, "_streaming_enabled", return_value=True), patch.object(
+            session, "_assign_speaker", return_value="SPEAKER_0"
+        ), patch.object(session, "_normalize_pcm16", side_effect=lambda pcm: pcm):
+            first = asyncio.run(session._transcribe_utterance(trim_trailing_word=True))
+            assert first[0]["text"] == "hello"
+            session._pending_audio.clear()
+            session._speech_start_s = None
+            session._pcm_buf = bytearray(real_tail)
+            final = asyncio.run(session.flush())
+            assert asyncio.run(session.flush()) == []
+        decoder.decode_pcm.assert_called_once_with(real_tail or bytes(4), is_last_chunk=True)
+        assert session._pcm_buf == bytearray()
+        assert final[0]["text"] == "world"
+        assert final[0]["start"] == 1.0
+        assert final[0]["end"] == pytest.approx(1.0 + len(real_tail) / 32000, abs=0.001)
+
+    def test_vad_endpoint_finalizes_and_resets_decoder_before_next_utterance(self):
+        session = sh.StreamSession(sample_rate=16000)
+        session._streaming_decoder = object()
+        with patch.object(session, "_streaming_enabled", return_value=True), patch.object(
+            session, "_drain_streaming_asr", new_callable=AsyncMock
+        ) as drain, patch.object(
+            session, "_transcribe_utterance", new_callable=AsyncMock, return_value=[]
+        ) as transcribe, patch.object(
+            session, "_run_vad", side_effect=[True] * 32 + [False] * 64
+        ):
+            asyncio.run(session.feed(_make_pcm(1.0)))
+            asyncio.run(session.feed(b"\x00" * (16000 * 2 * 2)))
+
+        assert any(call.kwargs.get("force") is True for call in drain.await_args_list)
+        assert all(call.kwargs.get("trim_trailing_word") is not True for call in transcribe.await_args_list)
+        assert session._streaming_decoder is None
+        assert session._streaming_text == ""
+        assert session._last_emitted_text == ""
+
+    def test_vad_endpoint_assigns_held_word_from_retained_acoustic_tail(self):
+        session = sh.StreamSession(sample_rate=16000)
+        retained_tail = _make_pcm(0.8)
+        endpoint_hangover = b"\x00" * int(0.4 * 16000 * 2)
+        session._finalization_audio = retained_tail
+        session._finalization_start_s = 0.5
+        session._pending_audio = bytearray(endpoint_hangover)
+        session._speech_start_s = 1.3
+        session._streaming_text = "held word"
+
+        with patch.object(session, "_streaming_enabled", return_value=True), patch.object(
+            session, "_assign_speaker", return_value="SPEAKER_0"
+        ) as assign:
+            result = asyncio.run(session._transcribe_utterance())
+
+        assert result[0]["text"] == "held word"
+        assert result[0]["start"] == pytest.approx(0.5)
+        assert assign.call_args.args[0] == retained_tail + endpoint_hangover
+
+    def test_exact_boundary_flush_releases_right_context_once_without_fabricating_empty_audio(self):
+        decoder = MagicMock()
+        decoder.next_input_bytes.return_value = 4
+        decoder.decode_pcm.return_value = "tail"
+        session = sh.StreamSession(sample_rate=16000)
+        session._streaming_decoder = decoder
+        session._asr_audio_buf = bytearray(b"abcd")
+        session._drain_streaming_asr_sync(force=False)
+        session._drain_streaming_asr_sync(force=True)
+        session._drain_streaming_asr_sync(force=True)
+        assert decoder.decode_pcm.call_args_list == [
+            call(b"abcd", is_last_chunk=False),
+            call(bytes(4), is_last_chunk=True),
+        ]
+
+        empty_decoder = MagicMock()
+        empty_decoder.next_input_bytes.return_value = 4
+        empty = sh.StreamSession(sample_rate=16000)
+        empty._streaming_decoder = empty_decoder
+        empty._drain_streaming_asr_sync(force=True)
+        empty_decoder.decode_pcm.assert_not_called()
+
+    def test_intermediate_drains_preserve_exact_audio_until_final_partial_flush(self):
+        class FixedChunkDecoder:
+            def __init__(self):
+                self.calls = []
+
+            def next_input_bytes(self, bytes_per_sample):
+                assert bytes_per_sample == 2
+                return 4
+
+            def decode_pcm(self, pcm, is_last_chunk=False):
+                self.calls.append((pcm, is_last_chunk))
+                return "text"
+
+        session = sh.StreamSession(sample_rate=16000)
+        decoder = FixedChunkDecoder()
+        session._streaming_decoder = decoder
+        session._asr_audio_buf = bytearray(b"abcdef")
+
+        session._drain_streaming_asr_sync(force=False)
+        assert decoder.calls == [(b"abcd", False)]
+        assert session._asr_audio_buf == bytearray(b"ef")
+
+        session._asr_audio_buf.extend(b"gh")
+        session._drain_streaming_asr_sync(force=False)
+        assert decoder.calls == [(b"abcd", False), (b"efgh", False)]
+        assert session._asr_audio_buf == bytearray()
+
+        session._asr_audio_buf.extend(b"ij")
+        session._pending_audio = bytearray(_make_pcm(1.0))
+        session._speech_start_s = 0.0
+        with patch.object(session, "_streaming_enabled", return_value=True), patch.object(
+            session, "_transcribe_utterance", new_callable=AsyncMock, return_value=[{"text": "text"}]
+        ) as transcribe:
+            result = asyncio.run(session.flush())
+
+        assert decoder.calls == [(b"abcd", False), (b"efgh", False), (b"ij", True)]
+        assert session._asr_audio_buf == bytearray()
+        assert result == [{"text": "text"}]
+        transcribe.assert_awaited_once_with()
 
     def test_fatal_cuda_decode_reports_and_closes_instead_of_falling_back(self):
         class AcceleratorError(RuntimeError):
@@ -279,6 +596,20 @@ class TestStreamSessionRNNTStreaming:
 
         assert session._streaming_failed is True
 
+    def test_nonfatal_decode_error_closes_stream_only_session(self):
+        session = sh.StreamSession(sample_rate=16000)
+        with patch.object(sh, '_SERVICE_MODE', 'stream'), patch.object(
+            session, '_streaming_enabled', return_value=True
+        ), patch.object(
+            session, '_drain_streaming_asr_sync', side_effect=RuntimeError("temporary decode failure")
+        ), patch.object(
+            sh, 'report_gpu_inference_error', return_value=False
+        ):
+            with pytest.raises(RuntimeError, match="temporary decode failure"):
+                asyncio.run(session._drain_streaming_asr(force=True))
+
+        assert session._streaming_failed is False
+
     def test_streaming_utterance_does_not_call_batch_transcribe_when_text_not_ready(self):
         session = sh.StreamSession(sample_rate=16000)
         session._pending_audio = bytearray(_make_pcm(1.0))
@@ -293,10 +624,12 @@ class TestStreamSessionRNNTStreaming:
         assert result == []
         assert not batch_transcribe.called
 
-    def test_streaming_utterance_emits_delta_text(self):
+    @pytest.mark.parametrize("speech_start", [0.0, 2.0])
+    def test_streaming_utterance_emits_delta_text(self, speech_start):
         session = sh.StreamSession(sample_rate=16000)
         session._pending_audio = bytearray(_make_pcm(1.0))
-        session._speech_start_s = 2.0
+        session._speech_start_s = speech_start
+        session._stream_offset_s = 5.0
         session._streaming_text = "hello world"
         session._last_emitted_text = "hello"
 
@@ -306,7 +639,7 @@ class TestStreamSessionRNNTStreaming:
             result = asyncio.run(session._transcribe_utterance())
 
         assert result[0]["text"] == "world"
-        assert result[0]["start"] == 2.0
+        assert result[0]["start"] == speech_start
         assert session._last_emitted_text == "hello world"
 
 
@@ -314,11 +647,13 @@ class TestStreamSessionCleanup:
 
     def test_cleanup_clears_all_buffers(self):
         session = sh.StreamSession(sample_rate=16000)
+        session._run_vad(b'\x00' * 1024)
         session._pcm_buf = bytearray(b'\x00' * 1000)
         session._audio_buf = bytearray(b'\x00' * 1000)
         session._pending_audio = bytearray(b'\x00' * 1000)
         session._spk_centroids = [np.zeros((1, 256))]
         session._spk_counts = [1]
+        reset_calls = session._vad.reset_calls
 
         session.cleanup()
 
@@ -326,6 +661,8 @@ class TestStreamSessionCleanup:
         assert len(session._pending_audio) == 0
         assert len(session._spk_centroids) == 0
         assert len(session._spk_counts) == 0
+        assert session._vad.state == 0
+        assert session._vad.reset_calls == reset_calls + 1
 
 
 class TestStreamSessionSpeaker:

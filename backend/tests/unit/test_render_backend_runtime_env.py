@@ -275,6 +275,7 @@ def test_notifications_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
 def test_render_prod_emits_memory_maintenance_job_cron_on(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
+    monkeypatch.setenv('HOSTED_PARAKEET_STREAM_API_URL', 'http://172.16.0.25')
     monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
     monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')
@@ -316,6 +317,7 @@ def test_render_prod_emits_memory_maintenance_job_cron_on(capsys, monkeypatch):
 def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
+    monkeypatch.setenv('HOSTED_PARAKEET_STREAM_API_URL', 'http://172.16.0.25')
     monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
     monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')
