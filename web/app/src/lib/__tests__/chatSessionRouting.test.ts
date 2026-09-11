@@ -9,9 +9,9 @@ const {
   clearMessages,
   getMessages,
   sendMessageStream,
-  createGeminiLiveSession,
+  createGptLiveSession,
   saveRealtimeMessage,
-  reportGeminiLiveUsage,
+  reportGptLiveUsage,
 } = await import('@/lib/api');
 
 /**
@@ -99,13 +99,13 @@ describe('chat session routing', () => {
     expect(url).toContain('chat_session_id=sess-9');
   });
 
-  it('mints managed Gemini Live sessions through the authenticated proxy', async () => {
-    await createGeminiLiveSession();
+  it('mints managed GPT Live sessions through the authenticated proxy', async () => {
+    await createGptLiveSession();
 
     const [url, request] = vi.mocked(fetch).mock.calls[0]!;
     expect(String(url)).toBe('/api/proxy/v2/realtime/session');
     expect(request?.method).toBe('POST');
-    expect(JSON.parse(String(request?.body))).toEqual({ provider: 'gemini' });
+    expect(JSON.parse(String(request?.body))).toEqual({ provider: 'gpt_live' });
   });
 
   it('persists live turns into the selected chat history', async () => {
@@ -129,8 +129,8 @@ describe('chat session routing', () => {
     });
   });
 
-  it('reports managed Gemini Live usage', async () => {
-    await reportGeminiLiveUsage({
+  it('reports managed GPT Live usage', async () => {
+    await reportGptLiveUsage({
       input_text_tokens: 1,
       input_audio_tokens: 2,
       input_cached_tokens: 3,
@@ -141,8 +141,8 @@ describe('chat session routing', () => {
     const [url, request] = vi.mocked(fetch).mock.calls[0]!;
     expect(String(url)).toBe('/api/proxy/v2/realtime/usage');
     expect(JSON.parse(String(request?.body))).toEqual({
-      provider: 'gemini',
-      model: 'gemini-3.1-flash-live-preview',
+      provider: 'gpt_live',
+      model: 'gpt-live-1',
       input_text_tokens: 1,
       input_audio_tokens: 2,
       input_cached_tokens: 3,

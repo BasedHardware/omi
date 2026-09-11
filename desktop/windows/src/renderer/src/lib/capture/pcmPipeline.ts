@@ -32,14 +32,18 @@ export async function createPcmPipeline(
   stream: MediaStream,
   onChunk: (i16: Int16Array) => void,
   onFallback?: (reason: string) => void,
-  // Frame size at 16kHz. The capture lanes keep the 4096 default (256ms — sized
-  // for VAD + WS batching); the realtime-voice uplink passes ~1024 (64ms) so
-  // conversational latency isn't paying a quarter second of framing.
-  frameSamples: number = FRAME_SAMPLES
+  // Frame size at the target rate. The capture lanes keep the 4096 default
+  // (256ms at 16kHz — sized for VAD + WS batching); the realtime-voice uplink
+  // passes ~1024 (64ms) so conversational latency isn't paying a quarter second
+  // of framing.
+  frameSamples: number = FRAME_SAMPLES,
+  // Output rate. 16kHz for the capture/Gemini lanes; the GPT-Live lane needs
+  // 24kHz (its `session.input_audio.append` format).
+  targetRate: number = TARGET_RATE
 ): Promise<PcmPipeline> {
   let ctx: AudioContext
   try {
-    ctx = new AudioContext({ sampleRate: TARGET_RATE })
+    ctx = new AudioContext({ sampleRate: targetRate })
   } catch {
     // Some platforms reject a non-native sampleRate — take the hardware rate and
     // resample (in the worklet, or per-chunk on the fallback path).
@@ -57,7 +61,7 @@ export async function createPcmPipeline(
       numberOfOutputs: 0, // a pure sink — a 0-output worklet stays active off its input, no destination connect needed
       processorOptions: {
         inputRate: ctx.sampleRate,
-        targetRate: TARGET_RATE,
+        targetRate,
         frameSamples
       }
     })
@@ -73,10 +77,10 @@ export async function createPcmPipeline(
     // ScriptProcessor buffer sizes must be a power of two in [256, 16384].
     const spFrame = Math.max(256, Math.min(16384, 2 ** Math.round(Math.log2(frameSamples))))
     const sp = ctx.createScriptProcessor(spFrame, 1, 1)
-    const needsResample = ctx.sampleRate !== TARGET_RATE
+    const needsResample = ctx.sampleRate !== targetRate
     sp.onaudioprocess = (ev): void => {
       const raw = ev.inputBuffer.getChannelData(0)
-      const f32 = needsResample ? linearResample(raw, ctx.sampleRate, TARGET_RATE) : raw
+      const f32 = needsResample ? linearResample(raw, ctx.sampleRate, targetRate) : raw
       onChunk(floatTo16BitPCM(f32))
     }
     sourceNode.connect(sp)

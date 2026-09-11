@@ -17,11 +17,14 @@ import Foundation
 enum RealtimeHubProvider: String, Sendable, Equatable {
   case openai
   case gemini
+  /// OpenAI "GPT-Live-1" full-duplex realtime (the default voice provider).
+  case gptLive = "gpt_live"
 
   var displayName: String {
     switch self {
     case .openai: return "OpenAI Realtime"
     case .gemini: return "Gemini Live"
+    case .gptLive: return "GPT-Live"
     }
   }
 
@@ -37,24 +40,38 @@ enum RealtimeHubProvider: String, Sendable, Equatable {
     // AUDIO + function calling; it speaks via native audio (24k PCM) played by
     // StreamingPCMPlayer, same as OpenAI.
     case .gemini: return "gemini-3.1-flash-live-preview"
+    case .gptLive: return "gpt-live-1"
+    }
+  }
+
+  /// The provider string the backend's realtime mint endpoint expects.
+  /// OpenAI's full-duplex model shares the OpenAI BYOK key but mints under its
+  /// own `gpt_live` provider id so the backend can price/route it separately.
+  var mintProviderParam: String {
+    switch self {
+    case .openai: return "openai"
+    case .gemini: return "gemini"
+    case .gptLive: return "gpt_live"
     }
   }
 
   /// The BYOK key this provider authenticates with (client-direct, Phase 1).
   var byokProvider: BYOKProvider {
     switch self {
-    case .openai: return .openai
+    case .openai, .gptLive: return .openai
     case .gemini: return .gemini
     }
   }
 
   /// The other realtime provider — used by the hub's failover chain: when the
   /// Auto-selected provider can't connect, the hub tries this one before dropping to
-  /// the legacy Claude cascade.
+  /// the legacy Claude cascade. GPT-Live (the default) falls back to Gemini; the
+  /// legacy OpenAI realtime and Gemini lanes keep their existing pairing.
   var alternate: RealtimeHubProvider {
     switch self {
     case .openai: return .gemini
     case .gemini: return .openai
+    case .gptLive: return .gemini
     }
   }
 }
@@ -68,10 +85,12 @@ final class RealtimeHubSettings {
   /// The hub provider follows the user's "Voice Model" choice in Advanced settings —
   /// there is no separate hub picker. The two map 1:1 (same underlying models), and
   /// `.auto` is already resolved to a concrete provider by `effectiveProvider`.
+  /// GPT-Live is the default; the legacy GPT realtime selection now also lands on
+  /// GPT-Live, and Gemini stays selectable (and is GPT-Live's failover alternate).
   var provider: RealtimeHubProvider {
     switch RealtimeOmniSettings.shared.effectiveProvider {
-    case .gptRealtime2: return .openai
-    case .geminiFlashLive, .auto: return .gemini
+    case .gptLive, .gptRealtime2, .auto: return .gptLive
+    case .geminiFlashLive: return .gemini
     }
   }
 

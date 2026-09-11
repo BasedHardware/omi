@@ -13,7 +13,10 @@ enum RealtimeVoicePhraseProfile: String, CaseIterable, Sendable {
   init(provider: RealtimeHubProvider) {
     switch provider {
     case .gemini: self = .geminiCharon
-    case .openai: self = .openAICedar
+    // GPT-Live (marin) reuses the OpenAI/cedar acknowledgement pack until a
+    // marin-matched clip pack is generated; the spoken reply itself is GPT-Live's
+    // native audio. Follow-up: generate `gpt-live-marin-*` clips.
+    case .openai, .gptLive: self = .openAICedar
     }
   }
 

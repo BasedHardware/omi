@@ -204,7 +204,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
       if !wantEphemeral, let key = byok {
         auth = .byokKey(key)
       } else {
-        let p = provider == .openai ? "openai" : "gemini"
+        let p = provider.mintProviderParam
         guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else {
           return ["error": "ephemeral mint requires a stable authenticated owner"]
         }

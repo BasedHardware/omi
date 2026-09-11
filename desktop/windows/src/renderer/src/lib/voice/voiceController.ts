@@ -27,6 +27,7 @@ import { getPreferences } from '../preferences'
 import { reportRealtimeUsage } from './usageReport'
 import { startOpenAiSession } from './openaiSession'
 import { startGeminiSession } from './geminiSession'
+import { startGptLiveSession } from './gptLiveSession'
 import { synthesizeTts, DEFAULT_TTS_VOICE } from './tts'
 import { chunkTts } from './ttsChunker'
 import type { ProviderSessionCallbacks, ProviderSessionHandle } from './providerSession'
@@ -297,7 +298,10 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
     } catch (e) {
       const failure = e instanceof MintError ? e.failure : null
       if (!failure?.tryOtherProvider) throw e
-      const other: VoiceProvider = provider === 'openai' ? 'gemini' : 'openai'
+      // GPT-Live is the default lane and always falls over to Gemini (the available
+      // alternate); Gemini falls to GPT-Live; the legacy OpenAI lane keeps Gemini.
+      const other: VoiceProvider =
+        provider === 'openai' ? 'gemini' : provider === 'gemini' ? 'gpt_live' : 'gemini'
       trackEvent('fallback_triggered', {
         component: 'realtime_mint',
         from: provider,
@@ -335,21 +339,29 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
   // newer session's handle, orphaning its live mic/socket.
   let session: ProviderSessionHandle
   try {
-    session =
-      provider === 'openai'
-        ? await startOpenAiSession({
-            clientSecret: token,
-            instructions,
-            onSpeakers: !headset,
-            sinkId: sinkId || undefined,
-            cb
-          })
-        : await startGeminiSession({
-            authToken: token,
-            instructions,
-            sinkId: sinkId || undefined,
-            cb
-          })
+    if (provider === 'gpt_live') {
+      session = await startGptLiveSession({
+        token,
+        instructions,
+        sinkId: sinkId || undefined,
+        cb
+      })
+    } else if (provider === 'openai') {
+      session = await startOpenAiSession({
+        clientSecret: token,
+        instructions,
+        onSpeakers: !headset,
+        sinkId: sinkId || undefined,
+        cb
+      })
+    } else {
+      session = await startGeminiSession({
+        authToken: token,
+        instructions,
+        sinkId: sinkId || undefined,
+        cb
+      })
+    }
   } catch (e) {
     if (mySeq !== startSeq) return
     dispatch({ type: 'fail', message: (e as Error)?.message ?? String(e), retryable: true })

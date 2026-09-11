@@ -1,9 +1,9 @@
 """Realtime-voice usage: response lifecycle on the provider-native wire, and modality pricing.
 
-Two provider protocols reach Omi's realtime surfaces — OpenAI Realtime and
-Gemini Live. Both are opaque to the relay that carries them, so the only way to
-attribute a session's spend is to recognise the provider's own lifecycle and
-usage events in the frames flowing back to the client.
+Three provider protocols reach Omi's realtime surfaces — OpenAI Realtime,
+GPT-Live, and Gemini Live. All are opaque to the relay that carries them, so the
+only way to attribute a session's spend is to recognise the provider's own
+lifecycle and usage events in the frames flowing back to the client.
 
 OpenAI
     ``response.created`` opens a response (several may be open at once —
@@ -49,8 +49,9 @@ from typing import Any
 from llm_gateway.gateway.accounting import CacheStatus, PricedUsage, ProviderResponseMetadata, ProviderUsage
 
 OPENAI_REALTIME_PROVIDER = 'openai'
+GPT_LIVE_PROVIDER = 'gpt_live'
 GEMINI_LIVE_PROVIDER = 'gemini'
-REALTIME_PROVIDERS = frozenset({OPENAI_REALTIME_PROVIDER, GEMINI_LIVE_PROVIDER})
+REALTIME_PROVIDERS = frozenset({OPENAI_REALTIME_PROVIDER, GPT_LIVE_PROVIDER, GEMINI_LIVE_PROVIDER})
 
 MICRO_USD_PER_USD = 1_000_000
 TOKENS_PER_MILLION = 1_000_000
@@ -107,6 +108,22 @@ _OPENAI_GPT_REALTIME_2 = RealtimeRates(
     output_text=24_000_000,
     output_audio=64_000_000,
 )
+# GPT-Live-1 bills $0.05/minute of session duration (developers.openai.com/api/docs/models/gpt-live-1).
+# Hub /client-reported paths still send modality token splits; until OpenAI publishes
+# Live modality rates, price those splits with the same card as gpt-realtime-2 so
+# telemetry stays non-zero and comparable. Duration billing remains authoritative
+# on the OpenAI invoice.
+_OPENAI_GPT_LIVE_1 = RealtimeRates(
+    rate_card_id='openai.gpt-live-1.modality.2026-09-11',
+    input_text=4_000_000,
+    cached_text=400_000,
+    input_audio=32_000_000,
+    cached_audio=400_000,
+    input_image=5_000_000,
+    cached_image=500_000,
+    output_text=24_000_000,
+    output_audio=64_000_000,
+)
 _GEMINI_31_FLASH_LIVE = RealtimeRates(
     rate_card_id='gemini.gemini-3.1-flash-live-preview.modality.2026-09-01',
     input_text=750_000,
@@ -131,18 +148,22 @@ _GEMINI_25_NATIVE_AUDIO = RealtimeRates(
 )
 REALTIME_RATE_CARDS: dict[tuple[str, str], RealtimeRates] = {
     (OPENAI_REALTIME_PROVIDER, 'gpt-realtime-2'): _OPENAI_GPT_REALTIME_2,
+    (GPT_LIVE_PROVIDER, 'gpt-live-1'): _OPENAI_GPT_LIVE_1,
     (GEMINI_LIVE_PROVIDER, 'gemini-3.1-flash-live-preview'): _GEMINI_31_FLASH_LIVE,
     (GEMINI_LIVE_PROVIDER, 'gemini-2.5-flash-native-audio-preview-12-2025'): _GEMINI_25_NATIVE_AUDIO,
 }
 # The model each realtime surface serves when the caller names none
-# (`routers/desktop_realtime.py` _OPENAI_REALTIME_MODEL / _GEMINI_LIVE_MODEL).
+# (`routers/desktop_realtime.py` issued models per provider).
 DEFAULT_REALTIME_MODELS: dict[str, str] = {
     OPENAI_REALTIME_PROVIDER: 'gpt-realtime-2',
+    GPT_LIVE_PROVIDER: 'gpt-live-1',
     GEMINI_LIVE_PROVIDER: 'gemini-3.1-flash-live-preview',
 }
 REALTIME_COST_BASIS = 'realtime_modality_rates_cached_subset_discounted'
 
 _OPENAI_PARSE_MARKERS = (b'response.done', b'response.created')
+_GPT_LIVE_PARSE_MARKERS = (b'session.closed', b'session.interrupted', b'session.started')
+_GPT_LIVE_ACTIVITY_MARKERS = (b'session.output_audio.delta', b'session.output_transcript.delta')
 _GEMINI_PARSE_MARKERS = (b'turnComplete', b'usageMetadata', b'interrupted')
 # Model activity is recognised by substring only: audio frames are the bulk of
 # a session and are never JSON-parsed. A tool call is activity too — it opens
@@ -358,11 +379,11 @@ def client_reported_cost_usd(provider: str, model: str | None, turn: RealtimeTur
 
     That path predates model-keyed tables and must keep producing a number for
     the ``llm_usage`` telemetry it feeds, so an unrecognised model prices on the
-    provider's default realtime model; an unknown provider prices as Gemini,
-    exactly as the endpoint always did.
+    provider's default realtime model; an unknown provider prices as GPT-Live,
+    the default managed live path.
     """
     if provider not in REALTIME_PROVIDERS:
-        provider = GEMINI_LIVE_PROVIDER
+        provider = GPT_LIVE_PROVIDER
     rates = realtime_rates_for(provider, model) or realtime_rates_for(provider, DEFAULT_REALTIME_MODELS[provider])
     assert rates is not None  # every provider has a default table
     return realtime_turn_cost_usd(turn, rates)
@@ -456,6 +477,10 @@ class RealtimeRelayObserver:
         self._gemini_in_flight = False
         self._gemini_interrupted = False
         self._gemini_completed: RealtimeTurnUsage | None = None
+        # GPT-Live: one session-scoped attempt; usage arrives on session.closed.
+        self._gpt_live_started = False
+        self._gpt_live_interrupted = False
+        self._gpt_live_closed = False
 
     # -- client → upstream ---------------------------------------------------------
 
@@ -488,6 +513,8 @@ class RealtimeRelayObserver:
                 return ()
             if self.provider == OPENAI_REALTIME_PROVIDER:
                 return self._observe_openai(raw)
+            if self.provider == GPT_LIVE_PROVIDER:
+                return self._observe_gpt_live(raw)
             return self._observe_gemini(raw)
         except Exception:
             return ()
@@ -512,6 +539,21 @@ class RealtimeRelayObserver:
                         )
                     )
                     for response_id in open_ids
+                )
+            if self.provider == GPT_LIVE_PROVIDER:
+                if self._gpt_live_closed or not self._gpt_live_started:
+                    return ()
+                self._gpt_live_started = False
+                return (
+                    self._emit(
+                        RealtimeTurnUsage(
+                            provider=GPT_LIVE_PROVIDER,
+                            outcome=OUTCOME_CANCELLED,
+                            error_class=(
+                                ERROR_INTERRUPTED if self._gpt_live_interrupted else ERROR_CLIENT_DISCONNECTED
+                            ),
+                        )
+                    ),
                 )
             emitted: list[RealtimeTurnUsage] = []
             held = self._take_completed()
@@ -605,6 +647,47 @@ class RealtimeRelayObserver:
     def _anonymous_key(self) -> str:
         self._openai_anonymous += 1
         return f'anonymous:{self._openai_anonymous}'
+
+    # -- GPT-Live ----------------------------------------------------------------
+
+    def _observe_gpt_live(self, raw: bytes) -> tuple[RealtimeTurnUsage, ...]:
+        has_activity = any(marker in raw for marker in _GPT_LIVE_ACTIVITY_MARKERS)
+        has_lifecycle = any(marker in raw for marker in _GPT_LIVE_PARSE_MARKERS)
+        if not has_activity and not has_lifecycle:
+            return ()
+        if has_activity and not self._gpt_live_started and not self._gpt_live_closed:
+            self._gpt_live_started = True
+            self.starts += 1
+        if not has_lifecycle:
+            return ()
+        payload = _parse_json_object(raw)
+        if payload is None:
+            return ()
+        event_type = payload.get('type')
+        if event_type == 'session.interrupted':
+            self._gpt_live_interrupted = True
+            return ()
+        if event_type != 'session.closed':
+            return ()
+        if self._gpt_live_closed:
+            return ()
+        if not self._gpt_live_started:
+            self._gpt_live_started = True
+            self.starts += 1
+        self._gpt_live_closed = True
+        self._gpt_live_started = False
+        outcome = OUTCOME_CANCELLED if self._gpt_live_interrupted else OUTCOME_SUCCESS
+        error_class = ERROR_INTERRUPTED if self._gpt_live_interrupted else ERROR_NONE
+        turn = RealtimeTurnUsage(
+            provider=GPT_LIVE_PROVIDER,
+            outcome=outcome,
+            error_class=error_class,
+        )
+        usage = payload.get('usage')
+        if isinstance(usage, Mapping):
+            # Live usage mirrors OpenAI-style modality details when present.
+            turn = replace(turn, **_openai_counts(usage), usage_reported=True)
+        return (self._emit(turn),)
 
     # -- Gemini ------------------------------------------------------------------
 

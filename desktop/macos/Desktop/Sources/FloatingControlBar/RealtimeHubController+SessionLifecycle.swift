@@ -427,7 +427,7 @@ extension RealtimeHubController {
       isOwnerScopeCurrent(ownerScope),
       let mintGeneration = beginMint(ownerScope: ownerScope)
     else { return }
-    let providerParam = provider == .openai ? "openai" : "gemini"
+    let providerParam = provider.mintProviderParam
     log("RealtimeHub: minting ephemeral \(provider.displayName) token (managed)")
     Task { [weak self] in
       guard let self else { return }
@@ -1422,7 +1422,7 @@ extension RealtimeHubController {
       return
     }
     let replacementGeneration = bargeInReplacementGeneration
-    let providerParam = provider == .openai ? "openai" : "gemini"
+    let providerParam = provider.mintProviderParam
     log("RealtimeHub[\(provider.displayName)]: minting fresh token for barge-in replacement")
     Task { [weak self] in
       guard let self else { return }

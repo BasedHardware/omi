@@ -1,14 +1,16 @@
 // Ephemeral realtime-token mint against the desktop Rust backend (Phase 6).
 // Contract verified live 2026-07-10 against /v2/realtime/session:
-//   POST { provider: 'openai' | 'gemini' }  (Firebase Bearer auth; plain token,
-//   no platform requirements — works for the Windows client as-is)
+//   POST { provider: 'gpt_live' | 'openai' | 'gemini' }  (Firebase Bearer auth;
+//   plain token, no platform requirements — works for the Windows client as-is)
 //   → 200 { provider, token, expires_at? }
+//       gpt_live: token  Omi-auth token for the `wss://<backend>/v1/omni/relay
+//                        ?provider=gpt_live` session (key injected server-side)
 //       openai: token 'ek_…'          (Bearer / client secret for WebRTC)
 //       gemini: token 'auth_tokens/…' (used as the SDK apiKey, v1alpha)
 //   → 4xx/5xx { error, reason, retryable, provider?, code?, upstream_status_code? }
 //   → 402 trial_expired / 403 byok mismatch from the auth extractor.
-// The server locks the model at mint (gpt-realtime-2 / gemini-3.1-flash-live);
-// clients configure everything else on connect.
+// The server locks the model at mint (gpt-live-1 / gpt-realtime-2 /
+// gemini-3.1-flash-live); clients configure everything else on connect.
 
 import type { AxiosRequestConfig } from 'axios'
 import { desktopApi } from '../apiClient'
@@ -22,6 +24,7 @@ import type { VoiceProvider } from './sessionMachine'
 const MINT_CONFIG = { __sessionPreserving: true } as AxiosRequestConfig
 
 // Server-locked models.
+export const GPT_LIVE_MODEL = 'gpt-live-1'
 export const OPENAI_REALTIME_MODEL = 'gpt-realtime-2'
 export const GEMINI_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview'
 

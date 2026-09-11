@@ -31,11 +31,12 @@ import type { VoiceSessionID, VoiceTurnID, VoiceResponseID } from '../turn/voice
 import { base64ToBytes, createVoicePlayer, type VoicePlayer } from '../pcmPlayer'
 import type { VoiceToolDeclaration } from '../../../../../shared/types'
 
-export type HubProvider = 'openai' | 'gemini'
+export type HubProvider = 'openai' | 'gemini' | 'gpt_live'
 
 /** Provider-specific interruption contract, mirroring Swift `bargeInStrategy`.
- *  OpenAI can cancel an in-flight reply in-session; Gemini cannot cleanly cancel
- *  a streaming reply, so its barge-in is a fresh session (the controller's job). */
+ *  OpenAI and GPT-Live can cancel/interrupt an in-flight reply in-session;
+ *  Gemini cannot cleanly cancel a streaming reply, so its barge-in is a fresh
+ *  session (the controller's job). */
 export type HubBargeInStrategy = 'inSessionCancel' | 'freshSession'
 
 /** Identity a hub event belongs to. Threaded through so a future host can map an
@@ -191,8 +192,15 @@ export const HUB_IDLE_RELEASE_MS = 180_000
 export const HUB_WARM_TIMEOUT_MS = 10_000
 
 export type HubSessionOptions = {
-  /** Ephemeral token minted by the backend (managed users — Windows path). */
+  /** Ephemeral token minted by the backend (managed users — Windows path). For
+   *  GPT-Live this is the Omi-auth token the relay accepts via `?token=`; for the
+   *  legacy lanes it is the provider's ephemeral secret. */
   token: string
+  /** Optional BYOK OpenAI key for the GPT-Live lane's direct-connect path (the
+   *  `openai-insecure-api-key.<key>` subprotocol against api.openai.com). When
+   *  set, GPT-Live bypasses the Omi relay entirely; the key never leaves the
+   *  renderer/provider socket. Unused by the managed lanes. */
+  byokKey?: string
   /** Assembled per-session system instruction (A9). */
   instructions: string
   /** Output device for spoken audio ('' / undefined = system default). */

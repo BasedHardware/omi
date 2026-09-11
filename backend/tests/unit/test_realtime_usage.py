@@ -13,6 +13,7 @@ from llm_gateway.gateway.accounting import CacheStatus, PricedUsage, ProviderRes
 from routers import desktop_realtime
 from utils.llm.realtime_usage import (
     DEFAULT_REALTIME_MODELS,
+    GPT_LIVE_PROVIDER,
     GEMINI_LIVE_PROVIDER,
     OPENAI_REALTIME_PROVIDER,
     REALTIME_COST_BASIS,
@@ -26,6 +27,7 @@ from utils.llm.realtime_usage import (
     realtime_turn_cost_micro_usd,
     realtime_turn_cost_usd,
     realtime_turn_metadata,
+    OUTCOME_SUCCESS,
 )
 
 _UNSET = object()
@@ -1175,7 +1177,7 @@ def test_client_reported_cost_usd_unknown_model_falls_back_to_provider_default()
     assert client_reported_cost_usd(OPENAI_REALTIME_PROVIDER, 'gpt-realtime-mini', turn) == 0.000256
 
 
-def test_client_reported_cost_usd_unknown_provider_prices_as_gemini() -> None:
+def test_client_reported_cost_usd_unknown_provider_prices_as_gpt_live() -> None:
     turn = client_reported_turn(
         'anthropic',
         input_text_tokens=10,
@@ -1186,7 +1188,7 @@ def test_client_reported_cost_usd_unknown_provider_prices_as_gemini() -> None:
     )
 
     assert client_reported_cost_usd('anthropic', None, turn) == client_reported_cost_usd(
-        GEMINI_LIVE_PROVIDER, DEFAULT_REALTIME_MODELS[GEMINI_LIVE_PROVIDER], turn
+        GPT_LIVE_PROVIDER, DEFAULT_REALTIME_MODELS[GPT_LIVE_PROVIDER], turn
     )
 
 
@@ -1381,3 +1383,37 @@ def test_oversized_response_ids_are_not_retained_or_reported() -> None:
     )
     assert done.provider_response_id is None
     assert observer.flush() == ()  # the anonymous entry was closed by the matching done
+
+
+def test_gpt_live_observer_emits_on_session_closed() -> None:
+    observer = RealtimeRelayObserver(GPT_LIVE_PROVIDER, model='gpt-live-1')
+    assert observer.observe_upstream_frame(_frame({'type': 'session.started'})) == ()
+    assert observer.starts == 0
+    assert observer.observe_upstream_frame(_frame({'type': 'session.output_audio.delta', 'delta': 'AA=='})) == ()
+    assert observer.starts == 1
+    turns = observer.observe_upstream_frame(
+        _frame(
+            {
+                'type': 'session.closed',
+                'usage': {
+                    'input_tokens': 10,
+                    'output_tokens': 4,
+                    'input_token_details': {'text_tokens': 6, 'audio_tokens': 4, 'cached_tokens': 0},
+                    'output_token_details': {'text_tokens': 1, 'audio_tokens': 3},
+                },
+            }
+        )
+    )
+    assert len(turns) == 1
+    assert turns[0].provider == GPT_LIVE_PROVIDER
+    assert turns[0].outcome == OUTCOME_SUCCESS
+    assert turns[0].input_text_tokens == 6
+    assert turns[0].input_audio_tokens == 4
+    assert turns[0].output_text_tokens == 1
+    assert turns[0].output_audio_tokens == 3
+    assert observer.flush() == ()
+
+
+def test_default_realtime_models_include_gpt_live() -> None:
+    assert DEFAULT_REALTIME_MODELS[GPT_LIVE_PROVIDER] == 'gpt-live-1'
+    assert realtime_rates_for(GPT_LIVE_PROVIDER, 'gpt-live-1') is not None

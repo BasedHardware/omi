@@ -1360,7 +1360,7 @@ final class DesktopDiagnosticsManager {
 
   private func safeProvider(_ provider: String) -> String {
     switch provider.lowercased() {
-    case "openai", "gemini": return provider.lowercased()
+    case "openai", "gemini", "gpt_live": return provider.lowercased()
     default: return "unknown"
     }
   }

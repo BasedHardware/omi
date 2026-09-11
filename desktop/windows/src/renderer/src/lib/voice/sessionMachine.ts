@@ -6,11 +6,14 @@
 // Provider notes baked into the states:
 //  - 'connecting' covers both the token mint and the provider handshake.
 //  - 'live' carries the provider actually connected (the mint may have fallen
-//    back openai→gemini), so the UI labels the true lane.
+//    back gpt_live→gemini), so the UI labels the true lane.
 //  - 'error' carries retryable so the UI can offer "Try again" only when the
 //    failure isn't structural (e.g. signed out vs a transient 503).
 
-export type VoiceProvider = 'openai' | 'gemini'
+// 'gpt_live' (GPT-Live-1) is the default realtime lane; 'gemini' is the
+// available alternate fallback; 'openai' (gpt-realtime-2) remains for users who
+// pinned the legacy lane. See autoModelSelector for the live default.
+export type VoiceProvider = 'openai' | 'gemini' | 'gpt_live'
 
 // Settings-level provider choice (macOS RealtimeOmniProvider.selectedProvider).
 // 'auto' (the out-of-the-box default) defers to autoModelSelector's daily

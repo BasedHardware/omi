@@ -3,8 +3,8 @@ import Network
 
 // MARK: - Realtime Omni Service
 //
-// One WebSocket client that talks to either Gemini 3.1 Flash Live or
-// OpenAI gpt-realtime-2 and exposes two capabilities the floating bar needs:
+// One WebSocket client that talks to Gemini 3.1 Flash Live, OpenAI gpt-realtime-2,
+// or OpenAI GPT-Live-1 and exposes two capabilities the floating bar needs:
 //
 //   • STT  — stream mic PCM in, receive the user's transcript out.
 //   • TTS  — send assistant text in, receive spoken PCM audio out.
@@ -18,6 +18,10 @@ import Network
 //               response.create, response.output_audio(.delta), input transcription.
 //   Gemini Live: BidiGenerateContentSetup, realtimeInput{audio}, clientContent,
 //               serverContent.modelTurn.parts.inlineData / inputTranscription.
+//   GPT-Live:   session.start {model, instructions, audio.format/output.voice},
+//               session.input_audio.append, session.output_audio.delta,
+//               session.input/output_transcript.delta, session.closed. Full-duplex;
+//               no response.create/commit. STT-only here (TTS has no text frame).
 //
 // Key resolution (phase 1): BYOK / env. Production should proxy through the omi
 // backend so keys stay server-side and usage is metered — see `resolveKey`.
@@ -79,8 +83,8 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
   private var usesNW: Bool { false }
   private var nw: NWConnection?
 
-  /// Mic PCM input rate per provider (Gemini 16k, OpenAI GA requires ≥24k).
-  var requiredInputSampleRate: Int { provider == .gptRealtime2 ? 24000 : 16000 }
+  /// Mic PCM input rate per provider (Gemini 16k, OpenAI GA and GPT-Live require ≥24k).
+  var requiredInputSampleRate: Int { provider == .geminiFlashLive ? 16000 : 24000 }
   /// Both providers emit 24kHz PCM16.
   let outputSampleRate = 24000
 
@@ -90,7 +94,7 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
     provider: RealtimeOmniProvider, relayBaseURL: String, authHeader: String,
     sttOnly: Bool = true, delegate: RealtimeOmniServiceDelegate
   ) {
-    self.provider = provider == .auto ? .geminiFlashLive : provider
+    self.provider = provider == .auto ? .gptLive : provider
     self.model = self.provider.modelID
     self.relayBaseURL = relayBaseURL
     self.authHeader = authHeader
@@ -236,6 +240,8 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
     switch provider {
     case .gptRealtime2:
       send(json: ["type": "input_audio_buffer.append", "audio": b64])
+    case .gptLive:
+      send(json: ["type": "session.input_audio.append", "audio": b64])
     case .geminiFlashLive, .auto:
       send(json: ["realtimeInput": ["audio": ["data": b64, "mimeType": "audio/pcm;rate=16000"]]])
     }
@@ -253,6 +259,10 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
     switch provider {
     case .gptRealtime2:
       send(json: ["type": "input_audio_buffer.commit"])
+    case .gptLive:
+      // GPT-Live is full-duplex: there is no input commit/turn loop; the model
+      // decides when to speak. Nothing is written on PTT release.
+      break
     case .geminiFlashLive, .auto:
       send(json: ["realtimeInput": ["activityEnd": [:]]])
     }
@@ -279,6 +289,16 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
           "turnComplete": true,
         ]
       ])
+    case .gptLive:
+      // GPT-Live's documented protocol exposes no "speak this text" frame; the
+      // model speaks on its own. Surface the capability gap instead of dropping it.
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "realtime_omni",
+        from: "gpt_live_speak",
+        to: "app_tts",
+        reason: "capability_mismatch",
+        outcome: .degraded,
+        extra: ["user_visible": false])
     }
   }
 
@@ -317,8 +337,26 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
           "realtimeInputConfig": ["automaticActivityDetection": ["disabled": true]],
         ]
       ])
+    case .gptLive:
+      // GPT-Live-1's first frame is `session.start`; full-duplex, no VAD/commit.
+      send(json: [
+        "type": "session.start",
+        "event_id": UUID().uuidString,
+        "session": [
+          "model": model,
+          "instructions": Self.gptLiveInstructions,
+          "audio": [
+            "format": ["type": "audio/pcm", "rate": 24000],
+            "output": ["voice": "marin"],
+          ],
+        ],
+      ])
     }
   }
+
+  /// Minimal system prompt for the STT-only omni shell.
+  private static let gptLiveInstructions =
+    "You are Omi, a concise voice transcription assistant. Transcribe what you hear; do not add commentary."
 
   private func makeRequest() -> URLRequest? {
     // Connect to the omi backend's omni relay. The backend holds the provider
@@ -329,7 +367,12 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
       .replacingOccurrences(of: "https://", with: "wss://")
       .replacingOccurrences(of: "http://", with: "ws://")
     let wsBase = base.hasSuffix("/") ? String(base.dropLast()) : base
-    let providerParam = provider == .gptRealtime2 ? "openai" : "gemini"
+    let providerParam: String
+    switch provider {
+    case .gptRealtime2: providerParam = "openai"
+    case .gptLive: providerParam = "gpt_live"
+    case .geminiFlashLive, .auto: providerParam = "gemini"
+    }
     guard var comps = URLComponents(string: "\(wsBase)/v1/omni/relay") else { return nil }
     comps.queryItems = [
       URLQueryItem(name: "provider", value: providerParam),
@@ -374,6 +417,7 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
     switch provider {
     case .gptRealtime2: handleOpenAI(obj)
     case .geminiFlashLive, .auto: handleGemini(obj)
+    case .gptLive: handleGPTLive(obj)
     }
   }
 
@@ -451,6 +495,38 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
       commitInputTurn()
     }
     delegate?.omniDidConnect()
+  }
+
+  @MainActor
+  private func handleGPTLive(_ e: [String: Any]) {
+    guard let type = e["type"] as? String else { return }
+    switch type {
+    case "session.started":
+      markReady()
+    case "session.output_audio.delta":
+      if let b64 = e["delta"] as? String, let d = Data(base64Encoded: b64) {
+        delegate?.omniDidReceiveAudio(d)
+      }
+    case "session.input_transcript.delta":
+      if let t = e["delta"] as? String {
+        delegate?.omniDidReceiveInputTranscript(t, isFinal: false, itemID: nil)
+      }
+    case "session.output_transcript.delta":
+      // STT-only shell: the assistant's own text is not the user's transcript.
+      break
+    case "session.closed":
+      // The protocol reports usage only at close; the omni shell does not bill here.
+      delegate?.omniDidReceiveInputTranscript("", isFinal: true, itemID: nil)
+      delegate?.omniDidFinishTurn()
+    case "error":
+      let msg =
+        (e["error"] as? [String: Any])?["message"] as? String
+        ?? e["message"] as? String
+        ?? "GPT-Live error"
+      notifyError(msg)
+    default:
+      break
+    }
   }
 
   // MARK: - Send helpers

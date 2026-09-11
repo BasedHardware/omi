@@ -50,6 +50,7 @@ import type { VoiceToolDeclaration } from '../../../../../shared/types'
 import type { VoiceSessionID, VoiceTurnID, VoiceResponseID } from '../turn/voiceTurnMachine'
 import { GeminiHubSession } from './geminiHubSession'
 import { OpenAiHubSession } from './openaiHubSession'
+import { GptLiveHubSession } from './gptLiveHubSession'
 import type { HubEventIdentity, HubSession, HubSessionEvents } from './hubSession'
 import {
   classifyHubClose,
@@ -116,6 +117,8 @@ export type HubSessionSpec = {
   /** The provider-neutral tool catalog this session advertises (PR-C). Empty when
    *  no `fetchTools` seam is wired or no signed-in owner exists yet. */
   tools: VoiceToolDeclaration[]
+  /** Optional BYOK OpenAI key for the GPT-Live lane's direct-connect path. */
+  byokKey?: string
 }
 
 export type HubControllerOptions = {
@@ -139,16 +142,42 @@ export type HubControllerOptions = {
   fetchTools?: () => Promise<VoiceToolDeclaration[]>
   /** Mint one ephemeral token for the resolved provider. Fresh per `ensureWarm`. */
   mintToken?: (provider: VoiceProvider) => Promise<string>
-  /** Construct the provider hub session. Default picks OpenAI/Gemini by provider. */
+  /** Construct the provider hub session. Default picks GPT-Live/Gemini/OpenAI by
+   *  provider. */
   createSession?: (spec: HubSessionSpec) => HubSession
   /** Output device for spoken audio; default = system default. */
   sinkId?: () => string | undefined
+  /** Optional BYOK OpenAI key for the GPT-Live lane's direct-connect path. Absent
+   *  ⇒ managed (the Omi relay). */
+  byokKey?: () => string | undefined
   /** Injectable wall clock for `aliveForMs` (tests use a fake). */
   now?: () => number
   /** Injectable one-shot timer for the A7c reconnect backoff (fake timers in tests).
    *  Defaults to `setTimeout`/`clearTimeout`. */
   setTimer?: (ms: number, fire: () => void) => unknown
   clearTimer?: (handle: unknown) => void
+}
+
+// MARK: - Default provider-session factory
+
+/** Construct the concrete hub session for a provider. Exported so the
+ *  provider→class mapping is testable without opening a socket (constructing a
+ *  session is side-effect free — it only connects on `ensureWarm`). */
+export function createDefaultHubSession(
+  spec: HubSessionSpec,
+  overrides: { sinkId?: string; byokKey?: string } = {}
+): HubSession {
+  const opts = {
+    token: spec.token,
+    instructions: spec.instructions,
+    events: spec.events,
+    tools: spec.tools,
+    sinkId: overrides.sinkId,
+    byokKey: overrides.byokKey
+  }
+  if (spec.provider === 'openai') return new OpenAiHubSession(opts)
+  if (spec.provider === 'gpt_live') return new GptLiveHubSession(opts)
+  return new GeminiHubSession(opts)
 }
 
 // MARK: - Controller
@@ -183,6 +212,7 @@ export class HubController {
   private readonly fetchTools?: () => Promise<VoiceToolDeclaration[]>
   private readonly mintToken: (provider: VoiceProvider) => Promise<string>
   private readonly createSession: (spec: HubSessionSpec) => HubSession
+  private readonly byokKey?: () => string | undefined
   private readonly now: () => number
   private readonly setTimer: (ms: number, fire: () => void) => unknown
   private readonly clearTimer: (handle: unknown) => void
@@ -291,18 +321,10 @@ export class HubController {
     this.mintToken =
       options.mintToken ?? ((provider) => mintRealtimeToken(provider).then((m) => m.token))
     const sinkId = options.sinkId
+    this.byokKey = options.byokKey
     this.createSession =
       options.createSession ??
-      ((spec) => {
-        const opts = {
-          token: spec.token,
-          instructions: spec.instructions,
-          events: spec.events,
-          tools: spec.tools,
-          sinkId: sinkId?.()
-        }
-        return spec.provider === 'openai' ? new OpenAiHubSession(opts) : new GeminiHubSession(opts)
-      })
+      ((spec) => createDefaultHubSession(spec, { sinkId: sinkId?.(), byokKey: this.byokKey?.() }))
     this.now = options.now ?? (() => Date.now())
     this.setTimer = options.setTimer ?? ((ms, fire) => setTimeout(fire, ms))
     this.clearTimer =
@@ -451,7 +473,10 @@ export class HubController {
     // Only a provider-scoped failure (unconfigured / quota / auth / outage) is worth the
     // other lane; a session-wide failure (401/402/403) surfaces unchanged.
     if (!failure?.tryOtherProvider) return null
-    const alternate: VoiceProvider = from === 'openai' ? 'gemini' : 'openai'
+    // GPT-Live is the default lane and always falls over to Gemini (the available
+    // alternate); Gemini falls to GPT-Live; the legacy OpenAI lane keeps Gemini.
+    const alternate: VoiceProvider =
+      from === 'openai' ? 'gemini' : from === 'gemini' ? 'gpt_live' : 'gemini'
     if (this.fallbackProvider !== null) {
       // Already failed over once this chain → the alternate is down too. Give up to the
       // cascade (Mac's guard-fail branch). One shared fallback event, closed enums.

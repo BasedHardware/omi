@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Realtime voice now uses OpenAI GPT-Live-1 by default; Gemini Live remains available as the alternate provider."
+  ]
+}

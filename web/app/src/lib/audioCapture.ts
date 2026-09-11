@@ -7,6 +7,12 @@ export type AudioMode = 'mic-only' | 'mic-and-system';
 
 export interface AudioCaptureOptions {
   mode: AudioMode;
+  /**
+   * PCM sample rate handed to `onAudioData`. Defaults to the transcription
+   * pipeline's 16kHz; realtime voice clients that need a different wire rate
+   * (e.g. GPT-Live's 24kHz) set it explicitly.
+   */
+  sampleRate?: number;
   onAudioData: (pcmData: Int16Array) => void;
   onMicLevel: (level: number) => void;
   onSystemLevel: (level: number) => void;
@@ -148,6 +154,7 @@ function resample(
  */
 export function createAudioCapture(options: AudioCaptureOptions): AudioCapture {
   const { mode, onAudioData, onMicLevel, onSystemLevel, onError } = options;
+  const targetSampleRate = options.sampleRate ?? TARGET_SAMPLE_RATE;
 
   let audioContext: AudioContext | null = null;
   let micStream: MediaStream | null = null;
@@ -230,7 +237,11 @@ export function createAudioCapture(options: AudioCaptureOptions): AudioCapture {
         const inputData = e.inputBuffer.getChannelData(0);
 
         // Resample to target sample rate
-        const resampledData = resample(inputData, audioContext!.sampleRate, TARGET_SAMPLE_RATE);
+        const resampledData = resample(
+          inputData,
+          audioContext!.sampleRate,
+          targetSampleRate,
+        );
 
         // Convert to PCM
         const pcmData = floatTo16BitPCM(resampledData);
