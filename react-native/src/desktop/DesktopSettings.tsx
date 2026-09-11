@@ -333,6 +333,8 @@ export function DesktopSettings({
   const [customVocabulary, setCustomVocabulary] = useState<
     ReturnType<typeof customVocabularyCopy>
   >([]);
+  const [transcriptionPreferencesError, setTranscriptionPreferencesError] =
+    useState<string | null>(null);
   const [developerKeys, setDeveloperKeys] = useState<
     ReturnType<typeof developerKeysCopy>
   >([]);
@@ -393,6 +395,7 @@ export function DesktopSettings({
     let nextAutomaticTranslation: ReturnType<typeof automaticTranslationCopy> =
       [];
     let nextCustomVocabulary: ReturnType<typeof customVocabularyCopy> = [];
+    let nextTranscriptionPreferencesError: string | null = null;
     let nextDeveloperKeys: ReturnType<typeof developerKeysCopy> = [];
     let nextMcpKeys: ReturnType<typeof developerKeysCopy> = [];
     let nextImportJobs: OmiImportJobRow[] = [];
@@ -475,7 +478,13 @@ export function DesktopSettings({
       );
       const transcriptionPreferencesTask = loadOmiTranscriptionPreferences(
         backend,
-      ).catch(() => null);
+      ).then(
+        prefs => ({prefs, error: null as string | null}),
+        reason => ({
+          prefs: null,
+          error: desktopReadErrorCopy(reason),
+        }),
+      );
       const developerKeysTask = loadOmiDevApiKeys(backend).catch(() => []);
       const mcpKeysTask = loadOmiMcpApiKeys(backend).catch(() => []);
       const importJobsTask = loadOmiImportJobs(backend).catch(() => []);
@@ -522,11 +531,14 @@ export function DesktopSettings({
         notificationFrequencyResult.settings?.frequency,
       );
       nextNotificationFrequencyError = notificationFrequencyResult.error;
-      const transcription = await transcriptionPreferencesTask;
+      const transcriptionPreferencesResult = await transcriptionPreferencesTask;
       nextAutomaticTranslation = automaticTranslationCopy(
-        transcription?.singleLanguageMode,
+        transcriptionPreferencesResult.prefs?.singleLanguageMode,
       );
-      nextCustomVocabulary = customVocabularyCopy(transcription?.vocabulary);
+      nextCustomVocabulary = customVocabularyCopy(
+        transcriptionPreferencesResult.prefs?.vocabulary,
+      );
+      nextTranscriptionPreferencesError = transcriptionPreferencesResult.error;
       nextDeveloperKeys = developerKeysCopy(
         await developerKeysTask,
         'Developer key',
@@ -574,6 +586,7 @@ export function DesktopSettings({
     setNotificationFrequencyError(nextNotificationFrequencyError);
     setAutomaticTranslation(nextAutomaticTranslation);
     setCustomVocabulary(nextCustomVocabulary);
+    setTranscriptionPreferencesError(nextTranscriptionPreferencesError);
     setDeveloperKeys(nextDeveloperKeys);
     setMcpKeys(nextMcpKeys);
     setImportJobs(nextImportJobs);
@@ -899,12 +912,35 @@ export function DesktopSettings({
           title="Primary language"
         />
       ) : null}
-      {automaticTranslation.map((row, index) => (
-        <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
-      ))}
-      {customVocabulary.map((row, index) => (
-        <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
-      ))}
+      {transcriptionPreferencesError !== null ? (
+        <>
+          <Row
+            copy={transcriptionPreferencesError}
+            title="Automatic translation"
+          />
+          <Row
+            copy={transcriptionPreferencesError}
+            title="Custom vocabulary"
+          />
+        </>
+      ) : (
+        <>
+          {automaticTranslation.map((row, index) => (
+            <Row
+              copy={row.copy}
+              key={`${row.title}-${index}`}
+              title={row.title}
+            />
+          ))}
+          {customVocabulary.map((row, index) => (
+            <Row
+              copy={row.copy}
+              key={`${row.title}-${index}`}
+              title={row.title}
+            />
+          ))}
+        </>
+      )}
       {peopleError !== null ? (
         <Row copy={peopleError} title="People" />
       ) : (

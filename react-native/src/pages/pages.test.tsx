@@ -1575,6 +1575,24 @@ test('Settings names GET custom vocabulary without add/delete or Flutter false d
   );
 });
 
+test('Settings names a failed transcription-preferences GET instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/transcription-preferences') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Automatic translation');
+  expect(tree).toContain('Custom vocabulary');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('Based Hardware');
+  expect(tree).not.toContain('Add Words');
+  expect(tree).not.toContain('Detect 10+ languages');
+});
+
 test('Settings omits Automatic translation when GET single_language_mode is missing', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

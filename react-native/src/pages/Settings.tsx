@@ -258,6 +258,8 @@ export function SettingsPage({
   const [customVocabulary, setCustomVocabulary] = useState<
     ReturnType<typeof customVocabularyCopy>
   >([]);
+  const [transcriptionPreferencesError, setTranscriptionPreferencesError] =
+    useState<string | null>(null);
   const [developerKeys, setDeveloperKeys] = useState<
     ReturnType<typeof developerKeysCopy>
   >([]);
@@ -338,6 +340,7 @@ export function SettingsPage({
       setNotificationFrequencyError(null);
       setAutomaticTranslation([]);
       setCustomVocabulary([]);
+      setTranscriptionPreferencesError(null);
       setDeveloperKeys([]);
       setMcpKeys([]);
       setImportJobs([]);
@@ -403,6 +406,7 @@ export function SettingsPage({
         setNotificationFrequencyError(null);
         setAutomaticTranslation([]);
         setCustomVocabulary([]);
+        setTranscriptionPreferencesError(null);
         setDeveloperKeys([]);
         setMcpKeys([]);
         setImportJobs([]);
@@ -437,6 +441,7 @@ export function SettingsPage({
         setNotificationFrequencyError(null);
         setAutomaticTranslation([]);
         setCustomVocabulary([]);
+        setTranscriptionPreferencesError(null);
         setDeveloperKeys([]);
         setMcpKeys([]);
         setImportJobs([]);
@@ -521,7 +526,13 @@ export function SettingsPage({
     );
     const transcriptionPreferencesTask = loadOmiTranscriptionPreferences(
       backend,
-    ).catch(() => null);
+    ).then(
+      prefs => ({prefs, error: null as string | null}),
+      reason => ({
+        prefs: null,
+        error: desktopReadErrorCopy(reason),
+      }),
+    );
     const developerKeysTask = loadOmiDevApiKeys(backend).catch(() => []);
     const mcpKeysTask = loadOmiMcpApiKeys(backend).catch(() => []);
     const importJobsTask = loadOmiImportJobs(backend).catch(() => []);
@@ -556,7 +567,7 @@ export function SettingsPage({
     const dailySummariesResult = await dailySummariesTask;
     const dailySummaryScheduleResult = await dailySummaryScheduleTask;
     const notificationFrequencyResult = await notificationFrequencyTask;
-    const transcription = await transcriptionPreferencesTask;
+    const transcriptionPreferencesResult = await transcriptionPreferencesTask;
     const nextDeveloperKeys = await developerKeysTask;
     const nextMcpKeys = await mcpKeysTask;
     const nextImportJobs = await importJobsTask;
@@ -592,9 +603,14 @@ export function SettingsPage({
     );
     setNotificationFrequencyError(notificationFrequencyResult.error);
     setAutomaticTranslation(
-      automaticTranslationCopy(transcription?.singleLanguageMode),
+      automaticTranslationCopy(
+        transcriptionPreferencesResult.prefs?.singleLanguageMode,
+      ),
     );
-    setCustomVocabulary(customVocabularyCopy(transcription?.vocabulary));
+    setCustomVocabulary(
+      customVocabularyCopy(transcriptionPreferencesResult.prefs?.vocabulary),
+    );
+    setTranscriptionPreferencesError(transcriptionPreferencesResult.error);
     setDeveloperKeys(developerKeysCopy(nextDeveloperKeys, 'Developer key'));
     setMcpKeys(
       developerKeysCopy(
@@ -782,20 +798,35 @@ export function SettingsPage({
             title="Primary language"
           />
         ) : null}
-        {automaticTranslation.map((row, index) => (
-          <SettingRow
-            copy={row.copy}
-            key={`${row.title}-${index}`}
-            title={row.title}
-          />
-        ))}
-        {customVocabulary.map((row, index) => (
-          <SettingRow
-            copy={row.copy}
-            key={`${row.title}-${index}`}
-            title={row.title}
-          />
-        ))}
+        {transcriptionPreferencesError !== null ? (
+          <>
+            <SettingRow
+              copy={transcriptionPreferencesError}
+              title="Automatic translation"
+            />
+            <SettingRow
+              copy={transcriptionPreferencesError}
+              title="Custom vocabulary"
+            />
+          </>
+        ) : (
+          <>
+            {automaticTranslation.map((row, index) => (
+              <SettingRow
+                copy={row.copy}
+                key={`${row.title}-${index}`}
+                title={row.title}
+              />
+            ))}
+            {customVocabulary.map((row, index) => (
+              <SettingRow
+                copy={row.copy}
+                key={`${row.title}-${index}`}
+                title={row.title}
+              />
+            ))}
+          </>
+        )}
         {peopleError !== null ? (
           <SettingRow copy={peopleError} title="People" />
         ) : (
