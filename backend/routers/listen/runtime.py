@@ -122,6 +122,10 @@ class ListenSessionRuntime:
         self.session_id = str(uuid.uuid4())
         self.client_conversation_id = _normalize_client_conversation_id(request.client_conversation_id)
         self.recording_session_id = self.client_conversation_id or str(uuid.uuid4())
+        # Set by the conversation controller when this socket joins an
+        # Omi/desktop paired capture. Transcript-level dedupe is only safe for
+        # that explicitly shared lifecycle.
+        self.shared_capture = False
         self.recording_session_ids_by_conversation: Dict[str, str] = {}
         self.client_device_context = request.client_device_context or resolve_client_device_from_headers(
             request.websocket.headers

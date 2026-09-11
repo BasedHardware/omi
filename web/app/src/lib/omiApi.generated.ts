@@ -1156,6 +1156,7 @@ export interface Conversation {
   processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
   screenshot_sharing_enabled?: boolean;
+  shared_capture?: boolean;
   source?: ConversationSource | null;
   starred?: boolean;
   started_at: string | null;
@@ -1337,6 +1338,7 @@ export interface ConversationSearchItem {
   processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
   screenshot_sharing_enabled?: boolean;
+  shared_capture?: boolean;
   source?: ConversationSource | null;
   starred?: boolean;
   started_at: string | null;

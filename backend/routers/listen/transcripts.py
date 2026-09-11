@@ -33,6 +33,7 @@ from utils.transcribe_decisions import (
     is_user_self_match,
     person_id_for_client,
     resolve_photo_conversation_source,
+    should_pair_omi_desktop_capture,
     should_queue_speaker_embedding,
     should_skip_speaker_detection,
 )
@@ -88,6 +89,7 @@ class TranscriptProcessor:
         self.cache = ConversationCache(self._load_conversation)
         self.current_session_segments: Dict[str, bool] = {}
         self.suggested_segments: set[str] = set()
+
         self.speaker_id_allocator = ConversationSpeakerIdAllocator()
         self.language_cache = TranscriptSegmentLanguageCache()
         self.translation_service = TranslationService()
@@ -101,6 +103,15 @@ class TranscriptProcessor:
                 on_translation_ready=self._on_translation_ready,
                 language_state=ConversationLanguageState(host.translation_language or 'en'),
             )
+
+    def _is_shared_capture(self, source: Any, marker: bool = False) -> bool:
+        if marker or bool(getattr(self.host, 'shared_capture', False)):
+            return True
+        source_value = source.value if isinstance(source, ConversationSource) else source
+        return should_pair_omi_desktop_capture(
+            existing_source=source_value if isinstance(source_value, str) else None,
+            request_source=getattr(self.host.request, 'source', None),
+        )
 
     async def _load_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
         return await self.host.persistence.call(
@@ -191,9 +202,20 @@ class TranscriptProcessor:
         updated: List[TranscriptSegment] = []
         removed: List[str] = []
         if segments:
-            conversation.transcript_segments, updated, removed = TranscriptSegment.combine_segments(
-                conversation.transcript_segments, segments
+            deduplicate_overlapping = self._is_shared_capture(
+                conversation.source,
+                conversation.shared_capture,
             )
+            if deduplicate_overlapping:
+                conversation.transcript_segments, updated, removed = TranscriptSegment.combine_segments(
+                    conversation.transcript_segments,
+                    segments,
+                    deduplicate_overlapping=True,
+                )
+            else:
+                conversation.transcript_segments, updated, removed = TranscriptSegment.combine_segments(
+                    conversation.transcript_segments, segments
+                )
             sort_transcript_segments_in_place(conversation.transcript_segments)
             speaker = self.host.speakers
             targets = conversation.transcript_segments if self.host.state.speaker_map_dirty else updated
@@ -356,7 +378,12 @@ class TranscriptProcessor:
                 self.host.state.words_transcribed_since_last_record += len(
                     ' '.join(segment.text for segment in new_segments).split()
                 )
-            transcript_segments, _, _ = TranscriptSegment.combine_segments([], new_segments)
+            if self._is_shared_capture(data.get('source'), bool(data.get('shared_capture', False))):
+                transcript_segments, _, _ = TranscriptSegment.combine_segments(
+                    [], new_segments, deduplicate_overlapping=True
+                )
+            else:
+                transcript_segments, _, _ = TranscriptSegment.combine_segments([], new_segments)
             current = deserialize_conversation(data)
             result = await self._update_live_conversation(current, transcript_segments, photos, finished_at, started_at)
             rolled_over = False

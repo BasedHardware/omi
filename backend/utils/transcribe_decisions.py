@@ -186,18 +186,35 @@ def normalize_listen_source(value: Optional[str]) -> str:
     return ConversationSource(value.strip()).value
 
 
+def should_pair_omi_desktop_capture(
+    *,
+    existing_source: Optional[str],
+    request_source: Optional[str],
+) -> bool:
+    """Return whether two live sources are the explicit paired-capture case."""
+    existing = normalize_listen_source(existing_source)
+    request = normalize_listen_source(request_source)
+    return {existing, request} == {'omi', 'desktop'}
+
+
 def should_attach_to_existing_in_progress(
     *,
     existing_source: Optional[str],
     request_source: Optional[str],
 ) -> bool:
-    """Resume only when the live pointer and this socket share a source (#5388).
+    """Resume compatible live captures without merging unrelated sources (#5388).
 
     Device + web (or any other cross-source pair) must each own a conversation.
-    Attaching the second socket to the first pointer silently merges two audio
-    streams into one session and loses the web recording on stop.
+    The Omi device and the macOS desktop are the one intentional cross-source
+    exception: they are two clients for the same capture, so keeping a shared
+    conversation avoids presenting duplicate memories for one recording.
     """
-    return normalize_listen_source(existing_source) == normalize_listen_source(request_source)
+    existing = normalize_listen_source(existing_source)
+    request = normalize_listen_source(request_source)
+    return existing == request or should_pair_omi_desktop_capture(
+        existing_source=existing_source,
+        request_source=request_source,
+    )
 
 
 def decide_lifecycle_action(

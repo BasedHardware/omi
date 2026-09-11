@@ -227,6 +227,8 @@ extension AppState {
       recordingStartTime = Date()
       currentBackendConversationId = nil
       pendingBackendConversationId = nil
+      currentBackendConversationIsShared = false
+      pendingBackendConversationIsShared = false
       ignoredRotatedBackendConversationIds = []
       AudioLevelMonitor.shared.reset()
       RecordingTimer.shared.start()
@@ -294,10 +296,17 @@ extension AppState {
               incomingBackendId: candidate,
               expectedBackendId: self.currentClientConversationId,
               activeBackendId: self.currentBackendConversationId,
-              ignoredRotatedBackendIds: self.ignoredRotatedBackendConversationIds
+              ignoredRotatedBackendIds: self.ignoredRotatedBackendConversationIds,
+              recordingSessionId: self.currentBackendConversationIsShared
+                ? self.currentClientConversationId : nil,
+              sharedCapture: self.currentBackendConversationIsShared
             ) ? candidate : nil
           }) {
-            try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
+            try await TranscriptionStorage.shared.bindBackendConversation(
+              id: sessionId,
+              backendId: backendId,
+              adoptAsClientConversationId: self.currentBackendConversationIsShared
+            )
             await MainActor.run {
               self.currentBackendConversationId = backendId
               self.pendingBackendConversationId = nil
@@ -1001,6 +1010,7 @@ extension AppState {
     // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil).
     let capturedSessionId = currentSessionId
     let capturedBackendId = currentBackendConversationId ?? pendingBackendConversationId
+    let capturedSharedCapture = currentBackendConversationIsShared || pendingBackendConversationIsShared
     captureCurrentFinishedRecordingForLifecycle()
     stopAudioCapture()
     clearTranscriptionState(
@@ -1016,7 +1026,11 @@ extension AppState {
         var persistedBackendId: String?
         if let backendId = capturedBackendId, !backendId.isEmpty {
           do {
-            try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
+            try await TranscriptionStorage.shared.bindBackendConversation(
+              id: sessionId,
+              backendId: backendId,
+              adoptAsClientConversationId: capturedSharedCapture
+            )
             persistedBackendId = try await TranscriptionStorage.shared.getSession(id: sessionId)?.backendId
           } catch {
             logError(
@@ -1214,6 +1228,8 @@ extension AppState {
     }
     currentBackendConversationId = nil
     currentClientConversationId = nil
+    currentBackendConversationIsShared = false
+    pendingBackendConversationIsShared = false
     pendingBackendConversationId = nil
     RecordingTimer.shared.restart()
 
@@ -1392,10 +1408,17 @@ extension AppState {
             incomingBackendId: candidate,
             expectedBackendId: self.currentClientConversationId,
             activeBackendId: self.currentBackendConversationId,
-            ignoredRotatedBackendIds: self.ignoredRotatedBackendConversationIds
+            ignoredRotatedBackendIds: self.ignoredRotatedBackendConversationIds,
+            recordingSessionId: self.currentBackendConversationIsShared
+              ? self.currentClientConversationId : nil,
+            sharedCapture: self.currentBackendConversationIsShared
           ) ? candidate : nil
         }) {
-          try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
+          try await TranscriptionStorage.shared.bindBackendConversation(
+            id: sessionId,
+            backendId: backendId,
+            adoptAsClientConversationId: self.currentBackendConversationIsShared
+          )
           await MainActor.run {
             guard self.isTranscribing, self.recordingGeneration == sessionGeneration else { return }
             self.currentBackendConversationId = backendId

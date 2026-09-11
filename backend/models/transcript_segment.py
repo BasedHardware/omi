@@ -118,10 +118,45 @@ class TranscriptSegment(BaseModel):
 
     @staticmethod
     def combine_segments(
-        segments: List['TranscriptSegment'], new_segments: List['TranscriptSegment'], delta_seconds: int = 0
+        segments: List['TranscriptSegment'],
+        new_segments: List['TranscriptSegment'],
+        delta_seconds: int = 0,
+        *,
+        deduplicate_overlapping: bool = False,
     ) -> Tuple[List['TranscriptSegment'], List['TranscriptSegment'], List[str]]:
         if not new_segments or len(new_segments) == 0:
             return segments, [], []
+
+        if deduplicate_overlapping:
+
+            def _duplicate_text(text: str) -> str:
+                return re.sub(r'[^\w]+', ' ', text.casefold()).strip()
+
+            def _is_overlapping_duplicate(existing: 'TranscriptSegment', incoming: 'TranscriptSegment') -> bool:
+                # Provider IDs are not shared across paired sockets, so identity
+                # alone cannot deduplicate the second stream. Require a substantial
+                # text match and nearly the same timeline; this leaves short
+                # backchannels and genuinely repeated lines untouched.
+                existing_text = _duplicate_text(existing.text)
+                incoming_text = _duplicate_text(incoming.text)
+                if not existing_text or existing_text != incoming_text:
+                    return False
+                if len(existing_text) < 20 and len(existing_text.split()) < 4:
+                    return False
+                if existing.id == incoming.id:
+                    return True
+                return abs(existing.start - incoming.start) <= 2 and abs(existing.end - incoming.end) <= 2
+
+            deduped_new_segments: List[TranscriptSegment] = []
+            for new_segment in new_segments:
+                if any(
+                    _is_overlapping_duplicate(existing, new_segment) for existing in [*segments, *deduped_new_segments]
+                ):
+                    continue
+                deduped_new_segments.append(new_segment)
+            if not deduped_new_segments:
+                return segments, [], []
+            new_segments = deduped_new_segments
 
         def _extract_last_incomplete_sentence(text: str) -> Tuple[Optional[str], str]:
             text = text.strip()

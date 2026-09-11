@@ -119,6 +119,31 @@ def test_retry_keeps_one_canonical_recording_session_binding(recording_store):
     assert len(recording_store.documents) == 1
 
 
+def test_shared_capture_marker_survives_binding_and_lifecycle_events(recording_store):
+    binding = recording_sessions.create_or_get_recording_session(
+        'uid', 'desktop-session', 'omi-conversation', shared_capture=True, firestore_client=recording_store
+    )
+    event = recording_sessions.record_lifecycle_event(
+        'uid', 'desktop-session', 'omi-conversation', 'processing', firestore_client=recording_store
+    )
+    stored = recording_sessions.get_recording_session('uid', 'desktop-session', firestore_client=recording_store)
+
+    assert binding['shared_capture'] is True
+    assert stored is not None and stored['shared_capture'] is True
+    assert event['shared_capture'] is True
+
+
+def test_shared_capture_marker_is_persisted_on_canonical_conversation(recording_store):
+    path = ('users', 'uid', 'conversations', 'omi-conversation')
+    recording_store.documents[path] = {'id': 'omi-conversation', 'source': 'omi'}
+
+    assert (
+        conversations_db.mark_conversation_shared_capture('uid', 'omi-conversation', firestore_client=recording_store)
+        is True
+    )
+    assert recording_store.documents[path]['shared_capture'] is True
+
+
 def test_completed_retry_returns_its_canonical_terminal_envelope(recording_store):
     recording_sessions.create_or_get_recording_session(
         'uid', 'recording-one', 'conversation-one', firestore_client=recording_store
@@ -404,6 +429,7 @@ def test_dual_write_mismatch_keeps_legacy_processing_and_completion_events(recor
         'lifecycle_version': None,
         'lifecycle_phase': None,
         'lifecycle_sequence': None,
+        'shared_capture': False,
     }
     assert processing == expected_legacy_envelope
     assert completed == expected_legacy_envelope
@@ -431,6 +457,7 @@ def test_shadow_mode_emits_legacy_envelope_when_durable_event_write_fails(monkey
         'lifecycle_version': None,
         'lifecycle_phase': None,
         'lifecycle_sequence': None,
+        'shared_capture': False,
     }
     assert fallbacks[0]['to_mode'] == 'legacy_pointer'
 

@@ -97,11 +97,16 @@ enum DesktopConversationMatchPolicy {
     incomingBackendId: String,
     expectedBackendId: String? = nil,
     activeBackendId: String?,
-    ignoredRotatedBackendIds: Set<String>
+    ignoredRotatedBackendIds: Set<String>,
+    recordingSessionId: String? = nil,
+    sharedCapture: Bool = false
   ) -> Bool {
     guard !incomingBackendId.isEmpty else { return false }
     if let expectedBackendId, !expectedBackendId.isEmpty, incomingBackendId != expectedBackendId {
-      return false
+      // A paired capture has one durable recording-session identity but may be
+      // bound to the conversation opened by the other client. The session id
+      // is the proof; an unmarked or unrelated mismatch remains rejected.
+      guard sharedCapture, recordingSessionId == expectedBackendId else { return false }
     }
     if let activeBackendId, !activeBackendId.isEmpty {
       return incomingBackendId == activeBackendId
@@ -139,10 +144,14 @@ enum DesktopConversationMatchPolicy {
   static func lifecycleEventBelongsToRecording(
     memoryId: String,
     recordingSessionId: String?,
-    expectedBackendId: String?
+    expectedBackendId: String?,
+    sharedCapture: Bool = false
   ) -> Bool {
     guard let expectedBackendId, !expectedBackendId.isEmpty else { return true }
-    guard memoryId == expectedBackendId else { return false }
+    if memoryId != expectedBackendId {
+      guard sharedCapture, recordingSessionId == expectedBackendId else { return false }
+      return true
+    }
     return recordingSessionId == nil || recordingSessionId == expectedBackendId
   }
 
@@ -155,21 +164,23 @@ enum DesktopConversationMatchPolicy {
     memory: [String: Any]?,
     recordingSessionId: String?,
     expectedBackendId: String?,
-    finishedRecordingStartTime: Date?
+    finishedRecordingStartTime: Date?,
+    sharedCapture: Bool = false
   ) -> Bool {
     guard !memoryId.isEmpty, memoryId != "?" else { return false }
     guard
       lifecycleEventBelongsToRecording(
         memoryId: memoryId,
         recordingSessionId: recordingSessionId,
-        expectedBackendId: expectedBackendId
+        expectedBackendId: expectedBackendId,
+        sharedCapture: sharedCapture
       )
     else {
       return false
     }
 
     if let expectedBackendId, !expectedBackendId.isEmpty {
-      return memoryId == expectedBackendId
+      return memoryId == expectedBackendId || sharedCapture
     }
 
     guard let finishedRecordingStartTime else { return false }
@@ -180,7 +191,8 @@ enum DesktopConversationMatchPolicy {
     memoryId: String,
     memory: [String: Any]?,
     recordingSessionId: String?,
-    pending: [FinishedRecordingEnvelope]
+    pending: [FinishedRecordingEnvelope],
+    sharedCapture: Bool = false
   ) -> Int? {
     pending.firstIndex { envelope in
       acceptsCompletedLocalRecording(
@@ -188,7 +200,8 @@ enum DesktopConversationMatchPolicy {
         memory: memory,
         recordingSessionId: recordingSessionId,
         expectedBackendId: envelope.clientConversationId,
-        finishedRecordingStartTime: envelope.startedAt
+        finishedRecordingStartTime: envelope.startedAt,
+        sharedCapture: sharedCapture
       )
     }
   }
@@ -204,7 +217,8 @@ enum DesktopConversationMatchPolicy {
     lifecycleSequence: Int?,
     expectedLifecyclePhase: String,
     expectedBackendId: String?,
-    lastAcceptedSequence: Int?
+    lastAcceptedSequence: Int?,
+    sharedCapture: Bool = false
   ) -> Bool {
     guard lifecycleVersion != nil || lifecycleSequence != nil else { return true }
     guard lifecycleVersion == 1,
@@ -215,7 +229,8 @@ enum DesktopConversationMatchPolicy {
       lifecycleSequence >= 0
     else { return false }
     if let expectedBackendId, !expectedBackendId.isEmpty {
-      guard recordingSessionId == expectedBackendId, conversationId == expectedBackendId else { return false }
+      guard recordingSessionId == expectedBackendId else { return false }
+      guard conversationId == expectedBackendId || sharedCapture else { return false }
     }
     guard let lastAcceptedSequence else { return true }
     return lifecycleSequence > lastAcceptedSequence
@@ -225,9 +240,12 @@ enum DesktopConversationMatchPolicy {
     id conversationId: String,
     boundBackendId: String,
     status: ConversationStatus,
-    source: ConversationSource?
+    source: ConversationSource?,
+    localSource: ConversationSource? = nil
   ) -> Bool {
-    conversationId == boundBackendId && source == .desktop && status != .inProgress
+    conversationId == boundBackendId
+      && (source == .desktop || (localSource == .desktop && source == .omi))
+      && status != .inProgress
   }
 
   static func shouldFinalizeTimestampMatchedConversation(status: ConversationStatus) -> Bool {
@@ -582,7 +600,11 @@ class AppState: ObservableObject {
   /// The UUID created by desktop before opening an identified `/v4/listen` stream.
   /// In the current compatible protocol it is also the backend conversation id.
   var currentClientConversationId: String?
+  /// True when the backend bound this recording to a paired capture owned by
+  /// another client. The recording-session id remains the local identity.
+  var currentBackendConversationIsShared = false
   var pendingBackendConversationId: String?
+  var pendingBackendConversationIsShared = false
   /// Last accepted server event sequence per durable recording session. This
   /// is display state only; Firestore remains the authoritative sequence owner.
   var lifecycleSequenceByRecordingSession: [String: Int] = [:]

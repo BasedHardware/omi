@@ -33,6 +33,7 @@ class ConversationEvent(MessageEvent):
     lifecycle_version: Optional[int] = None
     lifecycle_phase: Optional[str] = None
     lifecycle_sequence: Optional[int] = None
+    shared_capture: bool = False
 
     def to_json(self):
         j = self.model_dump(mode="json")
@@ -114,6 +115,7 @@ class ConversationSessionEvent(MessageEvent):
     lifecycle_version: Optional[int] = None
     lifecycle_phase: Optional[str] = None
     lifecycle_sequence: Optional[int] = None
+    shared_capture: bool = False
 
     def to_json(self):
         j = self.model_dump(mode="json")

@@ -237,13 +237,19 @@ extension AppState {
     }
   }
 
-  func bindActiveSessionToBackendConversation(_ backendId: String) {
+  func bindActiveSessionToBackendConversation(
+    _ backendId: String,
+    recordingSessionId: String? = nil,
+    sharedCapture: Bool = false
+  ) {
     guard
       DesktopConversationMatchPolicy.shouldBindConversationSession(
         incomingBackendId: backendId,
         expectedBackendId: currentClientConversationId,
         activeBackendId: currentBackendConversationId,
-        ignoredRotatedBackendIds: ignoredRotatedBackendConversationIds
+        ignoredRotatedBackendIds: ignoredRotatedBackendConversationIds,
+        recordingSessionId: recordingSessionId,
+        sharedCapture: sharedCapture
       )
     else {
       pendingBackendConversationId = nil
@@ -262,17 +268,25 @@ extension AppState {
 
     ignoredRotatedBackendConversationIds = []
     currentBackendConversationId = backendId
+    let acceptedSharedCapture = currentBackendConversationIsShared || sharedCapture
+    currentBackendConversationIsShared = acceptedSharedCapture
 
     guard let sessionId = currentSessionId else {
       pendingBackendConversationId = backendId
+      pendingBackendConversationIsShared = acceptedSharedCapture
       log("Transcription: Deferred backend conversation bind until local DB session exists (backend: \(backendId))")
       return
     }
 
     pendingBackendConversationId = nil
+    pendingBackendConversationIsShared = false
     Task {
       do {
-        try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
+        try await TranscriptionStorage.shared.bindBackendConversation(
+          id: sessionId,
+          backendId: backendId,
+          adoptAsClientConversationId: acceptedSharedCapture
+        )
       } catch {
         logError(
           "Transcription: Failed to bind DB session \(sessionId) to backend conversation \(backendId)", error: error)
@@ -293,6 +307,7 @@ extension AppState {
     let lifecycleVersion = event.raw["lifecycle_version"] as? Int
     let lifecyclePhase = event.raw["lifecycle_phase"] as? String
     let lifecycleSequence = event.raw["lifecycle_sequence"] as? Int
+    let sharedCapture = event.raw["shared_capture"] as? Bool ?? false
     let lastAcceptedSequence = recordingSessionId.flatMap { lifecycleSequenceByRecordingSession[$0] }
     guard
       DesktopConversationMatchPolicy.acceptsLifecycleEnvelope(
@@ -303,7 +318,8 @@ extension AppState {
         lifecycleSequence: lifecycleSequence,
         expectedLifecyclePhase: expectedLifecyclePhase,
         expectedBackendId: expectedBackendId,
-        lastAcceptedSequence: lastAcceptedSequence
+        lastAcceptedSequence: lastAcceptedSequence,
+        sharedCapture: sharedCapture
       )
     else {
       log("Transcription: Ignoring stale or misbound versioned lifecycle event for \(conversationId)")
@@ -351,7 +367,11 @@ extension AppState {
       else {
         break
       }
-      bindActiveSessionToBackendConversation(backendId)
+      bindActiveSessionToBackendConversation(
+        backendId,
+        recordingSessionId: event.raw["recording_session_id"] as? String,
+        sharedCapture: event.raw["shared_capture"] as? Bool ?? false
+      )
 
     case "memory_processing_started":
       // ConversationEvent: conversation is nested under "memory"
@@ -373,7 +393,8 @@ extension AppState {
         DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
           memoryId: processingId,
           recordingSessionId: recordingSessionId,
-          expectedBackendId: currentClientConversationId
+          expectedBackendId: currentClientConversationId,
+          sharedCapture: event.raw["shared_capture"] as? Bool ?? false
         )
       else {
         log("Transcription: Ignoring stale memory_processing_started \(processingId) for current recording")
@@ -398,7 +419,8 @@ extension AppState {
           memoryId: memoryId,
           memory: memory,
           recordingSessionId: recordingSessionId,
-          pending: pendingFinishedRecordings
+          pending: pendingFinishedRecordings,
+          sharedCapture: event.raw["shared_capture"] as? Bool ?? false
         )
       else {
         log("Transcription: Ignoring memory_created \(memoryId); no matching finished local recording")

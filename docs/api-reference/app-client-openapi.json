@@ -7426,6 +7426,11 @@
             "title": "Screenshot Sharing Enabled",
             "type": "boolean"
           },
+          "shared_capture": {
+            "default": false,
+            "title": "Shared Capture",
+            "type": "boolean"
+          },
           "source": {
             "anyOf": [
               {
@@ -8527,6 +8532,11 @@
           "screenshot_sharing_enabled": {
             "default": true,
             "title": "Screenshot Sharing Enabled",
+            "type": "boolean"
+          },
+          "shared_capture": {
+            "default": false,
+            "title": "Shared Capture",
             "type": "boolean"
           },
           "source": {

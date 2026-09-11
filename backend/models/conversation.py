@@ -299,6 +299,9 @@ class Conversation(BaseModel):
     finished_at: Optional[datetime]
 
     source: Optional[ConversationSource] = ConversationSource.omi
+    # True when Omi hardware and the macOS desktop intentionally feed the same
+    # live capture into this conversation. It scopes transcript deduplication.
+    shared_capture: bool = False
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
     # True when this conversation was transcribed on a third-party (custom STT)
