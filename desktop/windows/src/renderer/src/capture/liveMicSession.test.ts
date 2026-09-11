@@ -14,9 +14,7 @@ const calls: Call[] = []
 const stop = vi.fn()
 const finalizeHandle = vi.fn()
 
-// Preserve the module's real exports (liveRescue's isRetryableDropError now
-// calls the real isQuotaExhaustedMessage from this module) and mock only
-// startTranscription.
+// Preserve the module's real exports and mock only startTranscription.
 vi.mock('../lib/transcriptionClient', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/transcriptionClient')>()
   return {

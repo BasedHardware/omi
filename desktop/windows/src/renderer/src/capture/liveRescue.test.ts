@@ -87,6 +87,30 @@ describe('isRetryableDropError', () => {
     expect(isRetryableDropError('Overconstrained', 'OverconstrainedError')).toBe(false)
   })
 
+  it('retries a 1008 idle-timeout close — the code alone is not an entitlement stop', () => {
+    // Live bug: a meeting's VAD-gated loopback sent no audio for 60s, the backend
+    // closed transcribe-stream with 1008 "Idle timeout", and the bare-1008 match
+    // made it a terminal "quota used up" error (capture stopped, no reconnect).
+    expect(
+      isRetryableDropError(
+        'Omi transcription stopped: Omi transcribe-stream closed (1008) Idle timeout: no audio for 60s'
+      )
+    ).toBe(true)
+    expect(
+      isRetryableDropError(
+        'Omi transcription stopped: Omi /v4/listen closed (1008) Rate limit exceeded.'
+      )
+    ).toBe(true)
+  })
+
+  it('does NOT retry a spent daily voice-transcription budget', () => {
+    expect(
+      isRetryableDropError(
+        "Omi transcription stopped: Omi's daily voice transcription limit is used up — it frees up again over a rolling 24 hours"
+      )
+    ).toBe(false)
+  })
+
   it('still retries an ordinary drop when a name is present but not a permanent one', () => {
     expect(isRetryableDropError('socket dropped', 'AbortError')).toBe(true)
     expect(isRetryableDropError('socket dropped', undefined)).toBe(true)

@@ -6,6 +6,12 @@ import type {
   ListenSource,
   TranscriptLine
 } from '../../../shared/types'
+import {
+  classifyCloseReason,
+  classifyTranscriptionStop,
+  DAILY_LIMIT_MESSAGE,
+  QUOTA_MESSAGE
+} from '../../../shared/transcriptionStop'
 
 /** The session modes this client can drive ('ptt' rides lib/ptt/ instead). */
 export type TranscriptionMode = Extract<ListenMode, 'conversation' | 'transcribe'>
@@ -66,25 +72,17 @@ function isQuotaExhaustedEvent(ev: { type: string; raw: Record<string, unknown> 
   const remaining = ev.raw.remaining_seconds
   return typeof remaining !== 'number' || remaining <= 0
 }
-/** Whether a message indicates the account's cloud STT entitlement is exhausted
- *  (quota used up / trial expired / policy-violation 1008). Exported so callers
- *  outside this module (e.g. capture/liveRescue.ts's reconnect-worthiness check)
- *  don't re-derive this classification with their own regex. */
-export function isQuotaExhaustedMessage(message: string): boolean {
-  return /quota|1008|trial_expired/i.test(message)
+// A connected-then-closed event is reported by its backend REASON, never by the
+// 1008 code alone: the backend uses 1008 for idle timeouts and rate limits too,
+// and mislabeling those "quota used up" made them terminal (no reconnect) and
+// told the user to buy a subscription for a silent meeting.
+function closedMessage(mode: TranscriptionMode, code: number, reason: string): string {
+  const kind = classifyCloseReason(reason)
+  if (kind === 'quota') return QUOTA_MESSAGE
+  if (kind === 'daily_limit') return DAILY_LIMIT_MESSAGE
+  const endpoint = mode === 'transcribe' ? 'transcribe-stream' : '/v4/listen'
+  return `Omi ${endpoint} closed (${code})${reason ? ` ${reason}` : ''}`
 }
-function isTrialExpiredError(err: Error): boolean {
-  return /\(1008\)/.test(err.message) || /trial_expired/i.test(err.message)
-}
-// A connected-then-closed event that means the account isn't entitled to cloud
-// STT (free trial/quota used up): WS policy-violation 1008, or a backend reason
-// naming the quota. Distinguishes this from a generic network drop so the user
-// gets an actionable message instead of a bare "closed (1008)".
-function isQuotaClose(code: number, reason: string): boolean {
-  return code === 1008 || /trial_expired|freemium|quota/i.test(reason)
-}
-const QUOTA_MESSAGE =
-  'free Omi transcription quota is used up (1008) — add an Omi subscription or sign in with an entitled account to keep transcribing'
 
 type OmiStartOutcome = {
   handle: OmiListenHandle | null
@@ -186,11 +184,7 @@ async function startWithOmi(
           // 1000, etc.). Omi will emit no more transcripts, so end the session.
           // (Pre-connect closes arrive via onError and drive the initial failure.)
           if (outcome !== 'omi') return
-          onLost(
-            isQuotaClose(code, reason)
-              ? QUOTA_MESSAGE
-              : `Omi /v4/listen closed (${code})${reason ? ` ${reason}` : ''}`
-          )
+          onLost(closedMessage(mode, code, reason))
         },
         onError: (err, fatal) => {
           if (outcome === 'pending' && fatal) {
@@ -200,9 +194,9 @@ async function startWithOmi(
           }
           // Only surface post-connect errors when Omi actually connected.
           if (outcome === 'omi') {
-            // Quota backstop: a 1008 'trial_expired' close (in case the typed
-            // event didn't arrive first). End the session rather than erroring twice.
-            if (isTrialExpiredError(err)) {
+            // Quota backstop: a 'trial_expired' close (in case the typed event
+            // didn't arrive first). End the session rather than erroring twice.
+            if (classifyTranscriptionStop(err.message) === 'quota') {
               onLost(QUOTA_MESSAGE)
               return
             }

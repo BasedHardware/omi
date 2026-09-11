@@ -72,3 +72,45 @@ describe('startTranscription startup contract', () => {
     expect(cb.onError).toHaveBeenCalledOnce()
   })
 })
+
+describe('startTranscription post-connect close reasons', () => {
+  // Connect a lane, then close it the way the backend did; return the surfaced error.
+  async function closeWith(code: number, reason: string): Promise<string> {
+    h.auth.currentUser = { uid: 'user-1' }
+    let listener: {
+      onConnected: () => void
+      onClosed: (code: number, reason: string) => void
+    } | null = null
+    h.startOmiListen.mockImplementation(async (_source: string, l: typeof listener) => {
+      listener = l
+      setTimeout(() => l?.onConnected(), 0)
+      return { stop: vi.fn(), finalize: vi.fn() }
+    })
+    const cb = callbacks()
+    await startTranscription('system', cb, 'transcribe')
+    listener!.onClosed(code, reason)
+    expect(cb.onError).toHaveBeenCalledOnce()
+    return (vi.mocked(cb.onError).mock.calls[0][0] as Error).message
+  }
+
+  it('reports a 1008 idle timeout as an ordinary close, not "quota used up"', async () => {
+    // Live bug: this exact close was surfaced as "free Omi transcription quota is
+    // used up", which stopped the meeting capture instead of reconnecting.
+    const message = await closeWith(1008, 'Idle timeout: no audio for 60s')
+    expect(message).toBe(
+      'Omi transcription stopped: Omi transcribe-stream closed (1008) Idle timeout: no audio for 60s'
+    )
+    expect(message).not.toMatch(/quota/i)
+  })
+
+  it('reports a spent daily budget as the daily limit, without offering a subscription', async () => {
+    const message = await closeWith(1008, 'Daily transcription budget exhausted')
+    expect(message).toMatch(/daily voice transcription limit is used up/)
+    expect(message).not.toMatch(/subscription/i)
+  })
+
+  it('still reports a trial_expired close as the quota/entitlement stop', async () => {
+    const message = await closeWith(1008, 'trial_expired')
+    expect(message).toMatch(/free Omi transcription quota is used up/)
+  })
+})

@@ -1,5 +1,5 @@
 import type { LiveStatus } from './liveConversation'
-import { isQuotaExhaustedMessage } from './transcriptionClient'
+import { classifyTranscriptionStop } from '../../../shared/transcriptionStop'
 import { hasTranscriptionByokCached } from './byokKeys'
 import { createSignal } from './signal'
 
@@ -55,7 +55,9 @@ export function maybeTriggerTranscriptionQuotaPopup(status: LiveStatus, error?: 
     transcriptionQuotaPopupShown = false
     return false
   }
-  if (!error || !isQuotaExhaustedMessage(error)) return false
+  // Only a real entitlement stop offers the upgrade: the daily voice budget is the
+  // same on every plan, so upgrading would not lift it.
+  if (!error || classifyTranscriptionStop(error) !== 'quota') return false
   // BYOK users must never be paywalled — they pay the provider directly. The
   // backend exempts them, but a heartbeat lag can briefly emit the exhaustion
   // event locally after BYOK activation, so ignore it here (macOS
