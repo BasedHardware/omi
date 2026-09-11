@@ -26,9 +26,11 @@ private final class RestartSpyChatProvider: ChatProvider {
 @MainActor
 final class LocalProviderSettingsRestartTests: XCTestCase {
   /// - Parameter localModelsFetcher: stands in for `AIProvider.fetchLocalModels` (the real
-  ///   OpenAI-compatible `/models` request). Defaults to the real fetch so the two tests that
-  ///   don't care about the fetch's outcome keep exercising it; the test that does care about
-  ///   the auto-selected model list passes a deterministic stub instead.
+  ///   OpenAI-compatible `/models` request). Defaults to the real fetch; every test below that
+  ///   actually calls `fetchLocalModelOptions` passes a deterministic stub instead, since a live
+  ///   network call would make the test depend on whether anything answers on localhost:1234.
+  ///   `testModelFieldChangeRequestsARestart` never calls the fetch at all, so the default is
+  ///   unused there.
   private func makeSettingsView(
     chatProvider: ChatProvider,
     localModelsFetcher: @escaping (String) async throws -> [String] = AIProvider.fetchLocalModels
@@ -100,6 +102,31 @@ final class LocalProviderSettingsRestartTests: XCTestCase {
     // (SettingsContentView+FloatingBarAndChat.swift). The stub fetcher above
     // resolves instantly, so fetchLocalModelOptions calls onComplete without
     // any real request or wait.
+    view.fetchLocalModelOptions(onComplete: view.restartLocalBridgesIfActive)
+
+    await fulfillment(of: [restarted], timeout: 2)
+    XCTAssertEqual(spy.restartCallCount, 1)
+  }
+
+  /// Companion to the test above: `fetchLocalModelOptions`'s catch branch
+  /// (the server is unreachable or the base URL is wrong) must still call
+  /// `onComplete` and request a restart, exactly like its success branch
+  /// does. A stub that always resolves cannot exercise this path; this one
+  /// always throws.
+  ///
+  /// Only the restart is asserted, not `localModelsFetchFailed`: that is
+  /// `@State`, which (like `localModelOptions` elsewhere in this file) is
+  /// silently dropped when written from a test that never installs the view
+  /// into a live SwiftUI hierarchy, so it cannot be observed here.
+  func testBaseURLFieldCommitRequestsARestartWhenTheModelListRefetchFails() async {
+    let spy = RestartSpyChatProvider()
+    let restarted = expectation(description: "restart requested")
+    spy.onRestart = { restarted.fulfill() }
+    let view = makeSettingsView(
+      chatProvider: spy,
+      localModelsFetcher: { _ in throw URLError(.cannotConnectToHost) }
+    )
+
     view.fetchLocalModelOptions(onComplete: view.restartLocalBridgesIfActive)
 
     await fulfillment(of: [restarted], timeout: 2)
