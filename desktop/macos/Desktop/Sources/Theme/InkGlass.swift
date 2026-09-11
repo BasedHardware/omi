@@ -330,6 +330,24 @@ package enum InkGlass {
   /// is — a highlight is light, and INV-UI-1 wants that light neutral.
   package static let sheenAlpha: CGFloat = 0.5
 
+  /// How much of a panel's top edge the sheen line spans: the straight run between its two corners.
+  ///
+  /// The highlight is a *line* (`InkGlassView.sheenHeight` is one point, and the comment there says
+  /// why a band is wrong), and a straight line is the top edge only where that edge is straight.
+  /// Outside the run there is no top edge, only curve, and a straight band laid across a curve stops
+  /// touching it: on a disc — `cornerRadius` at half the side, which is what the chat transcript's
+  /// jump-to-latest button asks for — the run is zero and what renders is a bright chord hanging at
+  /// the apex over a one-point sliver of ground. That reads as a stray white line floating above the
+  /// button rather than as a highlight on it, which is the reported defect.
+  ///
+  /// The radius is resolved the way the shape itself resolves it — clamped to half the smaller side —
+  /// so the stadium call sites that ask for `cornerRadius: 999` are measured on the corner they
+  /// actually get and keep the full run their flat top has, instead of a hugely negative one.
+  nonisolated package static func sheenWidth(panelSize: CGSize, cornerRadius: CGFloat) -> CGFloat {
+    let radius = max(0, min(cornerRadius, min(panelSize.width, panelSize.height) / 2))
+    return max(0, panelSize.width - 2 * radius)
+  }
+
   /// The alpha of the `Ink.surface` ground, given the user's Reduce Transparency setting.
   ///
   /// Opaque when the setting is on, and the material goes with it — glass that ignores the setting is
@@ -612,10 +630,15 @@ package final class InkGlassView: NSView {
     panel.frame = frame
     material.frame = panel.bounds
     ground.frame = panel.bounds
-    // The top edge, in a flipped-off (AppKit) coordinate space: maxY is the top.
+    // The top edge, in a flipped-off (AppKit) coordinate space: maxY is the top. Centred on the
+    // panel's straight top run rather than spanning the full width — the same rule the SwiftUI
+    // panel follows, from the same function, so the two cannot drift into different highlights.
+    let sheenWidth = InkGlass.sheenWidth(
+      panelSize: panel.bounds.size, cornerRadius: style.cornerRadius)
     sheen.frame = NSRect(
-      x: 0, y: panel.bounds.maxY - InkGlassView.sheenHeight,
-      width: panel.bounds.width, height: InkGlassView.sheenHeight)
+      x: (panel.bounds.width - sheenWidth) / 2,
+      y: panel.bounds.maxY - InkGlassView.sheenHeight,
+      width: sheenWidth, height: InkGlassView.sheenHeight)
     shadowHost.frame = bounds
     applyShadow()
   }
@@ -835,10 +858,18 @@ package struct InkGlassPanelModifier: ViewModifier {
           // clip — a `clipShape` evaluated inside a 1 pt box degenerates to a straight bar and is what
           // squared the corners in the first place. Order is the whole fix.
           if InkGlass.showsMaterial(reduceTransparency: reduceTransparency) {
-            Color.white.opacity(InkGlass.sheenAlpha)
-              .frame(height: InkGlassView.sheenHeight)
-              .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-              .clipShape(shape)
+            // The width is the panel's straight top run (`InkGlass.sheenWidth`), read from the
+            // panel rather than assumed, so the line stops where the corner starts instead of
+            // being carried into the curve by the clip below and detaching from the edge there.
+            GeometryReader { proxy in
+              Color.white.opacity(InkGlass.sheenAlpha)
+                .frame(
+                  width: InkGlass.sheenWidth(panelSize: proxy.size, cornerRadius: cornerRadius),
+                  height: InkGlassView.sheenHeight
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .clipShape(shape)
+            }
           }
         }
         .environment(\.colorScheme, .light)
