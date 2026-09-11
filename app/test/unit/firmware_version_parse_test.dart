@@ -55,7 +55,9 @@ void main() {
       latestFirmwareDetails: const {'version': '2.0.0', 'min_version': '1.0.0'},
     );
 
-    expect(result.$1, isNot('Latest Version Not Available'));
+    expect(result.$1, 'A new version is available! Update your Omi now.');
+    expect(result.$2, isTrue);
+    expect(result.$3, '2.0.0');
   });
 
   test('a newer published firmware still offers the update', () async {
