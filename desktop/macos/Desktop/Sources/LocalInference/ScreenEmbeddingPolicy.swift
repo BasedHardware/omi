@@ -60,7 +60,10 @@ struct ScreenEmbeddingPolicy: Sendable, Equatable {
 
   /// One route counter through the existing local-inference fallback telemetry.
   /// The discriminator and dimensions are bounded; no frame or query content is accepted.
+  /// Capture invokes this per frame; emission is process-bounded to decision
+  /// changes plus an hourly heartbeat.
   func recordRoute() {
+    guard ScreenEmbeddingRouteRecorder.shared.shouldRecord(self) else { return }
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "local_embeddings", from: "gemini", to: searchRoute.rawValue,
       reason: reason == .hardKill ? "dispatch_disabled" : "policy",
@@ -70,5 +73,44 @@ struct ScreenEmbeddingPolicy: Sendable, Equatable {
         "route": reason == .hardKill ? "disabled" : searchRoute.rawValue,
         "route_reason": reason.rawValue,
       ])
+  }
+}
+
+/// Process-held last route decision. Capture records every frame; PostHog gets
+/// a change or at most one heartbeat per hour.
+final class ScreenEmbeddingRouteRecorder: @unchecked Sendable {
+  static let shared = ScreenEmbeddingRouteRecorder()
+  static let heartbeat: TimeInterval = 3600
+
+  private let lock = NSLock()
+  private var lastPlanClass: ScreenEmbeddingPolicy.PlanClass?
+  private var lastSearchRoute: ScreenEmbeddingPolicy.SearchRoute?
+  private var lastReason: ScreenEmbeddingPolicy.Reason?
+  private var lastEmittedAt: Date?
+  private var clock: @Sendable () -> Date = Date.init
+
+  func resetForTesting(clock: @escaping @Sendable () -> Date = Date.init) {
+    lock.lock()
+    lastPlanClass = nil
+    lastSearchRoute = nil
+    lastReason = nil
+    lastEmittedAt = nil
+    self.clock = clock
+    lock.unlock()
+  }
+
+  func shouldRecord(_ policy: ScreenEmbeddingPolicy) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    let now = clock()
+    let changed =
+      lastPlanClass != policy.planClass || lastSearchRoute != policy.searchRoute || lastReason != policy.reason
+    let heartbeatDue = lastEmittedAt.map { now.timeIntervalSince($0) >= Self.heartbeat } ?? false
+    guard changed || heartbeatDue else { return false }
+    lastPlanClass = policy.planClass
+    lastSearchRoute = policy.searchRoute
+    lastReason = policy.reason
+    lastEmittedAt = now
+    return true
   }
 }

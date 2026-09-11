@@ -4,6 +4,11 @@ import XCTest
 @testable import Omi_Computer
 
 final class ScreenEmbeddingPolicyTests: XCTestCase {
+  override func setUp() {
+    super.setUp()
+    ScreenEmbeddingRouteRecorder.shared.resetForTesting()
+  }
+
   func testEntitlementAndEngineMatrix() {
     let plans: [SubscriptionPlanType?] = [
       nil, .unknown("future"), .basic, .plus, .unlimited, .unlimitedV2, .pro, .operator, .architect,
@@ -70,6 +75,45 @@ final class ScreenEmbeddingPolicyTests: XCTestCase {
     }
   }
 
+  func testRouteTelemetryEmitsOncePerDecisionThenAgainOnPlanChange() {
+    let diagnostics = DesktopDiagnosticsManager.shared
+    diagnostics.resetForTests()
+    let free = ScreenEmbeddingPolicy(
+      plan: .basic, status: .active, localRoute: .engine(HashEmbeddingEngine()), killSwitches: .enabled)
+    for _ in 0..<100 { free.recordRoute() }
+    let freeEvents = diagnostics.currentSnapshotsForSentry().filter {
+      $0["route_event"] as? String == "screen_embedding_route"
+    }
+    XCTAssertEqual(freeEvents.count, 1)
+    let paid = ScreenEmbeddingPolicy(
+      plan: .operator, status: .active, localRoute: .engine(HashEmbeddingEngine()), killSwitches: .enabled)
+    paid.recordRoute()
+    let events = diagnostics.currentSnapshotsForSentry().filter {
+      $0["route_event"] as? String == "screen_embedding_route"
+    }
+    XCTAssertEqual(events.count, 2)
+    XCTAssertEqual(events.last?["plan_class"] as? String, "paid")
+  }
+
+  func testRouteTelemetryHeartbeatReemitsTheSameDecisionAfterAnHour() {
+    let diagnostics = DesktopDiagnosticsManager.shared
+    diagnostics.resetForTests()
+    let box = DateBox(Date(timeIntervalSince1970: 1_800_000_000))
+    ScreenEmbeddingRouteRecorder.shared.resetForTesting { box.now }
+    let decision = ScreenEmbeddingPolicy(
+      plan: .basic, status: .active, localRoute: .engine(HashEmbeddingEngine()), killSwitches: .enabled)
+    decision.recordRoute()
+    decision.recordRoute()
+    XCTAssertEqual(
+      diagnostics.currentSnapshotsForSentry().filter { $0["route_event"] as? String == "screen_embedding_route" }
+        .count, 1)
+    box.now.addTimeInterval(ScreenEmbeddingRouteRecorder.heartbeat)
+    decision.recordRoute()
+    XCTAssertEqual(
+      diagnostics.currentSnapshotsForSentry().filter { $0["route_event"] as? String == "screen_embedding_route" }
+        .count, 2)
+  }
+
   func testCachedEntitlementAndDefaultLadder() throws {
     let name = "screen-embedding-policy-\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
@@ -104,4 +148,9 @@ final class ScreenEmbeddingPolicyTests: XCTestCase {
         environment: ["OMI_LOCAL_EMBEDDINGS": "1"], defaults: defaults, isNonProduction: false
       ).isEnabled)
   }
+}
+
+private final class DateBox: @unchecked Sendable {
+  var now: Date
+  init(_ now: Date) { self.now = now }
 }
