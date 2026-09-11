@@ -806,7 +806,10 @@ async def tool_cancel_wro(request: Request):
         if result is None:
             return ChatToolResponse(error=f"Failed to cancel WRO: no response from ShipBob")
         if isinstance(result, dict) and ("error" in result or "status_code" in result):
-            detail = result.get("error") or f"HTTP {result.get('status_code')}"
+            detail = result.get("error")
+            if not detail:
+                status = result.get("status_code")
+                detail = f"HTTP {status}" if status is not None else "ShipBob request failed"
             return ChatToolResponse(error=f"Failed to cancel WRO: {detail}")
 
         return ChatToolResponse(result=f"**WRO #{wro_id} has been cancelled.**")
