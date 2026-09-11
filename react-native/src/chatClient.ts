@@ -94,9 +94,14 @@ export function chatComposerIsResting(
   chatBusy: boolean,
   olderAvailable: boolean,
   chatError: string | null,
+  historySettled: boolean,
 ): boolean {
   return (
-    messageCount === 0 && !chatBusy && !olderAvailable && chatError === null
+    historySettled &&
+    messageCount === 0 &&
+    !chatBusy &&
+    !olderAvailable &&
+    chatError === null
   );
 }
 

@@ -126,6 +126,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [olderChatCursor, setOlderChatCursor] = useState<string | null>(null);
   const [hasOlderChat, setHasOlderChat] = useState(false);
   const [loadingOlderChat, setLoadingOlderChat] = useState(false);
+  const [chatHistorySettled, setChatHistorySettled] = useState(false);
   const [chatBusy, setChatBusy] = useState(false);
   const [activeGenerationId, setActiveGenerationId] = useState<string | null>(
     null,
@@ -238,6 +239,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     setHasOlderChat(false);
     setChatBusy(false);
     setLoadingOlderChat(false);
+    setChatHistorySettled(false);
     setActiveGenerationId(null);
     stableChatMessageIds.clear();
     animatedChatMessageIds.clear();
@@ -285,6 +287,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       setHasOlderChat(false);
       setChatBusy(false);
       setLoadingOlderChat(false);
+      setChatHistorySettled(false);
       setActiveGenerationId(null);
       stableChatMessageIds.clear();
       animatedChatMessageIds.clear();
@@ -294,8 +297,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     }
     const backend = omiBackend;
     if (backend === undefined || backend === null) {
+      setChatHistorySettled(true);
       return () => undefined;
     }
+    setChatHistorySettled(false);
     // Capture the session this load belongs to. send() bumps mutation so an
     // in-flight setMessages(page) cannot wipe optimistic rows — but that same
     // bump must not discard the history page (cursor + prior messages). Always
@@ -315,6 +320,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         setOlderChatCursor(page.olderCursor);
         setHasOlderChat(page.hasOlder);
         setChatError(null);
+        setChatHistorySettled(true);
       })
       .catch(error => {
         if (
@@ -327,6 +333,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           if (chatWriteDoorUnavailable(error)) {
             setChatWriteDoorClosed(true);
           }
+          setChatHistorySettled(true);
           // A 401/unconfigured history load can mean the cloud session died;
           // re-probe it instead of keeping a ready shell on dead credentials.
           if (nativeSessionRequired && chatSessionLost(error)) {
@@ -795,6 +802,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     chatBusy,
     hasOlderChat,
     chatError,
+    chatHistorySettled,
   );
 
   const composer = (
@@ -1643,6 +1651,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                         <View style={styles.currents}>
                           <Text style={styles.sectionLabel}>CURRENTS</Text>
                           <View style={styles.transcript}>
+                            {!chatHistorySettled && messages.length === 0 ? (
+                              <Text style={styles.empty}>Loading chat…</Text>
+                            ) : null}
                             {olderChatAvailable && (
                               <FocusPressable
                                 accessibilityLabel="Load older messages"

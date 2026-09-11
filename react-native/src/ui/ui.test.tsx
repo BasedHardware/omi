@@ -846,6 +846,8 @@ test('coverage copy wins over a complete Home search miss', () => {
     'utf8',
   );
   expect(orchestrator).toContain('homeSearchEmptyTitle');
+  expect(orchestrator).toContain('chatHistorySettled');
+  expect(orchestrator).toContain('Loading chat…');
   expect(orchestrator).toContain('savedDataEmptyTitle(');
   expect(orchestrator).toContain('homeSearchItems(');
   expect(orchestrator).toContain('conversationRecapTitle(');
