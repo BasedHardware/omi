@@ -288,6 +288,53 @@ test('keeps chat history attachments instead of dropping file names', async () =
   ]);
 });
 
+test('refuses empty attachment ids instead of completing history', async () => {
+  const human = {
+    id: 'human-att-empty',
+    text: 'saved prompt',
+    sender: 'human' as const,
+    createdAt: 100,
+    generationOutcome: null,
+  };
+  const backendFor = (body: string): OmiBackend => ({
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 200,
+      body,
+    }),
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  });
+
+  await expect(
+    loadChatHistory(
+      backendFor(
+        JSON.stringify({
+          messages: [
+            wireMessage(human),
+            {
+              ...wireMessage(human),
+              id: 'human-att-blank',
+              text: 'has a blank attachment id',
+              attachments: [
+                {
+                  id: '',
+                  displayName: 'notes.txt',
+                  mediaType: 'text/plain',
+                  sizeBytes: 12,
+                  contentReference: null,
+                },
+              ],
+            },
+          ],
+          page: {olderCursor: null, hasOlder: false},
+          capabilities,
+        }),
+      ),
+    ),
+  ).rejects.toThrow('malformed');
+});
+
 test('loads named chat session history without mixing the main session', async () => {
   const requests: NativeHttpRequest[] = [];
   const backend = {
