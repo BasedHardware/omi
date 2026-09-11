@@ -1,6 +1,7 @@
 import AppKit
 import CryptoKit
 import Foundation
+@preconcurrency import GRDB
 import Network
 import OmiSupport
 import OmiTheme
@@ -1430,13 +1431,18 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "local_embedding_benchmark",
-      summary: "Run synthetic local hybrid retrieval metrics (recall@10 / nDCG@10) and write JSON",
-      params: ["output"],
+      summary: "Run local hybrid retrieval metrics (recall@10 / nDCG@10) and write JSON",
+      params: ["output", "fixture", "db"],
       category: "debug",
       surfaces: ["app"],
       safety: "local_debug",
-      sideEffects: ["writes a JSON report under Application Support; uses an in-memory synthetic DB"],
-      examples: ["./scripts/omi-ctl action local_embedding_benchmark"]
+      sideEffects: [
+        "writes a JSON report under Application Support; synthetic uses an in-memory DB; real copies a DB first"
+      ],
+      examples: [
+        "./scripts/omi-ctl action local_embedding_benchmark",
+        "./scripts/omi-ctl action local_embedding_benchmark fixture=real",
+      ]
     ) { params in
       guard AppBuild.isNonProduction else {
         return ["error": "local_embedding_benchmark is disabled on production bundles"]
@@ -1451,12 +1457,36 @@ final class DesktopAutomationActionRegistry {
           "error": "local_engine_unavailable",
         ]
       }
+      let fixture = params["fixture"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "synthetic"
       let report: LocalEmbeddingBenchmark.Report
       do {
-        report = try await LocalEmbeddingBenchmark.runSynthetic(engine: engine, runtime: runtime)
+        if fixture == "real" {
+          let scratch = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+          try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+          defer { try? FileManager.default.removeItem(at: scratch) }
+          let source: URL
+          if let raw = params["db"]?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+            source = URL(fileURLWithPath: raw)
+          } else if let discovered = LocalEmbeddingBenchmark.discoverBetaDatabase() {
+            source = discovered
+          } else {
+            return [
+              "kind": LocalEmbeddingBenchmark.reportKind,
+              "fixture": "real",
+              "error": "real_db_unavailable",
+            ]
+          }
+          let copied = try LocalEmbeddingBenchmark.copyDatabase(from: source, to: scratch)
+          let pool = try DatabasePool(path: copied.path)
+          report = try await LocalEmbeddingBenchmark.runReal(
+            pool: pool, runtime: runtime, engine: engine)
+        } else {
+          report = try await LocalEmbeddingBenchmark.runSynthetic(engine: engine, runtime: runtime)
+        }
       } catch {
         return [
           "kind": LocalEmbeddingBenchmark.reportKind,
+          "fixture": fixture == "real" ? "real" : "synthetic",
           "error": "benchmark_failed",
         ]
       }
@@ -1477,6 +1507,8 @@ final class DesktopAutomationActionRegistry {
         "kind": report.kind,
         "fixture": report.fixture,
         "metric_count": "\(report.metrics.count)",
+        "sampled_rows": "\(report.sampledRows)",
+        "gemini_embedded_rows": "\(report.geminiEmbeddedRows)",
       ]
     }
 
