@@ -52,3 +52,34 @@ jobs:
 
       - name: Run tests
         run: python -m pytest -q
+
+  # PR-time smoke test on the built wheel: catches missing/over-pinned runtime
+  # dependencies that editable/dev installs hide (see omi-cli 0.2.3 incident).
+  install-smoke:
+    name: Install smoke / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+          - os: windows-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: sdks/python-cli
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: sdks/python-cli/pyproject.toml
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Clean-install smoke test (wheel only)
+        run: bash verify-clean-install.sh dist

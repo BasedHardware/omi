@@ -86,6 +86,14 @@ jobs:
       - name: Check distribution metadata
         run: python -m twine check dist/*
 
+      # Release-blocking install smoke: installs the built wheel into a clean
+      # venv and runs the console script. Guards against the omi-cli 0.2.3
+      # incident, where a wheel missing `click` from its declared requirements
+      # shipped to PyPI (editable/dev installs and `twine check` both mask
+      # that class of breakage).
+      - name: Clean-install smoke test (wheel only)
+        run: bash verify-clean-install.sh dist
+
       - name: Upload dist artifact
         uses: actions/upload-artifact@v7
         with:
