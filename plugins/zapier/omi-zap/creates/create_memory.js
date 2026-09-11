@@ -1,9 +1,12 @@
-const body = async (z, bundle) => {
-  {
-    {
-      bundle.inputData.source;
-    }
-  }
+// Body field names must match ZapierActionCreateConversation
+// (plugins/zapier/models.py) — that is the contract the POST lands on.
+const body = {
+  text: '{{bundle.inputData.text}}',
+  source: '{{bundle.inputData.source}}',
+  language: '{{bundle.inputData.language}}',
+  started_at: '{{bundle.inputData.started_at}}',
+  finished_at: '{{bundle.inputData.finished_at}}',
+  geolocation: '{{bundle.inputData.geolocation}}',
 };
 
 module.exports = {
