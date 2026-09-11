@@ -84,6 +84,15 @@ overlay:
       env:
         MEMORY_ENABLED:
           value: 'on'
+        CONVERSATION_NOTES_V2_ENABLED:
+          value: 'true'
+          category: rollout
+        CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+          value: 'false'
+          category: rollout
+        CONVERSATION_OCR_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
     config_map:
       name: prod-omi-backend-config
       entries:
@@ -112,7 +121,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: modulate-velma-2,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -393,6 +402,9 @@ overlay:
         env:
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'
+          DAILY_SUMMARY_SELECTION_MODE:
+            value: indexed
+            category: rollout
           PINECONE_INDEX_NAME:
             value: memories-backend
       daily-memory-sweep-job:

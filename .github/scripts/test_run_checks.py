@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import os
 import re
 import shutil
@@ -293,6 +294,196 @@ class ManifestContractTests(unittest.TestCase):
 
 
 class RunnerBehaviorTests(unittest.TestCase):
+    def _prepare_cli_fixture(
+        self,
+        root: Path,
+        checks: list[dict[str, object]],
+        *,
+        changed_files: tuple[str, ...] = ("backend/example.py",),
+    ) -> tuple[Path, Path]:
+        """Create a tiny committed repo that exercises the real runner CLI."""
+        scripts = root / "checks"
+        scripts.mkdir(parents=True)
+        runs_file = root / "runs.txt"
+        manifest_lines = ["checks:"]
+        for spec in checks:
+            check_id = str(spec["id"])
+            script = scripts / f"{check_id}.py"
+            exit_code = int(spec.get("exit_code", 0))
+            script.write_text(
+                "from pathlib import Path\n"
+                f"Path({json.dumps(str(runs_file))}).open('a', encoding='utf-8').write({json.dumps(check_id + chr(10))})\n"
+                f"raise SystemExit({exit_code})\n",
+                encoding="utf-8",
+            )
+            triggers = spec.get("triggers", ("backend/**",))
+            manifest_lines.extend(
+                [
+                    f"  - id: {check_id}",
+                    f"    command: [\"python3\", \"checks/{check_id}.py\"]",
+                    f"    triggers: {json.dumps(list(triggers))}",
+                    "    lanes: [\"local\", \"ci\"]",
+                    f"    reason: {spec.get('reason', 'fixture check')}",
+                    f"    requires_pr_body: {'true' if spec.get('requires_pr_body', False) else 'false'}",
+                ]
+            )
+            if spec.get("platforms"):
+                manifest_lines.append(f"    platforms: {json.dumps(list(spec['platforms']))}")
+        manifest = root / ".github/checks-manifest.yaml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text("\n".join(manifest_lines) + "\n", encoding="utf-8")
+        changed = root / "changed-files.txt"
+        changed.write_text("".join(f"{path}\n" for path in changed_files), encoding="utf-8")
+
+        env = os.environ.copy()
+        for key in tuple(env):
+            if key.startswith("GIT_"):
+                del env[key]
+        subprocess.run(["git", "init", "-q", str(root)], check=True, env=env)
+        subprocess.run(["git", "-C", str(root), "add", "."], check=True, env=env)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "user.name=fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "-qm",
+                "fixture",
+            ],
+            check=True,
+            env=env,
+        )
+        return manifest, changed
+
+    def _run_cli(self, root: Path, manifest: Path, changed: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+        runner = REPO_ROOT / ".github/scripts/run_checks.py"
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        return subprocess.run(
+            [
+                sys.executable,
+                str(runner),
+                "--root",
+                str(root),
+                "--manifest",
+                str(manifest),
+                "--changed-files",
+                str(changed),
+                "--base",
+                "HEAD",
+                "--head",
+                "HEAD",
+                "--lane",
+                "ci",
+                "--platform",
+                "linux",
+                *extra,
+            ],
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def test_metadata_only_selects_body_checks_for_matching_path_and_platform(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, changed = self._prepare_cli_fixture(
+                root,
+                [
+                    {"id": "body-linux", "requires_pr_body": True, "platforms": ("linux",)},
+                    {"id": "source-linux"},
+                    {"id": "body-macos", "requires_pr_body": True, "platforms": ("macos",)},
+                    {
+                        "id": "body-unrelated",
+                        "requires_pr_body": True,
+                        "triggers": ("app/**",),
+                    },
+                ],
+            )
+            result = self._run_cli(root, manifest, changed, "--metadata-only", "--list")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("SELECTED body-linux", result.stdout)
+        self.assertNotIn("SELECTED source-linux", result.stdout)
+        self.assertNotIn("SELECTED body-macos", result.stdout)
+        self.assertNotIn("SELECTED body-unrelated", result.stdout)
+
+    def test_metadata_only_runs_all_failures_and_returns_nonzero(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, changed = self._prepare_cli_fixture(
+                root,
+                [
+                    {"id": "body-first", "requires_pr_body": True, "exit_code": 3},
+                    {"id": "body-second", "requires_pr_body": True, "exit_code": 4},
+                ],
+            )
+            result = self._run_cli(root, manifest, changed, "--metadata-only")
+            runs = (root / "runs.txt").read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(runs, ["body-first", "body-second"])
+        self.assertIn("<== FAIL body-first", result.stdout)
+        self.assertIn("<== FAIL body-second", result.stdout)
+        self.assertIn("Manifest checks failed: body-first, body-second", result.stderr)
+
+    def test_metadata_only_success_returns_zero_without_running_source_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, changed = self._prepare_cli_fixture(
+                root,
+                [
+                    {"id": "body-pass", "requires_pr_body": True},
+                    {"id": "source-fails", "exit_code": 9},
+                ],
+            )
+            result = self._run_cli(root, manifest, changed, "--metadata-only")
+            runs = (root / "runs.txt").read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(runs, ["body-pass"])
+        self.assertIn("Manifest checks passed: 1 check(s).", result.stdout)
+
+    def test_default_mode_runs_source_checks_and_remains_fail_fast(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, changed = self._prepare_cli_fixture(
+                root,
+                [
+                    {"id": "body-pass", "requires_pr_body": True},
+                    {"id": "source-fails", "exit_code": 7},
+                    {"id": "source-after-failure", "exit_code": 8},
+                ],
+            )
+            result = self._run_cli(root, manifest, changed)
+            runs = (root / "runs.txt").read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(runs, ["body-pass", "source-fails"])
+        self.assertIn("Manifest checks failed: source-fails", result.stderr)
+        self.assertNotIn("==> source-after-failure", result.stdout)
+
+    def test_metadata_only_rejects_conflicting_selection_flags(self) -> None:
+        runner = REPO_ROOT / ".github/scripts/run_checks.py"
+        for flags in (("--skip-pr-body-checks",), ("--check-id", "source-check")):
+            with self.subTest(flags=flags):
+                result = subprocess.run(
+                    [sys.executable, str(runner), "--lane", "ci", "--metadata-only", *flags],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("--metadata-only cannot combine", result.stderr)
+
     def test_run_git_decodes_unicode_checkout_path_as_utf8(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "路径 checkout"
@@ -521,6 +712,7 @@ esac
     def test_shared_windows_entrypoints_route_their_behavioral_contracts(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         expected_by_path = {
+            ".github/workflows/gcp_storage_lifecycle.yml": {"pr-preflight-contract-tests"},
             "Makefile": {"dev-harness-unit-tests", "setup-pre-push-prerequisites"},
             "scripts/dev-harness/_resolve_python.sh": {
                 "dev-harness-unit-tests",

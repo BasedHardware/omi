@@ -5,6 +5,7 @@ import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
+import 'package:omi/services/capture/transcription_allowance_cache.dart';
 import 'package:omi/utils/logger.dart';
 
 class UsageProvider with ChangeNotifier {
@@ -106,12 +107,14 @@ class UsageProvider with ChangeNotifier {
   @visibleForTesting
   void debugSetSubscription(UserSubscriptionResponse? value) {
     _subscription = value;
+    TranscriptionAllowanceCache.replace(value?.transcriptionAllowance);
     notifyListeners();
   }
 
   /// Wipes user-scoped state on logout so the next account doesn't inherit
   /// the previous account's subscription/usage (e.g. a stale Pro badge).
   void clearUserData() {
+    TranscriptionAllowanceCache.clear();
     _subscription = null;
     _todayUsage = null;
     _monthlyUsage = null;
@@ -152,8 +155,9 @@ class UsageProvider with ChangeNotifier {
       final subscription = await getUserSubscription();
       if (generation != _sessionGeneration) return; // Session cleared mid-flight; discard stale response.
       _subscription = subscription;
-      if (_subscription != null) {
-        PlatformManager.instance.analytics.setSubscriptionTier(_subscription!.subscription.plan.name);
+      if (subscription != null) {
+        TranscriptionAllowanceCache.replace(subscription.transcriptionAllowance);
+        PlatformManager.instance.analytics.setSubscriptionTier(subscription.subscription.plan.name);
       }
     } catch (e) {
       if (generation != _sessionGeneration) return;

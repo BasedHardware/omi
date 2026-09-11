@@ -60,16 +60,22 @@ struct RealtimeStreamingJournalProjection: Equatable {
   let modelsUsed: [String]
   /// Accepted screen observation for this turn, journaled on the user row (see MessageMetadata).
   let screenContext: String?
+  /// Native OCR evidence is journaled beside (and independently from) the
+  /// model's optional screen report. It is frozen into the existing streaming
+  /// persistence obligation so late OCR cannot drift to another turn.
+  let evidence: [ConversationEvidence]
 
   init(
     ownerID: String, continuityKey: String, admissionSurface: AgentSurfaceReference,
-    modelsUsed: [String] = [], screenContext: String? = nil
+    modelsUsed: [String] = [], screenContext: String? = nil,
+    evidence: [ConversationEvidence] = []
   ) {
     self.ownerID = ownerID
     self.continuityKey = continuityKey
     self.admissionSurface = admissionSurface
     self.modelsUsed = modelsUsed
     self.screenContext = screenContext
+    self.evidence = evidence
     userTurnID = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user")
     assistantTurnID = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "assistant")
   }
@@ -81,8 +87,8 @@ struct RealtimeStreamingJournalProjection: Equatable {
       text: text,
       sender: .user
     )
-    if let screenContext, !screenContext.isEmpty {
-      message.metadata = MessageMetadata(screenContext: screenContext)
+    if !evidence.isEmpty || !(screenContext?.isEmpty ?? true) {
+      message.metadata = MessageMetadata(screenContext: screenContext, evidence: evidence)
     }
     return message
   }
@@ -129,6 +135,10 @@ final class RealtimeStreamingJournalWriteLedger {
 
   func contains(continuityKey: String) -> Bool {
     entries[continuityKey] != nil
+  }
+
+  func projection(for continuityKey: String) -> RealtimeStreamingJournalProjection? {
+    entries[continuityKey]?.projection
   }
 
   @discardableResult
@@ -411,6 +421,11 @@ struct InterruptedTurnPayload: Equatable {
   /// barge-in after a fully spoken reply must journal that reply as delivered,
   /// not as a cut-off failure the model later tries to re-deliver.
   let answerDelivered: Bool
+  /// Whether the provider's full answer text had finished when the turn was
+  /// interrupted. A barge-in after response finish cut only spoken delivery:
+  /// the journaled reply is complete, and later turns must not re-answer that
+  /// thread as though the model never gave it.
+  let answerTextCompleted: Bool
 
   init(
     ownerID: String,
@@ -418,7 +433,8 @@ struct InterruptedTurnPayload: Equatable {
     assistantText: String,
     idempotencyKey: String,
     acceptedSpawnOwnerID: String? = nil,
-    answerDelivered: Bool = false
+    answerDelivered: Bool = false,
+    answerTextCompleted: Bool = false
   ) {
     self.ownerID = ownerID
     self.userText = userText
@@ -426,6 +442,7 @@ struct InterruptedTurnPayload: Equatable {
     self.idempotencyKey = idempotencyKey
     self.acceptedSpawnOwnerID = acceptedSpawnOwnerID
     self.answerDelivered = answerDelivered
+    self.answerTextCompleted = answerTextCompleted
   }
 
   /// User-visible chat text for a PTT-barged reply: keep streamed partial text only.

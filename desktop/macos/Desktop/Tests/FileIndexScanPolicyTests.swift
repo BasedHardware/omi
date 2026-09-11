@@ -52,6 +52,13 @@ final class FileIndexScanPolicyTests: XCTestCase {
         "/tmp/omi-test-home/Applications",
       ]
     )
+
+    let plan = policy.automaticScanPlan(
+      homeURL: home, applicationsURL: applications, fullDiskAccessGranted: false)
+    XCTAssertEqual(
+      plan.retainedPrefixes,
+      ["~/Desktop", "~/Documents", "~/Downloads"],
+      "Rows under intentionally omitted roots must not look deleted after a partial scan")
   }
 
   func testAutomaticScanRootsWithFullDiskAccessMatchStandardRoots() {
@@ -63,6 +70,10 @@ final class FileIndexScanPolicyTests: XCTestCase {
       policy.automaticScanRoots(
         homeURL: home, applicationsURL: applications, fullDiskAccessGranted: true),
       policy.standardScanRoots(homeURL: home, applicationsURL: applications))
+    XCTAssertTrue(
+      policy.automaticScanPlan(
+        homeURL: home, applicationsURL: applications, fullDiskAccessGranted: true
+      ).retainedPrefixes.isEmpty)
   }
 
   func testSkipFoldersAreRejectedBeforeRecursiveDescent() {

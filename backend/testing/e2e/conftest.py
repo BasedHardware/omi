@@ -83,6 +83,11 @@ def _set_e2e_env():
     os.environ["TYPESENSE_HOST"] = "localhost"
     os.environ["TYPESENSE_HOST_PORT"] = "8108"
     os.environ["TYPESENSE_API_KEY"] = "fake-typesense-key"
+    # The hermetic harness runs no Typesense server: an enabled first-party
+    # conversation index writer would block ~5s per durable conversation write
+    # on refused localhost:8108 retries and blow the e2e timing budget. The
+    # projection is covered by tests/unit/test_conversation_typesense_index.py.
+    os.environ["TYPESENSE_CONVERSATION_INDEX_WRITES"] = "0"
     os.environ["BUCKET_SPEECH_PROFILES"] = "speech-profiles"
     os.environ["BUCKET_POSTPROCESSING"] = "postprocessing"
     os.environ["BUCKET_PRIVATE_CLOUD_SYNC"] = "omi-private-cloud-sync"

@@ -188,8 +188,6 @@ env:
         key: GROQ_API_KEY
   - name: HOSTED_VAD_API_URL
     value: "http://vad.omi.me:80/v1/vad"
-  - name: HOSTED_SPEECH_PROFILE_API_URL
-    value: "http://vad.omi.me:80/v1/speaker-identification"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://diarizer.omi.me:80"
   - name: PINECONE_API_KEY
@@ -339,7 +337,7 @@ env:
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
+    value: "modulate-velma-2,dg-nova-3,parakeet"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS

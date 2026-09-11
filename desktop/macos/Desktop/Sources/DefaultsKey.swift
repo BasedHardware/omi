@@ -98,6 +98,9 @@ enum DefaultsKey: String {
   /// denied/notDetermined distinction for AX, so this is the only signal that keeps
   /// the sidebar from pulsing a deliberate skip as "denied".
   case onboardingAccessibilitySkipped = "onboardingAccessibilitySkipped"
+  /// System-audio process taps have no preflight API. Preserve an onboarding
+  /// skip separately so later microphone sessions do not test the tap anyway.
+  case onboardingSystemAudioSkipped = "onboardingSystemAudioSkipped"
   case screenAnalysisEnabled = "screenAnalysisEnabled"
   case ratingPromptQuestionCount = "ratingPromptQuestionCount"
   case ratingPromptSubmittedRating = "ratingPromptSubmittedRating"
@@ -125,6 +128,9 @@ enum DefaultsKey: String {
   /// One-shot marker: the PTT-only microphone choice has been folded into the shared
   /// `preferredMicrophoneDeviceUID`, so it is never carried over twice.
   case shortcutPTTMicrophoneMergedIntoPreferred = "shortcut_pttMicrophoneMergedIntoPreferred"
+  /// Silent Type: a dictation still types into the focused app, but the turn is
+  /// never written to the chat transcript. Absent means off.
+  case shortcutSilentTypeEnabled = "shortcut_silentTypeEnabled"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case floatingBarCachedPlan = "floatingBar_cachedPlan"
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"

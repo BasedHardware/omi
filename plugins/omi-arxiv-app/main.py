@@ -24,7 +24,8 @@ from pydantic import BaseModel
 ARXIV_API_URL = "https://export.arxiv.org/api/query"
 REQUEST_TIMEOUT_SECONDS = 12
 MAX_LIMIT = 10
-MIN_REQUEST_INTERVAL_SECONDS = 0.35
+# arXiv API Terms of Use require clients to wait at least three seconds between requests.
+MIN_REQUEST_INTERVAL_SECONDS = 3.0
 USER_AGENT = "omi-arxiv-app/1.0 (https://omi.me)"
 ATOM_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
 

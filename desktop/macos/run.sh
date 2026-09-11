@@ -16,6 +16,11 @@ omi_configure_homebrew_path
 # ─── Arguments ─────────────────────────────────────────────────────────
 YOLO_MODE=0
 FORCE_FULL_BUNDLE="${OMI_FORCE_FULL_BUNDLE:-0}"
+# Who asked for the full bundle. `--full` / OMI_FORCE_FULL_BUNDLE=1 is the
+# caller's habit and is refused on a reusable E2E pool slot; OMI_FORCE_REWIND_SEED
+# forces the install/seed path from inside the launcher and stays allowed.
+FULL_BUNDLE_EXPLICIT=0
+[ "$FORCE_FULL_BUNDLE" = "1" ] && FULL_BUNDLE_EXPLICIT=1
 # Reseeding replaces an existing named profile after preserving it. It must run
 # through the install/seed path; a fast executable patch intentionally skips it.
 if [ "${OMI_FORCE_REWIND_SEED:-0}" = "1" ]; then
@@ -31,6 +36,7 @@ for arg in "$@"; do
             ;;
         --full)
             FORCE_FULL_BUNDLE=1
+            FULL_BUNDLE_EXPLICIT=1
             ;;
         --fast-only)
             FAST_ONLY=1
@@ -79,6 +85,7 @@ Options (via environment variables):
   OMI_JIT_QA_TARGET="..."   omi-jit-qa only: local-dev-gcp, deployed-dev, or cloud-qa atomic endpoint tuple
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
   OMI_FORCE_FULL_BUNDLE=1  Rebuild the complete app bundle on this launch
+                          (E2E pool slots: refused while the fast bundle is reusable — use --fast-only)
   OMI_SCAN_STALE_BUNDLES=1  Remove stale same-named app bundles under $HOME (recovery only)
   OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
   OMI_DISABLE_LOCAL_AUTOMATION=1  Run a dev build "clean" with the bridge off
@@ -236,6 +243,15 @@ trap 'omi_run_sh_release_build_lock' EXIT INT TERM
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
 source "$SCRIPT_DIR/scripts/app-config.sh"
 derive_omi_app_config "${OMI_APP_NAME:-Omi Dev}" || exit 1
+# A pre-authorized E2E pool slot is machine-global and shared by every worktree;
+# building one without holding its lease clobbers another lane's app mid-test.
+# Non-pool names pass through untouched. See docs/e2e-bundle-pool.md.
+# verify passes for the holder and prints the pool slot number on stdout
+# (empty for a non-pool named bundle); the slot number drives the pool launch
+# policy below — the fail-closed guards key on it.
+if [ "$IS_NAMED_BUNDLE" = true ]; then
+    E2E_POOL_SLOT="$("$SCRIPT_DIR/scripts/omi-e2e-pool" verify "$APP_SLUG")" || exit 1
+fi
 LOCAL_PROFILE=false
 [ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ] && LOCAL_PROFILE=true
 
@@ -696,6 +712,20 @@ reset_local_profile_keychain_state() {
         # ACL. The reset helper rejects Prod, Beta, Omi Dev, and identity mismatch.
         ./scripts/omi-local-profile-keychain-reset.sh "$BUNDLE_ID" "$APP_PATH"
     fi
+}
+
+# Pool launch policy, as a pure decision so tests/test-omi-e2e-pool.sh can
+# drive it directly. An explicitly requested full rebuild of a LEASED E2E pool
+# slot is agent habit, not necessity: it is exactly the launch that, from a
+# background shell, cannot seed auth and reads as a cold start. Refuse it when
+# the fast bundle is still reusable; allow it whenever the fingerprint path
+# already decided a full rebuild is required, when the launcher itself forced
+# full (rewind reseed: $3 = 0), and for every non-pool named bundle.
+omi_pool_refuses_explicit_full() {
+    # $1 = E2E pool slot number ("" when the named bundle is not a pool slot)
+    # $2 = underlying fast-bundle eligibility reason
+    # $3 = 1 when --full / OMI_FORCE_FULL_BUNDLE requested the rebuild
+    [ -n "$1" ] && [ "$3" = "1" ] && [ "$2" = "reusable" ]
 }
 
 fail_fast_only() {
@@ -1240,6 +1270,15 @@ resolve_signing_identity
 FAST_BUNDLE_FINGERPRINT="$(fast_bundle_fingerprint)"
 FAST_BUNDLE_REASON="$(omi_fast_bundle_eligibility_reason "$APP_PATH" "$FAST_BUNDLE_STAMP" "$FAST_BUNDLE_FINGERPRINT")"
 if [ "$FORCE_FULL_BUNDLE" = "1" ]; then
+    if omi_pool_refuses_explicit_full "${E2E_POOL_SLOT:-}" "$FAST_BUNDLE_REASON" "$FULL_BUNDLE_EXPLICIT"; then
+        {
+            echo "ERROR: refusing an explicit --full rebuild of leased E2E pool slot ${E2E_POOL_SLOT} ($APP_NAME)."
+            echo "  The installed bundle is fast-reusable; pool launches prefer ./run.sh --fast-only."
+            echo "  A full rebuild runs on its own whenever the fast bundle is NOT reusable"
+            echo "  (first build, changed inputs, incomplete runtime) — you never need --full for that."
+        } >&2
+        exit 2
+    fi
     FAST_BUNDLE_REASON="full_requested"
     substep "Full bundle requested (--full or OMI_FORCE_FULL_BUNDLE=1)"
 elif [ "$FAST_BUNDLE_REASON" != "reusable" ]; then
@@ -1573,7 +1612,11 @@ omi_seed_dumped_auth_session() {
     # Tokens are seeded into UserDefaults; the app migrates them into
     # Keychain on launch with the correct teamid: partition (no prompt).
     if ! ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE" "$APP_PATH"; then
-        echo "Warning: could not seed auth into $BUNDLE_ID. Launching cold."
+        if [ -n "${E2E_POOL_SLOT:-}" ]; then
+            echo "Warning: could not seed auth into $BUNDLE_ID; keeping the existing session of E2E pool slot $E2E_POOL_SLOT."
+        else
+            echo "Warning: could not seed auth into $BUNDLE_ID. Launching cold."
+        fi
     fi
 }
 
@@ -1592,12 +1635,27 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
             echo "Note: $AUTH_SOURCE had no usable session; seeded auth from com.omi.computer-macos instead."
             omi_seed_dumped_auth_session
         else
-            echo "Warning: could not seed auth from $AUTH_SOURCE. Launching cold."
+            if [ -n "${E2E_POOL_SLOT:-}" ]; then
+                # An empty dump from a background shell means THIS session
+                # cannot read the source keychain — not that the slot has no
+                # session. Keep the slot's own persisted session; never
+                # overwrite or clear it, and never describe this as a cold
+                # launch (that wording is what sent agents at the Keychain).
+                echo "Note: cannot seed auth from $AUTH_SOURCE in this session;"
+                echo "keeping the existing session of E2E pool slot $E2E_POOL_SLOT (it persists across rebuilds)."
+                echo "Do NOT reset the slot's Keychain — a human signs in once instead (omi-e2e-pool setup)."
+            else
+                echo "Warning: could not seed auth from $AUTH_SOURCE. Launching cold."
+            fi
         fi
         rm -f "$AUTH_CACHE"
         AUTH_CACHE=""
     else
-        echo "Warning: could not create temporary auth cache. Launching cold."
+        if [ -n "${E2E_POOL_SLOT:-}" ]; then
+            echo "Note: could not create a temporary auth cache; keeping the existing session of E2E pool slot $E2E_POOL_SLOT."
+        else
+            echo "Warning: could not create temporary auth cache. Launching cold."
+        fi
     fi
 fi
 
@@ -1706,6 +1764,12 @@ build_launch_env_args() {
     fi
     if [ -n "${OMI_FORCE_CONTEXT_BUCKETS:-}" ]; then
         LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_CONTEXT_BUCKETS=$OMI_FORCE_CONTEXT_BUCKETS")
+    fi
+    if [ -n "${OMI_FORCE_BUCKET_CANDIDATES:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_BUCKET_CANDIDATES=$OMI_FORCE_BUCKET_CANDIDATES")
+    fi
+    if [ -n "${OMI_FORCE_BUCKET_WORKSTREAMS:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_BUCKET_WORKSTREAMS=$OMI_FORCE_BUCKET_WORKSTREAMS")
     fi
     if [ -n "${OMI_FORCE_MEETING_NOTE_SCREENSHOTS:-}" ]; then
         LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_MEETING_NOTE_SCREENSHOTS=$OMI_FORCE_MEETING_NOTE_SCREENSHOTS")

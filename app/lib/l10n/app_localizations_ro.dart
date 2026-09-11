@@ -1869,9 +1869,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get openSettings => 'Deschide setările';
 
   @override
-  String get wantDifferentName => 'Vrei să folosești alt nume?';
-
-  @override
   String get whatsYourName => 'Cum te cheamă?';
 
   @override
@@ -2051,7 +2048,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get memoryDeleted => 'Amintire ștearsă.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'O parte din istoricul amintirilor nu este disponibilă. Se afișează istoricul primit până acum.';
 
   @override
   String get undo => 'Anulează';
@@ -9961,10 +9959,33 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Profilul vocal al lui $name';
+  }
+
+  @override
+  String get play => 'Redă';
+
+  @override
+  String get redo => 'Înregistrează din nou';
+
+  @override
+  String get answerWithYourVoice => 'Răspunde cu vocea ta:';
+
+  @override
+  String get speechProfileTopicLocation => 'Unde locuiești?';
+
+  @override
+  String get speechProfileTopicWork => 'Cu ce te ocupi?';
+
+  @override
+  String get speechProfileTopicGoal => 'Care este obiectivul tău pe termen lung?';
+
+  @override
   String get transcriptionNoAudio => 'Transcrierea nu primește audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Atinge + pentru a începe înregistrarea';
 
   @override
   String get chatBlockTask => 'Sarcină';
@@ -10001,4 +10022,11 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Nu s-a putut încărca graful de cunoștințe';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Conversia vorbirii în text nu este disponibilă momentan. Verifică conexiunea la internet și setările de recunoaștere vocală ale dispozitivului, apoi încearcă din nou.';
+
+  @override
+  String get processingTakingLonger => 'Încă se procesează — durează mai mult decât de obicei.';
 }

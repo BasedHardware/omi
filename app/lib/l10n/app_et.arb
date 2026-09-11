@@ -3246,5 +3246,16 @@
     "chatBlockUnavailable": "Pole enam saadaval",
     "chatBlockRecommendedNextSteps": "Soovitatud järgmised sammud",
     "couldNotLoadMemories": "Mälestusi ei õnnestunud laadida",
-    "couldNotLoadKnowledgeGraph": "Teadmiste graafi ei õnnestunud laadida"
+    "couldNotLoadKnowledgeGraph": "Teadmiste graafi ei õnnestunud laadida",
+    "speechProfileOwnerTitle": "{name}: hääleprofiil",
+    "play": "Esita",
+    "redo": "Salvesta uuesti",
+    "answerWithYourVoice": "Vasta oma häälega:",
+    "speechProfileTopicLocation": "Kus sa elad?",
+    "speechProfileTopicWork": "Mis tööd sa teed?",
+    "speechProfileTopicGoal": "Mis on sinu pikaajaline eesmärk?",
+    "speechToTextUnavailableDesc": "Kõne tekstiks teisendamine pole praegu saadaval. Kontrolli internetiühendust ja seadme kõnetuvastuse seadeid ning proovi uuesti.",
+    "memoryHistoryPartial": "Osa mälestuste ajaloost pole saadaval. Kuvatakse seni saadud ajalugu.",
+    "tapPlusToStartRecording": "Salvestamise alustamiseks puuduta +",
+    "processingTakingLonger": "Ikka käimas — see võtab kauem aega kui tavaliselt."
 }

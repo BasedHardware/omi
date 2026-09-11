@@ -253,6 +253,12 @@ actor ProactiveLaneClient {
   static let defaultQuotaCooldownSeconds = 10 * 60
   static let minQuotaCooldownSeconds = 60
   static let maxQuotaCooldownSeconds = 60 * 60
+  /// Minimum completion budget accepted by the backend for the reasoning lane.
+  /// Reasoning models spend part of this cap on hidden tokens before producing
+  /// the strict JSON body. Keep every director call at this floor so a client
+  /// request cannot be truncated before the backend's compatible budget is
+  /// applied.
+  static let backendCompatibleReasoningMinimumCompletionTokens = 2400
   private let session: URLSession
   private let baseURL: () -> String
   private let authorization: () async throws -> String
@@ -475,6 +481,8 @@ actor ProactiveLaneClient {
         "image_url": ["url": "data:image/jpeg;base64,\(imageData.base64EncodedString())"],
       ])
     }
+    let effectiveMaxCompletionTokens = Self.effectiveMaxCompletionTokens(
+      operation: operation, requested: maxCompletionTokens)
     var body: [String: Any] = [
       "operation": operation,
       "messages": [["role": "user", "content": content]],
@@ -482,7 +490,7 @@ actor ProactiveLaneClient {
         "type": "json_schema",
         "json_schema": ["name": "desktop_proactivity", "strict": true, "schema": jsonSchema],
       ],
-      "max_completion_tokens": maxCompletionTokens,
+      "max_completion_tokens": effectiveMaxCompletionTokens,
     ]
     if let cacheKey { body["cache_key"] = cacheKey }
     let root = baseURL().hasSuffix("/") ? baseURL() : baseURL() + "/"
@@ -553,6 +561,11 @@ actor ProactiveLaneClient {
           failure: ProactiveLaneFailureClassification.classify(error)))
       throw error
     }
+  }
+
+  static func effectiveMaxCompletionTokens(operation: String, requested: Int) -> Int {
+    guard operation == ModelQoS.Proactivity.reasoningOperation else { return requested }
+    return max(requested, backendCompatibleReasoningMinimumCompletionTokens)
   }
 
   private func clearCooldownsIfOwnerChanged(_ owner: String?) {
@@ -795,6 +808,8 @@ enum ContextProactivityTelemetry {
       "attempt_rejected", "jit_trigger_authority_changed", "jit_paid_boundary_invalid",
       "jit_notification_budget", "jit_full_turn_budget", "jit_suppressed",
       "candidate_graduation", "notification_dropped", "jit_execution",
+      "http_error", "invalid_structured_output", "invalid_response", "decode",
+      "network", "quota_cooldown", "plan_gated",
     ])
     let allowedDecisions = Set(["insight", "task_candidate", "focus_nudge", "silence"])
     await MainActor.run {

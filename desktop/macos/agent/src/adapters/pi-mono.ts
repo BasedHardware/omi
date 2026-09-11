@@ -507,6 +507,15 @@ export class PiMonoAdapter implements HarnessAdapter {
   /** State for projecting gateway-owned public-web progress without waiting for
    * the terminal turn before forwarding model text. */
   private activePublicWebTurn: PublicWebTurnState | null = null;
+  /** Last character forwarded to the host as answer text this prompt, so an
+   *  iteration boundary can tell whether the two sides would render as one
+   *  run-on line. Null until this prompt has forwarded any answer text. */
+  private lastForwardedTextChar: string | null = null;
+  /** Set once the provider pauses on a tool mid-prompt. The next text delta
+   *  opens a new provider iteration; without a separator the host renders the
+   *  pre-tool sentence and the continuation joined together
+   *  ("…handle it.Capture the…"). */
+  private awaitingContinuationText = false;
   /** Served models observed on the in-flight prompt, deduplicated. Reported
    *  once per identity through the adapter event sink (`model_used`) so the
    *  Response Context popover can attribute the answer honestly. */
@@ -835,6 +844,8 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     this.eventHandler = onEvent;
     this.reportedPromptModels.clear();
+    this.lastForwardedTextChar = null;
+    this.awaitingContinuationText = false;
     this.toolExecutor = onToolCall;
     this.requiredAgentControlFailures.clear();
     this.requiredControlInputs.clear();
@@ -1294,7 +1305,12 @@ export class PiMonoAdapter implements HarnessAdapter {
             this.activePublicWebTurn.bufferedText += msgEvent.delta;
             this.emitPublicWebText(this.activePublicWebTurn);
           } else {
-            this.eventHandler?.({ type: "text_delta", text: msgEvent.delta });
+            if (this.awaitingContinuationText) {
+              this.awaitingContinuationText = false;
+              const gap = this.iterationGapDelta(msgEvent.delta);
+              if (gap) this.forwardAnswerDelta(gap);
+            }
+            this.forwardAnswerDelta(msgEvent.delta);
           }
         }
         break;
@@ -1340,6 +1356,60 @@ export class PiMonoAdapter implements HarnessAdapter {
         // Handled by turn_end
         break;
     }
+  }
+
+  /** Forward answer text to the host, remembering the last character so a
+   *  later iteration boundary can tell whether the two sides run together. */
+  private forwardAnswerDelta(delta: string): void {
+    const last = delta[delta.length - 1];
+    if (last !== undefined) this.lastForwardedTextChar = last;
+    this.eventHandler?.({ type: "text_delta", text: delta });
+  }
+
+  /** The separator to emit before a continuation's first text delta, empty
+   *  when either side already carries whitespace so the provider's own line
+   *  breaks are never doubled. Same rule the backend chat agent loop applies
+   *  between its own tool-loop iterations. */
+  private iterationGapDelta(nextDelta: string): string {
+    const previous = this.lastForwardedTextChar;
+    const next = nextDelta[0];
+    if (!previous || !next) return "";
+    // Whitespace of any kind (\t, \r, …) counts as an existing break — the
+    // provider's own separator must never be doubled by a blank paragraph.
+    const carriesBreak = (c: string) => /\s/.test(c);
+    return carriesBreak(previous) || carriesBreak(next) ? "" : "\n\n";
+  }
+
+  /** Terminal answer text for the prompt result: every text block of the
+   *  provider's final message, with an iteration separator where a tool block
+   *  splits two text runs that would otherwise join into one line. */
+  static terminalText(content: PiContentBlock[] | undefined): string {
+    if (!content) return "";
+    let text = "";
+    let separated = false;
+    for (const block of content) {
+      if (block.type === "text") {
+        const blockText = block.text || "";
+        if (blockText) {
+          // Same whitespace contract as iterationGapDelta: any whitespace
+          // character counts as an existing break.
+          const carriesBreak = (c: string) => /\s/.test(c);
+          if (
+            separated &&
+            text &&
+            !carriesBreak(text[text.length - 1]) &&
+            !carriesBreak(blockText[0])
+          ) {
+            text += "\n\n";
+          }
+          text += blockText;
+        }
+        separated = false;
+      } else {
+        separated = true;
+      }
+    }
+    return text;
   }
 
   private handleToolStart(event: PiRpcEvent): void {
@@ -1586,6 +1656,10 @@ export class PiMonoAdapter implements HarnessAdapter {
         this.rejectJitAttemptBudget(generation, pending);
         return;
       }
+      // The continuation's text opens a new provider iteration. If text was
+      // already forwarded this prompt, the two sides must not render as one
+      // run-on line — the next text delta carries the separator.
+      this.awaitingContinuationText = true;
       process.stderr.write(
         `[pi-mono] intermediate turn_end (${stopReason}) — keeping prompt alive\n`
       );
@@ -1613,14 +1687,11 @@ export class PiMonoAdapter implements HarnessAdapter {
     const publicWebTurn = this.activePublicWebTurn;
     this.activePublicWebTurn = null;
 
-    // Extract text from content blocks
-    let text = "";
-    if (message?.content) {
-      text = message.content
-        .filter((b) => b.type === "text")
-        .map((b) => b.text || "")
-        .join("");
-    }
+    // Extract text from content blocks. A provider that keeps its whole loop
+    // in one message puts tool blocks between the text blocks; joining only
+    // the text runs the iterations together ("…handle it.Capture the…"), so
+    // the separator mirrors what the streamed deltas carry.
+    let text = PiMonoAdapter.terminalText(message?.content);
     if (publicWebTurn) {
       text = publicWebTurn.bufferedText || text;
       // A terminal public-web turn proves the gateway completed the required

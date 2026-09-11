@@ -3342,5 +3342,16 @@
     "chatBlockUnavailable": "Már nem érhető el",
     "chatBlockRecommendedNextSteps": "Javasolt következő lépések",
     "couldNotLoadMemories": "Nem sikerült betölteni az emlékeket",
-    "couldNotLoadKnowledgeGraph": "Nem sikerült betölteni a tudásgráfot"
+    "couldNotLoadKnowledgeGraph": "Nem sikerült betölteni a tudásgráfot",
+    "speechProfileOwnerTitle": "{name} hangprofilja",
+    "play": "Lejátszás",
+    "redo": "Újrafelvétel",
+    "answerWithYourVoice": "Válaszolj szóban:",
+    "speechProfileTopicLocation": "Hol élsz?",
+    "speechProfileTopicWork": "Mivel foglalkozol?",
+    "speechProfileTopicGoal": "Mi a hosszú távú célod?",
+    "speechToTextUnavailableDesc": "A beszéd szöveggé alakítása jelenleg nem érhető el. Ellenőrizd az internetkapcsolatot és az eszköz beszédfelismerési beállításait, majd próbáld újra.",
+    "memoryHistoryPartial": "Az emlékek előzményeinek egy része nem érhető el. Az eddig megkapott előzmények láthatók.",
+    "tapPlusToStartRecording": "Koppints a + jelre a felvétel indításához",
+    "processingTakingLonger": "Még folyamatban — ez tovább tart a szokásosnál."
 }

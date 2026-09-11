@@ -20,8 +20,8 @@ from datetime import datetime
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from rich.console import Console
-from rich.markup import escape
 from rich.table import Table
+from rich.text import Text
 
 
 def _no_color_env() -> bool:
@@ -77,7 +77,7 @@ class Renderer:
             self._emit_mapping(data, title=title)
         else:
             # Scalars or anything else — just print.
-            self._stdout.print(data)
+            self._stdout.print(Text(data) if isinstance(data, str) else data)
 
     def _emit_json(self, data: Any) -> None:
         # Use sys.stdout directly to avoid Rich coloring/wrapping the JSON.
@@ -96,14 +96,14 @@ class Renderer:
             self._stdout.print("[dim](no results)[/dim]")
             return
 
-        # Pick columns. Caller-supplied wins; otherwise use the keys of the first row.
-        cols = list(columns) if columns else list(rows[0].keys())
+        # Explicit columns win; inferred columns preserve keys from every row.
+        cols = list(columns) if columns else list(dict.fromkeys(key for row in rows for key in row))
 
         table = Table(title=title, show_lines=False, header_style="bold")
         for col in cols:
-            table.add_column(col)
+            table.add_column(Text(col, style="bold"))
         for row in rows:
-            table.add_row(*[_stringify(row.get(c)) for c in cols])
+            table.add_row(*[Text(_stringify(row.get(c))) for c in cols])
         self._stdout.print(table)
 
     def _emit_mapping(self, mapping: Mapping[str, Any], *, title: Optional[str]) -> None:
@@ -111,7 +111,7 @@ class Renderer:
         table.add_column("field", style="bold")
         table.add_column("value")
         for k, v in mapping.items():
-            table.add_row(k, _stringify(v))
+            table.add_row(Text(k), Text(_stringify(v)))
         self._stdout.print(table)
 
     # ------------------------------------------------------------------
@@ -145,12 +145,16 @@ class Renderer:
             sys.stderr.write(json.dumps(payload) + "\n")
             sys.stderr.flush()
         else:
-            line = f"[red]✗[/red] {message}"
+            # Error text can include server responses and user input. Apply
+            # our decoration to Text spans, without parsing that data as markup.
+            line = Text()
+            line.append("✗", style="red")
+            line.append(f" {message}")
             if detail:
-                line += f"\n  [dim]{detail}[/dim]"
+                line.append(f"\n  {detail}", style="dim")
             if extra:
                 for key, value in extra.items():
-                    line += f"\n  [dim]{escape(str(key))}: {escape(_stringify(value))}[/dim]"
+                    line.append(f"\n  {key}: {_stringify(value)}", style="dim")
             self._stderr.print(line)
 
     def debug(self, message: str) -> None:

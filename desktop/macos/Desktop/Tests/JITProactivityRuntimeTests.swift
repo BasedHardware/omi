@@ -11,6 +11,30 @@ final class JITProactivityRuntimeTests: XCTestCase {
     return try XCTUnwrap(authority.capture(ownerID: "owner", expectedOwnerID: "owner"))
   }
 
+  func testFullTurnFailureClassificationPreservesBoundedLedgerProvenance() throws {
+    let classification = JITProactivityDelivery.classifyExecutionFailure(
+      ProactiveLaneClientError.http(status: 502, retryAfterSeconds: nil))
+
+    XCTAssertEqual(classification.failure, "http_error")
+    XCTAssertEqual(classification.status, 502)
+    let provenance = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(classification.provenanceJSON.utf8)) as? [String: Any])
+    XCTAssertEqual(provenance["failure"] as? String, "http_error")
+    XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 502)
+    XCTAssertNil(provenance["error_type"])
+  }
+
+  func testFullTurnFailureClassificationNeverIncludesRawErrorText() throws {
+    struct SensitiveError: Error, LocalizedError {
+      var errorDescription: String? { "secret prompt and provider response" }
+    }
+
+    let classification = JITProactivityDelivery.classifyExecutionFailure(SensitiveError())
+    XCTAssertFalse(classification.provenanceJSON.contains("secret prompt"))
+    XCTAssertFalse(classification.provenanceJSON.contains("provider response"))
+    XCTAssertEqual(classification.failure, "network")
+  }
+
   func testUnknownAuthorityPreservesLegacyLane() async throws {
     let runtime = JITProactivityRuntime { _ in
       JITProactivityFlags(rollout: .unknown, killSwitch: .unknown)
@@ -484,6 +508,51 @@ final class JITProactivityRuntimeTests: XCTestCase {
     XCTAssertEqual(execution?.triggerID, "z-confirmed")
     XCTAssertEqual(execution?.prompt, "Use this exact standing action")
     XCTAssertEqual(execution?.claim.triggerID, "z-confirmed")
+  }
+
+  func testZeroWorthinessValidatedFactsStillAdmitMatchingPlannedTrigger() async throws {
+    let snapshotFacts = ["Safari is showing github.com/BasedHardware/omi"]
+    let bucket = ContextBucketSnapshot(
+      bucketID: "safari", versionID: 1, version: 1, header: "Safari",
+      frozenRankedSegment: Data(), tail: [], validatedFacts: snapshotFacts, notifyWorthiness: 0)
+    let runtime = try wiredRuntime(
+      triggers: [try compiledTrigger(id: "safari-trigger", condition: ["keywords": ["safari"]])])
+
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(
+        text: snapshotFacts.joined(separator: "\n"),
+        appName: "Safari",
+        occurredAt: Date(timeIntervalSince1970: 1_777_248_000)),
+      ambient: JITAmbientRuntimeContext.fromSnapshot(bucket))
+
+    guard case .deliver(.planned, "safari-trigger", _) = decision else {
+      return XCTFail("zero-worthiness validated facts must still match planned triggers: \(decision)")
+    }
+    XCTAssertFalse(JITAmbientRuntimeContext.fromSnapshot(bucket).permitsNanoTriage)
+  }
+
+  func testZeroWorthinessAmbientDoesNotPurchaseNanoWhenNoPlannedMatch() async throws {
+    let bucket = ContextBucketSnapshot(
+      bucketID: "safari", versionID: 1, version: 1, header: "Safari",
+      frozenRankedSegment: Data(), tail: [],
+      validatedFacts: ["Safari is showing github.com/BasedHardware/omi"], notifyWorthiness: 0)
+    let runtime = try wiredRuntime(
+      triggers: [try compiledTrigger(id: "planned", condition: ["keywords": ["release"]])],
+      nano: { _, _ in
+        XCTFail("zero-worthiness ambient must not purchase nano")
+        return .approved
+      })
+
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(
+        text: bucket.validatedFacts.joined(separator: "\n"),
+        occurredAt: Date(timeIntervalSince1970: 1_777_248_000)),
+      ambient: JITAmbientRuntimeContext.fromSnapshot(bucket))
+
+    XCTAssertEqual(decision, .suppressed(reason: "ambient_local_gate"))
+    XCTAssertFalse(JITAmbientRuntimeContext.fromSnapshot(bucket).permitsNanoTriage)
   }
 
   func testAmbiguousOnlySuppressesWithoutAmbientOrNewModelAuthority() async throws {
