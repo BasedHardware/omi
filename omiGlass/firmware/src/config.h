@@ -76,6 +76,8 @@ typedef enum {
 // BLE CONFIGURATION - Power optimized for extended battery life
 // =============================================================================
 #define BLE_MTU_SIZE 517            // Maximum MTU for efficiency
+#define BLE_MIN_MTU_SIZE 23         // Standard minimum ATT MTU per Bluetooth Core specification
+#define BLE_ATT_HEADER_SIZE 3       // ATT notification overhead: 1-byte opcode (0x1B) + 2-byte attribute handle
 #define BLE_CHUNK_SIZE 500          // Safe chunk size for photo transfer
 #define BLE_PHOTO_TRANSFER_DELAY 3  // Fast transfer for connection stability
 #define BLE_TX_POWER ESP_PWR_LVL_N0 // Low power for 6+ hour battery life
