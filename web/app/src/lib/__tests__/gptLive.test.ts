@@ -225,6 +225,88 @@ describe('GptLiveClient', () => {
     client.stop();
   });
 
+  it('treats an error frame as fatal: reports the message and stops the session', () => {
+    const handlers = callbacks();
+    const client = new GptLiveClient({ ...handlers });
+    client.connect('token');
+    const socket = FakeWebSocket.instances[0]!;
+
+    socket.emit({ type: 'error', error: 'boom' });
+
+    expect(handlers.onError).toHaveBeenCalledWith('boom');
+    // `fail` tears the session down (sends session.close).
+    expect(socket.sent.some((frame) => frame.includes('"session.close"'))).toBe(true);
+    client.stop();
+  });
+
+  it('normalizes a non-string error frame instead of reporting undefined', () => {
+    const handlers = callbacks();
+    const client = new GptLiveClient({ ...handlers });
+    client.connect('token');
+    const socket = FakeWebSocket.instances[0]!;
+
+    socket.emit({ type: 'error', error: { code: 'bad' } as unknown as string });
+
+    expect(handlers.onError).toHaveBeenCalledWith('GPT Live encountered an error');
+    client.stop();
+  });
+
+  it('waits out a brief usage grace before the hard close', () => {
+    vi.useFakeTimers();
+    try {
+      const handlers = callbacks();
+      const client = new GptLiveClient({ ...handlers });
+      client.connect('token');
+      const socket = FakeWebSocket.instances[0]!;
+      const close = vi.spyOn(socket, 'close');
+
+      client.stop();
+      expect(close).not.toHaveBeenCalled(); // still listening for session.closed
+
+      vi.advanceTimersByTime(400);
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('captures session.closed usage on stop and closes promptly', () => {
+    const handlers = callbacks();
+    const client = new GptLiveClient({ ...handlers });
+    client.connect('token');
+    const socket = FakeWebSocket.instances[0]!;
+
+    client.stop();
+    socket.emit({
+      type: 'session.closed',
+      usage: { input_tokens: 3, output_tokens: 2 },
+    });
+
+    expect(handlers.onUsage).toHaveBeenCalledWith(
+      expect.objectContaining({ input_text_tokens: 3, output_text_tokens: 2 }),
+    );
+    expect(handlers.onClose).toHaveBeenCalled();
+  });
+
+  it('clears the connect timeout when the socket closes early', () => {
+    vi.useFakeTimers();
+    try {
+      const handlers = callbacks();
+      const client = new GptLiveClient({ ...handlers });
+      client.connect('token');
+      const socket = FakeWebSocket.instances[0]!;
+
+      socket.onclose?.();
+      expect(handlers.onError).toHaveBeenCalledWith('GPT Live disconnected');
+
+      // The 15s connect timeout must not fire a second error after close.
+      vi.advanceTimersByTime(20000);
+      expect(handlers.onError).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('maps aggregate-only GPT-Live usage without inventing audio tokens', () => {
     expect(
       gptLiveUsageReport({

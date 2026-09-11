@@ -168,7 +168,6 @@ export function useGptLive({
 
   return {
     state,
-    isLive: state !== 'idle',
     level,
     duration,
     segments,

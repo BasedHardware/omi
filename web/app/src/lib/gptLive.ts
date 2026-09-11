@@ -9,6 +9,9 @@ export const GPT_LIVE_SAMPLE_RATE = 24000;
 export const DEFAULT_GPT_LIVE_INSTRUCTIONS =
   'You are Omi, a concise and helpful voice assistant. Continue naturally from the conversation history when it is relevant.';
 
+/** How long `stop()` waits for the relay's closing usage frame before the hard close. */
+export const STOP_USAGE_GRACE_MS = 400;
+
 interface GptLiveUsageMetadata {
   input_tokens?: number;
   output_tokens?: number;
@@ -119,6 +122,9 @@ export class GptLiveClient {
   private usage: RealtimeUsageReport | null = null;
   private stopped = false;
   private connectionTimeout: number | null = null;
+  /** Pending hard-close after `stop()`, so a closing `session.closed` usage frame
+   *  can land first. */
+  private closeTimer: number | null = null;
   /** Sends `session.start`; deferred until `auth_response` on the managed relay. */
   private sendStartFrame: (() => void) | null = null;
 
@@ -161,6 +167,7 @@ export class GptLiveClient {
     socket.onmessage = (event) => this.handleMessage(String(event.data));
     socket.onerror = () => this.fail('GPT Live connection failed');
     socket.onclose = () => {
+      this.clearConnectionTimeout();
       this.capture?.stop();
       this.capture = null;
       this.player.close();
@@ -180,10 +187,7 @@ export class GptLiveClient {
   stop(): void {
     this.stopped = true;
     this.flushExchange();
-    if (this.connectionTimeout !== null) {
-      window.clearTimeout(this.connectionTimeout);
-      this.connectionTimeout = null;
-    }
+    this.clearConnectionTimeout();
     this.capture?.stop();
     this.capture = null;
     this.player.close();
@@ -191,9 +195,33 @@ export class GptLiveClient {
     const socket = this.socket;
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'session.close' }));
+      // Give the relay a brief window to deliver the session-scoped usage on
+      // `session.closed` before we hard-close; a received `session.closed`
+      // finalizes immediately (see handleMessage).
+      if (this.closeTimer === null) {
+        this.closeTimer = window.setTimeout(() => this.hardClose(), STOP_USAGE_GRACE_MS);
+      }
+    } else {
+      this.hardClose();
     }
-    socket?.close();
+  }
+
+  /** Close the socket now (no grace wait) and drop the pending close timer. */
+  private hardClose(): void {
+    if (this.closeTimer !== null) {
+      window.clearTimeout(this.closeTimer);
+      this.closeTimer = null;
+    }
+    const socket = this.socket;
     this.socket = null;
+    socket?.close();
+  }
+
+  private clearConnectionTimeout(): void {
+    if (this.connectionTimeout !== null) {
+      window.clearTimeout(this.connectionTimeout);
+      this.connectionTimeout = null;
+    }
   }
 
   private async startCapture(): Promise<void> {
@@ -283,12 +311,15 @@ export class GptLiveClient {
       case 'session.closed': {
         if (message.usage) this.usage = gptLiveUsageReport(message.usage);
         this.stop();
+        // The server already ended the session — no reason to wait out the grace.
+        this.hardClose();
         return;
       }
       case 'error': {
-        this.options.onError(
-          message.message ?? message.error ?? 'GPT Live encountered an error',
-        );
+        // Normalize a non-string frame payload so a malformed error can't fall
+        // through as `undefined`; the session is fatal, so stop the mic/socket.
+        const raw = message.message ?? message.error;
+        this.fail(typeof raw === 'string' && raw ? raw : 'GPT Live encountered an error');
         return;
       }
       case 'session.interrupted': {
