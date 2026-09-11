@@ -58,23 +58,36 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   private let notificationFrequencyKey = "notification_frequency"
   private let notificationMasterEnabledKey = "notifications_enabled"
 
-  override func tearDown() async throws {
-    UserDefaults.standard.removeObject(forKey: paywallKey)
-    UserDefaults.standard.removeObject(forKey: bridgeModeKey)
-    UserDefaults.standard.removeObject(forKey: AIProvider.localBackendURLKey)
-    UserDefaults.standard.removeObject(forKey: AIProvider.connectorSynthesisModeKey)
-    UserDefaults.standard.removeObject(forKey: AIProvider.cloudAssistModeKey)
-    UserDefaults.standard.removeObject(forKey: AIProvider.contextBudgetPercentKey)
-    UserDefaults.standard.removeObject(forKey: notificationFrequencyKey)
-    UserDefaults.standard.removeObject(forKey: notificationMasterEnabledKey)
-    for p in BYOKProvider.allCases {
-      UserDefaults.standard.removeObject(forKey: p.storageKey)
+  /// UserDefaults keys this file's tests mutate. Grows by one entry almost
+  /// every round (Cloud-assist key, connector-synthesis legacy key,
+  /// notification keys); keeping the list here means the next key is added
+  /// in one place instead of a hand re-scan of `tearDown()`.
+  private var localProviderDefaultsKeys: [String] {
+    [
+      paywallKey,
+      bridgeModeKey,
+      AIProvider.localBackendURLKey,
+      AIProvider.connectorSynthesisModeKey,
+      AIProvider.cloudAssistModeKey,
+      AIProvider.contextBudgetPercentKey,
+      notificationFrequencyKey,
+      notificationMasterEnabledKey,
+      DefaultsKey.byokLLMProvider.rawValue,
+    ] + BYOKProvider.allCases.map { $0.storageKey }
+  }
+
+  private func resetLocalProviderState() {
+    for key in localProviderDefaultsKeys {
+      UserDefaults.standard.removeObject(forKey: key)
     }
-    UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
     APIKeyService.persistEnrolledFingerprints([:])
     FloatingBarUsageLimiter.shared.reset()
     ManagedProactivityDecisionSource.setOverride(nil)
     NegativeFeedbackRemediationFeature.testOverride = nil
+  }
+
+  override func tearDown() async throws {
+    resetLocalProviderState()
   }
 
   private func exhaustedFreeQuota() throws -> APIClient.ChatUsageQuota {

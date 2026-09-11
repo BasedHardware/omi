@@ -938,6 +938,22 @@ class PushToTalkManager: ObservableObject {
     return .transcriptionFailed
   }
 
+  /// Ends a turn after a batch-transcription failure: plan-limit refusals
+  /// surface the usage-limit popup, everything else publishes a generic
+  /// transcription-failed terminal. Shared by the three batch-STT catch
+  /// sites that all need this same classify-then-publish sequence.
+  private func publishBatchTranscriptionFailure(turnID: VoiceTurnID, error: Error) {
+    let terminalReason = Self.transcriptionTerminalReason(for: error)
+    if terminalReason == .transcriptionPlanLimit {
+      NotificationCenter.default.post(
+        name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "transcription"])
+      self.voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .transcriptionPlanLimit))
+    } else {
+      self.voiceTurnCoordinator.publish(
+        .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
+    }
+  }
+
   private func performTerminalCleanup(discardBufferedAudio: Bool = false, parkWarm: Bool = false) {
     // Always restore audio on teardown (cancel, error, cleanup) so we never leave it muted.
     SystemAudioMuteController.shared.restore()
@@ -1702,15 +1718,7 @@ class PushToTalkManager: ObservableObject {
             transcriptLength: nil,
             turnKind: .question,
             audioSeconds: Double(audioData.count / 2) / 16000.0)
-          let terminalReason = Self.transcriptionTerminalReason(for: error)
-          if terminalReason == .transcriptionPlanLimit {
-            NotificationCenter.default.post(
-              name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "transcription"])
-            self.voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .transcriptionPlanLimit))
-          } else {
-            self.voiceTurnCoordinator.publish(
-              .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
-          }
+          self.publishBatchTranscriptionFailure(turnID: turnID, error: error)
           return
         }
         self.sendTranscript(turnID: turnID)
@@ -2525,15 +2533,7 @@ class PushToTalkManager: ObservableObject {
             "stt_model": "unknown",
             "user_visible": true,
           ])
-        let terminalReason = Self.transcriptionTerminalReason(for: error)
-        if terminalReason == .transcriptionPlanLimit {
-          NotificationCenter.default.post(
-            name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "transcription"])
-          self.voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .transcriptionPlanLimit))
-        } else {
-          self.voiceTurnCoordinator.publish(
-            .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
-        }
+        self.publishBatchTranscriptionFailure(turnID: turnID, error: error)
         return
       }
       self.sendTranscript(turnID: turnID)
@@ -4146,15 +4146,7 @@ extension PushToTalkManager {
           reason: capturedReason,
           outcome: .exhausted,
           extra: ["stt_provider": "unknown", "stt_model": "unknown", "user_visible": false])
-        let terminalReason = Self.transcriptionTerminalReason(for: error)
-        if terminalReason == .transcriptionPlanLimit {
-          NotificationCenter.default.post(
-            name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "transcription"])
-          self.voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .transcriptionPlanLimit))
-        } else {
-          self.voiceTurnCoordinator.publish(
-            .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
-        }
+        self.publishBatchTranscriptionFailure(turnID: turnID, error: error)
         return
       }
       self.sendTranscript(turnID: turnID)
