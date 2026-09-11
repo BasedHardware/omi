@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:version/version.dart';
@@ -47,6 +48,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   SDCardWalSyncImpl(this.listener);
+
+  @visibleForTesting
+  set testWals(List<Wal> wals) => _wals = wals;
+
+  @visibleForTesting
+  set testDevice(BtDevice? device) => _device = device;
 
   bool _supportsTimestampMarkers() {
     if (_device == null) return false;
@@ -106,6 +113,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   @override
   Future deleteWal(Wal wal) async {
+    if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
     _wals.removeWhere((w) => w.id == wal.id);
 
     if (_device != null) {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:path_provider/path_provider.dart';
@@ -42,6 +43,9 @@ class StorageSyncImpl implements StorageSync {
   double get currentSpeedKBps => _currentSpeedKBps;
 
   StorageSyncImpl(this.listener);
+
+  @visibleForTesting
+  set testWals(List<Wal> wals) => _wals = wals;
 
   @override
   void setLocalSync(LocalWalSync localSync) {
@@ -219,6 +223,7 @@ class StorageSyncImpl implements StorageSync {
 
   @override
   Future deleteWal(Wal wal) async {
+    if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
     await _deleteWalsOnDevice([wal]);
     _wals = _wals.where((w) => w.id != wal.id).toList();
     listener.onWalUpdated();
