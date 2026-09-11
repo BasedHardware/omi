@@ -623,6 +623,59 @@ test('old memories use v3 content without manufacturing canonical provenance', a
   expect(result.page.completenessStatus).toBe('unknown');
 });
 
+test('old tasks name GET sort_order and indent_level integer strings', async () => {
+  const {api} = backend({
+    action_items: [
+      {
+        id: 'string-order',
+        description: 'Call Alex',
+        completed: false,
+        sort_order: '-5',
+        indent_level: '2',
+      },
+      {
+        id: 'named',
+        description: 'Write recap',
+        completed: false,
+      },
+    ],
+    has_more: false,
+  });
+  const result = await loadTasks(api);
+  expect(result.items[0]).toMatchObject({sortOrder: -5, indentLevel: 2});
+  expect(result.items[1]).toMatchObject({sortOrder: 0, indentLevel: 0});
+  await expect(
+    loadTasks(
+      backend({
+        action_items: [
+          {
+            id: 'fraction',
+            description: 'Call Alex',
+            completed: false,
+            sort_order: '1.5',
+          },
+        ],
+        has_more: false,
+      }).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+  await expect(
+    loadTasks(
+      backend({
+        action_items: [
+          {
+            id: 'decimal-string',
+            description: 'Call Alex',
+            completed: false,
+            indent_level: '3.0',
+          },
+        ],
+        has_more: false,
+      }).api,
+    ),
+  ).rejects.toThrow('Omi order is malformed');
+});
+
 test('old task wrapper preserves dates in milliseconds, nullable epochs and source evidence', async () => {
   const evidence = {
     kind: 'conversation',

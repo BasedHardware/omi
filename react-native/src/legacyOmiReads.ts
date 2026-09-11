@@ -55,13 +55,21 @@ function milliseconds(value: unknown): number | null {
 }
 function integer(value: unknown, nonnegative = false): number {
   if (value === undefined || value === null) return 0;
-  if (
-    typeof value !== 'number' ||
-    !Number.isSafeInteger(value) ||
-    (nonnegative && value < 0)
-  )
+  let parsed: number;
+  if (typeof value === 'string') {
+    if (!/^[+-]?[0-9]+$/.test(value)) {
+      throw new Error('Omi order is malformed');
+    }
+    parsed = Number(value);
+  } else if (typeof value === 'number' && Number.isSafeInteger(value)) {
+    parsed = value;
+  } else {
     throw new Error('Omi order is malformed');
-  return value;
+  }
+  if (!Number.isSafeInteger(parsed) || (nonnegative && parsed < 0)) {
+    throw new Error('Omi order is malformed');
+  }
+  return parsed;
 }
 function rows(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value) || value.length > limit)
