@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 import typer
+from rich.markup import escape
 
 from omi_cli import config as cfg
 from omi_cli.errors import UsageError
@@ -63,7 +64,7 @@ def configure(
         "local_api_url": profile.local_api_url,
         "local_token": _mask_token(profile.local_token),
     }
-    ctx.renderer.success(f"Configured local Omi Desktop API for profile [bold]{profile.name}[/bold].")
+    ctx.renderer.success(f"Configured local Omi Desktop API for profile [bold]{escape(profile.name)}[/bold].")
     ctx.renderer.emit(payload, title="local configuration")
 
 
