@@ -289,7 +289,13 @@ function requiredUsageInteger(value: unknown, label: string): number {
   if (value === undefined) {
     return 0;
   }
-  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
+  if (typeof value === 'string') {
+    if (!/^[+-]?[0-9]+$/.test(value)) {
+      throw new Error(`${label} is malformed`);
+    }
+    return Number(value);
+  }
+  if (typeof value === 'number' && Number.isSafeInteger(value)) {
     return value;
   }
   throw new Error(`${label} is malformed`);

@@ -60,11 +60,32 @@ test('parses GET usage period buckets and omits missing periods', () => {
   });
 });
 
+test('does not omit a usage period when stored counts are integer strings', () => {
+  expect(
+    parseOmiUsagePeriod(
+      JSON.stringify({
+        yearly: {
+          transcription_seconds: '12',
+          words_transcribed: '20',
+          insights_gained: '4',
+          memories_created: '2',
+        },
+      }),
+      'yearly',
+    ),
+  ).toEqual({
+    transcriptionSeconds: 12,
+    wordsTranscribed: 20,
+    insightsGained: 4,
+    memoriesCreated: 2,
+  });
+});
+
 test('fails closed for malformed GET usage periods', () => {
   expect(() => parseOmiUsagePeriod(JSON.stringify([]), 'yearly')).toThrow();
   expect(() =>
     parseOmiUsagePeriod(
-      JSON.stringify({yearly: {transcription_seconds: '12'}}),
+      JSON.stringify({yearly: {transcription_seconds: '12.5'}}),
       'yearly',
     ),
   ).toThrow();

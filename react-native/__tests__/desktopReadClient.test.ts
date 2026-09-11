@@ -3792,9 +3792,20 @@ test('loadAccountSettings names GET usage today without inventing zeros', async 
   expect(snapshot.usageError).toBeNull();
   expect(parseCloudUsage({today: null}, 'Usage')).toBeNull();
   expect(parseCloudUsage({}, 'Usage')).toBeNull();
-  expect(() =>
+  expect(
     parseCloudUsage(
       {today: {transcription_seconds: '90'}},
+      'Usage',
+    ),
+  ).toEqual({
+    transcriptionSeconds: 90,
+    wordsTranscribed: 0,
+    insightsGained: 0,
+    memoriesCreated: 0,
+  });
+  expect(() =>
+    parseCloudUsage(
+      {today: {transcription_seconds: '90.5'}},
       'Usage',
     ),
   ).toThrow('Usage transcription_seconds is malformed');

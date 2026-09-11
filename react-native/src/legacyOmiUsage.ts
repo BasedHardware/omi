@@ -26,7 +26,13 @@ function requiredUsageInteger(value: unknown): number {
   if (value === undefined) {
     return 0;
   }
-  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
+  if (typeof value === 'string') {
+    if (!/^[+-]?[0-9]+$/.test(value)) {
+      throw new UsageError();
+    }
+    return Number(value);
+  }
+  if (typeof value === 'number' && Number.isSafeInteger(value)) {
     return value;
   }
   throw new UsageError();
