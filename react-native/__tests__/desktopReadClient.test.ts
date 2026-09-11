@@ -3322,7 +3322,7 @@ test('keeps empty subscription plan tokens instead of failing Settings Plan', ()
       wordsTranscribedLimit: null,
       insightsGainedUsed: null,
       insightsGainedLimit: null,
-      chatQuotaUsed: null,
+      chatQuotaUsed: 0,
       chatQuotaUnit: null,
     }),
   );
@@ -3361,6 +3361,86 @@ test('keeps empty subscription plan tokens instead of failing Settings Plan', ()
   expect(() =>
     parseCloudSubscription(
       {plan: null, status: 'active'},
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response is malformed');
+});
+
+test('names omitted GET subscription chat_quota_used as zero instead of hiding Chat this month', () => {
+  expect(
+    parseCloudSubscription(
+      {
+        plan: 'plus',
+        status: 'active',
+        chat_quota_unit: 'messages',
+        subscription: {
+          plan: 'plus',
+          status: 'active',
+          limits: {chat_questions_per_month: 100},
+        },
+      },
+      'Subscription response',
+    ),
+  ).toEqual(
+    expect.objectContaining({
+      chatQuotaUsed: 0,
+      chatQuotaUnit: 'messages',
+      chatQuestionsPerMonth: 100,
+    }),
+  );
+  expect(
+    subscriptionPeriodCopy(
+      parseCloudSubscription(
+        {
+          plan: 'plus',
+          status: 'active',
+          chat_quota_unit: 'messages',
+          subscription: {
+            plan: 'plus',
+            status: 'active',
+            limits: {chat_questions_per_month: 100},
+          },
+        },
+        'Subscription response',
+      ),
+    ),
+  ).toEqual([
+    {
+      title: 'Chat this month',
+      copy: '0 of 100 messages used this month',
+    },
+  ]);
+  expect(
+    subscriptionPeriodCopy(
+      parseCloudSubscription(
+        {
+          plan: 'plus',
+          status: 'active',
+          chat_quota_unit: 'cost_usd',
+        },
+        'Subscription response',
+      ),
+    ),
+  ).toEqual([
+    {title: 'Chat this month', copy: '$0.00 used this month'},
+  ]);
+  expect(
+    subscriptionPeriodCopy(
+      parseCloudSubscription(
+        {plan: 'plus', status: 'active'},
+        'Subscription response',
+      ),
+    ),
+  ).toBeNull();
+  expect(() =>
+    parseCloudSubscription(
+      {plan: 'plus', status: 'active', chat_quota_used: null},
+      'Subscription response',
+    ),
+  ).toThrow('Subscription response is malformed');
+  expect(() =>
+    parseCloudSubscription(
+      {plan: 'plus', status: 'active', chat_quota_used: 'nope'},
       'Subscription response',
     ),
   ).toThrow('Subscription response is malformed');

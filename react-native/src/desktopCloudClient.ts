@@ -415,6 +415,13 @@ export function parseCloudSubscription(
       : null;
   const chatQuotaUnit =
     typeof record.chat_quota_unit === 'string' ? record.chat_quota_unit : null;
+  const chatQuotaUsed =
+    record.chat_quota_used === undefined
+      ? 0
+      : optionalFiniteNumber(record.chat_quota_used);
+  if (chatQuotaUsed === null) {
+    throw new Error(`${label} is malformed`);
+  }
   return {
     plan,
     status,
@@ -428,7 +435,7 @@ export function parseCloudSubscription(
     wordsTranscribedLimit: optionalInteger(record.words_transcribed_limit),
     insightsGainedUsed: optionalInteger(record.insights_gained_used),
     insightsGainedLimit: optionalInteger(record.insights_gained_limit),
-    chatQuotaUsed: optionalFiniteNumber(record.chat_quota_used),
+    chatQuotaUsed,
     chatQuotaUnit,
     chatQuestionsPerMonth:
       limits === null ? null : optionalInteger(limits.chat_questions_per_month),
