@@ -1,5 +1,6 @@
 import {
   parseStoredTranscriptSegments,
+  projectDeviceTranscription,
   recordingListSpeech,
 } from "./device-transcriptions";
 import {
@@ -137,7 +138,7 @@ export async function readConversations(
     .prepare(
       `SELECT s.id, s.started_at, s.ended_at, s.captured_at_ms, t.state, substr(${visibleStoredTextTrimSql(
         "t.text"
-      )}, 1, 241) AS text, t.segments, t.updated_at FROM device_transcriptions t JOIN device_sessions s ON s.id = t.session_id AND s.account_id = t.account_id WHERE t.account_id = ? ORDER BY s.started_at DESC`
+      )}, 1, 241) AS text, t.text AS stored_text, t.segments, t.language, t.discarded_leading_packets AS discardedLeadingPackets, t.error_code AS errorCode, t.updated_at FROM device_transcriptions t JOIN device_sessions s ON s.id = t.session_id AND s.account_id = t.account_id WHERE t.account_id = ? ORDER BY s.started_at DESC`
     )
     .bind(accountId)
     .all<{
@@ -147,7 +148,11 @@ export async function readConversations(
       captured_at_ms: number | null;
       state: string;
       text: string | null;
+      stored_text: string | null;
       segments: string | null;
+      language: string | null;
+      discardedLeadingPackets: number;
+      errorCode: string | null;
       updated_at: number;
     }>();
   for (const recording of recordings.results) {
@@ -156,9 +161,16 @@ export async function readConversations(
         ? null
         : parseStoredTranscriptSegments(recording.segments);
     if (
-      recording.state === "completed" &&
-      (typeof recording.text !== "string" ||
-        (recording.segments !== null && parsed === null))
+      projectDeviceTranscription({
+        sessionId: recording.id,
+        state: recording.state,
+        text: recording.stored_text,
+        segments: recording.segments,
+        language: recording.language,
+        discardedLeadingPackets: recording.discardedLeadingPackets,
+        errorCode: recording.errorCode,
+        updatedAt: recording.updated_at,
+      }) === null
     ) {
       throw new UnprojectableConversationRecordError();
     }

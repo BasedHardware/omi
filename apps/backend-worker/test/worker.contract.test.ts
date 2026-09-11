@@ -1534,6 +1534,51 @@ describe("worker request contract", () => {
     );
   });
 
+  test("conversations GET does not omit a neighboring row when discarded leading packets are negative", async () => {
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_sessions (id, account_id, device_id, codec, state, r2_prefix, started_at, ended_at, created_at, updated_at) VALUES (?, ?, 'pendant', 21, 'complete', ?, 1, 1, 1, 1)"
+      )
+      .bind("session-readable-packets", "test-account", "r2-readable-packets")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_transcriptions (session_id, account_id, state, available_at, text, discarded_leading_packets, updated_at) VALUES (?, ?, 'completed', 1, 'Recorded words', 0, 1)"
+      )
+      .bind("session-readable-packets", "test-account")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_sessions (id, account_id, device_id, codec, state, r2_prefix, started_at, ended_at, created_at, updated_at) VALUES (?, ?, 'pendant', 21, 'complete', ?, 2, 2, 2, 2)"
+      )
+      .bind("session-negative-packets", "test-account", "r2-negative-packets")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_transcriptions (session_id, account_id, state, available_at, text, discarded_leading_packets, updated_at) VALUES (?, ?, 'completed', 1, 'Stored speech', ?, 2)"
+      )
+      .bind("session-negative-packets", "test-account", -1)
+      .run();
+
+    const envelope = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(envelope.status).toBe(500);
+    expect(envelope.headers.get("retry-after")).toBeNull();
+    expect((await envelope.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+
+    const offset = await fetchWorker("/v1/conversations?limit=50&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    expect(offset.status).toBe(500);
+    expect(offset.headers.get("retry-after")).toBeNull();
+    expect((await offset.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+  });
+
   test("conversations GET keeps queued recordings when stored segments JSON is unreadable", async () => {
     await d1Mock
       .prepare(
