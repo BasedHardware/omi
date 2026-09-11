@@ -67,7 +67,12 @@ extension RealtimeHubController {
       return
     }
 
-    if let key = APIKeyService.selectedRealtimeBYOKKey(for: provider.byokProvider) {
+    // Offered for a provider the user picked themselves, withheld from one reached by
+    // failover or by `.auto` resolving there — see RealtimeHubSettings.isVoiceModelChoice.
+    if let key = APIKeyService.selectedRealtimeBYOKKey(
+      for: provider.byokProvider,
+      chosenForVoice: RealtimeHubSettings.shared.isVoiceModelChoice(provider))
+    {
       let fingerprint = APIKeyService.byokFingerprint(key)
       guard
         CredentialHealthManager.shared.canUseBYOK(
