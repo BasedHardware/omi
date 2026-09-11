@@ -139,6 +139,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [chatWriteDoorClosed, setChatWriteDoorClosed] = useState(false);
   const [chatEpoch, setChatEpoch] = useState(0);
   const chatMutationSeqRef = useRef(0);
+  const sendInFlightRef = useRef<object | null>(null);
   // Monotonic chat session epoch. Each run of the chat-history effect (a gate
   // transition or a backend plane switch) bumps it, so a send or older-page
   // load that started under a retired session can never write transcript
@@ -241,6 +242,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     setLoadingOlderChat(false);
     setChatHistorySettled(false);
     setActiveGenerationId(null);
+    sendInFlightRef.current = null;
     stableChatMessageIds.clear();
     animatedChatMessageIds.clear();
     resetReads();
@@ -289,6 +291,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       setLoadingOlderChat(false);
       setChatHistorySettled(false);
       setActiveGenerationId(null);
+      sendInFlightRef.current = null;
       stableChatMessageIds.clear();
       animatedChatMessageIds.clear();
       return () => {
@@ -559,10 +562,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       backend === null ||
       visibleDisplayText(draft) === '' ||
       chatBusy ||
-      chatWriteDoorClosed
+      chatWriteDoorClosed ||
+      sendInFlightRef.current !== null
     ) {
       return;
     }
+    const sendToken = {};
+    sendInFlightRef.current = sendToken;
     const session = chatSessionEpochRef.current;
     chatMutationSeqRef.current += 1;
     let admitted = false;
@@ -650,6 +656,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }
       }
     } finally {
+      if (sendInFlightRef.current === sendToken) {
+        sendInFlightRef.current = null;
+      }
       if (
         chatSessionEpochRef.current === session &&
         (!requestStarted || omiRequestRef.current === localMessage.id)

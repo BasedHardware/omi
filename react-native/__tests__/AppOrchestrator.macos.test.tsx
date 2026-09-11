@@ -484,6 +484,70 @@ test('a send still in flight when the session dies never seeds the next session'
   ).toHaveLength(2);
 });
 
+test('two same-tick submits admit exactly one message', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async (value: {id: string}) => {
+    if (value.id === 'chat-history') {
+      return {id: value.id, status: 200, body: historyBody([])};
+    }
+    if (value.id.startsWith('admit-')) {
+      return {
+        id: value.id,
+        status: 200,
+        body: admissionBody(
+          {
+            id: 'once-human',
+            text: 'only once',
+            sender: 'human',
+            createdAt: 1,
+            generationOutcome: null,
+          },
+          'once-generation',
+        ),
+      };
+    }
+    return {id: value.id, status: 501, body: null};
+  });
+  mockBackend.generationEvents.mockResolvedValue({
+    id: 'once-generation',
+    status: 200,
+    body: `event: done\nid: terminal\ndata: ${JSON.stringify({
+      kind: 'done',
+      message: wireMessage({
+        id: 'once-ai',
+        text: 'one reply',
+        sender: 'ai',
+        createdAt: 2,
+        generationOutcome: 'completed',
+      }),
+    })}\n\n`,
+  });
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('only once');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(
+    mockBackend.request.mock.calls.filter(([value]: [{id: string}]) =>
+      value.id.startsWith('admit-'),
+    ),
+  ).toHaveLength(1);
+});
+
 test('a mid-run 401 leaves the product shell once the session is gone', async () => {
   mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
   mockAuth.hasCloudSession.mockResolvedValueOnce(true).mockResolvedValue(false);
