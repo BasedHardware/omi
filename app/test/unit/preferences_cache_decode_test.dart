@@ -115,12 +115,21 @@ void main() {
     expect(prefs.getStringList('cachedPeople'), hasLength(1));
   });
 
-  test('removePendingMemory removes the target when an unreadable entry is present', () async {
+  test('addPendingMemory works after a bad entry and keeps it', () async {
+    final prefs = await _prefs({'uid': 'user-1', 'pendingMemories:user-1': _unreadable});
+    prefs.addPendingMemory(_memory('pending-1'));
+    expect(prefs.pendingMemories.map((m) => m.id), ['pending-1']);
+    expect(prefs.getStringList('pendingMemories:user-1'), hasLength(_unreadable.length + 1));
+    expect(prefs.getStringList('pendingMemories:user-1'), containsAll(_unreadable));
+  });
+
+  test('removePendingMemory removes only the target and keeps unreadable entries', () async {
     final prefs = await _prefs({'uid': 'user-1'});
     prefs.pendingMemories = [_memory('pending-1'), _memory('pending-2')];
     await _appendUnreadable(prefs, 'pendingMemories:user-1');
     prefs.removePendingMemory('pending-1');
     expect(prefs.pendingMemories.map((m) => m.id), ['pending-2']);
+    expect(prefs.getStringList('pendingMemories:user-1'), containsAll(_unreadable));
   });
 
   group('modifiedConversationDetails', () {

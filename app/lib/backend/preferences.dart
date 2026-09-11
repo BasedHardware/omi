@@ -777,18 +777,27 @@ class SharedPreferencesUtil {
   }
 
   void addPendingMemory(Memory memory) {
-    final List<Memory> memories = pendingMemories;
-    memories.add(memory);
-    pendingMemories = memories;
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return;
+    _scopeLegacyUserData(ownerUid);
+    final key = _userScopedKey('pendingMemories', ownerUid);
+    saveStringList(key, [...getStringList(key), jsonEncode(memory.toJson())]);
   }
 
   void removePendingMemory(String memoryId, {String? ownerUid}) {
     final owner = ownerUid ?? uid;
     if (owner.isEmpty) return;
     final key = _userScopedKey('pendingMemories', owner);
-    final memories = _decodeCachedList(key, (json) => Memory.fromJson(json));
-    memories.removeWhere((m) => m.id == memoryId);
-    saveStringList(key, memories.map((memory) => jsonEncode(memory.toJson())).toList());
+    saveStringList(key, getStringList(key).where((encoded) => !_hasId(encoded, memoryId)).toList());
+  }
+
+  bool _hasId(String encoded, String id) {
+    try {
+      final decoded = jsonDecode(encoded);
+      return decoded is Map<String, dynamic> && decoded['id'] == id;
+    } catch (e) {
+      return false;
+    }
   }
 
   void clearPendingMemories() {
