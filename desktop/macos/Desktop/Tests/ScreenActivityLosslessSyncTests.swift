@@ -232,6 +232,75 @@ final class ScreenActivityLosslessSyncTests: XCTestCase {
     }
   }
 
+  func testLegacyFreePolicySelectsVectorlessFinalizedRowsAndSkipsInFlightOCR() throws {
+    let queue = try makeLegacyQueue()
+    let bucketStart = Date(timeIntervalSince1970: 1_700_000_000)
+    let afterClose = bucketStart.addingTimeInterval(301)
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText, embedding)
+          VALUES (?, 'SyntheticApp', 'SyntheticWindow', NULL, NULL)
+          """,
+        arguments: [bucketStart])
+      try db.execute(
+        sql: """
+          INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText, embedding)
+          VALUES (?, 'SyntheticApp', 'SyntheticWindow', 'final OCR', NULL)
+          """,
+        arguments: [bucketStart])
+      try db.execute(
+        sql: """
+          INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText, embedding)
+          VALUES (?, 'SyntheticApp', 'SyntheticWindow', 'still in the open bucket', NULL)
+          """,
+        arguments: [afterClose])
+
+      let paid = ScreenEmbeddingPolicy(
+        plan: .operator, status: .active, localRoute: .none, killSwitches: .enabled)
+      XCTAssertTrue(paid.shouldEmbedWithGemini)
+      XCTAssertTrue(
+        try ScreenActivitySyncService.fetchLegacySyncRows(
+          db: db, afterId: 0, limit: 100, requireEmbedding: paid.shouldEmbedWithGemini, now: afterClose
+        ).isEmpty)
+
+      let free = ScreenEmbeddingPolicy(
+        plan: .basic, status: .active, localRoute: .none, killSwitches: .enabled)
+      XCTAssertFalse(free.shouldEmbedWithGemini)
+      let selected = try ScreenActivitySyncService.fetchLegacySyncRows(
+        db: db, afterId: 0, limit: 100, requireEmbedding: free.shouldEmbedWithGemini, now: afterClose)
+      XCTAssertEqual(selected.map { $0["id"] as? Int64 }, [2])
+      XCTAssertNil(selected[0]["embedding"] as? Data)
+    }
+  }
+
+  func testLegacyPaidPolicyStillRequiresAnEmbedding() throws {
+    let queue = try makeLegacyQueue()
+    let bucketStart = Date(timeIntervalSince1970: 1_700_000_000)
+    let afterClose = bucketStart.addingTimeInterval(301)
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText, embedding)
+          VALUES (?, 'SyntheticApp', 'SyntheticWindow', 'final OCR', NULL)
+          """,
+        arguments: [bucketStart])
+      let embedding = [Float(0.25), Float(-0.5)].withUnsafeBytes { Data($0) }
+      try db.execute(
+        sql: """
+          INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText, embedding)
+          VALUES (?, 'SyntheticApp', 'SyntheticWindow', 'embedded OCR', ?)
+          """,
+        arguments: [bucketStart, embedding])
+
+      let paid = ScreenEmbeddingPolicy(
+        plan: .operator, status: .active, localRoute: .none, killSwitches: .enabled)
+      let selected = try ScreenActivitySyncService.fetchLegacySyncRows(
+        db: db, afterId: 0, limit: 100, requireEmbedding: paid.shouldEmbedWithGemini, now: afterClose)
+      XCTAssertEqual(selected.map { $0["id"] as? Int64 }, [2])
+    }
+  }
+
   private func makeLegacyQueue() throws -> DatabaseQueue {
     let queue = try DatabaseQueue()
     try queue.write { db in

@@ -181,6 +181,28 @@ struct GeminiResponse: Decodable {
   }
 }
 
+/// Shared Gemini proxy URLRequest builder. EmbeddingService and GeminiClient.send
+/// both go through here so the capability header cannot drift between call sites.
+enum DesktopGeminiProxyRequest {
+  static let localEmbeddingsHeader = "X-Omi-Local-Embeddings"
+
+  /// Advertise that this build can keep a free user off Gemini. Hard-killed
+  /// clients omit the header so the proxy fail-opens like an old build.
+  /// The value is a bare marker — never plan or route.
+  static func prepare(
+    _ request: URLRequest, killSwitches: LocalEmbeddingKillSwitches = .resolve()
+  ) -> URLRequest {
+    var outgoing = request
+    let policy = ScreenEmbeddingPolicy.cached(killSwitches: killSwitches)
+    if policy.reason == .hardKill {
+      outgoing.setValue(nil, forHTTPHeaderField: localEmbeddingsHeader)
+    } else {
+      outgoing.setValue("1", forHTTPHeaderField: localEmbeddingsHeader)
+    }
+    return outgoing
+  }
+}
+
 // MARK: - GeminiClient
 
 /// Low-level client for communicating with the Gemini API via backend proxy.
@@ -469,7 +491,7 @@ actor GeminiClient {
     configuration.timeoutIntervalForResource = 300
     let session = URLSession(configuration: configuration)
     defer { session.finishTasksAndInvalidate() }
-    return try await session.data(for: request)
+    return try await session.data(for: DesktopGeminiProxyRequest.prepare(request))
   }
 
   static func shouldAutoRetry(_ error: Error) -> Bool {

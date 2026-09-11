@@ -123,19 +123,37 @@ struct LocalHybridSearch: Sendable {
   }
 }
 
-/// The chat route is selected once. A local query failure must never invoke the legacy closure.
-/// Probe failure (`.none`) stays on local FTS-only. Opt-out and the hard kill (`.disabled`)
-/// keep Gemini.
+/// The chat and Rewind routes are selected once from `ScreenEmbeddingPolicy`.
+/// A local query failure must never invoke the legacy Gemini closure.
+/// Free/unknown plans never take the Gemini path: probe failure and opt-out
+/// stay keyword-only. Only the hard kill restores Gemini on every plan.
 enum ScreenHistorySearchRoute {
   static func search<T: Sendable>(
     runtime: LocalEmbeddingRuntime,
+    policy: ScreenEmbeddingPolicy? = nil,
+    defaults: UserDefaults? = nil,
     local: @Sendable ((any LocalEmbeddingService)?) async throws -> T,
     legacy: @Sendable () async throws -> T
   ) async throws -> T {
-    switch await runtime.selectEngine() {
-    case .engine(let engine): return try await local(engine)
-    case .none: return try await local(nil)
-    case .disabled: return try await legacy()
+    let selection = await runtime.selectEngine()
+    let decision: ScreenEmbeddingPolicy
+    if let policy {
+      decision = policy
+    } else if let defaults {
+      decision = ScreenEmbeddingPolicy.cached(
+        localRoute: selection, killSwitches: runtime.killSwitches, defaults: defaults)
+    } else {
+      decision = ScreenEmbeddingPolicy(
+        plan: nil, status: nil, localRoute: selection, killSwitches: runtime.killSwitches)
+    }
+    switch decision.searchRoute {
+    case .local:
+      if case .engine(let engine) = selection { return try await local(engine) }
+      return try await local(nil)
+    case .ftsOnly:
+      return try await local(nil)
+    case .gemini:
+      return try await legacy()
     }
   }
 }

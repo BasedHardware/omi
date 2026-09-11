@@ -97,7 +97,7 @@ actor EmbeddingService {
     request.timeoutInterval = 30
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-    let (data, response) = try await URLSession.shared.data(for: request)
+    let (data, response) = try await URLSession.shared.data(for: DesktopGeminiProxyRequest.prepare(request))
 
     // Check HTTP status before parsing — non-JSON error bodies (HTML 401/500)
     // cause "data couldn't be read" errors that mask the real problem.
@@ -152,7 +152,7 @@ actor EmbeddingService {
     request.timeoutInterval = 60
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-    let (data, response) = try await URLSession.shared.data(for: request)
+    let (data, response) = try await URLSession.shared.data(for: DesktopGeminiProxyRequest.prepare(request))
 
     // Check HTTP status before parsing — non-JSON error bodies (HTML 401/500)
     // cause "data couldn't be read" errors that mask the real problem.

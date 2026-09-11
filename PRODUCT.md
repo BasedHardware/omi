@@ -54,6 +54,14 @@ privacy, lineage, graph, and outbox rules. The complete convergence and removal
 ledger lives in
 [`backend/docs/epics/universal_memory_task_convergence.md`](backend/docs/epics/universal_memory_task_convergence.md).
 
+## Desktop screen embeddings
+
+Free and unknown desktop entitlements use on-device screen vectors, degrading
+to keyword search when unavailable. Active paid plans retain Gemini screen
+uploads for phone-side search. The local-embedding hard kill restores the legacy
+Gemini route for every plan. Policy and rollback details live in
+[`desktop/macos/Desktop/Sources/LocalInference/ARCHITECTURE.md`](desktop/macos/Desktop/Sources/LocalInference/ARCHITECTURE.md).
+
 ## Before you build
 
 - Large or ambiguous features start as a GitHub issue

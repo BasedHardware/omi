@@ -64,8 +64,11 @@ actor OCREmbeddingService {
   private let batchEmbedder: BatchEmbedder
   private let embeddingWriter: EmbeddingWriter
   private let flushSleeper: FlushSleeper
+  private let backfillSleeper: FlushSleeper
   private let losslessSyncEnabled: @Sendable () async -> Bool
   private let now: @Sendable () -> Date
+  private let screenPolicy: @Sendable () -> ScreenEmbeddingPolicy
+  private let recordRoute: @Sendable (ScreenEmbeddingPolicy) -> Void
 
   private init() {
     self.batchEmbedder = { texts, taskType in
@@ -77,10 +80,13 @@ actor OCREmbeddingService {
     self.flushSleeper = { nanoseconds in
       try await Task.sleep(nanoseconds: nanoseconds)
     }
+    self.backfillSleeper = self.flushSleeper
     self.losslessSyncEnabled = {
       await MainActor.run { ScreenActivityLosslessSyncFeature.isEnabled }
     }
     self.now = Date.init
+    self.screenPolicy = { ScreenEmbeddingPolicy.cached() }
+    self.recordRoute = { $0.recordRoute() }
   }
 
   /// Test-only initializer that injects the flush path's embedder, writer, and
@@ -89,8 +95,13 @@ actor OCREmbeddingService {
     batchEmbedderForTesting: @escaping BatchEmbedder,
     embeddingWriterForTesting: @escaping EmbeddingWriter,
     flushSleeperForTesting: FlushSleeper? = nil,
+    backfillSleeperForTesting: @escaping FlushSleeper = { _ in },
     losslessSyncEnabledForTesting: @escaping @Sendable () async -> Bool = { false },
-    nowForTesting: @escaping @Sendable () -> Date = Date.init
+    nowForTesting: @escaping @Sendable () -> Date = Date.init,
+    screenPolicyForTesting: @escaping @Sendable () -> ScreenEmbeddingPolicy = {
+      ScreenEmbeddingPolicy(plan: .operator, status: .active, localRoute: .none, killSwitches: .enabled)
+    },
+    recordRouteForTesting: @escaping @Sendable (ScreenEmbeddingPolicy) -> Void = { _ in }
   ) {
     self.batchEmbedder = batchEmbedderForTesting
     self.embeddingWriter = embeddingWriterForTesting
@@ -98,8 +109,11 @@ actor OCREmbeddingService {
       flushSleeperForTesting ?? { nanoseconds in
         try await Task.sleep(nanoseconds: nanoseconds)
       }
+    self.backfillSleeper = backfillSleeperForTesting
     self.losslessSyncEnabled = losslessSyncEnabledForTesting
     self.now = nowForTesting
+    self.screenPolicy = screenPolicyForTesting
+    self.recordRoute = recordRouteForTesting
   }
 
   /// Number of screenshots queued for the next batch flush (test introspection).
@@ -298,6 +312,13 @@ actor OCREmbeddingService {
 
       let texts = chunk.map { $0.formattedText }
       do {
+        // Re-read after compaction awaits and before every outbound batch. A paid
+        // batch queued before downgrade must never spend under the new free plan.
+        guard screenPolicy().shouldEmbedWithGemini else {
+          pendingItems.removeAll()
+          recentHashes.removeAll()
+          return
+        }
         let embeddings = try await batchEmbedder(texts, "RETRIEVAL_DOCUMENT")
 
         // The embed call above suspended; if the owner retargeted while it was
@@ -402,6 +423,9 @@ actor OCREmbeddingService {
   /// its existing 5000-row cap.
   func backfillIfNeeded() async {
     guard !isBackfillRunning else { return }
+    let decision = screenPolicy()
+    recordRoute(decision)
+    guard decision.shouldEmbedWithGemini else { return }
     isBackfillRunning = true
     defer { isBackfillRunning = false }
 
@@ -450,7 +474,8 @@ actor OCREmbeddingService {
         }
         let embeddings: [[Float]]
         do {
-          embeddings = try await EmbeddingService.shared.embedBatch(texts: texts, taskType: "RETRIEVAL_DOCUMENT")
+          guard screenPolicy().shouldEmbedWithGemini else { return }
+          embeddings = try await batchEmbedder(texts, "RETRIEVAL_DOCUMENT")
           guard ownerSnapshot.isCurrent() else { return }
         } catch let error as EmbeddingService.EmbeddingError where error.isExpectedBackendState {
           log(
@@ -499,7 +524,7 @@ actor OCREmbeddingService {
         }
 
         // Rate limiting delay between batches
-        try await Task.sleep(nanoseconds: 200_000_000)  // 200ms
+        try await backfillSleeper(200_000_000)  // 200ms
       }
 
       let finalProcessedCount = totalProcessed

@@ -227,6 +227,30 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
     XCTAssertTrue(hits.allSatisfy { $0.matchedBy == .keyword })
   }
 
+  func testFreePlanOptOutStaysOnKeywordsWithoutLegacyCall() async throws {
+    let (store, directory) = try fixture()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let runtime = LocalEmbeddingRuntime(
+      engines: [FailOnCallEmbeddingEngine()],
+      killSwitches: LocalEmbeddingKillSwitches(isDisabled: false, isEnabled: false, forcedEngineRaw: nil),
+      record: { _, _ in })
+    let policy = ScreenEmbeddingPolicy(
+      plan: .basic, status: .active, localRoute: .disabled, killSwitches: runtime.killSwitches)
+    let hits = try await ScreenHistorySearchRoute.search(
+      runtime: runtime, policy: policy,
+      local: { selected in
+        XCTAssertNil(selected)
+        return try await LocalHybridSearch(store: store, runtime: runtime, authorization: .unrestricted)
+          .search(query: "budget", engine: selected)
+      },
+      legacy: {
+        XCTFail("free opt-out reached Gemini route")
+        return [LocalHybridHit]()
+      })
+    XCTAssertEqual(hits.map(\.sourceId), [2, 1])
+    XCTAssertTrue(hits.allSatisfy { $0.matchedBy == .keyword })
+  }
+
   func testSourceKindFilterKeepsScreenSearchSeparateFromTranscripts() async throws {
     let (store, directory) = try fixture()
     defer { try? FileManager.default.removeItem(at: directory) }

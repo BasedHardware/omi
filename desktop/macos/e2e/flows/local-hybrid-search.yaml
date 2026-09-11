@@ -1,9 +1,10 @@
 version: 2
 name: local-hybrid-search
 tier: manual
-description: Headless synthetic local hybrid retrieval benchmark via the automation bridge. Local embeddings are on by default in non-production; production-family stays on Gemini until localEmbeddingsEnabled / OMI_LOCAL_EMBEDDINGS=1. Apple NLCE assets are OS-managed; a Mac without them (once opted in) must report local_engine_unavailable (FTS-only) rather than calling Gemini.
+description: Headless synthetic local hybrid retrieval benchmark via the automation bridge. Local embeddings are on by default in non-production; free and unknown plans also default on in production; paid production bundles opt in with localEmbeddingsEnabled / OMI_LOCAL_EMBEDDINGS=1. Paid capture continues Gemini upload for phone search. Apple NLCE assets are OS-managed; a Mac without them (once opted in) must report local_engine_unavailable (FTS-only) rather than calling Gemini.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/LocalInference/ScreenEmbeddingPolicy.swift
   - desktop/macos/Desktop/Sources/LocalInference/LocalEmbeddingService.swift
   - desktop/macos/Desktop/Sources/LocalInference/LocalEmbeddingRuntime.swift
   - desktop/macos/Desktop/Sources/LocalInference/LocalEmbeddingKillSwitches.swift
@@ -12,6 +13,7 @@ covers:
   - desktop/macos/Desktop/Sources/LocalInference/LocalEmbeddingBenchmark.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/LocalEmbeddingStore.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/LocalHybridSearch.swift
+  - desktop/macos/Desktop/Sources/Rewind/Services/RewindScreenSearch.swift
   - desktop/macos/Desktop/Sources/Providers/ChatLocalHybridTool.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
 preconditions:
@@ -20,7 +22,7 @@ preconditions:
 steps:
   - id: S1
     name: Run the synthetic local embedding benchmark
-    do: "On a non-production named bundle, run `./scripts/omi-ctl action local_embedding_benchmark`. If Apple NLContextualEmbedding assets are on the machine, verify the JSON report has kind=local_embedding_benchmark, fixture=synthetic, and metric_count of 9 (name_heavy/paraphrase/date_bounded × fts/vector/hybrid). If the action returns error=local_engine_unavailable, that is the fail-closed probe and this step still passes — search stays keyword-only, never Gemini."
+    do: "On a non-production named bundle, run `./scripts/omi-ctl action local_embedding_benchmark`. If Apple NLContextualEmbedding assets are on the machine, verify the JSON report has kind=local_embedding_benchmark, fixture=synthetic, and metric_count of 9 (name_heavy/paraphrase/date_bounded × fts/vector/hybrid). `fixture=real` copies a Rewind DB first and reports agreement/self-retrieval counts only (no OCR or query text). If the action returns error=local_engine_unavailable, that is the fail-closed probe and this step still passes — search stays keyword-only, never Gemini."
     bridge.action:
       name: local_embedding_benchmark
     expect:
