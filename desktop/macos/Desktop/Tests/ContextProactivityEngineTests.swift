@@ -725,13 +725,33 @@ final class ContextProactivityEngineTests: XCTestCase {
     for entryPoint in entryPoints {
       XCTAssertTrue(source.contains(entryPoint), "missing entry point \(entryPoint)")
     }
-    let admissionCalls =
-      source.components(
-        separatedBy: "JITProactivityCoordinator.shared.handle("
-      ).count - 1
+
+    // Counting one admission call per entry point was the wrong shape once the dwell
+    // lanes were consolidated onto a single shared call behind the injected
+    // `jitHandle` seam. What has to hold is not a count but a route: every lane
+    // reaches the coordinator through that seam, and none of them around it. The
+    // only surviving mention of the singleton is the seam's own default argument.
+    let singletonReferences =
+      source.components(separatedBy: "JITProactivityCoordinator.shared.handle(").count - 1
     XCTAssertEqual(
-      admissionCalls, entryPoints.count,
-      "each evaluation entry point needs its own JIT admission check")
+      singletonReferences, 1,
+      "the coordinator singleton belongs only in jitHandle's default; a lane calling it "
+        + "directly cannot be driven against a fake in tests")
+
+    // Presence is not enough for the speech lane: an admission check placed after
+    // delivery would still read as present. Pin the order within its body.
+    guard let speechStart = source.range(of: "func evaluateFromSpeech(") else {
+      return XCTFail("missing func evaluateFromSpeech(")
+    }
+    let speechBody = source[speechStart.upperBound...]
+    guard let admission = speechBody.range(of: "await jitHandle("),
+      let delivery = speechBody.range(of: "await evaluateAndDeliver(")
+    else {
+      return XCTFail("evaluateFromSpeech must consult jitHandle and then evaluateAndDeliver")
+    }
+    XCTAssertTrue(
+      admission.lowerBound < delivery.lowerBound,
+      "speech must clear JIT admission before it delivers, not after")
   }
 
   private func contextProactivityEngineSource() throws -> String {

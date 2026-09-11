@@ -410,10 +410,11 @@ actor ContextProactivityEngine {
     // planned-trigger precedence: dwell and departure stop there, speech did not.
     //
     // Routed rather than documented as independent, per the ruling on #12407.
-    if await JITProactivityCoordinator.shared.handle(
-      fence: fence, snapshot: snapshot, frame: frameSample.frame,
-      authorizationSnapshot: authorizationSnapshot)
-    {
+    //
+    // Through `jitHandle` rather than the singleton: main moved the dwell lanes onto
+    // that injected seam, and a lane that reaches the coordinator by a second route
+    // is one a test can configure the others away from but not this one.
+    if await jitHandle(fence, snapshot, frameSample.frame, authorizationSnapshot) {
       return
     }
     let speechSection = ContextProactivityPromptBuilder.liveSpeechSection(speech)
