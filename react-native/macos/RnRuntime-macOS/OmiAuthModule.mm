@@ -608,6 +608,8 @@ RCT_EXPORT_MODULE(OmiAuth)
       if (OmiAuthRefreshFailureIsDefinitive(status, json)) {
         OSStatus clearStatus = OmiAuthClearSessionIfCurrent(refreshToken);
         if (clearStatus == errSecSuccess) {
+          OmiAuthSetShippingSessionIgnored(YES);
+          OmiAuthSetEnvironmentCloudTokensIgnored(YES);
           completion(nil, nil);
         } else if (clearStatus == errSecItemNotFound) {
           [self resolveStoredToken:completion];
@@ -861,10 +863,6 @@ RCT_REMAP_METHOD(hasCloudSession,
       return;
     }
   }
-  if (OmiAuthStoredSession() != nil) {
-    resolve(@YES);
-    return;
-  }
   [self resolveStoredToken:^(NSString *token, NSError *error) {
     if (error != nil) {
       reject(@"OMI_AUTH_TRANSPORT", @"Omi cloud session could not be refreshed", error);
@@ -1019,6 +1017,7 @@ RCT_REMAP_METHOD(signOut,
   if (status == errSecSuccess || status == errSecItemNotFound) {
     OmiAuthSetEnvironmentCloudTokensIgnored(YES);
     OmiAuthSetShippingSessionIgnored(YES);
+    [NSUserDefaults.standardUserDefaults removeObjectForKey:OmiOnboardingCompletedKey];
     resolve(@{@"signedOut" : @YES});
     return;
   }
