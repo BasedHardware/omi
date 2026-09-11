@@ -324,6 +324,10 @@ class SlackClient:
                             channel_name = ch["name"]
                             break
                 
+                if not channel_id:
+                    # An explicit channel must never degrade into a workspace-wide search.
+                    return {"success": False, "error": "channel_not_found_or_unavailable"}
+
                 if channel_id:
                     # Check if query is asking for recent messages (today, recent, etc.)
                     query_lower = query.lower().strip()
@@ -383,19 +387,8 @@ class SlackClient:
             # Use search API for general searches
             search_query = query
             if channel:
-                # If channel is provided, search within that channel
-                if not channel.startswith('C') and not channel.startswith('G'):
-                    # It's a channel name, need to find the ID
-                    channels = self.list_channels(access_token)
-                    channel_id = None
-                    for ch in channels:
-                        if ch["name"].lower() == channel.lower().lstrip('#'):
-                            channel_id = ch["id"]
-                            break
-                    if channel_id:
-                        search_query = f"in:{channel_id} {query}"
-                else:
-                    search_query = f"in:{channel} {query}"
+                # Reuse the resolved ID, including when channel history fails.
+                search_query = f"in:{channel_id} {query}"
             
             print(f"🔍 Using search API with query: '{search_query}'", flush=True)
             result = client.search_messages(query=search_query)
