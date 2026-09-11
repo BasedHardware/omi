@@ -312,6 +312,9 @@ run_suite() {
     echo "suite timed out after ${budget}s" >>"$log_path"
     status=124
   fi
+  if [ "$status" = "124" ]; then
+    print_batch_diagnostics "$log_path" "suite $suite (timed out)"
+  fi
   record_suite_seconds "$log_path" "$log_dir"
   echo "$status" >"$status_path"
   exit "$status"
@@ -319,6 +322,19 @@ run_suite() {
 
 # Many suites, one SwiftPM process — the green fast path. A pass marks every
 # suite in the batch green; anything else is thrown away and re-run per suite.
+# A killed or failing batch used to vanish with its temp log; the step summary
+# then named the batch and nothing else (#13456: two attempts, no test name).
+# Print what XCTest had reached so the hang or failure has a name.
+print_batch_diagnostics() {
+  local log_path="$1"
+  local label="$2"
+  echo "--- $label: last XCTest progress lines ---"
+  grep -E "^Test (Case|Suite) '.*' (started|passed|failed)" "$log_path" 2>/dev/null | tail -n 12
+  echo "--- $label: failures and crashes ---"
+  grep -E "error: |: failed - |Fatal error|Exited with unexpected signal|Executed [0-9]+ tests" "$log_path" 2>/dev/null | tail -n 20
+  echo "--- end $label ---"
+}
+
 run_batch() {
   local log_dir="$1"
   local batch_id="$2"
@@ -347,6 +363,9 @@ run_batch() {
   if [ -f "$timeout_path" ]; then
     echo "batch of ${batch_size} suite(s) timed out after ${budget}s" >>"$log_path"
     status=124
+  fi
+  if [ "$status" != "0" ]; then
+    print_batch_diagnostics "$log_path" "batch $batch_id (exit $status)"
   fi
 
   if [ "$status" = "0" ]; then
