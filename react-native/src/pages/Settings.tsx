@@ -271,6 +271,7 @@ export function SettingsPage({
     [],
   );
   const [importJobs, setImportJobs] = useState<OmiImportJobRow[]>([]);
+  const [importJobsError, setImportJobsError] = useState<string | null>(null);
   const [webhookUrls, setWebhookUrls] = useState<
     Map<OmiWebhookUrlType, OmiWebhookUrl>
   >(new Map());
@@ -349,6 +350,7 @@ export function SettingsPage({
       setDeveloperKeys([]);
       setMcpKeys([]);
       setImportJobs([]);
+      setImportJobsError(null);
       setWebhookUrls(new Map());
       setError(cloudSessionUnavailableCopy(backend));
       setPhase('error');
@@ -416,6 +418,7 @@ export function SettingsPage({
         setDeveloperKeys([]);
         setMcpKeys([]);
         setImportJobs([]);
+        setImportJobsError(null);
         setWebhookUrls(new Map());
         setError(desktopBackendServiceCopy);
         setSettingsCanRetry(true);
@@ -452,6 +455,7 @@ export function SettingsPage({
         setDeveloperKeys([]);
         setMcpKeys([]);
         setImportJobs([]);
+        setImportJobsError(null);
         setWebhookUrls(new Map());
         setError(desktopBackendUnauthorizedCopy);
         setPhase('signed-out');
@@ -548,7 +552,13 @@ export function SettingsPage({
     );
     const developerKeysTask = loadOmiDevApiKeys(backend).catch(() => []);
     const mcpKeysTask = loadOmiMcpApiKeys(backend).catch(() => []);
-    const importJobsTask = loadOmiImportJobs(backend).catch(() => []);
+    const importJobsTask = loadOmiImportJobs(backend).then(
+      jobs => ({jobs, error: null as string | null}),
+      reason => ({
+        jobs: [] as Awaited<ReturnType<typeof loadOmiImportJobs>>,
+        error: desktopReadErrorCopy(reason),
+      }),
+    );
     const webhookUrlsTask = loadOmiWebhookUrls(backend).catch(
       () => new Map<OmiWebhookUrlType, OmiWebhookUrl>(),
     );
@@ -583,7 +593,7 @@ export function SettingsPage({
     const transcriptionPreferencesResult = await transcriptionPreferencesTask;
     const nextDeveloperKeys = await developerKeysTask;
     const nextMcpKeys = await mcpKeysTask;
-    const nextImportJobs = await importJobsTask;
+    const importJobsResult = await importJobsTask;
     const nextWebhookUrls = await webhookUrlsTask;
     if (!current()) {
       return;
@@ -632,7 +642,8 @@ export function SettingsPage({
         'MCP key',
       ),
     );
-    setImportJobs(importJobsCopy(nextImportJobs));
+    setImportJobs(importJobsCopy(importJobsResult.jobs));
+    setImportJobsError(importJobsResult.error);
     setWebhookUrls(nextWebhookUrls);
   }, [browser]);
 
@@ -1095,9 +1106,13 @@ export function SettingsPage({
             title={row.title}
           />
         ))}
-        {importJobs.map(row => (
-          <SettingRow copy={row.copy} key={row.key} title={row.title} />
-        ))}
+        {importJobsError !== null ? (
+          <SettingRow copy={importJobsError} title="Import Data" />
+        ) : (
+          importJobs.map(row => (
+            <SettingRow copy={row.copy} key={row.key} title={row.title} />
+          ))
+        )}
       </>
     );
 

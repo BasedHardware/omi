@@ -1869,6 +1869,28 @@ test('Settings names GET import jobs without Start import or Limitless', async (
   ).toBe(false);
 });
 
+test('Settings names a failed import jobs GET instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/import/jobs?limit=50') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Import Data');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('job-1');
+  expect(tree).not.toContain('No imports yet');
+  expect(tree).not.toContain('Limitless');
+});
+
 test('Apps category labels are not raw wire tokens', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

@@ -346,6 +346,7 @@ export function DesktopSettings({
     [],
   );
   const [importJobs, setImportJobs] = useState<OmiImportJobRow[]>([]);
+  const [importJobsError, setImportJobsError] = useState<string | null>(null);
   const [webhookUrls, setWebhookUrls] = useState<
     Map<OmiWebhookUrlType, OmiWebhookUrl>
   >(new Map());
@@ -404,6 +405,7 @@ export function DesktopSettings({
     let nextDeveloperKeys: ReturnType<typeof developerKeysCopy> = [];
     let nextMcpKeys: ReturnType<typeof developerKeysCopy> = [];
     let nextImportJobs: OmiImportJobRow[] = [];
+    let nextImportJobsError: string | null = null;
     let nextWebhookUrls = new Map<OmiWebhookUrlType, OmiWebhookUrl>();
     if (backend !== undefined && backend !== null && session === 'ready') {
       const peopleTask = loadOmiPeopleNames(backend).then(
@@ -498,7 +500,13 @@ export function DesktopSettings({
       );
       const developerKeysTask = loadOmiDevApiKeys(backend).catch(() => []);
       const mcpKeysTask = loadOmiMcpApiKeys(backend).catch(() => []);
-      const importJobsTask = loadOmiImportJobs(backend).catch(() => []);
+      const importJobsTask = loadOmiImportJobs(backend).then(
+        jobs => ({jobs, error: null as string | null}),
+        reason => ({
+          jobs: [] as Awaited<ReturnType<typeof loadOmiImportJobs>>,
+          error: desktopReadErrorCopy(reason),
+        }),
+      );
       const webhookUrlsTask = loadOmiWebhookUrls(backend).catch(
         () => new Map<OmiWebhookUrlType, OmiWebhookUrl>(),
       );
@@ -563,7 +571,9 @@ export function DesktopSettings({
         })),
         'MCP key',
       );
-      nextImportJobs = importJobsCopy(await importJobsTask);
+      const importJobsResult = await importJobsTask;
+      nextImportJobs = importJobsCopy(importJobsResult.jobs);
+      nextImportJobsError = importJobsResult.error;
       nextWebhookUrls = await webhookUrlsTask;
     } else {
       nextAccount = failedAccountSettings(
@@ -604,6 +614,7 @@ export function DesktopSettings({
     setDeveloperKeys(nextDeveloperKeys);
     setMcpKeys(nextMcpKeys);
     setImportJobs(nextImportJobs);
+    setImportJobsError(nextImportJobsError);
     setWebhookUrls(nextWebhookUrls);
   }, [backend, session]);
 
@@ -1237,9 +1248,13 @@ export function DesktopSettings({
       {mcpKeys.map((row, index) => (
         <Row copy={row.copy} key={`mcp-key-${index}`} title={row.title} />
       ))}
-      {importJobs.map(row => (
-        <Row copy={row.copy} key={row.key} title={row.title} />
-      ))}
+      {importJobsError !== null ? (
+        <Row copy={importJobsError} title="Import Data" />
+      ) : (
+        importJobs.map(row => (
+          <Row copy={row.copy} key={row.key} title={row.title} />
+        ))
+      )}
     </>
   );
 
