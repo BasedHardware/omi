@@ -35,8 +35,8 @@ class WalFileManager {
 
     final content = await _walFile!.readAsString();
     if (content.isEmpty) {
-      Logger.debug('WAL file is empty, returning empty list');
-      return [];
+      Logger.debug('WAL file is empty, trying backup');
+      return await _loadFromBackup();
     }
 
     dynamic jsonData;
@@ -74,7 +74,9 @@ class WalFileManager {
     };
 
     final jsonString = jsonEncode(jsonData);
-    await _walFile!.writeAsString(jsonString);
+    final tmp = File('${_walFile!.path}.tmp');
+    await tmp.writeAsString(jsonString, flush: true);
+    await tmp.rename(_walFile!.path);
 
     Logger.debug('Successfully saved ${wals.length} WALs to file');
     return true;
