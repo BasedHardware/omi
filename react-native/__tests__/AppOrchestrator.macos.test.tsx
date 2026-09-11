@@ -1089,6 +1089,86 @@ test('a send during the initial history load still receives the transcript', asy
   expect(labelsOf(renderer)).toContain('Load earlier messages');
 });
 
+test('a failed history load during send still names the history error', async () => {
+  // send() bumps chatMutationSeqRef. The history error path used to require
+  // that mutation still match, so a 404 GET after send never settled and
+  // never replaced the send copy with Chat history is not available. Compact
+  // Home also pins Loading chat… on that same catch. Settle the history
+  // error. This does not make the omnibar non-editable.
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+
+  const historyResolvers: Array<
+    (value: {id: string; status: number; body: string | null}) => void
+  > = [];
+  const writeDoor = {
+    error: {code: 'not_found', retryable: false, action: 'none'},
+  };
+  mockBackend.request.mockImplementation(
+    async (value: {id: string; body?: string}) => {
+      if (value.id === 'chat-history') {
+        return new Promise(resolve => {
+          historyResolvers.push(resolve);
+        });
+      }
+      if (value.id.startsWith('admit-')) {
+        return {
+          id: value.id,
+          status: 404,
+          body: JSON.stringify(writeDoor),
+        };
+      }
+      return {id: value.id, status: 501, body: null};
+    },
+  );
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  expect(historyResolvers.length).toBeGreaterThan(0);
+
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('sent while history pending');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain(
+    'Sending messages is not available on this backend yet.',
+  );
+  expect(labelsOf(renderer)).toContain('Send unavailable');
+
+  await act(async () => {
+    historyResolvers.splice(0).forEach(resolve => {
+      resolve({
+        id: 'chat-history',
+        status: 404,
+        body: JSON.stringify(writeDoor),
+      });
+    });
+    await flushAsyncQueue();
+  });
+
+  const copy = textOf(renderer);
+  expect(copy).toContain(
+    'Chat history is not available on this backend yet.',
+  );
+  expect(copy).not.toContain('Loading chat…');
+  expect(labelsOf(renderer)).toContain('Send unavailable');
+  expect(
+    renderer.root.findAll(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
 test('a send during an older-history load still keeps the earlier page', async () => {
   // send() bumps chatMutationSeqRef. That used to discard a successfully
   // fetched older page entirely — losing those messages and leaving the same

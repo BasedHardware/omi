@@ -305,9 +305,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     // in-flight setMessages(page) cannot wipe optimistic rows — but that same
     // bump must not discard the history page (cursor + prior messages). Always
     // merge into whatever the session already shows; workspace reload / gate
-    // drop clear messages before bumping the epoch.
+    // drop clear messages before bumping the epoch. A send must not suppress
+    // this load's settle/error bookkeeping either, or a failed history read
+    // would pin Loading chat… and never name the history error.
     const session = chatSessionEpochRef.current;
-    const mutation = chatMutationSeqRef.current;
     loadNewestChatHistory(backend)
       .then(page => {
         if (!active || chatSessionEpochRef.current !== session) {
@@ -326,7 +327,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         if (
           active &&
           chatSessionEpochRef.current === session &&
-          mutation === chatMutationSeqRef.current &&
           onboardingRequired === false
         ) {
           setChatError(chatHistoryErrorCopy(error));
