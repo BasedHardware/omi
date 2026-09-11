@@ -24,7 +24,30 @@ import {
   isVisibleGenerationText,
 } from "./generation-prompt";
 import { openLiveGenerationSse } from "./generation-sse";
-import type { ChatCreate, GenerationEvent } from "./wire";
+import type { ChatCreate, ChatMessage, GenerationEvent } from "./wire";
+
+function projectExternalGenerationFrame(event: GenerationEvent): unknown {
+  if (event.kind !== "done" && event.kind !== "cancelled") {
+    const { id: _id, ...frame } = event;
+    return frame;
+  }
+  if (event.kind === "cancelled" && event.message === null) {
+    return { kind: "cancelled", message: null };
+  }
+  const message = event.message as ChatMessage | null | undefined;
+  if (message === null || message === undefined || message.sender !== "ai") {
+    throw new TypeError(
+      "terminal Chat frame has no canonical assistant message"
+    );
+  }
+  return {
+    kind: event.kind,
+    message: {
+      ...message,
+      generationOutcome: event.kind === "done" ? "completed" : "cancelled",
+    },
+  };
+}
 
 export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
   private readonly waiters = new Map<
@@ -310,9 +333,8 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
   }
 
   encode(event: GenerationEvent): string {
-    const { id: _id, ...frame } = event;
     return `event: ${event.kind}\nid: ${event.id}\ndata: ${JSON.stringify(
-      frame
+      projectExternalGenerationFrame(event)
     )}\n\n`;
   }
 

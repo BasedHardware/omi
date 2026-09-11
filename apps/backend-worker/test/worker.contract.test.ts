@@ -4600,6 +4600,46 @@ describe("ratified generation wire", () => {
     expect(transcript).not.toContain('"id":"event-1"');
   });
 
+  test("worker done event encoding overlays completed generationOutcome", () => {
+    const encode = (
+      accountBackend.prototype as unknown as {
+        encode(event: {
+          id: string;
+          kind: "done";
+          message: Record<string, unknown>;
+        }): string;
+      }
+    ).encode;
+    const message = {
+      id: "assistant-1",
+      text: "hello",
+      sender: "ai",
+      type: "text",
+      createdAt: 1,
+      updatedAt: 1,
+      chatSessionId: null,
+      appId: null,
+      journalRevision: 0,
+      payloadHash: "sha256:test",
+      messageSource: "assistant_generation",
+      rating: null,
+      reported: false,
+      revision: "1",
+      attachments: [],
+    };
+    const transcript = encode.call(accountBackend.prototype, {
+      id: "2",
+      kind: "done",
+      message,
+    });
+    expect(parseChatGenerationEventStream(transcript)).toEqual([
+      {
+        kind: "done",
+        message: { ...message, generationOutcome: "completed" },
+      },
+    ]);
+  });
+
   test("generation endpoint emits a parser-compatible leading snapshot", async () => {
     const response = await fetchWorker(
       "/v1/chat-generations/generation-id/events",
