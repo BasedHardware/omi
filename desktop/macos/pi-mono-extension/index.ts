@@ -1964,6 +1964,56 @@ export async function resolveLocalContextWindow(
   return { contextWindow: DEFAULT_LOCAL_CONTEXT_WINDOW, source: "default" };
 }
 
+/** Register a local OpenAI-compatible provider (LM Studio, Ollama, etc.)
+ *  with one text-or-vision model, probing its context window from the
+ *  server first. Shared by the "omi-local" and "omi-local-vision"
+ *  registrations below: they differ only in provider name, base URL, and
+ *  model id, and the registered model is otherwise identical. */
+async function registerLocalProvider(
+  pi: ExtensionAPI,
+  { name, baseUrl, modelId, apiKey }: { name: string; baseUrl: string; modelId: string; apiKey: string },
+): Promise<void> {
+  const { contextWindow, source } = await resolveLocalContextWindow(baseUrl, modelId);
+  process.stderr.write(`[omi-provider] ${name} context window=${contextWindow} (${source})\n`);
+  pi.registerProvider(name, {
+    api: "openai-completions",
+    baseUrl,
+    apiKey,
+    models: [
+      {
+        id: modelId,
+        name: modelId,
+        reasoning: false,
+        // pi-ai's openai-completions client strips image content blocks
+        // before sending the request whenever `input` doesn't list "image"
+        // (see providers/openai-completions.js): declaring "text" only
+        // silently dropped screenshots even when the user's chosen model
+        // is actually vision-capable (e.g. running a single vision model
+        // with no separate vision-subagent configured). The user picks
+        // this model id themselves, same trust boundary as the vision
+        // and cloud providers, which already declare both.
+        input: ["text", "image"],
+        // Probed from the server above (resolveLocalContextWindow), not
+        // hardcoded: pi derives each request's output budget as
+        // contextWindow - estimatedConversationTokens - safety, and a
+        // window smaller than what the server actually loaded collapses
+        // that budget to 1 token once the conversation outgrows it.
+        contextWindow,
+        maxTokens: 8_192,
+        // Genuinely free, never tracked anywhere, client or server.
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        // pi-ai auto-detects the max-tokens field name from the base URL and
+        // only recognizes a handful of known hosts as "max_tokens"; every
+        // unknown host (including a local LM Studio/Ollama server) falls
+        // back to "max_completion_tokens", which LM Studio silently ignores
+        // so the request would go out with no effective token cap. Force the
+        // field LM Studio (and most local OpenAI-compatible servers) accept.
+        compat: { maxTokensField: "max_tokens" },
+      },
+    ],
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Extension entry point
 // ---------------------------------------------------------------------------
@@ -2042,51 +2092,16 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
   // this has no effect on installs that haven't configured a local model.
   const localBaseUrl = process.env.OMI_LOCAL_BASE_URL;
   const localModelId = process.env.OMI_LOCAL_MODEL_ID;
+  // Most local OpenAI-compatible servers (LM Studio, Ollama, etc.) don't
+  // check the key, but pi's openai-completions client requires a
+  // non-empty string or it throws before sending the request.
+  const localApiKey = process.env.OMI_LOCAL_API_KEY || "not-needed";
   if (localBaseUrl && localModelId) {
-    const { contextWindow: localContextWindow, source: localContextSource } =
-      await resolveLocalContextWindow(localBaseUrl, localModelId);
-    process.stderr.write(
-      `[omi-provider] omi-local context window=${localContextWindow} (${localContextSource})\n`
-    );
-    pi.registerProvider("omi-local", {
-      api: "openai-completions",
+    await registerLocalProvider(pi, {
+      name: "omi-local",
       baseUrl: localBaseUrl,
-      // Most local OpenAI-compatible servers (LM Studio, Ollama, etc.) don't
-      // check the key, but pi's openai-completions client requires a
-      // non-empty string or it throws before sending the request.
-      apiKey: process.env.OMI_LOCAL_API_KEY || "not-needed",
-      models: [
-        {
-          id: localModelId,
-          name: localModelId,
-          reasoning: false,
-          // pi-ai's openai-completions client strips image content blocks
-          // before sending the request whenever `input` doesn't list "image"
-          // (see providers/openai-completions.js) — declaring "text" only
-          // silently dropped screenshots even when the user's chosen model
-          // is actually vision-capable (e.g. running a single vision model
-          // with no separate vision-subagent configured). The user picks
-          // this model id themselves, same trust boundary as the vision
-          // and cloud providers below, which already declare both.
-          input: ["text", "image"],
-          // Probed from the server above (resolveLocalContextWindow), not
-          // hardcoded: pi derives each request's output budget as
-          // contextWindow - estimatedConversationTokens - safety, and a
-          // window smaller than what the server actually loaded collapses
-          // that budget to 1 token once the conversation outgrows it.
-          contextWindow: localContextWindow,
-          maxTokens: 8_192,
-          // Genuinely free — never tracked anywhere, client or server.
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          // pi-ai auto-detects the max-tokens field name from the base URL and
-          // only recognizes a handful of known hosts as "max_tokens"; every
-          // unknown host (including a local LM Studio/Ollama server) falls
-          // back to "max_completion_tokens", which LM Studio silently ignores
-          // — the request would go out with no effective token cap. Force the
-          // field LM Studio (and most local OpenAI-compatible servers) accept.
-          compat: { maxTokensField: "max_tokens" },
-        },
-      ],
+      modelId: localModelId,
+      apiKey: localApiKey,
     });
   }
 
@@ -2097,29 +2112,11 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
   // single-local-model setups are completely unaffected.
   const localVisionModelId = process.env.OMI_LOCAL_VISION_MODEL_ID;
   if (localBaseUrl && localVisionModelId) {
-    const { contextWindow: visionContextWindow, source: visionContextSource } =
-      await resolveLocalContextWindow(localBaseUrl, localVisionModelId);
-    process.stderr.write(
-      `[omi-provider] omi-local-vision context window=${visionContextWindow} (${visionContextSource})\n`
-    );
-    pi.registerProvider("omi-local-vision", {
-      api: "openai-completions",
+    await registerLocalProvider(pi, {
+      name: "omi-local-vision",
       baseUrl: localBaseUrl,
-      apiKey: process.env.OMI_LOCAL_API_KEY || "not-needed",
-      models: [
-        {
-          id: localVisionModelId,
-          name: localVisionModelId,
-          reasoning: false,
-          input: ["text", "image"],
-          // See the "omi-local" model above: probed, not hardcoded.
-          contextWindow: visionContextWindow,
-          maxTokens: 8_192,
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          // See the "omi-local" model above — same LM Studio max-tokens quirk.
-          compat: { maxTokensField: "max_tokens" },
-        },
-      ],
+      modelId: localVisionModelId,
+      apiKey: localApiKey,
     });
   }
 

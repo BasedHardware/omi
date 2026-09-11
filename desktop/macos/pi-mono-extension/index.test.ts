@@ -3346,6 +3346,58 @@ test("omiProvider: does not register omi when OMI_API_KEY is not set (local-only
   );
 });
 
+test("omiProvider: registers omi-local-vision when the vision env var is present", async () => {
+  await withEnvAsync(
+    {
+      OMI_LOCAL_BASE_URL: "http://100.100.100.100:1234/v1",
+      OMI_LOCAL_VISION_MODEL_ID: "qwen3-vl-8b-mlx",
+    },
+    async () => {
+      await withFakeFetch(alwaysFailFetch, async () => {
+        const pi = fakePi();
+        await omiProvider(pi as any);
+        const vision = pi.registered.find((r) => r.name === "omi-local-vision");
+        assert.ok(vision, "omi-local-vision must register when the vision env var is present");
+        assert.equal(vision!.config.baseUrl, "http://100.100.100.100:1234/v1");
+        assert.equal(vision!.config.models[0].id, "qwen3-vl-8b-mlx");
+      });
+    }
+  );
+});
+
+test("omiProvider: omi-local and omi-local-vision model configs are identical except id and name", async () => {
+  await withEnvAsync(
+    {
+      OMI_LOCAL_BASE_URL: "http://100.100.100.100:1234/v1",
+      OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx",
+      OMI_LOCAL_VISION_MODEL_ID: "qwen3-vl-8b-mlx",
+    },
+    async () => {
+      await withFakeFetch(alwaysFailFetch, async () => {
+        const pi = fakePi();
+        await omiProvider(pi as any);
+        const local = pi.registered.find((r) => r.name === "omi-local");
+        const vision = pi.registered.find((r) => r.name === "omi-local-vision");
+        assert.ok(local && vision, "both omi-local and omi-local-vision must register");
+
+        const localModel = { ...local!.config.models[0] };
+        const visionModel = { ...vision!.config.models[0] };
+        // id and name are expected to differ (each carries its own model id);
+        // strip them and everything else must be structurally identical, which
+        // proves the shared registerLocalProvider helper didn't let the two
+        // registrations diverge.
+        delete localModel.id;
+        delete localModel.name;
+        delete visionModel.id;
+        delete visionModel.name;
+        assert.deepEqual(localModel, visionModel);
+        assert.equal(local!.config.models[0].id, "qwen3.8-27b-mlx");
+        assert.equal(vision!.config.models[0].id, "qwen3-vl-8b-mlx");
+      });
+    }
+  );
+});
+
 // ---------------------------------------------------------------------------
 // isLocalProviderName / before_provider_headers scoping
 //
