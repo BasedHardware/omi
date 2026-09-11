@@ -3,7 +3,12 @@ from pathlib import Path
 
 import pytest
 
+from database import firestore_index_registry as registry
 from scripts import jit_qa_firestore_index_operator as operator
+
+# Every registry composite is selected; the count follows the registry so a new
+# production query requirement is provisioned on the isolated QA database too.
+_REGISTRY_COUNT = len(registry.INDEX_REQUIREMENTS)
 
 _UNSET = object()
 
@@ -53,10 +58,12 @@ def _field_api_request(*, ready: bool = False, api_scope: object = _UNSET):
     return request
 
 
-def test_selected_manifest_is_canonical_and_contains_only_bounded_required_queries():
+def test_selected_manifest_is_canonical_and_contains_every_registry_composite():
     manifest, signatures = operator.selected_manifest()
 
-    assert len(manifest["indexes"]) == 17
+    assert _REGISTRY_COUNT >= 78
+    assert len(manifest["indexes"]) == _REGISTRY_COUNT
+    assert operator.TARGET_REQUIREMENTS is registry.INDEX_REQUIREMENTS
     assert signatures == {requirement.signature for requirement in operator.TARGET_REQUIREMENTS}
     assert {
         (
@@ -87,29 +94,18 @@ def test_plan_reads_only_fixed_named_database_and_reports_all_required_indexes(m
         {"project": "based-hardware-dev", "database": "jit-qa", "runner": operator.reconciler.subprocess.run}
     ]
     assert result["manifest_validated"] is True
-    assert result["selected_index_count"] == 17
+    assert result["selected_index_count"] == _REGISTRY_COUNT
     assert result["selected_field_index_count"] == 1
-    assert result["missing_count"] == 18
+    assert result["missing_count"] == _REGISTRY_COUNT + 1
     assert {entry["state"] for entry in result["indexes"]} == {"MISSING"}
     assert {entry["identifier"] for entry in result["indexes"]} == {
-        "memory_items_universal_list_scan",
-        "conversations_entity_timeline_completed",
-        "memories_universal_list_scan_updated_at",
-        "memories_universal_list_scan_created_at",
-        "daily_sweep_active_fact_subject",
-        "daily_sweep_active_fact_slot",
-        "daily_sweep_active_fact_entity",
-        "daily_sweep_active_fact_entity_slot",
-        "daily_sweep_active_fact_subject_content",
-        "daily_sweep_active_fact_entity_content",
-        "conversation_finalization_jobs_oldest_nonterminal",
-        "chat_sessions_current_by_app_created_at",
-        "messages_by_app_created_at",
-        "messages_by_session_created_at",
-        "action_items_completed_due_range",
-        "action_items_completed_created_range",
-        "action_items_completed_created_newest_first",
+        requirement.identifier for requirement in registry.INDEX_REQUIREMENTS
     }
+    assert {
+        "chat_first_deferrals_due",
+        "action_items_completed_created_newest_first",
+        "memory_items_canonical_atlas_read",
+    } <= {entry["identifier"] for entry in result["indexes"]}
     assert result["field_indexes"] == [
         {
             "identifier": "conversations_status_collection_group_ascending",
@@ -164,13 +160,13 @@ def test_apply_requires_confirmation_and_delegates_only_selected_signatures(monk
         field_api_request=field_api,
     )
     assert result["schema_version"] == "omi.jit.qa.firestore-index-apply.v1"
-    assert result["created_index_count"] == 17
+    assert result["created_index_count"] == _REGISTRY_COUNT
     assert result["created_field_index_count"] == 1
     assert calls[0][0] == "provision"
     assert calls[1][0] == "wait"
     assert calls[0][1]["project"] == operator.PROJECT
     assert calls[0][1]["database"] == operator.DATABASE
-    assert len(calls[0][1]["expected"]) == 17
+    assert len(calls[0][1]["expected"]) == _REGISTRY_COUNT
     assert calls[1][1]["expected"] == calls[0][1]["expected"]
 
 
@@ -205,7 +201,7 @@ def test_apply_cli_keeps_reconciler_progress_out_of_json_receipt(monkeypatch, ca
     captured = capsys.readouterr()
     receipt = json.loads(captured.out)
     assert receipt["missing_count"] == 0
-    assert receipt["created_index_count"] == 17
+    assert receipt["created_index_count"] == _REGISTRY_COUNT
     assert receipt["created_field_index_count"] == 1
     assert "READY" in captured.err
 
