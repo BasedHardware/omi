@@ -81,7 +81,11 @@ def get_action_item(
         # A fixed page cap would report existing older items as not found.
         page_size = 200
         offset = 0
-        while True:
+        # The API filters locked records after pagination, so a short page
+        # does not mean the result set is exhausted. Continue until empty
+        # or the documented 10k scan cap (checked before the next request).
+        max_offset = 10_000
+        while offset <= max_offset:
             page = client.get("/v1/dev/user/action-items", params={"limit": page_size, "offset": offset})
             if not page:
                 break
@@ -89,14 +93,6 @@ def get_action_item(
                 if item.get("id") == action_item_id:
                     ctx.renderer.emit(item, title="action item")
                     return
-            # The API filters locked records after pagination, so a short page
-            # does not mean the result set is exhausted. Only stop on empty.
-            if len(page) == 0:
-                break
-            # Guard against a pathological infinite cursor if the server never
-            # advances offset semantics; 10k items matches the documented cap.
-            if offset >= 10_000:
-                break
             offset += page_size
     # Exit code 5 (NotFoundError) — same contract as a server-side 404,
     # whether or not the dev API exposed a direct GET for this noun.
