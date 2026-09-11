@@ -631,7 +631,7 @@ actor AgentBridge {
   /// auth, no Rust backend, no cost logging). Meaningless for "acp".
   ///
   /// Read-through to the app-global provider selection in Settings, not a
-  /// stored per-bridge field — there is no per-session override. The shared
+  /// stored per-bridge field: there is no per-session override. The shared
   /// `AgentRuntimeProcess` reads the same global config when it launches the
   /// harness process, so this and the actually-running process always agree.
   var providerMode: String {
@@ -671,7 +671,7 @@ actor AgentBridge {
   }
 
   /// Whether this run requires the managed Omi credential (Firebase ID
-  /// token). True only for the "omi" provider on the piMono harness — the
+  /// token). True only for the "omi" provider on the piMono harness; the
   /// "omi-local" provider shares that harness but talks to a user-configured
   /// endpoint and must never be blocked on, or fetch, a Firebase token.
   private var requiresManagedPiMonoCredentials: Bool {
@@ -1637,7 +1637,7 @@ actor AgentBridge {
       throw BridgeError.requestAlreadyActive
     }
 
-    // Local sessions share the piMono adapter/credentialScope with "omi" —
+    // Local sessions share the piMono adapter/credentialScope with "omi";
     // gate on providerMode too, or a local session would still hit Omi's
     // quota check and the Firebase-token retry path below despite never
     // authenticating to Omi in the first place.

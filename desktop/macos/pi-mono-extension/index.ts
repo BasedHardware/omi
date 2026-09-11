@@ -808,7 +808,7 @@ export function classifyFileWrite(filePath: string): DenyDecision | null {
  *  subagent (see agent/src/vision-subagent.ts's writeScreenshotForVisionSubagent).
  *  Matched together with the directory check below (visionScreenshotDirectory)
  *  so a user file elsewhere on disk that happens to share this basename is
- *  never blocked — only the exact fixed path the writer uses is. */
+ *  never blocked; only the exact fixed path the writer uses is. */
 const VISION_SCREENSHOT_BASENAME = /^omi-screen\.(?:png|jpe?g|webp)$/;
 
 /** The provider name pi-mono-extension registers the vision-capable local
@@ -825,18 +825,18 @@ const LOCAL_PROVIDER_NAME = "omi-local";
 /** Classify a `read` of the vision screenshot file. Returns null (allowed)
  *  for any path that isn't the fixed screenshot path, or when the currently
  *  active model is the vision subagent's own model (it legitimately reads
- *  its own input image). Blocks everything else — in practice, the main
+ *  its own input image). Blocks everything else: in practice, the main
  *  model trying to look at the screenshot itself instead of delegating to
  *  the vision subagent, whether because it never tried delegating or
  *  because delegation just failed.
  *
  *  Note: this can't be done by tracking the subagent tool-call's in-flight
- *  window (tempting, since we already see "before"/"after" events for it) —
+ *  window (tempting, since we already see "before"/"after" events for it):
  *  the vision agent's frontmatter declares its own `extensions:` entry (see
  *  agent/src/index.ts), so pi-subagents loads a *separate* instance of this
  *  extension for the child session, with its own module-level state. Only
- *  ctx.model — which correctly reflects whichever session is currently
- *  active in each extension instance — survives that split. */
+ *  ctx.model, which correctly reflects whichever session is currently
+ *  active in each extension instance, survives that split. */
 export function classifyVisionScreenshotRead(filePath: string, activeModelProvider: string | undefined): DenyDecision | null {
   if (typeof filePath !== "string" || filePath.length === 0) return null;
   if (activeModelProvider === VISION_PROVIDER_NAME) return null;
@@ -846,7 +846,7 @@ export function classifyVisionScreenshotRead(filePath: string, activeModelProvid
   return {
     blocked: true,
     reason:
-      "This screenshot must be interpreted by the vision subagent — call " +
+      "This screenshot must be interpreted by the vision subagent, call " +
       "subagent(agent:\"vision\", task:...) with this file path instead of " +
       "reading it directly. If that delegation just failed, tell the user " +
       "you're unable to interpret images right now rather than guessing.",
@@ -856,7 +856,7 @@ export function classifyVisionScreenshotRead(filePath: string, activeModelProvid
 /** Classify a whole tool_call event by dispatching on toolName.
  *  When OMI_YOLO_MODE=1, the ordinary interactive denylist is bypassed.
  *  Kernel read-only authority remains mandatory in every build.
- *  `activeModelProvider` is ctx.model?.provider from the extension context —
+ *  `activeModelProvider` is ctx.model?.provider from the extension context,
  *  optional so existing callers/tests that don't care about the vision-read
  *  guard can keep calling this with just an event. */
 export function inspectToolCall(
@@ -1142,7 +1142,7 @@ export const OMI_CHAT_CONTRACT_VERSION = "1";
 /** Whether the currently active model's provider is a self-hosted local
  *  provider (main chat or vision). Omi-internal `x-omi-*` telemetry headers
  *  (correlation id, reasoning effort, JIT budget) must never reach a
- *  user-pointed local/LAN server — they're diagnostic plumbing for Omi's own
+ *  user-pointed local/LAN server: they're diagnostic plumbing for Omi's own
  *  cloud gateway, not something a self-hosted OpenAI-compatible endpoint
  *  should ever see on the wire. */
 export function isLocalProviderName(providerName: string | undefined): boolean {
@@ -2048,7 +2048,7 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
   }
 
   // Only register the cloud "omi" provider when an API key is actually
-  // configured — pi's registerProvider validates auth eagerly and throws
+  // configured: pi's registerProvider validates auth eagerly and throws
   // if it's missing, which would otherwise crash the extension on every
   // startup for local-only installs that never set OMI_API_KEY.
   if (apiKey) {
@@ -2065,7 +2065,7 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
           input: ["text", "image"],
           contextWindow: 200_000,
           maxTokens: 16_384,
-          // Cost set to 0 client-side — tracked server-side by the backend
+          // Cost set to 0 client-side, tracked server-side by the backend
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         },
       ],
@@ -2076,7 +2076,7 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
   // which preserves one safe correlation id across an upstream retry chain.
   pi.on("before_provider_headers", async (event, ctx) => {
     // Local/vision requests go to the user's own server, not Omi's cloud
-    // gateway — these headers are Omi-internal telemetry and must stay off
+    // gateway: these headers are Omi-internal telemetry and must stay off
     // that wire entirely, not just unbilled.
     if (isLocalProviderName(ctx?.model?.provider)) return;
     const raw = await omiRelayContextRaw();
@@ -2087,7 +2087,7 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
   });
 
   // Local provider: a user-configured OpenAI-compatible endpoint (e.g. LM
-  // Studio, Ollama) — never routes through api.omi.me, never bills or logs
+  // Studio, Ollama): never routes through api.omi.me, never bills or logs
   // usage server-side. Only registered when both env vars are present, so
   // this has no effect on installs that haven't configured a local model.
   const localBaseUrl = process.env.OMI_LOCAL_BASE_URL;
@@ -2108,7 +2108,7 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
   // Local vision provider: an optional second model on the same server (e.g.
   // a vision-capable model resident alongside the main text model in LM
   // Studio) that the "vision" pi-subagents role is pinned to. Only registered
-  // when a vision model id is configured — absent by default, so existing
+  // when a vision model id is configured: absent by default, so existing
   // single-local-model setups are completely unaffected.
   const localVisionModelId = process.env.OMI_LOCAL_VISION_MODEL_ID;
   if (localBaseUrl && localVisionModelId) {

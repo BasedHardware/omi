@@ -1712,13 +1712,13 @@ async function main(): Promise<void> {
   };
   const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
     // SECURITY: the "omi" provider authenticates to api.omi.me with a Firebase
-    // ID token. Never fall back to ANTHROPIC_API_KEY — that would leak the
+    // ID token. Never fall back to ANTHROPIC_API_KEY: that would leak the
     // upstream Anthropic provider secret to the Omi backend. Local providers
     // never send this token in the first place.
     if (provider === "omi" && !authToken) return false;
     piMonoAuthToken = authToken;
     piMonoClasses ??= await import("./adapters/pi-mono.js");
-    // Optional vision subagent (local mode only) — see syncVisionSubagentFile.
+    // Optional vision subagent (local mode only), see syncVisionSubagentFile.
     // Regenerated on every bridge start so it always reflects the current
     // Settings choice; removed entirely when unset.
     syncVisionSubagentFile(process.env.OMI_LOCAL_VISION_MODEL_ID, piMonoClasses.resolveBundledExtension(), logErr);

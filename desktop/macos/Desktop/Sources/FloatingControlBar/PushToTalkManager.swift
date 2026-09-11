@@ -762,9 +762,9 @@ class PushToTalkManager: ObservableObject {
   // MARK: - Listening Lifecycle
 
   /// True iff the user is not exempt (BYOK, or Local with a self-hosted
-  /// backend URL configured — see `isPushToTalkUsageLimitBlocked`) and has
+  /// backend URL configured, see `isPushToTalkUsageLimitBlocked`) and has
   /// hit the monthly free-tier chat-question limit. PTT turns count toward
-  /// that limit (desktop_chat_realtime), so they must be gated by it too —
+  /// that limit (desktop_chat_realtime), so they must be gated by it too,
   /// same as typed chat (ChatProvider / floating bar). Without this, a free
   /// user over 30 questions could keep talking for free. Posts the same
   /// usage-limit popup and returns true so the caller early-returns.

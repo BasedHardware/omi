@@ -164,7 +164,7 @@ extension SettingsContentView {
   /// Restarts every live local-mode bridge, not just the main window's. The
   /// floating control bar keeps its own independent ChatProvider (see
   /// FloatingControlBarManager.sharedFloatingProvider) that never picks up a
-  /// Settings change on its own — restarting only `chatProvider` here would
+  /// Settings change on its own; restarting only `chatProvider` here would
   /// leave it running indefinitely on whatever model/vision config it
   /// started with, silently diverging from the main window after any later
   /// edit.
@@ -194,7 +194,7 @@ extension SettingsContentView {
           }
           // Enter (onSubmit) commits the field, but a user who just clicks
           // away without pressing Enter would otherwise keep the old bridge
-          // talking to the old server indefinitely — the exact stale-process
+          // talking to the old server indefinitely, the exact stale-process
           // bug restartLocalBridgesIfActive was added to fix for the model
           // fields (see 5f3abca24a), just missed here for Base URL.
           .onChange(of: isLocalBaseURLFieldFocused) { wasFocused, isFocused in
@@ -227,7 +227,7 @@ extension SettingsContentView {
 
         if localModelOptions.isEmpty {
           // No fetched list yet (not tried, still loading, or the server was
-          // unreachable) — fall back to manual entry so Local always works
+          // unreachable), fall back to manual entry so Local always works
           // even when the server can't be reached from Settings.
           TextField(AIProvider.defaultLocalModelID, text: $localLLMModelID)
             .textFieldStyle(.roundedBorder)
@@ -235,7 +235,7 @@ extension SettingsContentView {
               restartLocalBridgesIfActive()
             }
           if localModelsFetchFailed {
-            Text("Couldn't reach the server to list models — enter the model id manually.")
+            Text("Couldn't reach the server to list models, enter the model id manually.")
               .scaledFont(size: OmiType.caption)
               .foregroundColor(Ink.secondary)
           }
@@ -300,7 +300,7 @@ extension SettingsContentView {
         .foregroundColor(Ink.secondary)
 
         Text(
-          "Your backend must verify tokens against the SAME Firebase project you sign in with here — if it uses its own project (e.g. its own google-credentials.json), every request will fail with Unauthorized, since Firebase ID tokens are project-scoped. Sign-in itself is unaffected by this field either way."
+          "Your backend must verify tokens against the SAME Firebase project you sign in with here. If it uses its own project (e.g. its own google-credentials.json), every request will fail with Unauthorized, since Firebase ID tokens are project-scoped. Sign-in itself is unaffected by this field either way."
         )
         .scaledFont(size: OmiType.caption)
         .foregroundColor(Ink.secondary)
@@ -375,7 +375,7 @@ extension SettingsContentView {
 
   /// Fetches the model list from the configured local endpoint and populates
   /// `localModelOptions`. Falls back to manual text entry (leaves the list
-  /// empty) on any failure — the server may be asleep, off-network, or the
+  /// empty) on any failure: the server may be asleep, off-network, or the
   /// base URL may not be a real server yet, none of which should block Local
   /// from being usable via manual model-id entry.
   /// - Parameter onComplete: runs on the main actor after the fetch settles,
@@ -398,7 +398,7 @@ extension SettingsContentView {
       do {
         var models = try await localModelsFetcher(baseURL)
         // Keep the currently configured model selectable even if the server's
-        // list doesn't (yet) include it — Picker needs a matching tag.
+        // list doesn't (yet) include it: Picker needs a matching tag.
         if !currentModelId.isEmpty && !models.contains(currentModelId) {
           models.insert(currentModelId, at: 0)
         }

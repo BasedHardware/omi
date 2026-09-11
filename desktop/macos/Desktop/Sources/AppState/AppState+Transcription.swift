@@ -43,7 +43,7 @@ extension AppState {
 
     // Paywall hard-stop: every code path that enables the mic + WS streaming
     // funnels through here, including auto-restart from sleep and toggle
-    // shortcuts. Refuse to start and surface the upgrade popup — unless
+    // shortcuts. Refuse to start and surface the upgrade popup, unless
     // transcription itself is exempt (BYOK, or a local backend configured).
     // Explicit "transcription" reason (not the default "trial_expired") so
     // the central choke point applies this gate's own exemption.

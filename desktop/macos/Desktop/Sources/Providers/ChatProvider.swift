@@ -84,7 +84,7 @@ struct ChatRunAccountingPolicy: Equatable {
 
   init(pinnedAdapterID: String) {
     // piMono is shared by the Omi-billed "omi" provider and the free
-    // "omi-local" provider (see AIProvider) — only "omi" ever touches the
+    // "omi-local" provider (see AIProvider); only "omi" ever touches the
     // Omi account's quota or spend accounting.
     usesOmiAccountQuota =
       pinnedAdapterID == AgentAdapterId.piMono.rawValue && AIProvider.currentProviderMode == "omi"
@@ -1343,7 +1343,7 @@ class ChatProvider: ObservableObject {
   /// Future-session preference hint for startup/UI only. A live send must use
   /// `ChatRunAccountingPolicy` from its resolved immutable session profile.
   /// "local" shares piMono's Node harness (see AgentRuntimeRouting) but is
-  /// never the Omi-billed account — excluded explicitly since harness alone
+  /// never the Omi-billed account, excluded explicitly since harness alone
   /// can't tell the two apart.
   var isUsingOmiAccountProvider: Bool {
     resolvedHarnessMode() == "piMono" && bridgeMode != BridgeMode.local.rawValue
@@ -1978,7 +1978,7 @@ class ChatProvider: ObservableObject {
 
   /// On the local provider, when a vision-capable subagent model is
   /// configured, the bridge stops attaching screenshots directly to the
-  /// session (see agent/src/index.ts) — this tells the model to delegate
+  /// session (see agent/src/index.ts); this tells the model to delegate
   /// instead. Nil (and thus omitted from responseContext) whenever no vision
   /// model is set, so behavior for existing single-local-model setups is
   /// unchanged, and nil for every provider other than local.
@@ -1987,7 +1987,7 @@ class ChatProvider: ObservableObject {
     let visionModelID = UserDefaults.standard.string(forKey: AIProvider.localVisionModelIDKey) ?? ""
     guard !visionModelID.isEmpty else { return nil }
     return
-      "<vision_subagent>\nYou cannot see images yourself. When a screenshot is attached, the prompt will include a line like \"[Screen image saved at: <path> — delegate to the vision subagent to interpret it]\". When you see that, use the subagent tool with agent \"vision\" and a task describing what you need, including that exact file path, to have it read and describe the image for you. Do not guess about screen contents you have not delegated for. You are not able to open that file yourself — a direct read of it will be refused. If the subagent call itself errors or fails, do not retry it more than once and do not fall back to any other tool to inspect the image: tell the user plainly that you're currently unable to interpret images (screenshot delegation failed) rather than guessing at what might be on screen.\n</vision_subagent>"
+      "<vision_subagent>\nYou cannot see images yourself. When a screenshot is attached, the prompt will include a line like \"[Screen image saved at: <path>, delegate to the vision subagent to interpret it]\". When you see that, use the subagent tool with agent \"vision\" and a task describing what you need, including that exact file path, to have it read and describe the image for you. Do not guess about screen contents you have not delegated for. You are not able to open that file yourself; a direct read of it will be refused. If the subagent call itself errors or fails, do not retry it more than once and do not fall back to any other tool to inspect the image: tell the user plainly that you're currently unable to interpret images (screenshot delegation failed) rather than guessing at what might be on screen.\n</vision_subagent>"
   }
 
   private func resolveKernelQuerySession(
@@ -2340,7 +2340,7 @@ class ChatProvider: ObservableObject {
     let previousBridgeMode = bridgeMode
     // piMono and local share the same Node harness ("piMono") but configure
     // different pi providers via environment variables baked in at process
-    // spawn time (see AgentRuntimeProcess.performStartProcess) — compare on
+    // spawn time (see AgentRuntimeProcess.performStartProcess); compare on
     // the bridge-mode identity too, or switching piMono <-> local computes
     // the same harness and silently no-ops, leaving the previous provider's
     // subprocess (and its env vars) running.
@@ -2358,12 +2358,12 @@ class ChatProvider: ObservableObject {
     guard agentBridgeStarted else { return }
     if newHarness == previousHarness {
       // Same harness, different provider (piMono <-> local): the running
-      // process's env vars are stale, and no RPC can change them in place —
+      // process's env vars are stale, and no RPC can change them in place;
       // only a full runtime restart picks up the new provider config.
       do {
         try await resolvedAgentClient().restart()
         guard preferenceChange == profilePreferenceChangeGeneration else { return }
-        log("ChatProvider: Runtime restarted for provider change — \(resolvedMode.rawValue)")
+        log("ChatProvider: Runtime restarted for provider change: \(resolvedMode.rawValue)")
       } catch {
         guard preferenceChange == profilePreferenceChangeGeneration else { return }
         logError("Failed to restart runtime for provider change", error: error)
@@ -2397,7 +2397,7 @@ class ChatProvider: ObservableObject {
   /// provider base URL/model id. The harness bakes `OMI_PROVIDER` and the
   /// local endpoint/model into its environment at spawn time (see
   /// AgentRuntimeProcess.performStartProcess), so a plain @AppStorage write
-  /// to those keys is invisible to an already-running process — it needs an
+  /// to those keys is invisible to an already-running process; it needs an
   /// explicit restart. No-ops if the user isn't currently on Local, or if no
   /// bridge is running yet (the next start will read the fresh values).
   func restartLocalBridgeIfActive() async {

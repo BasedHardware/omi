@@ -25,7 +25,7 @@ enum AgentRuntimeRouting {
   static func harnessMode(for mode: ChatProvider.BridgeMode) -> AgentHarnessMode {
     switch mode {
     case .omiAI, .piMono, .local:
-      // Local shares piMono's Node harness — they differ only in which pi
+      // Local shares piMono's Node harness, they differ only in which pi
       // provider the harness process is configured with (see
       // AIProvider.currentProviderMode / AgentRuntimeProcess.performStartProcess).
       return .piMono

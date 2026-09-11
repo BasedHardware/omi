@@ -1,7 +1,7 @@
 /**
  * Vision subagent support (local provider only).
  *
- * pi-subagents (loaded as a Pi package — see pi-mono-extension) resolves
+ * pi-subagents (loaded as a Pi package, see pi-mono-extension) resolves
  * custom agent roles from markdown files with YAML frontmatter under
  * ~/.pi/agent/agents/. The model a role is pinned to has no env-var
  * indirection in that frontmatter, so the resolved "omi-local-vision/<id>"
@@ -26,7 +26,7 @@ const VISION_AGENT_PATH = join(PI_USER_AGENTS_DIR, "omi-vision.md");
  *  `async: false` pins this role to foreground (synchronous) execution.
  *  pi-subagents' background-child runner resolves its host peer packages
  *  (including `@earendil-works/chord`) from whatever `@earendil-works/
- *  pi-coding-agent` Node's module resolution finds on this machine — which,
+ *  pi-coding-agent` Node's module resolution finds on this machine, which,
  *  via the user's own separately-installed global `pi` CLI, is currently
  *  0.84.3. `chord` only exists starting at pi-coding-agent 0.85.0, so any
  *  async/background subagent call fails before it can spawn. Foreground
@@ -36,7 +36,7 @@ const VISION_AGENT_PATH = join(PI_USER_AGENTS_DIR, "omi-vision.md");
  *
  *  `extensions: <path>` explicitly loads pi-mono-extension for this child
  *  session. A foreground subagent does NOT automatically inherit the parent
- *  pi process's "ambient" extensions unless told to — without this, the
+ *  pi process's "ambient" extensions unless told to; without this, the
  *  child's own model registry never learns about the "omi-local-vision"
  *  provider (registered by that same extension file), and model resolution
  *  fails with `Model "omi-local-vision/<id>" not found`. */
@@ -49,7 +49,7 @@ export function syncVisionSubagentFile(
     try {
       unlinkSync(VISION_AGENT_PATH);
     } catch {
-      // Not present — nothing to clean up.
+      // Not present, nothing to clean up.
     }
     return;
   }
@@ -95,7 +95,7 @@ export function visionScreenshotDirectory(): string {
   return tmpdir();
 }
 
-/** Writes a screenshot to a fixed path (overwritten per query — pi-mono RPC
+/** Writes a screenshot to a fixed path (overwritten per query: pi-mono RPC
  *  only handles one prompt at a time, so there's no concurrent-write race)
  *  and returns the absolute path for the model to hand to the vision
  *  subagent instead of the raw image bytes. */

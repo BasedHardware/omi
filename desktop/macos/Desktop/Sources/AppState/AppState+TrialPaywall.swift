@@ -91,7 +91,7 @@ extension AppState {
     !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: .desktopIsPaywalled)
   }
 
-  /// True when transcription specifically is exempt from the paywall — either
+  /// True when transcription specifically is exempt from the paywall: either
   /// the general BYOK exemption above, or because the local provider is
   /// active with a self-hosted backend configured (Settings' "Local Backend
   /// URL", see `AIProvider.isLocalProviderWithSelfHostedBackend`), which
@@ -106,7 +106,7 @@ extension AppState {
   }
 
   /// True when screen capture / screenshot interpretation is exempt from the
-  /// paywall — either the general BYOK exemption above, or because the Local
+  /// paywall: either the general BYOK exemption above, or because the Local
   /// provider is active AND the user has not opted cloud-assisted features
   /// on. Unlike `isTranscriptionExemptFromPaywall`, this needs no
   /// self-hosted-backend check: screen capture's own cloud dependency was

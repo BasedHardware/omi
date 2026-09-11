@@ -112,9 +112,9 @@ final class PiMonoWiringTests: XCTestCase {
   // reimplementation) so this exercises the real logic.
 
   func testBridgeModeLocalSharesNodeHarnessButDifferentProvider() {
-    // Local must run the same Node harness as piMono (the pi-mono subprocess)
-    // — they differ only in which pi provider AgentRuntimeProcess configures
-    // that harness with (see AIProvider.currentProviderMode) — this is
+    // Local must run the same Node harness as piMono (the pi-mono subprocess);
+    // they differ only in which pi provider AgentRuntimeProcess configures
+    // that harness with (see AIProvider.currentProviderMode). This is
     // exactly what makes a piMono <-> local no-op guard bug possible if
     // identity is derived from the Node harness string instead of the raw
     // BridgeMode. See ChatProvider.switchBridgeMode's newHarness comparison.
@@ -336,7 +336,7 @@ final class PiMonoWiringTests: XCTestCase {
 
   func testLocalModelsResponseDecodesRealLMStudioShape() throws {
     // Captured verbatim (trimmed) from a live `curl .../v1/models` against
-    // an actual LM Studio server — locks in the real response shape rather
+    // an actual LM Studio server, locks in the real response shape rather
     // than a guessed one.
     let json = """
     {

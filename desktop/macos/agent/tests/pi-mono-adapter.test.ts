@@ -1274,7 +1274,7 @@ describe("PiMonoAdapter local provider", () => {
     const sendCommand = vi.fn();
     (adapter as any).sendCommand = sendCommand;
 
-    // Swift/ChatProvider still requests a Claude model id — the local
+    // Swift/ChatProvider still requests a Claude model id, the local
     // provider must ignore it and target its one configured model.
     await adapter.createSession({ cwd: "/tmp", model: "claude-sonnet-4-6" });
 
@@ -1309,7 +1309,7 @@ describe("PiMonoAdapter local provider", () => {
 
   it("regression: default provider still maps Claude ids to omi-sonnet", async () => {
     // MODEL_MAP consolidated every claude-* id (including opus variants) to
-    // "omi-sonnet" upstream of this branch — pi-mono-extension's "omi"
+    // "omi-sonnet" upstream of this branch; pi-mono-extension's "omi"
     // provider registers only that one model now. This asserts the local
     // provider addition didn't disturb that existing mapping.
     const config: HarnessConfig = { authToken: "test-token" };

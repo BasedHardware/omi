@@ -1285,7 +1285,7 @@ test("inspectToolCall: read-only service authority blocks adapter mutations even
 // ---------------------------------------------------------------------------
 // classifyVisionScreenshotRead
 //
-// Note: this can't be verified via a shared "in-flight call id" set — the
+// Note: this can't be verified via a shared "in-flight call id" set: the
 // vision agent's frontmatter declares its own `extensions:` entry, so
 // pi-subagents loads a *separate* instance of this extension for the child
 // session, with its own module-level state. ctx.model is what actually
@@ -3133,7 +3133,7 @@ test("resolveLocalContextWindow: strips a trailing /v1/ to probe the LM Studio o
 });
 
 // ---------------------------------------------------------------------------
-// omiProvider — conditional "omi-local" registration
+// omiProvider: conditional "omi-local" registration
 // ---------------------------------------------------------------------------
 
 /** Minimal ExtensionAPI stub: omiProvider only calls registerProvider and on().
@@ -3233,7 +3233,7 @@ test("omiProvider: registers omi-local when both env vars are present", async ()
       OMI_LOCAL_BASE_URL: "http://100.100.100.100:1234/v1",
       OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx",
       // The "omi" cloud provider only registers when an API key is present
-      // (see the if (apiKey) gate) — set one so this test's unrelated
+      // (see the if (apiKey) gate); set one so this test's unrelated
       // assertion that "omi" still registers alongside "omi-local" holds.
       OMI_API_KEY: "test-key",
     },
@@ -3404,7 +3404,7 @@ test("omiProvider: omi-local and omi-local-vision model configs are identical ex
 // Regression coverage: the before_provider_headers hook used to attach Omi's
 // internal x-omi-* telemetry headers (correlation id, reasoning effort, JIT
 // budget) to every provider request unconditionally, including omi-local and
-// omi-local-vision — sending Omi-internal telemetry to whatever self-hosted
+// omi-local-vision, sending Omi-internal telemetry to whatever self-hosted
 // or LAN endpoint the user pointed "Local" at. It must now skip local/vision.
 // ---------------------------------------------------------------------------
 

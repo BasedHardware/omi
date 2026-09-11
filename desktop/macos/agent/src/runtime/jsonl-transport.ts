@@ -669,16 +669,16 @@ export class JsonlTransport {
       const mimeType = detectImageMimeType(message.imageBase64);
       const localVisionModelId = process.env.OMI_LOCAL_VISION_MODEL_ID;
       if (localVisionModelId) {
-        // A vision subagent is configured (local provider only — see
-        // syncVisionSubagentFile) — don't attach the raw image to the
+        // A vision subagent is configured (local provider only, see
+        // syncVisionSubagentFile); don't attach the raw image to the
         // primary session's prompt, since the main model may not be
         // vision-capable at all. Write it to disk and point the model at
         // the path instead; the system prompt tells it to delegate
         // interpretation to the "vision" subagent, which reads the file
         // itself via its own read tool.
         const imagePath = writeScreenshotForVisionSubagent(message.imageBase64, mimeType);
-        promptText = `${message.prompt}\n\n[Screen image saved at: ${imagePath} — delegate to the vision subagent to interpret it]`;
-        this.log(`Jsonl transport: vision subagent configured — wrote screenshot to ${imagePath} instead of attaching inline`);
+        promptText = `${message.prompt}\n\n[Screen image saved at: ${imagePath}, delegate to the vision subagent to interpret it]`;
+        this.log(`Jsonl transport: vision subagent configured, wrote screenshot to ${imagePath} instead of attaching inline`);
       } else {
         blocks.push({
           type: "image",
