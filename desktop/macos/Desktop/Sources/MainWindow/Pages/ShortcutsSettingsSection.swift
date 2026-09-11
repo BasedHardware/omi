@@ -20,6 +20,21 @@ enum PushToTalkSettingsGuidance {
   }
 }
 
+/// What the recorder card's button says.
+///
+/// It said "Save", and the button has never saved anything: its action is `startShortcutCapture`,
+/// and a recorded chord is committed the moment the keys go down, by the capture handler. So the
+/// card offered a Save for a shortcut that was already saved, and the only thing pressing it could
+/// do was throw that shortcut away and listen again. Which is the useful action — it just needed to
+/// say so.
+enum ShortcutRecorderAction {
+  /// The card is only mounted while recording or once a custom shortcut exists, so the idle case is
+  /// always "there is already a chord here" and never a first run with nothing to redo.
+  static func label(isRecording: Bool) -> String {
+    isRecording ? "Listening…" : "Redo"
+  }
+}
+
 struct ShortcutsSettingsSection: View {
   @ObservedObject private var settings = ShortcutSettings.shared
   @Binding var highlightedSettingId: String?
@@ -418,10 +433,19 @@ struct ShortcutsSettingsSection: View {
 
         Spacer()
 
+        // A control's own ground rather than the filled primary: this is a quiet "do it again" next
+        // to the chord it would replace, not the card's call to action. `settingsGlassWell` is the
+        // pane's glass for exactly that — and the pane may not wear real `inkGlassPanel` glass,
+        // which would be a second ground inside the window's own.
         Button(action: action) {
-          Text(isRecording ? "Listening..." : "Save")
+          Text(ShortcutRecorderAction.label(isRecording: isRecording))
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(isRecording ? Ink.secondary : Ink.primary)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.xs)
+            .settingsGlassWell()
         }
-        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+        .buttonStyle(.plain)
       }
 
       Text(helperText)
