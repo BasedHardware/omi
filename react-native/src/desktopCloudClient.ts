@@ -223,6 +223,7 @@ export function parseCloudApp(value: unknown, label: string): CloudApp {
   ) {
     throw new Error(`${label} connected_accounts are malformed`);
   }
+  const ratingCount = optionalInteger(record.rating_count);
   return {
     id,
     name: record.name,
@@ -235,17 +236,8 @@ export function parseCloudApp(value: unknown, label: string): CloudApp {
     private: record.private === true,
     official: record.official === true,
     installs: optionalInteger(record.installs) ?? 0,
-    ratingAvg:
-      typeof record.rating_avg === 'number' &&
-      Number.isFinite(record.rating_avg)
-        ? record.rating_avg
-        : null,
-    ratingCount:
-      typeof record.rating_count === 'number' &&
-      Number.isSafeInteger(record.rating_count) &&
-      record.rating_count >= 0
-        ? record.rating_count
-        : null,
+    ratingAvg: optionalFiniteNumber(record.rating_avg),
+    ratingCount: ratingCount !== null && ratingCount >= 0 ? ratingCount : null,
     image: typeof record.image === 'string' ? record.image : '',
     hasExternalIntegration:
       record.external_integration !== null &&

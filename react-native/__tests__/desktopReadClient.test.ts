@@ -3162,6 +3162,24 @@ test('parses catalogue, enabled, owned, and service app records without inventin
   expect(
     parseCloudApp(
       {
+        id: 'catalog-app-rated-strings',
+        name: 'String-rated app',
+        rating_avg: '4.5',
+        rating_count: '12',
+        installs: '3',
+      },
+      'App strings',
+    ),
+  ).toEqual(
+    expect.objectContaining({
+      ratingAvg: 4.5,
+      ratingCount: 12,
+      installs: 3,
+    }),
+  );
+  expect(
+    parseCloudApp(
+      {
         id: 'catalog-app-image',
         name: 'Imaged app',
         image: 'https://cdn.example.test/app.png',
