@@ -714,7 +714,11 @@ async function projectHistoryMessage(
       generationOutcome: null,
     });
   }
-  return projectStoredChatMessage({ ...message, sender: "unknown" });
+  return projectStoredChatMessage({
+    ...message,
+    sender: "unknown",
+    generationOutcome: null,
+  });
 }
 
 function overlayCreateFields(

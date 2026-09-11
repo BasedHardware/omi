@@ -3532,6 +3532,93 @@ describe("worker request contract", () => {
     ]);
   });
 
+  test("history GET overlays null generationOutcome on unknown senders", async () => {
+    const omittedOutcome = {
+      id: "unknown-omit-outcome",
+      text: "unknown without generationOutcome",
+      sender: "bot",
+      type: "text",
+      createdAt: 2,
+      updatedAt: 2,
+      chatSessionId: null,
+      appId: null,
+      journalRevision: 0,
+      payloadHash: "sha256:test",
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      revision: "2",
+      attachments: [],
+    };
+    const completedOutcome = {
+      ...omittedOutcome,
+      id: "unknown-completed-outcome",
+      text: "unknown with completed generationOutcome",
+      createdAt: 3,
+      updatedAt: 3,
+      revision: "3",
+      generationOutcome: "completed" as const,
+    };
+    await insertChatMessage({
+      id: "known-human",
+      accountId: "test-account",
+      text: "hello from you",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)"
+      )
+      .bind(
+        omittedOutcome.id,
+        "test-account",
+        omittedOutcome.text,
+        omittedOutcome.sender,
+        omittedOutcome.createdAt,
+        2,
+        JSON.stringify(omittedOutcome)
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)"
+      )
+      .bind(
+        completedOutcome.id,
+        "test-account",
+        completedOutcome.text,
+        completedOutcome.sender,
+        completedOutcome.createdAt,
+        3,
+        JSON.stringify(completedOutcome)
+      )
+      .run();
+
+    const response = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(200);
+    const envelope = wireToChatHistoryEnvelope(await response.json());
+    expect(envelope).not.toBeNull();
+    expect(envelope!.messages.map((message) => message.id)).toEqual([
+      "known-human",
+      "unknown-omit-outcome",
+      "unknown-completed-outcome",
+    ]);
+    expect(
+      envelope!.messages.map((message) => [
+        message.sender,
+        message.generationOutcome,
+      ])
+    ).toEqual([
+      ["human", null],
+      ["unknown", null],
+      ["unknown", null],
+    ]);
+  });
+
   test("history GET keeps neighboring rows when one payload is unreadable JSON", async () => {
     await insertChatMessage({
       id: "readable-human",
