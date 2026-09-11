@@ -7,7 +7,7 @@ and chat tools for managing calendar events.
 import os
 import sys
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from urllib.parse import urlencode
 
@@ -221,8 +221,12 @@ def parse_datetime(dt_str: str) -> tuple[datetime, bool]:
     # Default: try to parse as ISO format
     try:
         parsed = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+        if parsed.tzinfo is not None:
+            # Convert the instant to UTC wall time before dropping tzinfo so
+            # callers that attach timeZone: UTC do not shift the event.
+            parsed = parsed.astimezone(timezone.utc)
         return parsed.replace(tzinfo=None), False
-    except:
+    except Exception:
         pass
 
     raise ValueError(f"Could not parse datetime: {dt_str}")
