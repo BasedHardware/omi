@@ -10,6 +10,7 @@ from database import conversation_finalization_jobs as finalization_jobs_db
 from services.conversation_finalization import final_attempt_failed
 from utils.byok import set_validated_byok_keys
 from utils.cloud_tasks import get_listen_finalization_tasks_max_attempts
+from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.finalizer import (
     ConversationFinalizationDisposition,
@@ -29,9 +30,18 @@ FINALIZATION_RESULT_PROTOCOL_LEGACY = 1
 FINALIZATION_RESULT_PROTOCOL_V2 = 2
 
 
+def _processing_attempt_number(failed_processing_attempts: int) -> int:
+    """Return the 1-based attempt index for this processing try.
+
+    ``claim_finalization_job`` no longer burns the budget on lease handoffs;
+    ``attempt_count`` is failed processing so far. This try is the next one.
+    """
+    return max(int(failed_processing_attempts), 0) + 1
+
+
 def _finalization_attempt_decision(attempt_count: int, *, reason: str):
     return decide_attempt(
-        attempt_count=max(attempt_count, 1),
+        attempt_count=_processing_attempt_number(attempt_count),
         outcome=ProcessOutcome.retry(reason, reason=reason),
         policy=QueuePolicy(max_attempts=get_listen_finalization_tasks_max_attempts()),
         now=datetime.now(timezone.utc),
@@ -94,6 +104,7 @@ async def process_conversation_task(
         """
         if job_id is None or generation is None or lease_epoch is None:
             return False
+        this_try = _processing_attempt_number(attempt_count)
         terminal = _finalization_attempt_decision(attempt_count, reason=failure_code).terminal
         try:
             if terminal:
@@ -103,7 +114,7 @@ async def process_conversation_task(
                     job_id,
                     generation,
                     lease_epoch,
-                    attempt_count,
+                    this_try,
                 )
                 if not marked_dead_letter:
                     return False
@@ -116,6 +127,7 @@ async def process_conversation_task(
                 lease_epoch,
                 failure_code,
             )
+            LISTEN_FINALIZATION_RETRIES_TOTAL.inc()
         except Exception:
             logger.error(
                 'pusher finalization recovery update failed uid=%s conversation=%s failure=%s terminal=%s',

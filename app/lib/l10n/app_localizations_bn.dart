@@ -9987,4 +9987,7 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'এই মুহূর্তে কথাকে লেখায় রূপান্তর করা যাচ্ছে না। আপনার ইন্টারনেট সংযোগ এবং ডিভাইসের কথোপকথন শনাক্তকরণের সেটিংস পরীক্ষা করে আবার চেষ্টা করুন।';
+
+  @override
+  String get processingTakingLonger => 'এখনও কাজ চলছে — এটি স্বাভাবিকের চেয়ে বেশি সময় নিচ্ছে।';
 }

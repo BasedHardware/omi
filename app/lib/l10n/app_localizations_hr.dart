@@ -10017,4 +10017,7 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Pretvaranje govora u tekst trenutačno nije dostupno. Provjerite internetsku vezu i postavke prepoznavanja govora na uređaju pa pokušajte ponovno.';
+
+  @override
+  String get processingTakingLonger => 'Još traje — ovo traje duže nego inače.';
 }

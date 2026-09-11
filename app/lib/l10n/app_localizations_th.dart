@@ -9924,4 +9924,7 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'ขณะนี้ไม่สามารถแปลงเสียงเป็นข้อความได้ โปรดตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและการตั้งค่าการรู้จำเสียงของอุปกรณ์ แล้วลองอีกครั้ง';
+
+  @override
+  String get processingTakingLonger => 'ยังทำงานอยู่ — ใช้เวลานานกว่าปกติ';
 }

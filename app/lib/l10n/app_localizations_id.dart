@@ -9992,4 +9992,7 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Konversi suara ke teks sedang tidak tersedia. Periksa koneksi internet dan pengaturan pengenalan suara perangkat Anda, lalu coba lagi.';
+
+  @override
+  String get processingTakingLonger => 'Masih diproses — ini memakan waktu lebih lama dari biasanya.';
 }

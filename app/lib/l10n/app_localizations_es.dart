@@ -10006,4 +10006,7 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'La transcripción de voz no está disponible en este momento. Comprueba tu conexión a Internet y los ajustes de reconocimiento de voz de tu dispositivo e inténtalo de nuevo.';
+
+  @override
+  String get processingTakingLonger => 'Sigue trabajando: esto está tardando más de lo habitual.';
 }

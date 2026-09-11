@@ -10039,4 +10039,7 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'La transcripció de veu no està disponible ara mateix. Comprova la connexió a Internet i la configuració del reconeixement de veu del dispositiu i torna-ho a provar.';
+
+  @override
+  String get processingTakingLonger => 'Encara en curs: això està trigant més del normal.';
 }

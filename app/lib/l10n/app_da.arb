@@ -3275,5 +3275,6 @@
     "speechProfileTopicGoal": "Hvad er dit langsigtede mål?",
     "speechToTextUnavailableDesc": "Tale til tekst er ikke tilgængelig lige nu. Kontrollér din internetforbindelse og enhedens indstillinger for talegenkendelse, og prøv igen.",
     "memoryHistoryPartial": "Noget af mindehistorikken er ikke tilgængeligt. Viser den historik, der er modtaget indtil nu.",
-    "tapPlusToStartRecording": "Tryk på + for at starte optagelsen"
+    "tapPlusToStartRecording": "Tryk på + for at starte optagelsen",
+    "processingTakingLonger": "Arbejder stadig — det tager længere end normalt."
 }

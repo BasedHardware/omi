@@ -142,6 +142,12 @@ class Config:
     active_profile: str = DEFAULT_PROFILE_NAME
     profiles: dict[str, Profile] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
+    load_error: Optional[str] = None
+
+    @property
+    def was_load_error(self) -> bool:
+        """True when the on-disk file could not be parsed (malformed/corrupt)."""
+        return self.load_error is not None
 
     def get_profile(self, name: Optional[str] = None) -> Profile:
         target = name or self.active_profile
@@ -162,17 +168,68 @@ class Config:
 
 
 def load(path: Optional[Path] = None) -> Config:
-    """Load the config from disk, returning an empty Config if the file is missing."""
+    """Load the config from disk, returning an empty Config if the file is missing.
+
+    A malformed or undecodable TOML file also yields an empty Config rather
+    than raising, so read-only diagnostics such as ``omi version`` and
+    ``omi config path`` keep working precisely when the config needs repair.
+    The parse failure is recorded on :attr:`Config.load_error`, and
+    :func:`save` refuses to overwrite such a file so a write command cannot
+    silently destroy config the user could still repair by hand.
+    """
     p = path or default_config_path()
     if not p.exists():
         return Config(path=p, active_profile=DEFAULT_PROFILE_NAME, profiles={})
 
     with p.open("rb") as fh:
-        data = tomllib.load(fh)
+        try:
+            data = tomllib.load(fh)
+        except tomllib.TOMLDecodeError as exc:
+            return Config(
+                path=p,
+                active_profile=DEFAULT_PROFILE_NAME,
+                profiles={},
+                load_error=f"config file is not valid TOML: {exc}",
+            )
+        except UnicodeDecodeError as exc:
+            return Config(
+                path=p,
+                active_profile=DEFAULT_PROFILE_NAME,
+                profiles={},
+                load_error=f"config file is not valid UTF-8: {exc}",
+            )
 
     active = data.get("active_profile", DEFAULT_PROFILE_NAME)
+    if not isinstance(active, str):
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"'active_profile' must be a string, got {type(active).__name__}",
+        )
+
     profiles_data = data.get("profiles", {})
-    profiles = {name: Profile.from_toml_dict(name, raw) for name, raw in profiles_data.items()}
+    
+    # Validate that profiles is a table (dict), not a string or other scalar.
+    if not isinstance(profiles_data, dict):
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"'profiles' must be a table, got {type(profiles_data).__name__}",
+        )
+    
+    # Validate each profile value is a table before constructing Profile objects.
+    profiles = {}
+    for name, raw in profiles_data.items():
+        if not isinstance(raw, dict):
+            return Config(
+                path=p,
+                active_profile=DEFAULT_PROFILE_NAME,
+                profiles={},
+                load_error=f"profile '{name}' must be a table, got {type(raw).__name__}",
+            )
+        profiles[name] = Profile.from_toml_dict(name, raw)
 
     extra = {key: value for key, value in data.items() if key not in {"active_profile", "profiles"}}
     return Config(path=p, active_profile=active, profiles=profiles, extra=extra)
@@ -184,7 +241,17 @@ def save(config: Config) -> None:
     The temp file is created with owner-only access before any credential is
     written. POSIX uses mode ``0o600``; Windows uses a protected owner-rights
     DACL supplied directly to ``CreateFileW``.
+
+    Raises PermissionError when the on-disk file failed to parse on load:
+    overwriting it would silently destroy profiles/credentials the user could
+    still repair by hand. The caller (a write command) surfaces that error
+    instead of clobbering the corrupt file.
     """
+    if config.load_error is not None:
+        raise PermissionError(
+            f"refusing to overwrite {config.path}: {config.load_error}. "
+            "Fix or remove the config file and try again."
+        )
     config.path.parent.mkdir(parents=True, exist_ok=True)
     # Tighten parent dir perms too — credentials live underneath. Best-effort:
     # don't fail if the user has a custom mode they want to keep.

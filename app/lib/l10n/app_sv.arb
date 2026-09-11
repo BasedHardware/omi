@@ -3257,5 +3257,6 @@
     "speechProfileTopicGoal": "Vad är ditt långsiktiga mål?",
     "speechToTextUnavailableDesc": "Tal till text är inte tillgängligt just nu. Kontrollera internetanslutningen och enhetens inställningar för taligenkänning och försök igen.",
     "memoryHistoryPartial": "En del av minneshistoriken är inte tillgänglig. Visar historiken som har tagits emot hittills.",
-    "tapPlusToStartRecording": "Tryck på + för att börja spela in"
+    "tapPlusToStartRecording": "Tryck på + för att börja spela in",
+    "processingTakingLonger": "Fortfarande igång — det tar längre tid än vanligt."
 }

@@ -33,13 +33,31 @@ _FINALIZATION_CAPABILITIES = frozenset(
 
 # This roster is the independent authority for where persisted conversation
 # finalization executes. Do not derive it from env keys or imports: omission of
-# MEMORY_ENABLED from Pusher was the 2026-08-30 incident.
+# MEMORY_ENABLED from Pusher was the 2026-08-30 incident. backend-sync is the
+# Cloud Tasks conversation-finalization writer for pendant/phone conversations.
 _EXPECTED_DEPLOYABLE_CAPABILITIES: dict[tuple[str, str], frozenset[str]] = {
     ('gke', 'backend-listen'): _FINALIZATION_CAPABILITIES,
     ('gke', 'pusher'): _FINALIZATION_CAPABILITIES,
     ('cloud_run', 'backend'): _FINALIZATION_CAPABILITIES,
     ('cloud_run', 'backend-sync'): _FINALIZATION_CAPABILITIES,
 }
+
+# Declared on every finalization host with the same literal, or live capture
+# (backend-listen / pusher / backend-sync) and regenerate (cloud_run/backend)
+# silently run different pipelines. An omitted flag must fail admission, not
+# fall through to the process-local False default.
+SUMMARY_PIPELINE_FLAGS = (
+    'CONVERSATION_NOTES_V2_ENABLED',
+    'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
+    'CONVERSATION_OCR_CONTEXT_ENABLED',
+)
+
+# The runtime resolves these flags with strip().casefold() against the truthy
+# set {'1','true','yes','on'}; anything else — including '' — is silently False.
+# Admission therefore only accepts that truthy set and its falsy counterparts,
+# so an empty or misspelled literal cannot pass the contract while behaving
+# like the omitted/False case the contract exists to reject.
+_SUMMARY_FLAG_LITERALS = frozenset({'1', 'true', 'yes', 'on', '0', 'false', 'no', 'off'})
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -97,6 +115,7 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
 
     errors: list[ValidationError] = []
     declared_by_host: dict[tuple[str, str], frozenset[str]] = {}
+    summary_flag_values: dict[str, dict[str, str]] = {flag: {} for flag in SUMMARY_PIPELINE_FLAGS}
 
     for platform, service_name, service_config in _iter_declared_services(env_config):
         key = (platform, service_name)
@@ -155,11 +174,46 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
                 )
             )
 
+        for flag in SUMMARY_PIPELINE_FLAGS:
+            if flag not in literal_env:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'summary-pipeline flag {flag} must be a literal on every conversation-finalization host',
+                    )
+                )
+                continue
+            # Compare raw literals, not normalized values: the pusher co-host
+            # gate (verify_pusher_cohost_env_diff.py) enforces byte-identical
+            # values for these same flags, so admission must not accept drift
+            # (e.g. 'true' vs ' TRUE ') that the co-host gate would reject.
+            summary_flag_values[flag][scope] = literal_env[flag]
+            if literal_env[flag].strip().casefold() not in _SUMMARY_FLAG_LITERALS:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'summary-pipeline flag {flag} must be an explicit boolean literal '
+                        f'(true/false), got {literal_env[flag]!r}',
+                    )
+                )
+
+    for flag, host_values in summary_flag_values.items():
+        distinct = set(host_values.values())
+        if len(distinct) > 1:
+            rendered = ', '.join(f'{scope}={value!r}' for scope, value in sorted(host_values.items()))
+            errors.append(
+                ValidationError(
+                    f'{env}/conversation-finalization',
+                    f'summary-pipeline flag {flag} disagrees across finalization hosts: {rendered}',
+                )
+            )
+
     return errors
 
 
 __all__ = [
     'CANONICAL_MEMORY_MUTATION_CAPABILITY',
     'CONVERSATION_FINALIZATION_CAPABILITY',
+    'SUMMARY_PIPELINE_FLAGS',
     'validate_conversation_finalization_capabilities',
 ]

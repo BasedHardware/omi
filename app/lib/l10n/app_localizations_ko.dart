@@ -9814,4 +9814,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc => '지금은 음성을 텍스트로 변환할 수 없습니다. 인터넷 연결과 기기의 음성 인식 설정을 확인한 후 다시 시도해주세요.';
+
+  @override
+  String get processingTakingLonger => '아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요.';
 }

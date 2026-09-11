@@ -10012,4 +10012,7 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Pretvorba govora v besedilo trenutno ni na voljo. Preverite internetno povezavo in nastavitve prepoznavanja govora v napravi ter poskusite znova.';
+
+  @override
+  String get processingTakingLonger => 'Še poteka — traja dlje kot običajno.';
 }

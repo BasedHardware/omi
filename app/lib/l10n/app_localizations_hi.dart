@@ -9961,4 +9961,7 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'अभी बोली को टेक्स्ट में बदलना उपलब्ध नहीं है। अपना इंटरनेट कनेक्शन और डिवाइस की वाक् पहचान सेटिंग जाँचें, फिर दोबारा कोशिश करें।';
+
+  @override
+  String get processingTakingLonger => 'अभी भी काम हो रहा है — इसमें सामान्य से ज़्यादा समय लग रहा है।';
 }

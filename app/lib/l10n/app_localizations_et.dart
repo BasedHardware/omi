@@ -9975,4 +9975,7 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Kõne tekstiks teisendamine pole praegu saadaval. Kontrolli internetiühendust ja seadme kõnetuvastuse seadeid ning proovi uuesti.';
+
+  @override
+  String get processingTakingLonger => 'Ikka käimas — see võtab kauem aega kui tavaliselt.';
 }

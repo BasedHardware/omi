@@ -677,13 +677,67 @@ def test_mixed_read_batches_canonical_suppression_status_lookups(service_mod, mo
     result = service.read("uid-test", limit=10)
 
     assert {item.id for item in result} == {"legacy-a", "legacy-b"}
-    assert len(db.get_all_calls) == 1
-    assert db.get_all_calls[0] == [
-        "users/uid-test/memory_items/legacy-a",
-        "users/uid-test/memory_items/legacy-b",
-        "users/uid-test/memory_historical_overrides/legacy-a",
-        "users/uid-test/memory_historical_overrides/legacy-b",
+    assert db.get_all_calls == [
+        [
+            "users/uid-test/memory_items/legacy-a",
+            "users/uid-test/memory_items/legacy-b",
+        ],
+        [
+            "users/uid-test/memory_historical_overrides/legacy-a",
+            "users/uid-test/memory_historical_overrides/legacy-b",
+        ],
     ]
+
+
+def test_canonical_statuses_skips_override_when_item_has_valid_status(service_mod):
+    db = _BatchStatusDb(
+        {
+            "users/uid-test/memory_items/live": {"status": "active"},
+            "users/uid-test/memory_historical_overrides/live": {"status": "tombstoned"},
+        }
+    )
+    service = service_mod.MemoryService(db_client=db)
+
+    statuses = service.canonical_statuses("uid-test", ["live"])
+
+    assert statuses["live"] == service_mod.MemoryItemStatus.active
+    assert db.get_all_calls == [["users/uid-test/memory_items/live"]]
+
+
+def test_canonical_statuses_override_only_tombstone_is_suppressed_not_503(service_mod):
+    db = _BatchStatusDb({"users/uid-test/memory_historical_overrides/gone": {"status": "tombstoned"}})
+    service = service_mod.MemoryService(db_client=db)
+
+    statuses = service.canonical_statuses("uid-test", ["gone"])
+
+    assert statuses["gone"] == service_mod.MemoryItemStatus.tombstoned
+    assert db.get_all_calls == [
+        ["users/uid-test/memory_items/gone"],
+        ["users/uid-test/memory_historical_overrides/gone"],
+    ]
+
+
+def test_canonical_statuses_malformed_item_is_503_even_with_valid_override(service_mod):
+    db = _BatchStatusDb(
+        {
+            "users/uid-test/memory_items/bad": {"status": "not-a-status"},
+            "users/uid-test/memory_historical_overrides/bad": {"status": "tombstoned"},
+        }
+    )
+    service = service_mod.MemoryService(db_client=db)
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.canonical_statuses("uid-test", ["bad"])
+
+    assert exc_info.value.status_code == 503
+    assert db.get_all_calls == [["users/uid-test/memory_items/bad"]]
+
+
+def test_canonical_statuses_both_absent_admits_historical(service_mod):
+    db = _BatchStatusDb()
+    service = service_mod.MemoryService(db_client=db)
+
+    assert service.canonical_statuses("uid-test", ["ghost"]) == {}
 
 
 def test_mixed_read_maps_unordered_batch_snapshots_by_reference_path(service_mod):
@@ -1873,6 +1927,27 @@ def test_search_deduplicates_canonical_and_historical_candidates(service_mod):
     assert [match.memory.id for match in result] == ["same", "legacy"]
     assert result[0].memory.content == "canonical"
     service.history.search.assert_called_once()
+
+
+def test_search_batches_historical_suppression_lookups(service_mod):
+    db = _BatchStatusDb()
+    service = service_mod.MemoryService(db_client=db)
+    service._canonical.search = MagicMock(return_value=[])
+    service.history.search = MagicMock(
+        return_value=[
+            service_mod.MemorySearchMatch(_memory(service_mod, "legacy-a"), 0.8),
+            service_mod.MemorySearchMatch(_memory(service_mod, "legacy-b"), 0.7),
+        ]
+    )
+
+    result = service.search("uid-test", "query", limit=10)
+
+    assert [match.memory.id for match in result] == ["legacy-a", "legacy-b"]
+    assert db.get_all_calls[0] == [
+        "users/uid-test/memory_items/legacy-a",
+        "users/uid-test/memory_items/legacy-b",
+    ]
+    assert all("memory_historical_overrides" not in path for path in db.get_all_calls[0])
 
 
 def test_search_applies_result_filter_before_final_limit(service_mod):

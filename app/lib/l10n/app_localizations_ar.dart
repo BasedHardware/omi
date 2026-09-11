@@ -9923,4 +9923,7 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'تحويل الكلام إلى نص غير متاح الآن. تحقق من اتصالك بالإنترنت وإعدادات التعرف على الكلام في جهازك، ثم حاول مرة أخرى.';
+
+  @override
+  String get processingTakingLonger => 'ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد.';
 }

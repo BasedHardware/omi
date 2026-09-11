@@ -9997,4 +9997,7 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Претварање говора у текст тренутно није доступно. Проверите интернет везу и подешавања препознавања говора на уређају, па покушајте поново.';
+
+  @override
+  String get processingTakingLonger => 'Još traje — ovo traje duže nego inače.';
 }

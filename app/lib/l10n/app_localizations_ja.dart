@@ -9811,4 +9811,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc => '現在、音声をテキストに変換できません。インターネット接続とデバイスの音声認識設定を確認してから、もう一度お試しください。';
+
+  @override
+  String get processingTakingLonger => 'まだ処理中です。通常より時間がかかっています。';
 }

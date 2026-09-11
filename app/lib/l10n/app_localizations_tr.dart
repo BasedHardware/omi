@@ -9994,4 +9994,7 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Konuşmayı metne dönüştürme şu anda kullanılamıyor. İnternet bağlantınızı ve cihazınızın konuşma tanıma ayarlarını kontrol edip tekrar deneyin.';
+
+  @override
+  String get processingTakingLonger => 'Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor.';
 }

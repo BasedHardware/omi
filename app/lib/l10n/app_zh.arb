@@ -3279,5 +3279,6 @@
     "speechProfileTopicGoal": "你的长期目标是什么？",
     "speechToTextUnavailableDesc": "目前无法将语音转换为文字。请检查网络连接和设备的语音识别设置，然后重试。",
     "memoryHistoryPartial": "部分记忆历史暂不可用。正在显示目前已获取的历史记录。",
-    "tapPlusToStartRecording": "点击 + 开始录音"
+    "tapPlusToStartRecording": "点击 + 开始录音",
+    "processingTakingLonger": "仍在处理中——比平时耗时更长。"
 }

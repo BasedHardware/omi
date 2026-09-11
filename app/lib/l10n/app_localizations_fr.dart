@@ -10069,4 +10069,7 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'La transcription vocale est indisponible pour le moment. Vérifiez votre connexion Internet et les réglages de reconnaissance vocale de votre appareil, puis réessayez.';
+
+  @override
+  String get processingTakingLonger => 'Toujours en cours — cela prend plus de temps que d’habitude.';
 }

@@ -3292,5 +3292,6 @@
     "speechProfileTopicGoal": "Uzun vadeli hedefiniz nedir?",
     "speechToTextUnavailableDesc": "Konuşmayı metne dönüştürme şu anda kullanılamıyor. İnternet bağlantınızı ve cihazınızın konuşma tanıma ayarlarını kontrol edip tekrar deneyin.",
     "memoryHistoryPartial": "Anı geçmişinin bir kısmı kullanılamıyor. Şimdiye kadar alınan geçmiş gösteriliyor.",
-    "tapPlusToStartRecording": "Kaydı başlatmak için + simgesine dokunun"
+    "tapPlusToStartRecording": "Kaydı başlatmak için + simgesine dokunun",
+    "processingTakingLonger": "Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor."
 }

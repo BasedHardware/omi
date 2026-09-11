@@ -10019,4 +10019,7 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Преобразование речи в текст сейчас недоступно. Проверьте подключение к интернету и настройки распознавания речи на устройстве, затем попробуйте ещё раз.';
+
+  @override
+  String get processingTakingLonger => 'Ещё обрабатывается — это занимает больше обычного.';
 }

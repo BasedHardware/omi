@@ -3293,5 +3293,6 @@
     "speechProfileTopicGoal": "Qual é seu objetivo de longo prazo?",
     "speechToTextUnavailableDesc": "A transcrição de voz não está disponível no momento. Verifique sua conexão com a internet e as configurações de reconhecimento de voz do dispositivo e tente novamente.",
     "memoryHistoryPartial": "Parte do histórico de memórias não está disponível. Exibindo o histórico recebido até agora.",
-    "tapPlusToStartRecording": "Toque em + para começar a gravar"
+    "tapPlusToStartRecording": "Toque em + para começar a gravar",
+    "processingTakingLonger": "Ainda a trabalhar — isto está a demorar mais do que o habitual."
 }

@@ -3234,5 +3234,6 @@
     "speechProfileTopicGoal": "Was ist dein langfristiges Ziel?",
     "speechToTextUnavailableDesc": "Die Spracherkennung ist derzeit nicht verfügbar. Prüfe deine Internetverbindung und die Einstellungen zur Spracherkennung auf deinem Gerät und versuche es erneut.",
     "memoryHistoryPartial": "Ein Teil des Erinnerungsverlaufs ist nicht verfügbar. Der bisher empfangene Verlauf wird angezeigt.",
-    "tapPlusToStartRecording": "Tippe auf +, um die Aufnahme zu starten"
+    "tapPlusToStartRecording": "Tippe auf +, um die Aufnahme zu starten",
+    "processingTakingLonger": "Arbeitet noch — das dauert länger als üblich."
 }

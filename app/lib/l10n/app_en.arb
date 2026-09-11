@@ -11829,5 +11829,9 @@
     "speechToTextUnavailableDesc": "Speech-to-text isn't available right now. Check your internet connection and your device's speech recognition settings, then try again.",
     "@speechToTextUnavailableDesc": {
         "description": "Error dialog body when neither the server transcriber nor on-device speech recognition is available for the speech profile recording"
+    },
+    "processingTakingLonger": "Still working — this is taking longer than usual.",
+    "@processingTakingLonger": {
+        "description": "Shown on the homepage processing card after ~2 minutes with a Retry action (#5481)."
     }
 }

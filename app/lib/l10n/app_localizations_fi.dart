@@ -9983,4 +9983,7 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Puheen muuntaminen tekstiksi ei ole juuri nyt käytettävissä. Tarkista internetyhteytesi ja laitteesi puheentunnistusasetukset ja yritä uudelleen.';
+
+  @override
+  String get processingTakingLonger => 'Vielä käynnissä — tämä kestää tavallista kauemmin.';
 }

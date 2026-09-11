@@ -9966,4 +9966,7 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Tale til tekst er ikke tilgængelig lige nu. Kontrollér din internetforbindelse og enhedens indstillinger for talegenkendelse, og prøv igen.';
+
+  @override
+  String get processingTakingLonger => 'Arbejder stadig — det tager længere end normalt.';
 }

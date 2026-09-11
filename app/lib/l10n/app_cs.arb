@@ -3235,5 +3235,6 @@
     "speechProfileTopicGoal": "Jaký je váš dlouhodobý cíl?",
     "speechToTextUnavailableDesc": "Převod řeči na text momentálně není dostupný. Zkontrolujte připojení k internetu a nastavení rozpoznávání řeči v zařízení a zkuste to znovu.",
     "memoryHistoryPartial": "Část historie vzpomínek není dostupná. Zobrazuje se dosud přijatá historie.",
-    "tapPlusToStartRecording": "Klepnutím na + začnete nahrávat"
+    "tapPlusToStartRecording": "Klepnutím na + začnete nahrávat",
+    "processingTakingLonger": "Stále probíhá — trvá to déle než obvykle."
 }
