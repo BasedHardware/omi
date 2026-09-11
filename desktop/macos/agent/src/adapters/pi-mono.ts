@@ -249,7 +249,7 @@ function resolveBundledPi(): string {
  *  Shipped: <App>.app/Contents/Resources/agent/dist/adapters/../../.. → <App>.app/Contents/Resources/pi-mono-extension/index.ts
  */
 /** Exported so callers outside this adapter (e.g. the vision subagent's
- *  generated frontmatter — see index.ts's syncVisionSubagentFile) can point
+ *  generated frontmatter, see index.ts's syncVisionSubagentFile) can point
  *  a pi-subagents child session at the same extension file the main pi
  *  process is launched with. */
 export function resolveBundledExtension(): string {
@@ -744,8 +744,8 @@ export class PiMonoAdapter implements HarnessAdapter {
   async createSession(opts: SessionOpts): Promise<string> {
     // The "omi" provider serves multiple models (omi-sonnet/omi-opus) and
     // callers address them via Claude-style ids that mapModel() aliases.
-    // A local provider serves exactly one model — the one it was configured
-    // with — so any requested model is ignored in favor of that fixed id.
+    // A local provider serves exactly one model, the one it was configured
+    // with, so any requested model is ignored in favor of that fixed id.
     const mapped =
       this.provider === "omi"
         ? opts.model
@@ -1014,7 +1014,7 @@ export class PiMonoAdapter implements HarnessAdapter {
   }
 
   async setModel(sessionId: string, model: string): Promise<void> {
-    // A local provider serves exactly one model — ignore the requested model
+    // A local provider serves exactly one model, ignore the requested model
     // id and keep targeting the configured local model.
     const mapped =
       this.provider === "omi" ? mapModel(model) : this.config.model ?? model;

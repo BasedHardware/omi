@@ -126,7 +126,7 @@ extension AppState {
   }
 
   /// True when screen capture / screenshot interpretation is exempt from the
-  /// paywall — either the general BYOK exemption above, or because the Local
+  /// paywall: either the general BYOK exemption above, or because the Local
   /// provider is active AND the user has not opted cloud-assisted features
   /// on. Unlike `isTranscriptionExemptFromPaywall`, this needs no
   /// self-hosted-backend check: screen capture's own cloud dependency was

@@ -47,8 +47,8 @@ class ScreenCaptureManager {
   /// Was WebP (via libwebp) until this was found to break every local-model
   /// vision request: LM Studio's mlx-vlm image decoding path rejects WebP
   /// outright ("'url' field must be a base64 encoded image.") while
-  /// accepting PNG/JPEG fine — confirmed with a minimal request built by
-  /// hand, independent of any of our own code. JPEG keeps a comparable size
+  /// accepting PNG/JPEG fine (confirmed with a minimal request built by
+  /// hand, independent of any of our own code). JPEG keeps a comparable size
   /// to WebP (PNG at full Retina resolution runs 15-25x larger) while being
   /// universally decodable. Reuses the same encoder as `captureScreenJPEG`.
   static func captureScreenData() -> Data? {

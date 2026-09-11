@@ -64,7 +64,7 @@ struct AIProvider: Identifiable {
   static let local = AIProvider(
     id: "local",
     displayName: "Local",
-    tagline: "Your own local model — never leaves your network",
+    tagline: "Your own local model, never leaves your network",
     attributionURL: nil,
     sfSymbol: "",
     logoResource: nil,
@@ -86,12 +86,12 @@ struct AIProvider: Identifiable {
   static let localModelIDKey = "localLLMModelID"
   /// UserDefaults key for an optional vision-capable local model id, used as
   /// a subagent the main local model can delegate screenshot interpretation
-  /// to. No default — empty/unset means the feature is off and behavior is
+  /// to. No default: empty/unset means the feature is off and behavior is
   /// identical to a single local model handling everything itself.
   static let localVisionModelIDKey = "localLLMVisionModelID"
   /// UserDefaults key for an optional self-hosted backend URL, used in place
   /// of api.omi.me for voice transcription and memory/conversation sync when
-  /// the local provider is active. No default — empty/unset means "use the
+  /// the local provider is active. No default: empty/unset means "use the
   /// normal cloud/dev resolution", same opt-in framing as the two keys above.
   static let localBackendURLKey = "localBackendURL"
 
@@ -211,7 +211,7 @@ struct AIProvider: Identifiable {
     isLocalProviderActive && !localCloudAssistEnabled
   }
 
-  /// Default local endpoint — localhost, matching LM Studio's default port.
+  /// Default local endpoint: localhost, matching LM Studio's default port.
   /// Only used as the initial value of an editable Settings field, never
   /// hardcoded into a request path.
   static let defaultLocalBaseURL = "http://localhost:1234/v1"
@@ -233,7 +233,7 @@ struct AIProvider: Identifiable {
   /// provider maps to, read straight from the persisted Settings selection.
   /// This is the single source of truth `AgentRuntimeProcess` consults when
   /// launching the harness process and `AgentBridge`/`ChatRunAccountingPolicy`
-  /// consult for quota/billing gating — there is no per-session override.
+  /// consult for quota/billing gating: there is no per-session override.
   static var currentProviderMode: String {
     let raw = UserDefaults.standard.string(forKey: selectedProviderRawValueKey) ?? AIProvider.piMono.bridgeModeRawValue
     return raw == AIProvider.local.bridgeModeRawValue ? "omi-local" : "omi"
@@ -251,7 +251,7 @@ struct AIProvider: Identifiable {
     return ChatProvider.BridgeMode(rawValue: modeRaw) ?? .piMono
   }
 
-  /// True when the Local provider is the active chat/agent provider — every
+  /// True when the Local provider is the active chat/agent provider: every
   /// text call already routes to the user's own server (see
   /// `currentProviderMode`), and since the vision-subagent delegation,
   /// screenshot interpretation does too. Free-tier gates that only exist to
@@ -276,9 +276,10 @@ struct AIProvider: Identifiable {
 
   /// A local model's time to first token is dominated by prompt prefill on
   /// the user's own hardware (measured 20 to 60s on 2026-09-10, longer as
-  /// the conversation grows), so the cloud-sized 20s voice domain's
-  /// provider-response deadline declares the turn dead while the reply is
-  /// still coming. 180s matches the existing `chatLaneTool` budget.
+  /// the conversation grows), so the voice domain's 20s provider-response
+  /// deadline, sized for a cloud round trip, declares the turn dead while
+  /// the reply is still coming. 180s matches the existing `chatLaneTool`
+  /// budget.
   static let localVoiceProviderResponseDeadline: TimeInterval = 180
 
   /// Maps the active provider to the voice provider-response deadline
@@ -306,7 +307,7 @@ struct AIProvider: Identifiable {
 
   /// Resolves the model id to use for an LLM call, given what it would use
   /// on a cloud provider. On the local provider this must be the user's
-  /// configured local model — passing a Claude id forces the pi-mono
+  /// configured local model: passing a Claude id forces the pi-mono
   /// extension to also register the cloud "omi" provider, which then fails
   /// without an Anthropic key.
   static func resolveModel(cloudDefault: String) -> String {
@@ -336,7 +337,7 @@ struct AIProvider: Identifiable {
   /// Studio, Ollama, etc.) currently reports at `{baseURL}/models`.
   ///
   /// This is the only reliable source of truth for what's actually being
-  /// served — a name saved from a previous session (or copy-pasted from
+  /// served: a name saved from a previous session (or copy-pasted from
   /// somewhere else) is not proof a model still exists or is loaded.
   /// Throws on any network, HTTP, or decode failure; callers should fall
   /// back to manual text entry rather than block on this.

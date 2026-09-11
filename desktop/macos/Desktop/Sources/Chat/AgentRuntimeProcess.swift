@@ -2548,7 +2548,7 @@ actor AgentRuntimeProcess {
 
     // Provider selection within the piMono harness: "omi" (default, routed
     // through the Rust backend) or "omi-local" (a user-configured
-    // OpenAI-compatible endpoint, chosen app-wide in Settings — see
+    // OpenAI-compatible endpoint, chosen app-wide in Settings, see
     // AIProvider.currentProviderMode). Meaningless for every other harness.
     let providerMode = preferredAdapterId == .piMono ? AIProvider.currentProviderMode : "omi"
     let isLocalProvider = preferredAdapterId == .piMono && providerMode == "omi-local"
@@ -2560,7 +2560,7 @@ actor AgentRuntimeProcess {
       let localBaseURL = defaults.string(forKey: AIProvider.localBaseURLKey) ?? AIProvider.defaultLocalBaseURL
       let localModelID = defaults.string(forKey: AIProvider.localModelIDKey) ?? AIProvider.defaultLocalModelID
       guard !localBaseURL.isEmpty, !localModelID.isEmpty else {
-        log("AgentRuntimeProcess: local provider start refused — base URL or model id not configured")
+        log("AgentRuntimeProcess: local provider start refused, base URL or model id not configured")
         throw BridgeError.localConfigMissing
       }
       env["OMI_PROVIDER"] = "omi-local"
