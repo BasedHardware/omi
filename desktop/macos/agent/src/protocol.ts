@@ -1084,6 +1084,9 @@ export interface ContextSnapshotProjection {
     olderHistoryStrategy: "none" | "truncated";
     stableCacheIdentity: string;
     dynamicContextIdentity: string;
+    /** Present only when the Local provider's context budget trimmed retained
+     * turns below 100% for this render. See context-snapshot.ts's ContextRenderBudget. */
+    contextBudgetPercent?: number;
   };
   ownerId: string;
   sessionId: string;

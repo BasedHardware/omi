@@ -211,6 +211,8 @@ export class KernelCore {
   protected readonly activeExecutions = new Map<string, ActiveExecution>();
   protected readonly bindingResolutionLocks = new Map<string, Promise<void>>();
   protected readonly contextDeliveryByBinding = new Map<string, ContextDeliveryCursor>();
+  /** Local-provider-only context budget percentage; see AgentRuntimeKernelOptions. */
+  protected readonly contextBudgetPercent: number;
   protected readonly toolCapabilities: RunToolCapabilityBroker;
   /**
    * The one immutable server-derived Main Chat sample for this process, keyed
@@ -242,6 +244,7 @@ export class KernelCore {
     this.runtimeNodeId = options.runtimeNodeId ?? "desktop-local";
     this.artifactStorage = options.artifactStorage;
     this.recoverRunInput = options.recoverRunInput;
+    this.contextBudgetPercent = options.contextBudgetPercent ?? 100;
     this.toolCapabilities = new RunToolCapabilityBroker({
       store: this.store,
       onRejected: options.onToolCapabilityRejected,
@@ -1321,12 +1324,14 @@ export class KernelCore {
               accepted.session.surfaceKind,
               accepted.session.executionRole,
               this.contextDeliveryByBinding.get(handle.bindingId),
+              { percent: this.contextBudgetPercent },
             )
           : {
               rendered: renderContextSnapshot(
                 snapshot,
                 accepted.session.surfaceKind,
                 accepted.session.executionRole,
+                { percent: this.contextBudgetPercent },
               ),
               next: undefined,
             };

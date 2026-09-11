@@ -51,6 +51,13 @@ const SOURCE_OUTCOMES = new Set<ContextSourceOutcome>([
   "redacted",
 ]);
 const MAX_SOURCE_PAYLOAD_BYTES = 512 * 1024;
+/**
+ * Per-source render-time character cap at 100% context budget. Chosen so
+ * 100% never truncates anything observed today: the largest single-source
+ * payload measured (workspace) was 19,584 chars on 2026-09-10, well under
+ * this ceiling. Below 100%, the effective cap is BASE_SOURCE_CHARS * percent / 100.
+ */
+const BASE_SOURCE_CHARS = 40_000;
 const RECENT_TURN_LIMIT = 64;
 const ACTIVE_RUN_LIMIT = 32;
 const RECENT_COMPLETED_RUN_LIMIT = 12;
@@ -640,6 +647,167 @@ function safeConversationEvidenceContext(
   }
 }
 
+/**
+ * Local-provider-only render-time context budget, as a percentage of today's
+ * default (unbudgeted) kernel context snapshot. 100 (the default) must
+ * render byte-identical to calling the renderer without this argument at
+ * all: every existing caller relies on that.
+ */
+export interface ContextRenderBudget {
+  percent: number;
+}
+
+const DEFAULT_CONTEXT_RENDER_BUDGET: ContextRenderBudget = { percent: 100 };
+
+/**
+ * Parses OMI_CONTEXT_BUDGET_PERCENT (set by the Swift host only when the
+ * Local provider is active, see index.ts's main()) into the effective
+ * ContextRenderBudget.percent. Absent, empty, non-numeric, or out of
+ * [10, 100] resolves to 100 (today's default, byte-identical rendering).
+ * Pure and side-effect-free so it can be unit-tested directly.
+ */
+export function parseContextBudgetPercent(raw: string | undefined): number {
+  const trimmed = raw?.trim();
+  if (!trimmed) return 100;
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(parsed)) return 100;
+  return Math.min(100, Math.max(10, parsed));
+}
+
+/** Attached to a source payload (or wraps it) when applyContextBudget trims it. */
+export interface ContextBudgetMarker {
+  truncated: true;
+  droppedChars: number;
+  percent: number;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Deterministic, structure-aware truncation for a single context source
+ * payload: if `payload`'s JSON size already fits within `maxChars`, it is
+ * returned unchanged (no marker: this keeps 100% budget byte-identical
+ * wherever a payload is already small, which is every payload observed
+ * today). Otherwise it trims the largest array-valued fields first, then
+ * long string fields, and attaches a `contextBudget` marker so the model can
+ * see the payload was cut. A non-object payload is wrapped as
+ * `{ value, contextBudget }` since a marker cannot be attached to it directly.
+ */
+export function applyContextBudget(payload: unknown, maxChars: number, percent: number): unknown {
+  const originalJson = stableJsonStringify(payload);
+  if (originalJson.length <= maxChars) return payload;
+  // Reserve room for the marker itself so the final JSON (content + marker)
+  // still fits within maxChars; slightly conservative for the wrapped
+  // (non-object) shape, which is fine since callers only need "at most".
+  const markerOverhead = stableJsonStringify({
+    contextBudget: { truncated: true, droppedChars: originalJson.length, percent },
+  }).length;
+  const contentBudget = Math.max(0, maxChars - markerOverhead);
+  const trimmed = trimValueToBudget(payload, contentBudget);
+  const droppedChars = Math.max(0, originalJson.length - stableJsonStringify(trimmed).length);
+  const marker: ContextBudgetMarker = { truncated: true, droppedChars, percent };
+  return isPlainObject(trimmed) ? { ...trimmed, contextBudget: marker } : { value: trimmed, contextBudget: marker };
+}
+
+function trimValueToBudget(value: unknown, maxChars: number): unknown {
+  if (Array.isArray(value)) return trimArrayToBudget(value, maxChars);
+  if (isPlainObject(value)) return trimObjectToBudget(value, maxChars);
+  if (typeof value === "string") return trimStringToBudget(value, maxChars);
+  return value;
+}
+
+/** Binary-searches the longest prefix of `items` whose JSON fits `maxChars`. */
+function trimArrayToBudget(items: unknown[], maxChars: number): unknown[] {
+  let lo = 0;
+  let hi = items.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (stableJsonStringify(items.slice(0, mid)).length <= maxChars) lo = mid;
+    else hi = mid - 1;
+  }
+  return items.slice(0, lo);
+}
+
+/** Binary-searches the longest prefix of `text` whose JSON-encoded form fits `maxChars`. */
+function trimStringToBudget(text: string, maxChars: number): string {
+  if (maxChars <= 2) return "";
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (stableJsonStringify(text.slice(0, mid)).length <= maxChars) lo = mid;
+    else hi = mid - 1;
+  }
+  return text.slice(0, lo);
+}
+
+/** Trims an object's largest array-valued fields first, then its longest
+ * string fields, stopping as soon as the whole object fits `maxChars`. */
+function trimObjectToBudget(obj: Record<string, unknown>, maxChars: number): Record<string, unknown> {
+  let working: Record<string, unknown> = { ...obj };
+  const fits = () => stableJsonStringify(working).length <= maxChars;
+  if (fits()) return working;
+
+  const arrayKeys = Object.keys(working)
+    .filter((key) => Array.isArray(working[key]))
+    .sort((a, b) => stableJsonStringify(working[b]).length - stableJsonStringify(working[a]).length);
+  for (const key of arrayKeys) {
+    if (fits()) break;
+    const budgetWithoutField = maxChars - stableJsonStringify({ ...working, [key]: [] }).length;
+    working = { ...working, [key]: trimArrayToBudget(working[key] as unknown[], Math.max(0, budgetWithoutField)) };
+  }
+
+  if (!fits()) {
+    const stringKeys = Object.keys(working)
+      .filter((key) => typeof working[key] === "string")
+      .sort((a, b) => (working[b] as string).length - (working[a] as string).length);
+    for (const key of stringKeys) {
+      if (fits()) break;
+      const budgetWithoutField = maxChars - stableJsonStringify({ ...working, [key]: "" }).length;
+      working = { ...working, [key]: trimStringToBudget(working[key] as string, Math.max(0, budgetWithoutField)) };
+    }
+  }
+
+  return working;
+}
+
+/** Keeps the most recent `ceil(recentTurns.length * percent / 100)` turns. */
+function budgetedRecentTurns<T>(recentTurns: T[], percent: number): T[] {
+  if (percent >= 100) return recentTurns;
+  const keepCount = Math.ceil((recentTurns.length * percent) / 100);
+  return recentTurns.slice(recentTurns.length - keepCount);
+}
+
+/**
+ * Applies the retained-turn budget to a full render's recentTurns and
+ * reflects the drop in the fields the plan already reports (omittedTurnCount,
+ * olderHistoryStrategy), plus contextBudgetPercent so the model knows a
+ * budget is active. Only used for full renders: delta selection is
+ * deliberately unaffected by budget (see renderContextSnapshotForBinding).
+ */
+function applyTurnBudgetForFullRender(
+  snapshot: Pick<ContextSnapshotProjection, "recentTurns" | "contextPlan">,
+  budget: ContextRenderBudget,
+): Pick<ContextSnapshotProjection, "recentTurns" | "contextPlan"> {
+  if (budget.percent >= 100) return snapshot;
+  const budgetedTurns = budgetedRecentTurns(snapshot.recentTurns, budget.percent);
+  const droppedByBudget = snapshot.recentTurns.length - budgetedTurns.length;
+  const omittedTurnCount = snapshot.contextPlan.omittedTurnCount + droppedByBudget;
+  return {
+    recentTurns: budgetedTurns,
+    contextPlan: {
+      ...snapshot.contextPlan,
+      retainedTurnStartSeq: budgetedTurns[0]?.turnSeq ?? null,
+      retainedTurnCount: budgetedTurns.length,
+      omittedTurnCount,
+      olderHistoryStrategy: omittedTurnCount > 0 ? "truncated" : "none",
+      contextBudgetPercent: budget.percent,
+    },
+  };
+}
+
 /** Pure dynamic renderer. It has no clocks, I/O, routing, or source selection. */
 export function renderContextSnapshot(
   snapshot: Pick<
@@ -648,8 +816,10 @@ export function renderContextSnapshot(
   >,
   surfaceKind: string,
   executionRole: AgentExecutionRole,
+  budget: ContextRenderBudget = DEFAULT_CONTEXT_RENDER_BUDGET,
 ): string {
-  const relevant = relevantSnapshotMaterial(snapshot, surfaceKind, executionRole);
+  const budgeted = { ...snapshot, ...applyTurnBudgetForFullRender(snapshot, budget) };
+  const relevant = relevantSnapshotMaterial(budgeted, surfaceKind, executionRole, budget);
   const json = stableJsonStringify(relevant).replaceAll("<", "\\u003c");
   return [
     `[Kernel Context Snapshot version=${snapshot.version} generation=${snapshot.snapshotGeneration}]`,
@@ -683,6 +853,7 @@ export function renderContextSnapshotForBinding(
   surfaceKind: string,
   executionRole: AgentExecutionRole,
   previous?: ContextDeliveryCursor,
+  budget: ContextRenderBudget = DEFAULT_CONTEXT_RENDER_BUDGET,
 ): { rendered: string; next: ContextDeliveryCursor; deliveryMode: "full" | "delta" } {
   const currentTotalTurnCount = snapshot.contextPlan?.totalTurnCount ?? snapshot.recentTurns.length;
   const currentHashes = new Map(
@@ -693,6 +864,16 @@ export function renderContextSnapshotForBinding(
   );
   const currentContextPlanHash = hash(stableJsonStringify(snapshot.contextPlan));
   const currentCapabilitiesHash = hash(stableJsonStringify(snapshot.capabilities));
+  // The cursor always tracks the full fetched window's hashes, not just the
+  // budgeted subset a full render actually puts in its JSON. This is what
+  // keeps a budget-dropped turn from being spuriously resent: since delta
+  // selection is unaffected by budget (below) and compares against this same
+  // cursor, a turn the budget trimmed out still has a matching hash here (it
+  // has not changed in the DB), so it correctly reads as "unchanged" and is
+  // never backfilled by a later delta: the budget shrinks the effective
+  // retention window for that binding going forward, it does not defer
+  // sending the trimmed turns. If a trimmed turn is later actually edited,
+  // its hash changes and it is resent like any other genuine change.
   const nextCursor: ContextDeliveryCursor = {
     conversationId: snapshot.conversationId,
     turnHashes: currentHashes,
@@ -701,12 +882,14 @@ export function renderContextSnapshotForBinding(
     contextPlanHash: currentContextPlanHash,
     capabilitiesHash: currentCapabilitiesHash,
   };
+  const buildFullDelivery = (): { rendered: string; next: ContextDeliveryCursor; deliveryMode: "full" } => ({
+    rendered: renderContextSnapshot(snapshot, surfaceKind, executionRole, budget),
+    next: nextCursor,
+    deliveryMode: "full",
+  });
+
   if (!previous || previous.conversationId !== snapshot.conversationId) {
-    return {
-      rendered: renderContextSnapshot(snapshot, surfaceKind, executionRole),
-      next: nextCursor,
-      deliveryMode: "full",
-    };
+    return buildFullDelivery();
   }
 
   // If the total turn count decreased since the previous delivery, turns were
@@ -720,13 +903,14 @@ export function renderContextSnapshotForBinding(
   // Normal aging (turns dropping off the 64-turn retention window as new turns
   // arrive) does NOT trigger this: totalTurnCount only increases in that case.
   if (currentTotalTurnCount < previous.totalTurnCount) {
-    return {
-      rendered: renderContextSnapshot(snapshot, surfaceKind, executionRole),
-      next: nextCursor,
-      deliveryMode: "full",
-    };
+    return buildFullDelivery();
   }
 
+  // Delta selection is deliberately unaffected by the budget: it only ever
+  // sends turns whose hash changed since the cursor. A turn the previous full
+  // render dropped for budget still has its (unchanged) hash in
+  // previous.turnHashes (see nextCursor above), so it correctly compares as
+  // "unchanged" here and is not spuriously resent.
   const changedTurns = snapshot.recentTurns.filter(
     (turn) => previous.turnHashes.get(turn.turnId) !== currentHashes.get(turn.turnId),
   );
@@ -754,6 +938,7 @@ export function renderContextSnapshotForBinding(
     { ...snapshot, recentTurns: changedTurns, sourceOutcomes: deltaSourceOutcomes },
     surfaceKind,
     executionRole,
+    budget,
   );
   const contextPlanUnchanged = previous.contextPlanHash === currentContextPlanHash;
   const capabilitiesUnchanged = previous.capabilitiesHash === currentCapabilitiesHash;
@@ -775,6 +960,7 @@ export function renderContextSnapshotForBinding(
       includedTurnCount: changedTurns.length,
       unchangedSources: unchangedSourceIds,
       unchangedSections,
+      ...(budget.percent < 100 ? { contextBudgetPercent: budget.percent } : {}),
     },
     ...relevantForDelta,
   }).replaceAll("<", "\\u003c");
@@ -825,6 +1011,7 @@ function relevantSnapshotMaterial(
   snapshot: Pick<ContextSnapshotProjection, "recentTurns" | "recentOperations" | "sourceOutcomes" | "activeRuns" | "recentCompletedRuns" | "capabilities" | "contextPlan">,
   surfaceKind: string,
   executionRole: AgentExecutionRole,
+  budget: ContextRenderBudget = DEFAULT_CONTEXT_RENDER_BUDGET,
 ): Record<string, unknown> {
   const sourceSet = relevantSourceKinds(surfaceKind, executionRole);
   const historicalTurns = (surfaceKind === "realtime_voice" || surfaceKind === "realtime")
@@ -844,6 +1031,7 @@ function relevantSnapshotMaterial(
     recentOperations: snapshot.recentOperations ?? [],
     sourceOutcomes: semanticSourceOutcomes(
       snapshot.sourceOutcomes.filter((source) => sourceSet.has(source.source)),
+      budget,
     ),
     activeRuns: executionRole === "coordinator" ? snapshot.activeRuns : [],
     recentCompletedRuns: executionRole === "coordinator" ? snapshot.recentCompletedRuns : [],
@@ -918,13 +1106,20 @@ export function assertConversationContextPlan(
 
 function semanticSourceOutcomes(
   sources: ContextSnapshotProjection["sourceOutcomes"],
+  budget: ContextRenderBudget = DEFAULT_CONTEXT_RENDER_BUDGET,
 ): Array<Pick<ContextSnapshotProjection["sourceOutcomes"][number], "source" | "outcome" | "expiresAtMs" | "payloadHash" | "payload">> {
+  // payloadHash always reflects the untruncated payload from the DB row (see
+  // ContextSourceUpdateInput): unchanged detection in the delta path above
+  // must stay keyed on that, not on the budget-trimmed payload rendered here.
+  const maxChars = Math.floor((BASE_SOURCE_CHARS * budget.percent) / 100);
   return sources.map((source) => ({
     source: source.source,
     outcome: source.outcome,
     expiresAtMs: source.expiresAtMs,
     payloadHash: source.payloadHash,
-    payload: source.payload,
+    payload: budget.percent >= 100
+      ? source.payload
+      : (applyContextBudget(source.payload, maxChars, budget.percent) as Record<string, unknown>),
   }));
 }
 

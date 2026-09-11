@@ -6,9 +6,11 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   KERNEL_CONTEXT_RENDERER_POLICY_VERSION,
+  applyContextBudget,
   buildContextSnapshot,
   inheritContextSnapshotForSession,
   kernelSystemPolicy,
+  parseContextBudgetPercent,
   renderContextSnapshot,
   renderContextSnapshotForBinding,
   updateContextSource,
@@ -19,6 +21,7 @@ import {
   recordJournalTurn,
   updateJournalTurn,
 } from "../src/runtime/conversation-journal.js";
+import { stableJsonStringify } from "../src/runtime/kernel-support.js";
 import { resolveSurfaceSession } from "../src/runtime/surface-session.js";
 import { createKernelHarness, waitUntil } from "./kernel-fakes.js";
 
@@ -1258,6 +1261,192 @@ describe("kernel ContextSnapshot", () => {
     expect(snapshot.rendererFingerprint).not.toBe(beforeCompletion.rendererFingerprint);
     store.close();
   });
+
+  it("renders byte-identical output at 100% context budget, for both full and delta delivery", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-budget-100",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "budget-100" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    for (let sequence = 1; sequence <= 5; sequence += 1) {
+      recordJournalTurn(store, journalTurn(
+        "owner-budget-100", surface.conversationId, `b100-turn-${sequence}`, `budget100 canonical turn ${sequence}`, sequence,
+      ));
+    }
+    updateContextSource(store, {
+      ownerId: "owner-budget-100",
+      sessionId: surface.agentSessionId,
+      source: "workspace",
+      sourceRevision: "1",
+      outcome: "available",
+      capturedAtMs: 1,
+      payload: { workingDirectory: "/tmp/budget-100" },
+    }, 1);
+
+    const first = buildContextSnapshot(store, surface.agentSessionId, "owner-budget-100", 5);
+    expect(renderContextSnapshot(first, "main_chat", "coordinator", { percent: 100 }))
+      .toBe(renderContextSnapshot(first, "main_chat", "coordinator"));
+
+    const fullDefault = renderContextSnapshotForBinding(first, "main_chat", "coordinator");
+    const fullBudgeted = renderContextSnapshotForBinding(first, "main_chat", "coordinator", undefined, { percent: 100 });
+    expect(fullBudgeted.rendered).toBe(fullDefault.rendered);
+
+    recordJournalTurn(store, journalTurn(
+      "owner-budget-100", surface.conversationId, "b100-turn-6", "budget100 canonical turn 6", 6,
+    ));
+    const second = buildContextSnapshot(store, surface.agentSessionId, "owner-budget-100", 6);
+    const deltaDefault = renderContextSnapshotForBinding(second, "main_chat", "coordinator", fullDefault.next);
+    const deltaBudgeted = renderContextSnapshotForBinding(
+      second, "main_chat", "coordinator", fullBudgeted.next, { percent: 100 },
+    );
+    expect(deltaBudgeted.deliveryMode).toBe("delta");
+    expect(deltaBudgeted.rendered).toBe(deltaDefault.rendered);
+    store.close();
+  });
+
+  it("keeps the most recent half of retained turns and reports the drop in contextPlan at 50% budget", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-budget-50",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "budget-50" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    for (let sequence = 1; sequence <= 10; sequence += 1) {
+      recordJournalTurn(store, journalTurn(
+        "owner-budget-50", surface.conversationId, `b50-turn-${sequence}`, `budget50 canonical turn ${sequence}`, sequence,
+      ));
+    }
+    const snapshot = buildContextSnapshot(store, surface.agentSessionId, "owner-budget-50", 10);
+    expect(snapshot.contextPlan).toMatchObject({
+      retainedTurnCount: 10, omittedTurnCount: 0, olderHistoryStrategy: "none",
+    });
+    expect(Object.hasOwn(snapshot.contextPlan, "contextBudgetPercent")).toBe(false);
+
+    const budgeted = renderedPayload(renderContextSnapshot(snapshot, "main_chat", "coordinator", { percent: 50 }));
+    expect(budgeted.recentTurns).toHaveLength(5);
+    expect(budgeted.recentTurns[0]?.content).toBe("budget50 canonical turn 6");
+    expect(budgeted.recentTurns[4]?.content).toBe("budget50 canonical turn 10");
+    expect(budgeted.contextPlan).toMatchObject({
+      retainedTurnCount: 5,
+      totalTurnCount: 10,
+      omittedTurnCount: 5,
+      olderHistoryStrategy: "truncated",
+      contextBudgetPercent: 50,
+    });
+
+    const unbudgeted = renderedPayload(renderContextSnapshot(snapshot, "main_chat", "coordinator"));
+    expect(unbudgeted.recentTurns).toHaveLength(10);
+    expect(Object.hasOwn(unbudgeted.contextPlan, "contextBudgetPercent")).toBe(false);
+    store.close();
+  });
+
+  it("applyContextBudget deterministically trims an oversized array-valued field and marks the result truncated", () => {
+    const item = "a".repeat(1_000);
+    const payload = {
+      workingDirectory: "/tmp/context-workspace",
+      files: Array.from({ length: 30 }, (_, index) => `${item}-${index}`),
+    };
+    const originalLength = stableJsonStringify(payload).length;
+    expect(originalLength).toBeGreaterThan(20_000);
+    expect(originalLength).toBeLessThan(40_000);
+
+    // Fits under the cap: returned unchanged, no marker.
+    expect(applyContextBudget(payload, 40_000, 100)).toBe(payload);
+
+    const trimmed = applyContextBudget(payload, 20_000, 50) as Record<string, unknown>;
+    expect(stableJsonStringify(trimmed).length).toBeLessThanOrEqual(20_000);
+    expect(trimmed.workingDirectory).toBe("/tmp/context-workspace");
+    expect((trimmed.files as unknown[]).length).toBeLessThan(payload.files.length);
+    expect(trimmed.contextBudget).toMatchObject({ truncated: true, percent: 50 });
+    expect((trimmed.contextBudget as { droppedChars: number }).droppedChars).toBeGreaterThan(0);
+
+    // Deterministic for the same input.
+    expect(applyContextBudget(payload, 20_000, 50)).toEqual(trimmed);
+  });
+
+  it("truncates an oversized workspace source payload through a full render at 50% budget, and leaves it untouched at 100%", () => {
+    const { store, session } = fixture("main_chat");
+    const item = "a".repeat(1_000);
+    const bigPayload = {
+      workingDirectory: "/tmp/context-workspace",
+      files: Array.from({ length: 30 }, (_, index) => `${item}-${index}`),
+    };
+    updateContextSource(store, {
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      source: "workspace",
+      sourceRevision: "1",
+      outcome: "available",
+      capturedAtMs: 1,
+      payload: bigPayload,
+    }, 1);
+    const snapshot = buildContextSnapshot(store, session.sessionId, session.ownerId, 1);
+
+    const unbudgeted = renderedPayload(renderContextSnapshot(snapshot, "main_chat", "coordinator"));
+    const workspaceUnbudgeted = unbudgeted.sourceOutcomes.find(
+      (entry: { source: string }) => entry.source === "workspace",
+    );
+    expect(workspaceUnbudgeted.payload).toEqual(bigPayload);
+    expect(Object.hasOwn(workspaceUnbudgeted.payload, "contextBudget")).toBe(false);
+
+    const budgeted = renderedPayload(renderContextSnapshot(snapshot, "main_chat", "coordinator", { percent: 50 }));
+    const workspaceBudgeted = budgeted.sourceOutcomes.find(
+      (entry: { source: string }) => entry.source === "workspace",
+    );
+    expect(stableJsonStringify(workspaceBudgeted.payload).length).toBeLessThanOrEqual(20_000);
+    expect(workspaceBudgeted.payload.contextBudget).toMatchObject({ truncated: true, percent: 50 });
+    // Unchanged detection stays keyed on the untruncated DB payloadHash.
+    expect(workspaceBudgeted.payloadHash).toBe(workspaceUnbudgeted.payloadHash);
+    store.close();
+  });
+
+  it("does not resend budget-dropped turns on a later delta once nothing has actually changed", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-budget-cursor",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "budget-cursor" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    for (let sequence = 1; sequence <= 10; sequence += 1) {
+      recordJournalTurn(store, journalTurn(
+        "owner-budget-cursor", surface.conversationId, `bc-turn-${sequence}`, `budget cursor canonical turn ${sequence}`, sequence,
+      ));
+    }
+
+    const first = buildContextSnapshot(store, surface.agentSessionId, "owner-budget-cursor", 10);
+    const full = renderContextSnapshotForBinding(first, "main_chat", "coordinator", undefined, { percent: 50 });
+    expect(full.deliveryMode).toBe("full");
+    const fullPayload = renderedPayload(full.rendered);
+    expect(fullPayload.recentTurns).toHaveLength(5);
+    // The cursor tracks the whole fetched window (10), not just the 5
+    // delivered turns: this is what keeps a budget-dropped turn from being
+    // treated as "changed" (and spuriously resent) by the next delta.
+    expect(full.next.turnHashes.size).toBe(10);
+
+    // Nothing changes: the same 10 turns are fetched again, no new turn, no edit.
+    const second = buildContextSnapshot(store, surface.agentSessionId, "owner-budget-cursor", 11);
+    const delta = renderContextSnapshotForBinding(second, "main_chat", "coordinator", full.next, { percent: 50 });
+    expect(delta.deliveryMode).toBe("delta");
+    const payload = deltaPayload(delta.rendered);
+    expect(payload.contextDelivery.includedTurnCount).toBe(0);
+    expect(delta.rendered).toContain('"recentTurns":[]');
+    store.close();
+  });
+});
+
+describe("parseContextBudgetPercent", () => {
+  it("clamps supplied values to [10, 100] and defaults absent/empty/non-numeric input to 100", () => {
+    expect(parseContextBudgetPercent("50")).toBe(50);
+    expect(parseContextBudgetPercent("5")).toBe(10);
+    expect(parseContextBudgetPercent("150")).toBe(100);
+    expect(parseContextBudgetPercent("abc")).toBe(100);
+    expect(parseContextBudgetPercent(undefined)).toBe(100);
+    expect(parseContextBudgetPercent("")).toBe(100);
+    expect(parseContextBudgetPercent("   ")).toBe(100);
+    expect(parseContextBudgetPercent("10")).toBe(10);
+    expect(parseContextBudgetPercent("100")).toBe(100);
+  });
 });
 
 interface DeltaPayload {
@@ -1277,6 +1466,17 @@ function deltaPayload(rendered: string): DeltaPayload {
   const lastLine = rendered.split("\n").at(-1);
   if (!lastLine) throw new Error("delta rendering is missing its JSON payload line");
   return JSON.parse(lastLine) as DeltaPayload;
+}
+
+/** Generic parse of either a full or delta rendering's trailing JSON line. */
+function renderedPayload(rendered: string): {
+  recentTurns: Array<{ content: string }>;
+  sourceOutcomes: Array<{ source: string; outcome: string; payloadHash: string; payload: Record<string, unknown> }>;
+  contextPlan: Record<string, unknown>;
+} {
+  const lastLine = rendered.split("\n").at(-1);
+  if (!lastLine) throw new Error("rendering is missing its JSON payload line");
+  return JSON.parse(lastLine);
 }
 
 function journalTurn(

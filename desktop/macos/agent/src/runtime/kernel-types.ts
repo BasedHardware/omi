@@ -492,6 +492,12 @@ export interface AgentRuntimeKernelOptions {
   recoverRunInput?: KernelRunRecoveryPolicy;
   onToolCapabilityRejected?: (code: RunToolCapabilityRejectCode) => void;
   /**
+   * Local-provider-only context budget as a percentage of today's default
+   * kernel context snapshot (100 = byte-identical to unbudgeted rendering).
+   * Set from OMI_CONTEXT_BUDGET_PERCENT in src/index.ts; defaults to 100.
+   */
+  contextBudgetPercent?: number;
+  /**
    * Canonical execution-profile repository. Production uses the immutable
    * SQLite profile reader; tests with synthetic adapters may inject an
    * equivalent authoritative repository instead of reviving legacy columns.
