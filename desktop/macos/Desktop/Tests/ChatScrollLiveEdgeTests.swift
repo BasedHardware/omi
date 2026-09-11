@@ -419,7 +419,14 @@ final class UserScrollDetectorTests: XCTestCase {
 
   private func drainMainQueue() {
     // omi-test-quality: wall-clock-wait -- drives the AppKit notification callback and its next-turn terminal bounds read.
-    _ = RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05))
+    // A single `run(mode:before:)` returns as soon as any source fires. When an earlier suite in the
+    // same process left a repeating `.common`-mode timer behind, that timer ends the drain before the
+    // detector's `DispatchQueue.main.async` terminal read has run, and the settled count stays 0.
+    // Pump until the deadline so the drain length does not depend on which suites ran before this one.
+    let deadline = Date().addingTimeInterval(0.05)
+    repeat {
+      _ = RunLoop.main.run(mode: .default, before: deadline)
+    } while Date() < deadline
   }
 }
 
