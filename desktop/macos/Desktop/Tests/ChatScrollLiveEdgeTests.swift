@@ -417,6 +417,39 @@ final class UserScrollDetectorTests: XCTestCase {
     return event
   }
 
+  #if DEBUG
+    func testFollowGlideInvalidatesItsCommonModeTimerOnDeinit() {
+      let (scrollView, _) = makeScrollViewAtBottom()
+      weak var leftover: Timer?
+      autoreleasepool {
+        let glide = ChatFollowGlide()
+        XCTAssertTrue(
+          glide.glide(clipView: scrollView.contentView, to: NSPoint(x: 0, y: 200), duration: 0.16),
+          "the harness document is far enough from the target for a glide to arm")
+        leftover = glide.debugRunLoopTimer
+        XCTAssertEqual(leftover?.isValid, true)
+      }
+      XCTAssertNotEqual(
+        leftover?.isValid, true,
+        "deinit must invalidate the run-loop timer; a leftover repeating .common source starves later main-async drains"
+      )
+    }
+
+    func testLiveEdgePinnerInvalidatesItsCommonModeTimerOnDeinit() {
+      weak var leftover: Timer?
+      autoreleasepool {
+        let pinner = ChatLiveEdgePinner()
+        pinner.start(track: {})
+        leftover = pinner.debugRunLoopTimer
+        XCTAssertEqual(leftover?.isValid, true)
+      }
+      XCTAssertNotEqual(
+        leftover?.isValid, true,
+        "deinit must invalidate the run-loop timer; a leftover repeating .common source starves later main-async drains"
+      )
+    }
+  #endif
+
   private func drainMainQueue() {
     // omi-test-quality: wall-clock-wait -- drives the AppKit notification callback and its next-turn terminal bounds read.
     // A single `run(mode:before:)` returns as soon as any source fires. When an earlier suite in the
