@@ -52,6 +52,7 @@ def test_l1_prompt_teaches_owner_attribution_gates():
 
     assert "WHO IS WHO: the owner is only the segments the transcript marks as the owner" in prompt
     assert "When the header says owner identity is untrusted, first-person statements are unattributed" in prompt
+    assert "When the source header says owner identity is untrusted, first-person context" in prompt
     assert "BYSTANDER: if David said little or nothing, the slice contributes nothing about David" in prompt
     assert "PARTICIPATING IS NOT A FACT" in prompt
     assert "a guest introduces themselves as a marine biologist and David asks about funding" in prompt

@@ -117,6 +117,8 @@ def _source_type_instructions(source_type: str, user_name: str) -> str:
             f"but do not assume every speaker is {user_name}. "
             f"Treat a statement as about {user_name} only when source role, first-person context, "
             f"or surrounding evidence supports that attribution. "
+            f"When the source header says owner identity is untrusted, first-person context "
+            f"does not attribute the statement to {user_name}. "
             f"For named people or known roles, preserve the source-local speaker label and keep the item "
             f"about that person or relationship context, not as a user fact. "
             f"Ignore background noise, transcription errors, and long passages where nothing memorable happens."

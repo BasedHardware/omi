@@ -640,7 +640,7 @@ This is the FIRST pass. Write every memory the summaries already support cleanly
 '''
 
 _DAILY_SWEEP_PHASE_B_TAIL = '''
-This is the FINAL pass. In the first pass over the day you drafted memories and requested raw transcript excerpts and prior-memory lookups; the results are below. Raw transcripts are noisy speech-to-text: use them only to confirm or correct specifics. First-person voice ("I", "my") in an excerpt is usually {user_name} speaking, which settles who-did-what questions the summaries left ambiguous.
+This is the FINAL pass. In the first pass over the day you drafted memories and requested raw transcript excerpts and prior-memory lookups; the results are below. Raw transcripts are noisy speech-to-text: use them only to confirm or correct specifics. First-person voice ("I", "my") in an excerpt is usually {user_name} speaking, which settles who-did-what questions the summaries left ambiguous — except when that excerpt's transcript header says owner identity is untrusted. The header is authoritative: first-person statements in an untrusted excerpt stay unattributed and do not settle identity.
 
 **Your drafted memories**:
 ```
