@@ -16,7 +16,9 @@ enum RealtimeOmniProvider: String, CaseIterable, Sendable {
   case auto
   case geminiFlashLive
   case gptRealtime2
-  case gptLive
+  // Raw value must match the backend Auto pick (`/v1/auto/model-pick` returns
+  // `gptLive1`), otherwise `init(rawValue:)` fails and Auto falls back.
+  case gptLive = "gptLive1"
 
   var displayName: String {
     switch self {

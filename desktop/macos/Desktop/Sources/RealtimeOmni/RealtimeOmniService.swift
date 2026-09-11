@@ -248,6 +248,7 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
   }
 
   /// Signal end of the user's PTT turn.
+  @MainActor
   func commitInputTurn() {
     // If the turn ended before the session opened (very short press), defer the
     // commit so it can't precede setup/activityStart — markReady() flushes it
@@ -260,12 +261,27 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
     case .gptRealtime2:
       send(json: ["type": "input_audio_buffer.commit"])
     case .gptLive:
-      // GPT-Live is full-duplex: there is no input commit/turn loop; the model
-      // decides when to speak. Nothing is written on PTT release.
-      break
+      // GPT-Live is full-duplex with no client commit frame, and the warm session
+      // stays open, so it never emits `session.closed` on PTT release. Close the
+      // input turn locally: publish the accumulated STT as final and finish the
+      // turn so PushToTalkManager answers the completed press instead of waiting
+      // out finalization until its timeout/fallback.
+      finalizeGptLiveInputTurn()
     case .geminiFlashLive, .auto:
       send(json: ["realtimeInput": ["activityEnd": [:]]])
     }
+  }
+
+  /// Terminal for a GPT-Live PTT input turn on the warm omni session.
+  ///
+  /// The input transcript deltas already reached the delegate as interim; an empty
+  /// final makes the delegate resolve them (`PushToTalkManager` falls back to its
+  /// `lastInterimText`), and `omniDidFinishTurn` reaches the single terminal
+  /// coordinator outcome. Split out so the terminal contract is directly testable.
+  @MainActor
+  func finalizeGptLiveInputTurn() {
+    delegate?.omniDidReceiveInputTranscript("", isFinal: true, itemID: nil)
+    delegate?.omniDidFinishTurn()
   }
 
   // MARK: TTS — speak assistant text out
@@ -516,8 +532,7 @@ final class RealtimeOmniService: NSObject, @unchecked Sendable {
       break
     case "session.closed":
       // The protocol reports usage only at close; the omni shell does not bill here.
-      delegate?.omniDidReceiveInputTranscript("", isFinal: true, itemID: nil)
-      delegate?.omniDidFinishTurn()
+      finalizeGptLiveInputTurn()
     case "error":
       let msg =
         (e["error"] as? [String: Any])?["message"] as? String

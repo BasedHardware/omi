@@ -85,11 +85,13 @@ final class RealtimeHubSettings {
   /// The hub provider follows the user's "Voice Model" choice in Advanced settings —
   /// there is no separate hub picker. The two map 1:1 (same underlying models), and
   /// `.auto` is already resolved to a concrete provider by `effectiveProvider`.
-  /// GPT-Live is the default; the legacy GPT realtime selection now also lands on
-  /// GPT-Live, and Gemini stays selectable (and is GPT-Live's failover alternate).
+  /// GPT-Live is the default; an explicit "GPT Realtime 2" selection stays on the
+  /// legacy OpenAI realtime lane (matching `RealtimeOmniService`), and Gemini stays
+  /// selectable (and is GPT-Live's failover alternate).
   var provider: RealtimeHubProvider {
     switch RealtimeOmniSettings.shared.effectiveProvider {
-    case .gptLive, .gptRealtime2, .auto: return .gptLive
+    case .gptLive, .auto: return .gptLive
+    case .gptRealtime2: return .openai
     case .geminiFlashLive: return .gemini
     }
   }
