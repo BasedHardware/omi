@@ -1252,22 +1252,17 @@ function promptBlocksFor(transport: JsonlTransport, message: QueryMessage): Prom
 
 describe("JsonlTransport promptBlocks screen marker", () => {
   let originalProvider: string | undefined;
-  let originalVisionModel: string | undefined;
 
   beforeEach(() => {
     originalProvider = process.env.OMI_PROVIDER;
-    originalVisionModel = process.env.OMI_LOCAL_VISION_MODEL_ID;
   });
 
   afterEach(() => {
     if (originalProvider === undefined) delete process.env.OMI_PROVIDER;
     else process.env.OMI_PROVIDER = originalProvider;
-    if (originalVisionModel === undefined) delete process.env.OMI_LOCAL_VISION_MODEL_ID;
-    else process.env.OMI_LOCAL_VISION_MODEL_ID = originalVisionModel;
   });
 
-  it("local provider, image present, no vision model: blocks are [image, text] and text ends with the marker paragraph", () => {
-    delete process.env.OMI_LOCAL_VISION_MODEL_ID;
+  it("local provider, image present: blocks are [image, text] and text ends with the marker paragraph", () => {
     process.env.OMI_PROVIDER = "omi-local";
     const { store, session, transport } = fixture();
     const blocks = promptBlocksFor(transport, query(session.sessionId, { imageBase64: "AAAA", prompt: "what is on my screen" }));
@@ -1279,7 +1274,6 @@ describe("JsonlTransport promptBlocks screen marker", () => {
   });
 
   it("cloud provider ('omi' or unset), image present: text is exactly the original prompt", () => {
-    delete process.env.OMI_LOCAL_VISION_MODEL_ID;
     for (const provider of ["omi", undefined] as const) {
       if (provider === undefined) delete process.env.OMI_PROVIDER;
       else process.env.OMI_PROVIDER = provider;
@@ -1303,19 +1297,6 @@ describe("JsonlTransport promptBlocks screen marker", () => {
     expect(text).toBe("no screen here");
     store.close();
   });
-
-  it("local provider with a vision model configured: existing disk-delegation path is unchanged, no screen marker added", () => {
-    process.env.OMI_PROVIDER = "omi-local";
-    process.env.OMI_LOCAL_VISION_MODEL_ID = "some-vision-model";
-    const { store, session, transport } = fixture();
-    const blocks = promptBlocksFor(transport, query(session.sessionId, { imageBase64: "AAAA", prompt: "what is on my screen" }));
-
-    expect(blocks.map((block) => block.type)).toEqual(["text"]);
-    const text = blocks.filter((block) => block.type === "text").map((block) => block.text).join("");
-    expect(text).toContain("[Screen image saved at:");
-    expect(text).not.toContain(SCREEN_MARKER);
-    store.close();
-  });
 });
 
 function textOf(blocks: PromptBlock[]): string {
@@ -1327,22 +1308,17 @@ function textOf(blocks: PromptBlock[]): string {
 
 describe("JsonlTransport promptBlocks screen marker: end-to-end through the kernel", () => {
   let originalProvider: string | undefined;
-  let originalVisionModel: string | undefined;
 
   beforeEach(() => {
     originalProvider = process.env.OMI_PROVIDER;
-    originalVisionModel = process.env.OMI_LOCAL_VISION_MODEL_ID;
   });
 
   afterEach(() => {
     if (originalProvider === undefined) delete process.env.OMI_PROVIDER;
     else process.env.OMI_PROVIDER = originalProvider;
-    if (originalVisionModel === undefined) delete process.env.OMI_LOCAL_VISION_MODEL_ID;
-    else process.env.OMI_LOCAL_VISION_MODEL_ID = originalVisionModel;
   });
 
-  it("local provider, image, no vision model: the adapter receives [image, text] and the text carries the User Message header, the prompt, and the marker", async () => {
-    delete process.env.OMI_LOCAL_VISION_MODEL_ID;
+  it("local provider, image: the adapter receives [image, text] and the text carries the User Message header, the prompt, and the marker", async () => {
     process.env.OMI_PROVIDER = "omi-local";
     const { store, adapter, session, transport } = fixture();
     await transport.handleQuery(query(session.sessionId, { imageBase64: "AAAA", prompt: "what is on my screen" }));
@@ -1357,7 +1333,6 @@ describe("JsonlTransport promptBlocks screen marker: end-to-end through the kern
   });
 
   it("cloud provider, image: the adapter's text carries the original prompt and no marker", async () => {
-    delete process.env.OMI_LOCAL_VISION_MODEL_ID;
     delete process.env.OMI_PROVIDER;
     const { store, adapter, session, transport } = fixture();
     await transport.handleQuery(query(session.sessionId, { imageBase64: "AAAA", prompt: "what is on my screen" }));
@@ -1366,19 +1341,6 @@ describe("JsonlTransport promptBlocks screen marker: end-to-end through the kern
     const text = textOf(sentBlocks);
     expect(text).toContain("what is on my screen");
     expect(text).not.toContain(SCREEN_MARKER);
-    store.close();
-  });
-
-  it("local provider with OMI_LOCAL_VISION_MODEL_ID set: the adapter's text carries the disk-delegation line and no inline image block reaches the adapter", async () => {
-    process.env.OMI_PROVIDER = "omi-local";
-    process.env.OMI_LOCAL_VISION_MODEL_ID = "some-vision-model";
-    const { store, adapter, session, transport } = fixture();
-    await transport.handleQuery(query(session.sessionId, { imageBase64: "AAAA", prompt: "what is on my screen" }));
-
-    const sentBlocks = adapter.executed.at(-1)!.prompt;
-    expect(sentBlocks.map((block) => block.type)).toEqual(["text"]);
-    const text = textOf(sentBlocks);
-    expect(text).toContain("[Screen image saved at:");
     store.close();
   });
 

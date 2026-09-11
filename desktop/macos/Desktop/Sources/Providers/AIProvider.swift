@@ -84,11 +84,6 @@ struct AIProvider: Identifiable {
   static let localBaseURLKey = "localLLMBaseURL"
   /// UserDefaults key for the local provider's model id.
   static let localModelIDKey = "localLLMModelID"
-  /// UserDefaults key for an optional vision-capable local model id, used as
-  /// a subagent the main local model can delegate screenshot interpretation
-  /// to. No default: empty/unset means the feature is off and behavior is
-  /// identical to a single local model handling everything itself.
-  static let localVisionModelIDKey = "localLLMVisionModelID"
   /// UserDefaults key for an optional self-hosted backend URL, used in place
   /// of api.omi.me for voice transcription and memory/conversation sync when
   /// the local provider is active. No default: empty/unset means "use the
@@ -253,9 +248,9 @@ struct AIProvider: Identifiable {
 
   /// True when the Local provider is the active chat/agent provider: every
   /// text call already routes to the user's own server (see
-  /// `currentProviderMode`), and since the vision-subagent delegation,
-  /// screenshot interpretation does too. Free-tier gates that only exist to
-  /// meter Omi's cloud model should key off this, combined with the
+  /// `currentProviderMode`), and screenshot interpretation does too (the
+  /// image is attached directly to that same local model). Free-tier gates
+  /// that only exist to meter Omi's cloud model should key off this, combined with the
   /// individual feature's own "does this still call Omi's cloud" check
   /// (e.g. connector synthesis, which stays gated unless the user opts into
   /// `localCloudAssistMode == .cloud`, see `localCloudAssistEnabled`).

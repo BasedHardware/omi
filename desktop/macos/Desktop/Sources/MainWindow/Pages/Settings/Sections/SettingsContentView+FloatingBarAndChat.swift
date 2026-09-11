@@ -165,9 +165,8 @@ extension SettingsContentView {
   /// floating control bar keeps its own independent ChatProvider (see
   /// FloatingControlBarManager.sharedFloatingProvider) that never picks up a
   /// Settings change on its own; restarting only `chatProvider` here would
-  /// leave it running indefinitely on whatever model/vision config it
-  /// started with, silently diverging from the main window after any later
-  /// edit.
+  /// leave it running indefinitely on whatever model config it started
+  /// with, silently diverging from the main window after any later edit.
   func restartLocalBridgesIfActive() {
     Task {
       await chatProvider?.restartLocalBridgeIfActive()
@@ -251,38 +250,6 @@ extension SettingsContentView {
             restartLocalBridgesIfActive()
           }
         }
-      }
-
-      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-        Text("Vision model (optional)")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(Ink.secondary)
-
-        if localModelOptions.isEmpty {
-          TextField("None", text: $localLLMVisionModelID)
-            .textFieldStyle(.roundedBorder)
-            .onChange(of: localLLMVisionModelID) { _, _ in
-              restartLocalBridgesIfActive()
-            }
-        } else {
-          Picker("", selection: $localLLMVisionModelID) {
-            Text("None").tag("")
-            ForEach(localModelOptions, id: \.self) { modelId in
-              Text(modelId).tag(modelId)
-            }
-          }
-          .pickerStyle(.menu)
-          .labelsHidden()
-          .onChange(of: localLLMVisionModelID) { _, _ in
-            restartLocalBridgesIfActive()
-          }
-        }
-
-        Text(
-          "A separate vision-capable model the main model can delegate screenshot interpretation to. Leave unset to use one model for everything."
-        )
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(Ink.secondary)
       }
 
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
@@ -393,7 +360,6 @@ extension SettingsContentView {
     localModelsFetchFailed = false
     let baseURL = localLLMBaseURL
     let currentModelId = localLLMModelID
-    let currentVisionModelId = localLLMVisionModelID
     Task {
       do {
         var models = try await localModelsFetcher(baseURL)
@@ -401,9 +367,6 @@ extension SettingsContentView {
         // list doesn't (yet) include it: Picker needs a matching tag.
         if !currentModelId.isEmpty && !models.contains(currentModelId) {
           models.insert(currentModelId, at: 0)
-        }
-        if !currentVisionModelId.isEmpty && !models.contains(currentVisionModelId) {
-          models.insert(currentVisionModelId, at: 0)
         }
         await MainActor.run {
           self.localModelOptions = models

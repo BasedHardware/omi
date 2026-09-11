@@ -31,7 +31,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { appendFile, chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { isSafeSkillName, loadSkillInstructions, searchSkills } from "../agent/dist/runtime/node-tools.js";
 import {
   isStdioServer,
@@ -50,7 +50,6 @@ import {
   type OmiToolManifestEntry,
   type OmiToolProjectionContext,
 } from "../agent/dist/runtime/omi-tool-manifest.js";
-import { visionScreenshotDirectory } from "../agent/dist/vision-subagent.js";
 
 /**
  * Opaque, request-scoped correlation ids are the only context forwarded to
@@ -804,65 +803,16 @@ export function classifyFileWrite(filePath: string): DenyDecision | null {
   return null;
 }
 
-/** Filename pattern for the on-disk screenshot handed to the vision
- *  subagent (see agent/src/vision-subagent.ts's writeScreenshotForVisionSubagent).
- *  Matched together with the directory check below (visionScreenshotDirectory)
- *  so a user file elsewhere on disk that happens to share this basename is
- *  never blocked; only the exact fixed path the writer uses is. */
-const VISION_SCREENSHOT_BASENAME = /^omi-screen\.(?:png|jpe?g|webp)$/;
-
-/** The provider name pi-mono-extension registers the vision-capable local
- *  model under (see the omi-local-vision registerProvider call below). The
- *  vision subagent's frontmatter pins it to "omi-local-vision/<id>", so any
- *  tool call made while that's the active model is, by construction, the
- *  vision subagent's own work rather than the main assistant's. */
-const VISION_PROVIDER_NAME = "omi-local-vision";
-
 /** The provider name pi-mono-extension registers the main local chat model
  *  under (see the omi-local registerProvider call below). */
 const LOCAL_PROVIDER_NAME = "omi-local";
 
-/** Classify a `read` of the vision screenshot file. Returns null (allowed)
- *  for any path that isn't the fixed screenshot path, or when the currently
- *  active model is the vision subagent's own model (it legitimately reads
- *  its own input image). Blocks everything else: in practice, the main
- *  model trying to look at the screenshot itself instead of delegating to
- *  the vision subagent, whether because it never tried delegating or
- *  because delegation just failed.
- *
- *  Note: this can't be done by tracking the subagent tool-call's in-flight
- *  window (tempting, since we already see "before"/"after" events for it):
- *  the vision agent's frontmatter declares its own `extensions:` entry (see
- *  agent/src/index.ts), so pi-subagents loads a *separate* instance of this
- *  extension for the child session, with its own module-level state. Only
- *  ctx.model, which correctly reflects whichever session is currently
- *  active in each extension instance, survives that split. */
-export function classifyVisionScreenshotRead(filePath: string, activeModelProvider: string | undefined): DenyDecision | null {
-  if (typeof filePath !== "string" || filePath.length === 0) return null;
-  if (activeModelProvider === VISION_PROVIDER_NAME) return null;
-  const resolved = resolve(filePath);
-  if (!VISION_SCREENSHOT_BASENAME.test(basename(resolved))) return null;
-  if (dirname(resolved) !== visionScreenshotDirectory()) return null;
-  return {
-    blocked: true,
-    reason:
-      "This screenshot must be interpreted by the vision subagent, call " +
-      "subagent(agent:\"vision\", task:...) with this file path instead of " +
-      "reading it directly. If that delegation just failed, tell the user " +
-      "you're unable to interpret images right now rather than guessing.",
-  };
-}
-
 /** Classify a whole tool_call event by dispatching on toolName.
  *  When OMI_YOLO_MODE=1, the ordinary interactive denylist is bypassed.
- *  Kernel read-only authority remains mandatory in every build.
- *  `activeModelProvider` is ctx.model?.provider from the extension context,
- *  optional so existing callers/tests that don't care about the vision-read
- *  guard can keep calling this with just an event. */
+ *  Kernel read-only authority remains mandatory in every build. */
 export function inspectToolCall(
   event: ToolCallEvent,
   builtInToolPolicy: OmiBuiltInToolPolicy = "default",
-  activeModelProvider?: string,
 ): DenyDecision | null {
   if (
     builtInToolPolicy === "read_only"
@@ -885,14 +835,8 @@ export function inspectToolCall(
       const path = (event.input as { path?: unknown })?.path;
       return typeof path === "string" ? classifyFileWrite(path) : null;
     }
-    case "read": {
-      const path = (event.input as { path?: unknown })?.path;
-      return typeof path === "string"
-        ? classifyVisionScreenshotRead(path, activeModelProvider)
-        : null;
-    }
     default:
-      // grep, find, ls, and custom tools pass through unchanged.
+      // read, grep, find, ls, and custom tools pass through unchanged.
       return null;
   }
 }
@@ -1139,14 +1083,14 @@ export const OMI_TOOL_TIMEOUT_MS = 30_000;
 export const OMI_LONG_CONTROL_TOOL_TIMEOUT_MS = 10 * 60_000;
 export const OMI_CHAT_CONTRACT_VERSION = "1";
 
-/** Whether the currently active model's provider is a self-hosted local
- *  provider (main chat or vision). Omi-internal `x-omi-*` telemetry headers
- *  (correlation id, reasoning effort, JIT budget) must never reach a
- *  user-pointed local/LAN server: they're diagnostic plumbing for Omi's own
- *  cloud gateway, not something a self-hosted OpenAI-compatible endpoint
- *  should ever see on the wire. */
+/** Whether the currently active model's provider is the self-hosted local
+ *  provider. Omi-internal `x-omi-*` telemetry headers (correlation id,
+ *  reasoning effort, JIT budget) must never reach a user-pointed local/LAN
+ *  server: they're diagnostic plumbing for Omi's own cloud gateway, not
+ *  something a self-hosted OpenAI-compatible endpoint should ever see on
+ *  the wire. */
 export function isLocalProviderName(providerName: string | undefined): boolean {
-  return providerName === LOCAL_PROVIDER_NAME || providerName === VISION_PROVIDER_NAME;
+  return providerName === LOCAL_PROVIDER_NAME;
 }
 
 export function applyOmiProviderHeaders(
@@ -1964,11 +1908,8 @@ export async function resolveLocalContextWindow(
   return { contextWindow: DEFAULT_LOCAL_CONTEXT_WINDOW, source: "default" };
 }
 
-/** Register a local OpenAI-compatible provider (LM Studio, Ollama, etc.)
- *  with one text-or-vision model, probing its context window from the
- *  server first. Shared by the "omi-local" and "omi-local-vision"
- *  registrations below: they differ only in provider name, base URL, and
- *  model id, and the registered model is otherwise identical. */
+/** Register a local OpenAI-compatible provider (LM Studio, Ollama, etc.),
+ *  probing its context window from the server first. */
 async function registerLocalProvider(
   pi: ExtensionAPI,
   { name, baseUrl, modelId, apiKey }: { name: string; baseUrl: string; modelId: string; apiKey: string },
@@ -1988,10 +1929,9 @@ async function registerLocalProvider(
         // before sending the request whenever `input` doesn't list "image"
         // (see providers/openai-completions.js): declaring "text" only
         // silently dropped screenshots even when the user's chosen model
-        // is actually vision-capable (e.g. running a single vision model
-        // with no separate vision-subagent configured). The user picks
-        // this model id themselves, same trust boundary as the vision
-        // and cloud providers, which already declare both.
+        // is actually vision-capable. The user picks this model id
+        // themselves, same trust boundary as the cloud provider, which
+        // already declares both.
         input: ["text", "image"],
         // Probed from the server above (resolveLocalContextWindow), not
         // hardcoded: pi derives each request's output budget as
@@ -2075,9 +2015,9 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
   // Pi asks for headers once per provider request and keeps them for retries,
   // which preserves one safe correlation id across an upstream retry chain.
   pi.on("before_provider_headers", async (event, ctx) => {
-    // Local/vision requests go to the user's own server, not Omi's cloud
-    // gateway: these headers are Omi-internal telemetry and must stay off
-    // that wire entirely, not just unbilled.
+    // Local requests go to the user's own server, not Omi's cloud gateway:
+    // these headers are Omi-internal telemetry and must stay off that wire
+    // entirely, not just unbilled.
     if (isLocalProviderName(ctx?.model?.provider)) return;
     const raw = await omiRelayContextRaw();
     // Per-turn effort lane: typed chat runs "adaptive" (the model decides its
@@ -2105,22 +2045,7 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
     });
   }
 
-  // Local vision provider: an optional second model on the same server (e.g.
-  // a vision-capable model resident alongside the main text model in LM
-  // Studio) that the "vision" pi-subagents role is pinned to. Only registered
-  // when a vision model id is configured: absent by default, so existing
-  // single-local-model setups are completely unaffected.
-  const localVisionModelId = process.env.OMI_LOCAL_VISION_MODEL_ID;
-  if (localBaseUrl && localVisionModelId) {
-    await registerLocalProvider(pi, {
-      name: "omi-local-vision",
-      baseUrl: localBaseUrl,
-      modelId: localVisionModelId,
-      apiKey: localApiKey,
-    });
-  }
-
-  pi.on("tool_call", async (event, ctx): Promise<ToolCallEventResult | void> => {
+  pi.on("tool_call", async (event): Promise<ToolCallEventResult | void> => {
     let decision: DenyDecision | null = null;
     let builtInToolPolicy: OmiBuiltInToolPolicy = "read_only";
     try {
@@ -2140,7 +2065,7 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
         summary: summarizeInput(event),
       });
     }
-    decision = inspectToolCall(event, builtInToolPolicy, ctx?.model?.provider);
+    decision = inspectToolCall(event, builtInToolPolicy);
 
     void appendAudit({
       ts: new Date().toISOString(),

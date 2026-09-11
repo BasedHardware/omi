@@ -962,9 +962,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // Both have their own, narrower exemption beyond BYOK: audio recording is
     // also off the hook once transcription is pointed at a self-hosted
     // backend, and screen capture is also off the hook while the Local
-    // provider is active, since the vision-subagent delegation routes
-    // screenshot interpretation to the user's own server instead of Omi's
-    // Gemini proxy (see AppState.isScreenCaptureExemptFromPaywall).
+    // provider is active, since screenshot interpretation routes to the
+    // user's own server instead of Omi's Gemini proxy (see
+    // AppState.isScreenCaptureExemptFromPaywall).
     let screenCapturePaywalled = !AppState.isScreenCaptureExemptFromPaywall
     let transcriptionPaywalled = !AppState.isTranscriptionExemptFromPaywall
     let screenCaptureItem = NSMenuItem()

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { PromptBlock } from "../adapters/interface.js";
 import { detectImageMimeType } from "../mime-detect.js";
-import { writeScreenshotForVisionSubagent } from "../vision-subagent.js";
 import type {
   CancelAckMessage,
   ErrorMessage,
@@ -667,33 +666,19 @@ export class JsonlTransport {
     let promptText = message.prompt;
     if (message.imageBase64) {
       const mimeType = detectImageMimeType(message.imageBase64);
-      const localVisionModelId = process.env.OMI_LOCAL_VISION_MODEL_ID;
-      if (localVisionModelId) {
-        // A vision subagent is configured (local provider only, see
-        // syncVisionSubagentFile); don't attach the raw image to the
-        // primary session's prompt, since the main model may not be
-        // vision-capable at all. Write it to disk and point the model at
-        // the path instead; the system prompt tells it to delegate
-        // interpretation to the "vision" subagent, which reads the file
-        // itself via its own read tool.
-        const imagePath = writeScreenshotForVisionSubagent(message.imageBase64, mimeType);
-        promptText = `${message.prompt}\n\n[Screen image saved at: ${imagePath}, delegate to the vision subagent to interpret it]`;
-        this.log(`Jsonl transport: vision subagent configured, wrote screenshot to ${imagePath} instead of attaching inline`);
-      } else {
-        blocks.push({
-          type: "image",
-          data: message.imageBase64,
-          mimeType,
-        });
-        if (process.env.OMI_PROVIDER === "omi-local") {
-          // Measured 2026-09-10: with an inline image block and no marker, local
-          // models (gemma-4, qwen3-vl) ignored the attached screenshot, called the
-          // screenshot/capture_screen tools instead (which fail), then repeated a
-          // stale "I don't have permission to see your screen" refusal from
-          // retained history. The cloud provider does not exhibit this and stays
-          // untouched.
-          promptText = `${promptText}\n\n[A screenshot of the user's current screen is attached to this message as an image. Look at the attached image and answer from it directly. Do not call screenshot or capture_screen for this request; the attached image is the current screen.]`;
-        }
+      blocks.push({
+        type: "image",
+        data: message.imageBase64,
+        mimeType,
+      });
+      if (process.env.OMI_PROVIDER === "omi-local") {
+        // Measured 2026-09-10: with an inline image block and no marker, local
+        // models (gemma-4, qwen3-vl) ignored the attached screenshot, called the
+        // screenshot/capture_screen tools instead (which fail), then repeated a
+        // stale "I don't have permission to see your screen" refusal from
+        // retained history. The cloud provider does not exhibit this and stays
+        // untouched.
+        promptText = `${promptText}\n\n[A screenshot of the user's current screen is attached to this message as an image. Look at the attached image and answer from it directly. Do not call screenshot or capture_screen for this request; the attached image is the current screen.]`;
       }
     }
     blocks.push({ type: "text", text: promptText });

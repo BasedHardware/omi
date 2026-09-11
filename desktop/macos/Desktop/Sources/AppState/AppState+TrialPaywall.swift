@@ -98,8 +98,7 @@ extension AppState {
   /// routes voice transcription away from Omi's Deepgram proxy entirely.
   /// Distinct from `isScreenCaptureExemptFromPaywall`: transcription needs the
   /// extra backend-URL check because the Local provider alone only covers
-  /// text and (via the vision subagent) screenshots, not the separate voice
-  /// pipeline.
+  /// text and screenshots, not the separate voice pipeline.
   nonisolated static var isTranscriptionExemptFromPaywall: Bool {
     if !isPaywalledEffective { return true }
     return AIProvider.isLocalProviderWithSelfHostedBackend
@@ -110,10 +109,10 @@ extension AppState {
   /// provider is active AND the user has not opted cloud-assisted features
   /// on. Unlike `isTranscriptionExemptFromPaywall`, this needs no
   /// self-hosted-backend check: screen capture's own cloud dependency was
-  /// Omi's Gemini proxy for interpreting the image, and the vision-subagent
-  /// delegation (see `ChatProvider.visionSubagentInstruction`) already routes
-  /// that through the local provider's own model/subagent instead. Screen
-  /// capture itself (the macOS frame grab) never leaves the device under any
+  /// Omi's Gemini proxy for interpreting the image, and the local provider
+  /// already routes that through its own model instead (the screenshot is
+  /// attached directly to the request). Screen capture itself (the macOS
+  /// frame grab) never leaves the device under any
   /// provider, but the proactive assistants and live notes that consume it
   /// (task/memory/insight/suggestion extraction) go back to Omi's Gemini
   /// proxy the moment the user opts cloud-assist on, so this is metered again

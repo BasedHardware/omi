@@ -18,7 +18,6 @@ import { basename, join as pathJoin } from "node:path";
 import {
   classifyBash,
   classifyFileWrite,
-  classifyVisionScreenshotRead,
   inspectToolCall,
   summarizeInput,
   appendAudit,
@@ -1280,64 +1279,6 @@ test("inspectToolCall: read-only service authority blocks adapter mutations even
     if (previous === undefined) delete process.env.OMI_YOLO_MODE;
     else process.env.OMI_YOLO_MODE = previous;
   }
-});
-
-// ---------------------------------------------------------------------------
-// classifyVisionScreenshotRead
-//
-// Note: this can't be verified via a shared "in-flight call id" set: the
-// vision agent's frontmatter declares its own `extensions:` entry, so
-// pi-subagents loads a *separate* instance of this extension for the child
-// session, with its own module-level state. ctx.model is what actually
-// survives that split (see the doc comment on classifyVisionScreenshotRead).
-// ---------------------------------------------------------------------------
-
-test("classifyVisionScreenshotRead: blocks the vision screenshot path when the main model is asking", () => {
-  const tmp = tmpdir();
-  assert.ok(classifyVisionScreenshotRead(`${tmp}/omi-screen.png`, "omi-local"));
-  assert.ok(classifyVisionScreenshotRead(`${tmp}/omi-screen.jpg`, "omi-local"));
-  assert.ok(classifyVisionScreenshotRead(`${tmp}/omi-screen.webp`, undefined));
-});
-
-test("classifyVisionScreenshotRead: allows the vision screenshot path when the vision model is asking", () => {
-  const tmp = tmpdir();
-  assert.equal(classifyVisionScreenshotRead(`${tmp}/omi-screen.png`, "omi-local-vision"), null);
-});
-
-test("classifyVisionScreenshotRead: leaves unrelated paths alone regardless of active model", () => {
-  assert.equal(classifyVisionScreenshotRead("/Users/someone/Documents/photo.png", "omi-local"), null);
-  assert.equal(classifyVisionScreenshotRead("/Users/someone/Documents/photo.png", "omi-local-vision"), null);
-});
-
-// Regression test: the basename-only match used to block ANY file named
-// omi-screen.png/.jpg/.jpeg/.webp anywhere on disk, for every provider, not
-// just the fixed tmp-dir path the vision subagent actually writes to.
-test("classifyVisionScreenshotRead: does not block a user file that merely shares the screenshot's basename outside the screenshot directory", () => {
-  assert.equal(
-    classifyVisionScreenshotRead("/Users/someone/Documents/omi-screen.png", "omi-local"),
-    null,
-  );
-  assert.equal(
-    classifyVisionScreenshotRead("/Users/someone/Documents/omi-screen.jpg", undefined),
-    null,
-  );
-});
-
-test("inspectToolCall: denies a direct read of the vision screenshot from a non-vision model", () => {
-  const tmp = tmpdir();
-  const d = inspectToolCall(readEvent(`${tmp}/omi-screen.png`), "default", "omi-local");
-  assert.ok(d);
-});
-
-test("inspectToolCall: denies a direct read of the vision screenshot when no model context is known", () => {
-  const tmp = tmpdir();
-  const d = inspectToolCall(readEvent(`${tmp}/omi-screen.png`));
-  assert.ok(d);
-});
-
-test("inspectToolCall: allows the vision model reading its own screenshot", () => {
-  const tmp = tmpdir();
-  assert.equal(inspectToolCall(readEvent(`${tmp}/omi-screen.png`), "default", "omi-local-vision"), null);
 });
 
 test("inspectToolCall: passthrough for unknown custom tools", () => {
@@ -3346,71 +3287,18 @@ test("omiProvider: does not register omi when OMI_API_KEY is not set (local-only
   );
 });
 
-test("omiProvider: registers omi-local-vision when the vision env var is present", async () => {
-  await withEnvAsync(
-    {
-      OMI_LOCAL_BASE_URL: "http://100.100.100.100:1234/v1",
-      OMI_LOCAL_VISION_MODEL_ID: "qwen3-vl-8b-mlx",
-    },
-    async () => {
-      await withFakeFetch(alwaysFailFetch, async () => {
-        const pi = fakePi();
-        await omiProvider(pi as any);
-        const vision = pi.registered.find((r) => r.name === "omi-local-vision");
-        assert.ok(vision, "omi-local-vision must register when the vision env var is present");
-        assert.equal(vision!.config.baseUrl, "http://100.100.100.100:1234/v1");
-        assert.equal(vision!.config.models[0].id, "qwen3-vl-8b-mlx");
-      });
-    }
-  );
-});
-
-test("omiProvider: omi-local and omi-local-vision model configs are identical except id and name", async () => {
-  await withEnvAsync(
-    {
-      OMI_LOCAL_BASE_URL: "http://100.100.100.100:1234/v1",
-      OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx",
-      OMI_LOCAL_VISION_MODEL_ID: "qwen3-vl-8b-mlx",
-    },
-    async () => {
-      await withFakeFetch(alwaysFailFetch, async () => {
-        const pi = fakePi();
-        await omiProvider(pi as any);
-        const local = pi.registered.find((r) => r.name === "omi-local");
-        const vision = pi.registered.find((r) => r.name === "omi-local-vision");
-        assert.ok(local && vision, "both omi-local and omi-local-vision must register");
-
-        const localModel = { ...local!.config.models[0] };
-        const visionModel = { ...vision!.config.models[0] };
-        // id and name are expected to differ (each carries its own model id);
-        // strip them and everything else must be structurally identical, which
-        // proves the shared registerLocalProvider helper didn't let the two
-        // registrations diverge.
-        delete localModel.id;
-        delete localModel.name;
-        delete visionModel.id;
-        delete visionModel.name;
-        assert.deepEqual(localModel, visionModel);
-        assert.equal(local!.config.models[0].id, "qwen3.8-27b-mlx");
-        assert.equal(vision!.config.models[0].id, "qwen3-vl-8b-mlx");
-      });
-    }
-  );
-});
-
 // ---------------------------------------------------------------------------
 // isLocalProviderName / before_provider_headers scoping
 //
 // Regression coverage: the before_provider_headers hook used to attach Omi's
 // internal x-omi-* telemetry headers (correlation id, reasoning effort, JIT
-// budget) to every provider request unconditionally, including omi-local and
-// omi-local-vision, sending Omi-internal telemetry to whatever self-hosted
-// or LAN endpoint the user pointed "Local" at. It must now skip local/vision.
+// budget) to every provider request unconditionally, including omi-local,
+// sending Omi-internal telemetry to whatever self-hosted or LAN endpoint the
+// user pointed "Local" at. It must now skip local.
 // ---------------------------------------------------------------------------
 
-test("isLocalProviderName: true only for the local main and vision providers", () => {
+test("isLocalProviderName: true only for the local provider", () => {
   assert.equal(isLocalProviderName("omi-local"), true);
-  assert.equal(isLocalProviderName("omi-local-vision"), true);
   assert.equal(isLocalProviderName("omi"), false);
   assert.equal(isLocalProviderName(undefined), false);
 });
@@ -3436,10 +3324,6 @@ test("before_provider_headers: skips Omi telemetry headers when the active model
   const localHeaders: Record<string, string> = {};
   await handler!({ headers: localHeaders }, { model: { provider: "omi-local" } });
   assert.deepEqual(localHeaders, {}, "no Omi header should reach the local provider's request");
-
-  const visionHeaders: Record<string, string> = {};
-  await handler!({ headers: visionHeaders }, { model: { provider: "omi-local-vision" } });
-  assert.deepEqual(visionHeaders, {}, "no Omi header should reach the local vision provider's request");
 });
 
 test("before_provider_headers: still attaches Omi telemetry headers for the cloud provider", async () => {

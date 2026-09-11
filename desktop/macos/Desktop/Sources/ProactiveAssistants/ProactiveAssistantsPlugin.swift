@@ -285,9 +285,8 @@ public class ProactiveAssistantsPlugin: NSObject {
     // `desktop_isPaywalled` to UserDefaults whenever it flips so other
     // singletons can synchronously check. Toggle UI also gates on this.
     // BYOK users (all four keys configured locally) are never paywalled, and
-    // neither is the Local provider: since the vision-subagent delegation,
-    // screenshot interpretation runs against the user's own server under
-    // Local, never Omi's Gemini proxy (see
+    // neither is the Local provider: screenshot interpretation runs against
+    // the user's own server under Local, never Omi's Gemini proxy (see
     // `AppState.isScreenCaptureExemptFromPaywall`), so both bypass this gate
     // even if the flag is transiently stale.
     if !AppState.isScreenCaptureExemptFromPaywall {

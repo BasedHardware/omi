@@ -1338,7 +1338,7 @@ export class KernelCore {
         nextContextDelivery = renderedContext.next;
         effectivePrompt = `${renderedContext.rendered}${attachments}\n\n# User Message\n${input.prompt}`;
         // The transport's promptBlocks() may append per-provider instructions to the user's
-        // text block (screenshot marker, vision-subagent delegation line); rebuilding from the
+        // text block (e.g. the local-provider screenshot marker); rebuilding from the
         // raw input.prompt instead of the block's own text silently dropped them.
         effectivePromptBlocks = attemptInput.promptBlocks
           ? attemptInput.promptBlocks.map((block) =>

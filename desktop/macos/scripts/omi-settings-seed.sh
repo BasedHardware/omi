@@ -174,8 +174,8 @@ selected = {key: source[key] for key in KEYS if key in source}
 keys_to_delete = set()
 
 # Exception to the mirror-not-overlay rule above: the Local provider's
-# companion keys (localLLMBaseURL, localLLMModelID, localLLMVisionModelID,
-# localBackendURL, localCloudAssistMode) are bundle-local and never mirrored.
+# companion keys (localLLMBaseURL, localLLMModelID, localBackendURL,
+# localCloudAssistMode) are bundle-local and never mirrored.
 # Mirroring or deleting chatBridgeMode alone would then leave a bundle with a
 # Local endpoint configured but its chat routed to Omi's cloud model and
 # Omi's billing gate. Observed 2026-09-10: production Omi (no chatBridgeMode
