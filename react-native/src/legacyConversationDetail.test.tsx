@@ -1026,6 +1026,84 @@ test('does not fail conversation detail when stored sections or action items can
   expect(omitted.actionItems).toEqual([]);
 });
 
+test('does not fail conversation detail when stored title or overview is omitted', async () => {
+  mockRequest.mockResolvedValueOnce(
+    response({
+      ...fixture,
+      structured: {
+        sections: [{heading: 'Notes', body_markdown: 'Full notes'}],
+      },
+    }),
+  );
+  const omitted = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(omitted.title).toBe('');
+  expect(omitted.summary).toBe('');
+  expect(omitted.sections).toEqual([
+    {heading: 'Notes', bodyMarkdown: 'Full notes'},
+  ]);
+  expect(omitted.transcript).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: 'Full speech beyond the summary',
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+      },
+    ],
+  });
+  mockRequest.mockResolvedValueOnce(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        title: null,
+        overview: null,
+      },
+    }),
+  );
+  const nulled = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(nulled.title).toBe('');
+  expect(nulled.summary).toBe('');
+  expect(nulled.transcript).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: 'Full speech beyond the summary',
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+      },
+    ],
+  });
+  mockRequest.mockResolvedValueOnce(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        title: 1,
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValueOnce(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        overview: 5,
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+});
+
 test.each([undefined, null])(
   'omitted/null transcript stays unknown (%s)',
   async transcript_segments => {

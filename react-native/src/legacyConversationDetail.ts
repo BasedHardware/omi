@@ -70,6 +70,12 @@ function text(value: unknown, limit = 1000000): string {
   }
   return value;
 }
+function omittedText(value: unknown, limit = 1000000): string {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return text(value, limit);
+}
 function boolean(value: unknown): boolean {
   if (typeof value !== 'boolean') {
     throw new DetailError('invalid');
@@ -431,7 +437,7 @@ export async function loadLegacyConversationDetail(
   const linkedEvent = calendarEvent(value.calendar_event);
   const photos = conversationPhotos(value.photos);
   const integrationText = externalText(value.external_data);
-  const overview = text(structured.overview);
+  const overview = omittedText(structured.overview);
   const appRecap = firstAppSummary(
     value.apps_results,
     value.plugins_results,
@@ -464,7 +470,7 @@ export async function loadLegacyConversationDetail(
       : await loadOmiFolder(backend, folderId, signal).catch(() => undefined);
   return {
     id,
-    title: text(structured.title),
+    title: omittedText(structured.title),
     summary: overview,
     locked,
     sections,
