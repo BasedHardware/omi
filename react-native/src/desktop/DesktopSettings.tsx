@@ -300,6 +300,13 @@ export function DesktopSettings({
   const [usageMonthly, setUsageMonthly] = useState<OmiUsageStats | null>(null);
   const [usageYearly, setUsageYearly] = useState<OmiUsageStats | null>(null);
   const [usageAllTime, setUsageAllTime] = useState<OmiUsageStats | null>(null);
+  const [usageMonthlyError, setUsageMonthlyError] = useState<string | null>(
+    null,
+  );
+  const [usageYearlyError, setUsageYearlyError] = useState<string | null>(null);
+  const [usageAllTimeError, setUsageAllTimeError] = useState<string | null>(
+    null,
+  );
   const [fairUse, setFairUse] = useState<ReturnType<typeof fairUseCopy>>(null);
   const [dailySummaries, setDailySummaries] = useState<
     ReturnType<typeof dailySummaryCopy>
@@ -359,6 +366,9 @@ export function DesktopSettings({
     let nextUsageMonthly: OmiUsageStats | null = null;
     let nextUsageYearly: OmiUsageStats | null = null;
     let nextUsageAllTime: OmiUsageStats | null = null;
+    let nextUsageMonthlyError: string | null = null;
+    let nextUsageYearlyError: string | null = null;
+    let nextUsageAllTimeError: string | null = null;
     let nextFairUse: ReturnType<typeof fairUseCopy> = null;
     let nextDailySummaries: ReturnType<typeof dailySummaryCopy> = [];
     let nextDailySummarySchedule: ReturnType<typeof dailySummaryScheduleCopy> =
@@ -396,14 +406,26 @@ export function DesktopSettings({
         }),
       );
       const appChangelogsTask = loadOmiAppChangelogs(backend).catch(() => []);
-      const usageMonthlyTask = loadOmiUsagePeriod(backend, 'monthly').catch(
-        () => null,
+      const usageMonthlyTask = loadOmiUsagePeriod(backend, 'monthly').then(
+        stats => ({stats, error: null as string | null}),
+        reason => ({
+          stats: null as OmiUsageStats | null,
+          error: desktopReadErrorCopy(reason),
+        }),
       );
-      const usageYearlyTask = loadOmiUsagePeriod(backend, 'yearly').catch(
-        () => null,
+      const usageYearlyTask = loadOmiUsagePeriod(backend, 'yearly').then(
+        stats => ({stats, error: null as string | null}),
+        reason => ({
+          stats: null as OmiUsageStats | null,
+          error: desktopReadErrorCopy(reason),
+        }),
       );
-      const usageAllTimeTask = loadOmiUsagePeriod(backend, 'all_time').catch(
-        () => null,
+      const usageAllTimeTask = loadOmiUsagePeriod(backend, 'all_time').then(
+        stats => ({stats, error: null as string | null}),
+        reason => ({
+          stats: null as OmiUsageStats | null,
+          error: desktopReadErrorCopy(reason),
+        }),
       );
       const fairUseTask = loadOmiFairUseStatus(backend).catch(() => null);
       const dailySummariesTask = loadOmiDailySummaries(backend).catch(() => []);
@@ -437,9 +459,15 @@ export function DesktopSettings({
       nextIntegrations = integrationsResult.rows;
       nextIntegrationsError = integrationsResult.error;
       nextAppChangelogs = await appChangelogsTask;
-      nextUsageMonthly = await usageMonthlyTask;
-      nextUsageYearly = await usageYearlyTask;
-      nextUsageAllTime = await usageAllTimeTask;
+      const usageMonthlyResult = await usageMonthlyTask;
+      nextUsageMonthly = usageMonthlyResult.stats;
+      nextUsageMonthlyError = usageMonthlyResult.error;
+      const usageYearlyResult = await usageYearlyTask;
+      nextUsageYearly = usageYearlyResult.stats;
+      nextUsageYearlyError = usageYearlyResult.error;
+      const usageAllTimeResult = await usageAllTimeTask;
+      nextUsageAllTime = usageAllTimeResult.stats;
+      nextUsageAllTimeError = usageAllTimeResult.error;
       nextFairUse = fairUseCopy(await fairUseTask);
       nextDailySummaries = dailySummaryCopy(await dailySummariesTask);
       nextDailySummarySchedule = dailySummaryScheduleCopy(
@@ -487,6 +515,9 @@ export function DesktopSettings({
     setUsageMonthly(nextUsageMonthly);
     setUsageYearly(nextUsageYearly);
     setUsageAllTime(nextUsageAllTime);
+    setUsageMonthlyError(nextUsageMonthlyError);
+    setUsageYearlyError(nextUsageYearlyError);
+    setUsageAllTimeError(nextUsageAllTimeError);
     setFairUse(nextFairUse);
     setDailySummaries(nextDailySummaries);
     setDailySummarySchedule(nextDailySummarySchedule);
@@ -785,15 +816,27 @@ export function DesktopSettings({
       {usageStatsCopy(account?.usage)?.map(row => (
         <Row copy={row.copy} key={row.title} title={row.title} />
       ))}
-      {usagePeriodStatsCopy('This month', usageMonthly)?.map(row => (
-        <Row copy={row.copy} key={row.title} title={row.title} />
-      ))}
-      {usagePeriodStatsCopy('This year', usageYearly)?.map(row => (
-        <Row copy={row.copy} key={row.title} title={row.title} />
-      ))}
-      {usagePeriodStatsCopy('All time', usageAllTime)?.map(row => (
-        <Row copy={row.copy} key={row.title} title={row.title} />
-      ))}
+      {usageMonthlyError !== null ? (
+        <Row copy={usageMonthlyError} title="This month" />
+      ) : (
+        usagePeriodStatsCopy('This month', usageMonthly)?.map(row => (
+          <Row copy={row.copy} key={row.title} title={row.title} />
+        ))
+      )}
+      {usageYearlyError !== null ? (
+        <Row copy={usageYearlyError} title="This year" />
+      ) : (
+        usagePeriodStatsCopy('This year', usageYearly)?.map(row => (
+          <Row copy={row.copy} key={row.title} title={row.title} />
+        ))
+      )}
+      {usageAllTimeError !== null ? (
+        <Row copy={usageAllTimeError} title="All time" />
+      ) : (
+        usagePeriodStatsCopy('All time', usageAllTime)?.map(row => (
+          <Row copy={row.copy} key={row.title} title={row.title} />
+        ))
+      )}
       {subscriptionPeriodCopy(account?.subscription)?.map(row => (
         <Row copy={row.copy} key={row.title} title={row.title} />
       ))}

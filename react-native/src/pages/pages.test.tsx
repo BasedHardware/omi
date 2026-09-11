@@ -2271,3 +2271,25 @@ test('Settings names GET usage monthly yearly all-time without Upgrade', async (
     path: '/v1/users/me/usage?period=all_time',
   });
 });
+
+test('Settings names a failed usage period GET instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (
+      typeof request.path === 'string' &&
+      request.path.startsWith('/v1/users/me/usage?period=')
+    ) {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('This month');
+  expect(tree).toContain('This year');
+  expect(tree).toContain('All time');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('This month · Listening');
+  expect(tree).not.toContain('3 minutes');
+  expect(tree).not.toContain('Upgrade');
+});
