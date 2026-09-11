@@ -312,6 +312,9 @@ export function DesktopSettings({
   const [dailySummaries, setDailySummaries] = useState<
     ReturnType<typeof dailySummaryCopy>
   >([]);
+  const [dailySummariesError, setDailySummariesError] = useState<string | null>(
+    null,
+  );
   const [dailySummarySchedule, setDailySummarySchedule] = useState<
     ReturnType<typeof dailySummaryScheduleCopy>
   >([]);
@@ -373,6 +376,7 @@ export function DesktopSettings({
     let nextFairUse: ReturnType<typeof fairUseCopy> = null;
     let nextFairUseError: string | null = null;
     let nextDailySummaries: ReturnType<typeof dailySummaryCopy> = [];
+    let nextDailySummariesError: string | null = null;
     let nextDailySummarySchedule: ReturnType<typeof dailySummaryScheduleCopy> =
       [];
     let nextNotificationFrequency: ReturnType<
@@ -436,7 +440,13 @@ export function DesktopSettings({
           error: desktopReadErrorCopy(reason),
         }),
       );
-      const dailySummariesTask = loadOmiDailySummaries(backend).catch(() => []);
+      const dailySummariesTask = loadOmiDailySummaries(backend).then(
+        rows => ({rows, error: null as string | null}),
+        reason => ({
+          rows: [] as Awaited<ReturnType<typeof loadOmiDailySummaries>>,
+          error: desktopReadErrorCopy(reason),
+        }),
+      );
       const dailySummaryScheduleTask = loadOmiDailySummarySchedule(
         backend,
       ).catch(() => null);
@@ -479,7 +489,9 @@ export function DesktopSettings({
       const fairUseResult = await fairUseTask;
       nextFairUse = fairUseCopy(fairUseResult.status);
       nextFairUseError = fairUseResult.error;
-      nextDailySummaries = dailySummaryCopy(await dailySummariesTask);
+      const dailySummariesResult = await dailySummariesTask;
+      nextDailySummaries = dailySummaryCopy(dailySummariesResult.rows);
+      nextDailySummariesError = dailySummariesResult.error;
       nextDailySummarySchedule = dailySummaryScheduleCopy(
         await dailySummaryScheduleTask,
       );
@@ -531,6 +543,7 @@ export function DesktopSettings({
     setFairUse(nextFairUse);
     setFairUseError(nextFairUseError);
     setDailySummaries(nextDailySummaries);
+    setDailySummariesError(nextDailySummariesError);
     setDailySummarySchedule(nextDailySummarySchedule);
     setNotificationFrequency(nextNotificationFrequency);
     setAutomaticTranslation(nextAutomaticTranslation);
@@ -904,9 +917,13 @@ export function DesktopSettings({
       {dailySummarySchedule.map((row, index) => (
         <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
       ))}
-      {dailySummaries.map((row, index) => (
-        <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
-      ))}
+      {dailySummariesError !== null ? (
+        <Row copy={dailySummariesError} title="Daily summary" />
+      ) : (
+        dailySummaries.map((row, index) => (
+          <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
+        ))
+      )}
       {appChangelogs.map(row => (
         <Row copy={row.copy} key={row.key} title={row.title} />
       ))}

@@ -237,6 +237,9 @@ export function SettingsPage({
   const [dailySummaries, setDailySummaries] = useState<
     ReturnType<typeof dailySummaryCopy>
   >([]);
+  const [dailySummariesError, setDailySummariesError] = useState<string | null>(
+    null,
+  );
   const [dailySummarySchedule, setDailySummarySchedule] = useState<
     ReturnType<typeof dailySummaryScheduleCopy>
   >([]);
@@ -322,6 +325,7 @@ export function SettingsPage({
       setFairUse(null);
       setFairUseError(null);
       setDailySummaries([]);
+      setDailySummariesError(null);
       setDailySummarySchedule([]);
       setNotificationFrequency([]);
       setAutomaticTranslation([]);
@@ -384,6 +388,7 @@ export function SettingsPage({
         setFairUse(null);
         setFairUseError(null);
         setDailySummaries([]);
+        setDailySummariesError(null);
         setDailySummarySchedule([]);
         setNotificationFrequency([]);
         setAutomaticTranslation([]);
@@ -415,6 +420,7 @@ export function SettingsPage({
         setFairUse(null);
         setFairUseError(null);
         setDailySummaries([]);
+        setDailySummariesError(null);
         setDailySummarySchedule([]);
         setNotificationFrequency([]);
         setAutomaticTranslation([]);
@@ -478,7 +484,13 @@ export function SettingsPage({
         error: desktopReadErrorCopy(reason),
       }),
     );
-    const dailySummariesTask = loadOmiDailySummaries(backend).catch(() => []);
+    const dailySummariesTask = loadOmiDailySummaries(backend).then(
+      rows => ({rows, error: null as string | null}),
+      reason => ({
+        rows: [] as Awaited<ReturnType<typeof loadOmiDailySummaries>>,
+        error: desktopReadErrorCopy(reason),
+      }),
+    );
     const dailySummaryScheduleTask = loadOmiDailySummarySchedule(backend).catch(
       () => null,
     );
@@ -519,7 +531,7 @@ export function SettingsPage({
     const usageYearlyResult = await usageYearlyTask;
     const usageAllTimeResult = await usageAllTimeTask;
     const fairUseResult = await fairUseTask;
-    const summaries = await dailySummariesTask;
+    const dailySummariesResult = await dailySummariesTask;
     const schedule = await dailySummaryScheduleTask;
     const frequency = await notificationFrequencyTask;
     const transcription = await transcriptionPreferencesTask;
@@ -545,7 +557,8 @@ export function SettingsPage({
     setUsageAllTimeError(usageAllTimeResult.error);
     setFairUse(fairUseCopy(fairUseResult.status));
     setFairUseError(fairUseResult.error);
-    setDailySummaries(dailySummaryCopy(summaries));
+    setDailySummaries(dailySummaryCopy(dailySummariesResult.rows));
+    setDailySummariesError(dailySummariesResult.error);
     setDailySummarySchedule(dailySummaryScheduleCopy(schedule));
     setNotificationFrequency(
       mentorNotificationFrequencyCopy(frequency?.frequency),
@@ -808,13 +821,17 @@ export function SettingsPage({
             title={row.title}
           />
         ))}
-        {dailySummaries.map((row, index) => (
-          <SettingRow
-            copy={row.copy}
-            key={`${row.title}-${index}`}
-            title={row.title}
-          />
-        ))}
+        {dailySummariesError !== null ? (
+          <SettingRow copy={dailySummariesError} title="Daily summary" />
+        ) : (
+          dailySummaries.map((row, index) => (
+            <SettingRow
+              copy={row.copy}
+              key={`${row.title}-${index}`}
+              title={row.title}
+            />
+          ))
+        )}
         {appChangelogs.map(row => (
           <SettingRow copy={row.copy} key={row.key} title={row.title} />
         ))}
