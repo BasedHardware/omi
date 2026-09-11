@@ -244,6 +244,7 @@ test('signs out by deleting only this app firebase-rest-session keychain item', 
   expect(method).toContain('OmiAuthClearSession');
   expect(method).toContain('OmiAuthSetEnvironmentCloudTokensIgnored(YES)');
   expect(method).toContain('OmiAuthSetShippingSessionIgnored(YES)');
+  expect(method).toContain('removeObjectForKey:OmiOnboardingCompletedKey');
   expect(method).toContain('errSecSuccess');
   expect(method).toContain('errSecItemNotFound');
   expect(method).toContain('@{@"signedOut" : @YES}');
@@ -276,7 +277,7 @@ test('ignores environment cloud tokens after explicit sign-out until the next si
     /hasCloudSessionWithResolver:[^]*if \(!OmiAuthEnvironmentCloudTokensIgnored\(\)\) \{[^]*OMI_CLOUD_API_TOKEN[^]*OMI_API_TOKEN[^]*\[self resolveStoredToken:/,
   );
   expect(
-    auth.indexOf('OmiAuthSetEnvironmentCloudTokensIgnored(YES)'),
+    auth.lastIndexOf('OmiAuthSetEnvironmentCloudTokensIgnored(YES)'),
   ).toBeGreaterThan(auth.indexOf('RCT_REMAP_METHOD(signOut'));
   expect(
     auth.indexOf('OmiAuthSetEnvironmentCloudTokensIgnored(NO)'),
@@ -327,6 +328,12 @@ test('refreshes expiring macOS cloud sessions without using stale tokens', () =>
   expect(auth).toMatch(
     /hasCloudSessionWithResolver:[^]*\[self resolveStoredToken:[^]*resolve\(@\(token\.length > 0\)\)/,
   );
+  const hasCloudSession = auth.slice(
+    auth.indexOf('RCT_REMAP_METHOD(hasCloudSession'),
+    auth.indexOf('RCT_REMAP_METHOD(hasCompletedOnboarding'),
+  );
+  expect(hasCloudSession).not.toContain('OmiAuthStoredSession');
+  expect(hasCloudSession).toContain('[self resolveStoredToken:');
   expect(auth).toMatch(
     /if \(refreshToken\.length == 0\) \{[^]*OmiAuthClearSessionIfCurrent\(refreshToken\)/,
   );
@@ -541,6 +548,15 @@ test('refreshes shipping sessions with the public Firebase key, never api-keys',
   );
   expect(backend).toContain('if (status == 401 || status == 403) return YES;');
   expect(backend).toContain('OmiCloudRefreshFailureIsDefinitive(status, json)');
+  expect(backendRefresh).toContain('OmiAuthSetShippingSessionIgnored(YES)');
+  expect(backendRefresh).toContain(
+    'OmiAuthSetEnvironmentCloudTokensIgnored(YES)',
+  );
+  expect(backend).toContain(
+    'if (sessionCleared) [self emitSessionInvalidated]',
+  );
+  expect(backend).toContain('timeoutIntervalForRequest = 150');
+  expect(backend).toContain('timeoutIntervalForResource = 180');
   expect(backend).toContain('expectedUserId.length > 0');
   expect(backend).toContain('[refreshedUserId isEqualToString:expectedUserId]');
   expect(backend).toContain('[currentUserId isEqualToString:expectedUserId]');

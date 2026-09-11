@@ -303,6 +303,8 @@ static void OmiRefreshOwnKeychainCloudSession(
       ? session[@"refreshToken"] : nil;
   if (refreshToken.length == 0) {
     OmiClearOwnKeychainCloudSessionIfCurrent(refreshToken);
+    OmiAuthSetShippingSessionIgnored(YES);
+    OmiAuthSetEnvironmentCloudTokensIgnored(YES);
     completion(nil);
     return;
   }
@@ -334,6 +336,8 @@ static void OmiRefreshOwnKeychainCloudSession(
       if (error != nil || status < 200 || status >= 300 || ![json isKindOfClass:NSDictionary.class]) {
         if (OmiCloudRefreshFailureIsDefinitive(status, json)) {
           OmiClearOwnKeychainCloudSessionIfCurrent(refreshToken);
+          OmiAuthSetShippingSessionIgnored(YES);
+          OmiAuthSetEnvironmentCloudTokensIgnored(YES);
         }
         completion(error ?: [NSError errorWithDomain:@"OmiBackend" code:status userInfo:nil]);
         return;
@@ -749,8 +753,8 @@ RCT_EXPORT_MODULE(OmiBackend)
     _policy = OmiResolvedBackendPolicy(environment);
     _generations = [NSMutableDictionary dictionary];
     NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
-    configuration.timeoutIntervalForRequest = 10;
-    configuration.timeoutIntervalForResource = 15;
+    configuration.timeoutIntervalForRequest = 150;
+    configuration.timeoutIntervalForResource = 180;
     configuration.HTTPCookieStorage = nil;
     configuration.HTTPShouldSetCookies = NO;
     configuration.HTTPCookieAcceptPolicy = NSHTTPCookieAcceptPolicyNever;
@@ -785,6 +789,7 @@ RCT_EXPORT_MODULE(OmiBackend)
     if (self.disposed) { completion(nil, [NSError errorWithDomain:@"OmiBackendDisposed" code:1 userInfo:nil]); return; }
     self.policy = OmiResolvedBackendPolicy(environment);
     BOOL sessionCleared = OmiOwnKeychainCloudSession() == nil;
+    if (sessionCleared) [self emitSessionInvalidated];
     completion(self.policy, sessionCleared ? nil : error);
   });
 }
