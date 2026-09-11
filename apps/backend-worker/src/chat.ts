@@ -319,11 +319,12 @@ export async function cancelGeneration(
   db: D1Database,
   accountId: string,
   generationId: string
-): Promise<"not_found" | "terminal" | GenerationEvent> {
+): Promise<"not_found" | "terminal" | "unreadable" | GenerationEvent> {
   const hasGen = await hasGeneration(db, accountId, generationId);
   if (!hasGen) return "not_found";
   const terminal = await terminalEvent(db, accountId, generationId);
-  if (terminal === "unreadable" || terminal !== null) return "terminal";
+  if (terminal === "unreadable") return "unreadable";
+  if (terminal !== null) return "terminal";
   const event: GenerationEvent = {
     id: "2",
     kind: "cancelled",

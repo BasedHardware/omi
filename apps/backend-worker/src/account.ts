@@ -84,9 +84,14 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
   async cancel(
     accountId: string,
     generationId: string
-  ): Promise<"not_found" | "accepted" | "terminal"> {
+  ): Promise<"not_found" | "accepted" | "terminal" | "unreadable"> {
     const result = await cancelGeneration(this.env.DB, accountId, generationId);
-    if (result === "not_found" || result === "terminal") return result;
+    if (
+      result === "not_found" ||
+      result === "terminal" ||
+      result === "unreadable"
+    )
+      return result;
     this.notifyWaiters(generationId, result);
     return "accepted";
   }

@@ -7,6 +7,7 @@ import {
 } from "@omi-core/adapters-platform";
 
 import type { AccountBackend } from "../src/account";
+import { cancelGeneration } from "../src/chat";
 import {
   CONVERSATIONS_FRONTIER,
   CONVERSATIONS_READ_CONTRACT_VERSION,
@@ -78,7 +79,8 @@ const canonicalMessage = (
   revision: "1",
   attachments: [],
 });
-let cancellation: "accepted" | "terminal" | "not_found" = "accepted";
+let cancellation: "accepted" | "terminal" | "not_found" | "unreadable" =
+  "accepted";
 let d1Mock: D1Database;
 const accountStub = {
   admit: async (
@@ -4138,6 +4140,56 @@ describe("worker request contract", () => {
         action: "refresh_history",
       },
     });
+  });
+
+  test("cancellation of unreadable generation events is retryable unavailable", async () => {
+    cancellation = "unreadable";
+    const unreadable = await fetchWorker(
+      "/v1/chat-generations/unreadable-events",
+      {
+        method: "DELETE",
+        headers: authenticatedHeaders,
+      }
+    );
+    expect(unreadable.status).toBe(503);
+    expect(unreadable.headers.get("retry-after")).toBe("60");
+    expect(unreadable.headers.get("cache-control")).toBe("no-store");
+    expect((await unreadable.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+  });
+
+  test("cancelGeneration does not claim already terminal when events JSON is unreadable", async () => {
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(
+        "unreadable-cancel",
+        "test-account",
+        "op-unreadable-cancel",
+        "{}",
+        "generation-unreadable-cancel"
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '1', 1, ?)"
+      )
+      .bind("generation-unreadable-cancel", "test-account", "{")
+      .run();
+
+    expect(
+      await cancelGeneration(
+        d1Mock,
+        "test-account",
+        "generation-unreadable-cancel"
+      )
+    ).toBe("unreadable");
   });
 });
 

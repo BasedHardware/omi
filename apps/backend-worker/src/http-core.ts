@@ -76,7 +76,7 @@ export type AccountPort = {
   cancel(
     accountId: string,
     generationId: string
-  ): Promise<"not_found" | "accepted" | "terminal">;
+  ): Promise<"not_found" | "accepted" | "terminal" | "unreadable">;
   fetch(request: Request): Promise<Response>;
 };
 
@@ -775,6 +775,10 @@ export async function handleGenerationCancel(
     );
     if (cancellation === "not_found")
       return backendError("not_found", "refresh_history", 404);
+    if (cancellation === "unreadable")
+      return backendError("service_unavailable", "retry", 503, true, {
+        "retry-after": "60",
+      });
     return cancellation === "terminal"
       ? new Response(null, {
           status: 204,
