@@ -1,3 +1,3 @@
 {
-  "change": "Added opt-in on-device hybrid search over screen history, transcripts, and memories; on by default in non-production builds"
+  "change": "Added on-device hybrid search over screen history, transcripts, and memories so results stay faster, offline, and private"
 }
