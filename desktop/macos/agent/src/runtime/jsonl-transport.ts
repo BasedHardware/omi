@@ -685,6 +685,15 @@ export class JsonlTransport {
           data: message.imageBase64,
           mimeType,
         });
+        if (process.env.OMI_PROVIDER === "omi-local") {
+          // Measured 2026-09-10: with an inline image block and no marker, local
+          // models (gemma-4, qwen3-vl) ignored the attached screenshot, called the
+          // screenshot/capture_screen tools instead (which fail), then repeated a
+          // stale "I don't have permission to see your screen" refusal from
+          // retained history. The cloud provider does not exhibit this and stays
+          // untouched.
+          promptText = `${promptText}\n\n[A screenshot of the user's current screen is attached to this message as an image. Look at the attached image and answer from it directly. Do not call screenshot or capture_screen for this request; the attached image is the current screen.]`;
+        }
       }
     }
     blocks.push({ type: "text", text: promptText });
