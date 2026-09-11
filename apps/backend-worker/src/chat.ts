@@ -497,6 +497,13 @@ export async function readGenerationEvents(
       const message = generationMessageSync(event);
       if (message === null) return "unreadable";
       events.push({ ...event, message });
+    } else if (
+      event.kind === "cancelled" &&
+      event.message !== null &&
+      event.message !== undefined &&
+      (event.message as ChatMessage).sender !== "ai"
+    ) {
+      return "unreadable";
     } else {
       events.push(event);
     }
@@ -964,6 +971,7 @@ function generationMessageSync(
     event.message !== null &&
     event.message !== undefined
   ) {
+    if ((event.message as ChatMessage).sender !== "ai") return null;
     return event.message;
   }
   return null;

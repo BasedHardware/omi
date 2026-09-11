@@ -13,6 +13,7 @@ import {
   admitMessage,
   completeGeneration,
   failGeneration,
+  readGenerationEvents,
   readPendingGeneration,
   terminalEvent,
 } from "../src/chat";
@@ -2623,6 +2624,48 @@ describe("generation event payloads", () => {
     await expect(terminalEvent(db, "acct-a", "gen-done-missing")).resolves.toBe(
       "unreadable"
     );
+  });
+
+  test("readGenerationEvents of a done human message is unreadable", async () => {
+    await insertPending(
+      "gen-done-human",
+      "done-human-prompt",
+      JSON.stringify({ id: "1", kind: "snapshot", text: "" })
+    );
+    await db
+      .prepare(
+        "INSERT INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '2', 2, ?)"
+      )
+      .bind(
+        "gen-done-human",
+        "acct-a",
+        JSON.stringify({
+          id: "2",
+          kind: "done",
+          message: {
+            id: "gen-done-human",
+            text: "not an assistant",
+            sender: "human",
+            type: "text",
+            createdAt: 1,
+            updatedAt: 1,
+            chatSessionId: null,
+            appId: null,
+            journalRevision: 0,
+            payloadHash: "sha256:test",
+            messageSource: "desktop_chat",
+            rating: null,
+            reported: false,
+            generationOutcome: null,
+            revision: "1",
+            attachments: [],
+          },
+        })
+      )
+      .run();
+    await expect(
+      readGenerationEvents(db, "acct-a", "gen-done-human")
+    ).resolves.toBe("unreadable");
   });
 
   test("failing a pending generation with an unreadable snapshot unblocks the next generation", async () => {
