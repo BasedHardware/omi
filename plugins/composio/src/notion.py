@@ -531,7 +531,8 @@ def contains_personal_info(text):
     ]
 
     text_lower = text.lower()
-    return any(keyword in text_lower for keyword in personal_keywords)
+    # Keywords are stored mixed-case; compare lowercased so "I like" still matches.
+    return any(keyword.lower() in text_lower for keyword in personal_keywords)
 
 
 def format_as_memory(text):
