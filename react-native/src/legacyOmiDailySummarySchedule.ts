@@ -21,15 +21,16 @@ function requiredBoolean(value: unknown): boolean {
 }
 
 function requiredHour(value: unknown): number {
-  if (
-    typeof value !== 'number' ||
-    !Number.isSafeInteger(value) ||
-    value < 0 ||
-    value > 23
-  ) {
+  const hour =
+    typeof value === 'string' && /^[+-]?[0-9]+$/.test(value)
+      ? Number(value)
+      : typeof value === 'number' && Number.isSafeInteger(value)
+      ? value
+      : null;
+  if (hour === null || hour < 0 || hour > 23) {
     throw new DailySummaryScheduleError();
   }
-  return value;
+  return hour;
 }
 
 export type OmiDailySummarySchedule = {

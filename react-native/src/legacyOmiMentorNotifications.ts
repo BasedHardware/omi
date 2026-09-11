@@ -14,15 +14,16 @@ function object(value: unknown): Record<string, unknown> {
 }
 
 function requiredFrequency(value: unknown): number {
-  if (
-    typeof value !== 'number' ||
-    !Number.isSafeInteger(value) ||
-    value < 0 ||
-    value > 5
-  ) {
+  const frequency =
+    typeof value === 'string' && /^[+-]?[0-9]+$/.test(value)
+      ? Number(value)
+      : typeof value === 'number' && Number.isSafeInteger(value)
+      ? value
+      : null;
+  if (frequency === null || frequency < 0 || frequency > 5) {
     throw new MentorNotificationError();
   }
-  return value;
+  return frequency;
 }
 
 export type OmiMentorNotificationSettings = {

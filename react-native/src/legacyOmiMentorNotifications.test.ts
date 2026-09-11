@@ -13,6 +13,12 @@ test('parses GET mentor notification frequency without a Balanced default', () =
   ).toEqual({frequency: 5});
 });
 
+test('does not omit mentor notification settings when stored frequency is an integer string', () => {
+  expect(
+    parseOmiMentorNotificationSettings(JSON.stringify({frequency: '3'})),
+  ).toEqual({frequency: 3});
+});
+
 test('fails closed for malformed GET mentor notification settings', () => {
   expect(() =>
     parseOmiMentorNotificationSettings(JSON.stringify([])),
@@ -30,7 +36,7 @@ test('fails closed for malformed GET mentor notification settings', () => {
     parseOmiMentorNotificationSettings(JSON.stringify({frequency: 1.5})),
   ).toThrow();
   expect(() =>
-    parseOmiMentorNotificationSettings(JSON.stringify({frequency: '3'})),
+    parseOmiMentorNotificationSettings(JSON.stringify({frequency: '3.0'})),
   ).toThrow();
 });
 

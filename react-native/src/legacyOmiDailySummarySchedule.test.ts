@@ -13,6 +13,12 @@ test('parses GET daily summary settings without Flutter true/22 defaults', () =>
   ).toEqual({enabled: true, hour: 22});
 });
 
+test('does not omit daily summary settings when stored hour is an integer string', () => {
+  expect(
+    parseOmiDailySummarySchedule(JSON.stringify({enabled: true, hour: '22'})),
+  ).toEqual({enabled: true, hour: 22});
+});
+
 test('fails closed for malformed GET daily summary settings', () => {
   expect(() => parseOmiDailySummarySchedule(JSON.stringify([]))).toThrow();
   expect(() =>
