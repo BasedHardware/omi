@@ -111,7 +111,10 @@ export async function admitMessage(
     if (detached === null) {
       throw new TypeError("invalid chat message record");
     }
-    message = overlayCreateFields(detached, input);
+    message = {
+      ...overlayCreateFields(detached, input),
+      generationOutcome: null,
+    };
     if (input.journalRevision > message.journalRevision) {
       message = {
         ...message,

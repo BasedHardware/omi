@@ -2431,6 +2431,71 @@ describe("admit replay attachments", () => {
     );
   });
 
+  test("admit replay overlays null generationOutcome on stored humans", async () => {
+    const create = {
+      op: "create" as const,
+      opId: "op-replay-omit-outcome",
+      id: "msg-replay-omit-outcome",
+      at: 1,
+      text: "hello",
+      sender: "human" as const,
+      journalRevision: 0,
+      attachmentIds: [] as string[],
+    };
+    const stored = {
+      id: create.id,
+      text: create.text,
+      sender: "human",
+      type: "text",
+      createdAt: 1,
+      updatedAt: 1,
+      chatSessionId: null,
+      appId: null,
+      journalRevision: 0,
+      payloadHash: "sha256:test",
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      revision: "1",
+      attachments: [],
+    };
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, 1, ?)"
+      )
+      .bind(create.id, "acct-a", create.text, 1, JSON.stringify(stored))
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(
+        create.id,
+        "acct-a",
+        create.opId,
+        JSON.stringify(create),
+        "gen-replay-omit-outcome"
+      )
+      .run();
+
+    const omitted = await admitMessage(db, "acct-a", create, null);
+    expect(omitted).toMatchObject({ created: false });
+    if (typeof omitted === "string") throw new Error(omitted);
+    expect(omitted.message.generationOutcome).toBe(null);
+
+    await db
+      .prepare("UPDATE chat_messages SET payload = ? WHERE id = ?")
+      .bind(
+        JSON.stringify({ ...stored, generationOutcome: "completed" }),
+        create.id
+      )
+      .run();
+    const completed = await admitMessage(db, "acct-a", create, null);
+    expect(completed).toMatchObject({ created: false });
+    if (typeof completed === "string") throw new Error(completed);
+    expect(completed.message.generationOutcome).toBe(null);
+  });
+
   test("admit replay of a JSON-null stored ChatCreate is conflict instead of throwing", async () => {
     const create = {
       op: "create" as const,

@@ -4256,6 +4256,39 @@ describe("settings entitlement admission contract", () => {
     });
   });
 
+  test("chat POST overlays null generationOutcome on replay", async () => {
+    const request = chatCreate("replay-omit-outcome");
+    const init = {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(request),
+    };
+    const first = await fetchWorker("/v1/chat-messages", init);
+    expect(first.status).toBe(201);
+    const prior = admissions.get("replay-omit-outcome");
+    expect(prior).toBeDefined();
+    const withoutOutcome = { ...prior!.message };
+    delete withoutOutcome.generationOutcome;
+    prior!.message = withoutOutcome;
+
+    const omitted = await fetchWorker("/v1/chat-messages", init);
+    expect(omitted.status).toBe(200);
+    const omittedBody = (await omitted.json()) as {
+      message: { generationOutcome: unknown };
+    };
+    expect(omittedBody.message.generationOutcome).toBe(null);
+    expect(wireToChatAdmissionEnvelope(omittedBody)).not.toBeNull();
+
+    prior!.message = { ...withoutOutcome, generationOutcome: "completed" };
+    const completed = await fetchWorker("/v1/chat-messages", init);
+    expect(completed.status).toBe(200);
+    const completedBody = (await completed.json()) as {
+      message: { generationOutcome: unknown };
+    };
+    expect(completedBody.message.generationOutcome).toBe(null);
+    expect(wireToChatAdmissionEnvelope(completedBody)).not.toBeNull();
+  });
+
   test("concurrent distinct admissions share one atomic quota ceiling", async () => {
     const responses = await Promise.all(
       ["atomic-first", "atomic-second"].map((id) =>

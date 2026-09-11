@@ -723,7 +723,10 @@ export async function handleChatCreate(
       )
     );
     return json(
-      { message: admission.message, generation: admission.generation },
+      {
+        message: { ...admission.message, generationOutcome: null },
+        generation: admission.generation,
+      },
       admission.created ? 201 : 200
     );
   } catch {
