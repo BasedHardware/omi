@@ -35,6 +35,28 @@ delivery = push
 
             self.assertEqual(guard.scan_direct_transport_calls(root), {'backend/producer.py': 3})
 
+    def test_scanner_counts_every_transport_entry_point_not_only_send_notification(self) -> None:
+        # `send_client_displayed_notification{,_async}` reach `_send_to_user` the same
+        # way `send_notification` does (#13173). Leaving them off the list would let a
+        # producer keep owning transport while the ratchet read it as a reduction.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(
+                root,
+                'backend/producer.py',
+                '''
+from utils.notifications import send_client_displayed_notification, send_client_displayed_notification_async
+
+send_client_displayed_notification("u", "title", "body")
+
+
+async def stream(uid):
+    await send_client_displayed_notification_async(uid, "title", "body")
+''',
+            )
+
+            self.assertEqual(guard.scan_direct_transport_calls(root), {'backend/producer.py': 2})
+
     def test_scanner_excludes_transport_owner_dispatcher_and_tests(self) -> None:
         source = 'from utils.notifications import send_notification\nsend_notification("u", "t", "b")\n'
         with tempfile.TemporaryDirectory() as directory:

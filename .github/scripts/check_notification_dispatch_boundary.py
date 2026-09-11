@@ -18,6 +18,8 @@ TRANSPORT_CALLS = frozenset(
         '_send_to_user',
         '_send_to_user_async',
         'send_bulk_notification',
+        'send_client_displayed_notification',
+        'send_client_displayed_notification_async',
         'send_notification',
         'send_notification_async',
     }
