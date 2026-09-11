@@ -2025,6 +2025,85 @@ test('conversation list names GET folders without add or a write sheet', async (
   expect(textOf(renderer)).toContain('Inbox chat');
 });
 
+test('conversation list names a failed GET folders instead of empty success', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/folders') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const item = {
+    kind: 'conversation' as const,
+    summary: 'Notes',
+    searchableText: 'Notes',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: 'in_progress' as const,
+    source: 'chat' as const,
+    visibility: 'private' as const,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...item,
+                id: 'chat:work',
+                title: 'Work standup',
+                searchableText: 'Work standup\nNotes',
+                folderId: 'folder-work',
+              },
+              {
+                ...item,
+                id: 'chat:inbox',
+                title: 'Inbox chat',
+                searchableText: 'Inbox chat\nNotes',
+                folderId: null,
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Folders');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).toContain('Work standup');
+  expect(tree).toContain('Inbox chat');
+  expect(tree).not.toContain('Add');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Show Work conversations',
+    ),
+  ).toHaveLength(0);
+  expect(
+    request.mock.calls.some(
+      call => call[0].method === 'POST' || call[0].method === 'PATCH',
+    ),
+  ).toBe(false);
+});
+
 test('conversation list names GET calendar capture gaps without a write sheet', async () => {
   const item: ConversationProjection = {
     kind: 'conversation',
@@ -2146,6 +2225,73 @@ test('conversation list names GET calendar capture gaps without a write sheet', 
       .props.onPress();
   });
   expect(textOf(renderer)).not.toContain('Design review');
+});
+
+test('conversation list names a failed GET calendar capture gaps instead of empty success', async () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'chat:work',
+    title: 'Work chat',
+    summary: 'Notes',
+    searchableText: 'Work chat\nNotes',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:01:00.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: 'in_progress',
+    source: 'chat',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  const request = jest.fn(async request => {
+    if (
+      typeof request.path === 'string' &&
+      request.path.startsWith('/v1/calendar/capture-gaps?')
+    ) {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Not captured');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).toContain('Work chat');
+  expect(tree).not.toContain('Design review');
+  expect(tree).not.toContain('html_link');
+  expect(tree).not.toContain('Add');
+  expect(
+    request.mock.calls.some(
+      call => call[0].method === 'POST' || call[0].method === 'PATCH',
+    ),
+  ).toBe(false);
 });
 
 test('conversation list omits GET calendar capture gaps on failure and empty libraries', async () => {

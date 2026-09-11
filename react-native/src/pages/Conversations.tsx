@@ -244,7 +244,9 @@ export function ConversationsPage({
   const [goals, setGoals] = useState<OmiGoal[]>([]);
   const [goalsError, setGoalsError] = useState<string | null>(null);
   const [folders, setFolders] = useState<OmiFolder[]>([]);
+  const [foldersError, setFoldersError] = useState<string | null>(null);
   const [captureGaps, setCaptureGaps] = useState<OmiCalendarCaptureGap[]>([]);
+  const [captureGapsError, setCaptureGapsError] = useState<string | null>(null);
   const grouped = useMemo(() => {
     const groups: Array<{
       label: string;
@@ -334,20 +336,24 @@ export function ConversationsPage({
   useEffect(() => {
     if (backend === undefined || backend === null) {
       setFolders([]);
+      setFoldersError(null);
       return;
     }
     let cancelled = false;
-    loadOmiFolderNames(backend)
-      .then(rows => {
+    loadOmiFolderNames(backend).then(
+      rows => {
         if (!cancelled) {
           setFolders(rows);
+          setFoldersError(null);
         }
-      })
-      .catch(() => {
+      },
+      reason => {
         if (!cancelled) {
           setFolders([]);
+          setFoldersError(desktopReadErrorCopy(reason));
         }
-      });
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -371,20 +377,24 @@ export function ConversationsPage({
       captureGapWindow === null
     ) {
       setCaptureGaps([]);
+      setCaptureGapsError(null);
       return;
     }
     let cancelled = false;
-    loadOmiCalendarCaptureGaps(backend, captureGapWindow)
-      .then(rows => {
+    loadOmiCalendarCaptureGaps(backend, captureGapWindow).then(
+      rows => {
         if (!cancelled) {
           setCaptureGaps(rows);
+          setCaptureGapsError(null);
         }
-      })
-      .catch(() => {
+      },
+      reason => {
         if (!cancelled) {
           setCaptureGaps([]);
+          setCaptureGapsError(desktopReadErrorCopy(reason));
         }
-      });
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -439,7 +449,12 @@ export function ConversationsPage({
               </Text>
             </FocusPressable>
           </View>
-          {folders.length > 0 ? (
+          {foldersError !== null ? (
+            <View style={styles.conversationFolderFilters}>
+              <Text style={styles.projectionEmptyTitle}>Folders</Text>
+              <Text style={styles.projectionEmptyCopy}>{foldersError}</Text>
+            </View>
+          ) : folders.length > 0 ? (
             <View style={styles.conversationFolderFilters}>
               {folders.map(folder => {
                 const selectedFolder = selectedFolderId === folder.id;
@@ -553,47 +568,59 @@ export function ConversationsPage({
                 )}
               </View>
             ) : (
-              grouped.map(group => {
-                const gapHeader = captureGapHeaderCopy(group.gaps.length);
-                return (
-                  <View key={group.label} style={styles.conversationGroup}>
-                    <Text style={styles.conversationGroupTitle}>
-                      {group.label}
+              <>
+                {captureGapsError !== null && !filtering ? (
+                  <View>
+                    <Text style={styles.projectionEmptyTitle}>
+                      Not captured
                     </Text>
-                    {gapHeader !== '' ? (
-                      <Text style={styles.conversationRowTime}>
-                        {gapHeader}
-                      </Text>
-                    ) : null}
-                    {group.gaps.map(gap => {
-                      const timeCopy = captureGapTimeRangeCopy(
-                        gap.startMs,
-                        gap.endMs,
-                      );
-                      return (
-                        <View key={gap.eventId}>
-                          <Text numberOfLines={1} style={styles.resultTitle}>
-                            {gap.title}
-                          </Text>
-                          {timeCopy !== '' ? (
-                            <Text style={styles.conversationRowTime}>
-                              {timeCopy}
-                            </Text>
-                          ) : null}
-                        </View>
-                      );
-                    })}
-                    {group.items.map(item => (
-                      <ConversationRow
-                        item={item}
-                        key={item.id}
-                        onPress={() => setSelectedId(item.id)}
-                        selected={selectedId === item.id}
-                      />
-                    ))}
+                    <Text style={styles.projectionEmptyCopy}>
+                      {captureGapsError}
+                    </Text>
                   </View>
-                );
-              })
+                ) : null}
+                {grouped.map(group => {
+                  const gapHeader = captureGapHeaderCopy(group.gaps.length);
+                  return (
+                    <View key={group.label} style={styles.conversationGroup}>
+                      <Text style={styles.conversationGroupTitle}>
+                        {group.label}
+                      </Text>
+                      {gapHeader !== '' ? (
+                        <Text style={styles.conversationRowTime}>
+                          {gapHeader}
+                        </Text>
+                      ) : null}
+                      {group.gaps.map(gap => {
+                        const timeCopy = captureGapTimeRangeCopy(
+                          gap.startMs,
+                          gap.endMs,
+                        );
+                        return (
+                          <View key={gap.eventId}>
+                            <Text numberOfLines={1} style={styles.resultTitle}>
+                              {gap.title}
+                            </Text>
+                            {timeCopy !== '' ? (
+                              <Text style={styles.conversationRowTime}>
+                                {timeCopy}
+                              </Text>
+                            ) : null}
+                          </View>
+                        );
+                      })}
+                      {group.items.map(item => (
+                        <ConversationRow
+                          item={item}
+                          key={item.id}
+                          onPress={() => setSelectedId(item.id)}
+                          selected={selectedId === item.id}
+                        />
+                      ))}
+                    </View>
+                  );
+                })}
+              </>
             )}
             {outcome?.status === 'success' &&
               outcome.value.page.hasMore &&
