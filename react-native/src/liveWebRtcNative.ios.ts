@@ -1,0 +1,1 @@
+export {resolveNativeLiveWebRtcScope} from './liveWebRtcNativePhone';

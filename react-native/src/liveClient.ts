@@ -1,5 +1,8 @@
+import {Platform} from 'react-native';
+
 import type {NativeHttpResponse, OmiBackend} from './omiNativeTypes';
 import type {LiveVoiceProvider} from './desktopSettingsClient';
+import {resolveNativeLiveWebRtcScope} from './liveWebRtcNative';
 
 // Live session minting. The Worker holds provider keys; this client only ever
 // sends a provider choice (plus an SDP offer for GPT Live 1) and receives a
@@ -76,6 +79,12 @@ export function liveErrorCopy(
 }
 
 export function liveWebRtcSupported(): boolean {
+  if (Platform.OS === 'macos') {
+    return false;
+  }
+  if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    return resolveNativeLiveWebRtcScope() !== null;
+  }
   const scope = globalThis as {
     RTCPeerConnection?: unknown;
     navigator?: {mediaDevices?: {getUserMedia?: unknown}};

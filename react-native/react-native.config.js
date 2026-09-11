@@ -12,5 +12,12 @@ module.exports = {
     'react-native-svg': {
       root: resolve(__dirname, '../node_modules/react-native-svg'),
     },
+    'react-native-webrtc': {
+      root: resolve(__dirname, '../node_modules/react-native-webrtc'),
+      platforms: {
+        // GPT Live uses react-native-webrtc on phone only; keep macOS honest.
+        macos: null,
+      },
+    },
   },
 };
