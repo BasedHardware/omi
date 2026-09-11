@@ -557,6 +557,34 @@ describe("RunToolCapabilityBroker", () => {
     chat.store.close();
   });
 
+  it("authorizes screenshot for realtime voice runs but not for main_chat", () => {
+    // Regression: pi-mono unconditionally advertised screenshot, so every
+    // typed-chat and push-to-talk batch run got a guaranteed-failure tool
+    // (the Swift executor rejects screenshot outside realtime voice as
+    // unknown_realtime_invocation). The surface projection alone already
+    // authorizes it for realtime voice; the adapter projection must not
+    // duplicate that outside realtime voice.
+    const voice = fixture("coordinator", "act", "realtime_voice");
+    const voiceCapability = createBroker(voice.store).register({
+      ownerId: voice.session.ownerId,
+      sessionId: voice.session.sessionId,
+      runId: voice.run.runId,
+      attemptId: voice.attempt.attemptId,
+    });
+    expect(voiceCapability.allowedToolNames).toContain("screenshot");
+    voice.store.close();
+
+    const chat = fixture();
+    const chatCapability = createBroker(chat.store).register({
+      ownerId: chat.session.ownerId,
+      sessionId: chat.session.sessionId,
+      runId: chat.run.runId,
+      attemptId: chat.attempt.attemptId,
+    });
+    expect(chatCapability.allowedToolNames).not.toContain("screenshot");
+    chat.store.close();
+  });
+
   it("keeps capability state internal and revokes it at terminal attempt", () => {
     const { store, session, run, attempt } = fixture();
     const broker = createBroker(store);
