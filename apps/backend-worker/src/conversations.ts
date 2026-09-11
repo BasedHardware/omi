@@ -291,8 +291,8 @@ export function toLegacyConversation(
 }
 
 function projectConversation(row: StoredConversation): ConversationProjection {
-  assertProjectableTimestamp(row.createdAt);
-  assertProjectableTimestamp(row.updatedAt);
+  assertProjectableChatTimestamp(row.createdAt);
+  assertProjectableChatTimestamp(row.updatedAt);
   return {
     id: decodeSessionId(row.id),
     title: boundedDisplayText(row.title),
@@ -310,6 +310,16 @@ function projectConversation(row: StoredConversation): ConversationProjection {
     folderId: null,
     revision: null,
   };
+}
+
+function assertProjectableChatTimestamp(value: number): void {
+  if (
+    !Number.isSafeInteger(value) ||
+    value < 0 ||
+    !Number.isFinite(new Date(value).getTime())
+  ) {
+    throw new UnprojectableConversationRecordError();
+  }
 }
 
 function assertProjectableTimestamp(value: number): void {

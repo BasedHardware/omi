@@ -1408,6 +1408,43 @@ describe("worker request contract", () => {
     });
   });
 
+  test("conversations GET does not omit a neighboring row when chat createdAt is negative", async () => {
+    await insertChatMessage({
+      id: "readable-created-negative",
+      accountId: "test-account",
+      text: "readable createdAt",
+      createdAt: 1_000,
+      position: 1,
+      chatSessionId: "readable-created-negative",
+    });
+    await insertChatMessage({
+      id: "negative-created",
+      accountId: "test-account",
+      text: "negative createdAt",
+      createdAt: -1,
+      position: 2,
+      chatSessionId: "negative-created",
+    });
+
+    const envelope = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(envelope.status).toBe(500);
+    expect(envelope.headers.get("retry-after")).toBeNull();
+    expect((await envelope.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+
+    const offset = await fetchWorker("/v1/conversations?limit=50&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    expect(offset.status).toBe(500);
+    expect(offset.headers.get("retry-after")).toBeNull();
+    expect((await offset.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+  });
+
   test("conversations GET does not omit a neighboring row when completed segments JSON is unreadable", async () => {
     await d1Mock
       .prepare(
