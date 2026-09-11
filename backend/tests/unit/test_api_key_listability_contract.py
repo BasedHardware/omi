@@ -409,7 +409,15 @@ def test_malformed_dev_api_keys_are_rejected_before_any_redis_or_firestore_io(mo
         raise AssertionError("malformed key must not reach the Firestore client")
 
     monkeypatch.setattr(dev_api_key_db, "get_firestore_client", _forbidden_lookup)
-    monkeypatch.setattr(dev_api_key_db, "redis_db", MagicMock())
+    # A plain MagicMock would silently absorb Redis reads, so the test could
+    # pass even if a regression routed malformed tokens through the cache. The
+    # Redis handle must be a MagicMock (attribute access works) whose read
+    # method fails loudly: the format gate has to short-circuit before any IO.
+    forbidden_redis = MagicMock()
+    forbidden_redis.read_cached_dev_api_key_data.side_effect = AssertionError(
+        "malformed key must not reach the Redis cache"
+    )
+    monkeypatch.setattr(dev_api_key_db, "redis_db", forbidden_redis)
 
     malformed = [
         "",  # no credential at all

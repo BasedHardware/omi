@@ -304,6 +304,7 @@ def test_all_api_key_scope_dependencies_route_rate_limits_through_the_critical_e
             write_context = dependencies.get_developer_memory_default_memory_write_auth_context(auth)
             assert write_context.surface == 'developer_default_memory_write'
             assert await dependencies.get_developer_memory_default_memory_write_context(write_context) is write_context
+            assert await dependencies.get_developer_memory_default_memory_create_context(write_context) is write_context
             assert (
                 await dependencies.get_developer_memory_default_memory_batch_write_context(write_context)
                 is write_context
@@ -475,7 +476,8 @@ def test_dev_write_paths_check_burst_and_dedicated_rate_budgets() -> None:
 
     - POST /v1/dev/user/memories: hourly dev:memories plus the per-minute
       dev:memories_write_burst ceiling — the hourly window alone admits the
-      whole quota inside one minute (the scripted 69/min burst shape).
+      whole quota inside one minute (the scripted 69/min burst shape). The
+      burst budget is POST-only: PATCH/DELETE ride just the hourly context.
     - POST /v1/dev/user/conversations/from-segments: shared dev:conversations
       plus the dedicated dev:conversations_from_segments budget, mirroring the
       first-party route's conversations:from-segments policy.
@@ -499,16 +501,29 @@ def test_dev_write_paths_check_burst_and_dedicated_rate_budgets() -> None:
             key_id='key-1',
         )
 
+        # Verify the declared Depends() composition itself, not a hand-picked
+        # call order: the POST create context must chain the shared hourly
+        # write context (so PATCH/DELETE never touch the burst budget), and
+        # the from-segments wrapper must chain get_auth_with_conversations_write.
+        create_default = dependencies.get_developer_memory_default_memory_create_context.__defaults__[0]
+        assert create_default.dependency is dependencies.get_developer_memory_default_memory_write_context
+        write_default = dependencies.get_developer_memory_default_memory_write_context.__defaults__[0]
+        assert write_default.dependency is dependencies.get_developer_memory_default_memory_write_auth_context
+        from_segments_default = dependencies.get_uid_with_conversations_from_segments_write.__defaults__[0]
+        assert from_segments_default.dependency is dependencies.get_auth_with_conversations_write
+
         async def exercise() -> None:
             write_context = dependencies.ProductAuthorizationContext(
                 uid='user-1', app_id='developer_api', key_id='key-1'
             )
-            assert await dependencies.get_developer_memory_default_memory_write_context(write_context) is (
-                write_context
-            )
-            # The route's Depends() chain resolves get_auth_with_conversations_write
-            # (shared ceiling) before the from-segments wrapper adds its per-route
-            # budget; exercise them in that order.
+            # PATCH/DELETE path: shared hourly ceiling only, no burst budget.
+            hourly = await dependencies.get_developer_memory_default_memory_write_context(write_context)
+            assert hourly is write_context
+            # POST path: the create context composes on top of the hourly one.
+            assert await dependencies.get_developer_memory_default_memory_create_context(hourly) is write_context
+            # POST /v1/dev/user/conversations/from-segments: the wrapper's
+            # Depends(get_auth_with_conversations_write) resolves the shared
+            # ceiling before adding its per-route budget.
             assert await dependencies.get_auth_with_conversations_write(auth) is auth
             assert await dependencies.get_uid_with_conversations_from_segments_write(auth) == 'user-1'
 

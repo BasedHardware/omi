@@ -51,6 +51,7 @@ from dependencies import (
     get_developer_memory_default_memory_batch_write_context,
     get_developer_memory_default_memory_read_context,
     get_developer_memory_default_memory_write_context,
+    get_developer_memory_default_memory_create_context,
     get_uid_with_action_items_read,
     get_uid_with_action_items_write,
     get_uid_with_goals_read,
@@ -482,7 +483,7 @@ def search_memories_vector(
 @router.post("/v1/dev/user/memories", response_model=DeveloperMemory, tags=["Memories"], operation_id="createMemory")
 def create_memory(
     request: CreateMemoryRequest,
-    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_create_context),
 ):
     """
     Create a new memory for the authenticated user.

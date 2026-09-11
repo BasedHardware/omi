@@ -67,7 +67,17 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 
 # Policies the boost must not touch. Env-overridable (see module docstring);
 # resolved against RATE_POLICIES below so a typo is dropped, not enforced.
-_BOOST_EXEMPT_DEFAULT = "action_items:list,action_items:list_hot_client,static_map:get"
+# The abuse ceilings below are decisions, not defaults: RATE_LIMIT_BOOST exists
+# to temporarily widen limits for events, and a boosted event window is exactly
+# when scripted abuse would exploit a multiplied dev-write budget (boost=100
+# would turn 30/min into 3,000/min). dev:memories and dev:conversations are
+# exempt too — they are the shared hourly ceilings the dedicated policies
+# compose with; exempting only the dedicated budgets would leave the aggregate
+# hourly caps boosted into no-ops.
+_BOOST_EXEMPT_DEFAULT = (
+    "action_items:list,action_items:list_hot_client,static_map:get,"
+    "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments"
+)
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
 # ---------------------------------------------------------------------------

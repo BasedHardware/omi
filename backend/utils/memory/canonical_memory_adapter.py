@@ -1532,6 +1532,11 @@ def _resolve_duplicate_add_row(
     is not active, user-rejected, or carrying different content — return None on
     every re-read and stay fail-closed.
     """
+    # Only the duplicate-add collision shape can ever be resolved by a re-read;
+    # any other failure (admission, inactive-source, payload mismatch,
+    # exhausted-head-retry) pays nothing here and fails immediately.
+    if result.status != ApplyStatus.invalid_patch or result.reason != _DUPLICATE_ADD_ROW_REASON:
+        return None
     duplicate = _existing_identical_add_row(uid, result=result, memory_id=memory_id, data=data, db_client=db_client)
     if duplicate is not None:
         return duplicate

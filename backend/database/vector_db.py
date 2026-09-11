@@ -28,6 +28,7 @@ from models.conversation_metadata import ConversationMetadataKeys, metadata_list
 from models.product_memory import MemoryItem
 from models.memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -948,6 +949,16 @@ def search_action_items_by_vector(uid: str, query: str, limit: int = 10, min_sco
         return [m['metadata'].get('action_item_id') for m in kept]
     except Exception as e:
         logger.exception(f'search_action_items_by_vector failed uid={uid}: {e}')
+        # Degrade telemetry: without this, a provider outage is indistinguishable
+        # from a genuine no-match search in the empty-list result.
+        record_fallback(
+            component='other',
+            from_mode='action_item_vector_search',
+            to_mode='no_candidates',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
         return []
 
 

@@ -643,9 +643,19 @@ async def get_developer_memory_default_memory_write_context(
         key_id=auth_context.key_id,
         policy_name="dev:memories",
     )
-    # Burst ceiling: the hourly dev:memories window alone admits the whole
-    # quota inside one minute (the 2026-09-11 scripted-abuse shape), so the
-    # per-minute cap is what actually stops 69/min bursts.
+    return auth_context
+
+
+async def get_developer_memory_default_memory_create_context(
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
+) -> ProductAuthorizationContext:
+    """POST-only memory-create context: shared hourly ceiling plus burst cap.
+
+    The per-minute ``dev:memories_write_burst`` ceiling exists to stop scripted
+    create bursts (the 2026-09-11 69/min shape), so it must ride only the POST
+    create route — PATCH/DELETE share the hourly write context and must not
+    drain a POST-specific bucket.
+    """
     await _check_api_key_rate_limit_async(
         prefix="dev",
         uid=auth_context.uid,
