@@ -498,7 +498,8 @@ def build_report(
             'promotion_applied_decisions': len(applied),
             'promotion_failure_attempts': len(failures),
             'promotion_users': len({event['uid'] for event in promotion_raw}),
-            'sweep_days': len(sweeps),
+            'sweep_days': len({event['local_date'] for event in sweeps}),
+            'sweep_user_days': len(sweeps),
             'sweep_users': len({event['uid'] for event in sweeps}),
             **{f'sweep_{field}': sweep_counts[field] for field in SWEEP_COUNTERS},
         },
@@ -653,12 +654,12 @@ def render_human(report: Mapping[str, Any]) -> str:
     lines.append('')
     lines.append('Sweep candidate-gate drops')
     sweep_counters = report.get('sweep', {}).get('counters', {})
-    if totals.get('sweep_days', 0) == 0:
+    if totals.get('sweep_user_days', 0) == 0:
         lines.append('  no eligible observations (denominator 0)')
     else:
         for field in SWEEP_COUNTERS:
             metric = sweep_counters.get(field) or {}
-            lines.append(f"  {field}: {metric.get('count', 0)} candidates across {totals['sweep_days']} days")
+            lines.append(f"  {field}: {metric.get('count', 0)} candidates across {totals['sweep_user_days']} user-days")
     lines.append('')
     owner_covered = totals['capture_conversations_with_owner_counts']
     if owner_covered:

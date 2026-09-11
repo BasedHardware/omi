@@ -77,6 +77,7 @@ def test_report_deduplicates_capture_and_uses_explicit_denominators() -> None:
         'promotion_failure_attempts': 6,
         'promotion_users': 3,
         'sweep_days': 1,
+        'sweep_user_days': 1,
         'sweep_users': 1,
         'sweep_dropped_subjectless': 2,
         'sweep_dropped_basis_proposed': 3,
@@ -91,6 +92,33 @@ def test_report_deduplicates_capture_and_uses_explicit_denominators() -> None:
     assert disagreement['user_macro']['rate'] == pytest.approx(((2 / 3) + (1 / 4) + 0) / 3)
     assert disagreement['event_weighted']['ci95']['lower'] < 3 / 8
     assert disagreement['event_weighted']['ci95']['upper'] > 3 / 8
+
+
+def test_sweep_days_are_calendar_days_and_user_days_are_uid_date_rows() -> None:
+    raw = [
+        {
+            'stage': 'sweep',
+            'uid': uid,
+            'local_date': '2026-08-19',
+            'dropped_subjectless': 1,
+            'dropped_basis_proposed': 0,
+            'demoted_owner_untrusted': 0,
+            'skipped_duplicate_lookup': 0,
+        }
+        for uid in ('u1', 'u2')
+    ]
+    events, invalid = measurement.parse_events(raw)
+    report = measurement.build_report(
+        events,
+        source={'kind': 'test'},
+        input_entries=len(raw),
+        invalid_entries=invalid,
+    )
+    assert report['totals']['sweep_days'] == 1
+    assert report['totals']['sweep_user_days'] == 2
+    assert report['totals']['sweep_users'] == 2
+    rendered = measurement.render_human(report)
+    assert 'dropped_subjectless: 2 candidates across 2 user-days' in rendered
 
 
 def test_capture_regime_and_speaker_bucket_metrics_use_the_named_grain() -> None:
@@ -167,7 +195,7 @@ def test_human_output_prints_ratios_and_states_unavailable_diarization_metrics()
     assert 'owner-silent, multi-owner, or clean/degraded diarization' in rendered
     assert 'Operational failure statuses (attempt grain)' in rendered
     assert 'Sweep candidate-gate drops' in rendered
-    assert 'dropped_subjectless: 2 candidates across 1 days' in rendered
+    assert 'dropped_subjectless: 2 candidates across 1 user-days' in rendered
 
 
 def test_empty_input_is_honest_and_emits_no_rates(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
