@@ -1153,6 +1153,25 @@ def test_validation_result_model():
     assert result.approved is True
 
 
+def _prompt_text(invoked):
+    """Flatten what the builder handed the LLM into the text the model actually reads.
+
+    The gate now sends its prompt as two content parts of one message so the stable
+    half can end on a cache breakpoint (see test_mentor_gate_prompt_cache); the other
+    builders still send a plain string. Both render to the same bytes.
+    """
+    if isinstance(invoked, str):
+        return invoked
+    parts = []
+    for message in invoked:
+        content = message.content
+        if isinstance(content, str):
+            parts.append(content)
+        else:
+            parts.extend(part["text"] for part in content)
+    return "".join(parts)
+
+
 def test_pipeline_anchors_prompts_to_user_timezone_date(monkeypatch):
     """All three pipeline prompts must carry the user's timezone date, not the UTC default.
 
@@ -1208,4 +1227,4 @@ def test_pipeline_anchors_prompts_to_user_timezone_date(monkeypatch):
     assert result is not None
     assert len(prompts) >= 3
     for prompt in prompts:
-        assert "2031-02-03" in prompt, "pipeline prompt lost the user-timezone date anchor"
+        assert "2031-02-03" in _prompt_text(prompt), "pipeline prompt lost the user-timezone date anchor"

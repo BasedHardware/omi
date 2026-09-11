@@ -786,6 +786,10 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 current_messages=conversation_messages,
                 recent_notifications=recent_notifications,
                 current_date=current_date,
+                # Routes this user's successive gate calls to the same cached
+                # prefix; the gate is evaluated repeatedly during one listening
+                # session and its facts/goals prefix does not change between them.
+                uid=uid,
             )
     except Exception as e:
         logger.error(f"mentor_proactive gate_failed uid={uid} error={e}")
