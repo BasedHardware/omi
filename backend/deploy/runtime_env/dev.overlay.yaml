@@ -56,6 +56,9 @@ overlay:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
       env:
+        LLM_GATEWAY_ACCOUNTING_ENABLED:
+          value: 'true'
+          category: rollout
         OMI_LLM_GATEWAY_URL:
           value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
           category: service_discovery
@@ -138,7 +141,7 @@ overlay:
           value: parakeet,modulate-velma-2
           category: stt_policy
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: modulate-velma-2,dg-nova-3,parakeet
           category: stt_policy
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
@@ -216,7 +219,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: modulate-velma-2,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -362,6 +365,15 @@ overlay:
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'true'
             category: rollout
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -487,7 +499,7 @@ overlay:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           DAILY_SUMMARY_SELECTION_MODE:
-            value: shadow
+            value: indexed
             category: rollout
           PINECONE_INDEX_NAME:
             value: memories-backend-dev

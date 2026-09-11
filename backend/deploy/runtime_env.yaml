@@ -61,7 +61,7 @@ environments:
             value: dev
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -216,6 +216,9 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          LLM_GATEWAY_ACCOUNTING_ENABLED:
+            value: 'true'
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -298,7 +301,7 @@ environments:
             value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
             category: stt_policy
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware-dev
@@ -376,7 +379,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -685,6 +688,15 @@ environments:
               category: memory_rollout
               value: 'on'
             MEMORY_BELIEF_MODEL_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_NOTES_V2_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_OCR_CONTEXT_ENABLED:
               value: 'true'
               category: rollout
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
@@ -996,6 +1008,7 @@ environments:
         notifications-job:
           flags:
             --task-timeout: 3600s
+            --memory: 2Gi
           secrets:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -1021,7 +1034,7 @@ environments:
               value: 'true'
               category: memory_rollout
             DAILY_SUMMARY_SELECTION_MODE:
-              value: shadow
+              value: indexed
               category: rollout
             PINECONE_INDEX_NAME:
               category: integrations
@@ -1353,7 +1366,7 @@ environments:
             value: prod
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -1538,6 +1551,9 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          LLM_GATEWAY_ACCOUNTING_ENABLED:
+            value: 'true'
+            category: rollout
           MEMORY_ENABLED:
             value: 'on'
           CONVERSATION_NOTES_V2_ENABLED:
@@ -1577,7 +1593,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: modulate-velma-2,dg-nova-3,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -1922,6 +1938,15 @@ environments:
             MEMORY_BELIEF_MODEL_ENABLED:
               value: 'false'
               category: rollout
+            CONVERSATION_NOTES_V2_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+              value: 'false'
+              category: rollout
+            CONVERSATION_OCR_CONTEXT_ENABLED:
+              value: 'false'
+              category: rollout
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -2222,6 +2247,7 @@ environments:
         notifications-job:
           flags:
             --task-timeout: 3600s
+            --memory: 2Gi
           secrets:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -2247,7 +2273,7 @@ environments:
               value: 'true'
               category: memory_rollout
             DAILY_SUMMARY_SELECTION_MODE:
-              value: shadow
+              value: indexed
               category: rollout
             PINECONE_INDEX_NAME:
               category: integrations

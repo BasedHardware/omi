@@ -896,7 +896,7 @@ export interface RuntimeFailurePayload {
   retryable?: boolean;
   recoveryAction?: "worker_recycled";
   recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
-  retryDisposition?: "next_send";
+  retryDisposition?: "next_send" | "same_turn";
 }
 
 /// One concrete model identity observed serving this turn's completions.
@@ -1100,6 +1100,9 @@ export interface ContextSnapshotProjection {
     createdAtMs: number;
     /** Text of what the user's screen showed when this turn was asked (historical). */
     screenContext?: string;
+    /** Present when the desktop journaled this assistant turn's answer text as
+     *  complete even though spoken delivery was cut (e.g. a PTT barge-in). */
+    answerTextCompleted?: true;
     /** Bounded historical evidence references attached to this turn. */
     evidence?: ConversationEvidenceProjection[];
     /** True when an authorized evidence read is needed for complete detail. */

@@ -82,6 +82,9 @@ overlay:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
       env:
+        LLM_GATEWAY_ACCOUNTING_ENABLED:
+          value: 'true'
+          category: rollout
         MEMORY_ENABLED:
           value: 'on'
         CONVERSATION_NOTES_V2_ENABLED:
@@ -121,7 +124,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: modulate-velma-2,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -305,6 +308,11 @@ overlay:
             category: rollout
           MEMORY_ENABLED:
             value: 'on'
+          # Notes v2 prod-on (2026-09-01) to match Cloud Run backend. Calendar/OCR
+          # stay off via _base; do not promote them here.
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'true'
+            category: rollout
       backend-sync-backfill:
         env:
           LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -401,7 +409,7 @@ overlay:
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'
           DAILY_SUMMARY_SELECTION_MODE:
-            value: shadow
+            value: indexed
             category: rollout
           PINECONE_INDEX_NAME:
             value: memories-backend

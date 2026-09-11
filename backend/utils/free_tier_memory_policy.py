@@ -31,6 +31,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from utils.free_tier_cohort import cohort_admits
 from utils.managed_compute import Decision, managed_compute_decision_for
 
 logger = logging.getLogger(__name__)
@@ -47,9 +48,20 @@ _POLICY_UNAVAILABLE = 'policy_unavailable'
 DecisionFor = Callable[[str], Decision]
 
 
-def free_tier_memory_suppression_enabled() -> bool:
-    """Read the rollout flag. Tests monkeypatch this (or the module constant)."""
-    return FREE_TIER_MEMORY_SUPPRESSION
+def free_tier_memory_suppression_enabled(uid: str | None = None) -> bool:
+    """Is managed memory suppression lit for ``uid``?
+
+    The flag is necessary, never sufficient: a lit flag suppresses only the
+    cohort configured in ``FREE_TIER_MEMORY_SUPPRESSION_COHORT`` and not
+    stopped by ``FREE_TIER_EMERGENCY_STOP`` / the remote kill switch
+    (``utils.free_tier_cohort``). A caller that passes no uid is answered
+    ``False`` while the flag is on (logged once): un-formed memories never
+    backfill, so nobody is suppressed by a boolean alone. Tests monkeypatch
+    this (or the module constant plus the cohort env).
+    """
+    if not FREE_TIER_MEMORY_SUPPRESSION:
+        return False
+    return cohort_admits('FREE_TIER_MEMORY_SUPPRESSION', uid)
 
 
 @dataclass(frozen=True)
@@ -109,7 +121,7 @@ def managed_memory_formation_suppressed(uid: str, source: str) -> bool:
     conversation id; every other producer funnels through here so the gate
     shape, logging, and fail-closed behavior cannot drift between them.
     """
-    if not free_tier_memory_suppression_enabled():
+    if not free_tier_memory_suppression_enabled(uid):
         return False
     verdict = memory_formation_verdict(decision_for=managed_compute_decision_for(uid))
     if verdict.suppressed:

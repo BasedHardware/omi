@@ -68,7 +68,7 @@ environment_shared:
           value: '{env}'
           category: runtime_identity
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: modulate-velma-2,dg-nova-3,parakeet
           category: stt_policy
         CONVERSATION_SUMMARIZED_APP_IDS:
           config_map:
@@ -612,6 +612,18 @@ environment_shared:
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
             category: rollout
+          # Cloud Tasks conversation-finalization writes process_conversation here
+          # (pendant/phone). Declaring the rollout flags only on backend-listen /
+          # pusher / Cloud Run backend makes live capture disagree with regenerate.
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'false'
+            category: rollout
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+            value: 'false'
+            category: rollout
+          CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
             value: '555'
@@ -623,6 +635,7 @@ environment_shared:
       notifications-job:
         flags:
           --task-timeout: 3600s
+          --memory: 2Gi
         secrets:
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN

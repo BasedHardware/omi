@@ -485,6 +485,7 @@ final class KernelTurnProjection {
     message: ChatMessage,
     status: KernelJournalTurnStatus? = nil,
     terminalReason: String? = nil,
+    answerTextCompleted: Bool? = nil,
     ownerID: String? = nil
   ) async -> KernelJournalTurn? {
     guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
@@ -493,7 +494,8 @@ final class KernelTurnProjection {
       let turn = try await client.updateJournalTurn(
         surface: surface,
         ownerID: lease.ownerID,
-        update: message.journalUpdate(status: status, terminalReason: terminalReason)
+        update: message.journalUpdate(
+          status: status, terminalReason: terminalReason, answerTextCompleted: answerTextCompleted)
       )
       guard isCurrent(lease) else { return nil }
       _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
@@ -682,6 +684,7 @@ final class KernelTurnProjection {
     surface: AgentSurfaceReference,
     turnId: String,
     terminalReason: String,
+    answerTextCompleted: Bool = false,
     ownerID: String? = nil
   ) async -> KernelJournalTurn? {
     guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
@@ -690,7 +693,10 @@ final class KernelTurnProjection {
       let turn = try await client.updateJournalTurn(
         surface: surface,
         ownerID: lease.ownerID,
-        update: .sealedTerminalRevision(turnId: turnId, terminalReason: terminalReason)
+        update: .sealedTerminalRevision(
+          turnId: turnId,
+          terminalReason: terminalReason,
+          answerTextCompleted: answerTextCompleted)
       )
       guard isCurrent(lease) else { return nil }
       _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
@@ -715,6 +721,7 @@ final class KernelTurnProjection {
     resources: [ChatResource] = [],
     assistantStatus: KernelJournalTurnStatus = .completed,
     terminalReason: String? = nil,
+    answerTextCompleted: Bool? = nil,
     userScreenContext: String? = nil,
     userEvidence: [ConversationEvidence] = [],
     ownerID: String? = nil
@@ -760,7 +767,8 @@ final class KernelTurnProjection {
           status: assistantStatus,
           continuityKey: continuityKey,
           messageSource: origin,
-          terminalReason: terminalReason
+          terminalReason: terminalReason,
+          answerTextCompleted: answerTextCompleted
         ))
     }
 
