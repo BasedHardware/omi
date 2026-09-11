@@ -1406,6 +1406,89 @@ describe("worker request contract", () => {
     });
   });
 
+  test("conversations GET does not omit a neighboring row when completed segments JSON is unreadable", async () => {
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_sessions (id, account_id, device_id, codec, state, r2_prefix, started_at, ended_at, created_at, updated_at) VALUES (?, ?, 'pendant', 21, 'complete', ?, 1, 1, 1, 1)"
+      )
+      .bind("session-readable-segments", "test-account", "r2-readable-segments")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_transcriptions (session_id, account_id, state, available_at, text, updated_at) VALUES (?, ?, 'completed', 1, 'Recorded words', 1)"
+      )
+      .bind("session-readable-segments", "test-account")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_sessions (id, account_id, device_id, codec, state, r2_prefix, started_at, ended_at, created_at, updated_at) VALUES (?, ?, 'pendant', 21, 'complete', ?, 2, 2, 2, 2)"
+      )
+      .bind("session-broken-segments", "test-account", "r2-broken-segments")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_transcriptions (session_id, account_id, state, available_at, text, segments, updated_at) VALUES (?, ?, 'completed', 1, 'Stored speech', ?, 2)"
+      )
+      .bind("session-broken-segments", "test-account", "{")
+      .run();
+
+    const envelope = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(envelope.status).toBe(500);
+    expect(envelope.headers.get("retry-after")).toBeNull();
+    expect((await envelope.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+
+    const offset = await fetchWorker("/v1/conversations?limit=50&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    expect(offset.status).toBe(500);
+    expect(offset.headers.get("retry-after")).toBeNull();
+    expect((await offset.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+  });
+
+  test("conversations GET keeps queued recordings when stored segments JSON is unreadable", async () => {
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_sessions (id, account_id, device_id, codec, state, r2_prefix, started_at, ended_at, created_at, updated_at) VALUES (?, ?, 'pendant', 21, 'complete', ?, 1, 1, 1, 1)"
+      )
+      .bind(
+        "session-queued-broken-segments",
+        "test-account",
+        "r2-queued-broken"
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_transcriptions (session_id, account_id, state, available_at, text, segments, updated_at) VALUES (?, ?, 'queued', 1, 'Stored speech', ?, 1)"
+      )
+      .bind("session-queued-broken-segments", "test-account", "{")
+      .run();
+
+    const listed = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(listed.status).toBe(200);
+    const page = (await listed.json()) as {
+      items: Array<{ id: string; title: string; status: string }>;
+    };
+    expect(
+      page.items.find(
+        (item) => item.id === "recording:session-queued-broken-segments"
+      )
+    ).toEqual(
+      expect.objectContaining({
+        id: "recording:session-queued-broken-segments",
+        title: "",
+        status: "processing",
+      })
+    );
+  });
+
   test("conversations GET store throw is production INTERNAL 500", async () => {
     const throwingDb = {
       prepare() {

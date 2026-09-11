@@ -155,11 +155,16 @@ export async function readConversations(
       recording.segments === null
         ? null
         : parseStoredTranscriptSegments(recording.segments);
+    if (
+      recording.state === "completed" &&
+      recording.segments !== null &&
+      parsed === null
+    ) {
+      throw new UnprojectableConversationRecordError();
+    }
     const speech =
       recording.state === "completed"
-        ? parsed === null && recording.segments !== null
-          ? ""
-          : recordingListSpeech(recording.text, parsed) ?? ""
+        ? recordingListSpeech(recording.text, parsed) ?? ""
         : "";
     assertProjectableTimestamp(recording.started_at);
     assertProjectableTimestamp(recording.updated_at);
