@@ -265,7 +265,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future _bleDisconnectDevice(BtDevice btDevice) async {
-    await ServiceManager.instance().device.disconnectDevice();
+    await ServiceManager.instance().device.disconnectDevice(btDevice.id);
   }
 
   Future<int> _retrieveBatteryLevel(String deviceId) async {

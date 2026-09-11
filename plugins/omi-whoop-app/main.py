@@ -8,7 +8,7 @@ import os
 import sys
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from urllib.parse import urlencode
 
 import requests
@@ -153,6 +153,36 @@ def whoop_api_request(uid: str, method: str, endpoint: str, params: dict = None)
     except Exception as e:
         log(f"Whoop API request error: {e}")
         return {"error": str(e)}
+
+
+# Safety cap on continuation pages per collection; a real Whoop week of data
+# never needs anywhere near this many pages.
+MAX_COLLECTION_PAGES = 20
+
+
+def whoop_fetch_all_records(uid: str, endpoint: str, params: dict) -> Tuple[Optional[List[dict]], Optional[str]]:
+    """Fetch every page of a Whoop collection endpoint, following next_token/nextToken.
+
+    Returns (records, None) on success, or (None, error) if any page failed, so
+    callers can tell an empty collection apart from an incomplete fetch.
+    """
+    records: List[dict] = []
+    page_params = dict(params)
+
+    for _ in range(MAX_COLLECTION_PAGES):
+        result = whoop_api_request(uid, "GET", endpoint, params=page_params)
+        if not result or "error" in result:
+            return None, result.get("error", "Unknown error") if result else "No response from Whoop"
+
+        records.extend(result.get("records", []))
+        next_token = result.get("next_token")
+        if not next_token:
+            return records, None
+
+        page_params = dict(params)
+        page_params["nextToken"] = next_token
+
+    return records, None
 
 
 def format_recovery_score(recovery: dict) -> str:
@@ -698,39 +728,40 @@ async def tool_get_weekly_summary(request: Request):
             "limit": 7
         }
 
-        # Fetch recovery, cycles, and sleep
-        recovery_result = whoop_api_request(uid, "GET", "/recovery", params=params)
-        cycle_result = whoop_api_request(uid, "GET", "/cycle", params=params)
-        sleep_result = whoop_api_request(uid, "GET", "/activity/sleep", params=params)
+        # Fetch recovery, cycles, sleep, and workouts, following pagination for each
+        recovery_records, recovery_error = whoop_fetch_all_records(uid, "/recovery", params)
+        cycle_records, cycle_error = whoop_fetch_all_records(uid, "/cycle", params)
+        sleep_records, sleep_error = whoop_fetch_all_records(uid, "/activity/sleep", params)
+        workout_records, workout_error = whoop_fetch_all_records(uid, "/activity/workout", params)
 
         # Calculate averages
         recovery_scores = []
-        if recovery_result and "records" in recovery_result:
-            for r in recovery_result["records"]:
-                score = r.get("score", {}).get("recovery_score")
-                if score is not None:
-                    recovery_scores.append(score)
+        for r in recovery_records or []:
+            score = r.get("score", {}).get("recovery_score")
+            if score is not None:
+                recovery_scores.append(score)
 
         strain_scores = []
-        if cycle_result and "records" in cycle_result:
-            for c in cycle_result["records"]:
-                strain = c.get("score", {}).get("strain")
-                if strain is not None:
-                    strain_scores.append(strain)
+        for c in cycle_records or []:
+            strain = c.get("score", {}).get("strain")
+            if strain is not None:
+                strain_scores.append(strain)
 
         sleep_hours = []
-        if sleep_result and "records" in sleep_result:
-            for s in sleep_result["records"]:
-                summary = s.get("score", {}).get("stage_summary", {})
-                total = summary.get("total_in_bed_time_milli", 0)
-                awake = summary.get("total_awake_time_milli", 0)
-                sleep_ms = total - awake
-                if sleep_ms > 0:
-                    sleep_hours.append(sleep_ms / (1000 * 60 * 60))
+        for s in sleep_records or []:
+            summary = s.get("score", {}).get("stage_summary", {})
+            total = summary.get("total_in_bed_time_milli", 0)
+            awake = summary.get("total_awake_time_milli", 0)
+            sleep_ms = total - awake
+            if sleep_ms > 0:
+                sleep_hours.append(sleep_ms / (1000 * 60 * 60))
 
         result_parts = ["**Weekly Summary (Last 7 Days)**", ""]
 
-        if recovery_scores:
+        if recovery_error:
+            log(f"Weekly summary: recovery fetch failed: {recovery_error}")
+            result_parts.append("**Recovery:** Temporarily unavailable")
+        elif recovery_scores:
             avg_recovery = sum(recovery_scores) / len(recovery_scores)
             min_recovery = min(recovery_scores)
             max_recovery = max(recovery_scores)
@@ -738,14 +769,20 @@ async def tool_get_weekly_summary(request: Request):
         else:
             result_parts.append("**Recovery:** No data")
 
-        if strain_scores:
+        if cycle_error:
+            log(f"Weekly summary: strain fetch failed: {cycle_error}")
+            result_parts.append("**Strain:** Temporarily unavailable")
+        elif strain_scores:
             avg_strain = sum(strain_scores) / len(strain_scores)
             total_strain = sum(strain_scores)
             result_parts.append(f"**Strain:** Avg {avg_strain:.1f} (Total: {total_strain:.1f})")
         else:
             result_parts.append("**Strain:** No data")
 
-        if sleep_hours:
+        if sleep_error:
+            log(f"Weekly summary: sleep fetch failed: {sleep_error}")
+            result_parts.append("**Sleep:** Temporarily unavailable")
+        elif sleep_hours:
             avg_sleep = sum(sleep_hours) / len(sleep_hours)
             min_sleep = min(sleep_hours)
             max_sleep = max(sleep_hours)
@@ -754,9 +791,11 @@ async def tool_get_weekly_summary(request: Request):
             result_parts.append("**Sleep:** No data")
 
         # Add workout count
-        workout_result = whoop_api_request(uid, "GET", "/activity/workout", params=params)
-        workout_count = len(workout_result.get("records", [])) if workout_result else 0
-        result_parts.append(f"**Workouts:** {workout_count}")
+        if workout_error:
+            log(f"Weekly summary: workout fetch failed: {workout_error}")
+            result_parts.append("**Workouts:** Temporarily unavailable")
+        else:
+            result_parts.append(f"**Workouts:** {len(workout_records)}")
 
         return ChatToolResponse(result="\n".join(result_parts))
 

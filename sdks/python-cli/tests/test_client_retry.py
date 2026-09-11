@@ -129,6 +129,29 @@ def test_cli_auth_error_with_markup_preserves_exit_code(
         assert detail in captured.err
 
 
+def test_empty_body_401_maps_to_auth_error(authed_profile, respx_mock) -> None:
+    """An empty-body 401 must still raise, not be treated like an empty 204 success."""
+    respx_mock.delete("/v1/dev/user/memories/abc").respond(401, content=b"")
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(AuthError):
+            client.delete("/v1/dev/user/memories/abc")
+
+
+def test_empty_body_404_maps_to_not_found(authed_profile, respx_mock) -> None:
+    respx_mock.delete("/v1/dev/user/memories/abc").respond(404, content=b"")
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(NotFoundError):
+            client.delete("/v1/dev/user/memories/abc")
+
+
+def test_204_delete_still_returns_none(authed_profile, respx_mock) -> None:
+    """Guard the success path the fix must not regress: empty 2xx bodies stay silent."""
+    respx_mock.delete("/v1/dev/user/memories/abc").respond(204, content=b"")
+    with OmiClient(authed_profile) as client:
+        result = client.delete("/v1/dev/user/memories/abc")
+    assert result is None
+
+
 def test_403_maps_to_auth_error(authed_profile, respx_mock) -> None:
     respx_mock.post("/v1/dev/user/memories").respond(
         403, json={"detail": "Insufficient permissions. Required scope: memories:write"}
@@ -224,7 +247,6 @@ def test_503_retry_after_http_date(authed_profile, respx_mock, monkeypatch) -> N
     assert result == []
     assert len(sleeps) == 1
     assert 8.0 <= sleeps[0] <= 11.0
-
 
 
 def test_429_surfaces_rate_limit_with_policy(authed_profile, respx_mock) -> None:

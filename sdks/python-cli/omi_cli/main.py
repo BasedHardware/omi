@@ -153,8 +153,12 @@ def _root(
 
 
 @app.command(help="Print the omi-cli version.")
-def version() -> None:
-    typer.echo(f"omi-cli {__version__}")
+def version(typer_ctx: typer.Context) -> None:
+    ctx: AppContext = typer_ctx.obj
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit({"version": __version__})
+    else:
+        typer.echo(f"omi-cli {__version__}")
 
 
 @app.command(help="Ask a natural-language question, answered from your own Omi conversations.")

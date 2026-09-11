@@ -798,6 +798,7 @@ class PushToTalkManager: ObservableObject {
     seenFinalSegmentIDs.removeAll()
     lastInterimText = ""
     voiceTypeSession.begin()
+    latchSilentTypeForTurnStart(turnID: currentVoiceTurnID)
     resetVoiceTypingSources()
     voiceTypingLastOutcome = VoiceTypingOutcome()
     currentContextSnapshot = nil
@@ -872,6 +873,7 @@ class PushToTalkManager: ObservableObject {
       seenFinalSegmentIDs.removeAll()
       lastInterimText = ""
       voiceTypeSession.begin()
+      latchSilentTypeForTurnStart(turnID: currentVoiceTurnID)
       resetVoiceTypingSources()
       voiceTypingLastOutcome = VoiceTypingOutcome()
       currentContextSnapshot = nil
@@ -3255,6 +3257,29 @@ class PushToTalkManager: ObservableObject {
   }
   private var voiceTypingLastOutcome = VoiceTypingOutcome()
 
+  /// Silent Type for the current turn, read once at turn start. A mid-turn flip
+  /// must not split a turn: the delivery close path decides with the value the
+  /// turn started under, not whatever the toggle reads seconds later.
+  private var voiceTypingSilentTypeEnabled = false
+
+  /// Latches Silent Type at turn start, before anything can fail mid-turn.
+  ///
+  /// The delivery close path used to be the only place that named the turn as
+  /// suppressed — but a realtime provider failure while the dictation is still
+  /// finalizing reaches interrupted-turn recovery earlier, and recovery with no
+  /// receipt to stand down on journals the very text the toggle keeps out of
+  /// the chat. Arming at turn start means every recovery path mid-turn sees the
+  /// receipt. The toggle is read once per turn, so a mid-turn flip cannot
+  /// produce half-suppressed behavior. A turn that reaches the hub's commit is
+  /// a question, and `RealtimeHubController.commitTurn` ends the suppression
+  /// there; until then a question that dies mid-hold also stands recovery down
+  /// — the fail-closed direction for a privacy toggle.
+  func latchSilentTypeForTurnStart(turnID: VoiceTurnID?) {
+    voiceTypingSilentTypeEnabled = ShortcutSettings.shared.silentTypeEnabled
+    guard voiceTypingSilentTypeEnabled, let turnID else { return }
+    RealtimeHubController.shared.suppressJournalRecoveryAtTurnStart(turnID: turnID)
+  }
+
   private func resetVoiceTypingSources() {
     voiceTypingProbeSchedule.reset()
     voiceTypingOpeningDecoder.reset()
@@ -3696,25 +3721,39 @@ class PushToTalkManager: ObservableObject {
         turnKind: .dictation, audioSeconds: totalSec, dictationTranscriber: run.transcriber)
       self.terminateVoiceTypingLifecycle(
         disposition: run.completion.isConfirmedDelivery ? .committed : .cancelled, totalSec: totalSec)
-      // The journal write is awaited before the turn ends, so a lifecycle
-      // change at turn end cannot drop it; the wait is bounded so a slow
-      // bridge cannot hold the bar, and the write itself is not cancelled
-      // at the bound — it finishes in the background.
-      let utterance = run.transcript ?? ""
-      let completion = run.completion
-      // Register the write under the native `voice:<uuid>` identity before the
-      // bounded wait so a timeout+cancel still sees persistPending.
-      let journal = RealtimeHubController.shared.enqueueTurnPersistence(
-        idempotencyKey: RealtimeHubController.voiceContinuityKey(for: turnID)
-      ) {
-        await self.recordVoiceTypingExchange(
-          utterance: utterance, completion: completion, turnID: turnID)
-      }
-      let journaled =
-        (try? await DeadlinedOperation.run(seconds: Self.voiceTypingJournalWaitSeconds) { await journal.value })
-        ?? false
-      if !journaled {
-        log("PushToTalkManager: voice typing exchange not confirmed journaled before the turn ended")
+      // The turn-start latch, not a fresh read: a mid-turn flip must not split
+      // a turn between suppressed and journaled behavior.
+      let record = VoiceTypingChatRecordPolicy.decide(
+        silentTypeEnabled: voiceTypingSilentTypeEnabled)
+      if !record.journalsExchange {
+        // Both consequences of not writing: the reserved native source has no
+        // producing row to attach to, and recovery must not resurrect the
+        // transcript on a later provider failure.
+        if record.suppressesJournalRecovery, record.retiresReservedEvidence {
+          RealtimeHubController.shared.suppressJournalRecoveryForUnwrittenTurn(turnID: turnID)
+        }
+        log("PushToTalkManager: silent type — dictation kept out of the chat transcript")
+      } else {
+        // The journal write is awaited before the turn ends, so a lifecycle
+        // change at turn end cannot drop it; the wait is bounded so a slow
+        // bridge cannot hold the bar, and the write itself is not cancelled
+        // at the bound — it finishes in the background.
+        let utterance = run.transcript ?? ""
+        let completion = run.completion
+        // Register the write under the native `voice:<uuid>` identity before the
+        // bounded wait so a timeout+cancel still sees persistPending.
+        let journal = RealtimeHubController.shared.enqueueTurnPersistence(
+          idempotencyKey: RealtimeHubController.voiceContinuityKey(for: turnID)
+        ) {
+          await self.recordVoiceTypingExchange(
+            utterance: utterance, completion: completion, turnID: turnID)
+        }
+        let journaled =
+          (try? await DeadlinedOperation.run(seconds: Self.voiceTypingJournalWaitSeconds) { await journal.value })
+          ?? false
+        if !journaled {
+          log("PushToTalkManager: voice typing exchange not confirmed journaled before the turn ended")
+        }
       }
       guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
       if let hint = run.completion.statusHint {

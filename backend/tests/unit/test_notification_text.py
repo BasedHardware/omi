@@ -28,3 +28,11 @@ def test_keeps_plain_text_and_intra_word_punctuation() -> None:
 
 def test_empty_body_is_unchanged() -> None:
     assert to_plain_text('') == ''
+
+
+def test_keeps_single_line_triple_backtick_inline_code() -> None:
+    assert to_plain_text('```omi start``` before continuing.') == 'omi start before continuing.'
+
+
+def test_still_strips_multiline_fenced_code_block() -> None:
+    assert to_plain_text('```sh\nomi start\n```') == 'omi start'

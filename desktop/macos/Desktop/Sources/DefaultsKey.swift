@@ -128,6 +128,9 @@ enum DefaultsKey: String {
   /// One-shot marker: the PTT-only microphone choice has been folded into the shared
   /// `preferredMicrophoneDeviceUID`, so it is never carried over twice.
   case shortcutPTTMicrophoneMergedIntoPreferred = "shortcut_pttMicrophoneMergedIntoPreferred"
+  /// Silent Type: a dictation still types into the focused app, but the turn is
+  /// never written to the chat transcript. Absent means off.
+  case shortcutSilentTypeEnabled = "shortcut_silentTypeEnabled"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case floatingBarCachedPlan = "floatingBar_cachedPlan"
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"

@@ -1,4 +1,4 @@
-"""Decode user-provided JSON without numbers the HTTP serializer cannot send."""
+"""Decode user-provided JSON that the HTTP serializer can encode."""
 
 from __future__ import annotations
 
@@ -19,9 +19,20 @@ def _finite_float(value: str) -> float:
 
 
 def load_json_input(value: str | bytes) -> Any:
-    """Reject NaN, infinities, and exponents that overflow Python's float range.
+    """Reject non-finite numbers and strings that cannot be encoded as UTF-8.
 
     JSON strings are unchanged, and bytes retain json.loads' encoding detection.
-    Invalid input raises ValueError (including JSONDecodeError).
+    Invalid input raises ValueError (including JSONDecodeError and UnicodeError).
     """
-    return json.loads(value, parse_constant=_reject_constant, parse_float=_finite_float)
+    parsed = json.loads(value, parse_constant=_reject_constant, parse_float=_finite_float)
+    pending = [parsed]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str):
+            item.encode("utf-8")
+        elif isinstance(item, list):
+            pending.extend(item)
+        elif isinstance(item, dict):
+            pending.extend(item)
+            pending.extend(item.values())
+    return parsed

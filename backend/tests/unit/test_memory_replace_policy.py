@@ -24,6 +24,8 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
+from utils.conversations.owner_attribution import OwnerAttributionEvidence
+
 from tests.unit.memory_import_isolation import (
     CLIENT_BINDING_DATABASE_MODULES,
     WS_I_HEAVY_STUB_MODULE_NAMES,
@@ -447,6 +449,7 @@ def test_canonical_capture_requires_every_grounded_segment_to_resolve_to_one_sub
     subject_id, attribution, subject_kind = pc._l1_subject_from_matched_segments(
         source_id="conv-mixed-subject",
         matched_segments=matched_segments,
+        owner_evidence=OwnerAttributionEvidence.from_segments(matched_segments),
     )
 
     assert subject_id is None
@@ -591,6 +594,7 @@ def test_canonical_capture_logs_text_free_regime_and_attribution_decision(monkey
         # whether anything from this conversation can ever be promoted, and neither
         # is derivable from distinct_speaker_ids.
         "owner_speaker_ids": 1,
+        "owner_trust": "unique_owner",
         "stage": "capture",
         "subject_attribution": "third_party",
         "uid": "uid-decision-log",
@@ -746,7 +750,8 @@ def test_canonical_capture_quote_speaker_overrides_hallucinated_user_label(monke
     assert payload["subject_attribution"] == "third_party"
 
 
-def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speaker(monkeypatch):
+@pytest.mark.parametrize("about", ["the user", "speaker_1"])
+def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speaker(monkeypatch, about):
     pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
@@ -765,7 +770,7 @@ def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speak
                     evidence_quotes=["I work at Acme!"],
                     speaker_label="SPEAKER_00",
                     speaker_scope="session-local",
-                    about="the user",
+                    about=about,
                     risk_flags=[],
                     archive_class="general",
                 )
@@ -810,9 +815,15 @@ def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speak
         kind="speaker",
         label="SPEAKER_00",
     )
-    assert payload["subject_entity_id"] == expected_subject
-    assert payload["subject_entity_id"] != model_authored_subject
-    assert payload["subject_kind"] == "speaker"
+    if about == "the user":
+        # Measured no-owner transcripts cannot ground the model's owner claim.
+        assert payload["subject_entity_id"] is None
+        assert payload["subject_attribution"] == "unknown"
+        assert payload["subject_kind"] == "unknown"
+    else:
+        assert payload["subject_entity_id"] == expected_subject
+        assert payload["subject_entity_id"] != model_authored_subject
+        assert payload["subject_kind"] == "speaker"
     assert payload["evidence"][0]["quote_refs"][0]["speaker_label"] == "SPEAKER_01"
 
 

@@ -3287,15 +3287,15 @@ class TasksStore: ObservableObject {
   func restoreTask(
     _ task: TaskActionItem,
     expectedOwnerID: String? = nil
-  ) async {
-    guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
+  ) async -> TaskActionItem? {
+    guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return nil }
     // Undo of a tombstoned delete: the row still exists locally (deleted, whether or not
     // the backend acked). Purge it before the re-insert below or undo would duplicate it.
     try? await ActionItemStorage.shared.deleteActionItemByBackendId(
       task.id,
       authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
     )
-    guard isCurrent(lease) else { return }
+    guard isCurrent(lease) else { return nil }
 
     // A local-only task never had a backend row (deleteTask skipped the backend
     // delete). It must not go through the backend-recreate path below: staging
@@ -3304,8 +3304,7 @@ class TasksStore: ObservableObject {
     // re-insert it as an UNSYNCED local row so the pending create-sync pushes it
     // exactly once (carrying completion via retryUnsyncedItems).
     if ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
-      await restoreLocalOnlyTask(task, lease: lease)
-      return
+      return await restoreLocalOnlyTask(task, lease: lease)
     }
 
     // 1. Stage as an UNSYNCED local row with no stale backend identity (reusing
@@ -3324,12 +3323,12 @@ class TasksStore: ObservableObject {
       if isCurrent(lease) {
         logError("TasksStore: Failed to re-insert task locally for undo", error: error)
       }
-      return
+      return nil
     }
-    guard isCurrent(lease) else { return }
+    guard isCurrent(lease) else { return nil }
     guard let localId = inserted.id else {
       logError("TasksStore: Staged undo row has no local id", error: ActionItemStorageError.recordNotFound)
-      return
+      return nil
     }
     let stagedTask = inserted.toTaskActionItem()
 
@@ -3373,24 +3372,26 @@ class TasksStore: ObservableObject {
         expectedOwnerId: lease.ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
       )
-      guard isCurrent(lease) else { return }
+      guard isCurrent(lease) else { return nil }
       // Bind this same staged row to its new backend ID -- never a second insert.
       try await ActionItemStorage.shared.markSynced(
         id: localId,
         backendId: created.id,
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
-      guard isCurrent(lease) else { return }
+      guard isCurrent(lease) else { return nil }
       if stagedTask.completed, let idx = completedTasks.firstIndex(where: { $0.id == stagedTask.id }) {
         completedTasks[idx] = created
       } else if !stagedTask.completed, let idx = incompleteTasks.firstIndex(where: { $0.id == stagedTask.id }) {
         incompleteTasks[idx] = created
       }
       log("TasksStore: Restored task via undo (new backend ID: \(created.id))")
+      return created
     } catch {
       if isCurrent(lease) {
         logError("TasksStore: Failed to re-create task on backend (local restore preserved)", error: error)
       }
+      return stagedTask
     }
   }
 
@@ -3416,10 +3417,14 @@ class TasksStore: ObservableObject {
   /// its original rowid so the surfaced "local_<rowid>" id is stable. No backend
   /// recreate: the task never had a backend row, and the pending create-sync
   /// (retryUnsyncedItems) is the single writer that pushes it to the backend.
-  private func restoreLocalOnlyTask(_ task: TaskActionItem, lease: OwnerOperationLease) async {
+  private func restoreLocalOnlyTask(
+    _ task: TaskActionItem,
+    lease: OwnerOperationLease
+  ) async -> TaskActionItem? {
     let record = Self.localOnlyRestoreRecord(from: task)
+    let inserted: ActionItemRecord
     do {
-      try await ActionItemStorage.shared.insertLocalActionItem(
+      inserted = try await ActionItemStorage.shared.insertLocalActionItem(
         record,
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
@@ -3427,16 +3432,18 @@ class TasksStore: ObservableObject {
       if isCurrent(lease) {
         logError("TasksStore: Failed to re-insert local-only task for undo", error: error)
       }
-      return
+      return nil
     }
-    guard isCurrent(lease) else { return }
+    guard isCurrent(lease) else { return nil }
+    let restoredTask = inserted.toTaskActionItem()
 
-    if task.completed {
-      completedTasks.insert(task, at: 0)
+    if restoredTask.completed {
+      completedTasks.insert(restoredTask, at: 0)
     } else {
-      incompleteTasks.insert(task, at: 0)
+      incompleteTasks.insert(restoredTask, at: 0)
     }
-    log("TasksStore: Restored local-only task via undo (unsynced, id: \(task.id))")
+    log("TasksStore: Restored local-only task via undo (unsynced, id: \(restoredTask.id))")
+    return restoredTask
   }
 
   @discardableResult

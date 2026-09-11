@@ -92,6 +92,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   var audioReceivedThisTurn = false
   /// Stable per-turn key for kernel idempotent voice-turn persistence.
   var turnIdempotencyKey = ""
+  /// The one continuity key whose transcript must never reach the journal, even
+  /// through interrupted-turn recovery. Armed at the start of a turn while
+  /// Silent Type is on, and re-asserted when the dictation is delivered. Holds
+  /// at most the most recent such turn: only `turnIdempotencyKey` is ever
+  /// compared against it, and minting a different key clears it — as does
+  /// committing a turn as a question, whose continuity depends on recovery.
+  var journalSuppressedContinuityKey: String?
   /// (a) Pure cache of the typed kernel voice-context snapshot. Rebuild via
   /// `refreshVoiceContextSnapshot` / `fetchVoiceContextSnapshot` on relaunch.
   var prefetchedVoiceContext = ""
@@ -489,6 +496,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     lastExternalToolName = ""
     lastExternalToolErrorCode = ""
     turnIdempotencyKey = ""
+    journalSuppressedContinuityKey = nil
     turnAudio16k.removeAll()
     turnEarlyVerdictCode = nil
     lastTurnDiagnostics.removeAll()

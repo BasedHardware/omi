@@ -35,6 +35,9 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/PTTRoutePolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/TextInsertionSink.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeAudioTrim.swift
+  # VoiceTypingChatRecordPolicy.swift is deliberately not claimed here: this
+  # flow's too-short turn never reaches the dictation delivery close path where
+  # its decide(...) runs. That policy is covered by VoiceTypingSilentModeTests.
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeCommandParser.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeSession.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeWakeWordProbeSchedule.swift
