@@ -175,6 +175,8 @@ test('rejects malformed or wrong-transport answers', () => {
 });
 
 test('reports WebRTC and Gemini availability from the runtime scope', () => {
+  const {Platform} = require('react-native');
+  const previousOS = Platform.OS;
   const scope = globalThis as {
     RTCPeerConnection?: unknown;
     WebSocket?: unknown;
@@ -188,12 +190,20 @@ test('reports WebRTC and Gemini availability from the runtime scope', () => {
     mediaDevices: scope.navigator?.mediaDevices,
   };
   try {
+    Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
     delete scope.RTCPeerConnection;
     expect(liveWebRtcSupported()).toBe(false);
     scope.RTCPeerConnection = class {};
     scope.navigator = {mediaDevices: {getUserMedia: () => undefined}};
     expect(liveWebRtcSupported()).toBe(true);
 
+    Object.defineProperty(Platform, 'OS', {configurable: true, value: 'macos'});
+    expect(liveWebRtcSupported()).toBe(false);
+
+    Object.defineProperty(Platform, 'OS', {configurable: true, value: 'ios'});
+    expect(liveWebRtcSupported()).toBe(true);
+
+    Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
     delete scope.WebSocket;
     delete scope.AudioContext;
     expect(liveGeminiSupported()).toBe(false);
@@ -201,6 +211,10 @@ test('reports WebRTC and Gemini availability from the runtime scope', () => {
     scope.AudioContext = class {};
     expect(liveGeminiSupported()).toBe(true);
   } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: previousOS,
+    });
     if (previous.peer === undefined) {
       delete scope.RTCPeerConnection;
     } else {

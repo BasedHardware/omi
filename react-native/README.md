@@ -95,3 +95,11 @@ To learn more about React Native, take a look at the following resources:
 - [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
 - [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
 - [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+
+## GPT Live / react-native-webrtc
+
+Phone GPT Live 1 uses `react-native-webrtc` on **iOS and Android only**. After
+installing or upgrading that dependency, run `bundle exec pod install` inside
+`react-native/ios` on a Mac (CocoaPods / Xcode are required; this Linux CI host
+cannot run that step). macOS desktop builds intentionally do **not** link
+WebRTC — Live stays unsupported there.

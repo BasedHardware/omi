@@ -167,7 +167,9 @@ test('fails cleanly when microphone capture is rejected', async () => {
   expect(peer.closed).toBe(true);
 });
 
-test('resolveLiveWebRtcScope stays null without a peer connection', () => {
+test('resolveLiveWebRtcScope stays null without a peer connection on web', () => {
+  const {Platform} = require('react-native');
+  const previousOS = Platform.OS;
   const scope = globalThis as {
     RTCPeerConnection?: unknown;
     navigator?: {mediaDevices?: {getUserMedia?: unknown}};
@@ -175,12 +177,17 @@ test('resolveLiveWebRtcScope stays null without a peer connection', () => {
   const previousPeer = scope.RTCPeerConnection;
   const previousMedia = scope.navigator?.mediaDevices;
   try {
+    Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
     delete scope.RTCPeerConnection;
     expect(resolveLiveWebRtcScope()).toBeNull();
     scope.RTCPeerConnection = class {};
     scope.navigator = {mediaDevices: {getUserMedia: () => undefined}};
     expect(resolveLiveWebRtcScope()).not.toBeNull();
   } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: previousOS,
+    });
     if (previousPeer === undefined) {
       delete scope.RTCPeerConnection;
     } else {
@@ -190,4 +197,54 @@ test('resolveLiveWebRtcScope stays null without a peer connection', () => {
       delete scope.navigator;
     }
   }
+});
+
+test('resolveLiveWebRtcScope uses the native phone module on ios', () => {
+  const {Platform} = require('react-native');
+  const previousOS = Platform.OS;
+  try {
+    Object.defineProperty(Platform, 'OS', {configurable: true, value: 'ios'});
+    expect(resolveLiveWebRtcScope()).not.toBeNull();
+  } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: previousOS,
+    });
+  }
+});
+
+test('resolveLiveWebRtcScope stays null on macos', () => {
+  const {Platform} = require('react-native');
+  const previousOS = Platform.OS;
+  try {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'macos',
+    });
+    expect(resolveLiveWebRtcScope()).toBeNull();
+  } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: previousOS,
+    });
+  }
+});
+
+test('start succeeds when the scope omits HTML Audio', async () => {
+  const {scope, peer} = makeScope();
+  delete (scope as {Audio?: unknown}).Audio;
+  const phases: LiveVoicePhase[] = [];
+  const session = new LiveWebRtcSession(
+    scope,
+    async () => ({
+      provider: 'gpt_live' as const,
+      sessionId: 'live_test',
+      answerSdp: 'answer-sdp',
+    }),
+    {onPhase: phase => phases.push(phase)},
+  );
+  await session.start();
+  peer.dataChannel.emit(JSON.stringify({type: 'session.started'}));
+  expect(phases).toContain('live');
+  session.stop();
 });

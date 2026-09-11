@@ -1,9 +1,10 @@
-import {LiveUnsupportedError, type GptLiveSession} from './liveClient';
+import {Platform} from 'react-native';
 
-// Browser/WebRTC runtime for GPT-Live-1. React Native native platforms do not
-// ship an RTCPeerConnection, so this module resolves a scope and reports
-// LiveUnsupportedError instead of pretending a call started. PWA/web gets the
-// full duplex audio path.
+import {LiveUnsupportedError, type GptLiveSession} from './liveClient';
+import {resolveNativeLiveWebRtcScope} from './liveWebRtcNative';
+
+// GPT Live 1 WebRTC runtime. Phone (iOS/Android) uses react-native-webrtc;
+// PWA/web uses globalThis; macOS stays unsupported (no honest RN WebRTC path).
 export type LiveVoicePhase =
   | 'idle'
   | 'connecting'
@@ -72,6 +73,12 @@ export type LiveWebRtcScope = {
 };
 
 export function resolveLiveWebRtcScope(): LiveWebRtcScope | null {
+  if (Platform.OS === 'macos') {
+    return null;
+  }
+  if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    return resolveNativeLiveWebRtcScope();
+  }
   const scope = globalThis as unknown as Partial<LiveWebRtcScope>;
   if (typeof scope.RTCPeerConnection !== 'function') {
     return null;
@@ -184,8 +191,13 @@ export class LiveWebRtcSession {
   }
 
   private attachRemoteAudio(event: LiveRemoteTrackEvent): void {
+    if (this.audio !== null) return;
     const AudioCtor = this.scope.Audio;
-    if (AudioCtor === undefined || this.audio !== null) return;
+    // react-native-webrtc plays remote audio tracks natively; HTML Audio is
+    // web/PWA only. Missing Audio must not block the phone path.
+    if (AudioCtor === undefined) {
+      return;
+    }
     const audio = new AudioCtor();
     audio.autoplay = true;
     const streams = event.streams;
