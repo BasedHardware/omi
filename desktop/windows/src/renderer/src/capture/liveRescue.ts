@@ -73,9 +73,11 @@ export function isRetryableDropError(message: string, name?: string): boolean {
 }
 
 /** Whether a retryable drop was a backend rate-limit. The ws handshake surfaces a
- *  429 rejection as "Unexpected server response: 429", so match a standalone 429. */
+ *  429 rejection as "Unexpected server response: 429", so match a standalone 429;
+ *  transcribe-stream instead accepts the socket and closes it with 1008 "Rate
+ *  limit exceeded. Retry in Ns." (backend/routers/chat.py). */
 export function isRateLimitedDropError(message: string): boolean {
-  return /\b429\b/.test(message)
+  return /\b429\b|rate limit exceeded/i.test(message)
 }
 
 /**

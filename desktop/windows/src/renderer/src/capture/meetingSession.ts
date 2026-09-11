@@ -24,7 +24,6 @@
 // conversation, via either the continuous session or this meeting's mic lane), so
 // saving mic lines here too would duplicate it.
 import { startTranscription, type TranscriptionHandle } from '../lib/transcriptionClient'
-import { classifyTranscriptionStop } from '../../../shared/transcriptionStop'
 import {
   isRateLimitedDropError,
   isRetryableDropError,
@@ -68,11 +67,15 @@ export async function startMeetingSession(args: {
   let systemHandle: TranscriptionHandle | null = null
   let systemReconnectAttempt = 0
   let systemReconnectTimer: ReturnType<typeof setTimeout> | null = null
+  // Cancels an in-flight reconnect startup on stop(), so a late socket/loopback
+  // doesn't linger for the connect timeout after the meeting ended.
+  const reconnectAbort = new AbortController()
 
   const stopStartingHandles = (): void => {
     stopped = true
     if (systemReconnectTimer) clearTimeout(systemReconnectTimer)
     systemReconnectTimer = null
+    reconnectAbort.abort()
     for (const handle of startingHandles) {
       try {
         handle.stop()
@@ -86,9 +89,12 @@ export async function startMeetingSession(args: {
   // SYSTEM-LANE RECONNECT: once live, a dropped system lane reopens a fresh
   // transcribe-stream socket and keeps appending to the same local transcript
   // (the lane is transcription-only, so there is no server conversation to
-  // resume). The loopback is VAD-gated, so a silent remote side sends no audio
-  // and the backend closes the socket after 60s — expected in any meeting lull,
-  // so an idle close reconnects at once without spending the reconnect budget.
+  // resume), with liveRescue's jittered backoff. The attempt budget resets only
+  // when the lane delivers a segment — transcribe-stream accepts the socket before
+  // its rate-limit/provider checks, so "connected" alone doesn't prove health.
+  // Every reconnect is a new voice:transcribe_stream request (rate-limited per
+  // user, shared with PTT), so drops must stay rare: gated silence is kept alive
+  // by main's keepalive (ipc/omiListen.ts), not by reconnecting.
   // Terminal stops (quota, daily limit, a dead loopback source) still end capture.
   const onSystemLaneError = (e: Error): void => {
     if (stopped) return
@@ -105,26 +111,22 @@ export async function startMeetingSession(args: {
       }
       systemHandle = null
     }
-    let delayMs: number
-    if (classifyTranscriptionStop(e.message) === 'idle') {
-      delayMs = 0
-    } else if (
-      isRetryableDropError(e.message, e.name) &&
-      systemReconnectAttempt < MAX_RECONNECT_ATTEMPTS
+    if (
+      !isRetryableDropError(e.message, e.name) ||
+      systemReconnectAttempt >= MAX_RECONNECT_ATTEMPTS
     ) {
-      systemReconnectAttempt++
-      delayMs = reconnectDelayJitteredMs(systemReconnectAttempt, {
-        rateLimited: isRateLimitedDropError(e.message)
-      })
-    } else {
       args.onError(`system: ${e.message}`)
       return
     }
+    systemReconnectAttempt++
+    const delayMs = reconnectDelayJitteredMs(systemReconnectAttempt, {
+      rateLimited: isRateLimitedDropError(e.message)
+    })
     console.warn(`[meeting-session] system lane dropped, reconnecting in ${delayMs}ms:`, e.message)
     systemReconnectTimer = setTimeout(() => {
       systemReconnectTimer = null
       if (stopped) return
-      startLane('system', 'transcribe')
+      startLane('system', 'transcribe', reconnectAbort.signal)
         .then((handle) => {
           systemHandle = handle
         })
@@ -141,18 +143,19 @@ export async function startMeetingSession(args: {
   // backend-owned ('conversation').
   const startLane = (
     source: ListenSource,
-    mode: 'conversation' | 'transcribe'
+    mode: 'conversation' | 'transcribe',
+    signal: AbortSignal | undefined = args.signal
   ): Promise<TranscriptionHandle> =>
     startTranscription(
       source,
       {
         onLine: (line) => {
-          if (!stopped && source === 'system') systemLines.push(line)
+          if (stopped || source !== 'system') return
+          systemLines.push(line)
+          systemReconnectAttempt = 0 // a delivered segment proves the lane is healthy
         },
         onInterim: () => {},
-        onBackend: () => {
-          if (source === 'system') systemReconnectAttempt = 0 // connected: healthy again
-        },
+        onBackend: () => {},
         onError: (e) => {
           console.warn(`[meeting-session] ${source} lane error:`, e.message)
           if (source === 'system') onSystemLaneError(e)
@@ -161,8 +164,7 @@ export async function startMeetingSession(args: {
       },
       mode,
       undefined,
-      // The abort signal only guards startup; a live reconnect is torn down by stop().
-      live ? undefined : args.signal
+      signal
     ).then((handle) => {
       if (stopped) {
         handle.stop()

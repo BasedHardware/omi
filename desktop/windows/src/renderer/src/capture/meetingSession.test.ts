@@ -13,6 +13,9 @@ const laneCbs: Partial<Record<'mic' | 'system', LaneCb>> = {}
 const laneModes: Partial<Record<'mic' | 'system', string>> = {}
 const laneStarts: Record<'mic' | 'system', number> = { mic: 0, system: 0 }
 let systemShouldFail = false
+// Like production startTranscription: a failed start reports through cb.onError
+// first, then rejects.
+let systemFailMessage: string | null = null
 
 vi.mock('../lib/transcriptionClient', () => ({
   startTranscription: vi.fn(async (source: 'mic' | 'system', cb: LaneCb, mode?: string) => {
@@ -20,12 +23,19 @@ vi.mock('../lib/transcriptionClient', () => ({
     laneModes[source] = mode
     laneStarts[source]++
     if (source === 'system' && systemShouldFail) throw new Error('loopback unavailable')
+    if (source === 'system' && systemFailMessage) {
+      const error = new Error(systemFailMessage)
+      cb.onError(error)
+      throw error
+    }
     return { stop: stops[source], finalize: vi.fn() }
   })
 }))
 
-// Let a zero-delay reconnect timer and its startTranscription promise settle.
-const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 5))
+const IDLE_CLOSE =
+  'Omi transcription stopped: Omi transcribe-stream closed (1008) Idle timeout: no audio for 60s'
+// Longer than any single jittered backoff step (32s cap + 1s jitter).
+const PAST_BACKOFF_MS = 34_000
 
 // The meeting session defers its mic lane only to a healthy continuous mic (C6).
 const live = vi.hoisted(() => ({
@@ -62,6 +72,8 @@ beforeEach(() => {
   laneStarts.mic = 0
   laneStarts.system = 0
   systemShouldFail = false
+  systemFailMessage = null
+  vi.useRealTimers()
   live.health = 'inactive'
   live.waitForReady.mockReset()
   live.waitForReady.mockImplementation(async () => {
@@ -179,23 +191,20 @@ describe('startMeetingSession', () => {
     expect(stops.mic).toHaveBeenCalledOnce()
   })
 
-  it('reconnects the system lane after an idle-timeout close instead of stopping capture', async () => {
-    // Live bug: the remote side was silent for 60s, the backend closed the VAD-gated
-    // loopback socket ("Idle timeout"), and the whole meeting capture stopped with a
-    // "Capture stopped" toast. An idle close must reopen the lane and keep going.
+  it('reconnects a dropped system lane instead of stopping capture', async () => {
+    // Live bug: the backend closed the VAD-gated loopback socket ("Idle timeout",
+    // 1008) during a lull, and the whole meeting capture stopped with a "Capture
+    // stopped" toast. A retryable drop must reopen the lane and keep appending.
+    vi.useFakeTimers()
     const onError = vi.fn()
     const session = await startMeetingSession({ appName: 'Google Meet', onError })
     laneCbs.system?.onLine({ id: 'a', speaker: 'Alex', text: 'before the lull' })
 
-    laneCbs.system?.onError(
-      new Error(
-        'Omi transcription stopped: Omi transcribe-stream closed (1008) Idle timeout: no audio for 60s'
-      )
-    )
-    await flush()
+    laneCbs.system?.onError(new Error(IDLE_CLOSE))
+    expect(stops.system).toHaveBeenCalledOnce() // dead socket's loopback feed released
+    await vi.advanceTimersByTimeAsync(PAST_BACKOFF_MS)
 
     expect(onError).not.toHaveBeenCalled()
-    expect(stops.system).toHaveBeenCalledOnce() // dead socket's loopback feed released
     expect(laneStarts.system).toBe(2) // reopened
     laneCbs.system?.onLine({ id: 'b', speaker: 'Alex', text: 'after the lull' })
     await session.stop()
@@ -203,7 +212,35 @@ describe('startMeetingSession', () => {
     expect(saved.transcript).toContain('Alex: before the lull\nAlex: after the lull')
   })
 
+  it('gives up with an error once reconnects are exhausted (connect alone never resets the budget)', async () => {
+    vi.useFakeTimers()
+    const onError = vi.fn()
+    const session = await startMeetingSession({ appName: 'Google Meet', onError })
+
+    // Every reconnect fails the way production reports it: onError, then reject.
+    systemFailMessage = 'Omi transcription unavailable (connection or audio timed out)'
+    laneCbs.system?.onError(new Error(IDLE_CLOSE))
+    for (let i = 0; i < 12 && onError.mock.calls.length === 0; i++) {
+      await vi.advanceTimersByTimeAsync(PAST_BACKOFF_MS)
+    }
+
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError.mock.calls[0][0]).toMatch(/^system: .*timed out/)
+    expect(laneStarts.system).toBe(1 + 10) // startup + MAX_RECONNECT_ATTEMPTS
+    await session.stop()
+  })
+
+  it('stop() cancels a pending reconnect', async () => {
+    vi.useFakeTimers()
+    const session = await startMeetingSession({ appName: 'Google Meet', onError: vi.fn() })
+    laneCbs.system?.onError(new Error(IDLE_CLOSE))
+    await session.stop()
+    await vi.advanceTimersByTimeAsync(PAST_BACKOFF_MS)
+    expect(laneStarts.system).toBe(1) // no socket opened after the meeting ended
+  })
+
   it('ends capture on a terminal system-lane stop (daily limit) without reconnecting', async () => {
+    vi.useFakeTimers()
     const onError = vi.fn()
     const session = await startMeetingSession({ appName: 'Google Meet', onError })
 
@@ -212,7 +249,7 @@ describe('startMeetingSession', () => {
         "Omi transcription stopped: Omi's daily voice transcription limit is used up — it frees up again over a rolling 24 hours"
       )
     )
-    await flush()
+    await vi.advanceTimersByTimeAsync(PAST_BACKOFF_MS)
 
     expect(onError).toHaveBeenCalledOnce()
     expect(onError.mock.calls[0][0]).toMatch(/^system: .*daily voice transcription limit/)

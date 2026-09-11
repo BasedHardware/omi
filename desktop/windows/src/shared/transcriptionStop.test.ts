@@ -13,7 +13,8 @@ describe('classifyCloseReason', () => {
     expect(classifyCloseReason('trial_expired')).toBe('quota')
     expect(classifyCloseReason('quota_exceeded')).toBe('quota')
     expect(classifyCloseReason('Daily transcription budget exhausted')).toBe('daily_limit')
-    expect(classifyCloseReason('Idle timeout: no audio for 60s')).toBe('idle')
+    // The live bug: this idle teardown was reported as "quota used up".
+    expect(classifyCloseReason('Idle timeout: no audio for 60s')).toBe('generic')
     expect(classifyCloseReason('Rate limit exceeded. Retry in 30s.')).toBe('generic')
     expect(classifyCloseReason('')).toBe('generic')
   })
@@ -29,7 +30,7 @@ describe('classifyTranscriptionStop', () => {
       classifyTranscriptionStop(
         'Omi transcription stopped: Omi transcribe-stream closed (1008) Idle timeout: no audio for 60s'
       )
-    ).toBe('idle')
+    ).toBe('generic')
     expect(classifyTranscriptionStop('Omi /v4/listen closed (1006)')).toBe('generic')
   })
 })

@@ -13,10 +13,8 @@ export type TranscriptionStopKind =
   /** The rolling 24h voice-transcription duration budget is spent. Terminal, and
    *  plan-independent: upgrading does not lift it, so never offer an upgrade. */
   | 'daily_limit'
-  /** The backend closed an audio-idle session (VAD-gated audio sent nothing for a
-   *  while). Expected in silent stretches; reconnecting is always correct. */
-  | 'idle'
-  /** Anything else (network drop, transient server close, source failure). */
+  /** Anything else — network drop, idle timeout, rate limit, transient server
+   *  close, source failure. Retry-worthiness is decided by the caller. */
   | 'generic'
 
 export const QUOTA_MESSAGE =
@@ -29,7 +27,6 @@ export const DAILY_LIMIT_MESSAGE =
 export function classifyCloseReason(reason: string): TranscriptionStopKind {
   if (/budget exhausted/i.test(reason)) return 'daily_limit'
   if (/trial_expired|freemium|quota/i.test(reason)) return 'quota'
-  if (/idle timeout/i.test(reason)) return 'idle'
   return 'generic'
 }
 

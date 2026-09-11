@@ -51,6 +51,13 @@ describe('isRateLimitedDropError', () => {
   it('detects a 429 handshake rejection', () => {
     expect(isRateLimitedDropError('Unexpected server response: 429')).toBe(true)
   })
+  it('detects a transcribe-stream 1008 rate-limit close (accepted, then closed)', () => {
+    expect(
+      isRateLimitedDropError(
+        'Omi transcription stopped: Omi transcribe-stream closed (1008) Rate limit exceeded. Retry in 30s.'
+      )
+    ).toBe(true)
+  })
   it('does not match unrelated numbers or other statuses', () => {
     expect(isRateLimitedDropError('Omi /v4/listen closed (1006)')).toBe(false)
     expect(isRateLimitedDropError('Unexpected server response: 503')).toBe(false)
