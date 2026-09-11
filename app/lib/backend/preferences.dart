@@ -691,6 +691,8 @@ class SharedPreferencesUtil {
         final decoded = jsonDecode(encoded);
         if (decoded is Map<String, dynamic>) {
           items.add(fromJson(decoded));
+        } else {
+          Logger.debug('Skipping unreadable ${key.split(':').first} entry: ${decoded.runtimeType}');
         }
       } catch (e) {
         Logger.debug('Skipping unreadable ${key.split(':').first} entry: ${e.runtimeType}');
@@ -848,6 +850,7 @@ class SharedPreferencesUtil {
     try {
       final decoded = jsonDecode(conversation);
       if (decoded is Map<String, dynamic>) return ServerConversation.fromJson(decoded);
+      Logger.debug('Skipping unreadable modifiedConversationDetails: ${decoded.runtimeType}');
     } catch (e) {
       Logger.debug('Skipping unreadable modifiedConversationDetails: ${e.runtimeType}');
     }
