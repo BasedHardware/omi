@@ -627,7 +627,7 @@ actor MemoryStorage {
   func syncServerMemories(_ memories: [ServerMemory]) async throws {
     let db = try await ensureInitialized()
 
-    let (skipped, adopted, inserted) = try await db.write { database -> (Int, Int, Int) in
+    let (skipped, adopted, inserted, index) = try await db.write { database -> (Int, Int, Int, [(Int64, String)]) in
       try Self.reconcileServerMemories(memories, in: database)
     }
 
@@ -640,6 +640,9 @@ actor MemoryStorage {
     }
     if inserted > 0 {
       HomeKnowledgeCountInvalidation.post()
+    }
+    for item in index {
+      LocalEmbeddingIndexer.scheduleMemoryIndex(id: item.0, content: item.1)
     }
   }
 
@@ -682,7 +685,7 @@ actor MemoryStorage {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw KnowledgeLedgerMirrorSyncError.ownerChanged
       }
-      let (_, _, inserted) = try Self.reconcileServerMemories(memories, in: database)
+      let (_, _, inserted, _) = try Self.reconcileServerMemories(memories, in: database)
       // Throwing from this GRDB write closure rolls back every upsert above,
       // so an owner transition can never commit a prefix.
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
@@ -1360,10 +1363,11 @@ actor MemoryStorage {
   private static func reconcileServerMemories(
     _ memories: [ServerMemory],
     in database: Database
-  ) throws -> (skipped: Int, adopted: Int, inserted: Int) {
+  ) throws -> (skipped: Int, adopted: Int, inserted: Int, index: [(Int64, String)]) {
     var skipped = 0
     var adopted = 0
     var inserted = 0
+    var index: [(Int64, String)] = []
     for memory in memories {
       if var existingRecord =
         try MemoryRecord
@@ -1384,6 +1388,7 @@ actor MemoryStorage {
         }
         existingRecord.updateFrom(memory)
         try existingRecord.update(database)
+        Self.appendIndexable(existingRecord, into: &index)
       } else if var orphan =
         try MemoryRecord
         .filter(Column("backendSynced") == false)
@@ -1396,21 +1401,29 @@ actor MemoryStorage {
         orphan.updateFrom(memory)
         try orphan.update(database)
         adopted += 1
+        Self.appendIndexable(orphan, into: &index)
       } else {
         do {
-          _ = try MemoryRecord.from(memory).inserted(database)
+          let insertedRecord = try MemoryRecord.from(memory).inserted(database)
           inserted += 1
+          Self.appendIndexable(insertedRecord, into: &index)
         } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
           if var record = try MemoryRecord.filter(Column("backendId") == memory.id).fetchOne(database) {
             record.updateFrom(memory)
             try record.update(database)
+            Self.appendIndexable(record, into: &index)
           } else {
             throw dbError
           }
         }
       }
     }
-    return (skipped, adopted, inserted)
+    return (skipped, adopted, inserted, index)
+  }
+
+  private static func appendIndexable(_ record: MemoryRecord, into index: inout [(Int64, String)]) {
+    guard let id = record.id, id > 0, !record.content.isEmpty else { return }
+    index.append((id, record.content))
   }
 
   // MARK: - Local Extraction Operations
