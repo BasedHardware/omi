@@ -2708,6 +2708,28 @@ test('rejects an empty memory cursor before issuing a read', async () => {
   );
 });
 
+test('rejects an oversized memory cursor before issuing a read', async () => {
+  const backend = backendFor(() => {
+    throw new Error('unexpected request');
+  });
+  await expect(loadMemories(backend, 'm'.repeat(16385))).rejects.toThrow(
+    'Memory cursor is malformed',
+  );
+});
+
+test('rejects duplicate memory IDs instead of merging an ambiguous page', async () => {
+  await expect(
+    loadMemories(
+      backendFor(() => ({
+        status: 200,
+        body: JSON.stringify(
+          page([memory, memory], 'recall-completeness-v1'),
+        ),
+      })),
+    ),
+  ).rejects.toThrow('Memory IDs are duplicated');
+});
+
 test('accepts ratified partial completeness instead of treating honest pages as malformed', async () => {
   const memories = {
     ...page([memory], 'recall-completeness-v1'),

@@ -2561,7 +2561,7 @@ export async function loadMemories(
       }),
     };
   }
-  if (cursor !== null && cursor.length === 0) {
+  if (cursor !== null && (cursor.length === 0 || cursor.length > 16384)) {
     throw new Error('Memory cursor is malformed');
   }
   const path: `/${string}` =
@@ -2573,8 +2573,13 @@ export async function loadMemories(
     'Memories response',
     'recall-completeness-v1',
   );
+  const ids = new Set<string>();
   const items = validated.items.map((item, index) => {
     const id = string(item.id, `Memory ${index} id`);
+    if (ids.has(id)) {
+      throw new Error('Memory IDs are duplicated');
+    }
+    ids.add(id);
     const text = string(item.text, `Memory ${index} text`);
     const parsedText = parseMemoryText(text);
     const citations =
