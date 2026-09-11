@@ -817,7 +817,11 @@ function historyOutcomeFromTerminal(
     terminal.message.text !== message.text ||
     terminal.message.sender !== "ai" ||
     (typeof terminal.message.type === "string" &&
-      terminal.message.type !== message.type)
+      terminal.message.type !== message.type) ||
+    (typeof terminal.message.createdAt === "number" &&
+      terminal.message.createdAt !== message.createdAt) ||
+    (typeof terminal.message.updatedAt === "number" &&
+      terminal.message.updatedAt !== message.updatedAt)
   ) {
     return null;
   }
