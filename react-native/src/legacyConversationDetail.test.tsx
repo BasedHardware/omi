@@ -3,6 +3,7 @@ import ReactTestRenderer, {act} from 'react-test-renderer';
 import {
   conversationPhotoAnalyzingCopy,
   conversationPhotoDiscardedCopy,
+  desktopBackendServiceCopy,
 } from './desktopReadClient';
 import {
   loadLegacyConversationDetail,
@@ -620,8 +621,11 @@ test('names GET people names on transcript segments and omits unresolved ids', a
       ],
     });
   });
-  const unresolved = (await loadLegacyConversationDetail(backend, fixture.id))
-    .transcript;
+  const unresolvedDetail = await loadLegacyConversationDetail(
+    backend,
+    fixture.id,
+  );
+  const unresolved = unresolvedDetail.transcript;
   expect(unresolved).toMatchObject({
     status: 'loaded',
     segments: [
@@ -634,6 +638,7 @@ test('names GET people names on transcript segments and omits unresolved ids', a
       },
     ],
   });
+  expect(unresolvedDetail.peopleError).toBeUndefined();
   expect(
     unresolved.status === 'loaded' ? unresolved.segments[0] : null,
   ).not.toHaveProperty('personName');
@@ -652,14 +657,41 @@ test('names GET people names on transcript segments and omits unresolved ids', a
       ],
     });
   });
-  const failedPeople = (await loadLegacyConversationDetail(backend, fixture.id))
-    .transcript;
+  const failedPeopleDetail = await loadLegacyConversationDetail(
+    backend,
+    fixture.id,
+  );
+  const failedPeople = failedPeopleDetail.transcript;
   expect(failedPeople).toMatchObject({
     status: 'loaded',
     segments: [{text: fixture.transcript_segments[0].text}],
   });
+  expect(failedPeopleDetail.peopleError).toBeUndefined();
   expect(
     failedPeople.status === 'loaded' ? failedPeople.segments[0] : null,
+  ).not.toHaveProperty('personName');
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/users/people?include_speech_samples=false') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          is_user: false,
+          speaker: 'SPEAKER_00',
+          person_id: 'person-alex',
+        },
+      ],
+    });
+  });
+  const thrownPeople = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(thrownPeople.peopleError).toBe(desktopBackendServiceCopy);
+  expect(
+    thrownPeople.transcript.status === 'loaded'
+      ? thrownPeople.transcript.segments[0]
+      : null,
   ).not.toHaveProperty('personName');
   mockRequest.mockReset().mockResolvedValue(response(fixture));
   await loadLegacyConversationDetail(backend, fixture.id);
@@ -802,6 +834,7 @@ test('names GET apps_results app when catalog resolves and omits Unknown App', a
   expect(unresolved.appSummary).toBe('App wrote this recap');
   expect(unresolved.appSummaryName).toBeUndefined();
   expect(unresolved.appSummaryDescription).toBeUndefined();
+  expect(unresolved.appsError).toBeUndefined();
   mockRequest.mockImplementation(async () =>
     response({
       ...fixture,
@@ -819,6 +852,22 @@ test('names GET apps_results app when catalog resolves and omits Unknown App', a
   );
   await loadLegacyConversationDetail(backend, fixture.id);
   expect(mockRequest).toHaveBeenCalledTimes(1);
+});
+
+test('names a failed GET apps catalog instead of omitting Unknown App as empty success', async () => {
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/apps/notes') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return response({
+      ...fixture,
+      apps_results: [{content: 'App wrote this recap', app_id: 'notes'}],
+    });
+  });
+  const thrownApps = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(thrownApps.appSummary).toBe('App wrote this recap');
+  expect(thrownApps.appSummaryName).toBeUndefined();
+  expect(thrownApps.appsError).toBe(desktopBackendServiceCopy);
 });
 
 test('fails closed for malformed GET apps_results or plugins_results', async () => {

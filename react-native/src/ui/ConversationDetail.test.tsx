@@ -2,6 +2,7 @@ import React from 'react';
 import Renderer, {act} from 'react-test-renderer';
 import {Text} from 'react-native';
 import type {ConversationProjection} from '../desktopReadClient';
+import {desktopBackendServiceCopy} from '../desktopReadClient';
 
 const mockRecording = jest.fn(() => ({
   result: {
@@ -1067,6 +1068,45 @@ test('legacy conversation details name GET app result content', () => {
   expect(discarded).not.toContain('Saves notes from calls');
 });
 
+test('legacy conversation details name a failed GET app catalog instead of empty success', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        appSummary: 'App wrote this recap',
+        appsError: desktopBackendServiceCopy,
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('App wrote this recap');
+  expect(copy).toContain(desktopBackendServiceCopy);
+  expect(copy).not.toContain('Unknown App');
+  expect(copy).not.toContain('Official');
+  const discarded = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', discarded: true},
+    }),
+  );
+  expect(discarded).not.toContain('App wrote this recap');
+  expect(discarded).not.toContain(desktopBackendServiceCopy);
+});
+
 test('legacy discarded details name Discarded Conversation instead of structured title', () => {
   mockLegacy.mockReturnValue({
     result: {
@@ -1457,6 +1497,48 @@ test('legacy conversation details name GET people names on transcript speakers',
   );
   expect(copy).toContain('Alex Chen  ·  Hello there');
   expect(copy).not.toContain('Speaker 1');
+  expect(copy).not.toContain('person-alex');
+});
+
+test('legacy conversation details name a failed GET people instead of empty success', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        peopleError: desktopBackendServiceCopy,
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'Hello there',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              start: 0,
+              end: 1,
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('People');
+  expect(copy).toContain(desktopBackendServiceCopy);
+  expect(copy).toContain('Speaker 1  ·  Hello there');
+  expect(copy).not.toContain('Alex Chen');
   expect(copy).not.toContain('person-alex');
 });
 

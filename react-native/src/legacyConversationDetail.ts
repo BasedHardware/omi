@@ -2,6 +2,7 @@ import type {OmiBackend} from './omiNativeTypes';
 import {
   conversationPhotoChrome,
   conversationPhotoDataUri,
+  desktopReadErrorCopy,
   transcriptSttProviderCopy,
   visibleDisplayText,
 } from './desktopReadClient';
@@ -30,6 +31,8 @@ export type LegacyConversationDetail = {
   photoCaptions?: string[];
   photoRows?: {caption?: string; imageUri?: string}[];
   folderName?: string;
+  peopleError?: string;
+  appsError?: string;
   externalText?: string;
   transcript:
     | {status: 'unavailable'}
@@ -322,6 +325,7 @@ export async function loadLegacyConversationDetail(
   });
   // Old list responses omit transcripts; even detail can redact locked data.
   // Only an explicit unlocked array establishes an empty or loaded transcript.
+  let peopleError: string | undefined;
   const transcript: LegacyConversationDetail['transcript'] =
     locked || value.transcript_segments == null
       ? {status: 'unavailable'}
@@ -362,8 +366,12 @@ export async function loadLegacyConversationDetail(
               segment => segment.personId !== undefined,
             );
             const names = needsPeople
-              ? await loadOmiPeopleNames(backend, signal).catch(
-                  () => new Map<string, string>(),
+              ? await loadOmiPeopleNames(backend, signal).then(
+                  value => value,
+                  reason => {
+                    peopleError = desktopReadErrorCopy(reason);
+                    return new Map<string, string>();
+                  },
                 )
               : new Map<string, string>();
             return segments.map(segment => {
@@ -390,12 +398,17 @@ export async function loadLegacyConversationDetail(
     visibleDisplayText(overview),
   );
   const appSummary = appRecap?.content;
+  let appsError: string | undefined;
   const appChrome =
     appRecap?.appId === undefined
       ? undefined
       : (
-          await loadOmiApps(backend, [appRecap.appId]).catch(
-            () => new Map<string, OmiAppChrome>(),
+          await loadOmiApps(backend, [appRecap.appId]).then(
+            map => map,
+            reason => {
+              appsError = desktopReadErrorCopy(reason);
+              return new Map<string, OmiAppChrome>();
+            },
           )
         ).get(appRecap.appId);
   const appSummaryName = appChrome?.name;
@@ -425,6 +438,8 @@ export async function loadLegacyConversationDetail(
     ...(appSummaryDescription === undefined || appSummaryDescription === ''
       ? {}
       : {appSummaryDescription}),
+    ...(peopleError === undefined ? {} : {peopleError}),
+    ...(appsError === undefined ? {} : {appsError}),
     ...(linkedEvent === undefined ? {} : {calendarEvent: linkedEvent}),
     ...(photos === undefined
       ? {}

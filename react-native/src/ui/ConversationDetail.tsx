@@ -301,6 +301,10 @@ function LegacyConversationBody({
   const appSummaryDescription = conversation.discarded
     ? ''
     : visibleDisplayText(detail.appSummaryDescription ?? '');
+  const appsError = conversation.discarded
+    ? ''
+    : visibleDisplayText(detail.appsError ?? '');
+  const peopleError = visibleDisplayText(detail.peopleError ?? '');
   const calendarTitle = visibleDisplayText(detail.calendarEvent?.title ?? '');
   const calendarAttendees = (detail.calendarEvent?.attendees ?? [])
     .map(name => visibleDisplayText(name))
@@ -342,6 +346,9 @@ function LegacyConversationBody({
             status: conversation.status,
           })}
         </Text>
+      )}
+      {appsError === '' ? null : (
+        <Text style={[styles.conversationDetailField, ink]}>{appsError}</Text>
       )}
       {appSummaryName === '' ? null : (
         <Text style={[styles.conversationDetailField, ink]}>
@@ -471,6 +478,13 @@ function LegacyConversationBody({
       <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
         Transcript
       </Text>
+      {peopleError === '' ? null : (
+        <Text style={[styles.conversationDetailField, ink]}>
+          People
+          {': '}
+          {peopleError}
+        </Text>
+      )}
       {detail.transcript.status === 'unavailable' && !showExternalTranscript ? (
         <Text style={[styles.conversationDetailSummary, ink]}>
           {detail.locked
