@@ -378,9 +378,20 @@ def test_memory_item_to_memorydb_preserves_canonical_alias_for_portability():
 
 
 def test_memory_item_to_memorydb_attaches_belief_view_only_when_flag_on(monkeypatch):
-    now = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
+    # `captured_at` is anchored to the real clock because the band is too: the adapter
+    # calls `public_belief_overlay(item, now=datetime.now(timezone.utc))`, and takes no
+    # `now` a test could pin. A fixed capture date therefore ages every day the suite is
+    # not run, and this test did exactly that -- pinned at 2026-07-13T12:00Z against a
+    # 30-day half-life, it read `fading` until real time crossed two half-lives at
+    # 2026-09-11T12:00Z, then read `history` and failed for good.
+    #
+    # 45 days is one and a half half-lives: currency 0.354, which sits mid-band rather
+    # than on either edge. 30 days would land exactly on the current/fading boundary
+    # (currency 0.5, and `current` needs strictly greater), which is a coin flip on
+    # sub-second timing rather than a test.
+    now = datetime.now(timezone.utc)
     item = _item("mem-state", tier=MemoryLayer.short_term, content="in a meeting", updated_at=now).model_copy(
-        update={"half_life_days": 30, "captured_at": now - timedelta(days=30)}
+        update={"half_life_days": 30, "captured_at": now - timedelta(days=45)}
     )
     monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED", raising=False)
     off = memory_item_to_memorydb(item)
