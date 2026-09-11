@@ -571,6 +571,7 @@
       "risk": "high",
       "sources": [
         ".github/actions/deploy-backend-stack/**",
+        ".github/actions/sync-backfill-lifecycle/**",
         ".github/actions/transcription-release-candidate-probe/**",
         ".github/workflows/gcp_backend*.yml",
         ".github/workflows/gcp_llm_gateway.yml",
@@ -600,6 +601,7 @@
       "tests": [
         "tests/unit/test_render_backend_runtime_env.py",
         "tests/unit/test_preflight_cloud_run_deploy.py",
+        "tests/unit/test_plan_quota_env_retirement.py",
         "tests/unit/test_verify_backend_release_vector.py",
         "tests/unit/test_resolve_cloud_run_tagged_url.py",
         "tests/unit/test_repair_cloud_run_traffic.py",
@@ -696,7 +698,8 @@
         "backend/scripts/validate_rendered_deployment_contract.py"
       ],
       "tests": [
-        "tests/unit/test_rendered_deployment_contract.py"
+        "tests/unit/test_rendered_deployment_contract.py",
+        "tests/unit/test_plan_quota_env_retirement.py"
       ],
       "checks": [],
       "invariants": [

@@ -30,6 +30,7 @@ from utils.llm.desktop_llm_stub import (
     stub_chat_completions_json,
     stub_chat_completions_stream,
 )
+from utils.llm.prompt_cache import apply_cache_write_opt_out
 from utils.llm.gateway_client import (
     CHAT_AGENT_AUTO_LANE_ID,
     CHAT_STRUCTURED_AUTO_LANE_ID,
@@ -763,6 +764,12 @@ def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LAN
         result.pop('tool_choice', None)
         result.pop('reasoning_effort', None)
         result['reasoning_effort'] = _thinking_escalation_effort(body)
+    if lane_id == CHAT_STRUCTURED_AUTO_LANE_ID:
+        # Single-shot planner/local-agent prompts, unique from the first token: the
+        # ledger billed 2.6M of 3.0M prompt tok/day as cache writes against 0.01M reads.
+        # Scan the CLIENT's messages for a breakpoint, not the translated copy:
+        # _gateway_user_content rebuilds user blocks as {type, text} and drops it.
+        apply_cache_write_opt_out(result, marked_messages=messages)
     return result
 
 
