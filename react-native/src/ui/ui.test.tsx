@@ -1688,6 +1688,7 @@ test('a chat message names GET content_blocks without inventing write actions', 
           },
           {eyebrow: 'Memory', title: 'Prefers concise notes'},
           {eyebrow: 'Question', title: 'Schedule the follow-up?'},
+          {eyebrow: 'Task'},
         ],
       }}
       reduceMotion
@@ -1715,6 +1716,7 @@ test('a chat message names GET content_blocks without inventing write actions', 
   expect(copies).toContain('Prefers concise notes');
   expect(copies).toContain('Question');
   expect(copies).toContain('Schedule the follow-up?');
+  expect(copies).toContain('Task');
   expect(copies).not.toContain('Open in Memories');
   expect(copies).not.toContain('Open conversation');
   expect(copies).not.toContain('Open in Goals');

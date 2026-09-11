@@ -162,6 +162,7 @@ test('conversation-detail history names GET content_blocks without inventing wri
               detail: 'You like a slow start.',
             },
             {eyebrow: 'Memory', title: 'Prefers concise notes'},
+            {eyebrow: 'Task'},
           ],
         },
         {
@@ -201,6 +202,7 @@ test('conversation-detail history names GET content_blocks without inventing wri
   expect(tree).toContain('Quiet mornings');
   expect(tree).toContain('You like a slow start.');
   expect(tree).toContain('Prefers concise notes');
+  expect(tree).toContain('Task');
   expect(tree).toContain('Save this.');
   expect(tree).not.toContain('Open in Memories');
   expect(tree).not.toContain('Open conversation');

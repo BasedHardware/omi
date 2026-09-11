@@ -590,6 +590,7 @@ test('old chat history names GET content_blocks without inventing writes', () =>
       title: 'Schedule the follow-up?',
       detail: 'Yes, schedule it · Not now',
     },
+    {eyebrow: 'Task'},
     {
       eyebrow: 'Processing',
       title: 'Draft recap',
@@ -651,9 +652,9 @@ test('old chat history names empty-text GET tool thinking and citation fallbacks
             summary: 'You like a slow start.',
           },
           {
-            type: 'task_card',
+            type: 'taskCard',
             id: 't1',
-            task_id: 'task-1',
+            taskId: 'task-1',
           },
         ],
       },
@@ -692,6 +693,7 @@ test('old chat history names empty-text GET tool thinking and citation fallbacks
       title: 'Quiet mornings',
       detail: 'You like a slow start.',
     },
+    {eyebrow: 'Task'},
   ]);
   expect(page.messages.find(row => row.id === 'fallback-kept')?.text).toBe(
     'Here is what I found.',

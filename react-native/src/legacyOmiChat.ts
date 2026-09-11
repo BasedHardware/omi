@@ -536,6 +536,13 @@ function parseContentBlock(
         contentBlockChrome('Question', text, parseQuestionOptionLabels(row)),
       ];
     }
+    case 'taskCard':
+    case 'task_card': {
+      if (wireString(row, 'taskId', 'task_id') === undefined) {
+        return [];
+      }
+      return [contentBlockChrome('Task')];
+    }
     case 'goalLink':
     case 'goal_link': {
       const summary = wireString(row, 'summary');
