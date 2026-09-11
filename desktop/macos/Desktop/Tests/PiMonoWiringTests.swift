@@ -339,15 +339,15 @@ final class PiMonoWiringTests: XCTestCase {
     // an actual LM Studio server, locks in the real response shape rather
     // than a guessed one.
     let json = """
-    {
-      "data": [
-        {"id": "qwen2.5-7b-instruct", "object": "model", "owned_by": "organization_owner"},
-        {"id": "qwen3.8-27b-optiq", "object": "model", "owned_by": "organization_owner"},
-        {"id": "qwen3.8-27b-mlx@6bit", "object": "model", "owned_by": "organization_owner"}
-      ],
-      "object": "list"
-    }
-    """.data(using: .utf8)!
+      {
+        "data": [
+          {"id": "qwen2.5-7b-instruct", "object": "model", "owned_by": "organization_owner"},
+          {"id": "qwen3.8-27b-optiq", "object": "model", "owned_by": "organization_owner"},
+          {"id": "qwen3.8-27b-mlx@6bit", "object": "model", "owned_by": "organization_owner"}
+        ],
+        "object": "list"
+      }
+      """.data(using: .utf8)!
     let decoded = try JSONDecoder().decode(AIProvider.LocalModelsResponse.self, from: json)
     XCTAssertEqual(decoded.data.map(\.id), ["qwen2.5-7b-instruct", "qwen3.8-27b-optiq", "qwen3.8-27b-mlx@6bit"])
   }

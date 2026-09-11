@@ -445,7 +445,8 @@ actor EmbeddingService {
       case .invalidResponse:
         return "Embedding API returned an unexpected response."
       case .localProviderCloudOff:
-        return "Embeddings are off under the Local provider. Enable Cloud-assisted features in Settings > AI Provider to use semantic search here."
+        return
+          "Embeddings are off under the Local provider. Enable Cloud-assisted features in Settings > AI Provider to use semantic search here."
       case .serverError:
         switch reasonCode {
         case "product_gate":

@@ -89,7 +89,8 @@ class TranscriptionService: @unchecked Sendable {
       case .payloadTooLarge:
         return "Recording too long — keep it under 5 minutes"
       case .planLimitReached:
-        return "Transcription is over your plan's limit. Check Settings → Plan and Usage; holding the key again won't help."
+        return
+          "Transcription is over your plan's limit. Check Settings → Plan and Usage; holding the key again won't help."
       case .webSocketError(let message):
         return "WebSocket error: \(message)"
       }

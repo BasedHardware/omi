@@ -308,7 +308,8 @@ actor GeminiClient {
       case .planGated:
         return "AI features require an active plan or BYOK keys."
       case .localProviderCloudOff:
-        return "This feature is off under the Local provider. Enable Cloud-assisted features in Settings > AI Provider to turn it on."
+        return
+          "This feature is off under the Local provider. Enable Cloud-assisted features in Settings > AI Provider to turn it on."
       }
     }
 
