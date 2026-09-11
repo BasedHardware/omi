@@ -62,16 +62,24 @@ test('omits empty GET task integrations and unknown defaults', () => {
   ).toEqual([{key: 'todoist', name: 'Todoist', isDefault: false}]);
 });
 
+test('omits non-boolean connected flags without hiding neighboring integrations', () => {
+  expect(
+    parseOmiTaskIntegrations(
+      JSON.stringify({
+        integrations: {
+          todoist: {connected: 'true', access_token: 'secret-todoist'},
+          clickup: {connected: true},
+        },
+      }),
+    ),
+  ).toEqual([{key: 'clickup', name: 'ClickUp', isDefault: false}]);
+});
+
 test('fails closed for malformed GET task integrations', () => {
   expect(() => parseOmiTaskIntegrations(JSON.stringify([]))).toThrow();
   expect(() =>
     parseOmiTaskIntegrations(
       JSON.stringify({integrations: [{connected: true}]}),
-    ),
-  ).toThrow();
-  expect(() =>
-    parseOmiTaskIntegrations(
-      JSON.stringify({integrations: {todoist: {connected: 'true'}}}),
     ),
   ).toThrow();
   expect(() =>

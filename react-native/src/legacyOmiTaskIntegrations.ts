@@ -65,12 +65,6 @@ export function parseOmiTaskIntegrations(body: string): OmiTaskIntegration[] {
       continue;
     }
     const details = object(integrations[rawKey]);
-    if (details.connected === undefined || details.connected === null) {
-      continue;
-    }
-    if (typeof details.connected !== 'boolean') {
-      throw new TaskIntegrationError();
-    }
     if (details.connected !== true) {
       continue;
     }
