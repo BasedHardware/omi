@@ -36,14 +36,11 @@ function timestampMs(value: unknown): number {
   return parsed;
 }
 
-function optionalText(value: unknown, fallback: string): void {
+function optionalText(value: unknown): void {
   if (value === undefined) {
     return;
   }
-  const copy = text(value, 256);
-  if (copy !== fallback && visibleDisplayText(copy) === '') {
-    throw new CaptureGapError();
-  }
+  text(value, 256);
 }
 
 export type OmiCalendarCaptureGap = {
@@ -140,8 +137,8 @@ export function parseOmiCalendarCaptureGaps(
       throw new CaptureGapError();
     }
     seen.add(eventId);
-    optionalText(row.status, 'confirmed');
-    optionalText(row.coverage, 'not_captured');
+    optionalText(row.status);
+    optionalText(row.coverage);
     const title = visibleDisplayText(text(row.title, 10000));
     if (title === '') {
       continue;
