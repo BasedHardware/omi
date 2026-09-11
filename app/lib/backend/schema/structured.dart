@@ -75,10 +75,13 @@ class Structured {
         if (item is String) {
           if (item.isEmpty) continue;
           structured.actionItems.add(ActionItem(item));
-        } else if (item is Map<String, dynamic>) {
-          structured.actionItems.add(ActionItem.fromJson(item));
         } else if (item is Map) {
-          structured.actionItems.add(ActionItem.fromJson(Map<String, dynamic>.from(item)));
+          final itemJson = item is Map<String, dynamic> ? item : Map<String, dynamic>.from(item);
+          try {
+            structured.actionItems.add(ActionItem.fromJson(itemJson));
+          } on FormatException {
+            continue;
+          }
         }
       }
     }
@@ -87,10 +90,13 @@ class Structured {
     if (events is List) {
       for (final event in events) {
         if (event is Map && event.isEmpty) continue;
-        if (event is Map<String, dynamic>) {
-          structured.events.add(Event.fromJson(event));
-        } else if (event is Map) {
-          structured.events.add(Event.fromJson(Map<String, dynamic>.from(event)));
+        if (event is Map) {
+          final eventJson = event is Map<String, dynamic> ? event : Map<String, dynamic>.from(event);
+          try {
+            structured.events.add(Event.fromJson(eventJson));
+          } on FormatException {
+            continue;
+          }
         }
       }
     }
