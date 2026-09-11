@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {ActivityIndicator, Image, Text, View} from 'react-native';
 import {
   clockLabel,
@@ -23,6 +23,27 @@ import {styles} from './styles';
 import {FocusPressable} from './Pressable';
 import {useLegacyConversationDetail} from '../useLegacyConversationDetail';
 import {useRecordingTranscript} from '../recordingTranscript';
+
+function CatalogAppImage({
+  accessibilityLabel,
+  uri,
+}: {
+  accessibilityLabel: string;
+  uri: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return null;
+  }
+  return (
+    <Image
+      accessibilityLabel={accessibilityLabel}
+      onError={() => setFailed(true)}
+      source={{uri}}
+      style={styles.cloudAppImage}
+    />
+  );
+}
 
 export function formatConversationDate(value: string | null): string {
   if (value === null) {
@@ -301,6 +322,9 @@ function LegacyConversationBody({
   const appSummaryDescription = conversation.discarded
     ? ''
     : visibleDisplayText(detail.appSummaryDescription ?? '');
+  const appSummaryImageUri = conversation.discarded
+    ? ''
+    : visibleDisplayText(detail.appSummaryImageUri ?? '');
   const appsError = conversation.discarded
     ? ''
     : visibleDisplayText(detail.appsError ?? '');
@@ -349,6 +373,14 @@ function LegacyConversationBody({
       )}
       {appsError === '' ? null : (
         <Text style={[styles.conversationDetailField, ink]}>{appsError}</Text>
+      )}
+      {appSummaryImageUri === '' ? null : (
+        <CatalogAppImage
+          accessibilityLabel={
+            appSummaryName === '' ? 'App image' : appSummaryName
+          }
+          uri={appSummaryImageUri}
+        />
       )}
       {appSummaryName === '' ? null : (
         <Text style={[styles.conversationDetailField, ink]}>

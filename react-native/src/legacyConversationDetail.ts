@@ -21,6 +21,7 @@ export type LegacyConversationDetail = {
   appSummary?: string;
   appSummaryName?: string;
   appSummaryDescription?: string;
+  appSummaryImageUri?: string;
   calendarEvent?: {
     title?: string;
     attendees: string[];
@@ -413,6 +414,7 @@ export async function loadLegacyConversationDetail(
         ).get(appRecap.appId);
   const appSummaryName = appChrome?.name;
   const appSummaryDescription = appChrome?.description;
+  const appSummaryImageUri = appChrome?.image;
   const folderId =
     value.folder_id === undefined || value.folder_id === null
       ? undefined
@@ -438,6 +440,9 @@ export async function loadLegacyConversationDetail(
     ...(appSummaryDescription === undefined || appSummaryDescription === ''
       ? {}
       : {appSummaryDescription}),
+    ...(appSummaryImageUri === undefined || appSummaryImageUri === ''
+      ? {}
+      : {appSummaryImageUri}),
     ...(peopleError === undefined ? {} : {peopleError}),
     ...(appsError === undefined ? {} : {appsError}),
     ...(linkedEvent === undefined ? {} : {calendarEvent: linkedEvent}),

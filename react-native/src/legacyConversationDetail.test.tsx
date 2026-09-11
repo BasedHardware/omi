@@ -791,6 +791,7 @@ test('names GET apps_results app when catalog resolves and omits Unknown App', a
           id: 'notes',
           name: 'Notes',
           description: 'Saves notes from calls',
+          image: 'https://cdn.example.test/notes.png',
         }),
       };
     }
@@ -810,6 +811,7 @@ test('names GET apps_results app when catalog resolves and omits Unknown App', a
       appSummary: 'App wrote this recap',
       appSummaryName: 'Notes',
       appSummaryDescription: 'Saves notes from calls',
+      appSummaryImageUri: 'https://cdn.example.test/notes.png',
     }),
   );
   expect(mockRequest).toHaveBeenCalledWith({
@@ -834,6 +836,7 @@ test('names GET apps_results app when catalog resolves and omits Unknown App', a
   expect(unresolved.appSummary).toBe('App wrote this recap');
   expect(unresolved.appSummaryName).toBeUndefined();
   expect(unresolved.appSummaryDescription).toBeUndefined();
+  expect(unresolved.appSummaryImageUri).toBeUndefined();
   expect(unresolved.appsError).toBeUndefined();
   mockRequest.mockImplementation(async () =>
     response({
@@ -867,6 +870,7 @@ test('names a failed GET apps catalog instead of omitting Unknown App as empty s
   const thrownApps = await loadLegacyConversationDetail(backend, fixture.id);
   expect(thrownApps.appSummary).toBe('App wrote this recap');
   expect(thrownApps.appSummaryName).toBeUndefined();
+  expect(thrownApps.appSummaryImageUri).toBeUndefined();
   expect(thrownApps.appsError).toBe(desktopBackendServiceCopy);
 });
 

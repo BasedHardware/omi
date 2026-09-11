@@ -1,5 +1,5 @@
 import type {ChatMessage} from './chatClient';
-import {visibleDisplayText} from './desktopReadClient';
+import {appImageUrl, visibleDisplayText} from './desktopReadClient';
 import type {OmiBackend} from './omiNativeTypes';
 
 const MAX_CHAT_APP_LOOKUPS = 20;
@@ -20,6 +20,7 @@ function object(value: unknown): Record<string, unknown> {
 export type OmiAppChrome = {
   name: string;
   description?: string;
+  image?: string;
 };
 
 export function parseOmiApp(body: string, appId: string): OmiAppChrome {
@@ -32,14 +33,19 @@ export function parseOmiApp(body: string, appId: string): OmiAppChrome {
   if (id !== appId || name === '') {
     throw new AppError();
   }
+  const image = appImageUrl(typeof row.image === 'string' ? row.image : '');
   if (row.description === undefined || row.description === null) {
-    return {name};
+    return image === null ? {name} : {name, image};
   }
   if (typeof row.description !== 'string') {
     throw new AppError();
   }
   const description = visibleDisplayText(row.description);
-  return description === '' ? {name} : {name, description};
+  return {
+    name,
+    ...(description === '' ? {} : {description}),
+    ...(image === null ? {} : {image}),
+  };
 }
 
 export async function loadOmiApps(

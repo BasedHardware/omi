@@ -1041,31 +1041,46 @@ test('legacy conversation details name GET app result content', () => {
         appSummary: 'App wrote this recap',
         appSummaryName: 'Notes',
         appSummaryDescription: 'Saves notes from calls',
+        appSummaryImageUri: 'https://cdn.example.test/notes.png',
         transcript: {status: 'loaded', segments: []},
       },
     },
     reload: jest.fn(),
   });
-  const copy = text(
-    render({
-      apiContract: 'omi',
-      conversation: {...conversation, id: 'old-1'},
-    }),
-  );
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  const copy = text(view);
+  const imageUri = 'https://cdn.example.test/notes.png';
   expect(copy).toContain('App wrote this recap');
   expect(copy).toContain('Notes');
   expect(copy).toContain('Saves notes from calls');
   expect(copy).not.toContain('Unknown App');
   expect(copy).not.toContain('Official');
-  const discarded = text(
-    render({
-      apiContract: 'omi',
-      conversation: {...conversation, id: 'old-1', discarded: true},
-    }),
-  );
+  expect(copy).not.toContain('raw.githubusercontent.com');
+  expect(
+    view.root.findAll(node => node.props.source?.uri === imageUri).length,
+  ).toBeGreaterThan(0);
+  expect(
+    view.root.findAll(node => node.props.source?.uri === imageUri)[0]?.props
+      .accessibilityLabel,
+  ).toBe('Notes');
+  expect(
+    view.root.findAll(node => node.props.source?.uri === imageUri)[0]?.props
+      .onPress,
+  ).toBeUndefined();
+  const discardedView = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1', discarded: true},
+  });
+  const discarded = text(discardedView);
   expect(discarded).not.toContain('App wrote this recap');
   expect(discarded).not.toContain('Notes');
   expect(discarded).not.toContain('Saves notes from calls');
+  expect(
+    discardedView.root.findAll(node => node.props.source?.uri === imageUri),
+  ).toHaveLength(0);
 });
 
 test('legacy conversation details name a failed GET app catalog instead of empty success', () => {
