@@ -162,7 +162,7 @@ DEFAULT_REALTIME_MODELS: dict[str, str] = {
 REALTIME_COST_BASIS = 'realtime_modality_rates_cached_subset_discounted'
 
 _OPENAI_PARSE_MARKERS = (b'response.done', b'response.created')
-_GPT_LIVE_PARSE_MARKERS = (b'session.closed', b'session.interrupted', b'session.started')
+_GPT_LIVE_PARSE_MARKERS = (b'session.closed', b'session.interrupted', b'session.started', b'response.event')
 _GPT_LIVE_ACTIVITY_MARKERS = (b'session.output_audio.delta', b'session.output_transcript.delta')
 _GEMINI_PARSE_MARKERS = (b'turnComplete', b'usageMetadata', b'interrupted')
 # Model activity is recognised by substring only: audio frames are the bulk of
@@ -477,10 +477,15 @@ class RealtimeRelayObserver:
         self._gemini_in_flight = False
         self._gemini_interrupted = False
         self._gemini_completed: RealtimeTurnUsage | None = None
-        # GPT-Live: one session-scoped attempt; usage arrives on session.closed.
+        # GPT-Live: a response is in flight between an activity burst and the
+        # boundary that closes it (`response.event` done) or the session close.
+        # `_gpt_live_boundary_seen` records that a response was closed on its own
+        # boundary, so a warm session's final `session.closed` does not count an
+        # extra start. `session.closed` also carries the session-scoped usage.
         self._gpt_live_started = False
         self._gpt_live_interrupted = False
         self._gpt_live_closed = False
+        self._gpt_live_boundary_seen = False
 
     # -- client → upstream ---------------------------------------------------------
 
@@ -667,27 +672,53 @@ class RealtimeRelayObserver:
         if event_type == 'session.interrupted':
             self._gpt_live_interrupted = True
             return ()
+        if event_type == 'response.event':
+            return self._observe_gpt_live_response(payload)
         if event_type != 'session.closed':
             return ()
         if self._gpt_live_closed:
             return ()
-        if not self._gpt_live_started:
-            self._gpt_live_started = True
-            self.starts += 1
         self._gpt_live_closed = True
+        # `session.closed` carries the session-scoped usage (GPT-Live bills by
+        # duration), so it always emits the closing row. It counts a start only
+        # when no response/activity was seen: a response already closed on its
+        # own `response.event` boundary was counted there.
+        if not self._gpt_live_started and not self._gpt_live_boundary_seen:
+            self.starts += 1
         self._gpt_live_started = False
-        outcome = OUTCOME_CANCELLED if self._gpt_live_interrupted else OUTCOME_SUCCESS
-        error_class = ERROR_INTERRUPTED if self._gpt_live_interrupted else ERROR_NONE
+        return (self._emit(self._gpt_live_turn(payload)),)
+
+    def _observe_gpt_live_response(self, payload: Mapping[str, Any]) -> tuple[RealtimeTurnUsage, ...]:
+        """A `response.event` envelope carries a delegated Responses lifecycle frame.
+
+        `response.done` / `response.completed` closes the voice response that was
+        in flight. Re-arming the start tracking here is what makes a warm session
+        count every reply: without it `starts` advanced only once per socket, so
+        every reply after the first bypassed quota and the per-session limit.
+        """
+        nested = _mapping(payload.get('event')) or payload
+        if nested.get('type') not in ('response.done', 'response.completed'):
+            return ()
+        if not self._gpt_live_started:
+            # A completion observed before any activity is still one response.
+            self.starts += 1
+        self._gpt_live_started = False
+        self._gpt_live_boundary_seen = True
+        return (self._emit(self._gpt_live_turn(nested)),)
+
+    def _gpt_live_turn(self, payload: Mapping[str, Any]) -> RealtimeTurnUsage:
+        interrupted = self._gpt_live_interrupted
+        self._gpt_live_interrupted = False
         turn = RealtimeTurnUsage(
             provider=GPT_LIVE_PROVIDER,
-            outcome=outcome,
-            error_class=error_class,
+            outcome=OUTCOME_CANCELLED if interrupted else OUTCOME_SUCCESS,
+            error_class=ERROR_INTERRUPTED if interrupted else ERROR_NONE,
         )
         usage = payload.get('usage')
         if isinstance(usage, Mapping):
             # Live usage mirrors OpenAI-style modality details when present.
             turn = replace(turn, **_openai_counts(usage), usage_reported=True)
-        return (self._emit(turn),)
+        return turn
 
     # -- Gemini ------------------------------------------------------------------
 

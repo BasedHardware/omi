@@ -1414,6 +1414,39 @@ def test_gpt_live_observer_emits_on_session_closed() -> None:
     assert observer.flush() == ()
 
 
+def test_gpt_live_observer_counts_each_response_on_a_warm_session() -> None:
+    observer = RealtimeRelayObserver(GPT_LIVE_PROVIDER, model='gpt-live-1')
+    assert observer.observe_upstream_frame(_frame({'type': 'session.output_audio.delta', 'delta': 'AA=='})) == ()
+    assert observer.starts == 1
+    first = observer.observe_upstream_frame(
+        _frame(
+            {
+                'type': 'response.event',
+                'event': {
+                    'type': 'response.done',
+                    'usage': {'input_tokens': 2, 'output_tokens': 1},
+                },
+            }
+        )
+    )
+    assert len(first) == 1
+    assert first[0].outcome == OUTCOME_SUCCESS
+    assert first[0].input_text_tokens == 2
+    # The warm session's second reply must be a fresh start, not skipped.
+    assert observer.observe_upstream_frame(_frame({'type': 'session.output_audio.delta', 'delta': 'AA=='})) == ()
+    assert observer.starts == 2
+    second = observer.observe_upstream_frame(
+        _frame({'type': 'response.event', 'event': {'type': 'response.completed'}})
+    )
+    assert len(second) == 1
+    assert observer.flush() == ()
+    # The closing row still carries the session usage, but a response already
+    # counted on its boundary is not counted as a fresh start.
+    closing = observer.observe_upstream_frame(_frame({'type': 'session.closed', 'usage': {}}))
+    assert len(closing) == 1
+    assert observer.starts == 2
+
+
 def test_default_realtime_models_include_gpt_live() -> None:
     assert DEFAULT_REALTIME_MODELS[GPT_LIVE_PROVIDER] == 'gpt-live-1'
     assert realtime_rates_for(GPT_LIVE_PROVIDER, 'gpt-live-1') is not None
