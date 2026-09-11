@@ -472,8 +472,8 @@ async def tool_get_analytics(request: Request):
         # Calculate detailed financial analytics
         total_orders = len(orders)
         
-        # Gross sales (subtotal before discounts, taxes, shipping)
-        gross_sales = sum(float(o.get("subtotal_price", 0)) for o in orders)
+        # Shopify subtotal_price is already after line-item discounts.
+        post_discount_subtotal = sum(float(o.get("subtotal_price", 0)) for o in orders)
         
         # Total discounts applied
         total_discounts = sum(float(o.get("total_discounts", 0)) for o in orders)
@@ -489,9 +489,10 @@ async def tool_get_analytics(request: Request):
                     for transaction in refund.get("transactions", []):
                         total_refunds += float(transaction.get("amount", 0))
         
-        # Shopify subtotal_price is already after discounts. Do not subtract
-        # total_discounts again or discounts are applied twice.
-        net_sales = gross_sales - total_refunds
+        # Present a true pre-discount gross so the Discounts row reconciles:
+        # gross_sales - total_discounts - total_refunds == net_sales
+        gross_sales = post_discount_subtotal + total_discounts
+        net_sales = post_discount_subtotal - total_refunds
         
         # Total collected (what was actually charged - includes tax & shipping)
         total_collected = sum(float(o.get("total_price", 0)) for o in orders)
