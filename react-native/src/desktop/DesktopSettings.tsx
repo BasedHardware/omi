@@ -961,8 +961,10 @@ export function DesktopSettings({
       {subscriptionPeriodCopy(account?.subscription)?.map(row => (
         <Row copy={row.copy} key={row.title} title={row.title} />
       ))}
-      {primaryLanguageCopy(account?.language, account?.languageNames) !==
-      null ? (
+      {account != null && account.languageError !== null ? (
+        <Row copy={account.languageError} title="Primary language" />
+      ) : primaryLanguageCopy(account?.language, account?.languageNames) !==
+        null ? (
         <Row
           copy={
             primaryLanguageCopy(account?.language, account?.languageNames) ?? ''

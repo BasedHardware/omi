@@ -1275,6 +1275,40 @@ test('Settings names GET primary language without a write sheet', async () => {
   expect(tree).not.toContain('Not set');
 });
 
+test('Settings names a failed language GET instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/language') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Primary language');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('English');
+  expect(tree).not.toContain('Not set');
+});
+
+test('Settings omits Primary language when GET language is empty', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/language') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({language: ' \t'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).not.toContain('Primary language');
+  expect(tree).not.toContain('Not set');
+});
+
 test('Settings names GET people without a write sheet', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

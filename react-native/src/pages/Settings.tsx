@@ -851,8 +851,10 @@ export function SettingsPage({
         {subscriptionPeriodCopy(snapshot.subscription)?.map(row => (
           <SettingRow copy={row.copy} key={row.title} title={row.title} />
         ))}
-        {primaryLanguageCopy(snapshot.language, snapshot.languageNames) !==
-        null ? (
+        {snapshot.languageError !== null ? (
+          <SettingRow copy={snapshot.languageError} title="Primary language" />
+        ) : primaryLanguageCopy(snapshot.language, snapshot.languageNames) !==
+          null ? (
           <SettingRow
             copy={
               primaryLanguageCopy(snapshot.language, snapshot.languageNames) ??
