@@ -17,15 +17,11 @@ void main() {
   }
 
   test('an action item with an unparseable due_at does not drop the conversation', () {
-    final structured = Structured.fromJson(
-      payload(
-        actionItems: [
-          {'id': 'a1', 'description': 'Good item', 'completed': false, 'due_at': '2026-08-20T16:00:00Z'},
-          {'id': 'a2', 'description': 'Garbage due date', 'completed': false, 'due_at': 'not-a-date'},
-          {'id': 'a3', 'description': 'Another good item', 'completed': false},
-        ],
-      ),
-    );
+    final structured = Structured.fromJson(payload(actionItems: [
+      {'id': 'a1', 'description': 'Good item', 'completed': false, 'due_at': '2026-08-20T16:00:00Z'},
+      {'id': 'a2', 'description': 'Garbage due date', 'completed': false, 'due_at': 'not-a-date'},
+      {'id': 'a3', 'description': 'Another good item', 'completed': false},
+    ]));
 
     expect(structured.title, 'Team sync');
     expect(structured.overview, 'Notes from the call');
@@ -33,29 +29,23 @@ void main() {
   });
 
   test('an action item with an empty due_at is skipped the same way', () {
-    final structured = Structured.fromJson(
-      payload(
-        actionItems: [
-          {'id': 'a1', 'description': 'Kept', 'completed': false},
-          {'id': 'a2', 'description': 'Dropped', 'completed': false, 'due_at': ''},
-        ],
-      ),
-    );
+    final structured = Structured.fromJson(payload(actionItems: [
+      {'id': 'a1', 'description': 'Kept', 'completed': false},
+      {'id': 'a2', 'description': 'Dropped', 'completed': false, 'due_at': ''},
+    ]));
 
     expect(structured.actionItems.map((e) => e.description), ['Kept']);
   });
 
   test('a malformed event does not drop the conversation or its action items', () {
-    final structured = Structured.fromJson(
-      payload(
-        actionItems: [
-          {'id': 'a1', 'description': 'Kept', 'completed': false},
-        ],
-        events: [
-          {'title': 'Standup', 'startsAt': 'not-a-date', 'duration': 30},
-        ],
-      ),
-    );
+    final structured = Structured.fromJson(payload(
+      actionItems: [
+        {'id': 'a1', 'description': 'Kept', 'completed': false},
+      ],
+      events: [
+        {'title': 'Standup', 'startsAt': 'not-a-date', 'duration': 30},
+      ],
+    ));
 
     expect(structured.title, 'Team sync');
     expect(structured.actionItems.map((e) => e.description), ['Kept']);
@@ -63,44 +53,34 @@ void main() {
   });
 
   test('an action item whose deleted flag is not a bool is skipped, not fatal', () {
-    final structured = Structured.fromJson(
-      payload(
-        actionItems: [
-          {'id': 'a1', 'description': 'Kept', 'completed': false},
-          {'id': 'a2', 'description': 'Dropped', 'completed': false, 'deleted': 'yes'},
-        ],
-      ),
-    );
+    final structured = Structured.fromJson(payload(actionItems: [
+      {'id': 'a1', 'description': 'Kept', 'completed': false},
+      {'id': 'a2', 'description': 'Dropped', 'completed': false, 'deleted': 'yes'},
+    ]));
 
     expect(structured.title, 'Team sync');
     expect(structured.actionItems.map((e) => e.description), ['Kept']);
   });
 
   test('a legacy integer timestamp event with a mistyped field is skipped, not fatal', () {
-    final structured = Structured.fromJson(
-      payload(
-        actionItems: [
-          {'id': 'a1', 'description': 'Kept', 'completed': false},
-        ],
-        events: [
-          {'title': 'Standup', 'startsAt': 1700000000, 'duration': 'long'},
-        ],
-      ),
-    );
+    final structured = Structured.fromJson(payload(
+      actionItems: [
+        {'id': 'a1', 'description': 'Kept', 'completed': false},
+      ],
+      events: [
+        {'title': 'Standup', 'startsAt': 1700000000, 'duration': 'long'},
+      ],
+    ));
 
     expect(structured.actionItems.map((e) => e.description), ['Kept']);
     expect(structured.events, isEmpty);
   });
 
   test('well formed payloads still decode every item', () {
-    final structured = Structured.fromJson(
-      payload(
-        actionItems: [
-          {'id': 'a1', 'description': 'One', 'completed': false, 'due_at': '2026-08-20T16:00:00Z'},
-          {'id': 'a2', 'description': 'Two', 'completed': true},
-        ],
-      ),
-    );
+    final structured = Structured.fromJson(payload(actionItems: [
+      {'id': 'a1', 'description': 'One', 'completed': false, 'due_at': '2026-08-20T16:00:00Z'},
+      {'id': 'a2', 'description': 'Two', 'completed': true},
+    ]));
 
     expect(structured.actionItems.map((e) => e.description), ['One', 'Two']);
     expect(structured.actionItems.last.completed, isTrue);
