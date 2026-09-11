@@ -41,6 +41,18 @@ function goalMetric(value: unknown): number | null {
   return null;
 }
 
+function goalId(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const id = visibleDisplayText(text(value, 256));
+    return id === '' ? null : id;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const id = visibleDisplayText(String(value));
+    return id === '' ? null : id;
+  }
+  return null;
+}
+
 export type OmiGoal = {
   id: string;
   title: string;
@@ -65,14 +77,13 @@ export function parseOmiGoals(body: string): OmiGoal[] {
       break;
     }
     const row = object(raw);
-    const id = visibleDisplayText(text(row.id, 256));
-    if (id === '') {
-      throw new GoalError();
+    const id = goalId(row.id);
+    if (id === null) {
+      continue;
     }
-    if (seen.has(id)) {
-      throw new GoalError();
+    if (typeof row.title !== 'string') {
+      continue;
     }
-    seen.add(id);
     const title = visibleDisplayText(text(row.title, 10000));
     if (title === '') {
       continue;
@@ -82,6 +93,10 @@ export function parseOmiGoals(body: string): OmiGoal[] {
     if (current === null || target === null) {
       continue;
     }
+    if (seen.has(id)) {
+      throw new GoalError();
+    }
+    seen.add(id);
     items.push({
       id,
       title,

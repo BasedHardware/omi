@@ -75,15 +75,44 @@ test('does not omit a neighboring titled goal when stored metrics cannot project
   ]);
 });
 
+test('does not omit a neighboring titled goal when stored identity cannot project', () => {
+  const rows = parseOmiGoals(
+    JSON.stringify([
+      {
+        id: 'goal-read',
+        title: 'Read 20 books',
+        current_value: 3,
+        target_value: 10,
+      },
+      {
+        id: 7,
+        title: 'Walk daily',
+        current_value: 1.5,
+        target_value: 4,
+      },
+      {
+        id: 'goal-title',
+        title: 1,
+        current_value: 1,
+        target_value: 2,
+      },
+      {id: '', title: 'Empty id', current_value: 1, target_value: 1},
+      {
+        id: {text: 'Nope'},
+        title: 'Object id',
+        current_value: 1,
+        target_value: 1,
+      },
+    ]),
+  );
+  expect(rows).toEqual([
+    {id: 'goal-read', title: 'Read 20 books', current: 3, target: 10},
+    {id: '7', title: 'Walk daily', current: 1.5, target: 4},
+  ]);
+});
+
 test('fails closed for malformed GET goals', () => {
   expect(() => parseOmiGoals(JSON.stringify({id: 'goal-1'}))).toThrow();
-  expect(() =>
-    parseOmiGoals(
-      JSON.stringify([
-        {id: 'goal-1', title: 1, current_value: 1, target_value: 2},
-      ]),
-    ),
-  ).toThrow();
   expect(() =>
     parseOmiGoals(
       JSON.stringify([
@@ -128,11 +157,24 @@ test('loadOmiGoals names resolved GET goals and omits failures', async () => {
         target_value: '4',
       },
       {id: 'goal-missing', title: 'Missing metrics', target_value: 10},
+      {
+        id: 7,
+        title: 'Numeric id',
+        current_value: 2,
+        target_value: 5,
+      },
+      {
+        id: 'goal-title',
+        title: 1,
+        current_value: 1,
+        target_value: 2,
+      },
     ]),
   });
   expect(await loadOmiGoals(backend)).toEqual([
     {id: 'goal-read', title: 'Read 20 books', current: 3, target: 10},
     {id: 'goal-string', title: 'Walk daily', current: 1.5, target: 4},
+    {id: '7', title: 'Numeric id', current: 2, target: 5},
   ]);
   expect(request).toHaveBeenCalledWith({
     id: expect.any(String),
