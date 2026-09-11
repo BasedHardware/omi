@@ -384,6 +384,64 @@ test('old chat history keeps GET chart_data points and omits empty charts', () =
   ).toBeUndefined();
 });
 
+test('old chat history names GET chart_data numeric-string values', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'chart-strings',
+        sender: 'ai',
+        text: 'Here is the trend.',
+        created_at: '2026-09-07T01:02:03Z',
+        chart_data: {
+          chart_type: 'bar',
+          title: 'Talk time',
+          datasets: [
+            {
+              label: 'Minutes',
+              data_points: [
+                {label: 'Mon', value: '12'},
+                {label: 'Tue', value: '15.5'},
+              ],
+            },
+          ],
+        },
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'chart-strings')?.chart).toEqual({
+    title: 'Talk time',
+    points: [
+      {label: 'Mon', value: 12},
+      {label: 'Tue', value: 15.5},
+    ],
+  });
+  const omitted = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'chart-non-numeric',
+        sender: 'ai',
+        text: 'Here is the trend.',
+        created_at: '2026-09-07T01:02:03Z',
+        chart_data: {
+          chart_type: 'bar',
+          title: 'Talk time',
+          datasets: [
+            {
+              label: 'Minutes',
+              data_points: [{label: 'Mon', value: 'nope'}],
+            },
+          ],
+        },
+      },
+    ]),
+    0,
+  );
+  expect(
+    omitted.messages.find(row => row.id === 'chart-non-numeric')?.chart,
+  ).toBeUndefined();
+});
+
 test('does not omit a neighboring chat message when stored chart_data cannot project', () => {
   const page = parseOmiHistory(
     JSON.stringify([

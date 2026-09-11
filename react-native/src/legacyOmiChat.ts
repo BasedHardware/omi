@@ -141,14 +141,25 @@ function parseOmiChatChart(
       return undefined;
     }
     const point = raw as Record<string, unknown>;
-    if (
-      typeof point.label !== 'string' ||
-      typeof point.value !== 'number' ||
-      !Number.isFinite(point.value)
+    let value: number;
+    if (typeof point.value === 'string') {
+      const parsed = Number(point.value);
+      if (point.value.trim() === '' || !Number.isFinite(parsed)) {
+        return undefined;
+      }
+      value = parsed;
+    } else if (
+      typeof point.value === 'number' &&
+      Number.isFinite(point.value)
     ) {
+      value = point.value;
+    } else {
       return undefined;
     }
-    points.push({label: point.label, value: point.value});
+    if (typeof point.label !== 'string') {
+      return undefined;
+    }
+    points.push({label: point.label, value});
   }
   return {title: row.title, points};
 }
