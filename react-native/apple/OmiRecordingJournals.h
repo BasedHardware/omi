@@ -1,6 +1,7 @@
 #import "OmiRecordingLog.h"
 #import "OmiRecordingPolicy.h"
 #import <CommonCrypto/CommonDigest.h>
+#include "omi_backend_http.h"
 
 static NSString *OmiRecordingDigest(NSString *value) {
   NSData *bytes = [value dataUsingEncoding:NSUTF8StringEncoding];
@@ -41,8 +42,9 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
   return self;
 }
 - (BOOL)valid:(NSDictionary *)owner error:(NSError **)error {
-  if (_disposed || ![owner[@"login"] isEqual:_currentLogin()] || !OmiRecordingMatches(owner[@"ownerKey"], @"^capture-owner-v1:[0-9a-f]{64}$")
-      || !OmiRecordingMatches(owner[@"receipt"], @"^capture1\\.[0-9a-f]{64}\\.[0-9a-f]{64}$")) return OmiRecordingError(error);
+  if (_disposed || ![owner[@"login"] isEqual:_currentLogin()]
+      || omi_backend_recording_owner_key_valid([owner[@"ownerKey"] isKindOfClass:NSString.class] ? [owner[@"ownerKey"] UTF8String] : nullptr) != 1
+      || omi_backend_recording_receipt_valid([owner[@"receipt"] isKindOfClass:NSString.class] ? [owner[@"receipt"] UTF8String] : nullptr) != 1) return OmiRecordingError(error);
   return YES;
 }
 - (NSString *)partition:(NSDictionary *)owner {
@@ -78,7 +80,14 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
 }
 - (OmiRecordingLog *)open:(NSDictionary *)owner identifier:(NSString *)identifier error:(NSError **)error {
   NSString *partition = [self partition:owner];
-  NSString *directory = [_root stringByAppendingPathComponent:partition];
+  char rel[160];
+  if (partition.length == 0 || identifier.length == 0 ||
+      omi_backend_recording_journal_relpath(partition.UTF8String, identifier.UTF8String, rel, sizeof(rel)) < 0) {
+    OmiRecordingError(error);
+    return nil;
+  }
+  NSString *path = [_root stringByAppendingPathComponent:@(rel)];
+  NSString *directory = path.stringByDeletingLastPathComponent;
   if (![NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions:@0700} error:error]) return nil;
   [[NSURL fileURLWithPath:_root] setResourceValue:@YES forKey:NSURLIsExcludedFromBackupKey error:nil];
   for (NSString *parent in @[_root.stringByDeletingLastPathComponent, _root]) {
@@ -95,7 +104,7 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
   }
   SecKeyRef key = [self copyKey:error];
   if (key == NULL) return nil;
-  OmiRecordingLog *log = [[OmiRecordingLog alloc] initWithPath:[directory stringByAppendingPathComponent:[identifier stringByAppendingString:@".journal"]] key:key binding:bytes error:error];
+  OmiRecordingLog *log = [[OmiRecordingLog alloc] initWithPath:path key:key binding:bytes error:error];
   CFRelease(key);
   return log;
 }
@@ -149,7 +158,7 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
     @autoreleasepool {
     if (![file.pathExtension isEqual:@"journal"]) continue;
     NSString *identifier = file.stringByDeletingPathExtension;
-    if (!OmiRecordingMatches(identifier, OmiRecordingUUIDPattern)) { OmiRecordingError(error); return nil; }
+    if (omi_backend_recording_uuid_valid(identifier.UTF8String) != 1) { OmiRecordingError(error); return nil; }
     OmiRecordingLog *log = [self open:owner identifier:identifier error:error];
     if (log == nil) return nil;
     NSArray<NSData *> *records = [log readAll:error];
@@ -174,7 +183,7 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
       unsigned char kind = ((const unsigned char *)record.bytes)[0];
       if (kind == 2) {
         NSString *session = [[NSString alloc] initWithData:[record subdataWithRange:NSMakeRange(1, record.length - 1)] encoding:NSUTF8StringEncoding];
-        if (!OmiRecordingMatches(session, OmiRecordingUUIDPattern) || (entry[@"sessionId"] != nil && ![entry[@"sessionId"] isEqual:session])) { [log close]; OmiRecordingError(error); return nil; }
+        if (omi_backend_recording_uuid_valid(session.UTF8String) != 1 || (entry[@"sessionId"] != nil && ![entry[@"sessionId"] isEqual:session])) { [log close]; OmiRecordingError(error); return nil; }
         entry[@"sessionId"] = session;
       } else if (kind != 0) { [log close]; OmiRecordingError(error); return nil; }
     }
@@ -206,6 +215,12 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
   NSMutableDictionary *entry = [self entry:handle error:error];
   if (entry == nil) return nil;
   NSString *path = request[@"path"], *method = request[@"method"];
+  if (![path isKindOfClass:NSString.class] || ![method isKindOfClass:NSString.class]
+      || omi_backend_recording_path_owned(method.UTF8String, path.UTF8String,
+                                          [entry[@"sessionId"] isKindOfClass:NSString.class] ? [entry[@"sessionId"] UTF8String] : nullptr) != 1) {
+    OmiRecordingError(error);
+    return nil;
+  }
   if ([path isEqual:@"/v1/device-sessions"] && [method isEqual:@"POST"]) {
     if (![request[@"body"] isKindOfClass:NSString.class]) { OmiRecordingError(error); return nil; }
     id body = [NSJSONSerialization JSONObjectWithData:[request[@"body"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:error];
@@ -213,11 +228,6 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
         || ![body[@"deviceId"] isEqual:entry[@"input"][@"deviceId"]] || ![body[@"codec"] isEqual:entry[@"input"][@"codec"]]
         || !OmiRecordingCapturedAtMatches(entry[@"input"][@"capturedAtMs"], body[@"capturedAtMs"])
         || ![(body[@"deviceName"] ?: NSNull.null) isEqual:entry[@"input"][@"deviceName"]]) { OmiRecordingError(error); return nil; }
-  } else {
-    NSString *session = entry[@"sessionId"];
-    NSString *base = [@"/v1/device-sessions/" stringByAppendingString:session ?: @""];
-    if (session == nil || !(([method isEqual:@"POST"] && [@[[base stringByAppendingString:@"/audio"], [base stringByAppendingString:@"/complete"], [base stringByAppendingString:@"/transcribe"]] containsObject:path])
-      || ([method isEqual:@"GET"] && [@[base, [base stringByAppendingString:@"/transcript"]] containsObject:path]))) { OmiRecordingError(error); return nil; }
   }
   return entry[@"owner"];
 }
@@ -229,7 +239,7 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
   id body = [NSJSONSerialization JSONObjectWithData:[response[@"body"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:error];
   NSDictionary *session = [body isKindOfClass:NSDictionary.class] ? body[@"session"] : nil;
   NSString *identifier = [session isKindOfClass:NSDictionary.class] ? session[@"id"] : nil;
-  if (!OmiRecordingMatches(identifier, OmiRecordingUUIDPattern) || ![session[@"deviceId"] isEqual:entry[@"input"][@"deviceId"]]
+  if (omi_backend_recording_uuid_valid([identifier isKindOfClass:NSString.class] ? identifier.UTF8String : nullptr) != 1 || ![session[@"deviceId"] isEqual:entry[@"input"][@"deviceId"]]
     || ![session[@"codec"] isEqual:entry[@"input"][@"codec"]]
     || !OmiRecordingCapturedAtMatches(entry[@"input"][@"capturedAtMs"], session[@"capturedAtMs"]) || (entry[@"sessionId"] != nil && ![entry[@"sessionId"] isEqual:identifier])) return OmiRecordingError(error);
   if (entry[@"sessionId"] == nil) {
@@ -242,8 +252,12 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
   NSMutableDictionary *entry = [self entry:handle error:error];
   if (entry == nil) return NO;
   [entry[@"log"] close];
-  NSString *directory = [_root stringByAppendingPathComponent:[self partition:entry[@"owner"]]];
-  if (![NSFileManager.defaultManager removeItemAtPath:[directory stringByAppendingPathComponent:[handle stringByAppendingString:@".journal"]] error:error]) return NO;
+  char rel[160];
+  NSString *partition = [self partition:entry[@"owner"]];
+  if (omi_backend_recording_journal_relpath(partition.UTF8String, handle.UTF8String, rel, sizeof(rel)) < 0) return OmiRecordingError(error);
+  NSString *path = [_root stringByAppendingPathComponent:@(rel)];
+  NSString *directory = path.stringByDeletingLastPathComponent;
+  if (![NSFileManager.defaultManager removeItemAtPath:path error:error]) return NO;
   int descriptor = open(directory.fileSystemRepresentation, O_RDONLY | O_CLOEXEC);
   if (descriptor < 0) return OmiRecordingError(error);
   int result = fsync(descriptor); close(descriptor);

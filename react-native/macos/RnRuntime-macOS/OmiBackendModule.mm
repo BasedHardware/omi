@@ -2,8 +2,8 @@
 #import "../../apple/OmiRecordingPolicy.h"
 #import "OmiBackendModule.h"
 #import "OmiAuthModule.h"
-#import "../../apple/OmiRequestTimeout.h"
 
+#include "omi_backend_http.h"
 #include "omi_backend_policy.h"
 
 #import <LocalAuthentication/LocalAuthentication.h>
@@ -1010,14 +1010,17 @@ RCT_REMAP_METHOD(request,
     if (![expectedContract isEqual:actual]) { reject(@"OMI_HTTP_BACKEND_CHANGED", @"The selected backend changed", nil); return; }
   }
   NSString *body = [value[@"body"] isKindOfClass:NSString.class] ? value[@"body"] : nil;
-  NSSet<NSString *> *methods = [NSSet setWithArray:@[ @"GET", @"POST", @"PATCH", @"DELETE" ]];
   NSSet<NSString *> *schemes = [NSSet setWithArray:@[ @"http", @"https" ]];
-  if (requestId.length == 0 || ![methods containsObject:method] || ![path hasPrefix:@"/"] ||
-      [path hasPrefix:@"//"] || [path containsString:@"://"]) {
+  omi_backend_http_plan plan = {};
+  if (requestId.length == 0 || method.length == 0 || path.length == 0 ||
+      omi_backend_http_plan_request(method.UTF8String, path.UTF8String, &plan) != 0 ||
+      plan.valid != 1) {
     reject(@"OMI_HTTP_INVALID_REQUEST", @"Native HTTP request is invalid", nil);
     return;
   }
-  NSURL *baseURL = OmiRequestBaseURL(policy, path);
+  NSURL *baseURL = (policy.captureOriginRequired && policy.captureURL != nil && plan.is_capture_path)
+      ? policy.captureURL
+      : policy.url;
   if (!OmiBackendPolicyIsValid(policy) || baseURL == nil ||
       ![schemes containsObject:baseURL.scheme.lowercaseString]) {
     reject(@"OMI_HTTP_UNCONFIGURED", @"Native HTTP configuration is unavailable", nil);
@@ -1047,7 +1050,7 @@ RCT_REMAP_METHOD(request,
   }
   NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
   request.HTTPMethod = method;
-  request.timeoutInterval = OmiRequestTimeout(method, url);
+  request.timeoutInterval = (NSTimeInterval)plan.timeout_seconds;
   NSSet<NSString *> *forbidden = [NSSet setWithArray:@[
     @"authorization", @"cookie", @"proxy-authorization", @"x-omi-contract-version", @"x-omi-client-id", @"x-omi-capture-ownership"
   ]];

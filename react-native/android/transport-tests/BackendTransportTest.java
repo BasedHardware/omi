@@ -41,6 +41,24 @@ public final class BackendTransportTest {
     assert OmiBackendTransport.examplePlatformSupported("POST", "/v1/tasks/ops");
     assert !OmiBackendTransport.examplePlatformSupported("DELETE", "/v1/tasks/ops");
     assert !OmiBackendTransport.examplePlatformSupported("POST", "/v1/tasks");
+    OmiBackendTransport.RequestPlan transcribe = OmiBackendTransport.planRequest(
+      "POST", "/v1/device-sessions/id/transcribe");
+    assert transcribe.valid;
+    assert transcribe.timeoutMillis == 150_000;
+    assert transcribe.capturePath;
+    OmiBackendTransport.RequestPlan users = OmiBackendTransport.planRequest("GET", "/v1/users/me");
+    assert users.valid;
+    assert users.timeoutMillis == 60_000;
+    assert !users.capturePath;
+    assert !OmiBackendTransport.httpRequestValid("GET", "//evil");
+    assert !OmiBackendTransport.planRequest("PUT", "/v1/tasks").valid;
+    String session = "11111111-2222-4333-8444-555555555555";
+    assert OmiBackendTransport.recordingPathOwned("POST", "/v1/device-sessions", null);
+    assert OmiBackendTransport.recordingPathOwned("POST", "/v1/device-sessions/" + session + "/audio", session);
+    assert !OmiBackendTransport.recordingPathOwned("POST", "/v1/device-sessions/other/audio", session);
+    String partition = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    assert (partition + "/" + session + ".journal").equals(
+      OmiBackendTransport.recordingJournalRelpath(partition, session));
     AtomicInteger redirects = new AtomicInteger();
     HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     server.createContext("/target", exchange -> {

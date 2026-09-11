@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <vector>
 
+#include "omi_backend_http.h"
 #include "omi_backend_policy.h"
 #include "omi_native_boundary.h"
 
@@ -71,4 +72,58 @@ Java_com_rnruntime_OmiBackendTransport_nativeExamplePlatformSupported(JNIEnv* en
   env->ReleaseStringUTFChars(method, methodUtf);
   env->ReleaseStringUTFChars(path, pathUtf);
   return result == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeHttpRequestValid(JNIEnv* env, jclass, jstring method, jstring path) {
+  if (method == nullptr || path == nullptr) return JNI_FALSE;
+  const char* methodUtf = env->GetStringUTFChars(method, nullptr);
+  const char* pathUtf = env->GetStringUTFChars(path, nullptr);
+  if (methodUtf == nullptr || pathUtf == nullptr) {
+    if (methodUtf != nullptr) env->ReleaseStringUTFChars(method, methodUtf);
+    if (pathUtf != nullptr) env->ReleaseStringUTFChars(path, pathUtf);
+    return JNI_FALSE;
+  }
+  const int32_t result = omi_backend_http_request_valid(methodUtf, pathUtf);
+  env->ReleaseStringUTFChars(method, methodUtf);
+  env->ReleaseStringUTFChars(path, pathUtf);
+  return result == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeRecordingPathOwned(JNIEnv* env, jclass, jstring method, jstring path, jstring sessionId) {
+  if (method == nullptr || path == nullptr) return JNI_FALSE;
+  const char* methodUtf = env->GetStringUTFChars(method, nullptr);
+  const char* pathUtf = env->GetStringUTFChars(path, nullptr);
+  const char* sessionUtf = sessionId == nullptr ? nullptr : env->GetStringUTFChars(sessionId, nullptr);
+  if (methodUtf == nullptr || pathUtf == nullptr) {
+    if (methodUtf != nullptr) env->ReleaseStringUTFChars(method, methodUtf);
+    if (pathUtf != nullptr) env->ReleaseStringUTFChars(path, pathUtf);
+    if (sessionId != nullptr && sessionUtf != nullptr) env->ReleaseStringUTFChars(sessionId, sessionUtf);
+    return JNI_FALSE;
+  }
+  const int32_t result = omi_backend_recording_path_owned(methodUtf, pathUtf, sessionUtf);
+  env->ReleaseStringUTFChars(method, methodUtf);
+  env->ReleaseStringUTFChars(path, pathUtf);
+  if (sessionId != nullptr && sessionUtf != nullptr) env->ReleaseStringUTFChars(sessionId, sessionUtf);
+  return result == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeRecordingJournalRelpath(JNIEnv* env, jclass, jstring partitionHex, jstring captureId) {
+  if (partitionHex == nullptr || captureId == nullptr) return nullptr;
+  const char* partitionUtf = env->GetStringUTFChars(partitionHex, nullptr);
+  const char* captureUtf = env->GetStringUTFChars(captureId, nullptr);
+  if (partitionUtf == nullptr || captureUtf == nullptr) {
+    if (partitionUtf != nullptr) env->ReleaseStringUTFChars(partitionHex, partitionUtf);
+    if (captureUtf != nullptr) env->ReleaseStringUTFChars(captureId, captureUtf);
+    return nullptr;
+  }
+  char buffer[160];
+  const int32_t written = omi_backend_recording_journal_relpath(
+      partitionUtf, captureUtf, buffer, sizeof(buffer));
+  env->ReleaseStringUTFChars(partitionHex, partitionUtf);
+  env->ReleaseStringUTFChars(captureId, captureUtf);
+  if (written < 0) return nullptr;
+  return env->NewStringUTF(buffer);
 }
