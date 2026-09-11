@@ -19,6 +19,7 @@ import {
 } from '../src/chatClient';
 import type {NativeHttpRequest, OmiBackend} from '../src/omiNative';
 import type {ChatMessage} from '../src/chatClient';
+import {desktopBackendServiceCopy} from '../src/desktopReadClient';
 
 const capabilities = {
   maxAttachmentsPerMessage: 4,
@@ -1202,6 +1203,69 @@ test('old chat history names resolved GET apps and omits unresolved ids', async 
     expectedApiContract: 'omi',
     path: '/v1/apps/ghost',
   });
+  expect(page.appsError).toBeUndefined();
+});
+
+test('old chat history names a failed GET apps catalog instead of empty success', async () => {
+  const request = jest.fn(async (input: {path: string}) => {
+    if (input.path.startsWith('/v2/messages')) {
+      return {
+        id: 'history',
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'old-ai',
+            text: 'Saved.',
+            sender: 'ai',
+            created_at: '2026-09-07T00:00:01Z',
+            plugin_id: 'notes',
+          },
+        ]),
+      };
+    }
+    throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+  });
+  const backend = {
+    getApiContract: async () => 'omi',
+    request,
+  } as unknown as OmiBackend;
+  const page = await loadNewestChatHistory(backend);
+  expect(page.messages).toEqual([
+    expect.objectContaining({id: 'old-ai', text: 'Saved.', appId: 'notes'}),
+  ]);
+  expect(page.messages[0]).not.toHaveProperty('appName');
+  expect(page.appsError).toBe(desktopBackendServiceCopy);
+});
+
+test('old send names a failed GET apps catalog instead of discarding the reply', async () => {
+  const sendOmiChat = jest.fn(async () => ({
+    id: 'send',
+    status: 200,
+    body: `done: ${Buffer.from(
+      JSON.stringify({
+        id: 'old-ai',
+        text: 'Saved.',
+        sender: 'ai',
+        created_at: '2026-09-07T00:00:01Z',
+        plugin_id: 'notes',
+      }),
+    ).toString('base64')}\n\n`,
+  }));
+  const request = jest.fn(async () => {
+    throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+  });
+  const backend = {
+    getApiContract: async () => 'omi',
+    request,
+    sendOmiChat,
+  } as unknown as OmiBackend;
+  const result = await sendChatMessage(backend, 'Hello', 1);
+  expect(result.assistant).toEqual(
+    expect.objectContaining({id: 'old-ai', text: 'Saved.', appId: 'notes'}),
+  );
+  expect(result.assistant).not.toHaveProperty('appName');
+  expect(result.appsError).toBe(desktopBackendServiceCopy);
+  expect(sendOmiChat).toHaveBeenCalledTimes(1);
 });
 
 test('old send does not retry non-idempotent failures or infer canonical protocol', async () => {

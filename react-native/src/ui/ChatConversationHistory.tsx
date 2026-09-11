@@ -68,6 +68,13 @@ export function ChatConversationHistory({
         </>
       ) : (
         <>
+          {result.appsError !== undefined && result.appsError !== '' ? (
+            <Text
+              accessibilityRole="alert"
+              style={[styles.conversationDetailSummary, ink]}>
+              {result.appsError}
+            </Text>
+          ) : null}
           {olderNotice !== null && (
             <Text
               accessibilityRole="alert"

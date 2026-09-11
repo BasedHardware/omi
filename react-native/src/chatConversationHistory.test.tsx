@@ -4,15 +4,20 @@ import {Text} from 'react-native';
 import type {NativeHttpResponse} from './omiNativeTypes';
 import {
   chatDaySummaryCopy,
+  desktopBackendServiceCopy,
   type ConversationProjection,
   type DomainReadOutcome,
 } from './desktopReadClient';
 import {ChatBackendError} from './chatClient';
 
 const mockRequest = jest.fn();
+const mockContract = jest.fn();
 let mockInvalidated: (() => void) | undefined;
 jest.mock('./omiNative', () => ({
-  omiBackend: {request: (request: unknown) => mockRequest(request)},
+  omiBackend: {
+    request: (request: unknown) => mockRequest(request),
+    getApiContract: () => mockContract(),
+  },
   subscribeOmiBackendSessionInvalidated: (listener: () => void) => {
     mockInvalidated = listener;
     return () => {
@@ -133,6 +138,7 @@ const renderers: ReactTestRenderer.ReactTestRenderer[] = [];
 afterEach(() => {
   act(() => renderers.splice(0).forEach(renderer => renderer.unmount()));
   mockRequest.mockReset();
+  mockContract.mockReset();
 });
 
 async function renderPage(items: ConversationProjection[]) {
@@ -256,6 +262,52 @@ test('native unsupported chat history does not claim a connection blip', async (
       node => node.props.accessibilityLabel === 'Reload chat messages',
     ),
   ).toHaveLength(0);
+});
+
+test('old chat history names a failed GET apps catalog instead of empty success', async () => {
+  mockContract.mockResolvedValue('omi');
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v2/messages?limit=50&offset=0') {
+      return {
+        id: 'omi-chat-history',
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'old-ai',
+            text: 'Saved notes recap.',
+            sender: 'ai',
+            created_at: '2026-09-07T00:00:01Z',
+            plugin_id: 'notes',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/notes') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: 'omit', status: 404, body: '{}'};
+  });
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('Saved notes recap.');
+  expect(textOf(renderer)).toContain(desktopBackendServiceCopy);
+  expect(textOf(renderer)).not.toContain('Notes');
+  expect(textOf(renderer)).not.toContain(
+    'Chat history is not available on this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain(
+    'Chat history could not be loaded. Check your connection and try again.',
+  );
+  expect(textOf(renderer)).not.toContain(
+    'Omi is temporarily unavailable. Try again.',
+  );
 });
 
 test('nested non-retryable chat history 503s do not offer Check again', async () => {

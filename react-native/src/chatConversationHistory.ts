@@ -34,6 +34,7 @@ type ChatHistoryRead =
       messages: ChatMessage[];
       olderCursor: string | null;
       hasOlder: boolean;
+      appsError?: string;
     };
 
 export function useChatConversationHistory(
@@ -100,6 +101,7 @@ export function useChatConversationHistory(
           messages: page.messages,
           olderCursor: page.olderCursor,
           hasOlder: page.hasOlder,
+          ...(page.appsError === undefined ? {} : {appsError: page.appsError}),
         });
       } catch (error) {
         if (alive && epoch.current === current) {
@@ -160,6 +162,12 @@ export function useChatConversationHistory(
                 ),
                 olderCursor: page.olderCursor,
                 hasOlder: page.hasOlder,
+                ...(page.appsError === undefined &&
+                previous.appsError === undefined
+                  ? {}
+                  : {
+                      appsError: page.appsError ?? previous.appsError,
+                    }),
               }
             : previous,
         );

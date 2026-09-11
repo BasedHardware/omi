@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Text, TextInput} from 'react-native';
+import {desktopBackendServiceCopy} from '../src/desktopReadClient';
 
 const mockAuth = {
   hasCloudSession: jest.fn(),
@@ -1864,3 +1865,47 @@ test.each(['stop', 'unmount', 'signout'])(
     }
   },
 );
+
+test('old chat history names a failed GET apps catalog instead of empty success', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.getApiContract.mockResolvedValue('omi');
+  mockBackend.request.mockImplementation(
+    async (value: {id: string; path?: string}) => {
+      if (value.path === '/v2/messages?limit=50&offset=0') {
+        return {
+          id: value.id,
+          status: 200,
+          body: JSON.stringify([
+            {
+              id: 'old-ai',
+              text: 'Saved notes recap.',
+              sender: 'ai',
+              created_at: '2026-09-07T00:00:01Z',
+              plugin_id: 'notes',
+            },
+          ]),
+        };
+      }
+      if (value.path === '/v1/apps/notes') {
+        throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+      }
+      return {id: value.id, status: 200, body: '[]'};
+    },
+  );
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Saved notes recap.');
+  expect(copy).toContain(desktopBackendServiceCopy);
+  expect(copy).not.toContain('Notes');
+  expect(copy).not.toContain(
+    'Chat history could not be loaded. Check your connection and try again.',
+  );
+  expect(copy).not.toContain('Omi is temporarily unavailable. Try again.');
+  expect(labelsOf(renderer)).toContain('Send');
+  expect(labelsOf(renderer)).not.toContain('Send unavailable');
+  expect(copy).toContain('Ask');
+});

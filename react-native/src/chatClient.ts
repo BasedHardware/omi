@@ -1,4 +1,5 @@
 import {attachOmiChatAppNames} from './legacyOmiApps';
+import {desktopReadErrorCopy} from './desktopReadClient';
 import {
   omiHistoryOffset,
   parseOmiHistory,
@@ -50,6 +51,7 @@ export type ChatHistoryPage = {
   messages: ChatMessage[];
   olderCursor: string | null;
   hasOlder: boolean;
+  appsError?: string;
 };
 type ParsedChatMessage = NonNullable<
   ReturnType<typeof wireToChatHistoryEnvelope>
@@ -324,6 +326,17 @@ function canonicalChatHistoryPath(query: {
   return path;
 }
 
+async function attachOmiChatAppNamesKeepingMessages(
+  backend: OmiBackend,
+  messages: ChatMessage[],
+): Promise<{messages: ChatMessage[]; appsError?: string}> {
+  try {
+    return {messages: await attachOmiChatAppNames(backend, messages)};
+  } catch (reason) {
+    return {messages, appsError: desktopReadErrorCopy(reason)};
+  }
+}
+
 async function loadOmiHistory(
   backend: OmiBackend,
   offset: number,
@@ -336,9 +349,16 @@ async function loadOmiHistory(
   });
   if (response.status !== 200) throwBackendError(response);
   const page = parseOmiHistory(response.body, offset);
+  const attached = await attachOmiChatAppNamesKeepingMessages(
+    backend,
+    page.messages,
+  );
   return {
     ...page,
-    messages: await attachOmiChatAppNames(backend, page.messages),
+    messages: attached.messages,
+    ...(attached.appsError === undefined
+      ? {}
+      : {appsError: attached.appsError}),
   };
 }
 
@@ -392,7 +412,11 @@ export async function sendChatMessage(
   onGenerationStarted?: (generationId: string) => void,
   localMessage?: ChatMessage,
   onRequestStarted?: (requestId: string) => boolean | void,
-): Promise<{human: ChatMessage; assistant: ChatMessage | null}> {
+): Promise<{
+  human: ChatMessage;
+  assistant: ChatMessage | null;
+  appsError?: string;
+}> {
   if ((await backend.getApiContract?.()) === 'omi') {
     if (backend.sendOmiChat === undefined)
       throw new Error('Omi chat transport is unavailable');
@@ -405,8 +429,16 @@ export async function sendChatMessage(
     const response = await backend.sendOmiChat(human.id, text);
     if (response.status !== 200) throwBackendError(response);
     const assistant = parseOmiChatStream(response.body);
-    const [named] = await attachOmiChatAppNames(backend, [assistant]);
-    return {human, assistant: named};
+    const attached = await attachOmiChatAppNamesKeepingMessages(backend, [
+      assistant,
+    ]);
+    return {
+      human,
+      assistant: attached.messages[0] ?? assistant,
+      ...(attached.appsError === undefined
+        ? {}
+        : {appsError: attached.appsError}),
+    };
   }
   const id = (localMessage ?? createLocalChatMessage(text, now)).id;
   const response = await backend.request({

@@ -323,7 +323,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         );
         setOlderChatCursor(page.olderCursor);
         setHasOlderChat(page.hasOlder);
-        setChatError(null);
+        setChatError(page.appsError ?? null);
         setChatHistorySettled(true);
       })
       .catch(error => {
@@ -633,7 +633,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         ];
       });
       setChatError(current =>
-        current === 'Could not stop the response.' ? null : current,
+        result.appsError !== undefined
+          ? result.appsError
+          : current === 'Could not stop the response.'
+          ? null
+          : current,
       );
     } catch (error) {
       if (
@@ -705,6 +709,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       setMessages(current => mergeOlderChatHistory(current, page.messages));
       setOlderChatCursor(page.olderCursor);
       setHasOlderChat(page.hasOlder);
+      setChatError(page.appsError ?? null);
     } catch (error) {
       if (
         chatSessionEpochRef.current !== session ||
@@ -732,6 +737,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           );
           setOlderChatCursor(page.olderCursor);
           setHasOlderChat(page.hasOlder);
+          setChatError(page.appsError ?? null);
           return;
         } catch (recoveryError) {
           if (
