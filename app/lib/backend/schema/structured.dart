@@ -81,6 +81,8 @@ class Structured {
             structured.actionItems.add(ActionItem.fromJson(itemJson));
           } on FormatException {
             continue;
+          } on TypeError {
+            continue;
           }
         }
       }
@@ -95,6 +97,8 @@ class Structured {
           try {
             structured.events.add(Event.fromJson(eventJson));
           } on FormatException {
+            continue;
+          } on TypeError {
             continue;
           }
         }

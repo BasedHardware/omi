@@ -49,6 +49,31 @@ void main() {
 
     expect(structured.title, 'Team sync');
     expect(structured.actionItems.map((e) => e.description), ['Kept']);
+    expect(structured.events, isEmpty);
+  });
+
+  test('an action item whose deleted flag is not a bool is skipped, not fatal', () {
+    final structured = Structured.fromJson(payload(actionItems: [
+      {'id': 'a1', 'description': 'Kept', 'completed': false},
+      {'id': 'a2', 'description': 'Dropped', 'completed': false, 'deleted': 'yes'},
+    ]));
+
+    expect(structured.title, 'Team sync');
+    expect(structured.actionItems.map((e) => e.description), ['Kept']);
+  });
+
+  test('a legacy integer timestamp event with a mistyped field is skipped, not fatal', () {
+    final structured = Structured.fromJson(payload(
+      actionItems: [
+        {'id': 'a1', 'description': 'Kept', 'completed': false},
+      ],
+      events: [
+        {'title': 'Standup', 'startsAt': 1700000000, 'duration': 'long'},
+      ],
+    ));
+
+    expect(structured.actionItems.map((e) => e.description), ['Kept']);
+    expect(structured.events, isEmpty);
   });
 
   test('well formed payloads still decode every item', () {
