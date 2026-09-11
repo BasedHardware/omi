@@ -2285,6 +2285,34 @@ test('Settings persists a plane switch before reloading the workspace', async ()
   expect(onWorkspaceReload).toHaveBeenCalledTimes(1);
 });
 
+test('re-selecting the current backend segment does not wipe the workspace', async () => {
+  const onWorkspaceReload = jest.fn();
+  const {setDesktopPreference} = jest.requireMock(
+    '../desktopSettingsClient',
+  ) as {setDesktopPreference: jest.Mock};
+  setDesktopPreference.mockClear();
+  const renderer = renderDesktop({onWorkspaceReload});
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  await act(async () => {
+    pressText(renderer, 'Old backend');
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(setDesktopPreference).not.toHaveBeenCalled();
+  expect(onWorkspaceReload).not.toHaveBeenCalled();
+});
+
 test('Settings disables backend switching while admission is pending', async () => {
   const renderer = renderDesktop({chatBusy: true});
   await act(async () => {
