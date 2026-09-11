@@ -282,7 +282,14 @@ export const assertProjectableConversationRecord = (
   record: OrderedConversationRecord["record"],
 ): void => {
   if (!OPAQUE_REF_PATTERN.test(record.id)) throw new UnprojectableConversationRecordError();
+  if (typeof record.structured.title !== "string") throw new UnprojectableConversationRecordError();
+  if (typeof record.structured.overview !== "string") throw new UnprojectableConversationRecordError();
+  if (typeof record.source !== "string") throw new UnprojectableConversationRecordError();
+  if (typeof record.status !== "string") throw new UnprojectableConversationRecordError();
+  if (typeof record.discarded !== "boolean") throw new UnprojectableConversationRecordError();
+  if (typeof record.starred !== "boolean") throw new UnprojectableConversationRecordError();
   if (!VISIBILITIES.has(record.visibility)) throw new UnprojectableConversationRecordError();
+  if (typeof record.is_locked !== "boolean") throw new UnprojectableConversationRecordError();
   if (record.folder_id !== null && typeof record.folder_id !== "string") {
     throw new UnprojectableConversationRecordError();
   }
