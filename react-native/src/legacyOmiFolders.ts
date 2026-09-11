@@ -59,6 +59,9 @@ export function parseOmiFolders(body: string): OmiFolder[] {
     if (names.has(id)) {
       throw new FoldersError();
     }
+    if (typeof folder.name !== 'string') {
+      continue;
+    }
     const name = visibleDisplayText(text(folder.name, 10000));
     if (name === '') {
       continue;

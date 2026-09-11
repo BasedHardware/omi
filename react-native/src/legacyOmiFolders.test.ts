@@ -44,12 +44,21 @@ test('parses GET folder color and omits empty or invalid color', () => {
   ]);
 });
 
+test('does not omit a neighboring named folder when stored name cannot project', () => {
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {id: 'folder-work', name: 'Work'},
+        {id: 'folder-wart', name: 1},
+        {id: 'folder-object', name: {text: 'Nope'}},
+      ]),
+    ),
+  ).toEqual([{id: 'folder-work', name: 'Work'}]);
+});
+
 test('fails closed for malformed GET folders', () => {
   expect(() =>
     parseOmiFolderNames(JSON.stringify({id: 'folder-work'})),
-  ).toThrow();
-  expect(() =>
-    parseOmiFolderNames(JSON.stringify([{id: 'folder-work', name: 1}])),
   ).toThrow();
   expect(() =>
     parseOmiFolderNames(
@@ -81,6 +90,17 @@ test('loadOmiFolderNames names resolved GET folders and omits failures', async (
     path: '/v1/folders',
   });
   expect(request.mock.calls.some(call => call[0].method !== 'GET')).toBe(false);
+  request.mockResolvedValueOnce({
+    id: 'folders',
+    status: 200,
+    body: JSON.stringify([
+      {id: 'folder-work', name: 'Work'},
+      {id: 'folder-wart', name: 1},
+    ]),
+  });
+  expect(await loadOmiFolderNames(backend)).toEqual([
+    {id: 'folder-work', name: 'Work'},
+  ]);
   request.mockResolvedValueOnce({id: 'folders', status: 404, body: null});
   expect(await loadOmiFolderNames(backend)).toEqual([]);
   request.mockResolvedValueOnce({id: 'folders', status: 200, body: '{'});
