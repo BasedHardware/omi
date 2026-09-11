@@ -397,6 +397,13 @@ export function setVoiceMuted(muted: boolean): void {
 
 /** Typed user turn into the live voice conversation (model replies with voice). */
 export function sendVoiceText(text: string): void {
+  // GPT-Live is full-duplex with no text-input frame (see
+  // gptLiveSession.sendUserText), so a typed turn would be silently dropped.
+  // Surface the drop on the event trail instead of recording a false send.
+  if ((state.status === 'connecting' || state.status === 'live') && state.provider === 'gpt_live') {
+    record('user-text-unsupported', text.slice(0, 80))
+    return
+  }
   handle?.sendUserText(text)
   record('user-text', text.slice(0, 80))
 }

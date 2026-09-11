@@ -14,7 +14,7 @@
 // report the downgrade via onFallback. `?worker&url` makes vite COMPILE the
 // worklet entry and return the built asset's URL in both dev and prod.
 import workletUrl from './pcmWorklet.ts?worker&url'
-import { floatTo16BitPCM, linearResample } from './pcmCore'
+import { floatTo16BitPCM, linearResample, scriptProcessorFrameSize } from './pcmCore'
 
 const TARGET_RATE = 16000
 const FRAME_SAMPLES = 4096
@@ -74,8 +74,10 @@ export async function createPcmPipeline(
     mode = 'script-processor'
     console.warn('[pcm-pipeline] worklet init failed — falling back to ScriptProcessor:', e)
     onFallback?.('worklet_init_failed')
-    // ScriptProcessor buffer sizes must be a power of two in [256, 16384].
-    const spFrame = Math.max(256, Math.min(16384, 2 ** Math.round(Math.log2(frameSamples))))
+    // ScriptProcessor buffer sizes must be a power of two in [256, 16384], and
+    // they count samples at the CONTEXT rate — scale the target-rate frame so a
+    // clamped hardware context still emits the intended frame duration.
+    const spFrame = scriptProcessorFrameSize(frameSamples, ctx.sampleRate, targetRate)
     const sp = ctx.createScriptProcessor(spFrame, 1, 1)
     const needsResample = ctx.sampleRate !== targetRate
     sp.onaudioprocess = (ev): void => {

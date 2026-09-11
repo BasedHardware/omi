@@ -173,7 +173,8 @@ export function createDefaultHubSession(
     events: spec.events,
     tools: spec.tools,
     sinkId: overrides.sinkId,
-    byokKey: overrides.byokKey
+    // A spec-level BYOK key wins; the controller option is the ambient fallback.
+    byokKey: spec.byokKey ?? overrides.byokKey
   }
   if (spec.provider === 'openai') return new OpenAiHubSession(opts)
   if (spec.provider === 'gpt_live') return new GptLiveHubSession(opts)
@@ -396,16 +397,24 @@ export class HubController {
       // to the OTHER provider once before giving up (Mac mintAndConnect :1176-1234).
       // The loop runs at most twice: `failoverOnMintFailure` returns a provider only on
       // the null→alternate transition, so the once-per-chain guard bounds it.
+      // BYOK GPT-Live bypasses the managed mint entirely: the user's own OpenAI key
+      // connects the lane direct, so there is no Omi token to obtain.
+      const byokKey = this.byokKey?.()
+      const usesByok = !!byokKey && provider === 'gpt_live'
       let activeProvider = provider
       let token: string
-      for (;;) {
-        try {
-          token = await this.mintToken(activeProvider)
-          break
-        } catch (e) {
-          const alternate = this.failoverOnMintFailure(e, activeProvider)
-          if (alternate === null) throw e // not provider-scoped, or already failed over
-          activeProvider = alternate
+      if (usesByok) {
+        token = byokKey as string
+      } else {
+        for (;;) {
+          try {
+            token = await this.mintToken(activeProvider)
+            break
+          } catch (e) {
+            const alternate = this.failoverOnMintFailure(e, activeProvider)
+            if (alternate === null) throw e // not provider-scoped, or already failed over
+            activeProvider = alternate
+          }
         }
       }
       // A teardownSession() straddled the mint (e.g. the wake-deferred refresh kicked
@@ -428,7 +437,8 @@ export class HubController {
         token,
         instructions,
         events: this.sessionEvents(),
-        tools
+        tools,
+        byokKey: usesByok ? byokKey : undefined
       })
       this.session = session
       this.sessionProvider = activeProvider

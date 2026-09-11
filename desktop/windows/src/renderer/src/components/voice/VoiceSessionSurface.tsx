@@ -46,7 +46,7 @@ function useOutputDevices(active: boolean): MediaDeviceInfo[] {
   return devices
 }
 
-const PROVIDER_LABEL = { openai: 'OpenAI', gemini: 'Gemini' } as const
+const PROVIDER_LABEL = { openai: 'OpenAI', gemini: 'Gemini', gpt_live: 'GPT-Live' } as const
 
 export function VoiceSessionSurface(props: { onClose?: () => void }): React.JSX.Element {
   const state = useVoiceSession()

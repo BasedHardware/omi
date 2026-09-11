@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { floatTo16BitPCM, linearResample } from './pcmCore'
+import { floatTo16BitPCM, linearResample, scriptProcessorFrameSize } from './pcmCore'
 import { floatTo16BitPCM as canonicalFloatTo16BitPCM } from '../audio'
 
 const SR = 16000
@@ -72,5 +72,25 @@ describe('linearResample', () => {
 
   it('handles an empty buffer', () => {
     expect(linearResample(new Float32Array(0), 48000, 16000).length).toBe(0)
+  })
+})
+
+describe('scriptProcessorFrameSize', () => {
+  it('keeps a 24kHz GPT-Live frame at 1024 when the context matches', () => {
+    expect(scriptProcessorFrameSize(1024, 24000, 24000)).toBe(1024)
+  })
+
+  it('scales a 24kHz frame up for a clamped 48kHz hardware context', () => {
+    // 1024 samples at 24kHz is 2048 at the 48kHz context rate.
+    expect(scriptProcessorFrameSize(1024, 48000, 24000)).toBe(2048)
+  })
+
+  it('scales a 16kHz frame up for a 32kHz context', () => {
+    expect(scriptProcessorFrameSize(1024, 32000, 16000)).toBe(2048)
+  })
+
+  it('clamps to the ScriptProcessor power-of-two bounds', () => {
+    expect(scriptProcessorFrameSize(64, 16000, 16000)).toBe(256)
+    expect(scriptProcessorFrameSize(32000, 16000, 16000)).toBe(16384)
   })
 })

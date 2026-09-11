@@ -238,6 +238,13 @@ describe('GptLiveHubSession — full-duplex turn', () => {
     expect(h.events.onError).toHaveBeenCalledTimes(1)
     expect(h.getSocket().closed).toBe(true)
   })
+
+  it('preserves a string error payload instead of masking it as generic', async () => {
+    const h = harness()
+    await connect(h)
+    h.getSocket().spec.onMessage(JSON.stringify({ type: 'error', error: 'boom-string' }))
+    expect(h.events.onError).toHaveBeenCalledWith('boom-string', true, undefined)
+  })
 })
 
 describe('GptLiveHubSession — cold press (warm-wait buffer)', () => {

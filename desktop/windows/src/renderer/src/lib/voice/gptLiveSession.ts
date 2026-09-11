@@ -81,6 +81,13 @@ export function createGptLiveMessageHandler(deps: {
   cb: ProviderSessionCallbacks
   /** Fired once when the server confirms `session.started`. */
   onStarted?: () => void
+  /** Where an `error` frame is surfaced. Defaults to `cb.onFatal`; the session
+   *  start overrides it so a pre-handshake error rejects the start promise and
+   *  tears down instead of leaving the caller hanging. */
+  onFatal?: (message: string, retryable: boolean) => void
+  /** Fired when the server ends the session (`session.closed`). Lets the caller
+   *  finalize a clean server close without reporting it as a fatal error. */
+  onSessionClosed?: () => void
 }): GptLiveMessageHandler {
   const { isStopped, getPlayer, cb } = deps
   let aiText = ''
@@ -130,6 +137,7 @@ export function createGptLiveMessageHandler(deps: {
           }
         }
         flush()
+        deps.onSessionClosed?.()
         return
       }
       case 'error': {
@@ -140,8 +148,9 @@ export function createGptLiveMessageHandler(deps: {
           (typeof err === 'string' && err) ||
           (typeof nested === 'string' ? nested : 'GPT-Live realtime error')
         // The socket may stay open after an error frame; treat it as fatal so the
-        // controller lands in the error state rather than hanging.
-        cb.onFatal(message, true)
+        // controller lands in the error state rather than hanging. A pre-handshake
+        // start overrides this to reject its in-flight promise.
+        ;(deps.onFatal ?? cb.onFatal)(message, true)
         return
       }
       default:
@@ -165,6 +174,8 @@ export async function startGptLiveSession(args: {
   instructions: string
   sinkId?: string
   cb: ProviderSessionCallbacks
+  /** Bound on the connection+handshake before the start rejects. Default 15 s. */
+  connectTimeoutMs?: number
 }): Promise<ProviderSessionHandle> {
   const { cb } = args
   let stopped = false
@@ -172,9 +183,17 @@ export async function startGptLiveSession(args: {
   let socket: WebSocket | null = null
   let player: VoicePlayer | null = null
   let mic: { stop: () => void } | null = null
+  let connectTimeout: ReturnType<typeof setTimeout> | null = null
   // Assigned once the message handler exists; lets `stop()` flush the accumulated
   // assistant reply before it marks the session stopped (flush is a no-op after).
   let flushPendingReply: (() => void) | null = null
+
+  const clearConnectTimeout = (): void => {
+    if (connectTimeout !== null) {
+      clearTimeout(connectTimeout)
+      connectTimeout = null
+    }
+  }
 
   const stop = (): void => {
     if (stopped) return
@@ -182,6 +201,7 @@ export async function startGptLiveSession(args: {
     // manual stop / socket close still reports the reply to `onUtterance`.
     flushPendingReply?.()
     stopped = true
+    clearConnectTimeout()
     mic?.stop()
     mic = null
     const ws = socket
@@ -230,6 +250,15 @@ export async function startGptLiveSession(args: {
     socket = ws
     let connected = false
     let sessionStarted = false
+    // If the socket opens (or the relay authorizes) but the provider never sends
+    // `session.started`, the start promise would otherwise hang until the caller
+    // gives up. Bound it so a silent provider rejects like any other failure.
+    connectTimeout = setTimeout(() => {
+      connectTimeout = null
+      if (connected || stopped) return
+      reject(new Error('GPT-Live connection timed out'))
+      stop()
+    }, args.connectTimeoutMs ?? 15000)
 
     const startCapture = async (): Promise<void> => {
       if (stopped || mic) return
@@ -271,17 +300,33 @@ export async function startGptLiveSession(args: {
           () => {
             if (stopped || connected) return
             connected = true
+            clearConnectTimeout()
             resolve()
             cb.onConnected()
           },
           (e: unknown) => {
-            // Pre-ready failure: tear down and reject so startGptLiveSession
-            // throws (the controller surfaces the fatal exactly once).
-            stop()
+            // Pre-ready failure: reject first (so the specific cause wins over the
+            // close reason stop() will produce), then tear down so
+            // startGptLiveSession throws (the controller surfaces it exactly once).
             reject(e instanceof Error ? e : new Error(String(e)))
+            stop()
           }
         )
-      }
+      },
+      // Before the handshake completes, an `error` frame must reject the start
+      // promise (and tear down) rather than only firing `cb.onFatal`, which would
+      // leave the caller awaiting forever.
+      onFatal: (message, retryable) => {
+        if (connected) {
+          fail(message, retryable)
+        } else {
+          reject(new Error(message))
+          stop()
+        }
+      },
+      // A server `session.closed` is a clean end, not a fatal: finalize (usage +
+      // flush) via stop() so the following socket close never reports an error.
+      onSessionClosed: () => stop()
     })
     flushPendingReply = handler.flush
 
@@ -301,8 +346,8 @@ export async function startGptLiveSession(args: {
           ws.send(JSON.stringify({ type: 'auth', token: args.token }))
         }
       } catch (e) {
-        stop()
         reject(e instanceof Error ? e : new Error(String(e)))
+        stop()
       }
     }
     ws.onmessage = (e: MessageEvent) => {
@@ -319,12 +364,12 @@ export async function startGptLiveSession(args: {
             try {
               sendStart()
             } catch (err) {
-              stop()
               reject(err instanceof Error ? err : new Error(String(err)))
+              stop()
             }
           } else {
-            stop()
             reject(new Error('GPT-Live relay authentication failed'))
+            stop()
           }
           return
         }
@@ -334,8 +379,8 @@ export async function startGptLiveSession(args: {
     ws.onerror = () => {
       if (connected) fail('GPT-Live connection failed', true)
       else {
-        stop()
         reject(new Error('GPT-Live connection failed'))
+        stop()
       }
     }
     ws.onclose = (e: CloseEvent) => {

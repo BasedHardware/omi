@@ -226,4 +226,49 @@ describe('startGptLiveSession — stop flush', () => {
     const handle = await promise
     handle.stop()
   })
+
+  it('rejects the start when an error frame arrives before the handshake', async () => {
+    const cb = makeCb()
+    const promise = startGptLiveSession({ token: 'omi-token', instructions: 'INSTR', cb })
+    await new Promise((r) => setTimeout(r, 0))
+    const ws = FakeWebSocket.instances[0]!
+    ws.onopen!()
+    ws.emit({ type: 'auth_response', success: true })
+    ws.emit({ type: 'error', message: 'relay refused' })
+
+    await expect(promise).rejects.toThrow('relay refused')
+    // The controller learns about the failure from the throw, not a double fatal.
+    expect(cb.onFatal).not.toHaveBeenCalled()
+  })
+
+  it('finalizes a server session.closed without reporting a fatal error', async () => {
+    const cb = makeCb()
+    const promise = startGptLiveSession({ token: 'omi-token', instructions: 'INSTR', cb })
+    await new Promise((r) => setTimeout(r, 0))
+    const ws = FakeWebSocket.instances[0]!
+    ws.onopen!()
+    ws.emit({ type: 'auth_response', success: true })
+    ws.emit({ type: 'session.started' })
+    const handle = await promise
+
+    ws.emit({ type: 'session.closed', usage: {} })
+    expect(cb.onFatal).not.toHaveBeenCalled()
+    handle.stop()
+  })
+
+  it('rejects if the provider never signals session.started', async () => {
+    const cb = makeCb()
+    const promise = startGptLiveSession({
+      token: 'omi-token',
+      instructions: 'INSTR',
+      cb,
+      connectTimeoutMs: 10
+    })
+    await new Promise((r) => setTimeout(r, 0))
+    const ws = FakeWebSocket.instances[0]!
+    ws.onopen!()
+    ws.emit({ type: 'auth_response', success: true })
+
+    await expect(promise).rejects.toThrow(/timed out/i)
+  })
 })

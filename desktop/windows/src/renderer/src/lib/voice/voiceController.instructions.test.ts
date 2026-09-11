@@ -30,7 +30,12 @@ vi.mock('./geminiSession', () => ({ startGeminiSession }))
 vi.mock('./gptLiveSession', () => ({ startGptLiveSession }))
 vi.mock('./tts', () => ({ synthesizeTts: vi.fn(), DEFAULT_TTS_VOICE: 'test-voice' }))
 
-import { startVoiceSession, stopVoiceSession } from './voiceController'
+import {
+  startVoiceSession,
+  stopVoiceSession,
+  sendVoiceText,
+  getVoiceEvents
+} from './voiceController'
 import { refreshAboutUserCard, resetAboutUserCard, whenAboutUserCardSettled } from './aboutUser'
 import { setPreferences } from './../preferences'
 
@@ -109,5 +114,26 @@ describe('startVoiceSession — system instruction', () => {
     const args = startGptLiveSession.mock.calls[0][0]
     expect(args.byok).toBe(false)
     expect(args.token).toBe('t')
+  })
+})
+
+describe('sendVoiceText — GPT-Live has no text-input frame', () => {
+  it('surfaces the drop instead of recording a sent turn', async () => {
+    await startVoiceSession('gpt_live')
+    handle.sendUserText.mockClear()
+
+    sendVoiceText('typed hello')
+
+    expect(handle.sendUserText).not.toHaveBeenCalled()
+    expect(getVoiceEvents().map((e) => e.type)).toContain('user-text-unsupported')
+  })
+
+  it('forwards typed text on a lane that supports it', async () => {
+    await startVoiceSession('openai')
+    handle.sendUserText.mockClear()
+
+    sendVoiceText('typed hello')
+
+    expect(handle.sendUserText).toHaveBeenCalledWith('typed hello')
   })
 })

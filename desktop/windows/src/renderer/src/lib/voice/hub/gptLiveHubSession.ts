@@ -179,10 +179,14 @@ export class GptLiveHubSession extends BaseHubSession {
         return
       }
       case 'error': {
-        const err = e.error as Record<string, unknown> | undefined
-        const nested = err?.message
+        const err = e.error
+        const nested =
+          typeof err === 'object' && err !== null
+            ? (err as Record<string, unknown>).message
+            : undefined
         const message =
           (typeof e.message === 'string' && e.message) ||
+          (typeof err === 'string' && err) ||
           (typeof nested === 'string' ? nested : 'GPT-Live realtime error')
         this.handleError(message, true)
         return
