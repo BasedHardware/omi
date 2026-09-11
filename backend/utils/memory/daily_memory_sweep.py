@@ -51,6 +51,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
 from utils.conversations.transcript_for_llm import memory_transcript_from_segments
 
+from database.auth import get_user_name
 from database.read_boundary import parse_snapshot_or_none
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
@@ -3407,6 +3408,27 @@ class CompletedDayConversationSource:
     owner_evidence: OwnerAttributionEvidence
 
 
+def _owner_about_aliases(uid: str) -> frozenset[str]:
+    """Tokens that mean the account owner in model-authored ``about``.
+
+    The prompt asks for the literal ``user`` token and also hands the model the
+    owner's name, so a name-in-``about`` row must still hit the owner gate.
+    Aliases are the prompt token plus the profile name the sweep already
+    loads; they are not guessed from first-person words like "me".
+    """
+
+    aliases = {"user", "the user", "primary user"}
+    try:
+        name = get_user_name(uid, use_default=False)
+    except Exception:
+        name = None
+    if name:
+        normalized = " ".join(str(name).split()).casefold()
+        if normalized:
+            aliases.add(normalized)
+    return frozenset(aliases)
+
+
 def _read_completed_day_conversation_sources(
     uid: str,
     window: CompletedLocalDayWindow,
@@ -4280,6 +4302,7 @@ def _load_or_stage_daily_summary_candidates(
         dropped_basis_proposed = 0
         demoted_owner_untrusted = 0
         skipped_duplicate_lookup = 0
+        owner_aliases = _owner_about_aliases(uid)
         for index, memory in enumerate(getattr(output, "memories", ()) or ()):
             content = str(getattr(memory, "content", "") or "").strip()[:MAX_CONTENT_CHARACTERS]
             cited = [
@@ -4308,7 +4331,7 @@ def _load_or_stage_daily_summary_candidates(
                 if basis == "proposed":
                     dropped_basis_proposed += 1
                 continue
-            if about.casefold() == "user":
+            if about.casefold() in owner_aliases:
                 if not any(may_attribute_to_owner(owner_lookup[conversation_id]) for conversation_id in cited):
                     # The model supplied no named alternate subject. Do not
                     # turn an untrusted user label into a relationship fact.

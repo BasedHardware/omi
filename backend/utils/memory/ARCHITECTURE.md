@@ -182,26 +182,34 @@ structured reason fields. Sweep events carry per-day counters
 source may mint an owner-attributed memory. Capture (`process_conversation.py`)
 and the daily sweep share that policy:
 
-- A unique owner speaker cluster is required before `about=user` or
+- A unique owner speaker cluster is required before `about=user` (or an
+  owner alias: the profile name, "the user", "primary user") or
   `subject_scope=primary_user` is admitted. Ambiguous or absent clustering
   demotes the claim (`demoted_owner_untrusted` on the sweep path) rather than
   rewriting it as a third-party fact.
 - Every sweep memory must name a subject in `about`. Subject-less, `unknown`,
-  and `uncertain` rows are omitted (`dropped_subjectless`).
+  and `uncertain` rows are omitted (`dropped_subjectless`). An omitted `about`
+  on the structured-output schema defaults to empty so one subjectless row
+  cannot fail the day's parse.
 - `basis` is `decided` only for a commitment or decision on tape by the owner,
   `proposed` for suggestions or plans without a decision (those are dropped,
   `dropped_basis_proposed`), and `observed` otherwise. Only `decided` may set a
   standing-attribute slot.
 - A model mark `duplicate_of` citing a ledger lookup hit skips the candidate
   instead of staging a sibling (`skipped_duplicate_lookup`). Lookup rows
-  prefix the canonical memory id so the model can cite it.
+  prefix the canonical memory id so the model can cite it. A non-empty
+  marker that is not one of those ids is ignored and the candidate is treated
+  as new.
 - Staged daily-summary pages are `daily_memory_sweep_daily_summary_stage.v3`
   because they now carry owner evidence and `about`. A reader that finds a
   foreign-version stage attests it consumed (empty candidates) so the cursor
   can advance without double-billing the model.
 
-L2 consolidation, the belief model, user-facing summary rendering, and
-speaker-ID synthesis vs real cluster evidence are out of scope for this gate.
+Clusters are `(speaker_id_scope, speaker_id)`. A `TranscriptSegment` that only
+materialized `speaker_id` from the SPEAKER_00 default is not evidence; a
+synthesized `0` that has already been persisted still looks real after reload
+(stored provenance would need a schema field). L2 consolidation, the belief
+model, and user-facing summary rendering are out of scope for this gate.
 
 ## Search, graph, and derived providers
 

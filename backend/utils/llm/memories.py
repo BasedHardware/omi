@@ -623,7 +623,10 @@ Respond with action, supersedes (indices), merged_content (only for merge), and 
 
 
 class DailySweepAgentMemory(BaseModel):
-    about: str = Field(description="Named subject: user for the account owner, otherwise the person name")
+    about: str = Field(
+        default="",
+        description="Named subject: user for the account owner, otherwise the person name",
+    )
     content: str = Field(description="One durable memory, stated as a standalone fact")
     conversation_ids: List[str] = Field(
         default=[], description="Ids of the conversations this memory came from (at least one)"
@@ -707,6 +710,25 @@ def _neutralize_fences(text: str) -> str:
     """Keep untrusted text from closing the prompt's ``` blocks."""
 
     return text.replace("```", "'''")
+
+
+def _ledger_lookup_memory_id(row: str) -> str:
+    """Parse the bracketed canonical id the ledger searcher prefixes onto a hit."""
+
+    text = str(row or "").lstrip()
+    if not text.startswith("["):
+        return ""
+    close = text.find("]")
+    if close <= 1:
+        return ""
+    return text[1:close].strip()
+
+
+def _normalized_duplicate_of(value: str) -> str:
+    text = str(value or "").strip()
+    if text.startswith("[") and text.endswith("]") and len(text) > 2:
+        return text[1:-1].strip()
+    return text
 
 
 def _daily_sweep_summaries_block(summary_rows: Sequence[tuple[str, str]]) -> str:
@@ -884,6 +906,8 @@ def run_daily_sweep_summary_agent(
         parsed = parser.invoke(response)
         return parsed
 
+    lookup_memory_ids: set[str] = set()
+
     def lookup_results_block(lookups: Sequence[Any]) -> str:
         sections = []
         for lookup in lookups:
@@ -896,6 +920,10 @@ def run_daily_sweep_summary_agent(
                     results = [str(item) for item in memory_searcher(query)]
                 except Exception:
                     results = []
+            for item in results[:DAILY_SWEEP_LOOKUP_RESULT_ROWS]:
+                memory_id = _ledger_lookup_memory_id(item)
+                if memory_id:
+                    lookup_memory_ids.add(memory_id)
             rendered = (
                 "\n".join(
                     f"- {_neutralize_fences(str(item)[:DAILY_SWEEP_LOOKUP_RESULT_CHARACTERS])}"
@@ -923,7 +951,7 @@ def run_daily_sweep_summary_agent(
             ][: max(0, max_transcript_fetches)]
             lookups = list(first.memory_lookups)[: max(0, max_memory_lookups)] if callable(memory_searcher) else []
             if not requests and not lookups:
-                sanitized = _sanitized_daily_sweep_output(first, known_ids, max_candidates)
+                sanitized = _sanitized_daily_sweep_output(first, known_ids, max_candidates, lookup_ids=set())
                 return sanitized
             excerpts = "\n\n".join(
                 f"[{request.conversation_id}] "
@@ -953,7 +981,7 @@ def run_daily_sweep_summary_agent(
             memory_lookups=[],
             folder_assignments=second.folder_assignments or first.folder_assignments,
         )
-        sanitized = _sanitized_daily_sweep_output(merged, known_ids, max_candidates)
+        sanitized = _sanitized_daily_sweep_output(merged, known_ids, max_candidates, lookup_ids=lookup_memory_ids)
         return sanitized
     except Exception as error:
         logger.error("Daily sweep summary agent failed: %s", type(error).__name__)
@@ -961,22 +989,32 @@ def run_daily_sweep_summary_agent(
 
 
 def _sanitized_daily_sweep_output(
-    output: DailySweepAgentPassOutput, known_ids: set, max_candidates: int
+    output: DailySweepAgentPassOutput,
+    known_ids: set,
+    max_candidates: int,
+    *,
+    lookup_ids: Optional[set[str]] = None,
 ) -> DailySweepAgentPassOutput:
     """Drop memories without valid provenance and assignments for unknown rows.
 
     folder_id is only checked for non-emptiness here; membership in the user's
     real folder set is enforced downstream in daily_memory_sweep (both when the
     page is staged and again on apply). Do not reuse this sanitizer anywhere
-    that lacks that second gate.
+    that lacks that second gate. A duplicate_of marker is kept only when it
+    cites a ledger id the model actually saw in lookup results; any other
+    non-empty marker is cleared so the candidate is processed as new.
     """
 
+    allowed_lookup_ids = lookup_ids if lookup_ids is not None else None
     memories = []
     for memory in output.memories:
         cited = [conversation_id for conversation_id in memory.conversation_ids if conversation_id in known_ids]
         content = " ".join((memory.content or "").split())
         if not cited or not content:
             continue
+        duplicate_of = (memory.duplicate_of or "").strip()
+        if allowed_lookup_ids is not None and _normalized_duplicate_of(duplicate_of) not in allowed_lookup_ids:
+            duplicate_of = ""
         memories.append(
             DailySweepAgentMemory(
                 content=content,
@@ -984,7 +1022,7 @@ def _sanitized_daily_sweep_output(
                 basis=memory.basis,
                 about=memory.about,
                 slot=(memory.slot or "").strip()[:64],
-                duplicate_of=(memory.duplicate_of or "").strip(),
+                duplicate_of=duplicate_of,
             )
         )
         if len(memories) >= max(0, max_candidates):

@@ -70,6 +70,13 @@ from models.transcript_segment import TranscriptSegment
 from utils.llm.usage_tracker import get_current_context
 
 
+@pytest.fixture(autouse=True)
+def _stub_owner_profile_name(monkeypatch):
+    """The owner-alias gate reads the profile name; tests must not hit Firebase."""
+
+    monkeypatch.setattr('utils.memory.daily_memory_sweep.get_user_name', lambda *_args, **_kwargs: None)
+
+
 def _candidate(**updates):
     value = {
         "candidate_id": "fact-alice-role",
@@ -2634,3 +2641,116 @@ def test_completed_day_gate_emits_decision_path_drop_counters(monkeypatch, caplo
     }
     assert 'subjectless fact' not in caplog.text
     assert 'I lift on Tuesdays' not in caplog.text
+
+
+def test_completed_day_omitted_about_is_dropped_subjectless_not_a_parse_failure(monkeypatch, caplog):
+    from utils.llm.memories import DailySweepAgentMemory
+
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document('users/user-1/memory_state/apply_control').set(control.model_dump(mode='json'))
+    local_date = date(2026, 8, 23)
+    trusted = [TranscriptSegment(text='I lift on Tuesdays.', speaker_id=0, is_user=True, start=0, end=1)]
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
+        lambda *_args, **_kwargs: ((_day_source('conversation-1', 'gym', segments=trusted),), 'complete'),
+    )
+    with caplog.at_level(logging.INFO):
+        result = produce_completed_day_daily_summary_sources(
+            'user-1',
+            local_date,
+            'UTC',
+            control,
+            db_client=db,
+            model_authority=DailySweepModelAuthority(
+                enabled=True, model_name='test', max_candidates=8, max_cost_usd=1.0
+            ),
+            agent_runner=lambda *_args, **_kwargs: _agent_output(
+                memories=[
+                    DailySweepAgentMemory(
+                        content='omitted about should drop',
+                        conversation_ids=['conversation-1'],
+                        basis='decided',
+                    ),
+                    SimpleNamespace(
+                        content='Dave lifts on Fridays',
+                        conversation_ids=['conversation-1'],
+                        about='user',
+                        basis='decided',
+                        slot='gym_schedule',
+                        duplicate_of='',
+                    ),
+                ]
+            ),
+            window_override=completed_local_day_window(local_date, 'UTC'),
+        )
+    assert result.source_status == 'complete'
+    assert [candidate.content for candidate in result.daily_summary] == ['Dave lifts on Fridays']
+    messages = [
+        record.getMessage() for record in caplog.records if 'canonical_memory_decision_path.v1' in record.getMessage()
+    ]
+    event = json.loads(messages[0].split('canonical_memory_decision_path.v1 ', 1)[1])
+    assert event['dropped_subjectless'] == 1
+
+
+def test_completed_day_owner_name_in_about_still_hits_the_owner_gate(monkeypatch, caplog):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document('users/user-1/memory_state/apply_control').set(control.model_dump(mode='json'))
+    local_date = date(2026, 8, 23)
+    monkeypatch.setattr('utils.memory.daily_memory_sweep.get_user_name', lambda *_args, **_kwargs: 'Dave')
+    trusted = [TranscriptSegment(text='I lift on Tuesdays.', speaker_id=0, is_user=True, start=0, end=1)]
+    untrusted = [
+        TranscriptSegment(text='I will move to Boston.', speaker_id=i, is_user=True, start=i, end=i + 1)
+        for i in range(2)
+    ]
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
+        lambda *_args, **_kwargs: (
+            (
+                _day_source('conversation-1', 'gym', segments=trusted),
+                _day_source('conversation-2', 'guest', segments=untrusted),
+            ),
+            'complete',
+        ),
+    )
+    with caplog.at_level(logging.INFO):
+        result = produce_completed_day_daily_summary_sources(
+            'user-1',
+            local_date,
+            'UTC',
+            control,
+            db_client=db,
+            model_authority=DailySweepModelAuthority(
+                enabled=True, model_name='test', max_candidates=8, max_cost_usd=1.0
+            ),
+            agent_runner=lambda *_args, **_kwargs: _agent_output(
+                memories=[
+                    SimpleNamespace(
+                        content='untrusted owner claim under the profile name',
+                        conversation_ids=['conversation-2'],
+                        about='Dave',
+                        basis='decided',
+                        slot='home_city',
+                        duplicate_of='',
+                    ),
+                    SimpleNamespace(
+                        content='Dave lifts on Fridays',
+                        conversation_ids=['conversation-1'],
+                        about='Dave',
+                        basis='decided',
+                        slot='gym_schedule',
+                        duplicate_of='',
+                    ),
+                ]
+            ),
+            window_override=completed_local_day_window(local_date, 'UTC'),
+        )
+    assert result.source_status == 'complete'
+    assert [candidate.content for candidate in result.daily_summary] == ['Dave lifts on Fridays']
+    assert result.daily_summary[0].subject_scope == MemorySubjectScope.primary_user
+    messages = [
+        record.getMessage() for record in caplog.records if 'canonical_memory_decision_path.v1' in record.getMessage()
+    ]
+    event = json.loads(messages[0].split('canonical_memory_decision_path.v1 ', 1)[1])
+    assert event['demoted_owner_untrusted'] == 1
