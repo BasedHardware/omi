@@ -338,6 +338,7 @@ function assertProjectableChatTimestamp(value: number): void {
 function assertProjectableTimestamp(value: number): void {
   if (
     !Number.isSafeInteger(value) ||
+    value < 0 ||
     !Number.isFinite(new Date(value).getTime())
   ) {
     throw new UnprojectableConversationRecordError();

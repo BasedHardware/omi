@@ -1848,6 +1848,72 @@ describe("worker request contract", () => {
     });
   });
 
+  test("conversations GET does not omit a neighboring row when started_at is negative", async () => {
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_sessions (id, account_id, device_id, codec, state, r2_prefix, started_at, ended_at, created_at, updated_at) VALUES (?, ?, 'pendant', 21, 'complete', ?, 1, 1, 1, 1)"
+      )
+      .bind(
+        "session-readable-nonneg-clocks",
+        "test-account",
+        "r2-readable-nonneg-clocks"
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_transcriptions (session_id, account_id, state, available_at, text, discarded_leading_packets, updated_at) VALUES (?, ?, 'completed', 1, 'Recorded words', 0, 1)"
+      )
+      .bind("session-readable-nonneg-clocks", "test-account")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_sessions (id, account_id, device_id, codec, state, r2_prefix, started_at, ended_at, created_at, updated_at) VALUES (?, ?, 'pendant', 21, 'complete', ?, -1, NULL, -1, -1)"
+      )
+      .bind(
+        "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        "test-account",
+        "r2-negative-started"
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_transcriptions (session_id, account_id, state, available_at, text, discarded_leading_packets, updated_at) VALUES (?, ?, 'completed', 1, 'Stored speech', 0, 1)"
+      )
+      .bind("dddddddd-dddd-4ddd-8ddd-dddddddddddd", "test-account")
+      .run();
+
+    const envelope = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(envelope.status).toBe(500);
+    expect(envelope.headers.get("retry-after")).toBeNull();
+    expect((await envelope.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+
+    const offset = await fetchWorker("/v1/conversations?limit=50&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    expect(offset.status).toBe(500);
+    expect(offset.headers.get("retry-after")).toBeNull();
+    expect((await offset.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+
+    const metadata = await fetchWorker(
+      "/v1/device-sessions/dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      { headers: authenticatedHeaders }
+    );
+    expect(metadata.status).toBe(200);
+    expect((await metadata.json()) as object).toEqual({
+      session: expect.objectContaining({
+        id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        startedAt: -1,
+        endedAt: null,
+      }),
+    });
+  });
+
   test("conversations GET keeps queued recordings when stored segments JSON is unreadable", async () => {
     await d1Mock
       .prepare(
