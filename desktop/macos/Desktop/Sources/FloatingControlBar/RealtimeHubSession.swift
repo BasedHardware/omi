@@ -1533,12 +1533,19 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     }
     let inD = usage["input_token_details"] as? [String: Any]
     let outD = usage["output_token_details"] as? [String: Any]
-    usageInText += n(inD, "text_tokens")
-    usageInAudio += n(inD, "audio_tokens")
-    usageInImage += n(inD, "image_tokens")
+    let inText = n(inD, "text_tokens")
+    let inAudio = n(inD, "audio_tokens")
+    let inImage = n(inD, "image_tokens")
+    // OpenAI may report only aggregate totals (no modality split); fall back to the
+    // aggregate so the turn is still reported instead of silently dropped.
+    usageInText += inText + inAudio + inImage > 0 ? inText : n(usage, "input_tokens")
+    usageInAudio += inAudio
+    usageInImage += inImage
     usageInCached += n(inD, "cached_tokens")
-    usageOutText += n(outD, "text_tokens")
-    usageOutAudio += n(outD, "audio_tokens")
+    let outText = n(outD, "text_tokens")
+    let outAudio = n(outD, "audio_tokens")
+    usageOutText += outText + outAudio > 0 ? outText : n(usage, "output_tokens")
+    usageOutAudio += outAudio
   }
 
   /// Gemini: usageMetadata is cumulative for the turn → keep the latest (replace, not sum).
@@ -1588,12 +1595,19 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     }
     let inD = usage["input_token_details"] as? [String: Any]
     let outD = usage["output_token_details"] as? [String: Any]
-    usageInText += n(inD, "text_tokens")
-    usageInAudio += n(inD, "audio_tokens")
-    usageInImage += n(inD, "image_tokens")
+    let inText = n(inD, "text_tokens")
+    let inAudio = n(inD, "audio_tokens")
+    let inImage = n(inD, "image_tokens")
+    // Session-scoped usage may arrive aggregate-only; fall back to the totals so
+    // the closing turn is still reported rather than dropped.
+    usageInText += inText + inAudio + inImage > 0 ? inText : n(usage, "input_tokens")
+    usageInAudio += inAudio
+    usageInImage += inImage
     usageInCached += n(inD, "cached_tokens")
-    usageOutText += n(outD, "text_tokens")
-    usageOutAudio += n(outD, "audio_tokens")
+    let outText = n(outD, "text_tokens")
+    let outAudio = n(outD, "audio_tokens")
+    usageOutText += outText + outAudio > 0 ? outText : n(usage, "output_tokens")
+    usageOutAudio += outAudio
   }
 
   /// Report the turn's usage to the backend (managed sessions only — BYOK pays direct).
