@@ -38,6 +38,9 @@ class CaptureProvider extends CaptureController {
     _liveSegmentWrite =
         _liveSegmentWrite.then((_) => localSegmentStore.replaceSession(sessionId, pending)).catchError((Object e) {
       Logger.debug('Error persisting live segments: $e');
+      if (_lastPersistedFingerprint == fingerprint) {
+        _lastPersistedFingerprint = null;
+      }
     });
     unawaited(_liveSegmentWrite);
   }

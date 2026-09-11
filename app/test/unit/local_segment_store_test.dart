@@ -108,4 +108,27 @@ void main() {
 
     expect(loaded.map((s) => s.text), ['second']);
   });
+
+  test('a failed write is retried on the next identical update', () async {
+    final blocked = File('${dir.path}/blocked');
+    await blocked.writeAsString('not a directory');
+    final store = LocalSegmentStore.at(Directory(blocked.path));
+    final provider = CaptureProvider(localSegmentStore: store);
+    addTearDown(provider.dispose);
+    provider.testSessionStartSeconds = 1700000002;
+
+    provider.segments = [_seg('a', 'only')];
+    provider.notifyListeners();
+    await provider.pendingLiveSegmentWrite;
+
+    expect(await LocalSegmentStore.at(Directory(blocked.path)).loadSession('live-1700000002'), isEmpty);
+
+    await blocked.delete();
+    provider.notifyListeners();
+    await provider.pendingLiveSegmentWrite;
+
+    final loaded = await LocalSegmentStore.at(Directory(blocked.path)).loadSession('live-1700000002');
+
+    expect(loaded.map((s) => s.text), ['only']);
+  });
 }
