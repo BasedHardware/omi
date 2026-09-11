@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/models/stt_result.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
@@ -454,6 +455,31 @@ class GeminiStreamingSttSocket implements IPureSocket {
   }
 }
 
+/// The one-time GPT-Live `session.start` frame for the STT-only socket.
+///
+/// Unlike the conversational GPT-Live clients, this lane only consumes
+/// `session.input_transcript.delta`, so it names the spoken language in the
+/// instructions and omits `audio.output.voice` (no reply is synthesized).
+Map<String, dynamic> gptLiveSessionStartMessage({
+  required String model,
+  required String language,
+  required int sampleRate,
+  required String eventId,
+}) {
+  final languageName = SttLanguages.common[language] ?? language;
+  return {
+    'type': 'session.start',
+    'event_id': eventId,
+    'session': {
+      'model': model,
+      'instructions': "Transcribe the user's speech in $languageName.",
+      'audio': {
+        'format': {'type': 'audio/pcm', 'rate': sampleRate},
+      },
+    },
+  };
+}
+
 /// OpenAI GPT-Live streaming socket with session.start handshake and base64 audio encoding
 class GptLiveStreamingSttSocket implements IPureSocket {
   WebSocketChannel? _channel;
@@ -534,7 +560,14 @@ class GptLiveStreamingSttSocket implements IPureSocket {
         cancelOnError: true,
       );
 
-      await _sendSessionStart();
+      if (!await _sendSessionStart()) {
+        // The handshake never reached the wire — reporting connected would let the
+        // composite service treat a dead session as live and never recover.
+        CustomSttLogService.instance.error('GptLive', 'Session start failed; not reporting connected');
+        DebugLogManager.logWarning('gpt_live_streaming_session_start_failed', {});
+        _status = PureSocketStatus.notConnected;
+        return false;
+      }
 
       onConnected();
       return true;
@@ -561,28 +594,26 @@ class GptLiveStreamingSttSocket implements IPureSocket {
     }
   }
 
-  Future<void> _sendSessionStart() async {
-    if (_sessionStartSent) return;
+  /// Send the one-time `session.start` frame. Returns false if the write failed,
+  /// so [connect] can refuse to report a connection that never started.
+  Future<bool> _sendSessionStart() async {
+    if (_sessionStartSent) return true;
 
-    final startMessage = {
-      'type': 'session.start',
-      'event_id': DateTime.now().microsecondsSinceEpoch.toString(),
-      'session': {
-        'model': model,
-        'instructions': "Transcribe the user's speech.",
-        'audio': {
-          'format': {'type': 'audio/pcm', 'rate': sampleRate},
-          'output': {'voice': 'marin'},
-        },
-      },
-    };
+    final startMessage = gptLiveSessionStartMessage(
+      model: model,
+      language: language,
+      sampleRate: sampleRate,
+      eventId: DateTime.now().microsecondsSinceEpoch.toString(),
+    );
 
     try {
       _channel!.sink.add(jsonEncode(startMessage));
       _sessionStartSent = true;
       CustomSttLogService.instance.info('GptLive', 'Session start sent');
+      return true;
     } catch (e) {
       CustomSttLogService.instance.error('GptLive', 'Failed to send session.start: $e');
+      return false;
     }
   }
 
