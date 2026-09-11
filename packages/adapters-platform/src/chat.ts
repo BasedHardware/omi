@@ -78,7 +78,8 @@ function parseSender(value: unknown): ChatMessageSender {
   return "unknown";
 }
 
-function parseType(value: unknown): ChatMessageType {
+function parseType(value: unknown): ChatMessageType | null {
+  if (typeof value !== "string" || value.length === 0) return null;
   if (value === "text" || value === "day_summary") return value;
   return "unknown";
 }
@@ -114,6 +115,7 @@ export function wireToChatMessage(raw: unknown): ChatMessage | null {
   const generationOutcome = raw["generationOutcome"];
   if (
     parsedId === null ||
+    type === null ||
     typeof raw["text"] !== "string" ||
     !isNonNegativeInteger(raw["createdAt"]) ||
     !isNonNegativeInteger(raw["updatedAt"]) ||

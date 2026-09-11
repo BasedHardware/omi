@@ -335,6 +335,45 @@ test('refuses empty attachment ids instead of completing history', async () => {
   ).rejects.toThrow('malformed');
 });
 
+test('refuses empty message types instead of completing history', async () => {
+  const human = {
+    id: 'human-type-empty',
+    text: 'saved prompt',
+    sender: 'human' as const,
+    createdAt: 100,
+    generationOutcome: null,
+  };
+  const backendFor = (body: string): OmiBackend => ({
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 200,
+      body,
+    }),
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  });
+
+  await expect(
+    loadChatHistory(
+      backendFor(
+        JSON.stringify({
+          messages: [
+            wireMessage(human),
+            {
+              ...wireMessage(human),
+              id: 'human-type-blank',
+              text: 'has a blank type',
+              type: '',
+            },
+          ],
+          page: {olderCursor: null, hasOlder: false},
+          capabilities,
+        }),
+      ),
+    ),
+  ).rejects.toThrow('malformed');
+});
+
 test('loads named chat session history without mixing the main session', async () => {
   const requests: NativeHttpRequest[] = [];
   const backend = {
