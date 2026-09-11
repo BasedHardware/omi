@@ -2634,6 +2634,10 @@ export type MeetingToastPayload = {
   kind: 'ask' | 'starting' | 'capturing' | 'error'
   /** Distinguishes a failed start, interrupted capture, and final-save failure. */
   errorKind?: 'startup' | 'runtime' | 'save'
+  /** Why a startup/runtime failure happened, when it's an account limit rather than
+   *  a local problem — so the toast doesn't blame sign-in/mic/network, and doesn't
+   *  offer a Retry that can only re-hit the same limit. Absent = generic failure. */
+  errorReason?: 'quota' | 'daily_limit'
   /** Show the one-time first-run hint line. */
   firstRun?: boolean
 }

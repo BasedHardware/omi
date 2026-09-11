@@ -49,11 +49,26 @@ function WhatsNewCard({ p }: { p: WhatsNewPayload }): React.JSX.Element {
   )
 }
 
+function failureAdvice(
+  errorKind: NonNullable<MeetingToastPayload['errorKind']>,
+  reason: MeetingToastPayload['errorReason']
+): string {
+  if (errorKind === 'save')
+    return 'The recording ended, but Omi could not save the local meeting transcript.'
+  if (reason === 'quota')
+    return 'Your free Omi transcription is used up. Upgrade your plan to keep transcribing meetings.'
+  if (reason === 'daily_limit')
+    return "Omi's daily voice transcription limit is used up. It frees up again over a rolling 24 hours."
+  return 'Check your sign-in, internet connection, and Windows microphone access, then retry.'
+}
+
 function MeetingCard({ p }: { p: MeetingToastPayload }): React.JSX.Element {
   const capturing = p.kind === 'capturing'
   const starting = p.kind === 'starting'
   const failed = p.kind === 'error'
   const errorKind = p.errorKind ?? 'startup'
+  // An account-limit stop can't be fixed by retrying — only offer Dismiss.
+  const retryable = errorKind !== 'save' && !p.errorReason
   return (
     <div
       className="insight-card"
@@ -89,9 +104,7 @@ function MeetingCard({ p }: { p: MeetingToastPayload }): React.JSX.Element {
           : starting
             ? 'Connecting audio and transcription…'
             : failed
-              ? errorKind === 'save'
-                ? 'The recording ended, but Omi could not save the local meeting transcript.'
-                : 'Check your sign-in, internet connection, and Windows microphone access, then retry.'
+              ? failureAdvice(errorKind, p.errorReason)
               : 'Capture and transcribe this meeting?'}
       </div>
       {p.firstRun ? (
@@ -105,7 +118,7 @@ function MeetingCard({ p }: { p: MeetingToastPayload }): React.JSX.Element {
           >
             {starting ? 'Cancel' : 'Stop'}
           </button>
-        ) : failed && errorKind === 'save' ? (
+        ) : failed && !retryable ? (
           <button
             className="meeting-btn"
             onClick={() => window.omi.meetingAction(p.meetingId, 'dismiss')}

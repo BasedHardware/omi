@@ -33,6 +33,7 @@ import { showMeetingToast, hideMeetingToast, getCurrentMeetingToast } from '../i
 import { onCaptureEventInMain } from '../ipc/captureBridge'
 import { getAppSettings, setAppSettings } from '../appSettings'
 import type { CaptureCommand, MeetingToastAction } from '../../shared/types'
+import { classifyTranscriptionStop } from '../../shared/transcriptionStop'
 
 const DEBOUNCE_MS = 3000
 const COALESCE_MS = 250
@@ -357,11 +358,13 @@ export function startMeetingMonitor(d: Deps): void {
       // Stop every sibling lane before clearing the state. Otherwise one lane
       // can keep recording after the other fails while the notice is gone.
       stopCapture()
+      const stopKind = classifyTranscriptionStop(ev.message ?? '')
       showMeetingToast({
         meetingId: currentMeeting.id,
         appName: currentMeeting.appName,
         kind: 'error',
-        errorKind: ev.status === 'startup-error' ? 'startup' : 'runtime'
+        errorKind: ev.status === 'startup-error' ? 'startup' : 'runtime',
+        ...(stopKind === 'quota' || stopKind === 'daily_limit' ? { errorReason: stopKind } : {})
       })
     }
   })
