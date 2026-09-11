@@ -3231,9 +3231,24 @@ test('keeps empty catalogue names instead of failing the Apps page', () => {
     expect.objectContaining({id: 'catalog-app-2', name: ' \t\n'}),
     expect.objectContaining({id: 'catalog-app-3', name: 'Owned app'}),
   ]);
-  expect(() => parseCloudApp({id: 'catalog-app-1'}, 'App 0')).toThrow(
-    'App 0 is malformed',
+  expect(parseCloudApp({id: 'catalog-app-1'}, 'App 0')).toEqual(
+    expect.objectContaining({id: 'catalog-app-1', name: ''}),
   );
+  expect(
+    parseCloudApps(
+      [{id: 'catalog-omitted'}, {id: 'catalog-named', name: 'Owned app'}],
+      'Apps response',
+    ),
+  ).toEqual([
+    expect.objectContaining({id: 'catalog-omitted', name: ''}),
+    expect.objectContaining({id: 'catalog-named', name: 'Owned app'}),
+  ]);
+  expect(() =>
+    parseCloudApp({id: 'catalog-app-1', name: 1}, 'App 0'),
+  ).toThrow('App 0 is malformed');
+  expect(() =>
+    parseCloudApp({id: 'catalog-app-1', name: null}, 'App 0'),
+  ).toThrow('App 0 is malformed');
 });
 
 test('names GET subscription quota integer strings instead of omitting Plan usage', () => {
