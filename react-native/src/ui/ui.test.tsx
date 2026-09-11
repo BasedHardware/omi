@@ -2053,6 +2053,42 @@ test('an empty chat bubble names GET unknown content_block Chat item instead of 
   });
 });
 
+test('an empty chat bubble names GET malformed content_block fallbacks instead of Message text unavailable', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-malformed',
+        text: 'Task\nGoal - Ship the recap\nQuestion',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Task\nGoal - Ship the recap\nQuestion');
+  expect(copies).not.toContain('Message text unavailable');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('an unknown chat sender says Sender unavailable instead of looking like a quiet AI turn', () => {
   const renderer = render(
     <ChatMessageRow

@@ -792,6 +792,127 @@ test('old chat history names empty-text GET unknown content_block Chat item fall
   expect(copy).not.toContain('Should stay omitted');
 });
 
+test('old chat history names empty-text GET malformed content_block fallbacks without inventing widgets', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'malformed-1',
+        sender: 'ai',
+        text: '',
+        created_at: '2026-09-07T01:02:03Z',
+        content_blocks: [
+          {type: 'taskCard', id: 't1'},
+          {
+            type: 'discoveryCard',
+            id: 'd1',
+            title: 'Quiet mornings',
+            summary: 'You like a slow start.',
+          },
+          {
+            type: 'discovery_card',
+            title: 'No id discovery',
+            summary: 'Still named',
+          },
+          {
+            type: 'goalLink',
+            id: 'g1',
+            summary: 'Ship the recap',
+          },
+          {
+            type: 'question_card',
+            id: 'q1',
+            text: 'Schedule standup?',
+          },
+          {
+            type: 'captureLink',
+            id: 'c1',
+            summary: 'Hallway recap',
+          },
+          {
+            type: 'conversation_link',
+            id: 'conv-1',
+            summary: 'Notes from standup',
+          },
+          {
+            type: 'memoryLink',
+            id: 'm1',
+            summary: 'Prefers mornings',
+          },
+          {
+            type: 'agent_spawn',
+            id: 'a1',
+            title: 'Draft recap',
+            objective: 'Write the notes',
+          },
+          {
+            type: 'followUp',
+            text: 'Want me to draft the recap next?',
+          },
+        ],
+      },
+      {
+        id: 'malformed-kept',
+        sender: 'ai',
+        text: 'Here is the answer.',
+        created_at: '2026-09-07T01:02:04Z',
+        content_blocks: [
+          {type: 'task_card', id: 't2'},
+          {
+            type: 'goal_link',
+            id: 'g2',
+            summary: 'Should stay omitted',
+          },
+        ],
+      },
+      {
+        id: 'malformed-question-empty',
+        sender: 'ai',
+        text: ' \t',
+        created_at: '2026-09-07T01:02:05Z',
+        content_blocks: [{type: 'questionCard', id: 'q-empty'}],
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'malformed-1')?.text).toBe(
+    'Task\nDiscovery - No id discovery - Still named\nGoal - Ship the recap\nSchedule standup?\nCapture - Hallway recap\nMeeting notes ready - Notes from standup\nMemory - Prefers mornings\nAgent started - Draft recap - Write the notes',
+  );
+  expect(
+    page.messages.find(row => row.id === 'malformed-1')?.contentBlocks,
+  ).toEqual([
+    {
+      eyebrow: 'Discovery',
+      title: 'Quiet mornings',
+      detail: 'You like a slow start.',
+    },
+    {eyebrow: 'Want me to draft the recap next?'},
+  ]);
+  expect(
+    page.messages.find(row => row.id === 'malformed-1')?.text,
+  ).not.toContain('Quiet mornings');
+  expect(
+    page.messages.find(row => row.id === 'malformed-1')?.text,
+  ).not.toContain('Want me to draft the recap next?');
+  expect(
+    page.messages.find(row => row.id === 'malformed-1')?.text,
+  ).not.toContain('t1');
+  expect(page.messages.find(row => row.id === 'malformed-kept')?.text).toBe(
+    'Here is the answer.',
+  );
+  expect(
+    page.messages.find(row => row.id === 'malformed-kept')?.text,
+  ).not.toContain('Task');
+  expect(
+    page.messages.find(row => row.id === 'malformed-kept')?.text,
+  ).not.toContain('Should stay omitted');
+  expect(
+    page.messages.find(row => row.id === 'malformed-question-empty')?.text,
+  ).toBe('Question');
+  const copy = JSON.stringify(page.messages);
+  expect(copy).not.toContain('preparedAnswer');
+  expect(copy).not.toContain('Show more');
+});
+
 test('old chat history names GET memory review cards without inventing writes', () => {
   const page = parseOmiHistory(
     JSON.stringify([

@@ -341,22 +341,44 @@ function contentBlockFallbackLine(raw: unknown): string | null {
       ]);
     case 'discoveryCard':
     case 'discovery_card':
+      return labelledFallback('Discovery', [
+        wireString(row, 'title'),
+        wireString(row, 'summary'),
+      ]);
     case 'questionCard':
-    case 'question_card':
+    case 'question_card': {
+      const text = wireString(row, 'text');
+      return text === undefined ? 'Question' : text;
+    }
     case 'taskCard':
     case 'task_card':
+      return 'Task';
     case 'goalLink':
     case 'goal_link':
+      return labelledFallback('Goal', [wireString(row, 'summary')]);
     case 'memoryLink':
     case 'memory_link':
+      return labelledFallback('Memory', [wireString(row, 'summary')]);
     case 'captureLink':
     case 'capture_link':
+      return labelledFallback('Capture', [wireString(row, 'summary')]);
     case 'conversationLink':
     case 'conversation_link':
+      return labelledFallback('Meeting notes ready', [
+        wireString(row, 'summary'),
+      ]);
     case 'agentSpawn':
     case 'agent_spawn':
+      return labelledFallback('Agent started', [
+        wireString(row, 'title'),
+        wireString(row, 'objective'),
+      ]);
     case 'agentCompletion':
     case 'agent_completion':
+      return labelledFallback('Agent completed', [
+        wireString(row, 'title'),
+        wireString(row, 'output'),
+      ]);
     case 'memoryReviewCard':
     case 'memory_review_card':
     case 'followUp':
@@ -741,8 +763,13 @@ function parseOmiChatFallbackText(row: Record<string, unknown>): string {
     }
     return raw
       .slice(0, 24)
-      .map(contentBlockFallbackLine)
-      .filter((line): line is string => line !== null && line !== '')
+      .flatMap(block => {
+        if (parseContentBlock(block).length > 0) {
+          return [];
+        }
+        const line = contentBlockFallbackLine(block);
+        return line === null || line === '' ? [] : [line];
+      })
       .join('\n');
   } catch {
     return '';
