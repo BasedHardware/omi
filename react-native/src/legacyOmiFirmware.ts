@@ -38,6 +38,9 @@ function firmwareChangelog(value: unknown): string[] | undefined {
   const rows = array(value, 32);
   const changelog: string[] = [];
   for (const raw of rows) {
+    if (typeof raw !== 'string') {
+      continue;
+    }
     const copy = visibleDisplayText(text(raw, 10000));
     if (copy !== '') {
       changelog.push(copy);
