@@ -13,6 +13,7 @@ import {
 } from '../desktopCloudClient';
 import {
   dataProtectionCopy,
+  desktopBackendConfigurationCopy,
   desktopReadErrorCopy,
   developerWebhookRowCopy,
   developerWebhookTypeCopy,
@@ -431,6 +432,12 @@ export function DesktopSettings({
       );
       nextImportJobs = importJobsCopy(await importJobsTask);
       nextWebhookUrls = await webhookUrlsTask;
+    } else {
+      nextAccount = failedAccountSettings(
+        session !== 'ready'
+          ? 'Sign in to load conversations and memories.'
+          : desktopBackendConfigurationCopy,
+      );
     }
     if (seq !== reloadSeqRef.current) {
       return;
@@ -729,7 +736,9 @@ export function DesktopSettings({
       ) : (
         <Row
           copy={
-            account === null
+            session !== 'ready'
+              ? 'Sign in to load conversations and memories.'
+              : account === null
               ? 'Loading plan…'
               : account.subscriptionError ?? 'Plan is unavailable.'
           }

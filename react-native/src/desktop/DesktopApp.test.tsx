@@ -9,6 +9,7 @@ import {
   chatDaySummaryCopy,
   desktopAccountSettingUnavailableCopy,
   desktopAppsUnavailableCopy,
+  desktopBackendConfigurationCopy,
   desktopBackendUnavailableCopy,
   developerKeyCreatedCopy,
 } from '../desktopReadClient';
@@ -4058,6 +4059,59 @@ test('Settings does not expose cloud mutations when account values failed to loa
   expect(
     renderer.root.findAll(node => node.props.accessibilityLabel === 'Opt in'),
   ).toHaveLength(0);
+});
+
+test('Settings does not claim a plan is loading after the backend is missing', async () => {
+  const native = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock} | null;
+  };
+  const previous = native.omiBackend;
+  native.omiBackend = null;
+  try {
+    const renderer = renderDesktop();
+    await act(async () => {
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Settings')
+        .props.onPress();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    act(() => {
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Account & Plan')
+        .props.onPress();
+    });
+    const account = renderedText(renderer);
+    expect(account).toContain(desktopBackendConfigurationCopy);
+    expect(account).not.toContain('Loading account…');
+    expect(account).not.toContain('Loading plan…');
+    act(() => {
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Alerts & Privacy')
+        .props.onPress();
+    });
+    const alerts = renderedText(renderer);
+    expect(alerts).toContain(desktopBackendConfigurationCopy);
+    expect(alerts).not.toContain('Loading recording storage…');
+    expect(alerts).not.toContain('Loading private cloud sync…');
+    expect(alerts).not.toContain('Loading training data…');
+    expect(
+      renderer.root.findAll(node => node.props.accessibilityLabel === 'Update'),
+    ).toHaveLength(0);
+    expect(
+      renderer.root.findAll(node => node.props.accessibilityLabel === 'Opt in'),
+    ).toHaveLength(0);
+    act(() => {
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'AI & Automation')
+        .props.onPress();
+    });
+    const automation = renderedText(renderer);
+    expect(automation).toContain(desktopBackendConfigurationCopy);
+    expect(automation).not.toContain('Loading developer webhooks…');
+  } finally {
+    native.omiBackend = previous;
+  }
 });
 
 test('Settings reports a nested non-retryable recording-storage read as unavailable', async () => {
