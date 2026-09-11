@@ -15,12 +15,13 @@ import {
   visibleDisplayText,
   type ConversationProjection,
 } from '../desktopReadClient';
-import {RecordingTranscript} from './RecordingTranscript';
+import {RecordingTranscriptView} from './RecordingTranscript';
 import {ChatConversationHistory} from './ChatConversationHistory';
 import {desktopTokens} from '../desktop/tokens';
 import {styles} from './styles';
 import {FocusPressable} from './Pressable';
 import {useLegacyConversationDetail} from '../useLegacyConversationDetail';
+import {useRecordingTranscript} from '../recordingTranscript';
 
 export function formatConversationDate(value: string | null): string {
   if (value === null) {
@@ -98,6 +99,51 @@ function ConversationClockFields({
   );
 }
 
+function recordingSessionId(
+  conversation: ConversationProjection,
+): string | null {
+  return conversation.source === 'omi' &&
+    conversation.id.startsWith('recording:') &&
+    conversation.id.length > 'recording:'.length
+    ? conversation.id.slice('recording:'.length)
+    : null;
+}
+
+function RecordingConversationFields({
+  conversation,
+  desktop,
+  ink,
+  sessionId,
+}: {
+  conversation: ConversationProjection;
+  desktop: boolean;
+  ink?: {color: string};
+  sessionId: string;
+}) {
+  const {result, reload} = useRecordingTranscript(
+    sessionId,
+    conversation.updatedAt ?? undefined,
+  );
+  return (
+    <>
+      <ConversationClockFields
+        conversation={conversation}
+        ink={ink}
+        durationCopy={
+          result.status === 'loaded' && result.value.state === 'completed'
+            ? conversationTranscriptDurationCopy(result.value.segments)
+            : null
+        }
+      />
+      <RecordingTranscriptView
+        desktop={desktop}
+        result={result}
+        reload={reload}
+      />
+    </>
+  );
+}
+
 export function ConversationDetail({
   conversation,
   desktop = false,
@@ -117,6 +163,7 @@ export function ConversationDetail({
     );
   }
   const ink = desktop ? {color: desktopTokens.color.ink} : undefined;
+  const sessionId = recordingSessionId(conversation);
   return (
     <>
       <Text style={[styles.conversationDetailTitle, ink]}>
@@ -125,17 +172,16 @@ export function ConversationDetail({
       <Text style={[styles.conversationDetailSummary, ink]}>
         {conversationDisplaySummary(conversation)}
       </Text>
-      <ConversationClockFields conversation={conversation} ink={ink} />
-      {conversation.source === 'omi' &&
-        conversation.id.startsWith('recording:') &&
-        conversation.id.length > 'recording:'.length && (
-          <RecordingTranscript
-            desktop={desktop}
-            key={conversation.id}
-            sessionId={conversation.id.slice('recording:'.length)}
-            revision={conversation.updatedAt ?? undefined}
-          />
-        )}
+      {sessionId !== null ? (
+        <RecordingConversationFields
+          conversation={conversation}
+          desktop={desktop}
+          ink={ink}
+          sessionId={sessionId}
+        />
+      ) : (
+        <ConversationClockFields conversation={conversation} ink={ink} />
+      )}
       {conversation.source === 'chat' &&
         conversation.id.startsWith('chat:') &&
         conversation.id.length > 'chat:'.length && (

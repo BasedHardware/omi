@@ -42,16 +42,17 @@ function attributedTranscriptLines(value: RecordingTranscriptValue):
   return lines.some(line => line.speaker !== null) || showClocks ? lines : null;
 }
 
-export function RecordingTranscript({
-  sessionId,
-  revision,
+type RecordingTranscriptRead = ReturnType<typeof useRecordingTranscript>;
+
+export function RecordingTranscriptView({
+  result,
+  reload,
   desktop = false,
 }: {
-  sessionId: string;
-  revision?: string;
+  result: RecordingTranscriptRead['result'];
+  reload: RecordingTranscriptRead['reload'];
   desktop?: boolean;
 }) {
-  const {result, reload} = useRecordingTranscript(sessionId, revision);
   const ink = desktop ? {color: desktopTokens.color.ink} : undefined;
   const completedText =
     result.status === 'loaded' && result.value.state === 'completed'
@@ -152,5 +153,24 @@ export function RecordingTranscript({
         </FocusPressable>
       )}
     </View>
+  );
+}
+
+export function RecordingTranscript({
+  sessionId,
+  revision,
+  desktop = false,
+}: {
+  sessionId: string;
+  revision?: string;
+  desktop?: boolean;
+}) {
+  const {result, reload} = useRecordingTranscript(sessionId, revision);
+  return (
+    <RecordingTranscriptView
+      result={result}
+      reload={reload}
+      desktop={desktop}
+    />
   );
 }

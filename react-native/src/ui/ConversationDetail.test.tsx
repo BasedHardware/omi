@@ -729,6 +729,79 @@ test('legacy conversation details name GET duration from transcript span', () =>
   expect(copy).not.toContain('Duration unavailable');
 });
 
+test('canonical recording details name GET duration from transcript span', () => {
+  mockRecording.mockReturnValue({
+    result: {
+      status: 'loaded',
+      value: {
+        state: 'completed',
+        text: 'Hello Later',
+        discardedLeadingPackets: 0,
+        segments: [
+          {
+            text: 'Hello',
+            speaker: 'SPEAKER_00',
+            isUser: false,
+            start: 0,
+            end: 90,
+          },
+          {
+            text: 'Later',
+            speaker: 'SPEAKER_01',
+            isUser: false,
+            start: 120,
+            end: 150,
+          },
+        ],
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      conversation: {
+        ...conversation,
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T13:00:00.000Z',
+        status: 'completed',
+      },
+    }),
+  );
+  expect(copy).toContain('Duration ·');
+  expect(copy).toContain('2 mins 30 secs');
+  expect(copy).not.toContain('1 hr');
+  expect(copy).not.toContain('Duration unavailable');
+});
+
+test('canonical recording details omit Duration when transcript span is empty', () => {
+  mockRecording.mockReturnValue({
+    result: {
+      status: 'loaded',
+      value: {
+        state: 'completed',
+        text: '',
+        discardedLeadingPackets: 0,
+        segments: [],
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      conversation: {
+        ...conversation,
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T13:00:00.000Z',
+        status: 'completed',
+      },
+    }),
+  );
+  expect(copy).toContain('Finished ·');
+  expect(copy).not.toContain('Duration ·');
+  expect(copy).not.toContain('1 hr');
+  expect(copy).not.toContain('Duration unavailable');
+});
+
 test('legacy in-progress chats omit Finished like canonical detail', () => {
   mockLegacy.mockReturnValue({
     result: {
