@@ -214,9 +214,13 @@ export async function startMeetingSession(args: {
   }
   args.signal?.removeEventListener('abort', stopStartingHandles)
   live = true
+  // The continuous session passes through 'connecting' on every normal rollover
+  // (silence finalize → new conversation) and on each reconnect attempt, then
+  // returns to 'ready'. Only 'failed' (reconnects exhausted / terminal stop) or
+  // 'inactive' (the session was turned off) means the meeting has lost its mic.
   const offLiveMicHealth = delegatedMic
     ? onLiveMicSessionHealth((health) => {
-        if (!stopped && health !== 'ready') {
+        if (!stopped && (health === 'failed' || health === 'inactive')) {
           args.onError('microphone: continuous transcription stopped')
         }
       })

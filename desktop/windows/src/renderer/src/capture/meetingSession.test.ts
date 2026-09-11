@@ -163,6 +163,35 @@ describe('startMeetingSession', () => {
     expect(live.listeners).toHaveLength(0)
   })
 
+  it('keeps capturing through a delegated mic rollover (ready → connecting → ready)', async () => {
+    // Live bug: the continuous mic finalized a conversation after a silence and
+    // reconnected for the next one; the brief 'connecting' was reported as
+    // "microphone: continuous transcription stopped" and the meeting capture died.
+    live.health = 'ready'
+    const onError = vi.fn()
+    const session = await startMeetingSession({ appName: 'Google Meet', onError })
+
+    for (const health of ['connecting', 'ready'] as const) {
+      live.health = health
+      for (const listener of live.listeners) listener(live.health)
+    }
+
+    expect(onError).not.toHaveBeenCalled()
+    await session.stop()
+  })
+
+  it('reports a delegated continuous mic that is turned off mid-meeting', async () => {
+    live.health = 'ready'
+    const onError = vi.fn()
+    const session = await startMeetingSession({ appName: 'Google Meet', onError })
+
+    live.health = 'inactive'
+    for (const listener of live.listeners) listener(live.health)
+
+    expect(onError).toHaveBeenCalledWith('microphone: continuous transcription stopped')
+    await session.stop()
+  })
+
   it('fails startup and stops system audio when the delegated mic never becomes ready', async () => {
     live.health = 'connecting'
     live.waitForReady.mockResolvedValue(false)
