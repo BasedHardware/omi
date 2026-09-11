@@ -92,10 +92,11 @@ enum SystemCaptureControls {
 
   @discardableResult
   static func setAudioRecording(_ enabled: Bool) -> SystemCaptureOutcome {
-    // Narrower exemption than the general paywall check: also off the hook
-    // once transcription is pointed at a self-hosted backend, even without
-    // BYOK (see AppState.isTranscriptionExemptFromPaywall). Posts its own
-    // "transcription" reason (not "trial_expired") so the central
+    // Same general paywall check as everything else (see
+    // AppState.isTranscriptionExemptFromPaywall): voice transcription always
+    // runs through Omi's Deepgram proxy, so the Local provider earns no
+    // exemption here. Posts its own "transcription" reason (not
+    // "trial_expired") so the central
     // `AppState.isUsageLimitExemptLocally` choke point can tell this gate
     // apart from screen capture's and apply the right exemption to each.
     if enabled && !AppState.isTranscriptionExemptFromPaywall {

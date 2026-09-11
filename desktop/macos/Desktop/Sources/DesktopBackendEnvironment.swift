@@ -68,18 +68,7 @@ enum DesktopBackendEnvironment {
   static func pythonBaseURL(
     environmentValue: String? = currentEnvironmentValue("OMI_PYTHON_API_URL")
   ) -> String {
-    // Local provider + a self-hosted backend URL configured in Settings
-    // (AIProvider.localBackendURLKey) overrides everything else: voice
-    // transcription and memory/conversation sync then hit that backend
-    // instead of api.omi.me. Checked only here, not in the pure/testable
-    // overload below, so existing unit tests are unaffected.
-    if UserDefaults.standard.string(forKey: DefaultsKey.chatBridgeMode) == "local",
-      let override = normalizedURL(UserDefaults.standard.string(forKey: AIProvider.localBackendURLKey))
-    {
-      return override
-    }
-
-    return pythonBaseURL(
+    pythonBaseURL(
       useDevelopmentBackends: shouldUseDevelopmentBackends,
       environmentValue: environmentValue
     )

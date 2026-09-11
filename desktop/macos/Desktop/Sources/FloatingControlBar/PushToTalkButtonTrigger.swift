@@ -100,10 +100,8 @@ extension PushToTalkManager {
   /// audio capture: a PTT turn's transcription is a separate axis (gated
   /// instead by `isTranscriptionExemptFromPaywall`/`blockIfPaywalled` at
   /// transcription start), and the chat completion it feeds always runs
-  /// against the user's own server under Local regardless of whether a
-  /// self-hosted backend is configured for voice, so PTT is exempt the same
-  /// way a Local-provider chat turn is, with no additional backend-URL
-  /// requirement.
+  /// against the user's own server under Local, so PTT is exempt the same
+  /// way a Local-provider chat turn is.
   var isPushToTalkUsageLimitBlocked: Bool {
     guard !APIKeyService.isByokActive, !AIProvider.isLocalProviderActive else { return false }
     return FloatingBarUsageLimiter.shared.isLimitReached
