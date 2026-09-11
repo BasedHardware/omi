@@ -1038,6 +1038,175 @@ test('nested non-retryable generation cancel is not a transient stop failure', a
   expect(textOf(renderer)).not.toContain('Could not stop the response.');
 });
 
+test('a later successful stop clears a transient stop failure', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(
+    async (value: {id: string; body?: string}) => {
+      if (value.id === 'chat-history') {
+        return {id: value.id, status: 200, body: historyBody([])};
+      }
+      if (value.id.startsWith('admit-')) {
+        const body = JSON.parse(value.body ?? '{}') as {
+          id: string;
+          text: string;
+          at: number;
+        };
+        return {
+          id: value.id,
+          status: 201,
+          body: admissionBody(
+            {
+              id: body.id,
+              text: body.text,
+              sender: 'human',
+              createdAt: body.at,
+              generationOutcome: null,
+            },
+            'generation-retry-stop',
+          ),
+        };
+      }
+      return {id: value.id, status: 501, body: null};
+    },
+  );
+  mockBackend.generationEvents.mockReturnValue(new Promise(() => undefined));
+  mockBackend.cancelGenerationEvents
+    .mockRejectedValueOnce(
+      Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'}),
+    )
+    .mockResolvedValueOnce(undefined);
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('retry stop question');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(labelsOf(renderer)).toContain('Stop');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Stop')
+      .props.onPress();
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain('Could not stop the response.');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Stop')
+      .props.onPress();
+    await flushAsyncQueue();
+  });
+  expect(mockBackend.cancelGenerationEvents).toHaveBeenCalledTimes(2);
+  expect(textOf(renderer)).not.toContain('Could not stop the response.');
+  expect(textOf(renderer)).not.toContain(
+    'Stopping the response is not available on this backend yet.',
+  );
+});
+
+test('a completed reply clears a transient stop failure', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  let resolveEvents:
+    | ((value: {id: string; status: number; body: string}) => void)
+    | undefined;
+  mockBackend.request.mockImplementation(
+    async (value: {id: string; body?: string}) => {
+      if (value.id === 'chat-history') {
+        return {id: value.id, status: 200, body: historyBody([])};
+      }
+      if (value.id.startsWith('admit-')) {
+        const body = JSON.parse(value.body ?? '{}') as {
+          id: string;
+          text: string;
+          at: number;
+        };
+        return {
+          id: value.id,
+          status: 201,
+          body: admissionBody(
+            {
+              id: body.id,
+              text: body.text,
+              sender: 'human',
+              createdAt: body.at,
+              generationOutcome: null,
+            },
+            'generation-finish-after-stop',
+          ),
+        };
+      }
+      return {id: value.id, status: 501, body: null};
+    },
+  );
+  mockBackend.generationEvents.mockImplementation(
+    () =>
+      new Promise(resolve => {
+        resolveEvents = resolve;
+      }),
+  );
+  mockBackend.cancelGenerationEvents.mockRejectedValue(
+    Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'}),
+  );
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('finish after stop');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(labelsOf(renderer)).toContain('Stop');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Stop')
+      .props.onPress();
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain('Could not stop the response.');
+  await act(async () => {
+    resolveEvents!({
+      id: 'generation-finish-after-stop',
+      status: 200,
+      body: `event: done\nid: e2\ndata: ${JSON.stringify({
+        kind: 'done',
+        message: wireMessage({
+          id: 'generation-finish-after-stop',
+          text: 'finished anyway',
+          sender: 'ai',
+          createdAt: 2,
+          generationOutcome: 'completed',
+        }),
+      })}\n\n`,
+    });
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain('finished anyway');
+  expect(textOf(renderer)).not.toContain('Could not stop the response.');
+  expect(textOf(renderer)).not.toContain(
+    'Response interrupted. It may still complete.',
+  );
+});
+
 test('a send during the initial history load still receives the transcript', async () => {
   // send() bumps chatMutationSeqRef so an in-flight setMessages(page) cannot
   // wipe the optimistic row. The same bump used to discard the history page

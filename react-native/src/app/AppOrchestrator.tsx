@@ -632,6 +632,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           ...withoutCanonical.slice(insertAt),
         ];
       });
+      setChatError(current =>
+        current === 'Could not stop the response.' ? null : current,
+      );
     } catch (error) {
       if (
         chatSessionEpochRef.current === session &&
@@ -788,8 +791,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             'Response stopped locally. It may still complete on the server.',
           );
         }
-      } else if (generationId !== null)
+      } else if (generationId !== null) {
         await cancelChatGeneration(backend, generationId);
+        if (chatSessionEpochRef.current === session) {
+          setChatError(current =>
+            current === 'Could not stop the response.' ? null : current,
+          );
+        }
+      }
     } catch (error) {
       if (chatSessionEpochRef.current === session) {
         setChatError(chatCancelErrorCopy(error));
