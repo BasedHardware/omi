@@ -364,7 +364,7 @@ async def test_gemini_proxy_does_not_plan_gate_embed_content(monkeypatch):
     )
 
     assert response.status_code == 200
-    assert auth_calls == [], "embedContent is TBD-4 / S24 and must not inherit the generate gate"
+    assert auth_calls == [], "embedContent without X-Omi-Local-Embeddings fail-opens for legacy clients"
 
 
 @pytest.mark.asyncio

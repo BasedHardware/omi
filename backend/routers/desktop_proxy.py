@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import re
 import sys
@@ -40,6 +41,7 @@ from utils.other.endpoints import get_current_user_uid
 from utils.subscription import RELEASE_PROBE_UID, is_desktop_trial_paywalled
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _ALLOWED_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent', 'batchEmbedContents'})
 _ALLOWED_MODELS = frozenset(
@@ -1626,14 +1628,15 @@ async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> 
 # Gen-1 Gemini generate/stream is the screen-intelligence spend path (free-tier S14).
 # screen_frame_judge is the configured Gemini-provider feature, so a request-scoped
 # Gemini BYOK key satisfies authorize_managed_compute. embedContent/batchEmbedContents
-# stay ungated until DESKTOP_EMBED_PLAN_GATE_ENABLED is on (default off) so a
-# server cut cannot blank free-client vectors before the local-embedding client
-# ships. The product name for that gate is screen_text_embedding; the entitle-
-# ment feature remains screen_frame_judge so BYOK and paid plans keep working
-# without minting a chat-completions lane for an embedding model.
-# desktop_proactivity completions are the JIT/context-bucket
-# lane and are intentionally not gated in this shard — a blanket 402 there would
-# kill the ambient nano triage (S24) and the shipped completion lane
+# are gated by default once the client advertises X-Omi-Local-Embeddings (a bare
+# capability marker). Requests without the header fail open to Gemini so builds
+# that predate local embeddings keep working; DESKTOP_EMBED_PLAN_GATE_DISABLED=1
+# is the only kill switch. The product name for the embed 402 is
+# screen_text_embedding; entitlement stays screen_frame_judge so BYOK and paid
+# plans keep working without minting a chat-completions lane for an embedding
+# model. desktop_proactivity completions are the JIT/context-bucket lane and
+# are intentionally not gated in this shard — a blanket 402 there would kill
+# the ambient nano triage (S24) and the shipped completion lane
 # (test_legacy_clients_are_not_gated_by_jit_rollout).
 _PLAN_GATED_PROXY_ACTIONS = frozenset({'generateContent', 'streamGenerateContent'})
 _EMBED_PROXY_ACTIONS = frozenset({'embedContent', 'batchEmbedContents'})
@@ -1641,16 +1644,37 @@ _PLAN_GATED_PROXY_FEATURE = 'screen_frame_judge'
 # Product name for the embed gate (docs/tests). Entitlement still uses
 # screen_frame_judge so Gemini BYOK keeps working.
 _EMBED_PLAN_GATED_FEATURE = 'screen_text_embedding'
+_LOCAL_EMBEDDINGS_HEADER = 'x-omi-local-embeddings'
+_LEGACY_EMBED_PLAN_CLASSES = frozenset({'free', 'paid', 'unknown'})
 
 
-def _embed_plan_gate_enabled() -> bool:
-    return os.getenv('DESKTOP_EMBED_PLAN_GATE_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+def _embed_plan_gate_disabled() -> bool:
+    return os.getenv('DESKTOP_EMBED_PLAN_GATE_DISABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
-def _plan_gated_actions() -> frozenset[str]:
-    if _embed_plan_gate_enabled():
-        return _PLAN_GATED_PROXY_ACTIONS | _EMBED_PROXY_ACTIONS
-    return _PLAN_GATED_PROXY_ACTIONS
+def _header_truthy(value: str) -> bool:
+    raw = value.strip().lower()
+    if not raw or raw in {'0', 'false', 'no', 'off'}:
+        return False
+    return True
+
+
+def _has_local_embeddings_capability(request: Request | None) -> bool:
+    if request is None:
+        return False
+    return _header_truthy(request.headers.get(_LOCAL_EMBEDDINGS_HEADER, ''))
+
+
+def _record_legacy_embed_client(*, plan_class: str) -> None:
+    bounded = plan_class if plan_class in _LEGACY_EMBED_PLAN_CLASSES else 'unknown'
+    record_fallback(
+        component='gemini_proxy',
+        from_mode='desktop_embed_legacy_client',
+        to_mode='gemini',
+        reason='unmigrated_principal',
+        outcome='degraded',
+    )
+    logger.info('desktop_embed_legacy_client plan_class=%s', bounded)
 
 
 def _plan_gate_detail(decision: Decision, action: str = '') -> dict[str, str]:
@@ -1661,12 +1685,18 @@ def _plan_gate_detail(decision: Decision, action: str = '') -> dict[str, str]:
     return detail
 
 
-async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
+async def _enforce_managed_plan_gate(uid: str, path: str, request: Request | None = None) -> None:
     try:
         _, _, action = _path_parts(path)
     except HTTPException:
         return
-    if action not in _plan_gated_actions():
+    if action in _EMBED_PROXY_ACTIONS:
+        if _embed_plan_gate_disabled():
+            return
+        if not _has_local_embeddings_capability(request):
+            _record_legacy_embed_client(plan_class='unknown')
+            return
+    elif action not in _PLAN_GATED_PROXY_ACTIONS:
         return
     # Same exemption as enforce_chat_quota: dest's candidate probe signs in as
     # this fixed non-human Free-plan UID to prove the Gemini provider path.
@@ -1691,11 +1721,11 @@ async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
 
 @router.post('/v1/proxy/gemini/{path:path}')
 async def gemini_proxy(request: Request, path: str, uid: str = Depends(_authorized_desktop_user)) -> Response:
-    await _enforce_managed_plan_gate(uid, path)
+    await _enforce_managed_plan_gate(uid, path, request)
     return await _proxy(request, path, False, uid)
 
 
 @router.post('/v1/proxy/gemini-stream/{path:path}')
 async def gemini_stream_proxy(request: Request, path: str, uid: str = Depends(_authorized_desktop_user)) -> Response:
-    await _enforce_managed_plan_gate(uid, path)
+    await _enforce_managed_plan_gate(uid, path, request)
     return await _proxy(request, path, True, uid)
