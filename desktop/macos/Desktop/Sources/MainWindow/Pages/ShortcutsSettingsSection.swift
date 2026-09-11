@@ -48,8 +48,6 @@ struct ShortcutsSettingsSection: View {
       pttSoundsCard
       muteAudioCard
     }
-    .onAppear {
-    }
     .onDisappear {
       stopShortcutCapture()
     }
