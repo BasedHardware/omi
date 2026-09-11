@@ -15,6 +15,7 @@ import {
   deviceDisplayName,
   deviceSerialMatchesId,
   firmwareUpdateCopy,
+  desktopReadErrorCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {firmwareLatestQuery, loadOmiLatestFirmware} from '../legacyOmiFirmware';
@@ -143,6 +144,7 @@ export function DeviceSession({
     available: boolean;
     changelog?: string[];
   } | null>(null);
+  const [firmwareError, setFirmwareError] = useState<string | null>(null);
   useEffect(() => {
     const backend = omiBackend;
     if (
@@ -152,21 +154,25 @@ export function DeviceSession({
       backend === null
     ) {
       setFirmwareCopy(null);
+      setFirmwareError(null);
       return;
     }
     let cancelled = false;
-    loadOmiLatestFirmware(backend, firmwareQuery)
-      .then(details => {
+    loadOmiLatestFirmware(backend, firmwareQuery).then(
+      details => {
         if (cancelled) {
           return;
         }
         setFirmwareCopy(firmwareUpdateCopy(firmwareQuery.firmware, details));
-      })
-      .catch(() => {
+        setFirmwareError(null);
+      },
+      reason => {
         if (!cancelled) {
           setFirmwareCopy(null);
+          setFirmwareError(desktopReadErrorCopy(reason));
         }
-      });
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -443,7 +449,13 @@ export function DeviceSession({
           </Text>,
         ];
       })}
-      {firmwareCopy !== null ? (
+      {firmwareError !== null ? (
+        <Text selectable style={styles.deviceMeta}>
+          Latest
+          {': '}
+          {firmwareError}
+        </Text>
+      ) : firmwareCopy !== null ? (
         <Text selectable style={styles.deviceMeta}>
           Latest
           {': '}

@@ -2,6 +2,7 @@ import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {DeviceSession, deviceHasReportedBattery, homeConnectionStatus} from './DeviceSession';
 import type {PlatformNativeSnapshot} from '../omiNative';
+import {desktopBackendServiceCopy} from '../desktopReadClient';
 
 jest.mock('../omiNative', () => ({
   isBluetoothScanAvailable: (state?: string) => state === 'poweredOn',
@@ -364,6 +365,55 @@ test('connected device names GET latest firmware without an OTA control', async 
   });
   expect(JSON.stringify(renderer.toJSON())).not.toContain('"Latest"');
   expect(JSON.stringify(renderer.toJSON())).not.toContain('"What\'s New"');
+  await act(async () => renderer.unmount());
+  omiBackend.request.mockReset();
+});
+
+test('connected device names a failed GET latest firmware instead of empty success', async () => {
+  omiBackend.request.mockReset();
+  omiBackend.request.mockImplementation(async () => {
+    throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+  });
+  const snapshot = {
+    bluetooth: 'poweredOn',
+    devices: [
+      {
+        id: 'omi-test',
+        name: 'Omi',
+        connected: true,
+        rssi: -40,
+        information: {
+          model: 'Omi Dev Kit',
+          firmware: '1.2.3',
+          hardware: '1',
+          manufacturer: 'Based Hardware',
+        },
+      },
+    ],
+    connectedDeviceId: 'omi-test',
+    capture: 'idle',
+  } as PlatformNativeSnapshot;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('"Latest"');
+  expect(output).toContain(desktopBackendServiceCopy);
+  expect(output).not.toContain('Install');
+  expect(output).not.toContain('"What\'s New"');
+  expect(output).not.toContain('1.3.0');
   await act(async () => renderer.unmount());
   omiBackend.request.mockReset();
 });
