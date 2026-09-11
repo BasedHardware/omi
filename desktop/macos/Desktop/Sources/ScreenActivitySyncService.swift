@@ -206,8 +206,12 @@ actor ScreenActivitySyncService {
 
     do {
       // Query screenshots that have embeddings and are newer than our cursor
-      let rowsPayload: ScreenActivityRowsPayload = try await dbPool.read { [lastSyncedId, batchSize] db in
-        let dbRows = try Row.fetchAll(db, sql: Self.syncRowsSQL, arguments: [lastSyncedId, batchSize])
+      let requireEmbedding = ScreenEmbeddingPolicy.cached().shouldEmbedWithGemini
+      let now = Date()
+      let rowsPayload: ScreenActivityRowsPayload = try await dbPool.read {
+        [lastSyncedId, batchSize, requireEmbedding, now] db in
+        let dbRows = try Self.fetchLegacySyncRows(
+          db: db, afterId: lastSyncedId, limit: batchSize, requireEmbedding: requireEmbedding, now: now)
         let rows = dbRows.compactMap(Self.payloadRow)
         return ScreenActivityRowsPayload(rows: rows)
       }
@@ -249,6 +253,36 @@ actor ScreenActivitySyncService {
     ORDER BY id ASC
     LIMIT ?
     """
+
+  /// Paid/Gemini capture still waits for a vector. Free capture never writes one, so
+  /// a finalized OCR row must still sync once its five-minute bucket has closed —
+  /// the lossless path's notion of "OCR is final" — otherwise stable (legacy) would
+  /// drop the rows cloud chat and phone time-window browse read.
+  static func fetchLegacySyncRows(
+    db: Database, afterId: Int64, limit: Int, requireEmbedding: Bool, now: Date,
+    slack: TimeInterval = 0
+  ) throws -> [Row] {
+    let capped = max(0, min(limit, 100))
+    if requireEmbedding {
+      return try Row.fetchAll(db, sql: Self.syncRowsSQL, arguments: [afterId, capped])
+    }
+    return try Row.fetchAll(
+      db,
+      sql: """
+        SELECT id, timestamp, appName, windowTitle, ocrText, embedding, deviceName, clientDeviceId
+        FROM screenshots
+        WHERE id > ?
+          AND ocrText IS NOT NULL
+          AND LENGTH(TRIM(ocrText)) > 0
+          AND (CAST(strftime('%s', timestamp) AS INTEGER) / ? + 1) * ? <= ?
+        ORDER BY id ASC
+        LIMIT ?
+        """,
+      arguments: [
+        afterId, Self.compactionBucketSeconds, Self.compactionBucketSeconds,
+        Self.bucketEligibilityCutoffEpoch(now: now, slack: slack), capped,
+      ])
+  }
 
   static let compactionBucketSeconds = 300
 
