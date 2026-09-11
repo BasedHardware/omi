@@ -200,6 +200,14 @@ def load(path: Optional[Path] = None) -> Config:
             )
 
     active = data.get("active_profile", DEFAULT_PROFILE_NAME)
+    if not isinstance(active, str):
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"'active_profile' must be a string, got {type(active).__name__}",
+        )
+
     profiles_data = data.get("profiles", {})
     
     # Validate that profiles is a table (dict), not a string or other scalar.
