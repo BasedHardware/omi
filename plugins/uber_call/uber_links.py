@@ -42,6 +42,12 @@ def _normalize_float(value: float | int | str | None) -> float | None:
     return float(value)
 
 
+def _valid_lat_lng(lat: float | None, lng: float | None) -> bool:
+    if lat is None or lng is None:
+        return True
+    return -90.0 <= lat <= 90.0 and -180.0 <= lng <= 180.0
+
+
 def build_location(
     *,
     latitude: float | int | str | None = None,
@@ -51,6 +57,11 @@ def build_location(
 ) -> UberLocation:
     lat = _normalize_float(latitude)
     lng = _normalize_float(longitude)
+    if not _valid_lat_lng(lat, lng):
+        raise ValueError(
+            f"Invalid coordinates: latitude={lat}, longitude={lng}. "
+            "Latitude must be in [-90, 90] and longitude in [-180, 180]."
+        )
     return UberLocation(
         latitude=lat,
         longitude=lng,
