@@ -342,9 +342,13 @@ export function DesktopSettings({
   const [developerKeys, setDeveloperKeys] = useState<
     ReturnType<typeof developerKeysCopy>
   >([]);
+  const [developerKeysError, setDeveloperKeysError] = useState<string | null>(
+    null,
+  );
   const [mcpKeys, setMcpKeys] = useState<ReturnType<typeof developerKeysCopy>>(
     [],
   );
+  const [mcpKeysError, setMcpKeysError] = useState<string | null>(null);
   const [importJobs, setImportJobs] = useState<OmiImportJobRow[]>([]);
   const [importJobsError, setImportJobsError] = useState<string | null>(null);
   const [webhookUrls, setWebhookUrls] = useState<
@@ -403,7 +407,9 @@ export function DesktopSettings({
     let nextCustomVocabulary: ReturnType<typeof customVocabularyCopy> = [];
     let nextTranscriptionPreferencesError: string | null = null;
     let nextDeveloperKeys: ReturnType<typeof developerKeysCopy> = [];
+    let nextDeveloperKeysError: string | null = null;
     let nextMcpKeys: ReturnType<typeof developerKeysCopy> = [];
+    let nextMcpKeysError: string | null = null;
     let nextImportJobs: OmiImportJobRow[] = [];
     let nextImportJobsError: string | null = null;
     let nextWebhookUrls = new Map<OmiWebhookUrlType, OmiWebhookUrl>();
@@ -498,8 +504,20 @@ export function DesktopSettings({
           error: desktopReadErrorCopy(reason),
         }),
       );
-      const developerKeysTask = loadOmiDevApiKeys(backend).catch(() => []);
-      const mcpKeysTask = loadOmiMcpApiKeys(backend).catch(() => []);
+      const developerKeysTask = loadOmiDevApiKeys(backend).then(
+        keys => ({keys, error: null as string | null}),
+        reason => ({
+          keys: [] as Awaited<ReturnType<typeof loadOmiDevApiKeys>>,
+          error: desktopReadErrorCopy(reason),
+        }),
+      );
+      const mcpKeysTask = loadOmiMcpApiKeys(backend).then(
+        keys => ({keys, error: null as string | null}),
+        reason => ({
+          keys: [] as Awaited<ReturnType<typeof loadOmiMcpApiKeys>>,
+          error: desktopReadErrorCopy(reason),
+        }),
+      );
       const importJobsTask = loadOmiImportJobs(backend).then(
         jobs => ({jobs, error: null as string | null}),
         reason => ({
@@ -560,17 +578,21 @@ export function DesktopSettings({
         transcriptionPreferencesResult.prefs?.vocabulary,
       );
       nextTranscriptionPreferencesError = transcriptionPreferencesResult.error;
+      const developerKeysResult = await developerKeysTask;
       nextDeveloperKeys = developerKeysCopy(
-        await developerKeysTask,
+        developerKeysResult.keys,
         'Developer key',
       );
+      nextDeveloperKeysError = developerKeysResult.error;
+      const mcpKeysResult = await mcpKeysTask;
       nextMcpKeys = developerKeysCopy(
-        (await mcpKeysTask).map(key => ({
+        mcpKeysResult.keys.map(key => ({
           name: key.name,
           keyPrefix: key.keyPrefix,
         })),
         'MCP key',
       );
+      nextMcpKeysError = mcpKeysResult.error;
       const importJobsResult = await importJobsTask;
       nextImportJobs = importJobsCopy(importJobsResult.jobs);
       nextImportJobsError = importJobsResult.error;
@@ -612,7 +634,9 @@ export function DesktopSettings({
     setCustomVocabulary(nextCustomVocabulary);
     setTranscriptionPreferencesError(nextTranscriptionPreferencesError);
     setDeveloperKeys(nextDeveloperKeys);
+    setDeveloperKeysError(nextDeveloperKeysError);
     setMcpKeys(nextMcpKeys);
+    setMcpKeysError(nextMcpKeysError);
     setImportJobs(nextImportJobs);
     setImportJobsError(nextImportJobsError);
     setWebhookUrls(nextWebhookUrls);
@@ -1242,12 +1266,20 @@ export function DesktopSettings({
           />
         ))
       )}
-      {developerKeys.map((row, index) => (
-        <Row copy={row.copy} key={`dev-key-${index}`} title={row.title} />
-      ))}
-      {mcpKeys.map((row, index) => (
-        <Row copy={row.copy} key={`mcp-key-${index}`} title={row.title} />
-      ))}
+      {developerKeysError !== null ? (
+        <Row copy={developerKeysError} title="Developer key" />
+      ) : (
+        developerKeys.map((row, index) => (
+          <Row copy={row.copy} key={`dev-key-${index}`} title={row.title} />
+        ))
+      )}
+      {mcpKeysError !== null ? (
+        <Row copy={mcpKeysError} title="MCP key" />
+      ) : (
+        mcpKeys.map((row, index) => (
+          <Row copy={row.copy} key={`mcp-key-${index}`} title={row.title} />
+        ))
+      )}
       {importJobsError !== null ? (
         <Row copy={importJobsError} title="Import Data" />
       ) : (
