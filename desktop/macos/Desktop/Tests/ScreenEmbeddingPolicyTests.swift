@@ -148,6 +148,22 @@ final class ScreenEmbeddingPolicyTests: XCTestCase {
         environment: ["OMI_LOCAL_EMBEDDINGS": "1"], defaults: defaults, isNonProduction: false
       ).isEnabled)
   }
+
+  func testProxyRequestSendsLocalEmbeddingsCapabilityWhenPolicyIsLive() {
+    var request = URLRequest(url: URL(string: "https://example.invalid/v1/proxy/gemini")!)
+    request.setValue("Bearer token", forHTTPHeaderField: "Authorization")
+    let prepared = DesktopGeminiProxyRequest.prepare(request, killSwitches: .enabled)
+    XCTAssertEqual(prepared.value(forHTTPHeaderField: DesktopGeminiProxyRequest.localEmbeddingsHeader), "1")
+    XCTAssertEqual(prepared.value(forHTTPHeaderField: "Authorization"), "Bearer token")
+  }
+
+  func testProxyRequestOmitsLocalEmbeddingsCapabilityUnderHardKill() {
+    let request = URLRequest(url: URL(string: "https://example.invalid/v1/proxy/gemini")!)
+    let prepared = DesktopGeminiProxyRequest.prepare(
+      request,
+      killSwitches: LocalEmbeddingKillSwitches(isDisabled: true, forcedEngineRaw: nil))
+    XCTAssertNil(prepared.value(forHTTPHeaderField: DesktopGeminiProxyRequest.localEmbeddingsHeader))
+  }
 }
 
 private final class DateBox: @unchecked Sendable {

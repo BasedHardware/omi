@@ -88,6 +88,16 @@ Chat `search_screen_history` and the Rewind UI search both take
 | Active paid | Gemini upload (Pinecone phone parity) plus local index when available | Local hybrid when the engine is available; otherwise Gemini |
 | Any, hard kill (`OMI_DISABLE_LOCAL_EMBEDDINGS`) | Gemini | Gemini |
 
+## Rollout: client capability handshake
+
+The server embed gate is on by default. A current client sends
+`X-Omi-Local-Embeddings: 1` on every Gemini proxy request (via
+`DesktopGeminiProxyRequest.prepare`) unless the hard kill is set. The proxy
+402s basic-plan `embedContent` / `batchEmbedContents` for that header.
+Builds that predate this change omit the header and fail open to Gemini.
+`DESKTOP_EMBED_PLAN_GATE_DISABLED=1` is the only server kill switch.
+Rollout is merge, then desktop release; there is no backend config step.
+
 ## Rollout: vectorless row sync
 
 Legacy `ScreenActivitySyncService.fetchLegacySyncRows` still requires
