@@ -94,6 +94,8 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+JITKnowledgeToolsGate.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
+  - desktop/macos/Desktop/Sources/Providers/AIProvider.swift
+  - desktop/macos/Desktop/Sources/Providers/AgentRuntimeRouting.swift
 preconditions:
   - automation_bridge_ready
 
