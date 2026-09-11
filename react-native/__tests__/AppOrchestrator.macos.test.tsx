@@ -1255,3 +1255,145 @@ test('old chat shows streamed tokens before the terminal frame arrives', async (
   expect(textOf(renderer)).toContain('STREAMING FINAL 世界');
   expect(textOf(renderer)).not.toContain('STREAMING PARTIAL 世界');
 });
+
+test('two same-tick submits admit exactly one message', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async (value: {id: string}) => {
+    if (value.id === 'chat-history') {
+      return {id: value.id, status: 200, body: historyBody([])};
+    }
+    if (value.id.startsWith('admit-')) {
+      return {
+        id: value.id,
+        status: 201,
+        body: admissionBody(
+          {
+            id: 'once-human',
+            text: 'only once',
+            sender: 'human',
+            createdAt: 1,
+            generationOutcome: null,
+          },
+          'once-generation',
+        ),
+      };
+    }
+    return {id: value.id, status: 501, body: null};
+  });
+  mockBackend.generationEvents.mockResolvedValue({
+    id: 'once-generation',
+    status: 200,
+    body: `event: done\nid: terminal\ndata: ${JSON.stringify({
+      kind: 'done',
+      message: wireMessage({
+        id: 'once-ai',
+        text: 'one reply',
+        sender: 'ai',
+        createdAt: 2,
+        generationOutcome: 'completed',
+      }),
+    })}\n\n`,
+  });
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(node => node.props.placeholder === 'Ask about your day…')!;
+  act(() => {
+    omnibar.props.onChangeText('only once');
+  });
+  await act(async () => {
+    const send = renderer.root.find(
+      node => node.props.accessibilityLabel === 'Send',
+    );
+    send.props.onPress();
+    send.props.onPress();
+    await flushAsyncQueue();
+  });
+  expect(
+    mockBackend.request.mock.calls.filter(([value]: [{id: string}]) =>
+      value.id.startsWith('admit-'),
+    ),
+  ).toHaveLength(1);
+});
+
+test('a failed history load reports even when a send bumped the session mutation', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  let resolveHistory:
+    | ((value: {id: string; status: number; body: string | null}) => void)
+    | undefined;
+  mockBackend.request.mockImplementation((value: {id: string}) => {
+    if (value.id === 'chat-history') {
+      return new Promise(resolve => {
+        resolveHistory = resolve;
+      });
+    }
+    if (value.id.startsWith('admit-')) {
+      return Promise.resolve({
+        id: value.id,
+        status: 201,
+        body: admissionBody(
+          {
+            id: 'race-human',
+            text: 'raced send',
+            sender: 'human',
+            createdAt: 1,
+            generationOutcome: null,
+          },
+          'race-generation',
+        ),
+      });
+    }
+    return Promise.resolve({id: value.id, status: 501, body: null});
+  });
+  mockBackend.generationEvents.mockResolvedValue({
+    id: 'race-generation',
+    status: 200,
+    body: `event: done\nid: terminal\ndata: ${JSON.stringify({
+      kind: 'done',
+      message: wireMessage({
+        id: 'race-ai',
+        text: 'raced reply',
+        sender: 'ai',
+        createdAt: 2,
+        generationOutcome: 'completed',
+      }),
+    })}\n\n`,
+  });
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  expect(resolveHistory).toBeDefined();
+
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(node => node.props.placeholder === 'Ask about your day…')!;
+  act(() => {
+    omnibar.props.onChangeText('raced send');
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send')
+      .props.onPress();
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain('raced reply');
+
+  // The original history load fails after the send bumped the mutation
+  // counter. It must still surface its error instead of silently keeping a
+  // settled-looking transcript.
+  await act(async () => {
+    resolveHistory!({id: 'chat-history', status: 503, body: null});
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain(
+    'Omi is temporarily unavailable. Try again.',
+  );
+});
