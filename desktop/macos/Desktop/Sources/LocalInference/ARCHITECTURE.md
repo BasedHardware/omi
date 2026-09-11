@@ -75,19 +75,31 @@ Route decisions emit one existing `recordFallback` counter with
 `route=gemini|local|fts_only|disabled`, and bounded `route_reason` (the shared
 helper uses `policy` or `dispatch_disabled` for its standard `reason`).
 `disabled` means the hard kill restored Gemini. No OCR text, query text, plan raw strings, or frame identifiers are sent.
-The policy exposes search intent; routing the Rewind UI through that policy is
-the follow-up in BasedHardware/omi #13465.
+Capture records a route on every frame; the process emits only when
+`(planClass, searchRoute, reason)` changes, plus at most one heartbeat per hour.
+Chat `search_screen_history` and the Rewind UI search both take
+`ScreenHistorySearchRoute`, so a free plan never embeds the query with Gemini.
 
-## Rollout dependency: vectorless row sync
+## Plan ladder
 
-Before enabling this foundation in a released bundle, ensure screen-activity
-sync supports vectorless rows. `ScreenActivitySyncService.syncRowsSQL` (legacy)
-requires `embedding IS NOT NULL`, so new free frames will not sync on that path.
-The lossless selector supports text-only rows after its 15-minute embedding grace.
-Stable defaults to legacy unless its rollout flag is enabled; Beta/non-production
-normally use lossless. This foundation leaves both row-sync paths unchanged per
-#13465; resolving the legacy dependency belongs with the follow-up before rollout.
-Rewind UI search wiring is also required before the user-facing move is complete.
+| Plan | Capture embed | Search |
+|---|---|---|
+| Free / unknown / inactive paid | Local / FTS-only (never Gemini) | Local hybrid when the engine is available; otherwise FTS-only |
+| Active paid | Gemini upload (Pinecone phone parity) plus local index when available | Local hybrid when the engine is available; otherwise Gemini |
+| Any, hard kill (`OMI_DISABLE_LOCAL_EMBEDDINGS`) | Gemini | Gemini |
+
+## Rollout: vectorless row sync
+
+Legacy `ScreenActivitySyncService.fetchLegacySyncRows` still requires
+`embedding IS NOT NULL` while Gemini capture is on. When the current
+`ScreenEmbeddingPolicy` says `shouldEmbedWithGemini == false`, a row is
+sync-eligible without a vector once OCR is final (non-empty text and the
+five-minute bucket has closed — the lossless path's notion of final, so an
+in-flight OCR row is not shipped early). Lossless sync already delivers
+text-only rows after its 15-minute embedding grace. The backend
+`POST /v1/screen-activity/sync` handler (`routers/desktop_screen_crisp.py`)
+accepts `embedding: null` and still upserts Firestore rows; Pinecone is gated
+separately by `grants_cloud_screen_vectors`.
 
 ## Storage and hybrid search
 
@@ -101,7 +113,23 @@ AC-bounded like OCR embeddings.
 
 ## Benchmark
 
-`LocalEmbeddingBenchmark` uses in-repo synthetic fixtures only (no personal
-data). Headless: `./scripts/omi-ctl action local_embedding_benchmark` on a
-non-production bundle. JSON reports recall@10 and nDCG@10 for FTS, vector, and
-hybrid slices. Label every number `synthetic`.
+`LocalEmbeddingBenchmark` has two fixtures. Headless:
+`./scripts/omi-ctl action local_embedding_benchmark` on a non-production bundle.
+`fixture=synthetic` (default) uses in-repo fixtures with no personal data.
+`fixture=real` copies a Rewind DB (Beta bundle path, or `db=`) to a temp file
+first and never opens the live database. It samples up to 500 screenshot rows
+that already hold a Gemini embedding blob and non-empty OCR, builds the local
+index with the selected engine (`apple_nlce`) when missing, then reports
+recall@10 / nDCG@10 for FTS, vector, hybrid, and Gemini-cosine.
+
+Ground truth on a real DB has no labels, so the report is honest about two
+views: (a) **agreement with Gemini** — top-10 overlap of each local mode
+against Gemini document-space kNN for the same source row (queries never leave
+the process, so Gemini ranking uses the stored document vector rather than a
+network query encoder); (b) **held-out self-retrieval** — a distinct 6–12 word
+span from after the first OCR line, target is that row, recall@1/@10 per mode.
+
+The JSON report contains only counts, metric values, engine id, model id,
+dimension, timings (p50/p95 embed ms, total index ms), row counts, and the
+machine chip/ram class. No OCR text, window titles, or query strings. Label
+every number with `fixture: real` or `fixture: synthetic`.

@@ -1625,18 +1625,40 @@ async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> 
 
 # Gen-1 Gemini generate/stream is the screen-intelligence spend path (free-tier S14).
 # screen_frame_judge is the configured Gemini-provider feature, so a request-scoped
-# Gemini BYOK key satisfies authorize_managed_compute. embedContent stays ungated
-# here (TBD-4 / S24). desktop_proactivity completions are the JIT/context-bucket
+# Gemini BYOK key satisfies authorize_managed_compute. embedContent/batchEmbedContents
+# stay ungated until DESKTOP_EMBED_PLAN_GATE_ENABLED is on (default off) so a
+# server cut cannot blank free-client vectors before the local-embedding client
+# ships. The product name for that gate is screen_text_embedding; the entitle-
+# ment feature remains screen_frame_judge so BYOK and paid plans keep working
+# without minting a chat-completions lane for an embedding model.
+# desktop_proactivity completions are the JIT/context-bucket
 # lane and are intentionally not gated in this shard — a blanket 402 there would
 # kill the ambient nano triage (S24) and the shipped completion lane
 # (test_legacy_clients_are_not_gated_by_jit_rollout).
 _PLAN_GATED_PROXY_ACTIONS = frozenset({'generateContent', 'streamGenerateContent'})
+_EMBED_PROXY_ACTIONS = frozenset({'embedContent', 'batchEmbedContents'})
 _PLAN_GATED_PROXY_FEATURE = 'screen_frame_judge'
+# Product name for the embed gate (docs/tests). Entitlement still uses
+# screen_frame_judge so Gemini BYOK keeps working.
+_EMBED_PLAN_GATED_FEATURE = 'screen_text_embedding'
 
 
-def _plan_gate_detail(decision: Decision) -> dict[str, str]:
+def _embed_plan_gate_enabled() -> bool:
+    return os.getenv('DESKTOP_EMBED_PLAN_GATE_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _plan_gated_actions() -> frozenset[str]:
+    if _embed_plan_gate_enabled():
+        return _PLAN_GATED_PROXY_ACTIONS | _EMBED_PROXY_ACTIONS
+    return _PLAN_GATED_PROXY_ACTIONS
+
+
+def _plan_gate_detail(decision: Decision, action: str = '') -> dict[str, str]:
     plan_type = decision.plan.value if decision.plan is not None else 'basic'
-    return {'error': 'plan_gated', 'plan_type': plan_type, 'reason': decision.reason}
+    detail = {'error': 'plan_gated', 'plan_type': plan_type, 'reason': decision.reason}
+    if action in _EMBED_PROXY_ACTIONS:
+        detail['feature'] = _EMBED_PLAN_GATED_FEATURE
+    return detail
 
 
 async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
@@ -1644,7 +1666,7 @@ async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
         _, _, action = _path_parts(path)
     except HTTPException:
         return
-    if action not in _PLAN_GATED_PROXY_ACTIONS:
+    if action not in _plan_gated_actions():
         return
     # Same exemption as enforce_chat_quota: dest's candidate probe signs in as
     # this fixed non-human Free-plan UID to prove the Gemini provider path.
@@ -1664,7 +1686,7 @@ async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
         return
     if decision.reason == 'authorization_unavailable':
         raise HTTPException(status_code=503, detail='plan authorization is temporarily unavailable')
-    raise HTTPException(status_code=402, detail=_plan_gate_detail(decision))
+    raise HTTPException(status_code=402, detail=_plan_gate_detail(decision, action))
 
 
 @router.post('/v1/proxy/gemini/{path:path}')
