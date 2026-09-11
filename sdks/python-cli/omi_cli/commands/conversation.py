@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -101,11 +102,24 @@ def _srt_timestamp(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
 
 
+def _clean_srt_text(text: str) -> str:
+    """Collapse whitespace-only lines so text can never contain an SRT cue separator."""
+    return "\n".join(line.strip() for line in text.splitlines() if line.strip())
+
+
+def _valid_srt_timing(value: object) -> bool:
+    """Accept only finite, non-negative real numbers (bool excluded)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return math.isfinite(value) and value >= 0
+
+
 def _render_srt(segments: list) -> tuple[str, int]:
     """Render transcript_segments as SRT text; returns (srt, skipped_count).
 
-    Segments with missing/invalid timing or empty text are skipped and counted,
-    never silently included with fabricated timestamps.
+    Segments with missing/invalid timing (including negative or non-finite
+    values) or empty text are skipped and counted, never silently included
+    with fabricated timestamps.
     """
     blocks: list[str] = []
     skipped = 0
@@ -115,15 +129,8 @@ def _render_srt(segments: list) -> tuple[str, int]:
             continue
         start = seg.get("start")
         end = seg.get("end")
-        text = str(seg.get("text") or "").strip()
-        if (
-            isinstance(start, bool)
-            or isinstance(end, bool)
-            or not isinstance(start, (int, float))
-            or not isinstance(end, (int, float))
-            or end < start
-            or not text
-        ):
+        text = _clean_srt_text(str(seg.get("text") or ""))
+        if not _valid_srt_timing(start) or not _valid_srt_timing(end) or end < start or not text:
             skipped += 1
             continue
         blocks.append(f"{len(blocks) + 1}\n{_srt_timestamp(start)} --> {_srt_timestamp(end)}\n{text}")
