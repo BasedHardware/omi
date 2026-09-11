@@ -8,3 +8,4 @@
 * [`quickstart.es.md`](quickstart.es.md) — primeros pasos con omi-cli en
   español.
 * [`quickstart.tr.md`](quickstart.tr.md) — Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart).
+* [`quickstart.hi.md`](quickstart.hi.md) — हिंदी में शुरुआत (Hindi Quickstart).
