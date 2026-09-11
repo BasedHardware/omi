@@ -13,9 +13,13 @@ and background processing.
   named executor lanes.
 - `owner_attribution.py` owns typed source-cluster evidence for memory writes.
   A passive memory may be attributed to the account owner only when the
-  transcript identifies exactly one owner speaker cluster. Segment `is_user`
-  labels and model-authored `about=user` cannot override that evidence, including
-  for quote promotion. Legacy transcripts without cluster IDs fail closed.
+  transcript identifies exactly one owner speaker cluster, keyed by
+  `(speaker_id_scope, speaker_id)` so merged conversations cannot collapse
+  distinct sources. Segment `is_user` labels and model-authored `about=user`
+  cannot override that evidence, including for quote promotion. Legacy
+  transcripts without cluster IDs fail closed: a `TranscriptSegment` that
+  only materialized `speaker_id` from the SPEAKER_00 default is not
+  cluster evidence.
   `transcript_for_llm.memory_transcript_from_segments` is the memory-only
   renderer: when owner evidence is untrusted it suppresses owner names and
   prefixes an explicit UNTRUSTED header. Summary and action-item rendering keep

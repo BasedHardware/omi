@@ -66,6 +66,13 @@ def test_all_user_subject_requires_unique_cluster_and_legacy_missing_ids_fail_cl
     assert not may_attribute_to_owner(evidence)
     assert infer_subject_from_segments(legacy)[1] == SubjectAttribution.unknown
     assert OwnerAttributionEvidence.from_segments([]).trust == 'no_speaker_ids'
+    materialized = TranscriptSegment(text='I will move to Boston.', is_user=True, start=0, end=1)
+    assert materialized.speaker_id == 0
+    assert '_speaker_id_synthesized' not in materialized.model_dump()
+    synthesized = OwnerAttributionEvidence.from_segments([materialized])
+    assert synthesized.trust == 'no_speaker_ids'
+    assert not may_attribute_to_owner(synthesized)
+    assert infer_subject_from_segments([materialized])[1] == SubjectAttribution.unknown
 
 
 def test_untrusted_quote_can_bind_known_contact_but_not_owner(pc):
@@ -88,6 +95,50 @@ def test_quote_binding_uses_cluster_not_individual_segment_flag():
     assert may_attribute_to_owner(evidence, segment=same_cluster)
     assert not may_attribute_to_owner(evidence, segment=segments[1])
     assert not may_attribute_to_owner(evidence, segment=SimpleNamespace(speaker_id=None))
+
+
+def test_scope_qualified_cluster_keys_keep_merged_sources_apart():
+    owner = TranscriptSegment(
+        text='I will move to Boston.',
+        speaker='SPEAKER_00',
+        speaker_id=0,
+        speaker_id_scope='conv-a:0',
+        is_user=True,
+        start=0,
+        end=1,
+    )
+    other = TranscriptSegment(
+        text='I prefer tea.',
+        speaker='SPEAKER_00',
+        speaker_id=0,
+        speaker_id_scope='conv-b:0',
+        is_user=False,
+        start=1,
+        end=2,
+    )
+    evidence = OwnerAttributionEvidence.from_segments([owner, other])
+    assert evidence.trust == 'unique_owner'
+    assert evidence.distinct_speaker_ids == 2
+    assert evidence.owner_cluster_id == ('conv-a:0', 0)
+    assert may_attribute_to_owner(evidence, segment=owner)
+    assert not may_attribute_to_owner(evidence, segment=other)
+    two_owners = OwnerAttributionEvidence.from_segments(
+        [
+            owner,
+            TranscriptSegment(
+                text='I prefer tea.',
+                speaker='SPEAKER_00',
+                speaker_id=0,
+                speaker_id_scope='conv-b:0',
+                is_user=True,
+                start=1,
+                end=2,
+            ),
+        ]
+    )
+    assert two_owners.trust == 'multi_owner'
+    assert two_owners.owner_cluster_id is None
+    assert not may_attribute_to_owner(two_owners)
 
 
 def test_memory_render_warns_and_preserves_original_summary_render():
