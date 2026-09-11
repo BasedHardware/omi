@@ -214,6 +214,9 @@ export function SettingsPage({
     OmiTaskIntegration[]
   >([]);
   const [integrations, setIntegrations] = useState<OmiIntegration[]>([]);
+  const [integrationsError, setIntegrationsError] = useState<string | null>(
+    null,
+  );
   const [appChangelogs, setAppChangelogs] = useState<OmiAppChangelogRow[]>([]);
   const [usageMonthly, setUsageMonthly] = useState<OmiUsageStats | null>(null);
   const [usageYearly, setUsageYearly] = useState<OmiUsageStats | null>(null);
@@ -294,6 +297,7 @@ export function SettingsPage({
       setPeopleNames([]);
       setTaskIntegrations([]);
       setIntegrations([]);
+      setIntegrationsError(null);
       setAppChangelogs([]);
       setUsageMonthly(null);
       setUsageYearly(null);
@@ -349,6 +353,7 @@ export function SettingsPage({
         setPeopleNames([]);
         setTaskIntegrations([]);
         setIntegrations([]);
+      setIntegrationsError(null);
         setAppChangelogs([]);
         setUsageMonthly(null);
         setUsageYearly(null);
@@ -373,6 +378,7 @@ export function SettingsPage({
         setPeopleNames([]);
         setTaskIntegrations([]);
         setIntegrations([]);
+      setIntegrationsError(null);
         setAppChangelogs([]);
         setUsageMonthly(null);
         setUsageYearly(null);
@@ -398,7 +404,13 @@ export function SettingsPage({
     const taskIntegrationsTask = loadOmiTaskIntegrations(backend).catch(
       () => [],
     );
-    const integrationsTask = loadOmiIntegrations(backend).catch(() => []);
+    const integrationsTask = loadOmiIntegrations(backend).then(
+      rows => ({rows, error: null as string | null}),
+      reason => ({
+        rows: [] as OmiIntegration[],
+        error: desktopReadErrorCopy(reason),
+      }),
+    );
     const appChangelogsTask = loadOmiAppChangelogs(backend).catch(() => []);
     const usageMonthlyTask = loadOmiUsagePeriod(backend, 'monthly').catch(
       () => null,
@@ -445,7 +457,7 @@ export function SettingsPage({
     }
     const names = await peopleTask;
     const nextTaskIntegrations = await taskIntegrationsTask;
-    const nextIntegrations = await integrationsTask;
+    const integrationsResult = await integrationsTask;
     const nextAppChangelogs = await appChangelogsTask;
     const nextUsageMonthly = await usageMonthlyTask;
     const nextUsageYearly = await usageYearlyTask;
@@ -464,7 +476,8 @@ export function SettingsPage({
     }
     setPeopleNames(peopleNameRows(names));
     setTaskIntegrations(nextTaskIntegrations);
-    setIntegrations(nextIntegrations);
+    setIntegrations(integrationsResult.rows);
+    setIntegrationsError(integrationsResult.error);
     setAppChangelogs(nextAppChangelogs);
     setUsageMonthly(nextUsageMonthly);
     setUsageYearly(nextUsageYearly);
@@ -678,9 +691,13 @@ export function SettingsPage({
             title="Task integrations"
           />
         ))}
-        {integrations.map(row => (
-          <SettingRow copy={row.name} key={row.key} title="Integrations" />
-        ))}
+        {integrationsError !== null ? (
+          <SettingRow copy={integrationsError} title="Integrations" />
+        ) : (
+          integrations.map(row => (
+            <SettingRow copy={row.name} key={row.key} title="Integrations" />
+          ))
+        )}
         {fairUse?.map((row, index) => (
           <SettingRow
             copy={row.copy}

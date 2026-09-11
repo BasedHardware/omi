@@ -27,7 +27,7 @@ jest.mock('../omiNative', () => ({
 
 const {ConnectorsPage} = require('./Connectors');
 const {SettingsPage} = require('./Settings');
-const {developerKeyCreatedCopy} = require('../desktopReadClient');
+const {developerKeyCreatedCopy, desktopBackendServiceCopy} = require('../desktopReadClient');
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -2084,6 +2084,25 @@ test('Settings names GET integrations without Connect or a write sheet', async (
         typeof call[0].path === 'string' && call[0].path.includes('oauth-url'),
     ),
   ).toBe(false);
+});
+
+test('Settings names a failed integrations GET instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (
+      typeof request.path === 'string' &&
+      request.path.startsWith('/v1/integrations/')
+    ) {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Integrations');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('Gmail');
+  expect(labelsOf(renderer).includes('Connect')).toBe(false);
 });
 
 test('Settings names GET app changelogs without dismiss or a default icon', async () => {

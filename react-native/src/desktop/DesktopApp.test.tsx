@@ -10,6 +10,7 @@ import {
   desktopAccountSettingUnavailableCopy,
   desktopAppsUnavailableCopy,
   desktopBackendConfigurationCopy,
+  desktopBackendServiceCopy,
   desktopBackendUnavailableCopy,
   developerKeyCreatedCopy,
 } from '../desktopReadClient';
@@ -3195,6 +3196,79 @@ test('Settings names GET integrations without Connect or a write sheet', async (
         typeof call[0].path === 'string' && call[0].path.includes('oauth-url'),
     ),
   ).toBe(false);
+});
+
+test('Settings names a failed integrations GET instead of empty success', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (
+      typeof request.path === 'string' &&
+      request.path.startsWith('/v1/integrations/')
+    ) {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Ada');
+  expect(tree).toContain('Integrations');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('Gmail');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Connect',
+    ),
+  ).toHaveLength(0);
 });
 
 test('Settings names GET app changelogs without dismiss or a default icon', async () => {

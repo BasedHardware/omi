@@ -289,6 +289,9 @@ export function DesktopSettings({
     OmiTaskIntegration[]
   >([]);
   const [integrations, setIntegrations] = useState<OmiIntegration[]>([]);
+  const [integrationsError, setIntegrationsError] = useState<string | null>(
+    null,
+  );
   const [appChangelogs, setAppChangelogs] = useState<OmiAppChangelogRow[]>([]);
   const [usageMonthly, setUsageMonthly] = useState<OmiUsageStats | null>(null);
   const [usageYearly, setUsageYearly] = useState<OmiUsageStats | null>(null);
@@ -345,6 +348,7 @@ export function DesktopSettings({
     let nextPeople: {id: string; name: string}[] = [];
     let nextTaskIntegrations: OmiTaskIntegration[] = [];
     let nextIntegrations: OmiIntegration[] = [];
+    let nextIntegrationsError: string | null = null;
     let nextAppChangelogs: OmiAppChangelogRow[] = [];
     let nextUsageMonthly: OmiUsageStats | null = null;
     let nextUsageYearly: OmiUsageStats | null = null;
@@ -370,7 +374,13 @@ export function DesktopSettings({
       const taskIntegrationsTask = loadOmiTaskIntegrations(backend).catch(
         () => [],
       );
-      const integrationsTask = loadOmiIntegrations(backend).catch(() => []);
+      const integrationsTask = loadOmiIntegrations(backend).then(
+        rows => ({rows, error: null as string | null}),
+        reason => ({
+          rows: [] as OmiIntegration[],
+          error: desktopReadErrorCopy(reason),
+        }),
+      );
       const appChangelogsTask = loadOmiAppChangelogs(backend).catch(() => []);
       const usageMonthlyTask = loadOmiUsagePeriod(backend, 'monthly').catch(
         () => null,
@@ -405,7 +415,9 @@ export function DesktopSettings({
       }
       nextPeople = peopleNameRows(await peopleTask);
       nextTaskIntegrations = await taskIntegrationsTask;
-      nextIntegrations = await integrationsTask;
+      const integrationsResult = await integrationsTask;
+      nextIntegrations = integrationsResult.rows;
+      nextIntegrationsError = integrationsResult.error;
       nextAppChangelogs = await appChangelogsTask;
       nextUsageMonthly = await usageMonthlyTask;
       nextUsageYearly = await usageYearlyTask;
@@ -450,6 +462,7 @@ export function DesktopSettings({
     setPeopleNames(nextPeople);
     setTaskIntegrations(nextTaskIntegrations);
     setIntegrations(nextIntegrations);
+    setIntegrationsError(nextIntegrationsError);
     setAppChangelogs(nextAppChangelogs);
     setUsageMonthly(nextUsageMonthly);
     setUsageYearly(nextUsageYearly);
@@ -789,9 +802,13 @@ export function DesktopSettings({
           title="Task integrations"
         />
       ))}
-      {integrations.map(row => (
-        <Row copy={row.name} key={row.key} title="Integrations" />
-      ))}
+      {integrationsError !== null ? (
+        <Row copy={integrationsError} title="Integrations" />
+      ) : (
+        integrations.map(row => (
+          <Row copy={row.name} key={row.key} title="Integrations" />
+        ))
+      )}
       {fairUse?.map((row, index) => (
         <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
       ))}
