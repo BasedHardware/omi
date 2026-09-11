@@ -177,18 +177,14 @@ class INaturalistTools:
         self.sleep = sleep
         self.lock = asyncio.Lock()
         self.cache = OrderedDict()
+        self.in_flight = {}
         self.requests = deque()
         self.next_request = 0.0
         self.cooldown_until = 0.0
 
     async def request(self, path, params):
-        key = (path, tuple(sorted(params.items())))
         async with self.lock:
             now = self.clock()
-            cached = self.cache.get(key)
-            if cached and now - cached[0] < 300:
-                self.cache.move_to_end(key)
-                return cached[1], cached[2]
             if now < self.cooldown_until:
                 raise ToolError(
                     f"iNaturalist request budget is cooling down. Try again in {math.ceil(self.cooldown_until - now)} seconds."
@@ -233,16 +229,47 @@ class INaturalistTools:
         except (ValueError, KeyError, TypeError):
             raise ToolError("iNaturalist returned an unexpected response. Try again later.") from None
         fetched = datetime.fromtimestamp(self.wall_clock(), timezone.utc).isoformat(timespec="seconds")
-        async with self.lock:
-            self.cache[key] = (self.clock(), rows, fetched)
-            self.cache.move_to_end(key)
-            while len(self.cache) > 64:
-                self.cache.popitem(last=False)
         return rows, fetched
 
     async def run(self, name, payload):
         try:
             values = validate(name, payload)
+        except ToolError as exc:
+            return {"error": str(exc)}
+        key = (name, tuple(sorted(values.items())))
+        cached = self.cache.get(key)
+        if cached and self.clock() - cached[0] < 300:
+            self.cache.move_to_end(key)
+            return {"result": cached[1]}
+        task = self.in_flight.get(key)
+        if task is None:
+            if len(self.in_flight) >= 64:
+                return {"error": "This integration is busy. Try again later."}
+            task = asyncio.create_task(self._run_and_cache(name, values, key))
+            self.in_flight[key] = task
+            task.add_done_callback(lambda done: self._finish_request(key, done))
+        # A caller disconnecting must not cancel work another caller is awaiting.
+        return await asyncio.shield(task)
+
+    def _finish_request(self, key, task):
+        if self.in_flight.get(key) is task:
+            self.in_flight.pop(key)
+        if not task.cancelled():
+            # Retrieve unexpected failures even if all callers disconnected.
+            task.exception()
+
+    async def _run_and_cache(self, name, values, key):
+        response = await self._run(name, values)
+        if "result" in response:
+            # Commit only after endpoint-specific validation and formatting succeed.
+            self.cache[key] = (self.clock(), response["result"])
+            self.cache.move_to_end(key)
+            while len(self.cache) > 64:
+                self.cache.popitem(last=False)
+        return response
+
+    async def _run(self, name, values):
+        try:
             limit = values.get("limit", 1)
             if name == "get_inaturalist_taxon":
                 rows, fetched = await self.request(f"/taxa/{values['taxon_id']}", {})

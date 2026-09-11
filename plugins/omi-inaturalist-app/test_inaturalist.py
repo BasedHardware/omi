@@ -34,6 +34,8 @@ class FakeClock:
 class ToolTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.clock = FakeClock()
+        self.wall_clock = FakeClock()
+        self.wall_clock.now = 1_700_000_000.0
         self.calls = []
         self.rows = [TAXON]
         self.status = 200
@@ -53,7 +55,7 @@ class ToolTests(unittest.IsolatedAsyncioTestCase):
             self.sleeps.append(delay)
             self.clock.now += delay
 
-        self.tools = INaturalistTools(fetch, self.clock, lambda: 1_700_000_000.0, sleep)
+        self.tools = INaturalistTools(fetch, self.clock, self.wall_clock, sleep)
 
     async def test_taxon_search_preserves_ambiguity_rank_and_result_limit(self):
         self.rows = [{"id": 48663, "name": "Danaus", "rank": "genus"}, TAXON]
@@ -243,19 +245,217 @@ class ToolTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_cache_reuses_response_and_original_fetch_time_then_expires(self):
         first = await self.tools.run("search_inaturalist_taxa", {"query": "Monarch"})
+        original_time = datetime.fromtimestamp(self.wall_clock.now, timezone.utc).isoformat(timespec="seconds")
+        self.assertIn(f"fetched at {original_time}", first["result"])
+        self.clock.now += 60
+        self.wall_clock.now += 120
         second = await self.tools.run("search_inaturalist_taxa", {"query": "Monarch"})
         self.assertEqual(first, second)
         self.assertEqual(len(self.calls), 1)
         self.clock.now += 301
-        await self.tools.run("search_inaturalist_taxa", {"query": "Monarch"})
+        self.wall_clock.now += 301
+        third = await self.tools.run("search_inaturalist_taxa", {"query": "Monarch"})
+        new_time = datetime.fromtimestamp(self.wall_clock.now, timezone.utc).isoformat(timespec="seconds")
+        self.assertIn(f"fetched at {new_time}", third["result"])
+        self.assertNotIn(f"fetched at {original_time}", third["result"])
         self.assertEqual(len(self.calls), 2)
+
+    async def test_invalid_endpoint_results_do_not_poison_later_calls(self):
+        cases = [
+            ("get_inaturalist_taxon", {"taxon_id": 48662}, [], [TAXON]),
+            ("get_inaturalist_taxon", {"taxon_id": 48662}, [{**TAXON, "id": 7}], [TAXON]),
+            ("get_inaturalist_taxon", {"taxon_id": 48662}, [{**TAXON, "ancestors": [None]}], [TAXON]),
+            ("search_inaturalist_taxa", {"query": "Monarch"}, [{"name": "Monarch"}], [TAXON]),
+            ("search_inaturalist_places", {"query": "Michigan"}, [{"name": "Michigan"}], [PLACE]),
+            (
+                "get_inaturalist_observed_taxa",
+                {"place_id": 29},
+                [{"count": -1, "taxon": TAXON}],
+                [{"count": 1, "taxon": TAXON}],
+            ),
+            (
+                "get_inaturalist_observed_taxa",
+                {"place_id": 29},
+                [{"count": 1, "taxon": None}],
+                [{"count": 1, "taxon": TAXON}],
+            ),
+        ]
+        for name, payload, invalid, valid in cases:
+            with self.subTest(name=name, invalid=invalid):
+                self.setUp()
+                self.rows = invalid
+                failed = await self.tools.run(name, payload)
+                self.assertEqual(set(failed), {"error"}, failed)
+                self.rows = valid
+                corrected = await self.tools.run(name, payload)
+                self.assertEqual(set(corrected), {"result"}, corrected)
+                self.assertEqual(len(self.calls), 2)
+
+    async def overlapping_calls(self, *, cancel_first=False, fail_first=False):
+        entered, release, second_started = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+        async def fetch(path, params):
+            self.calls.append((path, params))
+            entered.set()
+            await release.wait()
+            return self.status, {}, json.dumps({"results": [TAXON]}).encode()
+
+        self.tools.fetch = fetch
+        self.status = 503 if fail_first else 200
+        first = asyncio.create_task(self.tools.run("search_inaturalist_taxa", {"query": "Monarch"}))
+        callers = [first]
+
+        async def second_call():
+            second_started.set()
+            return await self.tools.run("search_inaturalist_taxa", {"query": "Monarch"})
+
+        try:
+            # A deadlock guard, not an elapsed-time assertion: events control ordering.
+            async with asyncio.timeout(10):
+                await entered.wait()
+                second = asyncio.create_task(second_call())
+                callers.append(second)
+                await second_started.wait()
+                if cancel_first:
+                    first.cancel()
+                    with self.assertRaises(asyncio.CancelledError):
+                        await first
+                release.set()
+                result = await second
+                if not cancel_first:
+                    self.assertEqual(await first, result)
+                self.assertEqual(len(self.calls), 1)
+                self.assertEqual(len(self.tools.requests), 1)
+                self.assertEqual(set(result), {"error"} if fail_first else {"result"})
+                if fail_first:
+                    self.status = 200
+                    recovered = await self.tools.run("search_inaturalist_taxa", {"query": "Monarch"})
+                    self.assertEqual(set(recovered), {"result"}, recovered)
+                    self.assertEqual(len(self.calls), 2)
+        finally:
+            release.set()
+            await asyncio.wait_for(asyncio.gather(*callers, return_exceptions=True), 10)
+
+    async def test_overlapping_identical_calls_share_one_upstream_request(self):
+        await self.overlapping_calls()
+
+    async def test_canceling_one_waiter_keeps_shared_request_for_other_waiter(self):
+        await self.overlapping_calls(cancel_first=True)
+
+    async def test_failed_shared_request_does_not_block_a_successful_retry(self):
+        await self.overlapping_calls(fail_first=True)
+
+    async def test_larger_place_limit_does_not_reuse_a_smaller_cached_result(self):
+        self.rows = [PLACE, {"name": "Invalid second place"}]
+        first = await self.tools.run("search_inaturalist_places", {"query": "Michigan", "limit": 1})
+        self.assertEqual(set(first), {"result"}, first)
+        invalid = await self.tools.run("search_inaturalist_places", {"query": "Michigan", "limit": 2})
+        self.assertEqual(set(invalid), {"error"}, invalid)
+        self.rows = [PLACE, {"id": 2, "display_name": "Another Michigan"}]
+        corrected = await self.tools.run("search_inaturalist_places", {"query": "Michigan", "limit": 2})
+        self.assertEqual(set(corrected), {"result"}, corrected)
+        self.assertIn("Another Michigan", corrected["result"])
+        self.assertEqual(len(self.calls), 3)
+
+    async def test_unobserved_failure_cleans_up_after_all_callers_cancel(self):
+        entered, release, finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        original_fetch = self.tools.fetch
+
+        async def broken_fetch(path, params):
+            self.calls.append((path, params))
+            entered.set()
+            await release.wait()
+            raise RuntimeError("Synthetic unexpected provider failure")
+
+        self.tools.fetch = broken_fetch
+        caller = asyncio.create_task(self.tools.run("search_inaturalist_taxa", {"query": "Monarch"}))
+        try:
+            async with asyncio.timeout(10):
+                await entered.wait()
+                shared = next(iter(self.tools.in_flight.values()))
+                shared.add_done_callback(lambda _: finished.set())
+                caller.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await caller
+                release.set()
+                await finished.wait()
+                self.assertEqual(self.tools.in_flight, {})
+                self.assertEqual(self.tools.cache, {})
+                self.tools.fetch = original_fetch
+                recovered = await self.tools.run("search_inaturalist_taxa", {"query": "Monarch"})
+                self.assertEqual(set(recovered), {"result"}, recovered)
+                self.assertEqual(len(self.calls), 2)
+        finally:
+            release.set()
+            await asyncio.wait_for(asyncio.gather(caller, return_exceptions=True), 10)
+
+    async def test_cancelled_shared_work_removes_flight_and_allows_retry(self):
+        entered, blocked = asyncio.Event(), asyncio.Event()
+        original_fetch = self.tools.fetch
+
+        async def fetch(path, params):
+            self.calls.append((path, params))
+            entered.set()
+            await blocked.wait()
+
+        self.tools.fetch = fetch
+        caller = asyncio.create_task(self.tools.run("search_inaturalist_taxa", {"query": "Monarch"}))
+        try:
+            async with asyncio.timeout(10):
+                await entered.wait()
+                next(iter(self.tools.in_flight.values())).cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await caller
+                self.assertEqual(self.tools.in_flight, {})
+                self.assertEqual(self.tools.cache, {})
+                self.tools.fetch = original_fetch
+                recovered = await self.tools.run("search_inaturalist_taxa", {"query": "Monarch"})
+                self.assertEqual(set(recovered), {"result"}, recovered)
+                self.assertEqual(len(self.calls), 2)
+                self.assertEqual(len(self.tools.requests), 2)
+        finally:
+            blocked.set()
+            await asyncio.wait_for(asyncio.gather(caller, return_exceptions=True), 10)
+
+    async def test_pending_request_cap_preserves_existing_shared_work(self):
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        async def fetch(path, params):
+            self.calls.append((path, params))
+            if len(self.calls) == 64:
+                entered.set()
+            await release.wait()
+            return 200, {}, json.dumps({"results": [TAXON]}).encode()
+
+        self.tools.fetch = fetch
+        callers = [asyncio.create_task(self.tools.run("search_inaturalist_taxa", {"query": str(i)})) for i in range(64)]
+        try:
+            async with asyncio.timeout(10):
+                await entered.wait()
+                overflow = await self.tools.run("search_inaturalist_taxa", {"query": "overflow"})
+                self.assertEqual(set(overflow), {"error"})
+                self.assertIn("busy", overflow["error"])
+                self.assertEqual(len(self.calls), 64)
+                callers.append(asyncio.create_task(self.tools.run("search_inaturalist_taxa", {"query": "0"})))
+                release.set()
+                results = await asyncio.gather(*callers)
+                self.assertTrue(all(set(result) == {"result"} for result in results))
+                self.assertEqual(len(self.calls), 64)
+                self.assertEqual(self.tools.in_flight, {})
+                self.assertEqual(len(self.tools.cache), 64)
+                self.assertIn("result", await self.tools.run("search_inaturalist_taxa", {"query": "overflow"}))
+                self.assertEqual(len(self.calls), 65)
+        finally:
+            release.set()
+            await asyncio.wait_for(asyncio.gather(*callers, return_exceptions=True), 10)
 
     async def test_cache_is_bounded(self):
         for index in range(65):
             self.clock.now += 2
             await self.tools.run("search_inaturalist_taxa", {"query": str(index)})
         self.assertEqual(len(self.tools.cache), 64)
-        self.assertNotIn(("/taxa", (("per_page", 5), ("q", "0"))), self.tools.cache)
+        await self.tools.run("search_inaturalist_taxa", {"query": "0"})
+        self.assertEqual(len(self.calls), 66)
 
     async def test_concurrent_requests_share_one_second_budget(self):
         results = await asyncio.gather(

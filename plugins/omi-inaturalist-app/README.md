@@ -81,8 +81,11 @@ POST endpoints against App Home URL, so both settings are needed. The tools use
   most 10,000 requests in a rolling 24-hour period per running process. Ordinary
   back-to-back calls await pacing. Provider 429 cooldowns and the daily budget
   return explicit errors, with no automatic retries. Restarts reset local budgets.
-- Cache: at most 64 successful responses, five-minute TTL, with the original
-  fetch time included in the result. Cache hits do not consume provider requests.
+- Cache: at most 64 successfully validated and formatted tool results, five-minute
+  TTL, with the original fetch time preserved. Errors are not cached. Identical
+  normalized tool calls share one pending request and budget entry, even if one
+  caller disconnects. At most 64 distinct calls may be pending; excess calls get
+  a busy error. Cache hits do not consume provider requests.
 - Upstream timeout: 15 seconds; response body: at most 1 MiB; output: at most
   10 selected records, with bounded text fields. No upstream error body is echoed.
 - Follow iNaturalist's [API recommended practices](https://www.inaturalist.org/pages/api%2Brecommended%2Bpractices)
