@@ -25,6 +25,7 @@ import {
   conversationDayLabel,
   conversationGroupLabel,
   desktopBackendUnavailableCopy,
+  desktopReadErrorCopy,
   formatConversationDuration,
   visibleDisplayText,
   type ConversationProjection,
@@ -241,6 +242,7 @@ export function ConversationsPage({
   const searching = visibleDisplayText(query) !== '';
   const filtering = searching || starredOnly || selectedFolderId !== null;
   const [goals, setGoals] = useState<OmiGoal[]>([]);
+  const [goalsError, setGoalsError] = useState<string | null>(null);
   const [folders, setFolders] = useState<OmiFolder[]>([]);
   const [captureGaps, setCaptureGaps] = useState<OmiCalendarCaptureGap[]>([]);
   const grouped = useMemo(() => {
@@ -307,20 +309,24 @@ export function ConversationsPage({
   useEffect(() => {
     if (backend === undefined || backend === null) {
       setGoals([]);
+      setGoalsError(null);
       return;
     }
     let cancelled = false;
-    loadOmiGoals(backend)
-      .then(rows => {
+    loadOmiGoals(backend).then(
+      rows => {
         if (!cancelled) {
           setGoals(rows);
+          setGoalsError(null);
         }
-      })
-      .catch(() => {
+      },
+      reason => {
         if (!cancelled) {
           setGoals([]);
+          setGoalsError(desktopReadErrorCopy(reason));
         }
-      });
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -493,7 +499,12 @@ export function ConversationsPage({
                 {notice}
               </Text>
             )}
-            {goals.length > 0 && !searching && !starredOnly ? (
+            {goalsError !== null && !searching && !starredOnly ? (
+              <View>
+                <Text style={styles.projectionEmptyTitle}>Goals</Text>
+                <Text style={styles.projectionEmptyCopy}>{goalsError}</Text>
+              </View>
+            ) : goals.length > 0 && !searching && !starredOnly ? (
               <View>
                 <Text style={styles.projectionEmptyTitle}>Goals</Text>
                 {goals.map(goal => (

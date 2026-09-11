@@ -5,6 +5,7 @@ import {ConversationsPage} from './Conversations';
 import {
   clockLabel,
   conversationStatusCopy,
+  desktopBackendServiceCopy,
   desktopBackendUnavailableCopy,
   type ConversationProjection,
 } from '../desktopReadClient';
@@ -1735,6 +1736,52 @@ test('conversation list names GET goals without add or a write sheet', async () 
     expectedApiContract: 'omi',
     path: '/v1/goals/all',
   });
+  expect(request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
+    false,
+  );
+  expect(request.mock.calls.some(call => call[0].path === '/v1/goals')).toBe(
+    false,
+  );
+});
+
+test('conversation list names a failed GET goals instead of empty success', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/goals/all') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Goals');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).toContain('No conversations yet.');
+  expect(tree).not.toContain('No goals');
+  expect(tree).not.toContain('🎯');
+  expect(tree).not.toContain('Add');
   expect(request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
     false,
   );

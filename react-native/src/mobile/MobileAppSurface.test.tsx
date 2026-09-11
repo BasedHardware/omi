@@ -49,7 +49,7 @@ jest.mock('react-native-safe-area-context', () => ({
     require('react').createElement('SafeAreaContextView', props, children),
 }));
 
-import {formatTaskDue} from '../desktopReadClient';
+import {desktopBackendServiceCopy, formatTaskDue} from '../desktopReadClient';
 import {MobileAppSurface, type MobileAppSurfaceProps} from './MobileAppSurface';
 
 function buildProps(
@@ -1450,4 +1450,40 @@ test('compact Tasks tab names GET goals without add or a write sheet', async () 
   expect(homeTree).not.toContain('3/10');
   act(() => renderer.unmount());
   act(() => home.unmount());
+});
+
+test('compact Tasks tab names a failed GET goals instead of empty success', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/goals/all') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <MobileAppSurface
+        {...buildProps({
+          activeRoute: 'tasks',
+          backend: {request} as never,
+        })}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Goals');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).toContain('Prepare product demo');
+  expect(tree).not.toContain('No goals');
+  expect(tree).not.toContain('🎯');
+  expect(tree).not.toContain('Add');
+  expect(request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
+    false,
+  );
+  expect(request.mock.calls.some(call => call[0].path === '/v1/goals')).toBe(
+    false,
+  );
+  act(() => renderer.unmount());
 });

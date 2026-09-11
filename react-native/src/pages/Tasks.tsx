@@ -11,6 +11,7 @@ import {
 import Search from 'lucide-react-native/icons/search';
 import {
   desktopBackendUnavailableCopy,
+  desktopReadErrorCopy,
   formatTaskDue,
   taskDisplayTitle,
   taskGroup,
@@ -65,6 +66,7 @@ export function TasksPage({
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [goals, setGoals] = useState<OmiGoal[]>([]);
+  const [goalsError, setGoalsError] = useState<string | null>(null);
   const nowMs = useRef(Date.now()).current;
   const tasks = useMemo(
     () =>
@@ -100,20 +102,24 @@ export function TasksPage({
   useEffect(() => {
     if (backend === undefined || backend === null) {
       setGoals([]);
+      setGoalsError(null);
       return;
     }
     let cancelled = false;
-    loadOmiGoals(backend)
-      .then(rows => {
+    loadOmiGoals(backend).then(
+      rows => {
         if (!cancelled) {
           setGoals(rows);
+          setGoalsError(null);
         }
-      })
-      .catch(() => {
+      },
+      reason => {
         if (!cancelled) {
           setGoals([]);
+          setGoalsError(desktopReadErrorCopy(reason));
         }
-      });
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -145,7 +151,12 @@ export function TasksPage({
         onDismissTaskMutation={onDismissTaskMutation}
         busyTaskId={busyTaskId}
       />
-      {goals.length > 0 ? (
+      {goalsError !== null ? (
+        <View>
+          <Text style={styles.projectionEmptyTitle}>Goals</Text>
+          <Text style={styles.projectionEmptyCopy}>{goalsError}</Text>
+        </View>
+      ) : goals.length > 0 ? (
         <View>
           <Text style={styles.projectionEmptyTitle}>Goals</Text>
           {goals.map(goal => (

@@ -25,6 +25,7 @@ import Settings from 'lucide-react-native/icons/settings';
 import {
   conversationDiscardedPhotoCopy,
   desktopBackendUnavailableCopy,
+  desktopReadErrorCopy,
   formatTaskDue,
   taskDisplayTitle,
   taskIndentPadding,
@@ -261,9 +262,7 @@ const RecapCard = memo(function RecapCard({
       {recap.discarded === true ||
       recap.emoji == null ||
       recap.emoji === '' ? null : (
-        <Text
-          accessibilityLabel="Conversation emoji"
-          style={styles.recapStar}>
+        <Text accessibilityLabel="Conversation emoji" style={styles.recapStar}>
           {recap.emoji}
         </Text>
       )}
@@ -435,23 +434,28 @@ export function MobileAppSurface({
   const sendDisabled = askUnavailable || visibleDisplayText(askValue) === '';
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [goals, setGoals] = useState<OmiGoal[]>([]);
+  const [goalsError, setGoalsError] = useState<string | null>(null);
   useEffect(() => {
     if (backend === undefined || backend === null) {
       setGoals([]);
+      setGoalsError(null);
       return;
     }
     let cancelled = false;
-    loadOmiGoals(backend)
-      .then(rows => {
+    loadOmiGoals(backend).then(
+      rows => {
         if (!cancelled) {
           setGoals(rows);
+          setGoalsError(null);
         }
-      })
-      .catch(() => {
+      },
+      reason => {
         if (!cancelled) {
           setGoals([]);
+          setGoalsError(desktopReadErrorCopy(reason));
         }
-      });
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -749,7 +753,12 @@ export function MobileAppSurface({
                 ListHeaderComponent={
                   <>
                     {taskFeedback}
-                    {goals.length > 0 ? (
+                    {goalsError !== null ? (
+                      <View>
+                        <Text style={styles.sectionTitle}>Goals</Text>
+                        <Text style={styles.stateText}>{goalsError}</Text>
+                      </View>
+                    ) : goals.length > 0 ? (
                       <View>
                         <Text style={styles.sectionTitle}>Goals</Text>
                         {goals.map(goal => (

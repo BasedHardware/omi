@@ -5,6 +5,7 @@ import {TasksPage} from './Tasks';
 import {TaskPagination} from '../ui/TaskPagination';
 import type {TaskMutationProps} from '../ui/TaskEditor';
 import {
+  desktopBackendServiceCopy,
   desktopBackendUnavailableCopy,
   type TaskProjection,
 } from '../desktopReadClient';
@@ -853,6 +854,41 @@ test('tasks page names GET goals without add or a write sheet', async () => {
     expectedApiContract: 'omi',
     path: '/v1/goals/all',
   });
+  expect(request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
+    false,
+  );
+  expect(request.mock.calls.some(call => call[0].path === '/v1/goals')).toBe(
+    false,
+  );
+  act(() => renderer.unmount());
+});
+
+test('tasks page names a failed GET goals instead of empty success', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/goals/all') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        backend={{request} as never}
+        outcome={outcome}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = taskPageText(renderer);
+  expect(tree).toContain('Goals');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).toContain('Prepare demo');
+  expect(tree).not.toContain('No goals');
+  expect(tree).not.toContain('🎯');
+  expect(tree).not.toContain('Add');
   expect(request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
     false,
   );
