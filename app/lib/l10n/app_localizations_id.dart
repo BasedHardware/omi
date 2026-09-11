@@ -1863,9 +1863,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get openSettings => 'Buka Pengaturan';
 
   @override
-  String get wantDifferentName => 'Ingin menggunakan nama lain?';
-
-  @override
   String get whatsYourName => 'Siapa nama Anda?';
 
   @override
@@ -2048,7 +2045,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get memoryDeleted => 'Memori Dihapus.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Sebagian riwayat memori tidak tersedia. Menampilkan riwayat yang sudah diterima.';
 
   @override
   String get undo => 'Batalkan';
@@ -9925,14 +9922,74 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Profil Suara $name';
+  }
+
+  @override
+  String get play => 'Putar';
+
+  @override
+  String get redo => 'Rekam ulang';
+
+  @override
+  String get answerWithYourVoice => 'Jawab dengan suara Anda:';
+
+  @override
+  String get speechProfileTopicLocation => 'Di mana Anda tinggal?';
+
+  @override
+  String get speechProfileTopicWork => 'Apa pekerjaan Anda?';
+
+  @override
+  String get speechProfileTopicGoal => 'Apa tujuan jangka panjang Anda?';
+
+  @override
   String get transcriptionNoAudio => 'Transkripsi tidak menerima audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Ketuk + untuk mulai merekam';
+
+  @override
+  String get chatBlockTask => 'Tugas';
+
+  @override
+  String get chatBlockGoal => 'Tujuan';
+
+  @override
+  String get chatBlockConversation => 'Percakapan';
+
+  @override
+  String get chatBlockMemory => 'Memori';
+
+  @override
+  String get chatBlockQuestion => 'Pertanyaan';
+
+  @override
+  String get chatBlockOpenInGoals => 'Buka di Tujuan';
+
+  @override
+  String get chatBlockOpenConversation => 'Buka percakapan';
+
+  @override
+  String get chatBlockOpenInMemories => 'Buka di Memori';
+
+  @override
+  String get chatBlockUnavailable => 'Tidak lagi tersedia';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Langkah berikutnya yang disarankan';
 
   @override
   String get couldNotLoadMemories => 'Tidak dapat memuat kenangan';
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Tidak dapat memuat graf pengetahuan';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Konversi suara ke teks sedang tidak tersedia. Periksa koneksi internet dan pengaturan pengenalan suara perangkat Anda, lalu coba lagi.';
+
+  @override
+  String get processingTakingLonger => 'Masih diproses — ini memakan waktu lebih lama dari biasanya.';
 }

@@ -1,0 +1,10 @@
+{
+  "version": "0.12.305",
+  "date": "2026-09-06",
+  "changes": [
+    "Fixed the Unlimited plan's fallback description showing the wrong monthly question count",
+    "Typing with no text field focused now starts a search in the page's search bar (or lands in the chat composer on Chat) instead of playing the system alert sound",
+    "Free-plan Pendant recording on Apple Silicon now uses on-device transcription instead of forcing the cloud STT path.",
+    "Settings search field placeholder now reads \"Search\""
+  ]
+}

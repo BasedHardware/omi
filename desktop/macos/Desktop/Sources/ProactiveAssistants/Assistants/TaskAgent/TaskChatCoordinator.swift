@@ -44,7 +44,10 @@ final class TaskChatCoordinator: ObservableObject {
   private var suppressUnreadPersistence = false
   private var isResettingOwnerProjection = false
 
-  private let chatProvider: ChatProvider
+  /// The one provider (INV-6). Exposed so the task panel can build the same
+  /// content-block context every other Chat surface uses, without a second
+  /// provider or transcript.
+  let chatProvider: ChatProvider
   private let workstreamAPI: any TaskWorkstreamAPI
   private let persistWorkstreamLink: @MainActor (String, String, String, LocalMutationAuthorization) async -> Void
   private let ownerIDProvider: @MainActor () -> String?

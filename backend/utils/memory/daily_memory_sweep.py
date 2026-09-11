@@ -48,6 +48,11 @@ from google.cloud.firestore_v1 import FieldFilter
 from google.cloud import firestore
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
+from utils.conversations.transcript_for_llm import memory_transcript_from_segments
+
+from database.auth import get_user_name
+from database.read_boundary import parse_snapshot_or_none
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
 from database.firestore_index_registry import (
@@ -88,6 +93,8 @@ from utils.memory.knowledge_ledger import (
 from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.memory.memory_authority import validate_uid_for_memory_path
 from utils.memory.jit_trigger_contract import compile_trigger_condition
+from utils.memory.decision_path_telemetry import emit_memory_sweep_decision
+from utils.llm.usage_tracker import Features, track_usage
 
 # These budgets are deliberately separate from the canonical write budget.  A
 # completed-day producer must prove that it read the whole bounded source
@@ -126,7 +133,7 @@ ONBOARDING_PERMANENT_RECEIPT_PREFIX = "onboarding_source_"
 ONBOARDING_SOURCE_RECEIPT_PATH = "daily_memory_sweep_onboarding_sources"
 ONBOARDING_STAGED_CANDIDATE_PATH = "daily_memory_sweep_onboarding_staged"
 DAILY_SUMMARY_STAGED_CANDIDATE_PATH = "daily_memory_sweep_daily_summary_staged"
-DAILY_SUMMARY_STAGE_SCHEMA_VERSION = "daily_memory_sweep_daily_summary_stage.v2"
+DAILY_SUMMARY_STAGE_SCHEMA_VERSION = "daily_memory_sweep_daily_summary_stage.v3"
 MODEL_INVOCATION_PATH = "daily_memory_sweep_model_invocations"
 # This collection is intentionally outside ``users/{uid}``.  Account deletion
 # recursively removes every user subcollection, but an in-flight provider call
@@ -160,6 +167,46 @@ DAILY_MEMORY_SWEEP_COHORT_NAME_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME"
 DAILY_MEMORY_SWEEP_COHORT_FLAG_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG"
 DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS"
 DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENV = "MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED"
+
+# The QA run seam is intentionally separate from the ordinary scheduler
+# controls.  A caller must provide every QA-only gate below; setting a run id
+# alone can never open the production sweep or its cohort.
+QA_SWEEP_RUN_ID_ENV = "OMI_JIT_QA_SWEEP_RUN_ID"
+QA_SWEEP_ADMISSION_ENV = "OMI_JIT_QA_SWEEP_ADMISSION"
+QA_SWEEP_PROJECT = "based-hardware-dev"
+QA_SWEEP_DATABASE = "jit-qa"
+QA_SWEEP_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+QA_SWEEP_COHORT = "jit-qa-sweep-v1"
+QA_SWEEP_MODEL_NAME = "gpt-5.6-luna"
+QA_SWEEP_MAX_MODEL_CANDIDATES = 1
+QA_SWEEP_MAX_MODEL_COST_USD = 0.05
+# Qualification uses the same completed-day producer with an explicit tighter
+# envelope.  Zero phase-B requests/lookups makes one provider call the real
+# maximum for one completed day, instead of pricing the production envelope as
+# if it were a cheap single call.
+QA_SWEEP_MAX_CATCH_UP_DAYS = 1
+QA_SWEEP_MAX_SUMMARY_CONVERSATIONS = 1
+QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS = 2_000
+QA_SWEEP_MAX_TRANSCRIPT_FETCHES = 0
+QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS = 0
+QA_SWEEP_MAX_MEMORY_LOOKUPS = 0
+QA_SWEEP_MAX_SDK_RETRIES = 0
+QA_SWEEP_MAX_GATEWAY_ATTEMPTS = 1
+QA_SWEEP_MAX_PROVIDER_CALLS = 1
+# The deployed memories route is gpt-5.6-luna at $0.20/M input and $1.20/M
+# output.  The parser instructions alone are about 9.6K UTF-8 bytes, so an
+# 8K input cap would reject every real QA request.  12K input + 256 output
+# reserves about $0.0028, below the $0.05 run envelope; the gateway enforces
+# these same headers against the provider request and settles actual usage.
+QA_SWEEP_MAX_INPUT_TOKENS = 12_288
+QA_SWEEP_MAX_OUTPUT_TOKENS = 256
+QA_SWEEP_MAX_SPEND_MICRO_USD = 50_000
+QA_SWEEP_JIT_CONTRACT_VERSION = "jit-cloud-qa-v1"
+QA_SWEEP_RECEIPT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-run.v1"
+QA_SWEEP_OUTPUT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-output.v1"
+QA_SWEEP_RUN_COLLECTION = "jit_qa_sweep_runs"
+QA_SWEEP_OUTPUT_SUBCOLLECTION = "outputs"
+QA_SWEEP_RUN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,47}$")
 
 RECEIPT_LEASE = timedelta(minutes=10)
 MODEL_INVOCATION_LEASE = timedelta(minutes=15)
@@ -435,6 +482,69 @@ def daily_memory_sweep_model_authority_from_environment() -> DailySweepModelAuth
         max_candidates=max_candidates,
         max_cost_usd=max_cost,
     )
+
+
+def validate_qa_sweep_run_id(run_id: str) -> str:
+    normalized = (run_id or "").strip()
+    if not QA_SWEEP_RUN_ID_RE.fullmatch(normalized):
+        raise ValueError("QA sweep run id must match [a-z0-9][a-z0-9_-]{0,47}")
+    return normalized
+
+
+def qa_sweep_run_id_from_environment(environ: Optional[Mapping[str, str]] = None) -> Optional[str]:
+    env = environ if environ is not None else os.environ
+    raw = env.get(QA_SWEEP_RUN_ID_ENV, "").strip()
+    return validate_qa_sweep_run_id(raw) if raw else None
+
+
+def validate_qa_sweep_environment(environ: Optional[Mapping[str, str]] = None) -> str:
+    """Require the complete, closed-world override set for one QA sweep run."""
+
+    env = environ if environ is not None else os.environ
+    run_id = qa_sweep_run_id_from_environment(env)
+    if not run_id:
+        raise ValueError(f"{QA_SWEEP_RUN_ID_ENV} is required for a QA sweep run")
+    required = {
+        "OMI_ENV_STAGE": "dev",
+        "GOOGLE_CLOUD_PROJECT": QA_SWEEP_PROJECT,
+        "GCLOUD_PROJECT": QA_SWEEP_PROJECT,
+        "OMI_FIRESTORE_DATA_PLANE_PROJECT": QA_SWEEP_PROJECT,
+        "FIRESTORE_DATABASE_ID": QA_SWEEP_DATABASE,
+        "FIREBASE_AUTH_PROJECT_ID": "based-hardware",
+        "MEMORY_ENABLED": "on",
+        "OMI_JIT_QA_AUTH_ONLY": "true",
+        "OMI_JIT_QA_UID_ALLOWLIST": QA_SWEEP_UID,
+        QA_SWEEP_ADMISSION_ENV: "true",
+        DAILY_MEMORY_SWEEP_ENABLED_ENV: "true",
+        DAILY_MEMORY_SWEEP_KILL_SWITCH_ENV: "false",
+        DAILY_MEMORY_SWEEP_MODEL_ENABLED_ENV: "true",
+        DAILY_MEMORY_SWEEP_MODEL_NAME_ENV: QA_SWEEP_MODEL_NAME,
+        DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES_ENV: str(QA_SWEEP_MAX_MODEL_CANDIDATES),
+        DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD_ENV: f"{QA_SWEEP_MAX_MODEL_COST_USD:g}",
+        DAILY_MEMORY_SWEEP_COHORT_ENABLED_ENV: "true",
+        DAILY_MEMORY_SWEEP_COHORT_FLAG_ENV: QA_SWEEP_COHORT,
+        DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENV: "false",
+    }
+    for name, expected in required.items():
+        if env.get(name, "").strip().casefold() != expected.casefold():
+            raise ValueError(f"QA sweep requires {name}={expected!r}")
+    if env.get("FIRESTORE_EMULATOR_HOST", "").strip():
+        raise ValueError("QA sweep proof must use named Cloud Firestore")
+    if env.get("SERVICE_ACCOUNT_JSON", "").strip() or env.get("FIREBASE_AUTH_CREDENTIALS_PATH", "").strip():
+        raise ValueError("QA sweep proof cannot select customer Firebase credentials")
+    return run_id
+
+
+def qa_sweep_cohort_authorizer(uid: str, cohort_name: str = "") -> DailySweepCohortDecision:
+    """Admit only the fixed QA account under the explicit QA capability gate."""
+
+    try:
+        validate_qa_sweep_environment()
+    except ValueError:
+        return DailySweepCohortDecision.unavailable
+    if uid != QA_SWEEP_UID or cohort_name != QA_SWEEP_COHORT:
+        return DailySweepCohortDecision.unavailable
+    return DailySweepCohortDecision.enabled
 
 
 class SweepFenceBlocked(RuntimeError):
@@ -2144,6 +2254,7 @@ def _claim_receipt(
     claim_now: datetime,
     window: CompletedLocalDayWindow,
     sweep_generation: int = 1,
+    qa_run_id: Optional[str] = None,
 ) -> Literal["claimed", "idempotent", "conflict"]:
     receipt_ref = _receipt_ref(
         db_client,
@@ -2181,6 +2292,15 @@ def _claim_receipt(
                 or int(existing.get("account_generation", -1)) != account_generation
                 or int(existing.get("source_generation", -1)) != source_generation
                 or int(existing.get("sweep_generation", 1)) != sweep_generation
+                or existing.get("qa_run_id") != qa_run_id
+                or (
+                    qa_run_id is not None
+                    and (
+                        existing.get("source_id") != candidate.source_id
+                        or existing.get("source_type") != candidate.source_type
+                        or existing.get("source_version") != candidate.source_version
+                    )
+                )
                 or existing.get("local_timezone_window_id") != window.window_id
                 or existing.get("window_start_utc") != window.start_utc
                 or existing.get("window_end_utc") != window.end_utc
@@ -2217,26 +2337,34 @@ def _claim_receipt(
                 merge=True,
             )
             return "claimed"
-        transaction.set(
-            receipt_ref,
-            {
-                "schema_version": RECEIPT_SCHEMA_VERSION,
-                "uid": uid,
-                "local_date": local_date.isoformat(),
-                "source_key": candidate.source_key,
-                "candidate_digest": digest,
-                "account_generation": account_generation,
-                "source_generation": source_generation,
-                "sweep_generation": sweep_generation,
-                "claimant": claimant,
-                "receipt_state": "pending",
-                "local_timezone_window_id": window.window_id,
-                "window_start_utc": window.start_utc,
-                "window_end_utc": window.end_utc,
-                "claimed_at": normalized_now,
-                "claim_expires_at": normalized_now + RECEIPT_LEASE,
-            },
-        )
+        payload: dict[str, Any] = {
+            "schema_version": RECEIPT_SCHEMA_VERSION,
+            "uid": uid,
+            "local_date": local_date.isoformat(),
+            "source_key": candidate.source_key,
+            "candidate_digest": digest,
+            "account_generation": account_generation,
+            "source_generation": source_generation,
+            "sweep_generation": sweep_generation,
+            "claimant": claimant,
+            "receipt_state": "pending",
+            "local_timezone_window_id": window.window_id,
+            "window_start_utc": window.start_utc,
+            "window_end_utc": window.end_utc,
+            "claimed_at": normalized_now,
+            "claim_expires_at": normalized_now + RECEIPT_LEASE,
+        }
+        if qa_run_id is not None:
+            payload.update(
+                {
+                    "qa_run_id": qa_run_id,
+                    "source_id": candidate.source_id,
+                    "source_type": candidate.source_type,
+                    "source_version": candidate.source_version,
+                    "source_refs": list(candidate.source_refs),
+                }
+            )
+        transaction.set(receipt_ref, payload)
         return "claimed"
 
     transaction = db_client.transaction()
@@ -2258,6 +2386,7 @@ def _finish_receipt(
     claimant: str,
     window: CompletedLocalDayWindow,
     sweep_generation: int = 1,
+    qa_run_id: Optional[str] = None,
 ) -> None:
     receipt_ref = _receipt_ref(
         db_client,
@@ -2294,6 +2423,15 @@ def _finish_receipt(
             or int(existing.get("account_generation", -1)) != account_generation
             or int(existing.get("source_generation", -1)) != source_generation
             or int(existing.get("sweep_generation", 1)) != sweep_generation
+            or existing.get("qa_run_id") != qa_run_id
+            or (
+                qa_run_id is not None
+                and (
+                    existing.get("source_id") != candidate.source_id
+                    or existing.get("source_type") != candidate.source_type
+                    or existing.get("source_version") != candidate.source_version
+                )
+            )
             or existing.get("claimant") != claimant
             or existing.get("local_timezone_window_id") != window.window_id
             or existing.get("window_start_utc") != window.start_utc
@@ -2312,10 +2450,21 @@ def _finish_receipt(
             "window_end_utc": window.end_utc,
             "completed_at": datetime.now(timezone.utc),
         }
+        if qa_run_id is not None:
+            payload.update(
+                {
+                    "source_id": candidate.source_id,
+                    "source_type": candidate.source_type,
+                    "source_version": candidate.source_version,
+                    "source_refs": list(candidate.source_refs),
+                }
+            )
         if memory_id:
             payload["memory_id"] = memory_id
         if skip_reason:
             payload["skip_reason"] = skip_reason
+        if qa_run_id is not None:
+            payload["qa_run_id"] = qa_run_id
         transaction.set(receipt_ref, payload, merge=True)
 
     transaction = db_client.transaction()
@@ -2830,6 +2979,7 @@ def run_daily_memory_sweep(
     authority: SweepAuthorityState = SweepAuthorityState(),
     max_catch_up_days: int = MAX_CATCH_UP_DAYS,
     claimant: Optional[str] = None,
+    qa_run_id: Optional[str] = None,
 ) -> DailySweepOutput:
     """Run bounded completed local days with durable cursor and source receipts.
 
@@ -2842,6 +2992,8 @@ def run_daily_memory_sweep(
 
     normalized_uid = (uid or "").strip()
     validate_uid_for_memory_path(normalized_uid)
+    if qa_run_id is not None:
+        qa_run_id = validate_qa_sweep_run_id(qa_run_id)
     if not authority.may_write:
         return _blocked_output(normalized_uid, "authority_closed", status="disabled")
     if max_catch_up_days < 1 or max_catch_up_days > MAX_CATCH_UP_DAYS:
@@ -2964,6 +3116,7 @@ def run_daily_memory_sweep(
                 claim_now=now,
                 window=expected_window,
                 sweep_generation=current_cursor.sweep_generation,
+                qa_run_id=qa_run_id,
             )
             if claim == "conflict":
                 return _blocked_output(normalized_uid, "source_idempotency_conflict")
@@ -2999,6 +3152,7 @@ def run_daily_memory_sweep(
                         claimant=receipt_claimant,
                         window=expected_window,
                         sweep_generation=current_cursor.sweep_generation,
+                        qa_run_id=qa_run_id,
                     )
                 except SweepFenceBlocked:
                     return _blocked_output(normalized_uid, "receipt_completion_fence_closed")
@@ -3017,6 +3171,7 @@ def run_daily_memory_sweep(
                     claimant=receipt_claimant,
                     window=expected_window,
                     sweep_generation=current_cursor.sweep_generation,
+                    qa_run_id=qa_run_id,
                 )
             except SweepFenceBlocked:
                 return _blocked_output(normalized_uid, "receipt_completion_fence_closed")
@@ -3115,6 +3270,8 @@ class DailySweepRuntimeSources:
     # Content-free accounting used to enforce the model budget.  It is never
     # emitted as a user-facing telemetry payload.
     model_cost_usd: float = 0.0
+    # Content-free provider dispatch and usage evidence for qualification.
+    model_dispatch_evidence: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_iterables(
@@ -3129,6 +3286,7 @@ class DailySweepRuntimeSources:
         onboarding_source_progress: Optional[Mapping[str, int]] = None,
         eligibility_proof: Literal["completed_transcript_v1", "none"] = "none",
         model_cost_usd: float = 0.0,
+        model_dispatch_evidence: Optional[Mapping[str, Any]] = None,
     ) -> "DailySweepRuntimeSources":
         summary_values = tuple(daily_summary)
         onboarding_values = tuple(onboarding_cold_start)
@@ -3148,6 +3306,7 @@ class DailySweepRuntimeSources:
             onboarding_source_progress=dict(onboarding_source_progress or {}),
             eligibility_proof=eligibility_proof,
             model_cost_usd=model_cost_usd,
+            model_dispatch_evidence=dict(model_dispatch_evidence or {}),
         )
 
     def candidates(self) -> Tuple[DailySweepCandidate, ...]:
@@ -3246,6 +3405,28 @@ class CompletedDayConversationSource:
     summary_text: str
     transcript_text: str
     needs_folder: bool
+    owner_evidence: OwnerAttributionEvidence
+
+
+def _owner_about_aliases(uid: str) -> frozenset[str]:
+    """Tokens that mean the account owner in model-authored ``about``.
+
+    The prompt asks for the literal ``user`` token and also hands the model the
+    owner's name, so a name-in-``about`` row must still hit the owner gate.
+    Aliases are the prompt token plus the profile name the sweep already
+    loads; they are not guessed from first-person words like "me".
+    """
+
+    aliases = {"user", "the user", "primary user"}
+    try:
+        name = get_user_name(uid, use_default=False)
+    except Exception:
+        name = None
+    if name:
+        normalized = " ".join(str(name).split()).casefold()
+        if normalized:
+            aliases.add(normalized)
+    return frozenset(aliases)
 
 
 def _read_completed_day_conversation_sources(
@@ -3311,11 +3492,15 @@ def _read_completed_day_conversation_sources(
         if eligibility != "eligible":
             return (), "incomplete"
         try:
-            prepared = prepare_conversation_for_read(raw, uid)  # pyright: ignore[reportPrivateUsage]
-            conversation = Conversation(**(prepared or {}))
-            # TranscriptSegment.segments_as_string is the canonical textual
-            # rendering.  It ignores photos by construction.
-            transcript = (conversation.get_transcript(include_timestamps=False) or "").strip()
+            conversation = parse_snapshot_or_none(
+                Conversation,
+                snapshot,
+                payload_from_snapshot=lambda _snapshot: prepare_conversation_for_read(raw, uid) or {},
+            )
+            if conversation is None:
+                return (), "incomplete"
+            owner_evidence = OwnerAttributionEvidence.from_segments(conversation.transcript_segments)
+            transcript = memory_transcript_from_segments(conversation.transcript_segments)
             structured = conversation.structured
             title = (getattr(structured, "title", "") or "").strip() if structured else ""
             overview = (getattr(structured, "overview", "") or "").strip() if structured else ""
@@ -3347,6 +3532,7 @@ def _read_completed_day_conversation_sources(
                 conversation_id=conversation_id,
                 summary_text=summary,
                 transcript_text=transcript,
+                owner_evidence=owner_evidence,
                 needs_folder=not (raw.get("folder_id") or "") and isinstance(raw.get("jit_first_open"), Mapping),
             )
         )
@@ -3923,6 +4109,15 @@ def _load_or_stage_daily_summary_candidates(
     agent_runner: Any,
     folder_options: Sequence[Tuple[str, str]] = (),
     max_candidates: int,
+    max_transcript_fetches: int = MAX_DAILY_TRANSCRIPT_FETCHES,
+    max_fetch_characters: int = MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS,
+    max_memory_lookups: int = MAX_DAILY_MEMORY_LOOKUPS,
+    max_provider_retries: Optional[int] = None,
+    dispatch_evidence: Optional[Dict[str, Any]] = None,
+    max_input_tokens: Optional[int] = None,
+    max_output_tokens: Optional[int] = None,
+    jit_run_id: Optional[str] = None,
+    jit_max_spend_micro_usd: Optional[int] = None,
     sweep_generation: int = 1,
 ) -> Optional[Tuple[Tuple[DailySweepCandidate, ...], Tuple[Dict[str, str], ...]]]:
     """Stage the complete bounded daily-summary agent page before apply.
@@ -3947,7 +4142,17 @@ def _load_or_stage_daily_summary_candidates(
         {
             "uid": uid,
             "local_date": local_date.isoformat(),
-            "rows": [{"source": row.conversation_id, "text": row.summary_text} for row in conversation_rows],
+            "rows": [
+                {
+                    "source": row.conversation_id,
+                    "text": row.summary_text,
+                    "owner_evidence": {
+                        "trust": row.owner_evidence.trust,
+                        "owner_cluster_id": row.owner_evidence.owner_cluster_id,
+                    },
+                }
+                for row in conversation_rows
+            ],
         },
     )
 
@@ -4016,6 +4221,27 @@ def _load_or_stage_daily_summary_candidates(
         )
         if payload.get("candidate_digest") != expected_digest:
             return None
+        if jit_run_id is not None:
+            # A QA run may reuse only a stage created by this exact server run.
+            # A pre-existing stage has no trustworthy relationship to the
+            # current gateway request, so treating it as a cache hit would
+            # bypass the one-request QA proof and could double-apply stale
+            # candidates.
+            if payload.get("jit_run_id") != jit_run_id:
+                return None
+            staged_dispatch = payload.get("dispatch_evidence")
+            if not isinstance(staged_dispatch, Mapping):
+                return None
+            requests = staged_dispatch.get("requests")
+            if (
+                staged_dispatch.get("feature") != "memories"
+                or staged_dispatch.get("jit_run_id") != jit_run_id
+                or not isinstance(requests, list)
+                or len(requests) != 1
+            ):
+                return None
+        if dispatch_evidence is not None and isinstance(payload.get("dispatch_evidence"), Mapping):
+            dispatch_evidence.update(dict(payload["dispatch_evidence"]))
         return staged, assignments
 
     try:
@@ -4044,21 +4270,39 @@ def _load_or_stage_daily_summary_candidates(
     def build_candidate_page() -> Tuple[dict[str, Any], ...]:
         summary_rows = tuple((row.conversation_id, row.summary_text) for row in conversation_rows)
         transcript_lookup = {row.conversation_id: row.transcript_text for row in conversation_rows}
+        owner_lookup = {row.conversation_id: row.owner_evidence for row in conversation_rows}
         needs_folder_ids = tuple(row.conversation_id for row in conversation_rows if row.needs_folder)
-        output = agent_runner(
-            uid,
-            summary_rows,
-            transcript_lookup,
-            folder_options=tuple(folder_options) if needs_folder_ids else (),
-            needs_folder_ids=needs_folder_ids,
-            max_candidates=max_candidates,
-            max_transcript_fetches=MAX_DAILY_TRANSCRIPT_FETCHES,
-            max_fetch_characters=MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS,
-            memory_searcher=_daily_sweep_ledger_searcher(uid, db_client=db_client),
-            max_memory_lookups=MAX_DAILY_MEMORY_LOOKUPS,
-            cache_key=f"daily-sweep:{uid}",
-        )
+        # The server-owned UID must be in the context at the model boundary so
+        # GatewayContextChatOpenAI emits X-Omi-User-Uid and feature headers.
+        # Keep this around the actual runner call: QA and production adapters
+        # can supply different runners, and the context must not leak between
+        # scheduler users.
+        with track_usage(uid, Features.MEMORIES):
+            output = agent_runner(
+                uid,
+                summary_rows,
+                transcript_lookup,
+                folder_options=tuple(folder_options) if needs_folder_ids else (),
+                needs_folder_ids=needs_folder_ids,
+                max_candidates=max_candidates,
+                max_transcript_fetches=max_transcript_fetches,
+                max_fetch_characters=max_fetch_characters,
+                memory_searcher=_daily_sweep_ledger_searcher(uid, db_client=db_client),
+                max_memory_lookups=max_memory_lookups,
+                cache_key=f"daily-sweep:{uid}",
+                max_provider_retries=max_provider_retries,
+                max_input_tokens=max_input_tokens,
+                max_output_tokens=max_output_tokens,
+                jit_run_id=jit_run_id,
+                jit_max_spend_micro_usd=jit_max_spend_micro_usd,
+                dispatch_evidence=dispatch_evidence,
+            )
         candidates: List[DailySweepCandidate] = []
+        dropped_subjectless = 0
+        dropped_basis_proposed = 0
+        demoted_owner_untrusted = 0
+        skipped_duplicate_lookup = 0
+        owner_aliases = _owner_about_aliases(uid)
         for index, memory in enumerate(getattr(output, "memories", ()) or ()):
             content = str(getattr(memory, "content", "") or "").strip()[:MAX_CONTENT_CHARACTERS]
             cited = [
@@ -4066,10 +4310,46 @@ def _load_or_stage_daily_summary_candidates(
                 for conversation_id in (getattr(memory, "conversation_ids", ()) or ())
                 if str(conversation_id) in transcript_lookup
             ]
+            cited = list(dict.fromkeys(cited))[:MAX_SOURCE_REFS]
             if not content or not cited:
                 # A memory without provenance into this day's rows is dropped:
                 # candidates may never fabricate source references.
                 continue
+            duplicate_of = str(getattr(memory, "duplicate_of", "") or "").strip()
+            if duplicate_of:
+                # A lookup hit already holds this fact. Skip it here rather
+                # than staging a sibling the occupancy check would have to
+                # catch later — or miss, if the slot/subject keys diverge.
+                skipped_duplicate_lookup += 1
+                continue
+            about = " ".join(str(getattr(memory, "about", "") or "").split())
+            basis = str(getattr(memory, "basis", "") or "").strip().lower()
+            if about.casefold() in {"", "unknown", "unclear", "uncertain"}:
+                dropped_subjectless += 1
+                continue
+            if basis not in {"decided", "observed"}:
+                if basis == "proposed":
+                    dropped_basis_proposed += 1
+                continue
+            if about.casefold() in owner_aliases:
+                if not any(may_attribute_to_owner(owner_lookup[conversation_id]) for conversation_id in cited):
+                    # The model supplied no named alternate subject. Do not
+                    # turn an untrusted user label into a relationship fact.
+                    demoted_owner_untrusted += 1
+                    continue
+                subject_scope = MemorySubjectScope.primary_user
+                subject_entity_id = "user"
+            else:
+                subject_scope = MemorySubjectScope.third_party
+                # A name alone is not a globally resolved contact identity.
+                # Keep it deterministic and local to this source set.
+                subject_entity_id = (
+                    "source:"
+                    + deterministic_contract_id(
+                        "daily-sweep-named-subject",
+                        {"uid": uid, "sources": sorted(set(cited)), "name": about.casefold()},
+                    )[:24]
+                )
             candidates.append(
                 DailySweepCandidate(
                     candidate_id=deterministic_contract_id(
@@ -4089,18 +4369,27 @@ def _load_or_stage_daily_summary_candidates(
                     source_version="daily-memory-agent.v1",
                     source_refs=tuple(f"conversation:{conversation_id}" for conversation_id in cited[:MAX_SOURCE_REFS]),
                     authority=SweepAuthority.sweep_inference,
-                    subject_scope=MemorySubjectScope.primary_user,
-                    subject_entity_id=getattr(memory, "subject_entity_id", None),
+                    subject_scope=subject_scope,
+                    subject_entity_id=subject_entity_id,
                     # A slot names a standing attribute; the canonical occupancy
                     # check turns an occupied-slot add into an amend, which is
                     # how the daily run maintains the rendered profile.
-                    slot=(str(getattr(memory, "slot", "") or "").strip() or None),
+                    slot=(str(getattr(memory, "slot", "") or "").strip() or None) if basis == "decided" else None,
                 )
             )
             if len(candidates) >= max_candidates:
                 break
         if len(candidates) > MAX_CANDIDATES_PER_DAY:
             raise ValueError("daily summary model candidate budget exceeded")
+        emit_memory_sweep_decision(
+            logger,
+            uid=uid,
+            local_date=local_date.isoformat(),
+            dropped_subjectless=dropped_subjectless,
+            dropped_basis_proposed=dropped_basis_proposed,
+            demoted_owner_untrusted=demoted_owner_untrusted,
+            skipped_duplicate_lookup=skipped_duplicate_lookup,
+        )
         valid_folder_ids = {folder_id for folder_id, _name in folder_options}
         assignment_rows = [
             {
@@ -4155,7 +4444,10 @@ def _load_or_stage_daily_summary_candidates(
             "staged_at": datetime.now(timezone.utc),
             "expires_at": datetime.now(timezone.utc) + STAGED_CANDIDATE_RETENTION,
             "model_invocation_id": invocation_id,
+            "dispatch_evidence": dict(dispatch_evidence or {}),
         }
+        if jit_run_id is not None:
+            stage_payload["jit_run_id"] = jit_run_id
 
         def stage_if_open(transaction: Any) -> bool:
             deletion_ref, control_ref = _live_fence_refs(db_client, uid)
@@ -4213,7 +4505,9 @@ def _daily_sweep_ledger_searcher(uid: str, *, db_client: Any) -> Any:
             if item is None or item.status != MemoryItemStatus.active:
                 continue
             slot_label = f" [slot: {item.slot}]" if getattr(item, "slot", None) else ""
-            results.append(f"{item.content}{slot_label}")
+            memory_id = str(getattr(item, "memory_id", "") or "").strip()
+            prefix = f"[{memory_id}] " if memory_id else ""
+            results.append(f"{prefix}{item.content}{slot_label}")
         return tuple(results)
 
     return search
@@ -4311,6 +4605,7 @@ def produce_completed_day_daily_summary_sources(
     agent_runner: Optional[Any] = None,
     window_override: Optional[CompletedLocalDayWindow] = None,
     sweep_generation: int = 1,
+    qa_run_id: Optional[str] = None,
 ) -> DailySweepRuntimeSources:
     """Produce the exact completed-day source, including its bounded agent run.
 
@@ -4355,11 +4650,17 @@ def produce_completed_day_daily_summary_sources(
 
     model = model_authority or daily_memory_sweep_model_authority_from_environment()
 
+    is_qa_run = qa_run_id is not None
     # A persisted candidate list is accepted only when the model authority is
     # open.  In particular, a missing key is not interpreted as []: older
     # summary writers did not produce this field and must not advance the new
     # cursor without a producer proof.
     if "memory_candidates" in payload:
+        if is_qa_run:
+            # QA must observe a fresh, bounded gateway request. A historical
+            # summary cache is a producer artifact from another run and cannot
+            # prove this run's request, usage, or spend.
+            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
         raw_candidates = payload.get("memory_candidates")
         if (
             raw_candidates is None
@@ -4387,12 +4688,23 @@ def produce_completed_day_daily_summary_sources(
             model_cost_usd=0.0,
         )
 
+    max_summary_conversations = (
+        QA_SWEEP_MAX_SUMMARY_CONVERSATIONS if is_qa_run else MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS
+    )
+    max_summary_characters = (
+        QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS if is_qa_run else MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS
+    )
+    max_transcript_fetches = QA_SWEEP_MAX_TRANSCRIPT_FETCHES if is_qa_run else MAX_DAILY_TRANSCRIPT_FETCHES
+    max_fetch_characters = (
+        QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS if is_qa_run else MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS
+    )
+    max_memory_lookups = QA_SWEEP_MAX_MEMORY_LOOKUPS if is_qa_run else MAX_DAILY_MEMORY_LOOKUPS
     conversation_rows, conversation_status = _read_completed_day_conversation_sources(
         uid,
         window,
         db_client=db_client,
-        max_conversations=MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS,
-        max_summary_characters=MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS,
+        max_conversations=max_summary_conversations,
+        max_summary_characters=max_summary_characters,
     )
     if conversation_status == "incomplete":
         return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
@@ -4409,6 +4721,7 @@ def produce_completed_day_daily_summary_sources(
         return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
 
     runner = agent_runner
+    dispatch_evidence: Dict[str, Any] = {}
     if runner is None:
         # The deployment may only name the model configured for the existing
         # memory route.  It cannot select an arbitrary model through a source
@@ -4431,11 +4744,38 @@ def produce_completed_day_daily_summary_sources(
     estimated_cost = (
         (
             2 * spine_characters
-            + MAX_DAILY_TRANSCRIPT_FETCHES * MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS
-            + daily_sweep_phase_b_overhead_characters(MAX_DAILY_MEMORY_LOOKUPS)
+            + max_transcript_fetches * max_fetch_characters
+            + (
+                daily_sweep_phase_b_overhead_characters(
+                    max_memory_lookups,
+                    max_candidate_rows=model.max_candidates,
+                )
+                if is_qa_run
+                else daily_sweep_phase_b_overhead_characters(max_memory_lookups)
+            )
         )
         / 1000.0
     ) * MODEL_COST_PER_1K_INPUT_CHARACTERS_USD
+    if is_qa_run:
+        # The character heuristic above prices only the source spine.  The
+        # gateway reservation is the final authority, but the producer should
+        # also refuse a QA run whose configured worst-case input/output
+        # envelope would exceed its own model budget.  Read the checked-in
+        # gateway card instead of duplicating its rates here.
+        from llm_gateway.gateway.accounting import rate_card_for, rounded_micro_usd
+
+        rate_card = rate_card_for("openai", QA_SWEEP_MODEL_NAME)
+        if rate_card is None:
+            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+        rates = rate_card.effective_rates(QA_SWEEP_MAX_INPUT_TOKENS)
+        envelope_cost_usd = (
+            rounded_micro_usd(
+                QA_SWEEP_MAX_INPUT_TOKENS * rates.input_micro_usd_per_million
+                + QA_SWEEP_MAX_OUTPUT_TOKENS * rates.output_micro_usd_per_million
+            )
+            / 1_000_000
+        )
+        estimated_cost = max(estimated_cost, envelope_cost_usd)
     if estimated_cost > model.max_cost_usd:
         return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
     folder_options = (
@@ -4454,6 +4794,15 @@ def produce_completed_day_daily_summary_sources(
         agent_runner=runner,
         folder_options=folder_options,
         max_candidates=model.max_candidates,
+        max_transcript_fetches=max_transcript_fetches,
+        max_fetch_characters=max_fetch_characters,
+        max_memory_lookups=max_memory_lookups,
+        max_provider_retries=QA_SWEEP_MAX_SDK_RETRIES if is_qa_run else None,
+        dispatch_evidence=dispatch_evidence if is_qa_run else None,
+        max_input_tokens=QA_SWEEP_MAX_INPUT_TOKENS if is_qa_run else None,
+        max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS if is_qa_run else None,
+        jit_run_id=qa_run_id,
+        jit_max_spend_micro_usd=QA_SWEEP_MAX_SPEND_MICRO_USD if is_qa_run else None,
         sweep_generation=sweep_generation,
     )
     if staged is None:
@@ -4476,6 +4825,7 @@ def produce_completed_day_daily_summary_sources(
         source_status="complete" if candidates else "complete_zero",
         eligibility_proof="completed_transcript_v1",
         model_cost_usd=estimated_cost,
+        model_dispatch_evidence=dispatch_evidence,
     )
 
 
@@ -4554,6 +4904,7 @@ def firestore_daily_sweep_source_provider(
     db_client: Any,
     timezone_name: str = "UTC",
     window_override: Optional[CompletedLocalDayWindow] = None,
+    qa_run_id: Optional[str] = None,
 ) -> DailySweepRuntimeSources:
     """Read one bounded backend-produced source packet for the scheduler.
 
@@ -4579,7 +4930,13 @@ def firestore_daily_sweep_source_provider(
             db_client=db_client,
             window_override=window_override,
             sweep_generation=current_cursor.sweep_generation,
+            qa_run_id=qa_run_id,
         )
+        if qa_run_id is not None:
+            # Onboarding is a separate producer path and may add another model
+            # invocation.  QA input must come from an eligible completed
+            # recorded conversation source, so stop at the summary producer.
+            return summary_sources
         model_authority = daily_memory_sweep_model_authority_from_environment()
         onboarding_production = _produce_onboarding_sources(
             uid,
@@ -4605,7 +4962,14 @@ def firestore_daily_sweep_source_provider(
             ),
             eligibility_proof=summary_sources.eligibility_proof,
             model_cost_usd=summary_sources.model_cost_usd,
+            model_dispatch_evidence=summary_sources.model_dispatch_evidence,
         )
+    if qa_run_id is not None:
+        # The QA producer must read the completed conversation source and make
+        # its bounded gateway request in this run. A pre-existing adapter
+        # packet can contain ordinary production-sized candidates and has no
+        # trustworthy request/usage join, even when its generations match.
+        raise ValueError("QA sweep cannot reuse a pre-existing source packet")
     raw_payload = snapshot.to_dict() or {}
     payload: Dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
     # A staged packet is an immutable producer artifact.  Missing identity is
@@ -4706,13 +5070,17 @@ def firestore_daily_sweep_source_provider(
         # the scheduler must not advance its cursor.
         raise
     parsed_daily_summary = parse("daily_summary", source_type="daily_summary", authority=SweepAuthority.sweep_inference)
-    parsed_onboarding = parse(
-        "onboarding_cold_start",
-        source_type="onboarding",
-        authority=SweepAuthority.direct_user_statement,
-        trusted_direct=True,
+    parsed_onboarding = (
+        parse(
+            "onboarding_cold_start",
+            source_type="onboarding",
+            authority=SweepAuthority.direct_user_statement,
+            trusted_direct=True,
+        )
+        if qa_run_id is None
+        else ()
     )
-    raw_onboarding_source_keys = payload.get("onboarding_source_keys", ())
+    raw_onboarding_source_keys = payload.get("onboarding_source_keys", ()) if qa_run_id is None else ()
     if not isinstance(raw_onboarding_source_keys, (list, tuple)):
         raise ValueError("daily sweep onboarding source keys must be a list")
     onboarding_source_keys = tuple(
@@ -4722,7 +5090,7 @@ def firestore_daily_sweep_source_provider(
         not item.startswith("onboarding:") for item in onboarding_source_keys
     ):
         raise ValueError("daily sweep onboarding source keys are invalid")
-    raw_onboarding_progress = payload.get("onboarding_source_progress", {})
+    raw_onboarding_progress = payload.get("onboarding_source_progress", {}) if qa_run_id is None else {}
     if not isinstance(raw_onboarding_progress, Mapping):
         raise ValueError("daily sweep onboarding source progress is invalid")
     onboarding_source_progress = {
@@ -4773,6 +5141,115 @@ class DailySweepSchedulerSummary:
     # account therefore stays eligible without imposing head-of-line blocking.
     completed_uids: Tuple[str, ...] = ()
     failed_uids: Tuple[str, ...] = ()
+    model_dispatch_evidence: Tuple[Mapping[str, Any], ...] = ()
+
+
+def _qa_sweep_run_ref(db_client: Any, run_id: str) -> Any:
+    return db_client.document(f"{QA_SWEEP_RUN_COLLECTION}/{run_id}")
+
+
+def _qa_sweep_output_ref(db_client: Any, run_id: str) -> Any:
+    return db_client.document(f"{QA_SWEEP_RUN_COLLECTION}/{run_id}/{QA_SWEEP_OUTPUT_SUBCOLLECTION}/{QA_SWEEP_UID}")
+
+
+def _create_or_verify_qa_sweep_document(db_client: Any, ref: Any, payload: Mapping[str, Any], *, label: str) -> None:
+    create = getattr(ref, "create", None)
+    if not callable(create):
+        raise RuntimeError(f"QA sweep {label} requires create-only Firestore writes")
+    try:
+        create(dict(payload))
+        return
+    except Exception as exc:
+        snapshot = ref.get()
+        existing = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+        if isinstance(existing, Mapping) and dict(existing) == dict(payload):
+            return
+        raise RuntimeError(f"QA sweep {label} already exists with a different run result") from exc
+
+
+def write_qa_sweep_run_receipt(
+    db_client: Any,
+    *,
+    run_id: str,
+    summary: DailySweepSchedulerSummary,
+) -> None:
+    """Persist the content-free producer receipt after one QA scheduler run.
+
+    Candidate receipts carry ``qa_run_id`` and remain the durable output rows;
+    this run-level document only records bounded counters and the exact
+    consumer join path. It is create-only so a retry cannot rewrite a prior
+    run's evidence.
+    """
+
+    run_id = validate_run_id_for_qa_receipt(run_id)
+    status = "failed" if summary.errors else "completed"
+    policy = {
+        "model_name": QA_SWEEP_MODEL_NAME,
+        "max_model_candidates": QA_SWEEP_MAX_MODEL_CANDIDATES,
+        "max_model_cost_usd": QA_SWEEP_MAX_MODEL_COST_USD,
+        "max_catch_up_days": QA_SWEEP_MAX_CATCH_UP_DAYS,
+        "max_summary_conversations": QA_SWEEP_MAX_SUMMARY_CONVERSATIONS,
+        "max_summary_input_characters": QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS,
+        "max_transcript_fetches": QA_SWEEP_MAX_TRANSCRIPT_FETCHES,
+        "max_transcript_fetch_characters": QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS,
+        "max_memory_lookups": QA_SWEEP_MAX_MEMORY_LOOKUPS,
+        "sdk_max_retries": QA_SWEEP_MAX_SDK_RETRIES,
+        "gateway_max_attempts": QA_SWEEP_MAX_GATEWAY_ATTEMPTS,
+        "provider_calls_allowed": QA_SWEEP_MAX_PROVIDER_CALLS,
+        "max_input_tokens": QA_SWEEP_MAX_INPUT_TOKENS,
+        "max_output_tokens": QA_SWEEP_MAX_OUTPUT_TOKENS,
+        "max_spend_micro_usd": QA_SWEEP_MAX_SPEND_MICRO_USD,
+        "jit_contract_version": QA_SWEEP_JIT_CONTRACT_VERSION,
+    }
+    output_path = f"users/{QA_SWEEP_UID}/daily_memory_sweep_receipts"
+    output_payload = {
+        "schema_version": QA_SWEEP_OUTPUT_SCHEMA_VERSION,
+        "run_id": run_id,
+        "uid": QA_SWEEP_UID,
+        "project": QA_SWEEP_PROJECT,
+        "database": QA_SWEEP_DATABASE,
+        "status": status,
+        "attempted_users": summary.attempted_users,
+        "committed_users": summary.committed_users,
+        "blocked_users": summary.blocked_users,
+        "committed_candidates": summary.committed_candidates,
+        "idempotent_candidates": summary.idempotent_candidates,
+        "skipped_candidates": summary.skipped_candidates,
+        "error_count": len(summary.errors),
+        "model_policy": policy,
+        "model_dispatch_evidence": [dict(item) for item in summary.model_dispatch_evidence],
+        "candidate_receipt_collection": output_path,
+        "candidate_receipt_join_field": "qa_run_id",
+    }
+    _create_or_verify_qa_sweep_document(
+        db_client,
+        _qa_sweep_output_ref(db_client, run_id),
+        output_payload,
+        label="output row",
+    )
+    run_payload = {
+        "schema_version": QA_SWEEP_RECEIPT_SCHEMA_VERSION,
+        "run_id": run_id,
+        "uid": QA_SWEEP_UID,
+        "project": QA_SWEEP_PROJECT,
+        "database": QA_SWEEP_DATABASE,
+        "status": status,
+        "output_row_path": f"{QA_SWEEP_RUN_COLLECTION}/{run_id}/{QA_SWEEP_OUTPUT_SUBCOLLECTION}/{QA_SWEEP_UID}",
+        "candidate_receipt_collection": output_path,
+        "candidate_receipt_join_field": "qa_run_id",
+        "model_policy": policy,
+        "model_dispatch_evidence": [dict(item) for item in summary.model_dispatch_evidence],
+        "error_count": len(summary.errors),
+    }
+    _create_or_verify_qa_sweep_document(
+        db_client, _qa_sweep_run_ref(db_client, run_id), run_payload, label="run receipt"
+    )
+
+
+def validate_run_id_for_qa_receipt(run_id: str) -> str:
+    """Keep receipt validation local to this module's public QA seam."""
+
+    return validate_qa_sweep_run_id(run_id)
 
 
 def _pending_completed_dates(
@@ -4812,6 +5289,8 @@ def run_daily_memory_sweep_scheduler(
     cohort_authorizer: Optional[Any] = None,
     timezone_reconciler: Optional[Any] = None,
     max_users: int = 400,
+    qa_run_id: Optional[str] = None,
+    max_catch_up_days: Optional[int] = None,
 ) -> DailySweepSchedulerSummary:
     """Runtime producer/scheduler/adaptor behind the closed backend authority.
 
@@ -4825,6 +5304,15 @@ def run_daily_memory_sweep_scheduler(
 
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("now must be timezone-aware")
+    if qa_run_id is not None:
+        qa_run_id = validate_qa_sweep_run_id(qa_run_id)
+    catch_up_days = (
+        QA_SWEEP_MAX_CATCH_UP_DAYS
+        if qa_run_id is not None
+        else (MAX_CATCH_UP_DAYS if max_catch_up_days is None else max_catch_up_days)
+    )
+    if catch_up_days < 1 or catch_up_days > MAX_CATCH_UP_DAYS:
+        raise ValueError("max_catch_up_days must be between 1 and the bounded maximum")
     bounded_uids = tuple(sorted({uid.strip() for uid in uid_inventory if uid.strip()}))[: max(1, min(400, max_users))]
 
     # Crash-recovery cleanup is a privacy lifecycle operation, not a rollout
@@ -4848,6 +5336,7 @@ def run_daily_memory_sweep_scheduler(
     errors: List[str] = []
     completed_uids: List[str] = []
     failed_uids: List[str] = []
+    model_dispatch_evidence: List[Mapping[str, Any]] = []
 
     def process_one(uid: str) -> ProcessOutcome:
         nonlocal attempted, committed_users, blocked_users, committed, idempotent, skipped
@@ -4903,7 +5392,7 @@ def run_daily_memory_sweep_scheduler(
                 blocked_users += 1
                 completed_uids.append(uid)
                 return ProcessOutcome.ack()
-            if free_tier_memory_suppression_enabled():
+            if free_tier_memory_suppression_enabled(uid):
                 # §1.8: a basic account is not admitted to the sweep at all, so
                 # an account that downgrades stops being swept rather than
                 # having its already-claimed day fail late. Ack like the
@@ -4935,7 +5424,12 @@ def run_daily_memory_sweep_scheduler(
                 if not callable(timezone_reconciler) or not timezone_reconciler(uid, timezone_name):
                     raise ValueError("timezone_changed_requires_reconciliation")
                 cursor = _read_cursor(db_client, uid, control)
-            pending_dates = _pending_completed_dates(cursor, timezone_name=timezone_name, now=now)
+            pending_dates = _pending_completed_dates(
+                cursor,
+                timezone_name=timezone_name,
+                now=now,
+                max_days=catch_up_days,
+            )
             if not pending_dates:
                 completed_uids.append(uid)
                 return ProcessOutcome.ack()
@@ -4957,6 +5451,7 @@ def run_daily_memory_sweep_scheduler(
                         control,
                         timezone_name=timezone_name,
                         window_override=transition_window,
+                        qa_run_id=qa_run_id,
                     )
                 except TypeError:
                     # Preserve the narrow three-argument provider contract for
@@ -4964,6 +5459,8 @@ def run_daily_memory_sweep_scheduler(
                     sources = source_provider(uid, local_date, control)
                 if not isinstance(sources, DailySweepRuntimeSources):
                     raise ValueError("daily sweep source provider returned an invalid source bundle")
+                if sources.model_dispatch_evidence:
+                    model_dispatch_evidence.append(dict(sources.model_dispatch_evidence))
                 packets[local_date] = build_daily_sweep_input(
                     uid,
                     local_date,
@@ -4982,6 +5479,8 @@ def run_daily_memory_sweep_scheduler(
                 db_client=db_client,
                 authority=resolved_authority,
                 claimant=f"scheduler:{uuid4().hex}",
+                qa_run_id=qa_run_id,
+                max_catch_up_days=catch_up_days,
             )
             committed += output.committed_count
             idempotent += output.idempotent_count
@@ -5011,6 +5510,7 @@ def run_daily_memory_sweep_scheduler(
         errors=tuple(errors[:16]),
         completed_uids=tuple(completed_uids),
         failed_uids=tuple(failed_uids),
+        model_dispatch_evidence=tuple(model_dispatch_evidence),
     )
 
 
@@ -5050,12 +5550,43 @@ __all__ = [
     "DAILY_MEMORY_SWEEP_COHORT_NAME_ENV",
     "DAILY_MEMORY_SWEEP_COHORT_FLAG_ENV",
     "DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENV",
+    "QA_SWEEP_RUN_ID_ENV",
+    "QA_SWEEP_ADMISSION_ENV",
+    "QA_SWEEP_PROJECT",
+    "QA_SWEEP_DATABASE",
+    "QA_SWEEP_UID",
+    "QA_SWEEP_COHORT",
+    "QA_SWEEP_MODEL_NAME",
+    "QA_SWEEP_MAX_MODEL_CANDIDATES",
+    "QA_SWEEP_MAX_MODEL_COST_USD",
+    "QA_SWEEP_MAX_CATCH_UP_DAYS",
+    "QA_SWEEP_MAX_SUMMARY_CONVERSATIONS",
+    "QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS",
+    "QA_SWEEP_MAX_TRANSCRIPT_FETCHES",
+    "QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS",
+    "QA_SWEEP_MAX_MEMORY_LOOKUPS",
+    "QA_SWEEP_MAX_SDK_RETRIES",
+    "QA_SWEEP_MAX_GATEWAY_ATTEMPTS",
+    "QA_SWEEP_MAX_PROVIDER_CALLS",
+    "QA_SWEEP_MAX_INPUT_TOKENS",
+    "QA_SWEEP_MAX_OUTPUT_TOKENS",
+    "QA_SWEEP_MAX_SPEND_MICRO_USD",
+    "QA_SWEEP_JIT_CONTRACT_VERSION",
+    "QA_SWEEP_RECEIPT_SCHEMA_VERSION",
+    "QA_SWEEP_OUTPUT_SCHEMA_VERSION",
+    "QA_SWEEP_RUN_COLLECTION",
+    "QA_SWEEP_OUTPUT_SUBCOLLECTION",
     "SCHEMA_VERSION",
     "SweepAuthority",
     "SweepAuthorityState",
     "DailySweepModelAuthority",
     "DailySweepCohortAuthority",
     "daily_memory_sweep_model_authority_from_environment",
+    "validate_qa_sweep_run_id",
+    "qa_sweep_run_id_from_environment",
+    "validate_qa_sweep_environment",
+    "qa_sweep_cohort_authorizer",
+    "write_qa_sweep_run_receipt",
     "daily_memory_sweep_cohort_authority_from_environment",
     "read_daily_memory_sweep_cohort_assignment",
     "close_daily_memory_sweep_cohort_clients",

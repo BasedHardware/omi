@@ -1786,7 +1786,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get maybeLater => 'Maybe Later';
 
   @override
-  String get speechProfileIntro => 'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.';
+  String get speechProfileIntro => 'Let\'s set up your speech profile. You can always change it later';
 
   @override
   String get getStarted => 'Get Started';
@@ -1855,9 +1855,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get openSettings => 'Open Settings';
-
-  @override
-  String get wantDifferentName => 'Want to go by something else?';
 
   @override
   String get whatsYourName => 'What\'s your name?';
@@ -5594,7 +5591,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get doItAgain => 'Do it again';
 
   @override
-  String get listenToSpeechProfile => 'Listen to my speech profile ➡️';
+  String get listenToSpeechProfile => 'Listen to my speech profile';
 
   @override
   String get recognizingOthers => 'Recognizing others 👀';
@@ -9905,14 +9902,74 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
+  String get answerWithYourVoice => 'Answer with your voice:';
+
+  @override
+  String get speechProfileTopicLocation => 'Where do you live?';
+
+  @override
+  String get speechProfileTopicWork => 'What do you do for work?';
+
+  @override
+  String get speechProfileTopicGoal => 'What is your long-term goal?';
+
+  @override
   String get transcriptionNoAudio => 'Transcription not receiving audio';
 
   @override
   String get tapPlusToStartRecording => 'Tap + to start recording';
 
   @override
+  String get chatBlockTask => 'Task';
+
+  @override
+  String get chatBlockGoal => 'Goal';
+
+  @override
+  String get chatBlockConversation => 'Conversation';
+
+  @override
+  String get chatBlockMemory => 'Memory';
+
+  @override
+  String get chatBlockQuestion => 'Question';
+
+  @override
+  String get chatBlockOpenInGoals => 'Open in Goals';
+
+  @override
+  String get chatBlockOpenConversation => 'Open conversation';
+
+  @override
+  String get chatBlockOpenInMemories => 'Open in Memories';
+
+  @override
+  String get chatBlockUnavailable => 'No longer available';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Recommended next steps';
+
+  @override
   String get couldNotLoadMemories => 'Couldn\'t load memories';
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Couldn\'t load knowledge graph';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.';
+
+  @override
+  String get processingTakingLonger => 'Still working — this is taking longer than usual.';
 }

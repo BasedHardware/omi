@@ -30,6 +30,18 @@ logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
+_FATAL_ERROR_MARKERS = ("outbox_delivery_failed", "cursor_persist:")
+
+
+def _fatal_job_errors(errors: list[str], *, flex_deferred: bool) -> list[str]:
+    """Outbox/cursor failures always fail the job; a Flex stop does not retry the page."""
+    fatal = [error for error in errors if any(marker in error for marker in _FATAL_ERROR_MARKERS)]
+    if fatal:
+        return fatal
+    if flex_deferred:
+        return []
+    return list(errors)
+
 
 def _init_firebase() -> None:
     service_account_json = os.getenv("SERVICE_ACCOUNT_JSON")
@@ -58,8 +70,18 @@ def main() -> None:
             recurrence_signal_consumer=drain_recurrence_inbox_for_maintenance,
         )
     )
-    if summary.errors:
-        raise RuntimeError(f"memory-maintenance-job completed with {len(summary.errors)} error(s)")
+    fatal_errors = _fatal_job_errors(
+        list(summary.errors or []),
+        flex_deferred=bool(getattr(summary, "flex_deferred", False)),
+    )
+    if summary.errors and not fatal_errors:
+        logger.warning(
+            "memory-maintenance-job: flex stop with residual errors count=%d errors=%s",
+            len(summary.errors),
+            summary.errors,
+        )
+    if fatal_errors:
+        raise RuntimeError(f"memory-maintenance-job completed with {len(fatal_errors)} error(s)")
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ from utils.conversations.transcript_hash import (
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from .firestore_index_registry import MCP_CONVERSATION_CARD_QUERY_SPECS, STALE_IN_PROGRESS_CONVERSATIONS_QUERY
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
+from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
 from utils.other.storage import list_audio_chunks
@@ -47,6 +48,11 @@ logger = logging.getLogger(__name__)
 conversations_collection = 'conversations'
 
 _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
+# Top-level fields behind the Typesense conversation projection (see
+# utils/conversations/typesense_index.py). A generic update re-syncs the index
+# only when it touches one of these roots — segment/photo/app-result writes
+# never reach Typesense, so they must not pay for it.
+_SEARCH_INDEXED_FIELD_ROOTS = frozenset({'structured', 'created_at', 'started_at', 'finished_at', 'geolocation'})
 _PUBLIC_TRANSCRIPT_MAX_STORED_BYTES = 256 * 1024
 _PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES = 512 * 1024
 _PUBLIC_TRANSCRIPT_MAX_SEGMENTS = 4096
@@ -80,46 +86,6 @@ def get_conversation_ids(uid: str) -> List[str]:
     """
     coll = db.collection('users').document(uid).collection(conversations_collection)
     return [doc.id for doc in coll.select([]).stream()]
-
-
-def _ensure_timezone_aware(dt: datetime) -> datetime:
-    """
-    Ensure a datetime object is timezone-aware.
-    If naive, assume UTC timezone.
-    """
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
-
-
-def _firestore_revision_datetime(value: Any) -> Optional[datetime]:
-    """Normalize Firestore snapshot metadata to an aware API datetime.
-
-    The production client exposes ``DatetimeWithNanoseconds`` (a datetime
-    subclass), while Firestore emulators and fakes may expose protobuf-like
-    ``seconds``/``nanos`` values. Keep that SDK variation at the database
-    boundary so response models always receive the same public type.
-    """
-    if isinstance(value, datetime):
-        return _ensure_timezone_aware(value)
-
-    to_datetime = getattr(value, 'ToDatetime', None)
-    if callable(to_datetime):
-        try:
-            return _ensure_timezone_aware(to_datetime(tzinfo=timezone.utc))
-        except (TypeError, ValueError, OverflowError):
-            return None
-
-    try:
-        seconds = getattr(value, 'seconds')
-        nanos = getattr(value, 'nanos')
-        if isinstance(seconds, str) and isinstance(nanos, str):
-            timestamp = float(f'{seconds}.{nanos}')
-        else:
-            timestamp = float(seconds) + (float(nanos) / 1_000_000_000)
-        return datetime.fromtimestamp(timestamp, tz=timezone.utc)
-    except (AttributeError, IndexError, TypeError, ValueError, OverflowError):
-        return None
 
 
 # *********************************
@@ -359,7 +325,7 @@ def _document_data_with_revision(document) -> Optional[Dict[str, Any]]:
     data = document.to_dict()
     if data is None:
         return None
-    revision = _firestore_revision_datetime(getattr(document, 'update_time', None))
+    revision = firestore_revision_datetime(getattr(document, 'update_time', None))
     if revision is not None:
         data['updated_at'] = revision
     return data
@@ -395,6 +361,52 @@ def get_conversation_photos(uid: str, conversation_id: str):
     photos_ref = conversation_ref.collection('photos')
     photos = [doc.to_dict() for doc in photos_ref.stream()]
     return photos
+
+
+def iter_all_conversation_photos(uid: str):
+    start_key = db.document(f'users/{uid}/conversations/ /photos/ ')
+    end_key = db.document(f'users/{uid}/conversations//photos/')
+    query = (
+        db.collection_group('photos')
+        .where(filter=FieldFilter('__name__', '>=', start_key))
+        .where(filter=FieldFilter('__name__', '<=', end_key))
+    )
+    for doc in query.stream():
+        # Path format: users/{uid}/conversations/{conversation_id}/photos/{photo_id}
+        parts = doc.reference.path.split('/')
+        if len(parts) >= 6 and parts[-2] == 'photos' and parts[-4] == 'conversations':
+            conversation_id = parts[-3]
+            yield conversation_id, doc.to_dict()
+
+
+def _sync_conversation_search_index(uid: str, conversation_id: str) -> None:
+    """Converge the Typesense projection after a durable write (fail-open).
+
+    The import stays inside the hook on purpose: several test harnesses load
+    this module against stubbed ``utils`` packages without a real
+    ``utils.conversations`` path, and a module-top import of the projection
+    breaks them (PR #12819 round one).
+    """
+    try:
+        from utils.conversations.typesense_index import sync_conversation_index_after_write
+
+        sync_conversation_index_after_write(uid, conversation_id)
+    except Exception as exc:
+        logger.warning(
+            "conversation Typesense sync hook failed uid=%s conversation_id=%s: %s", uid, conversation_id, exc
+        )
+
+
+def _delete_conversation_search_index(uid: str, conversation_id: str) -> None:
+    """Remove one conversation from Typesense after a durable delete (fail-open)."""
+    try:
+        from utils.conversations.typesense_index import delete_conversation_index_doc
+
+        delete_conversation_index_doc(uid, conversation_id)
+    except Exception as exc:
+        logger.warning(
+            "conversation Typesense delete hook failed uid=%s conversation_id=%s: %s", uid, conversation_id, exc
+        )
 
 
 # *****************************
@@ -457,6 +469,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         transaction.set(conversation_ref, write_data)
 
     _write_processing_result(transaction)
+    _sync_conversation_search_index(uid, conversation_data['id'])
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
@@ -528,7 +541,14 @@ def persist_processing_result_with_lifecycle(
         transaction.set(conversation_ref, write_data, merge=True)
         return True
 
-    return _persist(transaction)
+    persisted = _persist(transaction)
+    if persisted:
+        _sync_conversation_search_index(uid, conversation_data['id'])
+    else:
+        # A processor result for a conversation whose owner is already gone:
+        # converge the search index to absence too.
+        _delete_conversation_search_index(uid, conversation_data['id'])
+    return persisted
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
@@ -550,9 +570,13 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     try:
         conversation_ref.create(conversation_data)
-        return True
     except (AlreadyExists, Conflict):
+        # The conversation exists but may be new to the search index (writer
+        # lag, backfill gap); the read-back sync converges it either way.
+        _sync_conversation_search_index(uid, conversation_data['id'])
         return False
+    _sync_conversation_search_index(uid, conversation_data['id'])
+    return True
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -923,6 +947,8 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
         # audio sync take their designed gone-owner path (stop syncing, release
         # the audio budget) instead of logging an ERROR and retrying forever.
         return False
+    if _SEARCH_INDEXED_FIELD_ROOTS.intersection(str(key).split('.', 1)[0] for key in update_data):
+        _sync_conversation_search_index(uid, conversation_id)
     return True
 
 
@@ -1060,6 +1086,7 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
         return
 
     conversation_ref.update({'structured.title': title, 'user_title': title})
+    _sync_conversation_search_index(uid, conversation_id)
 
 
 def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional[str], content: str) -> str:
@@ -1082,6 +1109,7 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
 
     if app_id is None:
         conversation_ref.update({'structured.overview': content})
+        _sync_conversation_search_index(uid, conversation_id)
         return 'ok'
 
     raw = doc_snapshot.to_dict() or {}
@@ -1209,6 +1237,7 @@ def delete_conversation(uid, conversation_id):
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
+    _delete_conversation_search_index(uid, conversation_id)
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -1505,12 +1534,14 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'discarded': True})
+    _sync_conversation_search_index(uid, conversation_id)
 
 
 def restore_conversation_from_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'discarded': False})
+    _sync_conversation_search_index(uid, conversation_id)
 
 
 # *********************************
@@ -1573,7 +1604,7 @@ def get_action_items(
     for conversation in conversations:
         conversation_id = conversation['id']
         conversation_title = conversation.get('structured', {}).get('title', 'Untitled')
-        conversation_created_at = _ensure_timezone_aware(conversation['created_at'])
+        conversation_created_at = ensure_timezone_aware(conversation['created_at'])
 
         raw_items = conversation.get('structured', {}).get('action_items', [])
 
@@ -1600,9 +1631,9 @@ def get_action_items(
 
             # Ensure timezone awareness for action item dates
             if created_at is not None:
-                created_at = _ensure_timezone_aware(created_at)
+                created_at = ensure_timezone_aware(created_at)
             if completed_at is not None:
-                completed_at = _ensure_timezone_aware(completed_at)
+                completed_at = ensure_timezone_aware(completed_at)
 
             # Fallback to conversation created_at if dates are missing
             if created_at is None:
@@ -1645,6 +1676,7 @@ def update_conversation_finished_at(uid: str, conversation_id: str, finished_at:
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'finished_at': finished_at})
+    _sync_conversation_search_index(uid, conversation_id)
 
 
 def _invalidate_client_processing(payload: Dict[str, Any]) -> None:

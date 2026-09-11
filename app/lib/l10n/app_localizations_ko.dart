@@ -1825,9 +1825,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get openSettings => '설정 열기';
 
   @override
-  String get wantDifferentName => '다른 이름으로 부르시겠습니까?';
-
-  @override
   String get whatsYourName => '이름이 무엇인가요?';
 
   @override
@@ -2004,7 +2001,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get memoryDeleted => '기억이 삭제되었습니다.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => '기억 기록의 일부를 불러올 수 없습니다. 지금까지 받은 기록을 표시합니다.';
 
   @override
   String get undo => '실행 취소';
@@ -9748,14 +9745,73 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name님의 음성 프로필';
+  }
+
+  @override
+  String get play => '재생';
+
+  @override
+  String get redo => '다시 녹음';
+
+  @override
+  String get answerWithYourVoice => '목소리로 답해주세요:';
+
+  @override
+  String get speechProfileTopicLocation => '어디에 사시나요?';
+
+  @override
+  String get speechProfileTopicWork => '어떤 일을 하시나요?';
+
+  @override
+  String get speechProfileTopicGoal => '장기적인 목표는 무엇인가요?';
+
+  @override
   String get transcriptionNoAudio => '전사가 오디오를 받지 못하고 있습니다';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => '+를 눌러 녹음 시작';
+
+  @override
+  String get chatBlockTask => '작업';
+
+  @override
+  String get chatBlockGoal => '목표';
+
+  @override
+  String get chatBlockConversation => '대화';
+
+  @override
+  String get chatBlockMemory => '메모리';
+
+  @override
+  String get chatBlockQuestion => '질문';
+
+  @override
+  String get chatBlockOpenInGoals => '목표에서 열기';
+
+  @override
+  String get chatBlockOpenConversation => '대화 열기';
+
+  @override
+  String get chatBlockOpenInMemories => '메모리에서 열기';
+
+  @override
+  String get chatBlockUnavailable => '더 이상 사용할 수 없음';
+
+  @override
+  String get chatBlockRecommendedNextSteps => '권장 다음 단계';
 
   @override
   String get couldNotLoadMemories => '추억을 불러올 수 없습니다';
 
   @override
   String get couldNotLoadKnowledgeGraph => '지식 그래프를 불러올 수 없습니다';
+
+  @override
+  String get speechToTextUnavailableDesc => '지금은 음성을 텍스트로 변환할 수 없습니다. 인터넷 연결과 기기의 음성 인식 설정을 확인한 후 다시 시도해주세요.';
+
+  @override
+  String get processingTakingLonger => '아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요.';
 }

@@ -83,4 +83,28 @@ if fast_call >= launch or full_call >= launch:
     raise SystemExit("local-profile Keychain reset must run before app launch")
 PY
 
+# ── E2E pool slots are not local-emulator profiles: refuse, any slot id ────
+# A pool slot's keychain item holds the session a human signed in once and
+# must survive every rebuild; the reset helper must refuse it outright, for
+# any pool size (slot 7 exists the moment the pool is grown), before it even
+# looks at the app.
+for pool_id in com.omi.omi-e2e-1 com.omi.omi-e2e-2 com.omi.omi-e2e-7; do
+  if PATH="$TMP/bin:$PATH" "$RESET" "$pool_id" "$APP" >/dev/null 2>&1; then
+    echo "reset helper must refuse E2E pool slot $pool_id" >&2
+    exit 1
+  fi
+done
+if out="$(PATH="$TMP/bin:$PATH" "$RESET" com.omi.omi-e2e-3 "$TMP/missing.app" 2>&1)"; then
+  echo "reset helper must refuse a pool slot before touching the app" >&2
+  exit 1
+fi
+case "$out" in
+  *"pool slot"*) ;;
+  *) echo "pool refusal must say it refused a pool slot: $out" >&2; exit 1 ;;
+esac
+if OMI_E2E_POOL_PREFIX=omi-lab PATH="$TMP/bin:$PATH" "$RESET" com.omi.omi-lab-12 "$APP" >/dev/null 2>&1; then
+  echo "reset helper must refuse a configured-prefix pool slot" >&2
+  exit 1
+fi
+
 echo "test-local-profile-keychain-reset.sh: OK"

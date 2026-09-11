@@ -1863,9 +1863,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get openSettings => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು ತೆರೆಯಿರಿ';
 
   @override
-  String get wantDifferentName => 'ಬೇರೆ ರೀತಿಯಲ್ಲಿ ಹೆಸರು ಹೇಳಿದೆ ತೆಗೆದುಕೊಳ್ಳಬೇಕೆ?';
-
-  @override
   String get whatsYourName => 'ನಿಮ್ಮ ಹೆಸರು ಏನು?';
 
   @override
@@ -2047,7 +2044,8 @@ class AppLocalizationsKn extends AppLocalizations {
   String get memoryDeleted => 'ಸ್ಮೃತಿ ಅಳಿಸಲಾಗಿದೆ.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'ನೆನಪುಗಳ ಇತಿಹಾಸದ ಕೆಲವು ಭಾಗಗಳು ಲಭ್ಯವಿಲ್ಲ. ಇದುವರೆಗೆ ಸ್ವೀಕರಿಸಿದ ಇತಿಹಾಸವನ್ನು ತೋರಿಸಲಾಗುತ್ತಿದೆ.';
 
   @override
   String get undo => 'ರದ್ದುಗೊಳಿಸಿ';
@@ -9946,14 +9944,74 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name ಅವರ ಧ್ವನಿ ಪ್ರೊಫೈಲ್';
+  }
+
+  @override
+  String get play => 'ಪ್ಲೇ ಮಾಡಿ';
+
+  @override
+  String get redo => 'ಮತ್ತೆ ರೆಕಾರ್ಡ್ ಮಾಡಿ';
+
+  @override
+  String get answerWithYourVoice => 'ನಿಮ್ಮ ಧ್ವನಿಯಲ್ಲಿ ಉತ್ತರಿಸಿ:';
+
+  @override
+  String get speechProfileTopicLocation => 'ನೀವು ಎಲ್ಲಿ ವಾಸಿಸುತ್ತೀರಿ?';
+
+  @override
+  String get speechProfileTopicWork => 'ನೀವು ಯಾವ ಕೆಲಸ ಮಾಡುತ್ತೀರಿ?';
+
+  @override
+  String get speechProfileTopicGoal => 'ನಿಮ್ಮ ದೀರ್ಘಾವಧಿಯ ಗುರಿ ಏನು?';
+
+  @override
   String get transcriptionNoAudio => 'ಲಿಪ್ಯಂತರಣ ಆಡಿಯೊ ಸ್ವೀಕರಿಸುತ್ತಿಲ್ಲ';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ';
+
+  @override
+  String get chatBlockTask => 'ಕಾರ್ಯ';
+
+  @override
+  String get chatBlockGoal => 'ಗುರಿ';
+
+  @override
+  String get chatBlockConversation => 'ಸಂಭಾಷಣೆ';
+
+  @override
+  String get chatBlockMemory => 'ನೆನಪು';
+
+  @override
+  String get chatBlockQuestion => 'ಪ್ರಶ್ನೆ';
+
+  @override
+  String get chatBlockOpenInGoals => 'ಗುರಿಗಳಲ್ಲಿ ತೆರೆಯಿರಿ';
+
+  @override
+  String get chatBlockOpenConversation => 'ಸಂಭಾಷಣೆ ತೆರೆಯಿರಿ';
+
+  @override
+  String get chatBlockOpenInMemories => 'ನೆನಪುಗಳಲ್ಲಿ ತೆರೆಯಿರಿ';
+
+  @override
+  String get chatBlockUnavailable => 'ಇನ್ನು ಲಭ್ಯವಿಲ್ಲ';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'ಶಿಫಾರಸು ಮಾಡಿದ ಮುಂದಿನ ಹಂತಗಳು';
 
   @override
   String get couldNotLoadMemories => 'ನೆನಪುಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
 
   @override
   String get couldNotLoadKnowledgeGraph => 'ಜ್ಞಾನ ಗ್ರಾಫ್ ಅನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'ಮಾತನ್ನು ಪಠ್ಯಕ್ಕೆ ಪರಿವರ್ತಿಸುವ ಸೌಲಭ್ಯ ಸದ್ಯ ಲಭ್ಯವಿಲ್ಲ. ನಿಮ್ಮ ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಮತ್ತು ಸಾಧನದ ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get processingTakingLonger => 'ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ — ಇದು ಸಾಮಾನ್ಯಕ್ಕಿಂತ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ.';
 }

@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 import re
+import json
 
 import pytest
 
@@ -42,9 +43,12 @@ def _meeting_context() -> CalendarMeetingContext:
 
 def _long_transcript() -> str:
     detail = 'Mem0 HSM GPT store catalog revoke Greg Leaf Discord September 8 '
-    return '\n\n'.join(
-        [f'[segment:s{i} {i:.3f}-{i + 1:.3f}] {"David" if i % 2 == 0 else "Speaker 1"}: {detail}' for i in range(100)]
-    )
+    return '\n\n'.join([f'[s{i} {i % 2}] {detail}' for i in range(100)])
+
+
+def _speaker_map() -> dict[int, str | None]:
+    # Cluster 0 is the user (David); cluster 1 is unmatched until the calendar guard binds it.
+    return {0: 'David', 1: None}
 
 
 def test_structured_additions_are_backward_compatible():
@@ -65,32 +69,40 @@ def test_structured_additions_are_backward_compatible():
     assert old.action_items[0].due_certainty is None
 
 
-def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypatch):
+@pytest.mark.parametrize('marked_source', [True, False])
+def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypatch, marked_source):
     from utils.llm import conversation_processing
     from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
 
     prefix = build_conversation_prompt_prefix(
         conversation_id='conv-123',
-        transcript=_long_transcript(),
+        transcript=_long_transcript() if marked_source else re.sub(r'\[[^]]+\] ', '', _long_transcript()),
         started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
         timezone_name='America/New_York',
         language_code='en',
         calendar_context=_meeting_context(),
+        speaker_map=_speaker_map(),
     )
     captured = {}
 
     class Model:
         def invoke(self, messages):
             captured['messages'] = messages
-            return SimpleNamespace(content='''{
+            content = '''{
                   "title":"Speaker 1 and Ash Discuss Agent Infrastructure",
                   "overview":"compatibility",
                   "emoji":"🔐",
                   "category":"technology",
-                  "sections":[{"heading":"Agent operations","body_markdown":"Ash runs ~12 long-running agents.","source_segment_ids":["s1"]}],
+                  "sections":[{"heading":"Agent operations","body_markdown":"- Ash runs ~12 long-running agents.\\n- The team proposed a review; it has not started.","source_segment_ids":["s1"]}],
                   "action_items":[{"description":"Send Fulcrum dinner invite","owner_name":"David","context":"Tentative NYC lunch or dinner with Ash.","due_at":"2026-09-08T12:00:00","due_certainty":"tentative","capture_owner":"user","source_segment_ids":["s9"]}],
                   "events":[]
-                }''')
+                }'''
+            if not marked_source:
+                payload = json.loads(content)
+                for item in payload['sections'] + payload['action_items']:
+                    item['source_segment_ids'] = []
+                content = json.dumps(payload)
+            return SimpleNamespace(content=content)
 
     def fake_get_llm(_feature, **kwargs):
         captured['kwargs'] = kwargs
@@ -107,9 +119,13 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
         task_intelligence_capture=True,
     )
 
-    assert result.overview == '## Agent operations\n\nAsh runs ~12 long-running agents.'
+    assert result.overview == (
+        '## Agent operations\n\n- Ash runs ~12 long-running agents.\n'
+        '- The team proposed a review; it has not started.'
+    )
     assert re.search(r'(?i)\b(?:speaker[ _]\d+|SPEAKER_\d+)\b', result.title) is None
     assert result.events == []
+    assert result.sections[0].source_segment_ids == (['s1'] if marked_source else [])
     assert result.action_items[0].owner_name == 'David'
     assert result.action_items[0].due_certainty == 'tentative'
     assert captured['kwargs']['cache_key'] == 'omi-conv-conv-123'
@@ -118,9 +134,21 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
     assert 'Never normalize or "correct" an uncertain name from general knowledge' in instructions
     assert 'participant email domain corroborates' in instructions
     assert 'fulcradynamics.com corroborates "Fulcra Dynamics" over ASR "Vulcra"' in instructions
-    assert 'NEVER emit diarization placeholders' in instructions
+    assert 'Speaker keys are diarization clusters, not names' in instructions
     assert 'whether or not calendar' in instructions
     assert 'Ash Kalb <ash@fulcradynamics.com>' in prefix.context
+    assert 'spk 0 David' in prefix.context
+    assert 'spk 1 Ash Kalb' in prefix.context
+    assert 'Speaker 1:' not in prefix.context
+    # Prompt-contract assertions only: live source replay, not this mock, measures model fidelity.
+    assert "'- ' bullets in plain, readable sentences" in instructions
+    assert 'Keep past anecdotes, current plans, and unrelated threads separate' in instructions
+    assert 'Do not complete clipped amounts' in instructions
+    assert 'return empty source_segment_ids lists' in instructions
+    assert 'Never invent IDs' in instructions
+    assert 'not quotas' in instructions
+    assert 'COVERAGE BEATS BREVITY' not in instructions
+    assert 'terse fragments, not sentences' not in instructions
 
 
 def test_note_and_memory_use_byte_identical_shared_prefix(monkeypatch):
@@ -134,6 +162,7 @@ def test_note_and_memory_use_byte_identical_shared_prefix(monkeypatch):
         timezone_name='America/New_York',
         language_code='en',
         calendar_context=_meeting_context(),
+        speaker_map=_speaker_map(),
     )
     expected = prefix.messages(cache_enabled=True)
     rebuilt_for_memory = build_conversation_prompt_prefix(
@@ -143,10 +172,11 @@ def test_note_and_memory_use_byte_identical_shared_prefix(monkeypatch):
         timezone_name='America/New_York',
         language_code='en',
         calendar_context=_meeting_context(),
+        speaker_map=_speaker_map(),
     )
     assert rebuilt_for_memory.messages(cache_enabled=True) == expected
     assert 'Speaker 1:' not in prefix.context
-    assert 'Ash Kalb:' in prefix.context
+    assert 'spk 1 Ash Kalb' in prefix.context
 
     class MemoryModel:
         def __init__(self):
@@ -258,13 +288,39 @@ def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder(
         finished_at=datetime(2026, 8, 18, 14, 30, tzinfo=timezone.utc),
     )
     assert context is not None
+    # Inputs exactly as the compact renderer emits them for one unresolved cluster
+    # (renderer→map wiring is pinned in test_compact_speaker_transcript.py).
+    transcript = '[seg-1 1] the flight is at noon'
+    speaker_map = {1: None}
     prefix = build_conversation_prompt_prefix(
         conversation_id='conv-telegram',
-        transcript='Speaker 1: the flight is at noon\n',
+        transcript=transcript,
         started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
         timezone_name='America/New_York',
         language_code='en',
         calendar_context=context,
+        speaker_map=speaker_map,
     )
-    assert 'Alice Chen' in prefix.context
-    assert 'Speaker 1:' not in prefix.context
+    assert transcript in prefix.context
+    assert 'spk 1 Alice Chen' in prefix.context
+    assert 'Speaker' not in prefix.context
+
+
+@pytest.mark.parametrize('gateway_enabled', [False, True])
+def test_shared_cache_requires_notes_and_memory_to_use_the_same_model(monkeypatch, gateway_enabled):
+    from utils.llm import conversation_prompt_prefix
+    from utils.llm.model_config import get_model_config
+    from llm_gateway.gateway.config_loader import load_gateway_config
+
+    monkeypatch.setattr(conversation_prompt_prefix, 'should_route_features_through_gateway', lambda: gateway_enabled)
+    if gateway_enabled:
+        routes = load_gateway_config(prod_mode=True).route_artifacts
+        notes = routes['route.conv_structure.model_config.001']
+        memory = routes['route.memory_l1.model_config.001']
+        assert notes.primary.model == memory.primary.model == 'gpt-5.6-luna'
+        assert notes.provider_options['reasoning_effort'] == 'low'
+        assert memory.primary.model == 'gpt-5.6-luna'
+        assert conversation_prompt_prefix.shared_conversation_cache_supported() is True
+    else:
+        assert get_model_config('conv_structure') == get_model_config('memory_l1')
+        assert conversation_prompt_prefix.shared_conversation_cache_supported() is True

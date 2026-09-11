@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildToolAvailabilitySnapshot,
   chatFirstToolManifest,
+  JIT_PROACTIVITY_READ_TOOL_NAMES,
   mcpToolDefinitionsForAdapter,
   normalizeOmiToolName,
   omiToolManifest,
   toolNamesForAdapter,
   toolsForAdapter,
+  toolsForSurface,
 } from "../src/runtime/omi-tool-manifest.js";
 
 describe("omi tool manifest", () => {
@@ -103,6 +105,8 @@ describe("omi tool manifest", () => {
       "save_knowledge_graph",
       "get_conversations",
       "search_conversations",
+      "read_conversation_evidence",
+      "search_conversation_evidence",
       "get_memories",
       "search_memories",
       "get_action_items",
@@ -301,9 +305,15 @@ describe("omi tool manifest", () => {
     expect(toolNamesForAdapter("pi-mono", {
       surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
     })).toEqual(expect.arrayContaining(["get_canonical_goals", "render_chat_blocks", "search_chat_history", "show_rewind_evidence"]));
-    expect(enabled.find((tool) => tool.name === "render_chat_blocks")?.description).toContain(
-      "call this in the same turn whenever you retrieve, create, or summarize tasks",
-    );
+    // The tool is for entities the user asked for or acted on, not for every
+    // entity a turn happened to read. The old "render whenever you retrieve"
+    // wording stacked three conversation cards above a summary that had merely
+    // cited those conversations.
+    const renderDescription = enabled.find((tool) => tool.name === "render_chat_blocks")?.description ?? "";
+    expect(renderDescription).toContain("when the entity IS the answer");
+    expect(renderDescription).toContain("sources belong in citations");
+    expect(renderDescription).toContain("Render at most three");
+    expect(renderDescription).not.toContain("whenever you retrieve");
     expect(enabled.find((tool) => tool.name === "render_chat_blocks")?.description).toContain(
       "never use a local SQLite/execute_sql numeric row ID",
     );
@@ -413,6 +423,20 @@ describe("omi tool manifest", () => {
       }
     });
 
+    it("projects only read-only ledger retrieval for a bounded proactive turn", () => {
+      const tools = mcpToolDefinitionsForAdapter("omi-tools-stdio", {
+        surfaceKind: "service",
+        executionRole: "coordinator",
+        jitKnowledgeToolsEnabled: true,
+        jitProactivity: true,
+      });
+
+      expect(tools.map((tool) => tool.name)).toEqual([...JIT_PROACTIVITY_READ_TOOL_NAMES]);
+      expect(JSON.stringify(tools)).not.toContain("create_standing_trigger");
+      expect(JSON.stringify(tools)).not.toContain("create_memory");
+      expect(tools.every((tool) => READ_TOOLS.includes(tool.name))).toBe(true);
+    });
+
     it("declares a swiftTool/chatToolExecutor dispatch for every ledger tool", () => {
       for (const toolName of ALL_LEDGER_TOOLS) {
         const tool = omiToolManifest.find((entry) => entry.name === toolName);
@@ -456,6 +480,45 @@ describe("omi tool manifest", () => {
       expect(byName.close_fact.inputSchema.required).toEqual(["memory_id", "reason"]);
     });
 
+    it("describes the typed backend standing-trigger condition contract", () => {
+      const tool = toolsForAdapter("pi-mono", { jitKnowledgeToolsEnabled: true }).find(
+        (entry) => entry.name === "create_standing_trigger",
+      );
+      const condition = tool?.inputSchema.properties.condition as Record<string, any>;
+      const properties = condition.properties as Record<string, any>;
+
+      expect(condition.additionalProperties).toBe(false);
+      expect(condition.anyOf).toEqual([
+        { required: ["entity_aliases"] },
+        { required: ["keywords"] },
+        { required: ["regex"] },
+        { required: ["apps"] },
+        { required: ["windows"] },
+        { required: ["time"] },
+        { required: ["calendar"] },
+      ]);
+      expect(properties.match_mode.enum).toEqual(["all", "any"]);
+      expect(properties.entity_aliases.additionalProperties.items.type).toBe("string");
+      expect(properties.keywords.items.type).toBe("string");
+      expect(properties.keywords.minItems).toBe(1);
+      expect(properties.regex.items.type).toBe("string");
+      expect(properties.regex.minItems).toBe(1);
+      expect(properties.apps.minItems).toBe(1);
+      expect(properties.windows.minItems).toBe(1);
+      expect(properties.time.required).toEqual(["start", "end"]);
+      expect(properties.calendar.anyOf).toEqual([
+        { required: ["event_keywords"] },
+        { required: ["event_types"] },
+      ]);
+      expect(properties.calendar.properties.event_keywords.minItems).toBe(1);
+      expect(properties.calendar.properties.event_types.minItems).toBe(1);
+      expect(condition.examples).toEqual([
+        { keywords: ["incident"] },
+        { apps: ["Slack"], keywords: ["budget"] },
+        { time: { start: "09:00", end: "17:00", timezone: "UTC" } },
+      ]);
+    });
+
     it("steers durable facts, playbooks, standing intent, and closures away from generic tools", () => {
       const createMemory = omiToolManifest.find((entry) => entry.name === "create_memory");
       const searchKnowledge = omiToolManifest.find((entry) => entry.name === "search_knowledge");
@@ -471,6 +534,78 @@ describe("omi tool manifest", () => {
     });
   });
 
+  it("keeps create_memory off realtime voice while advertising reminder and task writes", () => {
+    const voiceNames = toolsForSurface("realtime_voice").map((tool) => tool.name);
+    const voiceCreateMemory = omiToolManifest.find((entry) => entry.name === "create_memory");
+
+    expect(voiceNames).toContain("create_context_reminder");
+    expect(voiceNames).toContain("create_action_item");
+    expect(voiceNames).toContain("read_conversation_evidence");
+    expect(voiceNames).toContain("search_conversation_evidence");
+    expect(voiceNames).not.toContain("create_memory");
+    expect(voiceCreateMemory?.surfaces).toEqual(["desktop_chat"]);
+    expect(voiceCreateMemory?.voice).toBeUndefined();
+    expect(
+      toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "realtime_voice", executionRole: "coordinator" }),
+    ).not.toContain("create_memory");
+  });
+
+  it("states retained evidence vs reminder/task/memory writes without topic special cases (static prompt contract)", () => {
+    const reminder = omiToolManifest.find((entry) => entry.name === "create_context_reminder");
+    const task = omiToolManifest.find((entry) => entry.name === "create_action_item");
+    const memory = omiToolManifest.find((entry) => entry.name === "create_memory");
+    const readEvidence = omiToolManifest.find((entry) => entry.name === "read_conversation_evidence");
+    const searchEvidence = omiToolManifest.find((entry) => entry.name === "search_conversation_evidence");
+    const reminderVoice = String(reminder?.voice?.realtimeDescription);
+    const taskVoice = String(task?.voice?.realtimeDescription);
+    const reminderPolicy = [reminder?.description, reminder?.promptGuidelines?.join("\n"), reminderVoice].join("\n");
+    const taskPolicy = [task?.description, task?.promptGuidelines?.join("\n"), taskVoice].join("\n");
+    const memoryPolicy = [memory?.description, memory?.promptGuidelines?.join("\n"), memory?.capabilityDoc.bullets.join("\n")].join("\n");
+    const evidencePolicy = [
+      readEvidence?.voice?.realtimeDescription,
+      searchEvidence?.voice?.realtimeDescription,
+      readEvidence?.promptGuidelines?.join("\n"),
+      searchEvidence?.promptGuidelines?.join("\n"),
+    ].join("\n");
+    const allPolicy = [reminderPolicy, taskPolicy, memoryPolicy, evidencePolicy].join("\n");
+
+    expect(reminderVoice).toContain("explicitly ask to be notified next time they return here with a specific action");
+    expect(reminderVoice).toContain("remind me next time I'm here to renew it");
+    expect(reminderVoice).toContain("already retained as evidence");
+    expect(reminderVoice).toContain("do not substitute this for a fact-memory write if that tool is not advertised");
+    expect(taskVoice).toContain("only when the user explicitly asks to add something to their list");
+    expect(taskVoice).toContain("already retained as evidence");
+    expect(taskVoice).toContain("create_context_reminder");
+    expect(memoryPolicy).toContain("already retained as evidence");
+    expect(memoryPolicy).toContain("fact or preference");
+    expect(evidencePolicy).toContain("already retained");
+    expect(evidencePolicy).toContain("do not create a reminder, task, or memory");
+    expect(reminderPolicy).toContain("never grants this tool authority");
+    expect(taskPolicy).toContain("never grants this tool authority");
+    expect(allPolicy.toLowerCase()).not.toContain("checklist");
+    expect(allPolicy.toLowerCase()).not.toContain("stock plan");
+  });
+
+  it("folds evidence prompt guidelines without duplicating capability bullets", () => {
+    const mergeBullets = (tool: (typeof omiToolManifest)[number]): string[] => {
+      const bullets = [...tool.capabilityDoc.bullets];
+      for (const guideline of tool.promptGuidelines ?? []) {
+        if (!bullets.includes(guideline)) bullets.push(guideline);
+      }
+      return bullets;
+    };
+    const read = omiToolManifest.find((entry) => entry.name === "read_conversation_evidence");
+    const search = omiToolManifest.find((entry) => entry.name === "search_conversation_evidence");
+    const readBullets = mergeBullets(read!);
+    const searchBullets = mergeBullets(search!);
+    expect(readBullets.filter((bullet) => /full evidence is available or required for detail/i.test(bullet))).toHaveLength(1);
+    expect(readBullets.filter((bullet) => /continue a long source/i.test(bullet))).toHaveLength(1);
+    expect(searchBullets.filter((bullet) => /earlier screen, document, attachment, or tool result/i.test(bullet))).toHaveLength(1);
+    expect(searchBullets.filter((bullet) => /offset\/nextOffset/i.test(bullet))).toHaveLength(1);
+    expect(new Set(readBullets).size).toBe(readBullets.length);
+    expect(new Set(searchBullets).size).toBe(searchBullets.length);
+  });
+
   it("requires surfaces and capabilityDoc on every manifest entry", () => {
     // spawn_background_agent is the coordinator-RPC-only entrypoint and is
     // deliberately advertised on no agent-facing surface (see sibling test).
@@ -483,5 +618,26 @@ describe("omi tool manifest", () => {
       expect(tool.capabilityDoc.summary, `${tool.name} capabilityDoc.summary`).toBeTruthy();
       expect(tool.capabilityDoc.bullets.length, `${tool.name} capabilityDoc.bullets`).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("native component guidance", () => {
+  const byName = (name: string) =>
+    [...omiToolManifest, ...chatFirstToolManifest].find((tool) => tool.name === name);
+
+  it("teaches conversation and memory retrieval to render the component when the entity is the answer", () => {
+    expect(byName("get_conversations")?.promptGuidelines?.join("\n")).toContain("captureLink");
+    expect(byName("get_conversations")?.promptGuidelines?.join("\n")).toContain("'pick one'");
+    expect(byName("search_conversations")?.promptGuidelines?.join("\n")).toContain("captureLink");
+    expect(byName("get_memories")?.promptGuidelines?.join("\n")).toContain("memoryLink");
+    expect(byName("search_memories")?.promptGuidelines?.join("\n")).toContain("memoryLink");
+    expect(byName("get_action_items")?.promptGuidelines?.join("\n")).toContain("a count, never their names");
+  });
+
+  it("makes the component the default for anything Omi draws natively, with prose reserved for reading", () => {
+    const lead = byName("render_chat_blocks")?.promptGuidelines?.[0] ?? "";
+    expect(lead).toContain("Default to a component");
+    expect(lead).toContain("a summary, a recap, an analysis, a comparison, a count");
+    expect(lead).toContain("a bold title with a citation number is not a substitute");
   });
 });

@@ -1203,6 +1203,7 @@ actor AgentRuntimeProcess {
     harnessMode: String,
     binding: ExternalSurfaceRunBinding,
     terminalStatus: ExternalSurfaceRunTerminalStatus,
+    finalText: String? = nil,
     errorCode: String? = nil,
     transitionCleanupCapability: RuntimeOwnerTransitionCleanupCapability? = nil
   ) async throws -> ExternalSurfaceRunCompletion {
@@ -1247,6 +1248,7 @@ actor AgentRuntimeProcess {
         requestId: requestId,
         binding: binding,
         terminalStatus: terminalStatus,
+        finalText: finalText,
         errorCode: errorCode
       ),
       expectedKind: .externalSurfaceRunCompleteResult,
@@ -1272,7 +1274,9 @@ actor AgentRuntimeProcess {
       runID: binding.runID,
       attemptID: binding.attemptID,
       terminalStatus: confirmedStatus,
-      duplicate: result["duplicate"] as? Bool ?? false
+      duplicate: result["duplicate"] as? Bool ?? false,
+      finalTextPersisted: result["finalTextPersisted"] as? Bool ?? false,
+      journalMaterialized: result["journalMaterialized"] as? Bool ?? false
     )
   }
 
@@ -1524,6 +1528,7 @@ actor AgentRuntimeProcess {
     requestId: String,
     binding: ExternalSurfaceRunBinding,
     terminalStatus: ExternalSurfaceRunTerminalStatus,
+    finalText: String?,
     errorCode: String?
   ) -> [String: Any] {
     var message = protocolEnvelope(
@@ -1536,6 +1541,8 @@ actor AgentRuntimeProcess {
     message["runId"] = binding.runID
     message["attemptId"] = binding.attemptID
     message["terminalStatus"] = terminalStatus.rawValue
+    // Trimmed, not just non-empty; see ExternalSurfaceRunAnswer for why.
+    if let finalText = ExternalSurfaceRunAnswer.normalized(finalText) { message["finalText"] = finalText }
     if let errorCode, !errorCode.isEmpty { message["errorCode"] = errorCode }
     return message
   }
@@ -1553,6 +1560,8 @@ actor AgentRuntimeProcess {
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
     reasoningEffort: String? = nil,
+    jitBudget: JITProactivityAgentBudget? = nil,
+    jitCostEvidenceProjection: RuntimeJSONPayloadBox? = nil,
     jitKnowledgeToolsEnabled: Bool = false
   ) -> [String: Any] {
     var message = protocolEnvelope(
@@ -1569,6 +1578,10 @@ actor AgentRuntimeProcess {
     if !attachments.isEmpty { message["attachments"] = attachments.map(\.dictionary) }
     if let producingTurnId, !producingTurnId.isEmpty { message["producingTurnId"] = producingTurnId }
     if let reasoningEffort, !reasoningEffort.isEmpty { message["reasoningEffort"] = reasoningEffort }
+    if let jitBudget { message["jitBudget"] = jitBudget.wireDictionary }
+    if let jitCostEvidenceProjection {
+      message["jitCostEvidenceProjection"] = jitCostEvidenceProjection.value
+    }
     // UX gate only: the backend independently re-checks JIT entitlement on
     // every /v1/agent/execute-tool call. Omitted (not `false`) when the
     // rollout verdict isn't `enabled`, matching how the runtime treats an
@@ -2357,6 +2370,8 @@ actor AgentRuntimeProcess {
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
     reasoningEffort: String? = nil,
+    jitBudget: JITProactivityAgentBudget? = nil,
+    jitCostEvidenceProjection: RuntimeJSONPayloadBox? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
     onToolActivity: @escaping AgentBridge.ToolActivityHandler,
@@ -2408,6 +2423,8 @@ actor AgentRuntimeProcess {
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
         reasoningEffort: reasoningEffort,
+        jitBudget: jitBudget,
+        jitCostEvidenceProjection: jitCostEvidenceProjection,
         jitKnowledgeToolsEnabled: jitKnowledgeToolsEnabled
       )
       sendJson(queryDict)

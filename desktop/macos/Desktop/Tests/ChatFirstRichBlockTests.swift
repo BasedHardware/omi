@@ -3,7 +3,12 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatFirstRichBlockTests: XCTestCase {
-  private func conversation(id: String) -> ServerConversation {
+  private func conversation(
+    id: String,
+    source: ConversationSource = .desktop,
+    status: ConversationStatus = .completed,
+    discarded: Bool = false
+  ) -> ServerConversation {
     ServerConversation(
       id: id,
       createdAt: Date(timeIntervalSince1970: 1_000),
@@ -23,10 +28,10 @@ final class ChatFirstRichBlockTests: XCTestCase {
       geolocation: nil,
       photos: [],
       appsResults: [],
-      source: .desktop,
+      source: source,
       language: "en",
-      status: .completed,
-      discarded: false,
+      status: status,
+      discarded: discarded,
       deleted: false,
       isLocked: false,
       starred: false,
@@ -52,6 +57,77 @@ final class ChatFirstRichBlockTests: XCTestCase {
         requestedID: "meeting-42"
       ),
       "A mismatched detail response must render the unavailable state"
+    )
+  }
+
+  /// The reported failure: an agent's conversation search returns desktop
+  /// recordings, and a citation naming one used to route the capture focus,
+  /// whose source-scoped archive fetch rejected it — landing the reader on the
+  /// Conversations list with nothing opened.
+  func testCitationRouteOpensNonCaptureConversationsAsExactRecords() {
+    let desktop = conversation(id: "desktop-1", source: .desktop)
+    XCTAssertEqual(
+      ChatFirstConversationLinkPolicy.citationRoute(
+        forFetched: desktop,
+        requestedID: "desktop-1",
+        momentTimestampMs: nil),
+      .exactRecord,
+      "A desktop recording must open as the exact fetched record, not the capture focus"
+    )
+
+    let phone = conversation(id: "phone-1", source: .phone)
+    XCTAssertEqual(
+      ChatFirstConversationLinkPolicy.citationRoute(
+        forFetched: phone,
+        requestedID: "phone-1",
+        momentTimestampMs: nil),
+      .exactRecord
+    )
+
+    let discardedCapture = conversation(id: "omi-d", source: .omi, discarded: true)
+    XCTAssertEqual(
+      ChatFirstConversationLinkPolicy.citationRoute(
+        forFetched: discardedCapture,
+        requestedID: "omi-d",
+        momentTimestampMs: nil),
+      .exactRecord,
+      "A discarded capture is outside the archive contract but still an openable record"
+    )
+  }
+
+  func testCitationRouteKeepsCaptureFocusAndMomentForOmiCaptures() {
+    let capture = conversation(id: "omi-1", source: .omi)
+    XCTAssertEqual(
+      ChatFirstConversationLinkPolicy.citationRoute(
+        forFetched: capture,
+        requestedID: "omi-1",
+        momentTimestampMs: 16_000),
+      .captureFocus(momentTs: 16.0),
+      "An Omi-device capture keeps the capture focus so its moment still plays"
+    )
+    XCTAssertEqual(
+      ChatFirstConversationLinkPolicy.citationRoute(
+        forFetched: capture,
+        requestedID: "omi-1",
+        momentTimestampMs: nil),
+      .captureFocus(momentTs: nil)
+    )
+  }
+
+  func testCitationRouteRefusesToNavigateWhenTheRecordCannotBeTrusted() {
+    XCTAssertNil(
+      ChatFirstConversationLinkPolicy.citationRoute(
+        forFetched: nil,
+        requestedID: "gone-1",
+        momentTimestampMs: nil),
+      "A failed fetch must not navigate anywhere instead of stranding the reader on a list"
+    )
+    XCTAssertNil(
+      ChatFirstConversationLinkPolicy.citationRoute(
+        forFetched: conversation(id: "other-1"),
+        requestedID: "gone-1",
+        momentTimestampMs: nil),
+      "A mismatched fetch must not open a nearby row"
     )
   }
 
@@ -255,7 +331,11 @@ final class ChatFirstRichBlockTests: XCTestCase {
     XCTAssertEqual(summary, "After")
   }
 
-  func testRichRendererSelectionRequiresExplicitChatFirstContext() {
+  /// Every Chat surface renders every rich block. This used to assert the
+  /// opposite — that a caller without an explicit context got nothing — which is
+  /// how a turn whose only content was a task card read as an empty assistant
+  /// reply in the task panel and in the notch.
+  func testEveryRichBlockSurvivesGroupingOnEveryChatSurface() {
     let blocks: [ChatContentBlock] = [
       .questionCard(
         id: "question", questionId: "question-1", text: "Question", subjectKind: "goal", subjectId: "goal-1",
@@ -264,45 +344,15 @@ final class ChatFirstRichBlockTests: XCTestCase {
       .taskCard(id: "task", taskId: "task-1"),
       .goalLink(id: "goal", goalId: "goal-1", summary: "Goal"),
       .captureLink(id: "capture", conversationId: "capture-1", momentTimestampMs: nil, summary: "Capture"),
+      .conversationLink(
+        id: "conversation", conversationId: "conversation-1", summary: "Conversation",
+        recommendedActionItems: []),
       .memoryLink(id: "memory", memoryId: "memory-1", summary: "Memory"),
     ]
 
-    XCTAssertTrue(
-      ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false).isEmpty,
-      "legacy, floating, task, and onboarding call sites must keep rich blocks inert"
-    )
-
-    let enabled = ContentBlockGroup.visibleChatGroups(
-      blocks,
-      isStreaming: false,
-      richBlockRenderingEnabled: true
-    )
-    XCTAssertEqual(enabled.count, 5)
-    XCTAssertTrue(
-      enabled.contains {
-        if case .questionCard = $0 { return true }
-        return false
-      })
-    XCTAssertTrue(
-      enabled.contains {
-        if case .taskCard = $0 { return true }
-        return false
-      })
-    XCTAssertTrue(
-      enabled.contains {
-        if case .goalLink = $0 { return true }
-        return false
-      })
-    XCTAssertTrue(
-      enabled.contains {
-        if case .captureLink = $0 { return true }
-        return false
-      })
-    XCTAssertTrue(
-      enabled.contains {
-        if case .memoryLink = $0 { return true }
-        return false
-      })
+    let groups = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false)
+    XCTAssertEqual(groups.count, 6)
+    XCTAssertEqual(groups.map(\.id), blocks.map(\.id), "order is the transcript's, not the renderer's")
   }
 
   func testTaskAcknowledgementRequiresReconciledCompletedRecord() {

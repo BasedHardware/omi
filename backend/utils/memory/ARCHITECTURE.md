@@ -135,8 +135,12 @@ with expiry-ordered accounts first. It skips accounts with no active Short-term
 row, and skips non-urgent accounts dreamed in the last 20 hours unless they
 already have more than 10 active Short-term rows (hourly overflow drain).
 Remaining users run until the 15-minute Flex
-reservation no longer fits in the one-hour job budget. A Flex deferral leaves
+reservation no longer fits in the one-hour job budget. In-UID TTL apply and
+outbox/vector drain use that same `job_budget_fits` predicate so one account
+cannot consume the remaining hour. A Flex deferral leaves
 the durable cursor on the unfinished UID so later accounts are not skipped.
+A successful Flex stop with residual non-outbox errors exits 0; outbox and
+cursor_persist failures still fail the job.
 The job does not run a separate required-processing LLM: explicit submissions
 enter the consolidation batch with `requires_normalization=true`, and apply
 stamps the L2 receipt then the route from that one decision. Promote
@@ -163,12 +167,49 @@ deliberately absent from vector projection and therefore cannot be recovered
 reliably as vector neighbors.
 
 `decision_path_telemetry.py` emits the stable
-`canonical_memory_decision_path.v1` event for persisted capture and applied or
-blocked promotion routes. Capture events carry conversation source, resolved
-subject attribution, a non-PII classification of model-authored `about`,
-disagreement, and distinct speaker-ID count. Promotion events carry the route,
-stage status, and structured reason fields. Neither event accepts memory or
-transcript text.
+`canonical_memory_decision_path.v1` event for persisted capture, applied or
+blocked promotion routes, and daily-sweep candidate-gate decisions. Capture
+events carry conversation source, resolved subject attribution, a non-PII
+classification of model-authored `about`, disagreement, distinct speaker-ID count,
+and `owner_trust`. Promotion events carry the route, stage status, and
+structured reason fields. Sweep events carry per-day counters
+(`dropped_subjectless`, `dropped_basis_proposed`, `demoted_owner_untrusted`,
+`skipped_duplicate_lookup`) with no memory or transcript text.
+
+## Owner attribution at capture and daily sweep
+
+`utils/conversations/owner_attribution.py` is the typed evidence for whether a
+source may mint an owner-attributed memory. Capture (`process_conversation.py`)
+and the daily sweep share that policy:
+
+- A unique owner speaker cluster is required before `about=user` (or an
+  owner alias: the profile name, "the user", "primary user") or
+  `subject_scope=primary_user` is admitted. Ambiguous or absent clustering
+  demotes the claim (`demoted_owner_untrusted` on the sweep path) rather than
+  rewriting it as a third-party fact.
+- Every sweep memory must name a subject in `about`. Subject-less, `unknown`,
+  and `uncertain` rows are omitted (`dropped_subjectless`). An omitted `about`
+  on the structured-output schema defaults to empty so one subjectless row
+  cannot fail the day's parse.
+- `basis` is `decided` only for a commitment or decision on tape by the owner,
+  `proposed` for suggestions or plans without a decision (those are dropped,
+  `dropped_basis_proposed`), and `observed` otherwise. Only `decided` may set a
+  standing-attribute slot.
+- A model mark `duplicate_of` citing a ledger lookup hit skips the candidate
+  instead of staging a sibling (`skipped_duplicate_lookup`). Lookup rows
+  prefix the canonical memory id so the model can cite it. A non-empty
+  marker that is not one of those ids is ignored and the candidate is treated
+  as new.
+- Staged daily-summary pages are `daily_memory_sweep_daily_summary_stage.v3`
+  because they now carry owner evidence and `about`. A reader that finds a
+  foreign-version stage attests it consumed (empty candidates) so the cursor
+  can advance without double-billing the model.
+
+Clusters are `(speaker_id_scope, speaker_id)`. A `TranscriptSegment` that only
+materialized `speaker_id` from the SPEAKER_00 default is not evidence; a
+synthesized `0` that has already been persisted still looks real after reload
+(stored provenance would need a schema field). L2 consolidation, the belief
+model, and user-facing summary rendering are out of scope for this gate.
 
 ## Search, graph, and derived providers
 

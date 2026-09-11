@@ -1,21 +1,43 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flutter_map/flutter_map.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/memory_review.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
 
+class _TestEnvFields implements EnvFields {
+  @override
+  String? get posthogApiKey => null;
+  @override
+  String? get apiBaseUrl => null;
+  @override
+  String? get intercomAppId => null;
+  @override
+  String? get intercomIOSApiKey => null;
+  @override
+  String? get intercomAndroidApiKey => null;
+  @override
+  String? get googleClientId => null;
+  @override
+  String? get googleClientSecret => null;
+  @override
+  bool? get useWebAuth => false;
+  @override
+  bool? get useAuthCustomToken => false;
+}
+
 void main() {
+  // The journey preview builds proxy URLs from Env.apiBaseUrl (per-isolate statics).
+  setUpAll(() => Env.init(_TestEnvFields()));
+
   testWidgets('renders journey locations as compact accessible map rows', (tester) async {
     final semantics = tester.ensureSemantics();
 
@@ -24,7 +46,7 @@ void main() {
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         theme: ThemeData.dark(),
-        home: DailySummaryDetailPage(summaryId: 'summary-1', summary: _summary(), tileProvider: _MemoryTileProvider()),
+        home: DailySummaryDetailPage(summaryId: 'summary-1', summary: _summary()),
       ),
     );
     await tester.pump();
@@ -62,7 +84,6 @@ void main() {
               LocationPin(latitude: 37.7849, longitude: -122.4094, time: '10:00'),
             ],
           ),
-          tileProvider: _MemoryTileProvider(),
         ),
       ),
     );
@@ -113,7 +134,6 @@ void main() {
               ],
               knowledgeNuggets: [KnowledgeNugget(insight: 'Async beats status meetings')],
             ),
-            tileProvider: _MemoryTileProvider(),
           ),
         ),
       ),
@@ -133,6 +153,56 @@ void main() {
     );
   });
 
+  testWidgets('memories learned are tappable on a cold provider without the id loaded', (tester) async {
+    final reviews = <String>[];
+    final memoriesProvider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
+      reviewMemoryRequest: (id, value) async {
+        reviews.add(id);
+        return true;
+      },
+      editMemoryRequest: (id, value) async => const EditMemoryResult(persisted: true),
+    );
+    addTearDown(memoriesProvider.dispose);
+    // Cold start: nothing has initialised the provider and the bulk list never
+    // contains the recap id.
+    expect(memoriesProvider.loading, isTrue);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<MemoriesProvider>.value(
+        value: memoriesProvider,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: ThemeData.dark(),
+          home: DailySummaryDetailPage(
+            summaryId: 'summary-cold',
+            summary: _summary(
+              locations: const [],
+              memoriesLearned: const [
+                MemoryReviewItem(memoryId: 'mem-cold', content: 'Prefers async standups', category: 'work'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+
+    final accept = tester.widget<InkWell>(find.byKey(const Key('memory_review_accept_mem-cold')));
+    expect(accept.onTap, isNotNull);
+
+    await tester.tap(find.byKey(const Key('memory_review_accept_mem-cold')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+
+    expect(reviews, ['mem-cold']);
+  });
+
   testWidgets('shows positive desktop watching and proactive stats', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -144,7 +214,6 @@ void main() {
           summary: _summary(
             stats: DayStats(totalConversations: 1, totalDurationMinutes: 30, watchingMinutes: 17, proactiveMoments: 9),
           ),
-          tileProvider: _MemoryTileProvider(),
         ),
       ),
     );
@@ -176,13 +245,4 @@ DailySummary _summary({
           LocationPin(latitude: 37.7849, longitude: -122.4094, address: 'Office, San Francisco', time: '10:00'),
         ],
   );
-}
-
-class _MemoryTileProvider extends TileProvider {
-  static final _tile = MemoryImage(
-    base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='),
-  );
-
-  @override
-  ImageProvider getImage(TileCoordinates coordinates, TileLayer options) => _tile;
 }

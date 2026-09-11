@@ -1862,9 +1862,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get openSettings => 'Otwórz ustawienia';
 
   @override
-  String get wantDifferentName => 'Chcesz być nazywany inaczej?';
-
-  @override
   String get whatsYourName => 'Jak masz na imię?';
 
   @override
@@ -2045,7 +2042,8 @@ class AppLocalizationsPl extends AppLocalizations {
   String get memoryDeleted => 'Wspomnienie usunięte.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Część historii wspomnień jest niedostępna. Wyświetlana jest dotychczas otrzymana historia.';
 
   @override
   String get undo => 'Cofnij';
@@ -9944,14 +9942,74 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Profil głosowy: $name';
+  }
+
+  @override
+  String get play => 'Odtwórz';
+
+  @override
+  String get redo => 'Nagraj ponownie';
+
+  @override
+  String get answerWithYourVoice => 'Odpowiedz głosem:';
+
+  @override
+  String get speechProfileTopicLocation => 'Gdzie mieszkasz?';
+
+  @override
+  String get speechProfileTopicWork => 'Czym się zajmujesz zawodowo?';
+
+  @override
+  String get speechProfileTopicGoal => 'Jaki jest twój długoterminowy cel?';
+
+  @override
   String get transcriptionNoAudio => 'Transkrypcja nie odbiera dźwięku';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Dotknij +, aby rozpocząć nagrywanie';
+
+  @override
+  String get chatBlockTask => 'Zadanie';
+
+  @override
+  String get chatBlockGoal => 'Cel';
+
+  @override
+  String get chatBlockConversation => 'Rozmowa';
+
+  @override
+  String get chatBlockMemory => 'Wspomnienie';
+
+  @override
+  String get chatBlockQuestion => 'Pytanie';
+
+  @override
+  String get chatBlockOpenInGoals => 'Otwórz w Celach';
+
+  @override
+  String get chatBlockOpenConversation => 'Otwórz rozmowę';
+
+  @override
+  String get chatBlockOpenInMemories => 'Otwórz we Wspomnieniach';
+
+  @override
+  String get chatBlockUnavailable => 'Już niedostępne';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Zalecane kolejne kroki';
 
   @override
   String get couldNotLoadMemories => 'Nie udało się wczytać wspomnień';
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Nie udało się wczytać grafu wiedzy';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Zamiana mowy na tekst jest teraz niedostępna. Sprawdź połączenie internetowe i ustawienia rozpoznawania mowy na urządzeniu, a następnie spróbuj ponownie.';
+
+  @override
+  String get processingTakingLonger => 'Nadal działa — trwa to dłużej niż zwykle.';
 }

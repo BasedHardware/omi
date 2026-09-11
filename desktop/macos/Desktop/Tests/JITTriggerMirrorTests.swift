@@ -34,6 +34,55 @@ final class JITTriggerMirrorTests: XCTestCase {
       XCTAssertTrue(try database.columns(in: "jit_trigger_mirror").contains { $0.name == "snoozedUntil" })
       XCTAssertTrue(try database.tableExists("jit_knowledge_ledger_mirror_members"))
       XCTAssertTrue(try database.tableExists("jit_ambient_context_state"))
+      XCTAssertTrue(try database.tableExists("jit_nano_billing_observations"))
+    }
+  }
+
+  func testNanoBillingObservationPersistsOnlyBoundedAccountingFields() throws {
+    let queue = try migratedQueue()
+    let observation = JITProactivityNanoBillingObservation(
+      dispatch: "observed",
+      lane: .ambient,
+      ownerID: "qa-owner",
+      accountGeneration: 3,
+      snapshotRevision: "revision",
+      budgetDay: "2026-09-06",
+      contextID: "context-1",
+      candidateID: "candidate-1",
+      executionID: "execution-1",
+      outcome: "unknown",
+      operation: "proactive_extraction",
+      requestID: "request-1",
+      provider: "openai",
+      providerModel: "gpt-5-nano",
+      providerResponseID: "response-1",
+      fallbackClass: "unknown",
+      inputTokens: nil,
+      outputTokens: nil,
+      totalTokens: nil,
+      cachedInputTokens: nil,
+      cacheWriteTokens: nil,
+      usageStatus: "unknown",
+      costStatus: "unknown",
+      estimatedCostMicroUSD: nil,
+      providerAttempts: nil,
+      attemptIDs: [])
+    try queue.write { db in
+      try JITTriggerMirror.recordNanoBillingObservation(observation, in: db)
+    }
+    try queue.read { db in
+      let row = try XCTUnwrap(
+        Row.fetchOne(
+          db,
+          sql:
+            "SELECT outcome, requestID, providerResponseID, inputTokens, costStatus, attemptIDsJSON FROM jit_nano_billing_observations WHERE observationID = ?",
+          arguments: [observation.observationID]))
+      XCTAssertEqual(row["outcome"] as String, "unknown")
+      XCTAssertEqual(row["requestID"] as String, "request-1")
+      XCTAssertEqual(row["providerResponseID"] as String, "response-1")
+      XCTAssertNil(row["inputTokens"] as Int?)
+      XCTAssertEqual(row["costStatus"] as String, "unknown")
+      XCTAssertEqual(row["attemptIDsJSON"] as String, "[]")
     }
   }
 

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
+import 'package:omi/backend/schema/chat_content_block.dart';
 import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
 import 'package:omi/backend/schema/memory_review.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
@@ -444,6 +445,7 @@ class ServerMessage {
     return value.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList(growable: false);
   }
 
+  List<ChatContentBlock>? _typedContentBlocks;
   static Object? _tryDecodeJson(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return null;
@@ -475,36 +477,32 @@ class ServerMessage {
 
   static const _followUpTypes = {'followUp', 'follow_up'};
 
-  static const _desktopChatChromeTypes = {
-    'goalLink',
-    'goal_link',
-    'taskCard',
-    'task_card',
-    'questionCard',
-    'question_card',
-  };
+  /// Typed projection of [contentBlocks], decoded once per message.
+  ///
+  /// The raw list stays authoritative on the wire (see [toJson]); this is the
+  /// renderable view used by the chat content-block widgets.
+  List<ChatContentBlock> get typedContentBlocks => _typedContentBlocks ??= ChatContentBlock.decodeList(contentBlocks);
 
-  /// Desktop Chat-first cards (goal/task/question) are interactive shell chrome.
-  /// Mobile has no renderer for them, so fallback dumps like
-  /// `Goal - … Task Task Task` should not appear in the phone timeline.
-  bool get hideFromMobileChat {
-    if (sender != MessageSender.ai) return false;
-    if (type != MessageType.text) return false;
-    if (files.isNotEmpty || memories.isNotEmpty) return false;
+  /// True when [text] carries nothing beyond the fallback text synthesized from
+  /// [contentBlocks]. The interactive blocks then replace the body instead of
+  /// repeating it.
+  bool get textIsStructuredFallback {
     if (contentBlocks.isEmpty) return false;
-    if (!_blocksAreDesktopChatChromeOnly(contentBlocks)) return false;
     final fallback = _structuredFallbackText(contentBlocks);
     if (fallback.isEmpty) return false;
     final body = text.trim();
     return body.isEmpty || _normalizeWhitespace(body) == _normalizeWhitespace(fallback);
   }
 
-  static List<ServerMessage> visibleOnMobile(Iterable<ServerMessage> messages) {
-    return messages.where((message) => !message.hideFromMobileChat).toList();
-  }
-
-  static bool _blocksAreDesktopChatChromeOnly(List<Map<String, dynamic>> blocks) {
-    return blocks.every((block) => _desktopChatChromeTypes.contains(block['type']));
+  /// Returns the canonical body fallback for one raw wire block.
+  ///
+  /// A rich block can replace the ordinary message body on clients that know
+  /// how to render it. Unrecognised or display-only blocks still need their
+  /// synthesized line in that mode; otherwise a mixed turn silently loses
+  /// thinking, tool, citation, or future block content.
+  String? structuredFallbackTextForRawBlock(Map<String, dynamic> block) {
+    final fallback = _blockFallbackText(block).trim();
+    return fallback.isEmpty ? null : fallback;
   }
 
   static String _normalizeWhitespace(String value) {
@@ -522,8 +520,11 @@ class ServerMessage {
   }
 
   static String _blockFallbackText(Map<String, dynamic> block) {
-    String value(String camel, [String? snake]) =>
-        ((block[camel] ?? (snake == null ? null : block[snake])) as String? ?? '').trim();
+    String value(String camel, [String? snake]) {
+      final candidate = block[camel] ?? (snake == null ? null : block[snake]);
+      return candidate is String ? candidate.trim() : '';
+    }
+
     String labelled(String label, Iterable<String> details) {
       final unique = details.where((detail) => detail.isNotEmpty).toSet().toList(growable: false);
       return unique.isEmpty ? label : '$label - ${unique.join(' - ')}';

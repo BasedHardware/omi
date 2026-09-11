@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:fake_async/fake_async.dart';
@@ -7,12 +8,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/utils/constants.dart';
 
 /// Minimal EnvFields stub so Env-backed code paths don't hit a
 /// LateInitializationError (mirrors capture_provider_test.dart's fixture).
@@ -21,8 +26,6 @@ class _TestEnvFields implements EnvFields {
   String? get posthogApiKey => null;
   @override
   String? get apiBaseUrl => 'http://127.0.0.1:8000/';
-  @override
-  String? get googleMapsApiKey => null;
   @override
   String? get intercomAppId => null;
   @override
@@ -78,6 +81,19 @@ class _FakeConnectedSocket implements IPureSocket {
 /// for CaptureProvider.openConversationSocket.
 class _CountingSpeechProfileProvider extends SpeechProfileProvider {
   int openCalls = 0;
+  CustomSttConfig? lastCustomSttConfig;
+
+  /// What resolveLocalSttConfig() returns: null means "no on-device model on
+  /// this platform" (the default, matching the pre-fallback behavior).
+  CustomSttConfig? localSttConfig;
+  Completer<CustomSttConfig?>? pendingLocalConfig;
+  int resolveCalls = 0;
+
+  @override
+  Future<CustomSttConfig?> resolveLocalSttConfig() async {
+    resolveCalls++;
+    return pendingLocalConfig == null ? localSttConfig : await pendingLocalConfig!.future;
+  }
 
   @override
   Future<TranscriptSegmentSocketService?> openSpeechProfileSocket({
@@ -85,8 +101,11 @@ class _CountingSpeechProfileProvider extends SpeechProfileProvider {
     required int sampleRate,
     required String language,
     required bool force,
+    bool speechProfileRedo = false,
+    CustomSttConfig? customSttConfig,
   }) async {
     openCalls++;
+    lastCustomSttConfig = customSttConfig;
     return TranscriptSegmentSocketService.withSocket(
       sampleRate,
       codec,
@@ -96,6 +115,27 @@ class _CountingSpeechProfileProvider extends SpeechProfileProvider {
     );
   }
 }
+
+/// Counts finalize() calls instead of uploading anything.
+class _FinalizeCountingProvider extends SpeechProfileProvider {
+  int finalizeCalls = 0;
+
+  @override
+  Future finalize() async {
+    finalizeCalls++;
+  }
+}
+
+TranscriptSegment _userSegment(String id, String text, {int speakerId = 0}) => TranscriptSegment(
+      id: id,
+      text: text,
+      speaker: 'SPEAKER_$speakerId',
+      isUser: true,
+      personId: null,
+      start: 0,
+      end: 1,
+      translations: [],
+    );
 
 void main() {
   setUpAll(() async {
@@ -195,6 +235,9 @@ void main() {
         expect(provider.error, 'SOCKET_DISCONNECTED');
 
         provider.onClosed(1011);
+        // The third strike first checks (asynchronously) whether on-device STT
+        // can take over; with no local model that resolves to STT_UNAVAILABLE.
+        async.flushMicrotasks();
         expect(
           provider.error,
           'STT_UNAVAILABLE',
@@ -264,6 +307,204 @@ void main() {
     });
   });
 
+  // When the backend's streaming STT is down but this platform can transcribe
+  // on-device, the question flow must continue locally instead of dead-ending
+  // in STT_UNAVAILABLE: the backend accepts client-supplied transcripts in
+  // custom-STT mode, and the voice print is built from the uploaded audio, not
+  // the transcript, so nothing about the resulting profile changes.
+  group('falls back to on-device STT when the backend STT is unavailable', () {
+    const localConfig = CustomSttConfig(provider: SttProvider.onDeviceWhisper, language: 'en');
+
+    test('switches to on-device STT after repeated 1011 closes and reconnects with it', () {
+      fakeAsync((async) {
+        final provider = _CountingSpeechProfileProvider()..localSttConfig = localConfig;
+        provider.usePhoneMic = true;
+        provider.updateStartedRecording(true);
+
+        provider.onClosed(1011);
+        provider.onClosed(1011);
+        provider.onClosed(1011);
+        async.flushMicrotasks();
+
+        expect(provider.usingLocalStt, isTrue);
+        expect(provider.info, 'LOCAL_STT_FALLBACK');
+        expect(provider.error, isNot('STT_UNAVAILABLE'), reason: 'a usable local model means the flow can go on');
+
+        async.elapse(const Duration(seconds: 5));
+        expect(provider.openCalls, 1, reason: 'the fallback must reconnect rather than leave the socket dead');
+        expect(provider.lastCustomSttConfig, same(localConfig),
+            reason: 'the reconnect must carry the local STT config');
+
+        provider.dispose();
+      });
+    });
+
+    test('still surfaces STT_UNAVAILABLE when on-device STT is also unavailable', () {
+      fakeAsync((async) {
+        final provider = _CountingSpeechProfileProvider(); // localSttConfig stays null
+        provider.usePhoneMic = true;
+        provider.updateStartedRecording(true);
+
+        provider.onClosed(1011);
+        provider.onClosed(1011);
+        provider.onClosed(1011);
+        async.flushMicrotasks();
+
+        expect(provider.usingLocalStt, isFalse);
+        expect(provider.error, 'STT_UNAVAILABLE');
+
+        async.elapse(const Duration(seconds: 30));
+        expect(provider.openCalls, 0);
+
+        provider.dispose();
+      });
+    });
+
+    test('a 1011 storm while already on on-device STT gives up instead of looping', () {
+      fakeAsync((async) {
+        final provider = _CountingSpeechProfileProvider()..localSttConfig = localConfig;
+        provider.usePhoneMic = true;
+        provider.updateStartedRecording(true);
+
+        for (var i = 0; i < 3; i++) {
+          provider.onClosed(1011);
+        }
+        async.flushMicrotasks();
+        expect(provider.usingLocalStt, isTrue);
+
+        for (var i = 0; i < 3; i++) {
+          provider.onClosed(1011);
+        }
+        async.flushMicrotasks();
+        expect(provider.error, 'STT_UNAVAILABLE', reason: 'the fallback is a one-way switch, not a retry loop');
+
+        provider.dispose();
+      });
+    });
+
+    test('enableLocalStt() before initialise() makes the first socket use the local config', () {
+      fakeAsync((async) {
+        final provider = _CountingSpeechProfileProvider()..localSttConfig = localConfig;
+        var enabled = false;
+        provider.enableLocalStt().then((value) => enabled = value);
+        async.flushMicrotasks();
+        expect(enabled, isTrue);
+        expect(provider.usingLocalStt, isTrue);
+
+        // Drive the same reconnect path initialise()/_initiateWebsocket use.
+        provider.usePhoneMic = true;
+        provider.updateStartedRecording(true);
+        provider.onClosed(1006);
+        async.elapse(const Duration(seconds: 5));
+        expect(provider.lastCustomSttConfig, same(localConfig));
+
+        provider.dispose();
+      });
+    });
+
+    for (final endSession in ['close', 'dispose', 'restart']) {
+      test('late local availability is ignored after $endSession', () {
+        fakeAsync((async) {
+          final pending = Completer<CustomSttConfig?>();
+          final provider = _CountingSpeechProfileProvider()..pendingLocalConfig = pending;
+          provider.usePhoneMic = true;
+          provider.updateStartedRecording(true);
+          for (var i = 0; i < 3; i++) {
+            provider.onClosed(1011);
+          }
+          async.flushMicrotasks();
+          if (endSession == 'dispose') {
+            provider.dispose();
+          } else {
+            provider.close();
+            async.flushMicrotasks();
+            if (endSession == 'restart') {
+              provider.resetTranscript();
+              provider.usePhoneMic = true;
+              provider.updateStartedRecording(true);
+            }
+          }
+          pending.complete(localConfig);
+          async.flushMicrotasks();
+          async.elapse(const Duration(seconds: 10));
+          expect(provider.usingLocalStt, isFalse);
+          expect(provider.openCalls, 0);
+          if (endSession != 'dispose') provider.dispose();
+        });
+      });
+    }
+
+    test('repeated close callbacks share one pending availability check', () {
+      fakeAsync((async) {
+        final pending = Completer<CustomSttConfig?>();
+        final provider = _CountingSpeechProfileProvider()..pendingLocalConfig = pending;
+        provider.usePhoneMic = true;
+        provider.updateStartedRecording(true);
+        for (var i = 0; i < 6; i++) {
+          provider.onClosed(1011);
+        }
+        async.flushMicrotasks();
+        expect(provider.resolveCalls, 1);
+        pending.complete(localConfig);
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 5));
+        expect(provider.openCalls, 1);
+        provider.dispose();
+      });
+    });
+
+    test('close() resets the on-device STT mode so it cannot leak into the next session', () async {
+      final provider = _CountingSpeechProfileProvider()..localSttConfig = localConfig;
+      expect(await provider.enableLocalStt(), isTrue);
+
+      await provider.close();
+
+      expect(provider.usingLocalStt, isFalse);
+      provider.dispose();
+    });
+  });
+
+  // Regression coverage: close() left isInitialised and the STT-unavailable
+  // close count untouched, so a stale value from a previous session leaked
+  // into the next one — e.g. backing out of a freshly opened Settings page
+  // ran active-session cleanup it never started, or a new session tripped
+  // STT_UNAVAILABLE one 1011 close earlier than it should have.
+  group('close() resets state so a finished session cannot leak into the next', () {
+    test('resets isInitialised', () async {
+      final provider = SpeechProfileProvider();
+      provider.setInitialised(true);
+
+      await provider.close();
+
+      expect(provider.isInitialised, isFalse);
+      provider.dispose();
+    });
+
+    test('resets the STT-unavailable close count', () async {
+      final provider = _CountingSpeechProfileProvider();
+      provider.usePhoneMic = true;
+      provider.updateStartedRecording(true);
+
+      provider.onClosed(1011);
+      provider.onClosed(1011);
+      // Two strikes recorded, one away from tripping STT_UNAVAILABLE.
+
+      await provider.close();
+
+      provider.usePhoneMic = true;
+      provider.updateStartedRecording(true);
+      provider.onClosed(1011);
+
+      expect(
+        provider.error,
+        'SOCKET_DISCONNECTED',
+        reason: 'close() must reset the close count so a new session is not one 1011 away from STT_UNAVAILABLE',
+      );
+
+      provider.dispose();
+    });
+  });
+
   // Regression coverage: finalize()'s upload-failure branch commented "still
   // process conversation" but never set profileCompleted, so the "All Done"
   // continue button (gated on provider.profileCompleted in
@@ -292,6 +533,110 @@ void main() {
       expect(provider.error, 'TOO_SHORT');
 
       provider.dispose();
+    });
+  });
+
+  // The recording completes once the user has spoken enough sentences (the
+  // UI shows a bar filling toward the target), not when the backend decides
+  // the "Answer with your voice" topics were covered.
+  group('completes on the spoken sentence target', () {
+    test('fills the bar per sentence and finalizes once after a pause at the target', () {
+      fakeAsync((async) {
+        final provider = _FinalizeCountingProvider();
+        provider.updateStartedRecording(true);
+
+        provider.segments.add(_userSegment('1', 'I live in Austin.'));
+        provider.updateSpokenText();
+        expect(provider.spokenSentenceCount, 1);
+        expect(provider.sentenceProgress, closeTo(1 / 3, 0.01));
+        expect(provider.finalizeCalls, 0);
+
+        provider.segments.add(_userSegment('2', 'I work on hardware! My goal is 3.5 million users?'));
+        provider.updateSpokenText();
+        expect(provider.spokenSentenceCount, 3, reason: '"3.5" is not a sentence boundary');
+        expect(provider.sentenceProgress, 1.0);
+        expect(provider.finalizeCalls, 0, reason: 'the target does not cut the user off mid-sentence');
+
+        async.elapse(SpeechProfileProvider.completionGrace);
+        expect(provider.finalizeCalls, 1, reason: 'finalizes once the user pauses');
+
+        provider.segments.add(_userSegment('3', 'And more.'));
+        provider.updateSpokenText();
+        async.elapse(SpeechProfileProvider.completionCap);
+        expect(provider.finalizeCalls, 1, reason: 'later segments must not finalize again');
+
+        provider.dispose();
+      });
+    });
+
+    test('keeps recording while the user is still talking, up to the cap', () {
+      fakeAsync((async) {
+        final provider = _FinalizeCountingProvider();
+        provider.updateStartedRecording(true);
+        provider.segments.add(_userSegment('1', 'One. Two. Three.'));
+        provider.updateSpokenText();
+
+        // New speech every second keeps deferring the grace period...
+        for (var i = 0; i < 5; i++) {
+          async.elapse(const Duration(seconds: 1));
+          provider.segments.add(_userSegment('more$i', 'still talking'));
+          provider.updateSpokenText();
+          expect(provider.finalizeCalls, 0);
+        }
+        // ...but the cap after the target finalizes regardless.
+        async.elapse(SpeechProfileProvider.completionCap);
+        expect(provider.finalizeCalls, 1);
+
+        provider.dispose();
+      });
+    });
+
+    test("ignores Omi's own question segments and the backend's completion event", () {
+      final provider = _FinalizeCountingProvider();
+      provider.updateStartedRecording(true);
+
+      provider.segments
+          .add(_userSegment('q', 'Where do you live? What do you do? Any goals?', speakerId: omiSpeakerId));
+      provider.updateSpokenText();
+      expect(provider.spokenSentenceCount, 0);
+      expect(provider.finalizeCalls, 0);
+
+      provider.onMessageEventReceived(OnboardingCompleteEvent(conversationId: 'c1'));
+      expect(provider.finalizeCalls, 0, reason: 'only the sentence target completes the recording');
+
+      provider.dispose();
+    });
+  });
+
+  // Redo showed the previous recording's words (and counted them toward the
+  // target) because nothing cleared the provider's transcript before a new
+  // session; initialise() now resets it first.
+  group('a new recording starts with an empty transcript', () {
+    test('resetTranscript forgets the previous words, progress and completion', () {
+      final provider = _FinalizeCountingProvider();
+      provider.updateStartedRecording(true);
+      fakeAsync((async) {
+        provider.segments.add(_userSegment('1', 'I live in Austin. I build hardware. I want to ship!'));
+        provider.updateSpokenText();
+        async.elapse(SpeechProfileProvider.completionGrace);
+        expect(provider.finalizeCalls, 1);
+        provider.profileCompleted = true;
+
+        provider.resetTranscript();
+
+        expect(provider.text, isEmpty);
+        expect(provider.segments, isEmpty);
+        expect(provider.sentenceProgress, 0.0);
+        expect(provider.profileCompleted, isFalse);
+
+        // The fresh session counts from zero and can finalize again.
+        provider.segments.add(_userSegment('2', 'One. Two. Three.'));
+        provider.updateSpokenText();
+        async.elapse(SpeechProfileProvider.completionGrace);
+        expect(provider.finalizeCalls, 2);
+
+        provider.dispose();
+      });
     });
   });
 }

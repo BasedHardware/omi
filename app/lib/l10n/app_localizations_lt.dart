@@ -1858,9 +1858,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get openSettings => 'Atidaryti nustatymus';
 
   @override
-  String get wantDifferentName => 'Norite, kad jus vadintų kitaip?';
-
-  @override
   String get whatsYourName => 'Koks tavo vardas?';
 
   @override
@@ -2042,7 +2039,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get memoryDeleted => 'Prisiminimas ištrintas.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Dalis prisiminimų istorijos nepasiekiama. Rodoma iki šiol gauta istorija.';
 
   @override
   String get undo => 'Atšaukti';
@@ -9934,14 +9931,74 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name balso profilis';
+  }
+
+  @override
+  String get play => 'Leisti';
+
+  @override
+  String get redo => 'Įrašyti iš naujo';
+
+  @override
+  String get answerWithYourVoice => 'Atsakykite balsu:';
+
+  @override
+  String get speechProfileTopicLocation => 'Kur gyvenate?';
+
+  @override
+  String get speechProfileTopicWork => 'Kokį darbą dirbate?';
+
+  @override
+  String get speechProfileTopicGoal => 'Koks jūsų ilgalaikis tikslas?';
+
+  @override
   String get transcriptionNoAudio => 'Transkripcija negauna garso';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Norėdami pradėti įrašymą, palieskite +';
+
+  @override
+  String get chatBlockTask => 'Užduotis';
+
+  @override
+  String get chatBlockGoal => 'Tikslas';
+
+  @override
+  String get chatBlockConversation => 'Pokalbis';
+
+  @override
+  String get chatBlockMemory => 'Prisiminimas';
+
+  @override
+  String get chatBlockQuestion => 'Klausimas';
+
+  @override
+  String get chatBlockOpenInGoals => 'Atidaryti skiltyje „Tikslai“';
+
+  @override
+  String get chatBlockOpenConversation => 'Atidaryti pokalbį';
+
+  @override
+  String get chatBlockOpenInMemories => 'Atidaryti skiltyje „Prisiminimai“';
+
+  @override
+  String get chatBlockUnavailable => 'Nebepasiekiama';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Rekomenduojami tolesni veiksmai';
 
   @override
   String get couldNotLoadMemories => 'Nepavyko įkelti prisiminimų';
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Nepavyko įkelti žinių grafo';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Kalbos vertimas tekstu šiuo metu nepasiekiamas. Patikrinkite interneto ryšį ir įrenginio kalbos atpažinimo nustatymus, tada bandykite dar kartą.';
+
+  @override
+  String get processingTakingLonger => 'Vis dar vyksta — tai užtrunka ilgiau nei įprasta.';
 }

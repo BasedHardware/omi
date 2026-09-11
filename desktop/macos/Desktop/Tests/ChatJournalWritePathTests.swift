@@ -269,6 +269,31 @@ final class ChatJournalWritePathTests: XCTestCase {
     XCTAssertEqual(carried.rating, -1, "A nil projected rating falls back to the local value")
   }
 
+  func testProjectionCarryingHelperMergesReplayedModelAttributionIntoLocalMetadata() {
+    // A journal replay reconstructs only the metadata the kernel persists —
+    // the served-model attribution. The in-memory row holds the rest of the
+    // completion evidence, and an echo carrying modelsUsed must not erase it.
+    var existing = ChatMessage(id: "m", text: "answer", sender: .ai)
+    existing.metadata = MessageMetadata(
+      adapterId: "pi-mono",
+      modelsUsed: ["local-observed"],
+      screenContext: nil)
+    existing.metadata?.sqlRowsReturned = 7
+    var projected = ChatMessage(id: "m", text: "answer", sender: .ai)
+    projected.metadata = MessageMetadata(modelsUsed: ["gateway/upstream-9"])
+
+    let merged = ChatProvider.carryingLocalOnlyFields(projected, from: existing)
+    XCTAssertEqual(
+      merged.metadata?.modelsUsed, ["gateway/upstream-9"],
+      "the replayed attribution is what the journal carries, so it wins")
+    XCTAssertEqual(
+      merged.metadata?.sqlRowsReturned, 7,
+      "the completion evidence the journal does not persist survives the echo")
+    XCTAssertEqual(
+      merged.metadata?.adapterId, "pi-mono",
+      "the replay leaves adapterId at its default, so the row's value stays")
+  }
+
   func testProjectionCarryingHelperKeepsBoundCitationsAcrossKindOnlyJournalEcho() {
     let bound = ChatCitationReference(
       ordinal: 8001, kind: .memory, sourceID: "m1", preview: "Brain map is empty")

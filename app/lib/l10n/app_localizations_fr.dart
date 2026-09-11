@@ -1874,9 +1874,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get openSettings => 'Ouvrir les paramètres';
 
   @override
-  String get wantDifferentName => 'Voulez-vous utiliser un autre nom ?';
-
-  @override
   String get whatsYourName => 'Comment vous appelez-vous ?';
 
   @override
@@ -2060,7 +2057,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get memoryDeleted => 'Mémoire supprimée.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Une partie de l’historique des souvenirs est indisponible. L’historique reçu jusqu’à présent est affiché.';
 
   @override
   String get undo => 'Annuler';
@@ -10001,14 +9999,74 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Profil vocal de $name';
+  }
+
+  @override
+  String get play => 'Lire';
+
+  @override
+  String get redo => 'Réenregistrer';
+
+  @override
+  String get answerWithYourVoice => 'Répondez à voix haute :';
+
+  @override
+  String get speechProfileTopicLocation => 'Où habitez-vous ?';
+
+  @override
+  String get speechProfileTopicWork => 'Que faites-vous dans la vie ?';
+
+  @override
+  String get speechProfileTopicGoal => 'Quel est votre objectif à long terme ?';
+
+  @override
   String get transcriptionNoAudio => 'La transcription ne reçoit pas d\'audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Appuyez sur + pour commencer l’enregistrement';
+
+  @override
+  String get chatBlockTask => 'Tâche';
+
+  @override
+  String get chatBlockGoal => 'Objectif';
+
+  @override
+  String get chatBlockConversation => 'Conversation';
+
+  @override
+  String get chatBlockMemory => 'Souvenir';
+
+  @override
+  String get chatBlockQuestion => 'Question';
+
+  @override
+  String get chatBlockOpenInGoals => 'Ouvrir dans Objectifs';
+
+  @override
+  String get chatBlockOpenConversation => 'Ouvrir la conversation';
+
+  @override
+  String get chatBlockOpenInMemories => 'Ouvrir dans Souvenirs';
+
+  @override
+  String get chatBlockUnavailable => 'N’est plus disponible';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Prochaines étapes recommandées';
 
   @override
   String get couldNotLoadMemories => 'Impossible de charger les souvenirs';
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Impossible de charger le graphe de connaissances';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'La transcription vocale est indisponible pour le moment. Vérifiez votre connexion Internet et les réglages de reconnaissance vocale de votre appareil, puis réessayez.';
+
+  @override
+  String get processingTakingLonger => 'Toujours en cours — cela prend plus de temps que d’habitude.';
 }

@@ -67,7 +67,7 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 
 # Policies the boost must not touch. Env-overridable (see module docstring);
 # resolved against RATE_POLICIES below so a typo is dropped, not enforced.
-_BOOST_EXEMPT_DEFAULT = "action_items:list,action_items:list_hot_client"
+_BOOST_EXEMPT_DEFAULT = "action_items:list,action_items:list_hot_client,static_map:get"
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
 # ---------------------------------------------------------------------------
@@ -140,6 +140,12 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # reason as its parent policy.
     "action_items:list_hot_client": (ACTION_ITEMS_LIST_HOT_CLIENT_MAX, 60),
     "action_items:write": (120, 3600),
+    # Static map previews — Redis-cached image renders, so a hit costs one
+    # cache read, but a client loop with ever-changing pins would translate
+    # straight into billable provider calls. A home-feed hydration plus recap
+    # pages is tens of requests per session; this cap only exists to stop a
+    # hot loop.
+    "static_map:get": (240, 3600),
     # Memories — single LLM call each
     "memories:create": (60, 3600),
     # Memory batch writes — each request can create up to 100 memories, so the
@@ -217,6 +223,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "test:prompt": (30, 3600),
     # Apps
     "apps:generate_prompts": (30, 3600),
+    # Persona intro message is a billable LLM call (Features.PERSONA) with no
+    # quota gate, unlike its sibling generate_prompts. Same bound as that
+    # sibling until a quota-gate policy decision is made (see #12781).
+    "apps:twitter_initial_message": (30, 3600),
     # TTS — ElevenLabs proxy. Coarse outer ring; fine-grained burst + daily
     # char caps are enforced in database.redis_db.check_tts_rate_limit.
     "tts:synthesize": (300, 3600),

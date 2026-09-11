@@ -1862,9 +1862,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get openSettings => 'Відкрити налаштування';
 
   @override
-  String get wantDifferentName => 'Хочете, щоб до вас звертались інакше?';
-
-  @override
   String get whatsYourName => 'Як вас звати?';
 
   @override
@@ -2046,7 +2043,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get memoryDeleted => 'Спогад видалено.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Частина історії спогадів недоступна. Показано історію, отриману на цей момент.';
 
   @override
   String get undo => 'Скасувати';
@@ -9936,14 +9933,74 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Голосовий профіль: $name';
+  }
+
+  @override
+  String get play => 'Відтворити';
+
+  @override
+  String get redo => 'Записати знову';
+
+  @override
+  String get answerWithYourVoice => 'Відповідайте голосом:';
+
+  @override
+  String get speechProfileTopicLocation => 'Де ви живете?';
+
+  @override
+  String get speechProfileTopicWork => 'Ким ви працюєте?';
+
+  @override
+  String get speechProfileTopicGoal => 'Яка ваша довгострокова мета?';
+
+  @override
   String get transcriptionNoAudio => 'Транскрипція не отримує аудіо';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Натисніть +, щоб почати запис';
+
+  @override
+  String get chatBlockTask => 'Завдання';
+
+  @override
+  String get chatBlockGoal => 'Ціль';
+
+  @override
+  String get chatBlockConversation => 'Розмова';
+
+  @override
+  String get chatBlockMemory => 'Спогад';
+
+  @override
+  String get chatBlockQuestion => 'Питання';
+
+  @override
+  String get chatBlockOpenInGoals => 'Відкрити в «Цілях»';
+
+  @override
+  String get chatBlockOpenConversation => 'Відкрити розмову';
+
+  @override
+  String get chatBlockOpenInMemories => 'Відкрити у «Спогадах»';
+
+  @override
+  String get chatBlockUnavailable => 'Більше недоступно';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Рекомендовані наступні кроки';
 
   @override
   String get couldNotLoadMemories => 'Не вдалося завантажити спогади';
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Не вдалося завантажити граф знань';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Перетворення мовлення на текст зараз недоступне. Перевірте підключення до інтернету та налаштування розпізнавання мовлення на пристрої й спробуйте ще раз.';
+
+  @override
+  String get processingTakingLonger => 'Ще обробляється — це триває довше, ніж зазвичай.';
 }

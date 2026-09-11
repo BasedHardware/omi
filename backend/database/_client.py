@@ -107,6 +107,34 @@ _customer_firestore_client = None
 _customer_firestore_client_lock = Lock()
 
 
+def _firestore_database_id() -> str | None:
+    """Resolve the optional named database, with a hard QA-only fence.
+
+    The isolated JIT plane owns ``jit-qa`` in the development project.  A
+    named database must never be accepted as an ambient production override:
+    ordinary services retain the default database when this variable is absent,
+    while a misconfigured QA process fails before constructing a client.
+    """
+
+    database = (os.getenv("FIRESTORE_DATABASE_ID") or "").strip()
+    qa_auth_only = (os.getenv("OMI_JIT_QA_AUTH_ONLY") or "").strip().casefold() in {"1", "true", "yes", "on"}
+    if qa_auth_only:
+        if database != "jit-qa":
+            raise RuntimeError("isolated JIT QA requires FIRESTORE_DATABASE_ID=jit-qa")
+        if (
+            (os.getenv("OMI_ENV_STAGE") or "").strip().casefold() != "dev"
+            or (os.getenv("GOOGLE_CLOUD_PROJECT") or "").strip() != "based-hardware-dev"
+            or (os.getenv("OMI_FIRESTORE_DATA_PLANE_PROJECT") or "").strip() != "based-hardware-dev"
+        ):
+            raise RuntimeError("FIRESTORE_DATABASE_ID=jit-qa requires the isolated development JIT QA fence")
+        return database
+    if not database or database == "(default)":
+        return None
+    if database == "jit-qa":
+        raise RuntimeError("FIRESTORE_DATABASE_ID=jit-qa requires the isolated development JIT QA fence")
+    raise RuntimeError("FIRESTORE_DATABASE_ID is restricted to the isolated JIT QA database")
+
+
 def _build_firestore_client() -> Any:
     # Production safety: only override project/database when pointed at a local
     # Firestore emulator. Without FIRESTORE_EMULATOR_HOST set (i.e. real Firestore),
@@ -126,9 +154,18 @@ def _build_firestore_client() -> Any:
     customer_data = customer_data_service_account()
     if customer_data is not None:
         credentials, project_id = customer_data
-        return firestore.Client(credentials=credentials, project=project_id)
+        database = _firestore_database_id()
+        if database and project_id != "based-hardware-dev":
+            raise RuntimeError("jit-qa cannot use a mounted customer-data service account")
+        customer_kwargs: dict[str, Any] = {"credentials": credentials, "project": project_id}
+        if database:
+            customer_kwargs["database"] = database
+        return firestore.Client(**customer_kwargs)
 
     prepare_google_credentials()
+    database = _firestore_database_id()
+    if database:
+        return firestore.Client(project="based-hardware-dev", database=database)
     return firestore.Client()
 
 
@@ -154,7 +191,13 @@ def _build_customer_firestore_client() -> Any:
     entitlements = customer_entitlement_service_account()
     if entitlements is not None:
         credentials, project_id = entitlements
-        return firestore.Client(credentials=credentials, project=project_id)
+        database = _firestore_database_id()
+        if database and project_id != "based-hardware-dev":
+            raise RuntimeError("jit-qa cannot use a mounted customer-entitlement service account")
+        kwargs: dict[str, Any] = {"credentials": credentials, "project": project_id}
+        if database:
+            kwargs["database"] = database
+        return firestore.Client(**kwargs)
 
     return get_firestore_client()
 
@@ -191,6 +234,7 @@ def _build_data_plane_firestore_client() -> Any:
         return get_firestore_client()
 
     data_plane_project = os.environ.get("OMI_FIRESTORE_DATA_PLANE_PROJECT", "").strip()
+    database = _firestore_database_id()
     if not data_plane_project:
         service = (os.getenv("K_SERVICE") or os.getenv("APP_NAME") or "").strip().casefold()
         if "desktop-backend" in service:
@@ -214,10 +258,18 @@ def _build_data_plane_firestore_client() -> Any:
                 f"{data_plane_project} does not match the mounted service account's "
                 f"project {sa_project}"
             )
-        return firestore.Client(credentials=credentials, project=data_plane_project)
+        if database and sa_project != "based-hardware-dev":
+            raise RuntimeError("jit-qa cannot use a mounted customer-entitlement service account")
+        kwargs: dict[str, Any] = {"credentials": credentials, "project": data_plane_project}
+        if database:
+            kwargs["database"] = database
+        return firestore.Client(**kwargs)
 
     prepare_google_credentials()
-    return firestore.Client(project=data_plane_project)
+    kwargs = {"project": data_plane_project}
+    if database:
+        kwargs["database"] = database
+    return firestore.Client(**kwargs)
 
 
 def get_data_plane_firestore_client() -> Any:

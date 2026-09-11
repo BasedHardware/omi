@@ -17,6 +17,8 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationCardLead.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationJournalCopy.swift
   - desktop/macos/Desktop/Sources/MainWindow/ClickThroughView.swift
+  # Where the notch's own agent-exit routing decision lives.
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopShellPresentationPolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/CursorScreenTracker.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/DelayedActionScheduler.swift
@@ -26,6 +28,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarMouseInterception.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarSurfaceFloor.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
@@ -42,6 +45,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectReplyWindow.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectSuggestionFeedbackStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectVoiceFeedbackRouting.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITAmbientFeedback.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
@@ -87,6 +91,15 @@ steps:
     state.expect:
       state.floatingBarVisible: true
 
+  - id: S1b
+    name: Idle island frame satisfies the surface floor for its state
+    bridge.action:
+      name: notch_hover
+      params:
+        action: "state"
+    expect:
+      result.detail.surfaceFloorSatisfied: "true"
+
   - id: S2
     name: Open Ask Omi
     bridge.action:
@@ -95,7 +108,7 @@ steps:
         reset: "true"
         wait: "true"
     expect:
-      result.detail.focused: "true"
+      result.detail.target: "main_chat"
 
   - id: S3
     name: Send stubbed floating-bar query

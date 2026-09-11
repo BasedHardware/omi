@@ -20,6 +20,32 @@ _DAILY_MEMORY_SWEEP_SCRIPT = _REPO_ROOT / "backend" / "scripts" / "daily_memory_
 _JIT_PROACTIVITY_RESERVATION_SCRIPT = (
     _REPO_ROOT / "backend" / "scripts" / "jit_proactivity_reservation_emulator_test.py"
 )
+_JIT_LEDGER_USER_WRITE_SCRIPT = _REPO_ROOT / "backend" / "scripts" / "jit_ledger_user_write_emulator_test.py"
+
+
+def test_jit_ledger_user_write_emulator_harness_is_wired_to_api_and_apply():
+    assert _JIT_LEDGER_USER_WRITE_SCRIPT.exists()
+    script = _JIT_LEDGER_USER_WRITE_SCRIPT.read_text()
+    for required in (
+        "TestClient",
+        "/v3/memories",
+        "/v3/memories/batch",
+        "/v3/memory-imports/batch",
+        "MemoryControlState",
+        "WriterMode.ledger",
+        "ledger_schema_version",
+        "ledger_mutation",
+        "candidates_created",
+        "FIRESTORE_EMULATOR_HOST",
+        "PASS: JIT ledger direct-user POST, batch fencing, and evidence-import emulator proof",
+    ):
+        assert required in script
+
+    package = json.loads((_REPO_ROOT / "package.json").read_text())
+    command = package["scripts"]["test:memory-jit-ledger-user-write:emulator"]
+    assert command.startswith("MEMORY_ENABLED=on npx --no-install firebase emulators:exec")
+    assert "--only firestore" in command
+    assert "backend/scripts/jit_ledger_user_write_emulator_test.py" in command
 
 
 def test_jit_proactivity_reservation_emulator_harness_uses_real_transactional_store() -> None:

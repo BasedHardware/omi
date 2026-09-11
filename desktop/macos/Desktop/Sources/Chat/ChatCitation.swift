@@ -209,10 +209,27 @@ enum ChatCitationMarkup {
   static let kindOnlyMarkerPattern =
     #"\[(memory|task|goal|conversation|screenshot|web|source|capture|rewind)\](?![\s:]*\d)"#
 
+  /// Compiled once per pattern. Every marker scan used to compile its
+  /// expression on the call, and the citation-inheritance pass runs one scan
+  /// per text of every settled assistant row on every journal projection —
+  /// hundreds of compiles per streaming write on a long transcript, all on
+  /// the main thread. `NSRegularExpression` is immutable and thread-safe.
+  private static let expressionLock = NSLock()
+  private nonisolated(unsafe) static var expressions: [String: NSRegularExpression] = [:]
+
+  static func expression(_ pattern: String, options: NSRegularExpression.Options = []) -> NSRegularExpression? {
+    let key = "\(options.rawValue):\(pattern)"
+    expressionLock.lock()
+    defer { expressionLock.unlock() }
+    if let cached = expressions[key] { return cached }
+    guard let compiled = try? NSRegularExpression(pattern: pattern, options: options) else { return nil }
+    expressions[key] = compiled
+    return compiled
+  }
+
   static func explicitlyRequestsSources(_ text: String) -> Bool {
     guard
-      let expression = try? NSRegularExpression(
-        pattern: #"\b(?:citations?|cite|sources)\b"#, options: [.caseInsensitive])
+      let expression = expression(#"\b(?:citations?|cite|sources)\b"#, options: [.caseInsensitive])
     else { return false }
     return expression.firstMatch(
       in: text,
@@ -222,18 +239,38 @@ enum ChatCitationMarkup {
   /// Numeric citations outside inline-code spans, in reading order. Incomplete streaming markers
   /// and bracketed prose are left alone. Kind-prefixed copies such as `[memory 5023]` still count.
   static func ordinals(in text: String) -> [Int] {
-    markerMatches(in: text, pattern: numericMarkerPattern).map(\.ordinal)
+    ordinalsLock.lock()
+    if let cached = ordinalsByText[text] {
+      ordinalsLock.unlock()
+      return cached
+    }
+    ordinalsLock.unlock()
+    let ordinals = markerMatches(in: text, pattern: numericMarkerPattern).map(\.ordinal)
+    ordinalsLock.lock()
+    // Bounded, not LRU: settled answers repeat verbatim on every projection
+    // and a streaming row's changing text is never asked here, so the set
+    // that matters is the transcript's settled rows, which fit many times over.
+    if ordinalsByText.count >= 4_096 { ordinalsByText.removeAll(keepingCapacity: true) }
+    ordinalsByText[text] = ordinals
+    ordinalsLock.unlock()
+    return ordinals
   }
+
+  /// `ordinals(in:)` memoized by text. The citation-inheritance pass asks it
+  /// for every text of every settled assistant row on every journal
+  /// projection — one per coalesced streaming write — and a regex scan per
+  /// row made that pass cost the transcript's length in milliseconds.
+  private static let ordinalsLock = NSLock()
+  private nonisolated(unsafe) static var ordinalsByText: [String: [Int]] = [:]
 
   static func markerMatches(
     in text: String,
     pattern: String
   ) -> [(range: Range<String.Index>, ordinal: Int)] {
+    // Every marker opens with a bracket; a text without one has nothing to scan.
+    guard text.utf8.contains(UInt8(ascii: "[")) else { return [] }
     let codeRanges = OmiMarkdownInlineCode.codeSpanRanges(in: text)
-    guard
-      let expression = try? NSRegularExpression(
-        pattern: pattern, options: [.caseInsensitive])
-    else { return [] }
+    guard let expression = expression(pattern, options: [.caseInsensitive]) else { return [] }
     let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
     return expression.matches(in: text, range: nsRange).compactMap { match in
       guard let full = Range(match.range(at: 0), in: text),
@@ -247,6 +284,42 @@ enum ChatCitationMarkup {
 
   static func containsKindOnlyMarkers(_ text: String) -> Bool {
     !kindOnlyMatches(in: text).isEmpty
+  }
+
+  /// References a follow-up borrows from the turns before it.
+  ///
+  /// Ordinals are assigned per attempt, so `[1]` in one answer and `[1]` in the
+  /// next can name different sources. But a turn that retrieved nothing has no
+  /// ordinals of its own, and when the model writes `[1]` there it is pointing
+  /// back at the list the reader was just shown — "pick one conversation from
+  /// that day" answered without a tool call is exactly this. Left unbound the
+  /// marker drew as plain text next to a title the reader could not open.
+  ///
+  /// Only ordinals this turn cannot resolve itself are borrowed, and each from
+  /// the nearest earlier assistant turn that persisted it, so a turn's own
+  /// provenance always outranks the past and a stale list is never reached
+  /// past a fresher one that has the same number.
+  static func inheritedReferences(
+    citedIn message: ChatMessage,
+    resolved: [ChatCitationReference],
+    earlierTurns: some BidirectionalCollection<ChatMessage>,
+    lookback: Int = 8
+  ) -> [ChatCitationReference] {
+    var unresolved = message.citedCitationOrdinals.subtracting(resolved.map(\.ordinal))
+    guard !unresolved.isEmpty else { return [] }
+    var inherited = [ChatCitationReference]()
+    var searched = 0
+    for earlier in earlierTurns.reversed() where earlier.sender == .ai && earlier.id != message.id {
+      guard searched < lookback else { break }
+      searched += 1
+      for block in earlier.contentBlocks {
+        guard case .citation(_, let reference) = block, unresolved.remove(reference.ordinal) != nil
+        else { continue }
+        inherited.append(reference)
+      }
+      if unresolved.isEmpty { break }
+    }
+    return inherited.sorted { $0.ordinal < $1.ordinal }
   }
 
   /// Replace `[memory]` / `[conversation]` with the numeric marker for the best matching source of
@@ -294,11 +367,9 @@ enum ChatCitationMarkup {
   private static func kindOnlyMatches(
     in text: String
   ) -> [(range: Range<String.Index>, label: String)] {
+    guard text.utf8.contains(UInt8(ascii: "[")) else { return [] }
     let codeRanges = OmiMarkdownInlineCode.codeSpanRanges(in: text)
-    guard
-      let expression = try? NSRegularExpression(
-        pattern: kindOnlyMarkerPattern, options: [.caseInsensitive])
-    else { return [] }
+    guard let expression = expression(kindOnlyMarkerPattern, options: [.caseInsensitive]) else { return [] }
     let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
     return expression.matches(in: text, range: nsRange).compactMap { match in
       guard let full = Range(match.range(at: 0), in: text),
@@ -390,7 +461,7 @@ enum ChatCitationMarkup {
   }
 
   private static func firstBoldPhrase(in claim: String) -> String? {
-    guard let expression = try? NSRegularExpression(pattern: #"\*\*(.+?)\*\*"#),
+    guard let expression = expression(#"\*\*(.+?)\*\*"#),
       let match = expression.firstMatch(
         in: claim, range: NSRange(claim.startIndex..<claim.endIndex, in: claim)),
       let range = Range(match.range(at: 1), in: claim)
@@ -443,13 +514,22 @@ enum ChatCitationMarkup {
 
   /// Rich blocks are an authoritative selection made by the model. If it omits inline markers
   /// after rendering those blocks, retain source discoverability as one compact inline fallback.
+  ///
+  /// `renderedEntityIDs` are the entities the turn already draws as their own
+  /// components. A rendered task card is a better citation of that task than
+  /// `[3]` is — it opens the same thing and says what it is — so a rail that
+  /// only repeats those ids is noise printed under the cards, and now that
+  /// components are a turn's whole answer rather than a garnish, it is noise on
+  /// every such turn.
   static func appendingSelectedSources(
     to text: String,
     selectedReferences: [ChatCitationReference],
     requestedSources: Bool = false,
-    retrievedReferences: [ChatCitationReference] = []
+    retrievedReferences: [ChatCitationReference] = [],
+    renderedEntityIDs: Set<String> = []
   ) -> String {
-    let fallback = selectedReferences.isEmpty && requestedSources ? retrievedReferences : selectedReferences
+    let selection = selectedReferences.isEmpty && requestedSources ? retrievedReferences : selectedReferences
+    let fallback = selection.filter { !renderedEntityIDs.contains($0.sourceID) }
     guard !fallback.isEmpty else { return text }
     let fallbackOrdinals = Set(fallback.map(\.ordinal))
     let hasResolvedNumericCitation = ordinals(in: text).contains { fallbackOrdinals.contains($0) }
@@ -460,10 +540,26 @@ enum ChatCitationMarkup {
     return text + "\n\nSources: \(markers)"
   }
 
+  /// The entities this turn already draws as components, by the id a citation
+  /// would carry for the same thing.
+  static func renderedEntityIDs(in blocks: [ChatContentBlock]) -> Set<String> {
+    var identifiers = Set<String>()
+    for block in blocks {
+      switch block {
+      case .taskCard(_, let taskId): identifiers.insert(taskId)
+      case .goalLink(_, let goalId, _): identifiers.insert(goalId)
+      case .captureLink(_, let conversationId, _, _): identifiers.insert(conversationId)
+      case .conversationLink(_, let conversationId, _, _): identifiers.insert(conversationId)
+      case .memoryLink(_, let memoryId, _): identifiers.insert(memoryId)
+      default: continue
+      }
+    }
+    return identifiers
+  }
+
   private static func webReferences(in text: String) -> [ChatCitationReference] {
-    guard
-      let expression = try? NSRegularExpression(
-        pattern: #"\[(\d{1,4})\]\((https?://[^\s)]+)\)"#)
+    guard text.utf8.contains(UInt8(ascii: "[")),
+      let expression = expression(#"\[(\d{1,4})\]\((https?://[^\s)]+)\)"#)
     else { return [] }
     let codeRanges = OmiMarkdownInlineCode.codeSpanRanges(in: text)
     var seen = Set<Int>()
@@ -539,13 +635,19 @@ extension ChatMessage {
     }
   }
 
-  mutating func persistCitedReferences(from references: [ChatCitationReference]) {
+  /// Every numeric marker the answer writes, in its body and its text blocks.
+  var citedCitationOrdinals: Set<Int> {
     var cited = Set(ChatCitationMarkup.ordinals(in: text))
     for block in contentBlocks {
       if case .text(_, let blockText) = block {
         cited.formUnion(ChatCitationMarkup.ordinals(in: blockText))
       }
     }
+    return cited
+  }
+
+  mutating func persistCitedReferences(from references: [ChatCitationReference]) {
+    let cited = citedCitationOrdinals
     let existing = Set(
       contentBlocks.compactMap { block -> Int? in
         guard case .citation(_, let reference) = block else { return nil }
@@ -601,12 +703,14 @@ extension ChatMessage {
     retrievedReferences: [ChatCitationReference],
     fallbackText: String = ""
   ) {
+    let rendered = ChatCitationMarkup.renderedEntityIDs(in: contentBlocks)
     func apply(_ value: String) -> String {
       ChatCitationMarkup.appendingSelectedSources(
         to: value,
         selectedReferences: selectedReferences,
         requestedSources: requestedSources,
-        retrievedReferences: retrievedReferences)
+        retrievedReferences: retrievedReferences,
+        renderedEntityIDs: rendered)
     }
     if text.isEmpty {
       text = fallbackText

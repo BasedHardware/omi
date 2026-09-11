@@ -128,8 +128,10 @@ def test_dev_and_prod_require_the_live_finalization_alert_route_before_publishin
 
     assert dev_alert < dev_publish
     assert prod_alert < prod_publish
-    assert "secrets.GRAFANA_TOKEN" in AUTO
-    assert "secrets.GRAFANA_TOKEN" in MANUAL
+    assert "secrets.MONITOR_GRAFANA_TOKEN" in AUTO
+    assert "secrets.GRAFANA_TOKEN" not in AUTO
+    assert "secrets.MONITOR_GRAFANA_TOKEN" in MANUAL
+    assert "secrets.GRAFANA_TOKEN" not in MANUAL
 
 
 def test_prod_rechecks_live_finalization_alerts_after_rollout_before_final_pass() -> None:

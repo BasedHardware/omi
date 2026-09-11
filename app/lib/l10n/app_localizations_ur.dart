@@ -1858,9 +1858,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get openSettings => 'ترتیبات کھولیں';
 
   @override
-  String get wantDifferentName => 'کچھ اور نام سے جانا چاہتے ہیں؟';
-
-  @override
   String get whatsYourName => 'آپ کا نام کیا ہے؟';
 
   @override
@@ -2041,7 +2038,8 @@ class AppLocalizationsUr extends AppLocalizations {
   String get memoryDeleted => 'یاد حذف ہو گئی۔';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'یادوں کی تاریخ کا کچھ حصہ دستیاب نہیں ہے۔ اب تک موصول ہونے والی تاریخ دکھائی جا رہی ہے۔';
 
   @override
   String get undo => 'واپس لیں';
@@ -9926,14 +9924,74 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name کی صوتی پروفائل';
+  }
+
+  @override
+  String get play => 'چلائیں';
+
+  @override
+  String get redo => 'دوبارہ ریکارڈ کریں';
+
+  @override
+  String get answerWithYourVoice => 'اپنی آواز میں جواب دیں:';
+
+  @override
+  String get speechProfileTopicLocation => 'آپ کہاں رہتے ہیں؟';
+
+  @override
+  String get speechProfileTopicWork => 'آپ کیا کام کرتے ہیں؟';
+
+  @override
+  String get speechProfileTopicGoal => 'آپ کا طویل مدتی مقصد کیا ہے؟';
+
+  @override
   String get transcriptionNoAudio => 'ٹرانسکرپشن آڈیو وصول نہیں کر رہی';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'ریکارڈنگ شروع کرنے کے لیے + پر ٹیپ کریں';
+
+  @override
+  String get chatBlockTask => 'کام';
+
+  @override
+  String get chatBlockGoal => 'ہدف';
+
+  @override
+  String get chatBlockConversation => 'گفتگو';
+
+  @override
+  String get chatBlockMemory => 'یاد';
+
+  @override
+  String get chatBlockQuestion => 'سوال';
+
+  @override
+  String get chatBlockOpenInGoals => 'اہداف میں کھولیں';
+
+  @override
+  String get chatBlockOpenConversation => 'گفتگو کھولیں';
+
+  @override
+  String get chatBlockOpenInMemories => 'یادوں میں کھولیں';
+
+  @override
+  String get chatBlockUnavailable => 'اب دستیاب نہیں';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'تجویز کردہ اگلے اقدامات';
 
   @override
   String get couldNotLoadMemories => 'یادیں لوڈ نہیں ہو سکیں';
 
   @override
   String get couldNotLoadKnowledgeGraph => 'نالج گراف لوڈ نہیں ہو سکا';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'اس وقت آواز کو متن میں تبدیل کرنے کی سہولت دستیاب نہیں ہے۔ اپنا انٹرنیٹ کنکشن اور آلے کی آواز پہچاننے کی ترتیبات چیک کریں، پھر دوبارہ کوشش کریں۔';
+
+  @override
+  String get processingTakingLonger => 'ابھی کام جاری ہے — اس میں معمول سے زیادہ وقت لگ رہا ہے۔';
 }

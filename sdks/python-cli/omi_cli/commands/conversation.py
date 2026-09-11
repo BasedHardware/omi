@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING, Optional
 
 import typer
 
+from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import UsageError
+from omi_cli.json_input import load_json_input
 from omi_cli.models import ConversationTextSource
 from omi_cli.output import shorten
 
@@ -36,8 +38,12 @@ def list_conversations(
     typer_ctx: typer.Context,
     limit: int = typer.Option(25, "--limit", min=1, max=200),
     offset: int = typer.Option(0, "--offset", min=0),
-    start_date: Optional[datetime] = typer.Option(None, "--start-date", help="ISO datetime lower bound."),
-    end_date: Optional[datetime] = typer.Option(None, "--end-date", help="ISO datetime upper bound."),
+    start_date: Optional[datetime] = typer.Option(
+        None, "--start-date", formats=ISO_DATETIME_FORMATS, help="ISO datetime lower bound."
+    ),
+    end_date: Optional[datetime] = typer.Option(
+        None, "--end-date", formats=ISO_DATETIME_FORMATS, help="ISO datetime upper bound."
+    ),
     categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
 ) -> None:
@@ -97,8 +103,12 @@ def create_conversation(
         help="Source type. One of audio_transcript, message, other_text.",
     ),
     text_source_spec: Optional[str] = typer.Option(None, "--text-source-spec", help="e.g. 'email', 'slack'."),
-    started_at: Optional[datetime] = typer.Option(None, "--started-at", help="ISO datetime."),
-    finished_at: Optional[datetime] = typer.Option(None, "--finished-at", help="ISO datetime."),
+    started_at: Optional[datetime] = typer.Option(
+        None, "--started-at", formats=ISO_DATETIME_FORMATS, help="ISO datetime."
+    ),
+    finished_at: Optional[datetime] = typer.Option(
+        None, "--finished-at", formats=ISO_DATETIME_FORMATS, help="ISO datetime."
+    ),
     language: str = typer.Option("en", "--language", help="ISO 639-1 code."),
 ) -> None:
     ctx = _ctx(typer_ctx)
@@ -134,16 +144,16 @@ def from_segments(
     typer_ctx: typer.Context,
     segments_file: Path = typer.Argument(..., help="Path to a JSON file containing 'transcript_segments'."),
     source: Optional[str] = typer.Option(None, "--source", help="Conversation source (e.g. omi, friend, phone)."),
-    started_at: Optional[datetime] = typer.Option(None, "--started-at"),
-    finished_at: Optional[datetime] = typer.Option(None, "--finished-at"),
+    started_at: Optional[datetime] = typer.Option(None, "--started-at", formats=ISO_DATETIME_FORMATS),
+    finished_at: Optional[datetime] = typer.Option(None, "--finished-at", formats=ISO_DATETIME_FORMATS),
     language: str = typer.Option("en", "--language"),
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not segments_file.exists():
         raise UsageError(message=f"File not found: {segments_file}")
     try:
-        payload = json.loads(segments_file.read_text())
-    except json.JSONDecodeError as exc:
+        payload = load_json_input(segments_file.read_bytes())
+    except (ValueError, UnicodeDecodeError) as exc:
         raise UsageError(message=f"Invalid JSON in {segments_file}", detail=str(exc))
 
     segments = payload.get("transcript_segments") if isinstance(payload, dict) else payload
@@ -198,5 +208,7 @@ def delete_conversation(
     if not confirm:
         typer.confirm(f"Delete conversation {conversation_id}?", abort=True)
     with ctx.make_client() as client:
-        client.delete(f"/v1/dev/user/conversations/{conversation_id}")
+        result = client.delete(f"/v1/dev/user/conversations/{conversation_id}")
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit(result)
     ctx.renderer.success(f"Deleted conversation [bold]{conversation_id}[/bold].")

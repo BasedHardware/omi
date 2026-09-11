@@ -1716,8 +1716,9 @@ def test_run_consolidation_defers_flex_unavailability_without_applying_or_spendi
             return_value=_context([item]),
         ),
         patch("utils.memory.canonical_consolidation.apply_consolidation_decision") as apply_route,
+        pytest.raises(PromotionFlexDeferred, match="RateLimitError"),
     ):
-        report = run_canonical_consolidation(
+        run_canonical_consolidation(
             UID,
             db_client=db,
             run_id="flex-deferred",
@@ -1730,9 +1731,48 @@ def test_run_consolidation_defers_flex_unavailability_without_applying_or_spendi
     assert state is not None
     assert state.attempt_count == 0
     assert state.status == "retryable"
-    assert report.retryable_memory_ids == [item.memory_id]
-    assert report.watermark_blocked is True
     apply_route.assert_not_called()
+
+
+def test_run_consolidation_stops_the_uid_after_flex_deferral(monkeypatch):
+    from utils.memory.promotion_flex import PromotionFlexDeferred
+
+    first = _item("mem_flex_first", "First batch is deferred")
+    second = _item("mem_flex_second", "Second batch must not run")
+    control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
+    db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
+    gathered_ids: list[str] = []
+
+    def defer(_prompt):
+        raise PromotionFlexDeferred("job_budget")
+
+    def gather(uid, pending_items, **_kwargs):
+        gathered_ids.extend(item.memory_id for item in pending_items)
+        return _context(pending_items)
+
+    monkeypatch.setenv("MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP", "1")
+    with (
+        patch(
+            "utils.memory.canonical_consolidation.list_pending_consolidation_items",
+            return_value=[first, second],
+        ),
+        patch(
+            "utils.memory.canonical_consolidation.gather_consolidation_candidates",
+            side_effect=gather,
+        ),
+        pytest.raises(PromotionFlexDeferred, match="job_budget"),
+    ):
+        run_canonical_consolidation(
+            UID,
+            db_client=db,
+            run_id="flex-stop-page",
+            now=NOW,
+            llm_invoke=defer,
+            attempt_lease_seconds=1_200,
+        )
+
+    assert gathered_ids == [first.memory_id]
+    assert consolidation._read_retry_state(UID, second, db_client=db) is None
 
 
 def test_new_revision_does_not_inherit_old_revision_quarantine():

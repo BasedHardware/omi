@@ -23,6 +23,8 @@ Flow does: the hold is recorded whole, nothing is typed while the key is held,
 and at key-up the turn is transcribed once with the most accurate recognizer
 that can be reached, cleaned up, and pasted in one piece. `VoiceTypeSession`
 owns the dictate-or-ask decision and the delivery, and nothing else does.
+The fuller recovery, insertion, and notch contract lives in
+[`desktop-voice-turns.mdx`](../../../docs/desktop-voice-turns.mdx).
 
 - **Hold:** the microphone only records. Every route that can end as a
   dictation appends its chunks to the shared turn buffer (`batchAudioBuffer`),
@@ -39,8 +41,11 @@ owns the dictate-or-ask decision and the delivery, and nothing else does.
   eight dots ease to red (`NotchVoiceMorphGeometry.dictationTintDuration`,
   0.28 s ease-in) while
   keeping whatever motion they have — the waveform while listening, the ring
-  while the paste is prepared. A probe that misses is harmless: the closing
-  transcript decides on its own.
+  while the paste is prepared. When the dictation ends the red eases back out
+  over `dictationTintFadeDuration` (0.55 s) into whatever colour the dot is
+  returning to (`NotchDictationTint` owns the phases); it never snaps to
+  white. A probe that misses is harmless: the closing transcript decides on
+  its own.
 - **The decision latches one way** (`VoiceTypeSession.claim`): once typing,
   always typing for that turn. Not-typing never latches, because a probe hears
   a couple of seconds of a sentence the user has barely started.
@@ -49,66 +54,110 @@ owns the dictate-or-ask decision and the delivery, and nothing else does.
   (`payloadAssumingDictation`): the backend may spell the wake word "Tie" or
   "Typed", and losing the dictation over that would be worse than one stray
   word.
-- **Key-up.** `continueFinalization` records the paste target
-  (`noteRelease`, the frontmost app) before any recognizer runs, then closes
-  the turn through one path on every route, `finishVoiceTypingTurn`. The
-  reducer stays in `.finalizing` (the bar shows it thinking) until the paste
-  lands, exactly as it does for a batch-transcribed question, and every path
-  ends the turn.
+- **Key-up.** `continueFinalization` records the exact Accessibility target
+  (`noteRelease`) before closing transcription: the focused text element,
+  process, bundle, selection, and value digest. It then closes the turn
+  through one path on every route, `finishVoiceTypingTurn`. The reducer stays
+  in `.finalizing` (the bar shows it thinking) until delivery lands, exactly as
+  it does for a batch-transcribed question, and every path ends the turn.
   1. **Transcribe** (`DictationTranscriber`): the backend's pre-recorded
      recognizer (`/v2/voice-message/transcribe`, `velma-2` first) with the
      on-screen keywords as vocabulary, bounded to 12 s; on failure, timeout,
      or an empty result, the on-device model. With no network only the
-     on-device model runs. A route that already produced a backend transcript
-     (omni STT, batch STT after a warm-wait) hands it in as `knownTranscript`
-     so the audio is not transcribed twice. Every fallback is recorded
-     (`area=voice_typing`).
+     on-device model runs, and a route that latched offline at key-down stays
+     offline even if a path comes back mid-hold. A route that already
+     produced a backend transcript (omni STT, batch STT after a warm-wait)
+     hands it in as `knownTranscript` so the audio is not transcribed twice.
+     Every fallback is recorded (`area=voice_typing`). The 12 s cap (and the
+     polisher's 6 s) is enforced at the boundary by `DeadlinedOperation`: a
+     request stuck before its first cancellation check is abandoned at the
+     cap, not waited for. Cancelling the turn cancels the transcription and
+     tries no fallback.
   2. **No chat corrector.** `PTTTranscriptContextualCorrector` is not run on
      a dictation. Its greeting rule respells the first word of "<word>, …"
      from on-screen text; live it turned "So, this is a test" into "Sil, …"
      and "hello there" into "hello then". Names are the polisher's job.
   3. **Format** (`DictationFormatter`, always): spoken fillers out, the
-     punctuation they leave behind repaired, first letter capitalized.
+     punctuation they leave behind repaired, sentence starts and the
+     pronoun "I" capitalized. The backend recognizer can return a whole
+     dictation in lowercase, and this is the only case pass that runs when
+     the polisher below is unavailable (offline, plan-gated, timed out).
      English-only fillers ("er") are stripped only for English.
-  4. **Polish** (`DictationPolisher`, online only): the lightweight Gemini
-     model through the backend proxy (`GeminiClient`, thinking off, 6 s cap)
-     rewrites the transcript as the user would have typed it — self-
-     corrections applied, spoken "new paragraph" honoured, numbers and
-     addresses written out — with the target app and the keywords as context.
-     Its output is *accepted*, never trusted: `accept` strips wrapped quotes
-     and refuses empty, narrated, or unrecognisably resized rewrites, and any
-     refusal, failure, or timeout keeps the formatted text.
+  4. **Polish** (`DictationPolisher`, online only): a finite policy lets
+     already-clean English acknowledgements and greetings with no spelling
+     hints skip the remote rewrite. Other online dictation still uses the
+     lightweight Gemini model through the backend proxy (`GeminiClient`,
+     thinking off, 6 s cap), with the target app and keywords as context. Its
+     output is *accepted*, never trusted: `accept` strips wrapped quotes and
+     refuses empty, narrated, unrecognisably resized, or lexically unrelated
+     rewrites (at least 60 % of the rewrite's ordinary words must be the
+     speaker's; numbers and addresses are exempt, being what the model is
+     meant to rewrite), and any refusal, failure, or timeout keeps the
+     formatted text.
   5. **Deliver** (`VoiceTypeSession.deliver` → `PasteboardTextInsertionSink`):
-     the text goes onto the pasteboard, marked transient for clipboard
-     managers, one ⌘V is posted from a private-state event source (a locked
-     turn is finished by a chord press, so Option may still be physically
-     held), and the previous clipboard is put back 0.6 s later unless the user
-     has copied something since. If focus has moved since key-up — live, a
-     dock click brought Omi's own window forward mid-hold — the text is
-     copied instead and the bar says "Copied — press ⌘V to paste". An
-     unreadable current focus after a known release target is treated the same
-     way. A caret
-     sitting right after a word gets a separating space first
-     (`caretFollowsWordCharacter`, one character read through
-     `AXStringForRange`).
+     a verified AX insertion addresses the captured field and selection when
+     the editor supports it. A successful insertion at a collapsed caret keeps
+     a 30-second, owner-authorized receipt for `Undo Last Dictation`; a changed
+     target or value, owner, or Accessibility grant prevents execution. Menu
+     availability reads preserve the receipt; its expiry publishes a refresh.
+     If AX insertion is unavailable, the clipboard fallback rechecks the captured
+     field and posts `Cmd-V` to that same PID. A target change before that
+     final check falls back to copy; a same-PID focus change after the check but
+     before the paste event is delivered remains a limitation and does not
+     offer Undo. It reports an unconfirmed paste request; an unverified AX write
+     reports insertion uncertainty without copying for a retry. The fallback
+     restores the previous clipboard after its
+     transient paste unless the user has copied something since. A caret right
+     after a word or closing punctuation gets a separating space first; after
+     whitespace or an opener it does not.
 - **Hub commits are gated.** Before any hub commit (`commitHubTurn`, and the
   buffered warm-wait commit), `gateHubCommitOnFinalDictationCheck` decodes
   the opening of the turn on-device and claims a dictation the probes missed.
   Observed live without it: "type what is on my calendar" committed as a
   question, and the model spawned an agent to do the typing itself — not a
-  missed dictation but an unrequested action.
+  missed dictation but an unrequested action. The gate reads the decode
+  leniently, like the probes: it is the same model on the same opening and
+  mishears "type" the same ways, so a strict test would re-open exactly the
+  gap the probes' lenient test closes.
+  `VoiceTypeOpeningDecoder` coalesces only byte-identical opening audio, so a
+  release check may join an in-flight matching probe; a shorter prefix is
+  never reused for the released turn.
+- **Probe slots are spent when a probe starts**, not when it falls due
+  (`beginProbe`): one decode runs at a time, and a slow model load must not
+  silently consume the thresholds that pass while it is busy.
 - **Offline dictation.** `PTTRoutePolicy.decide` picks the route at key-down
   and checks the network first and unconditionally: with no path
-  (`NetworkReachability`, an `NWPathMonitor`), the turn takes the
-  `.onDeviceASR` route, is transcribed by the on-device model at key-up, and
-  is formatted without the polisher. Only dictation completes offline: a
-  question ends as `providerFailed` rather than pretending to be in flight.
+  (`NetworkReachability`, an `NWPathMonitor` started at launch so the first
+  turn already knows), the turn takes the `.onDeviceASR` route, is
+  transcribed by the on-device model at key-up, and is formatted without the
+  polisher. Only dictation completes offline: a question ends as
+  `noNetwork` ("No network — say “type …” to dictate offline") rather than
+  pretending to be in flight or blaming a provider that was never reached.
+- **Offline question recovery.** An offline turn that is not a dictation keeps
+  its transcribed question unsent in an owner-scoped five-minute recovery.
+  Review opens main Chat and appends it once the composer hydrates its own
+  draft; Copy remains explicit and never sends. The exact recovery and
+  authorization details are in
+  [`desktop-voice-turns.mdx`](../../../docs/desktop-voice-turns.mdx).
+- **Notch presentation.** Listening keeps a persistent `SEND` affordance in
+  the trailing notch lobe. Hands-free listening adds the lock icon and
+  `Locked` accessibility state; the left voice mark remains status-only.
 - A claimed hub turn is **cancelled, never committed**, so the model never
   answers a dictation out loud.
 - A finished turn is journaled as `Typed: <text>` (or `Copied to clipboard:
   <text>`) through the ordinary `recordExchange` on the realtime voice
   surface, so a dictation persists and enters conversation context exactly
-  like a spoken question. The continuity key is derived from the turn.
+  like a spoken question. The continuity key is derived from the turn. The
+  write is awaited before the turn ends (bounded to 3 s; at the bound the
+  write finishes in the background and the miss is logged), so a lifecycle
+  change at turn end cannot drop it.
+- Every dictation close terminates the capture lifecycle exactly once
+  (`terminateVoiceTypingLifecycle`), whatever the outcome, and a
+  backend-transcribed dictation's terminal bookkeeping belongs to that close
+  alone — the STT finalization path does not emit its own first.
+- `voice_typing_dictate` (automation) runs the same pipeline with no voice
+  turn. It is refused while a turn is active and abandoned before delivery if
+  one starts mid-run; the real turn's session state is never touched.
 
 Guards: `Tests/VoiceTypingTests.swift` (parser, session, formatter, polisher
 acceptance and hint filtering, transcriber fallback order, probe schedule,

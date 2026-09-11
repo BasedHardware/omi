@@ -28,12 +28,16 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/NetworkReachability.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTLanguageIdentifier.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DeadlinedOperation.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationFormatter.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationPolisher.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationTranscriber.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/PTTRoutePolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/TextInsertionSink.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeAudioTrim.swift
+  # VoiceTypingChatRecordPolicy.swift is deliberately not claimed here: this
+  # flow's too-short turn never reaches the dictation delivery close path where
+  # its decide(...) runs. That policy is covered by VoiceTypingSilentModeTests.
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeCommandParser.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeSession.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeWakeWordProbeSchedule.swift
@@ -88,6 +92,7 @@ steps:
       name: ptt_start
     expect:
       result.detail.listening: "true"
+      result.detail.screen_evidence: "skipped"
 
   - id: S2
     name: Assert typed turn is recording without anomalies

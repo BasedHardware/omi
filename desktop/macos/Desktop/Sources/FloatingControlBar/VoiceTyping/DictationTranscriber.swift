@@ -24,10 +24,6 @@ struct DictationTranscriber: Sendable {
     let source: Source
   }
 
-  enum BackendFailure: Error, Equatable {
-    case timedOut
-  }
-
   /// How long the backend gets before the on-device model takes the turn. The
   /// user is holding nothing and watching nothing; a paste that lands late is
   /// a paste the user has already given up on.
@@ -43,40 +39,32 @@ struct DictationTranscriber: Sendable {
   var didFallBack: @Sendable (String) async -> Void = { _ in }
   var backendTimeout: TimeInterval = DictationTranscriber.defaultBackendTimeout
 
+  /// Nil when nothing could transcribe the audio — or when the calling task
+  /// was cancelled, in which case no fallback is tried either: a superseded
+  /// turn must not keep working towards a paste.
   func transcribe(_ audio: Data) async -> Result? {
     guard !audio.isEmpty else { return nil }
     if isOnline {
+      let backend = self.backend
       do {
-        let text = try await Self.withTimeout(backendTimeout, backend, audio)
+        // Enforced at the boundary, not by cooperative cancellation alone: a
+        // request stuck in a token refresh does not get to hold the key-up.
+        let text = try await DeadlinedOperation.run(seconds: backendTimeout) { try await backend(audio) }
         if let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
           return Result(text: text, source: .backend)
         }
         await didFallBack("empty")
-      } catch BackendFailure.timedOut {
+      } catch is CancellationError {
+        return nil
+      } catch DeadlinedOperation.Failure.timedOut {
         await didFallBack("timeout")
       } catch {
         await didFallBack("other")
       }
     }
+    guard !Task.isCancelled else { return nil }
     guard let text = await onDevice(audio), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else { return nil }
     return Result(text: text, source: .onDevice)
-  }
-
-  private static func withTimeout(
-    _ seconds: TimeInterval,
-    _ operation: @escaping @Sendable (Data) async throws -> String?,
-    _ audio: Data
-  ) async throws -> String? {
-    try await withThrowingTaskGroup(of: String?.self) { group in
-      group.addTask { try await operation(audio) }
-      group.addTask {
-        try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-        throw BackendFailure.timedOut
-      }
-      guard let first = try await group.next() else { throw BackendFailure.timedOut }
-      group.cancelAll()
-      return first
-    }
   }
 }

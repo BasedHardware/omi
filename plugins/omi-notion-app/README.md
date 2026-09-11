@@ -123,3 +123,12 @@ When creating/updating the Omi app, use these URLs:
 ## Note on Page Permissions
 
 When users connect their Notion workspace, they must grant access to specific pages. The integration can only access pages that users have explicitly shared with it during the OAuth flow.
+
+## Regression tests
+
+Run `python3 plugins/omi-notion-app/test_main.py` from the repository root.
+The hermetic tests import the production module with framework/storage doubles
+and exercise `get_page` through its real HTTP helper: failed content retrieval
+must return a sanitized tool error retaining the independently retrieved page
+metadata (including archive status), while empty and populated successful reads
+retain their output. No live workspace or credentials are used.

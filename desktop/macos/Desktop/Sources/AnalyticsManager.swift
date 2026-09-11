@@ -167,6 +167,9 @@ class AnalyticsManager {
   var questionTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
   /// Test seam for search events; emitters live in `Analytics/AnalyticsManager+Search.swift`.
   var searchTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  /// Scoped observation of floating-bar PTT terminal telemetry. Nil in
+  /// production; tests install a capture at the same boundary as PostHog.
+  private var floatingBarPTTTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
 
   func setFloatingBarQueryTelemetryCaptureForTests(
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
@@ -178,6 +181,12 @@ class AnalyticsManager {
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
   ) {
     searchTelemetryCaptureForTests = capture
+  }
+
+  func setFloatingBarPTTTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    floatingBarPTTTelemetryCaptureForTests = capture
   }
 
   // MARK: - Initialization
@@ -566,6 +575,30 @@ class AnalyticsManager {
     PostHogManager.shared.setUserProperties(userProperties)
   }
 
+  private var deviceConnectionTelemetryCaptureForTests: (@MainActor (String) -> Void)?
+
+  func setDeviceConnectionTelemetryCaptureForTests(
+    _ capture: (@MainActor (String) -> Void)?
+  ) {
+    deviceConnectionTelemetryCaptureForTests = capture
+  }
+
+  func deviceConnected(device: BtDevice) {
+    let vendor = device.type.analyticsVendorSlug
+    let eventProperties: [String: Any] = [
+      "device_vendor": vendor,
+      "device_type": device.type.rawValue,
+    ]
+    deviceConnectionTelemetryCaptureForTests?("Device Connected")
+    PostHogManager.shared.track("Device Connected", properties: eventProperties)
+    PostHogManager.shared.setUserProperties(["device_vendor": vendor])
+  }
+
+  func deviceDisconnected() {
+    deviceConnectionTelemetryCaptureForTests?("Device Disconnected")
+    PostHogManager.shared.track("Device Disconnected")
+  }
+
   /// Report when ScreenCaptureKit broken state is detected (TCC granted but capture failing).
   func screenCaptureBrokenDetected() {
     guard !Self.isDevBuild else { return }
@@ -827,7 +860,7 @@ class AnalyticsManager {
 
   func chatMessageSent(
     messageLength: Int, hasSelectedAppContext: Bool = false, source: String,
-    countsAsQuestion: Bool = true
+    countsAsQuestion: Bool = true, attemptID: String? = nil
   ) {
     PostHogManager.shared.chatMessageSent(
       messageLength: messageLength, hasSelectedAppContext: hasSelectedAppContext, source: source)
@@ -837,7 +870,7 @@ class AnalyticsManager {
     // question (retries of a failed turn, busy no-op paths) so the one-time
     // prompt trigger counts each logical question exactly once.
     guard countsAsQuestion else { return }
-    questionAsked(surface: .chatWindow, source: source, messageLength: messageLength, attemptID: nil)
+    questionAsked(surface: .chatWindow, source: source, messageLength: messageLength, attemptID: attemptID)
   }
 
   func desktopRatingSubmitted(rating: Int, revision: Int? = nil) {
@@ -1514,11 +1547,13 @@ class AnalyticsManager {
 
   func suggestionFeedbackRecorded(
     verb: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    provenance: InterjectFeedbackProvenance? = nil
   ) {
     if let suggestionIdentity {
       var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
       properties["verb"] = verb
+      appendInterjectFeedbackProvenance(provenance, to: &properties)
       captureSuggestionAssistantTelemetryForTests(
         "Suggestion Feedback Recorded",
         properties: properties
@@ -1526,8 +1561,23 @@ class AnalyticsManager {
     }
     PostHogManager.shared.suggestionFeedbackRecorded(
       verb: verb,
-      suggestionIdentity: suggestionIdentity
+      suggestionIdentity: suggestionIdentity,
+      provenance: provenance
     )
+  }
+
+  private func appendInterjectFeedbackProvenance(
+    _ provenance: InterjectFeedbackProvenance?,
+    to properties: inout [String: Any]
+  ) {
+    guard let provenance else { return }
+    // Owner identity remains in the local owner fence and is never sent as an
+    // analytics property. The opaque delivery/candidate joins are enough to
+    // correlate the event with the bounded JIT receipt.
+    properties["feedback_lane"] = provenance.lane
+    properties["feedback_delivery_id"] = provenance.deliveryID
+    properties["feedback_candidate_id"] = provenance.candidateID
+    properties["feedback_account_generation"] = provenance.accountGeneration
   }
 
   func notificationWillPresent(notificationId: String, title: String) {
@@ -1621,14 +1671,44 @@ class AnalyticsManager {
   ///
   /// The wire property names are deliberately unchanged: existing dashboards and
   /// the PTT quality baseline join on them.
-  func floatingBarPTTEnded(mode: String, committed: Bool, transcriptLength: Int?) {
+  ///
+  /// `turn_kind` classifies the terminal by user intent, not route mechanics:
+  /// `dictation` (the voice-typing pipeline ran, paste succeeded or not),
+  /// `question` (committed or attempted agent answer), or `unknown`
+  /// (cancelled / too-short / silent discard before intent was knowable).
+  /// Deliberately absent from `floating_bar_ptt_started`: a dictation is only
+  /// recognized mid-hold. Optional bounded extras follow the same rule —
+  /// `audioSeconds` collapses into the closed `audio_seconds_bucket` when the
+  /// site already knows the length, and `dictationTranscriber` is the dictation
+  /// pipeline's bounded transcriber id (`route` when the STT route already
+  /// produced the transcript; otherwise `backend_batch_stt` / `on_device_asr`
+  /// from `DictationTranscriber.Source`). No deeper provider split here.
+  func floatingBarPTTEnded(
+    mode: String,
+    committed: Bool,
+    transcriptLength: Int?,
+    turnKind: PTTAttemptLifecycleRecorder.TurnKind = .unknown,
+    audioSeconds: Double? = nil,
+    dictationTranscriber: String? = nil
+  ) {
     var props: [String: Any] = [
       "mode": mode,
       "had_transcript": committed,
+      "turn_kind": turnKind.rawValue,
     ]
     if let transcriptLength {
       props["transcript_length"] = transcriptLength
     }
+    if let audioSecondsBucket = PTTAttemptLifecycleRecorder.AudioSecondsBucket.bucket(fromSeconds: audioSeconds) {
+      props["audio_seconds_bucket"] = audioSecondsBucket.rawValue
+    }
+    if turnKind == .dictation,
+      let dictationTranscriber,
+      ["route", "backend_batch_stt", "on_device_asr"].contains(dictationTranscriber)
+    {
+      props["dictation_transcriber"] = dictationTranscriber
+    }
+    floatingBarPTTTelemetryCaptureForTests?("floating_bar_ptt_ended", props)
     PostHogManager.shared.track("floating_bar_ptt_ended", properties: props)
   }
 

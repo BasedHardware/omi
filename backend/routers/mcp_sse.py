@@ -84,6 +84,7 @@ from utils.mcp_analytics import (
     schedule_mcp_tool_call,
 )
 from utils.observability.api_keys import record_api_key_repairs
+from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 from utils.other.endpoints import (
     cutover_enforcement_enabled,
     enforce_account_cutover_http_access,
@@ -1784,6 +1785,11 @@ async def mcp_authorize_consent(
         if isinstance(e, ValueError):
             return _oauth_error("invalid_request", str(e))
         return _oauth_error("access_denied", "Could not verify Omi sign-in token", status_code=401)
+
+    try:
+        enforce_jit_qa_uid(uid)
+    except JITQAAdmissionError as error:
+        raise HTTPException(status_code=403, detail="account is not admitted to the isolated JIT QA plane") from error
 
     try:
         _, code = await run_blocking(

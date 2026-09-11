@@ -1861,9 +1861,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get openSettings => 'Otvori Postavke';
 
   @override
-  String get wantDifferentName => 'Želiš li da ide sa nečim drugačijim?';
-
-  @override
   String get whatsYourName => 'Koje je tvoje ime?';
 
   @override
@@ -2043,7 +2040,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get memoryDeleted => 'Uspomena Obrisana.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Dio povijesti sjećanja nije dostupan. Prikazuje se dosad primljena povijest.';
 
   @override
   String get undo => 'Vrati Unazad';
@@ -9950,14 +9947,74 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Glasovni profil: $name';
+  }
+
+  @override
+  String get play => 'Reproduciraj';
+
+  @override
+  String get redo => 'Snimi ponovno';
+
+  @override
+  String get answerWithYourVoice => 'Odgovorite glasom:';
+
+  @override
+  String get speechProfileTopicLocation => 'Gdje živite?';
+
+  @override
+  String get speechProfileTopicWork => 'Čime se bavite?';
+
+  @override
+  String get speechProfileTopicGoal => 'Koji je vaš dugoročni cilj?';
+
+  @override
   String get transcriptionNoAudio => 'Transkripcija ne prima zvuk';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Dodirnite + za početak snimanja';
+
+  @override
+  String get chatBlockTask => 'Zadatak';
+
+  @override
+  String get chatBlockGoal => 'Cilj';
+
+  @override
+  String get chatBlockConversation => 'Razgovor';
+
+  @override
+  String get chatBlockMemory => 'Sjećanje';
+
+  @override
+  String get chatBlockQuestion => 'Pitanje';
+
+  @override
+  String get chatBlockOpenInGoals => 'Otvori u Ciljevima';
+
+  @override
+  String get chatBlockOpenConversation => 'Otvori razgovor';
+
+  @override
+  String get chatBlockOpenInMemories => 'Otvori u Sjećanjima';
+
+  @override
+  String get chatBlockUnavailable => 'Više nije dostupno';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Preporučeni sljedeći koraci';
 
   @override
   String get couldNotLoadMemories => 'Nije moguće učitati uspomene';
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Nije moguće učitati graf znanja';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Pretvaranje govora u tekst trenutačno nije dostupno. Provjerite internetsku vezu i postavke prepoznavanja govora na uređaju pa pokušajte ponovno.';
+
+  @override
+  String get processingTakingLonger => 'Još traje — ovo traje duže nego inače.';
 }

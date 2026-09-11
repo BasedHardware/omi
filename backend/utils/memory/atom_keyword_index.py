@@ -41,6 +41,12 @@ logger = logging.getLogger(__name__)
 
 ATOM_KEYWORD_COLLECTION_ENV = "MEMORY_TYPESENSE_COLLECTION"
 MEMORIES_COLLECTION = "canonical_memory_atoms"
+TYPESENSE_PROJECTION_READINESS_REQUIRED_ENV = "MEMORY_TYPESENSE_READINESS_REQUIRED"
+TYPESENSE_PROJECTION_READINESS_COLLECTION_ENV = "MEMORY_TYPESENSE_READINESS_COLLECTION"
+TYPESENSE_PROJECTION_READINESS_SOURCE_SHA_ENV = "MEMORY_TYPESENSE_READINESS_SOURCE_SHA"
+TYPESENSE_PROJECTION_READINESS_COLLECTION = "jit_qa_typesense_readiness"
+TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID = "jit_qa_projection_readiness"
+TYPESENSE_PROJECTION_READINESS_SCHEMA_VERSION = "omi.jit.qa.typesense.readiness.v1"
 _DEFAULT_CATEGORY = "interesting"
 _REQUIRED_SCHEMA_FIELDS = {
     "memory_id",
@@ -109,6 +115,71 @@ class AtomKeywordRebuildReport:
     indexed_count: int = 0
     expected_count: int = 0
     verified: bool = False
+
+
+class TypesenseProjectionNotReady(RuntimeError):
+    """The explicitly gated QA Typesense projection has no trusted readiness epoch."""
+
+
+def _typesense_projection_readiness_required() -> bool:
+    return os.getenv(TYPESENSE_PROJECTION_READINESS_REQUIRED_ENV, "").strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def require_typesense_projection_ready(uid: str) -> None:
+    """Require a live projection readiness epoch before current-ledger search.
+
+    The QA Typesense service uses an ephemeral data directory.  A restarted
+    instance can be healthy while its collection is empty, so the backend
+    consumes a marker written after a complete Firestore rebuild and producer
+    proof, immediately before the real consumer proof that exercises this
+    gate.  A successful qualification still requires the final consumer
+    receipt; a process death in that short interval can leave a rebuild-ready
+    marker without a qualified receipt, so operators must keep QA execution
+    idle while running the proof and retry after an interrupted run.  The
+    marker lives in Typesense itself; therefore
+    a fresh instance fails closed until the rehydration proof writes a new
+    epoch.  Normal services leave the gate unset and retain existing behavior.
+    """
+
+    if not _typesense_projection_readiness_required():
+        return
+    collection_name = os.getenv(TYPESENSE_PROJECTION_READINESS_COLLECTION_ENV, "").strip()
+    if not collection_name:
+        raise TypesenseProjectionNotReady("Typesense projection readiness collection is not configured")
+    try:
+        document = (
+            _typesense_client()
+            .collections[collection_name]
+            .documents[TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID]
+            .retrieve()
+        )
+    except Exception as exc:  # noqa: BLE001 - provider errors are one fail-closed boundary
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker is unavailable") from exc
+    if not isinstance(document, dict):
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker is malformed")
+    if document.get("id") != TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID:
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker has the wrong identity")
+    if document.get("userId") != uid:
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker has the wrong owner")
+    if document.get("readiness_schema_version") != TYPESENSE_PROJECTION_READINESS_SCHEMA_VERSION:
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker has the wrong schema")
+    epoch = document.get("projection_epoch")
+    if not isinstance(epoch, str) or not epoch.strip():
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker has no epoch")
+    expected_source_sha = os.getenv(TYPESENSE_PROJECTION_READINESS_SOURCE_SHA_ENV, "").strip()
+    if expected_source_sha and document.get("source_sha") != expected_source_sha:
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker has the wrong source")
+    try:
+        projection_count = int(document.get("projection_count", 0))
+    except (TypeError, ValueError) as exc:
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker has an invalid count") from exc
+    if projection_count <= 0:
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker has no indexed documents")
 
 
 def is_indexable_long_term_atom(item: MemoryItem) -> bool:

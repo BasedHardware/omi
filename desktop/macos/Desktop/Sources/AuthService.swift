@@ -90,9 +90,9 @@ class AuthService {
   // Keys are defined once in `DefaultsKey` and read/written through the typed
   // `UserDefaults` accessors so a typo is a compile error, not a silent nil.
   //
-  // Keychain service is team+bundle scoped so local Dev / named-bundle builds
-  // cannot poison each other or notarized Beta/Prod (login-keychain password
-  // dialog). See DesktopKeychainStore.scopedService.
+  // Secret-store service is team+bundle scoped so local Dev / named-bundle builds
+  // cannot poison each other or notarized Beta/Prod (keychain on shipped bundles,
+  // file store on developer bundles). See DesktopKeychainStore.scopedService.
   private let authTokenKeychainAccount = "firebase-rest-tokens"
   private var authTokenKeychainService: String {
     DesktopKeychainStore.scopedService(DesktopKeychainStore.legacyAuthTokenService)
@@ -121,11 +121,11 @@ class AuthService {
     var deleteKeychainString: (_ service: String, _ account: String) -> Void
     var recordsFallbackTelemetry: Bool
 
-    // Security invariant: new auth tokens live in the Keychain on EVERY build,
-    // including Sparkle beta. Plaintext UserDefaults fallback is disabled for new
-    // sign-ins. The read path remains only for transactional migration of older
-    // installs: keep that already-existing copy until Keychain read-back plus a
-    // forced refresh commit the new store.
+    // Security invariant: new auth tokens live in DesktopKeychainStore on every
+    // build (login keychain on shipped bundles, file store otherwise). Plaintext
+    // UserDefaults fallback is disabled for new sign-ins. The read path remains
+    // only for transactional migration of older installs: keep that existing
+    // copy until secret-store read-back plus a forced refresh commit the new store.
     nonisolated(unsafe) static let live = TokenStorageHooks(
       usesKeychainTokenStorage: { true },
       allowsUserDefaultsFallback: { false },
@@ -318,6 +318,10 @@ class AuthService {
       }
     }
     let attempt = beginSessionAttempt()
+    // Arm the phase watchdog BEFORE the restore awaits anything: the restore's
+    // own awaits (owner transitions, the token refresh) must not be able to
+    // delay the restoring phase's bounded resolution by delaying the arming.
+    armRestoringPhaseWatchdog(attempt: attempt)
     await restoreAuthState(attempt: attempt)
     // The listener enriches a configured SDK session, but a REST-backed
     // session can still restore and validate without it. Do not make listener
@@ -327,14 +331,34 @@ class AuthService {
     } else {
       log("AuthService: Firebase SDK unavailable; continuing with REST-backed auth")
     }
+  }
 
-    // Timeout: if auth isn't restored within 5 seconds, stop showing loading
-    DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
-      guard let self, self.isSessionAttemptCurrent(attempt) else { return }
-      if AuthState.shared.isRestoringAuth {
-        NSLog("OMI AUTH: Auth restore timed out after 5s, entering recoverable state")
-        AuthState.shared.transition(to: .recoveryRequired)
-      }
+  /// The one guaranteed escape from the restoring phase.
+  ///
+  /// Every fenced exit in the restore flow is silent (`validateRestoredSessionNow`,
+  /// `refreshIdToken`, and the `saveAuthState`/`commitRestoredSession` commits all
+  /// return without a transition when the attempt is no longer current), and any
+  /// newer session attempt — including the restore flow's own invalidation
+  /// branches — defuses an attempt-gated watchdog. Gating on the attempt therefore
+  /// made the watchdog defusable by exactly the interleaving it exists for: three
+  /// dev launches hung in `.restoring` for their whole session with the launch
+  /// attempt superseded and no further auth log after the listener's skip line.
+  /// The phase alone decides now: while the app still reports restoring, the
+  /// watchdog resolves it to the recoverable state (the same landing the old
+  /// watchdog produced whenever it was not defused). A user-driven sign-in that
+  /// is still running defers the resolution via `isLoading`, and a superseded
+  /// launch attempt is named in the log so the next occurrence names its race.
+  func armRestoringPhaseWatchdog(attempt: AuthSessionAttempt, timeout: TimeInterval = 5.0) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { [weak self] in
+      guard let self else { return }
+      guard AuthState.shared.isRestoringAuth, !AuthState.shared.isLoading else { return }
+      let superseded = !self.isSessionAttemptCurrent(attempt)
+      log(
+        "AUTH_WATCHDOG: restoring phase timed out after \(String(format: "%.1f", timeout))s"
+          + (superseded
+            ? " — launch attempt superseded; a newer auth flow never resolved the phase"
+            : " — restore still in flight"))
+      AuthState.shared.transition(to: .recoveryRequired)
     }
   }
 
@@ -1895,11 +1919,11 @@ class AuthService {
   /// the app really uses — so a harness can then relaunch and prove the app refreshes an
   /// expired idToken *without signing the user out*.
   ///
-  /// Why this exists: the tokens moved to the Keychain, so the old harness trick of
+  /// Why this exists: the tokens moved to the secret store, so the old harness trick of
   /// `defaults write <bundle> auth_tokenExpiry -float 1000` now tampers a key the app
   /// no longer reads — the probe silently measured nothing and reported a false
   /// regression. Going through `saveTokens` keeps the seam correct for BOTH backends
-  /// (keychain and the UserDefaults fallback) and is inert if the storage changes again.
+  /// (secret store and the UserDefaults fallback) and is inert if the storage changes again.
   ///
   /// `expiresIn: 0` lands at `now - 300` (saveTokens subtracts the 5-min buffer), i.e.
   /// already expired. Token material never leaves the process — only a redacted status.

@@ -47,7 +47,8 @@ final class FloatingBarNotificationGroundTests: XCTestCase {
       ownerID: "test-owner",
       title: "Couldn't reach Omi",
       message: "Error 502",
-      assistantId: assistantID)
+      assistantId: assistantID,
+      kind: ProactiveNotificationKind.from(assistantId: assistantID))
     return state
   }
 
@@ -55,6 +56,7 @@ final class FloatingBarNotificationGroundTests: XCTestCase {
     FloatingControlBarView(
       window: nil,
       onPlayPause: {},
+      onTogglePushToTalk: {},
       onAskAI: {},
       onHide: {},
       onSendQuery: { _ in },

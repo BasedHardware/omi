@@ -75,7 +75,7 @@ def test_task_integration_crud_default_and_todoist_task_creation(client, auth_he
     assert created.json() == {"success": True, "external_task_id": "todo-123", "error": None}
     assert len(requests) == 1
     request = requests[0]
-    assert str(request.url) == "https://api.todoist.com/rest/v2/tasks"
+    assert str(request.url) == "https://api.todoist.com/api/v1/tasks"
     assert request.headers["authorization"] == "Bearer todoist-token"
     payload = json.loads(request.content)
     assert payload["content"] == "E2E task"

@@ -1858,9 +1858,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get openSettings => 'Ava seaded';
 
   @override
-  String get wantDifferentName => 'Soovite kasutada muud nime?';
-
-  @override
   String get whatsYourName => 'Mis on teie nimi?';
 
   @override
@@ -2041,7 +2038,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get memoryDeleted => 'Mälestus kustutatud.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Osa mälestuste ajaloost pole saadaval. Kuvatakse seni saadud ajalugu.';
 
   @override
   String get undo => 'Tühista';
@@ -9908,14 +9905,74 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name: hääleprofiil';
+  }
+
+  @override
+  String get play => 'Esita';
+
+  @override
+  String get redo => 'Salvesta uuesti';
+
+  @override
+  String get answerWithYourVoice => 'Vasta oma häälega:';
+
+  @override
+  String get speechProfileTopicLocation => 'Kus sa elad?';
+
+  @override
+  String get speechProfileTopicWork => 'Mis tööd sa teed?';
+
+  @override
+  String get speechProfileTopicGoal => 'Mis on sinu pikaajaline eesmärk?';
+
+  @override
   String get transcriptionNoAudio => 'Transkriptsioon ei saa heli';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Salvestamise alustamiseks puuduta +';
+
+  @override
+  String get chatBlockTask => 'Ülesanne';
+
+  @override
+  String get chatBlockGoal => 'Eesmärk';
+
+  @override
+  String get chatBlockConversation => 'Vestlus';
+
+  @override
+  String get chatBlockMemory => 'Mälestus';
+
+  @override
+  String get chatBlockQuestion => 'Küsimus';
+
+  @override
+  String get chatBlockOpenInGoals => 'Ava eesmärkides';
+
+  @override
+  String get chatBlockOpenConversation => 'Ava vestlus';
+
+  @override
+  String get chatBlockOpenInMemories => 'Ava mälestustes';
+
+  @override
+  String get chatBlockUnavailable => 'Pole enam saadaval';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Soovitatud järgmised sammud';
 
   @override
   String get couldNotLoadMemories => 'Mälestusi ei õnnestunud laadida';
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Teadmiste graafi ei õnnestunud laadida';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Kõne tekstiks teisendamine pole praegu saadaval. Kontrolli internetiühendust ja seadme kõnetuvastuse seadeid ning proovi uuesti.';
+
+  @override
+  String get processingTakingLonger => 'Ikka käimas — see võtab kauem aega kui tavaliselt.';
 }

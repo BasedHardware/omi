@@ -1848,9 +1848,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get openSettings => 'Åbn indstillinger';
 
   @override
-  String get wantDifferentName => 'Vil du have et andet navn?';
-
-  @override
   String get whatsYourName => 'Hvad hedder du?';
 
   @override
@@ -2025,7 +2022,8 @@ class AppLocalizationsDa extends AppLocalizations {
   String get memoryDeleted => 'Hukommelse slettet';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Noget af mindehistorikken er ikke tilgængeligt. Viser den historik, der er modtaget indtil nu.';
 
   @override
   String get undo => 'Fortryd';
@@ -9898,14 +9896,74 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Stemmeprofil for $name';
+  }
+
+  @override
+  String get play => 'Afspil';
+
+  @override
+  String get redo => 'Optag igen';
+
+  @override
+  String get answerWithYourVoice => 'Svar med din stemme:';
+
+  @override
+  String get speechProfileTopicLocation => 'Hvor bor du?';
+
+  @override
+  String get speechProfileTopicWork => 'Hvad arbejder du med?';
+
+  @override
+  String get speechProfileTopicGoal => 'Hvad er dit langsigtede mål?';
+
+  @override
   String get transcriptionNoAudio => 'Transskription modtager ikke lyd';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Tryk på + for at starte optagelsen';
+
+  @override
+  String get chatBlockTask => 'Opgave';
+
+  @override
+  String get chatBlockGoal => 'Mål';
+
+  @override
+  String get chatBlockConversation => 'Samtale';
+
+  @override
+  String get chatBlockMemory => 'Minde';
+
+  @override
+  String get chatBlockQuestion => 'Spørgsmål';
+
+  @override
+  String get chatBlockOpenInGoals => 'Åbn i Mål';
+
+  @override
+  String get chatBlockOpenConversation => 'Åbn samtale';
+
+  @override
+  String get chatBlockOpenInMemories => 'Åbn i Minder';
+
+  @override
+  String get chatBlockUnavailable => 'Ikke længere tilgængelig';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Anbefalede næste trin';
 
   @override
   String get couldNotLoadMemories => 'Kunne ikke indlæse minder';
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Kunne ikke indlæse vidensgrafen';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Tale til tekst er ikke tilgængelig lige nu. Kontrollér din internetforbindelse og enhedens indstillinger for talegenkendelse, og prøv igen.';
+
+  @override
+  String get processingTakingLonger => 'Arbejder stadig — det tager længere end normalt.';
 }

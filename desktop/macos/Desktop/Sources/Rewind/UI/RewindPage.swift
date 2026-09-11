@@ -483,7 +483,7 @@ struct RewindPage: View {
         QuerySearchBar(
           text: $viewModel.searchQuery,
           accessibilityID: "rewind-search-field",
-          placeholder: "Search screen history…",
+          placeholder: "Search rewind",
           focus: $isSearchFocused, searchSurface: .rewind
         )
         .onChange(of: viewModel.searchQuery) { _, query in
@@ -609,12 +609,16 @@ struct RewindPage: View {
     .help(captureStateHelp)
   }
 
+  /// The knob shows the setting (right = capture enabled); the label shows reality.
+  /// "Off" therefore only ever appears next to a left knob — when capture is enabled
+  /// but health reports it not flowing, the label names the failure instead, or the
+  /// control reads as contradicting itself (red pill, knob right, "Capture Off").
   private var captureStateLabel: String {
     switch screenCaptureHealth {
     case .active: return "Capture On"
     case .temporarilyUnavailable: return "Capture Paused"
     case .recovering: return "Capture Recovering"
-    case .stopped: return "Capture Off"
+    case .stopped: return isMonitoring ? "Capture Stopped" : "Capture Off"
     }
   }
 
@@ -725,7 +729,8 @@ struct RewindPage: View {
       frameDisplay
         .frame(maxHeight: .infinity)
 
-      // Timeline and controls at bottom
+      // The picture's own controls, then the track
+      stageControls
       bottomControls
     }
   }
@@ -850,7 +855,8 @@ struct RewindPage: View {
       frameDisplay
         .frame(maxHeight: .infinity)
 
-      // Timeline and controls
+      // The picture's own controls, then the track
+      stageControls
       bottomControls
     }
   }
@@ -862,8 +868,7 @@ struct RewindPage: View {
   private func searchField(showResultsCount: Bool = false) -> some View {
     RewindSearchBar(
       query: $viewModel.searchQuery,
-      placeholder: brainDestination == nil
-        ? RewindSearchMetrics.placeholder : "Search screen history…",
+      placeholder: "Search rewind",
       isSearching: viewModel.isSearching,
       countLabel: showResultsCount && viewModel.activeSearchQuery != nil
         ? RewindSearchResultsPanel.countLabel(
@@ -1015,9 +1020,11 @@ struct RewindPage: View {
               }
             }
             .clipShape(frameShape)
-            // A border keyed to the app the frame belongs to, so the picture and its segment on the
-            // track are visibly the same stretch of the day.
-            .overlay(frameShape.strokeBorder(frameBorderColor, lineWidth: 2))
+            // A neutral hairline, never the app's palette colour: the track segment already says which
+            // app this is, and a coloured ring around a photograph of a screen reads as a selection
+            // state rather than as a frame. The hairline only keeps a white capture from dissolving
+            // into the light glass under it.
+            .overlay(frameShape.strokeBorder(Ink.hairline, lineWidth: 1))
             .shadow(color: .black.opacity(0.08), radius: 8)
             // **The stage is a preview, not the frame.** It is fit to whatever the pane happens to
             // be, which on a half-width window is a fraction of a 5120pt capture — enough to
@@ -1052,18 +1059,18 @@ struct RewindPage: View {
     }
     .padding(.horizontal, RewindStageFit.horizontalInset)
     .padding(.vertical, RewindStageFit.verticalInset)
-    .overlay {
-      RewindStageChrome(
-        screenshots: activeScreenshots,
-        currentIndex: currentIndex,
-        // The overlay lands on the *padded* stage, so the chrome re-derives the picture's rect in
-        // that space. It needs the frame's shape to do it.
-        imageSize: currentImage?.size,
-        window: trackWindow,
-        onSelect: { seekToIndex($0) },
-        showsDatePicker: $showDatePicker,
-        datePicker: AnyView(dayPicker))
-    }
+  }
+
+  /// Every control the picture owns — the date pill, the previous/next app circles and the zoom
+  /// cluster — on the glass directly under it. Nothing is overlaid on the picture itself.
+  private var stageControls: some View {
+    RewindStageControlBar(
+      screenshots: activeScreenshots,
+      currentIndex: currentIndex,
+      window: trackWindow,
+      showsDatePicker: $showDatePicker,
+      datePicker: AnyView(dayPicker),
+      onSelect: { seekToIndex($0) })
   }
 
   private var frameShape: RoundedRectangle {
@@ -1081,13 +1088,6 @@ struct RewindPage: View {
     let frames = screenshots.map { QuickLookFrame(screenshot: $0) }
     ScreenFrameQuickLook.shared.present(
       frames, startingAt: frames[currentIndex].id)
-  }
-
-  /// Nil is an honest outcome: with no frame resolved the border is a neutral hairline rather than an
-  /// invented colour.
-  private var frameBorderColor: Color {
-    guard activeScreenshots.indices.contains(currentIndex) else { return Ink.hairline }
-    return RewindPalette.color(forApp: activeScreenshots[currentIndex].appName)
   }
 
   // MARK: - Bottom Controls

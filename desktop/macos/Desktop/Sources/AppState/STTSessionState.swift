@@ -36,13 +36,21 @@ struct STTSessionState: Equatable {
   }
 
   /// Resolve which STT path to use for a new recording.
+  ///
+  /// Pendant BLE used to force cloud for named speaker-ID. Identified basic
+  /// (non-BYOK) on Apple Silicon now matches mic: local, unnamed. Paid,
+  /// unknown, and cache-miss stay on the previous BLE→cloud path.
   func resolveMode(
     audioSource: AudioSource,
     isAppleSilicon: Bool,
-    debugForceCloud: Bool
+    debugForceCloud: Bool,
+    preferLocalOnBasic: Bool = false
   ) -> ResolvedMode {
     let forceCloud = !sessionForceLocal && (debugForceCloud || appRunForceCloud)
-    if audioSource == .bleDevice || !isAppleSilicon || forceCloud {
+    if !isAppleSilicon || forceCloud {
+      return .cloud
+    }
+    if audioSource == .bleDevice && !preferLocalOnBasic {
       return .cloud
     }
     return .local
@@ -51,12 +59,14 @@ struct STTSessionState: Equatable {
   mutating func beginRecording(
     audioSource: AudioSource,
     isAppleSilicon: Bool,
-    debugForceCloud: Bool
+    debugForceCloud: Bool,
+    preferLocalOnBasic: Bool = false
   ) {
     activeMode = resolveMode(
       audioSource: audioSource,
       isAppleSilicon: isAppleSilicon,
-      debugForceCloud: debugForceCloud
+      debugForceCloud: debugForceCloud,
+      preferLocalOnBasic: preferLocalOnBasic
     )
   }
 

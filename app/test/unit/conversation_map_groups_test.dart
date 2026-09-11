@@ -1,16 +1,39 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_map/flutter_map.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/widgets/omi_map_preview.dart';
 import 'package:omi/pages/conversations/conversation_map_page.dart';
 
+class _TestEnvFields implements EnvFields {
+  @override
+  String? get posthogApiKey => null;
+  @override
+  String? get apiBaseUrl => null;
+  @override
+  String? get intercomAppId => null;
+  @override
+  String? get intercomIOSApiKey => null;
+  @override
+  String? get intercomAndroidApiKey => null;
+  @override
+  String? get googleClientId => null;
+  @override
+  String? get googleClientSecret => null;
+  @override
+  bool? get useWebAuth => false;
+  @override
+  bool? get useAuthCustomToken => false;
+}
+
 void main() {
+  // The page preview builds proxy URLs from Env.apiBaseUrl (per-isolate statics).
+  setUpAll(() => Env.init(_TestEnvFields()));
+
   test('omits missing and invalid locations without failing the map', () {
     final groups = buildConversationMapGroups([
       _conversation('missing'),
@@ -103,8 +126,7 @@ void main() {
     expect(find.text('No conversations yet'), findsNothing);
   });
 
-  testWidgets('markers and clustered rows expose stable descriptive keys', (tester) async {
-    _MemoryTileProvider.requests = 0;
+  testWidgets('preview and grouped rows expose stable descriptive keys', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -114,35 +136,23 @@ void main() {
             _conversation('first', latitude: 37.77491, longitude: -122.41941),
             _conversation('second', latitude: 37.77494, longitude: -122.41944),
           ],
-          tileProvider: _MemoryTileProvider(),
         ),
       ),
     );
     await tester.pump();
 
-    final marker = find.byKey(const ValueKey('conversation_map_marker_first%2Csecond'));
-    expect(marker, findsOneWidget);
-    expect(_MemoryTileProvider.requests, greaterThan(0));
+    // One static preview over every cluster anchor, one row per place.
+    expect(find.byKey(const ValueKey('conversation_map_preview')), findsOneWidget);
+    expect(find.byType(OmiMapPreview), findsOneWidget);
+    final group = find.byKey(const ValueKey('conversation_map_marker_first%2Csecond'));
+    expect(group, findsOneWidget);
 
-    await tester.tap(marker);
+    await tester.tap(group);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('conversation_map_cluster_row_first')), findsOneWidget);
     expect(find.byKey(const ValueKey('conversation_map_cluster_row_second')), findsOneWidget);
   });
-}
-
-class _MemoryTileProvider extends TileProvider {
-  static int requests = 0;
-  static final _tile = MemoryImage(
-    base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='),
-  );
-
-  @override
-  ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
-    requests++;
-    return _tile;
-  }
 }
 
 ServerConversation _conversation(String id, {double? latitude, double? longitude, bool discarded = false}) =>

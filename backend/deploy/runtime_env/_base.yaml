@@ -68,7 +68,7 @@ environment_shared:
           value: '{env}'
           category: runtime_identity
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: modulate-velma-2,dg-nova-3,parakeet
           category: stt_policy
         CONVERSATION_SUMMARIZED_APP_IDS:
           config_map:
@@ -623,6 +623,7 @@ environment_shared:
       notifications-job:
         flags:
           --task-timeout: 3600s
+          --memory: 2Gi
         secrets:
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -647,6 +648,9 @@ environment_shared:
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'false'
             category: memory_rollout
+          DAILY_SUMMARY_SELECTION_MODE:
+            value: legacy
+            category: rollout
           PINECONE_INDEX_NAME:
             category: integrations
           OMI_ENV_STAGE:
@@ -817,6 +821,35 @@ environment_shared:
             category: memory_rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
+      knowledge-ledger-drain-job:
+        flags:
+          --task-timeout: 1200s
+          --max-retries: '1'
+        secrets:
+          ENCRYPTION_SECRET:
+            secret: ENCRYPTION_SECRET
+            version: latest
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
+          POSTHOG_PROJECT_API_KEY:
+            secret: POSTHOG_PROJECT_API_KEY
+            version: latest
+        env:
+          OMI_ENV_STAGE:
+            value: '{env}'
+            category: runtime_identity
+          GOOGLE_CLOUD_PROJECT:
+            value: '{compute_project}'
+          MEMORY_ENABLED:
+            value: 'off'
+            category: memory_rollout
+          KNOWLEDGE_LEDGER_DRAIN_ENABLED:
+            value: 'false'
+            category: memory_rollout
+          KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
+            value: ''
+            category: memory_rollout
       # EXP-001. Ships default-off: both the enable flag and the kill switch
       # must be set deliberately before a single message is sent.
       #

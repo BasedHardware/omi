@@ -1857,9 +1857,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get openSettings => 'সেটিংস খুলুন';
 
   @override
-  String get wantDifferentName => 'অন্য কিছু নাম পেতে চান?';
-
-  @override
   String get whatsYourName => 'আপনার নাম কি?';
 
   @override
@@ -2040,7 +2037,8 @@ class AppLocalizationsBn extends AppLocalizations {
   String get memoryDeleted => 'স্মৃতি মুছে ফেলা হয়েছে।';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'স্মৃতির ইতিহাসের কিছু অংশ পাওয়া যাচ্ছে না। এখন পর্যন্ত পাওয়া ইতিহাস দেখানো হচ্ছে।';
 
   @override
   String get undo => 'পূর্বাবস্থা';
@@ -9919,14 +9917,74 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name-এর ভয়েস প্রোফাইল';
+  }
+
+  @override
+  String get play => 'চালান';
+
+  @override
+  String get redo => 'আবার রেকর্ড করুন';
+
+  @override
+  String get answerWithYourVoice => 'মুখে উত্তর দিন:';
+
+  @override
+  String get speechProfileTopicLocation => 'আপনি কোথায় থাকেন?';
+
+  @override
+  String get speechProfileTopicWork => 'আপনি কী কাজ করেন?';
+
+  @override
+  String get speechProfileTopicGoal => 'আপনার দীর্ঘমেয়াদি লক্ষ্য কী?';
+
+  @override
   String get transcriptionNoAudio => 'ট্রান্সক্রিপশন অডিও গ্রহণ করছে না';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'রেকর্ডিং শুরু করতে + চাপুন';
+
+  @override
+  String get chatBlockTask => 'কাজ';
+
+  @override
+  String get chatBlockGoal => 'লক্ষ্য';
+
+  @override
+  String get chatBlockConversation => 'কথোপকথন';
+
+  @override
+  String get chatBlockMemory => 'স্মৃতি';
+
+  @override
+  String get chatBlockQuestion => 'প্রশ্ন';
+
+  @override
+  String get chatBlockOpenInGoals => 'লক্ষ্যে খুলুন';
+
+  @override
+  String get chatBlockOpenConversation => 'কথোপকথন খুলুন';
+
+  @override
+  String get chatBlockOpenInMemories => 'স্মৃতিতে খুলুন';
+
+  @override
+  String get chatBlockUnavailable => 'আর উপলব্ধ নেই';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'প্রস্তাবিত পরবর্তী পদক্ষেপ';
 
   @override
   String get couldNotLoadMemories => 'স্মৃতি লোড করা যায়নি';
 
   @override
   String get couldNotLoadKnowledgeGraph => 'নলেজ গ্রাফ লোড করা যায়নি';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'এই মুহূর্তে কথাকে লেখায় রূপান্তর করা যাচ্ছে না। আপনার ইন্টারনেট সংযোগ এবং ডিভাইসের কথোপকথন শনাক্তকরণের সেটিংস পরীক্ষা করে আবার চেষ্টা করুন।';
+
+  @override
+  String get processingTakingLonger => 'এখনও কাজ চলছে — এটি স্বাভাবিকের চেয়ে বেশি সময় নিচ্ছে।';
 }

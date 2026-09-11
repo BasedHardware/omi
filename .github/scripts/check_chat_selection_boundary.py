@@ -9,8 +9,14 @@ without bound.
 
 SwiftUI has no type-level API that prevents an ancestor or message renderer
 from installing SelectionOverlay. This deliberately narrow source tripwire
-therefore protects the three authoritative live-transcript files. Behavioral
-resize coverage remains in ChatTimelineContinuityTests.
+therefore protects the authoritative live-transcript files. Behavioral resize
+coverage remains in ChatTimelineContinuityTests.
+
+The bar is on `SelectionOverlay`, not on selecting. The transcript now hosts
+selection through `ChatSelectableProse` — one `NSTextView` per prose block,
+which *is* its own selection and installs no per-`Text` overlay for a parent
+rebuild to thrash. That file is protected here too, so the AppKit path can
+never quietly acquire the SwiftUI one.
 """
 
 from __future__ import annotations
@@ -25,13 +31,15 @@ LIVE_TRANSCRIPT_FILES = (
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift",
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift",
     "desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift",
+    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatSelectableProse.swift",
 )
 MARKDOWN_FILE = LIVE_TRANSCRIPT_FILES[2]
+SELECTION_FILE = LIVE_TRANSCRIPT_FILES[3]
 
 FORBIDDEN_PATTERNS = {
     ".textSelection(.enabled)": (
-        "live chat must not install SwiftUI SelectionOverlay; use the existing copy actions "
-        "or a separate non-live reading surface"
+        "live chat must not install SwiftUI SelectionOverlay; selection belongs to "
+        "ChatSelectableProse, whose NSTextView owns it without one"
     ),
     "textSelectionEnabled": (
         "OmiMarkdown must not expose a native-selection escape hatch"
@@ -57,6 +65,15 @@ def check_sources(sources: Mapping[str, str]) -> list[str]:
     if markdown_source is not None and ".textSelection(.disabled)" not in markdown_source:
         failures.append(
             f"{MARKDOWN_FILE}: OmiMarkdown must explicitly disable inherited native text selection"
+        )
+
+    # The sanctioned remedy has to stay AppKit. An NSTextView owning its own
+    # selection is the whole reason selection is allowed back into the
+    # transcript; a SwiftUI Text here would reopen the failure class.
+    selection_source = sources.get(SELECTION_FILE)
+    if selection_source is not None and "NSTextView" not in selection_source:
+        failures.append(
+            f"{SELECTION_FILE}: transcript selection must be hosted by an NSTextView"
         )
 
     return failures

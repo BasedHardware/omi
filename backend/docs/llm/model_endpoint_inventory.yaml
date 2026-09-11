@@ -246,7 +246,7 @@ surfaces:
   feature: desktop_vertex
   plan_gating: basic_not_entitled
   funding_owner: omi
-  fallback_on_deny: none_unwired
+  fallback_on_deny: http_402
   call_sites:
   - routers/desktop_proxy.py::host:generativelanguage.googleapis.com
   - utils/llm/vertex_pt_routing.py::host:aiplatform.googleapis.com
@@ -257,7 +257,8 @@ surfaces:
     and back to Gemini native in the gateway Vertex adapter
   gateway_lane_capability_needed: desktop vertex lanes with PT pin/overflow and multi-region host policy in VertexGeminiProvider;
     OpenAI-shaped /v1/embeddings with task_type pass-through
-  migration_status: gateway_routed_desktop_vertex; the BFF keeps auth, trial paywall, redis metering, body limits, and model
+  migration_status: gateway_routed_desktop_vertex; the BFF keeps auth, trial paywall, S14 generate/stream
+    plan gate (402 plan_gated via authorize_managed_compute on screen_frame_judge; embedContent ungated), redis metering, body limits, and model
     allowlist; PT pin/overflow/host policy moved into the gateway provider via vertex_pt_routing (no second policy); FEATURE_MODE=off
     keeps the legacy direct Vertex path
   test_guardrail_coverage: backend/tests/unit/test_desktop_proxy.py and backend/tests/unit/test_vertex_pt_routing.py

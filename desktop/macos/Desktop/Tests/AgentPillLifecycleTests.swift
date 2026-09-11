@@ -447,7 +447,6 @@ import XCTest
     XCTAssertFalse(lobeSource.contains("VoiceWaveformBars(isActive: true)"))
     XCTAssertFalse(lobeSource.contains("showingNotchPttHint"))
     XCTAssertTrue(source.contains("pttStatusBanner"))
-    XCTAssertTrue(source.contains("state.isVoiceListening && state.pttHintText.isEmpty"))
     XCTAssertFalse(source.contains("!state.isVoiceFollowUp && !state.showingAIConversation"))
   }
 
@@ -541,7 +540,10 @@ import XCTest
     XCTAssertFalse(responseSource.contains("proxy.scrollTo(\"bottom\", anchor: .bottom)"))
     XCTAssertFalse(viewSource.contains("proxy.scrollTo(\"agentBottom\", anchor: .bottom)"))
     XCTAssertTrue(scrollSource.contains("struct ChatScrollContainer<Content: View>: View"))
-    XCTAssertTrue(scrollSource.contains("UserScrollDetector {"))
+    // The detector is mounted, and mounted with the transcript's own
+    // programmatic-scroll signal — without it a follow-scroll landing under an
+    // open press reads as the reader taking the viewport.
+    XCTAssertTrue(scrollSource.contains("UserScrollDetector(programmaticScroll: programmaticScroll) {"))
     XCTAssertTrue(scrollSource.contains("onScrollSettledAtBottom"))
     XCTAssertTrue(scrollSource.contains("scheduleSettledBottomFollow"))
     XCTAssertTrue(scrollSource.contains("Self.isAtBottom(scrollView)"))
@@ -843,7 +845,8 @@ import XCTest
         ownerID: "owner",
         title: "Replacement notification",
         message: "Must remain visible",
-        assistantId: "test"),
+        assistantId: "test",
+        kind: .functional),
       animated: false)
     scheduler.fire()
 
@@ -941,7 +944,9 @@ import XCTest
     // semantic animated transition.
     XCTAssertTrue(body.contains("if notchModeEnabled {"))
     XCTAssertTrue(body.contains("notchHoverMenuSurfaceSize(agentCount:"))
-    XCTAssertTrue(body.contains(": notchCollapsedSize"))
+    // The collapse lands on the composed closed surface (the single closed
+    // sizing authority), not a bare lobe size derived at the call site.
+    XCTAssertTrue(body.contains(": closedSurfaceSize(usesNotchIsland: true)"))
     XCTAssertTrue(body.contains("animated: false"))
     XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuExpandDuration"))
     XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuCollapseDuration"))
@@ -1581,9 +1586,12 @@ import XCTest
   func testPTTCollapsePreservesGlowPaddingOnLegacyDisplays() throws {
     let source = try floatingControlBarWindowSource()
 
-    // Legacy PTT collapse supplies the bare compact surface to the shared
-    // transition path, which applies the active response/agent glow exactly once.
-    XCTAssertTrue(source.contains("voiceSize = expanded ? Self.voiceBarSize : Self.minBarSize"))
+    // Legacy PTT collapse now lands on the composed closed surface (card ∪
+    // banner ∪ listening island) instead of substituting the bare compact
+    // bar; the shared transition path still applies the active response/agent
+    // glow exactly once on top of whatever size lands.
+    XCTAssertTrue(source.contains("return closedSurfaceSize(usesNotchIsland: usesNotchIsland)"))
+    XCTAssertFalse(source.contains("voiceSize = expanded ? Self.voiceBarSize : Self.minBarSize"))
     XCTAssertTrue(source.contains("let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: size)"))
     XCTAssertTrue(source.contains("guard state.isVoiceResponseGlowActive || collapsedPillAgentGlowActive else"))
   }

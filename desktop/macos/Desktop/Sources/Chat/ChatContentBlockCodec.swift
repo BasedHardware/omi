@@ -420,3 +420,73 @@ enum ChatJSONScalar {
     return nil
   }
 }
+
+/// Field-by-field equality. Hand-written because `questionCard.options` is
+/// `[[String: Any]]`, which cannot synthesize conformance. This exists for
+/// `ChatBubbleIdentity`: SwiftUI diffs every bubble on every transcript pass,
+/// so identity comparison must compare fields — the previous
+/// `ChatContentBlockCodec.comparisonData` term re-encoded both sides of every
+/// unchanged row (a JSON serialization pair per bubble per pass).
+extension ChatContentBlock: Equatable {
+  static func == (lhs: ChatContentBlock, rhs: ChatContentBlock) -> Bool {
+    switch (lhs, rhs) {
+    case (.text(let aId, let aText), .text(let bId, let bText)):
+      return aId == bId && aText == bText
+    case (
+      .toolCall(let aId, let aName, let aStatus, let aUse, let aInput, let aOut),
+      .toolCall(let bId, let bName, let bStatus, let bUse, let bInput, let bOut)
+    ):
+      return aId == bId && aName == bName && aStatus == bStatus && aUse == bUse
+        && aInput == bInput && aOut == bOut
+    case (.thinking(let aId, let aText), .thinking(let bId, let bText)):
+      return aId == bId && aText == bText
+    case (.discoveryCard(let a, let b, let c, let d), .discoveryCard(let e, let f, let g, let h)):
+      return a == e && b == f && c == g && d == h
+    case (
+      .questionCard(let a, let b, let c, let d, let e, let f, let g),
+      .questionCard(let h, let i, let j, let k, let l, let m, let n)
+    ):
+      return a == h && b == i && c == j && d == k && e == l
+        && Self.questionOptionsEqual(f, m) && g == n
+    case (.taskCard(let a, let b), .taskCard(let c, let d)):
+      return a == c && b == d
+    case (.goalLink(let a, let b, let c), .goalLink(let d, let e, let f)):
+      return a == d && b == e && c == f
+    case (.captureLink(let a, let b, let c, let d), .captureLink(let e, let f, let g, let h)):
+      return a == e && b == f && c == g && d == h
+    case (.conversationLink(let a, let b, let c, let d), .conversationLink(let e, let f, let g, let h)):
+      return a == e && b == f && c == g && d == h
+    case (.memoryLink(let a, let b, let c), .memoryLink(let d, let e, let f)):
+      return a == d && b == e && c == f
+    case (.memoryReviewCard(let a, let b, let c, let d), .memoryReviewCard(let e, let f, let g, let h)):
+      return a == e && b == f && c == g && d == h
+    case (.citation(let aId, let aRef), .citation(let bId, let bRef)):
+      return aId == bId && aRef == bRef
+    case (.followUp(let aId, let aText), .followUp(let bId, let bText)):
+      return aId == bId && aText == bText
+    case (
+      .agentSpawn(let a, let b, let c, let d, let e, let f, let g),
+      .agentSpawn(let h, let i, let j, let k, let l, let m, let n)
+    ):
+      return a == h && b == i && c == j && d == k && e == l && f == m && g == n
+    case (
+      .agentCompletion(let a, let b, let c, let d, let e, let f, let g, let h),
+      .agentCompletion(let i, let j, let k, let l, let m, let n, let o, let p)
+    ):
+      return a == i && b == j && c == k && d == l && e == m && f == n && g == o && h == p
+    default:
+      return false
+    }
+  }
+
+  /// `NSDictionary` deep equality — the same semantics the JSON round-trip
+  /// provided, minus the encode. One deliberate strictness difference: numeric
+  /// literal type flips (1 vs 1.0) now compare unequal where JSON normalized
+  /// them; that can only force an extra re-render, never stale UI.
+  private static func questionOptionsEqual(
+    _ lhs: [[String: Any]], _ rhs: [[String: Any]]
+  ) -> Bool {
+    guard lhs.count == rhs.count else { return false }
+    return zip(lhs, rhs).allSatisfy { ($0 as NSDictionary) == ($1 as NSDictionary) }
+  }
+}

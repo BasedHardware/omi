@@ -105,6 +105,31 @@ def _json_default(obj: object) -> str:
     raise TypeError(f"Type {type(obj)} not serializable")
 
 
+def _dumps(obj: object, **kwargs: Any) -> str:
+    """json.dumps that fails closed on NaN/Infinity instead of writing an invalid JSON token.
+
+    Firestore permits these non-finite float values, but the default json encoder
+    (allow_nan=True) writes them as bare NaN/Infinity/-Infinity tokens, which strict
+    JSON parsers reject -- silently corrupting the completed export.
+    """
+    try:
+        return json.dumps(obj, default=_json_default, allow_nan=False, **kwargs)
+    except ValueError as exc:
+        raise PortabilityExportIncomplete(
+            "retained record contains a non-finite numeric value (NaN/Infinity) that cannot be exported as JSON"
+        ) from exc
+
+
+def _dump(obj: object, fp: IO[str], **kwargs: Any) -> None:
+    """json.dump counterpart of `_dumps` for direct-to-spool writes."""
+    try:
+        json.dump(obj, fp, default=_json_default, allow_nan=False, **kwargs)
+    except ValueError as exc:
+        raise PortabilityExportIncomplete(
+            "retained record contains a non-finite numeric value (NaN/Infinity) that cannot be exported as JSON"
+        ) from exc
+
+
 def _iter_paginated(
     fetch_page: Callable[[int, int], Sequence[Mapping[str, Any]]], *, batch_size: int = 1000
 ) -> Iterator[Mapping[str, Any]]:
@@ -126,7 +151,7 @@ def _yield_json_array(items: Iterable[Mapping[str, Any]]) -> Iterator[str]:
         if not first:
             yield ',\n'
         first = False
-        yield '    ' + json.dumps(item, default=_json_default, indent=4)
+        yield '    ' + _dumps(item, indent=4)
     yield '\n  ]'
 
 
@@ -146,7 +171,7 @@ def _spool_export_memories_json(uid: str) -> IO[str]:
             if not first:
                 spool.write(",\n")
             first = False
-            spool.write("    " + json.dumps(memory.model_dump(mode="json"), default=_json_default, indent=4))
+            spool.write("    " + _dumps(memory.model_dump(mode="json"), indent=4))
         spool.write("\n  ]")
         spool.seek(0)
         return spool
@@ -249,7 +274,7 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
     yield "{\n"
 
     profile = cast(JsonRecord | None, get_user_profile(uid))
-    yield ('  "profile": ' + json.dumps(profile if profile else {}, default=_json_default, indent=2) + ",\n")
+    yield ('  "profile": ' + _dumps(profile if profile else {}, indent=2) + ",\n")
 
     # Photo manifests can contain base64 image bytes. Spool them independently
     # while conversations stream so account size cannot turn export into an
@@ -265,25 +290,21 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
             if not first:
                 yield ",\n"
             first = False
-            yield "    " + json.dumps(conv, default=_json_default, indent=4)
-            # Do not trust the marker alone: legacy conversations may have a
-            # photo subcollection without ``has_photos``.
-            conversation_id = str(conv.get("id") or "")
-            if conversation_id:
-                for photo in conversations_db.get_conversation_photos(uid, conversation_id) or []:
-                    if not isinstance(photo, Mapping):
-                        continue
-                    if photo_count:
-                        photo_spool.write(",\n")
-                    photo_spool.write("    ")
-                    json.dump(
-                        _export_photo_manifest(uid, conversation_id, photo, require_bytes=False),
-                        photo_spool,
-                        default=_json_default,
-                        indent=4,
-                    )
-                    photo_count += 1
+            yield "    " + _dumps(conv, indent=4)
         yield "\n  ],\n"
+
+        for conversation_id, photo in conversations_db.iter_all_conversation_photos(uid):
+            if not isinstance(photo, Mapping):
+                continue
+            if photo_count:
+                photo_spool.write(",\n")
+            photo_spool.write("    ")
+            _dump(
+                _export_photo_manifest(uid, str(conversation_id), photo, require_bytes=False),
+                photo_spool,
+                indent=4,
+            )
+            photo_count += 1
 
         if photo_count:
             yield '  "conversation_photo_manifest": [\n'
@@ -373,7 +394,7 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
     yield '  },\n'
 
     people = cast(Sequence[Mapping[str, Any]], get_people(uid))
-    yield '  "people": ' + json.dumps(people, default=_json_default, indent=2) + ",\n"
+    yield '  "people": ' + _dumps(people, indent=2) + ",\n"
 
     yield '  "action_items": '
     yield from _yield_json_array(
@@ -413,7 +434,7 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
         if not first:
             yield ",\n"
         first = False
-        yield "    " + json.dumps(msg, default=_json_default, indent=4)
+        yield "    " + _dumps(msg, indent=4)
     yield "\n  ]\n"
 
     yield "}\n"

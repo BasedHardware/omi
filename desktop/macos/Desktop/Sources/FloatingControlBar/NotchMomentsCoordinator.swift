@@ -167,6 +167,7 @@ final class NotchMomentsCoordinator {
       title: title,
       message: message,
       assistantId: assistantId,
-      sound: .none)
+      sound: .none,
+      kind: ProactiveNotificationKind.from(assistantId: assistantId))
   }
 }

@@ -43,6 +43,10 @@ struct SettingsSearchItem: Identifiable {
       name: "Reset Window Size", subtitle: "Restore the default window dimensions",
       keywords: ["resize", "window", "default size"], section: .general, icon: "gearshape",
       settingId: "general.fontsize"),
+    SettingsSearchItem(
+      name: "Transparency", subtitle: "How much of the desktop shows through the glass",
+      keywords: ["glass", "transparent", "opacity", "opaque", "blur", "see-through", "translucent"],
+      section: .general, icon: "circle.lefthalf.filled", settingId: "general.transparency"),
 
     // Rewind
     SettingsSearchItem(
@@ -105,6 +109,11 @@ struct SettingsSearchItem: Identifiable {
       name: "Local VAD Gate", subtitle: "Skip silence to reduce transcription cost",
       keywords: ["vad", "silence", "gate", "cost", "deepgram"], section: .transcription,
       icon: "waveform", settingId: "transcription.vadgate"),
+    SettingsSearchItem(
+      name: "Silent Type", subtitle: "Keeps what you dictate with Omi Type out of the chat",
+      keywords: ["silent", "type", "dictation", "voice typing", "private", "chat context"],
+      section: .transcription,
+      icon: "keyboard", settingId: "transcription.silenttype"),
 
     // Notifications
     SettingsSearchItem(
@@ -487,11 +496,12 @@ struct SettingsSidebar: View {
         .foregroundColor(isSearchFocused ? Ink.accent : Ink.secondary)
         .omiAnimation(.easeInOut(duration: 0.15), value: isSearchFocused)
 
-      TextField("Search settings...", text: $searchQuery)
+      TextField("Search", text: $searchQuery)
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.primary)
         .focused($isSearchFocused)
+        .straysTypingHere($isSearchFocused)
 
       if !searchQuery.isEmpty {
         Button {

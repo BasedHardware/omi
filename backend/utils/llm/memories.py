@@ -1,6 +1,8 @@
-from collections.abc import Callable, Sequence
+import json
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, cast
+from uuid import uuid4
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, field_validator
@@ -149,7 +151,12 @@ def extract_canonical_l1_memory_candidates(
     person_ids = sorted({segment.person_id for segment in segments if segment.person_id})
     people_records = cast(List[Dict[str, Any]], users_db.get_people_by_ids(uid, person_ids)) if person_ids else []
     people = Person.deserialize_many_safe(people_records)
-    content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=people)
+    # Imported here rather than at module load: the renderer pulls in ``database.auth``,
+    # and ``utils.llm.memories`` must stay importable under the stubbed ``database`` package
+    # the memory-validation unit tests install.
+    from utils.conversations.transcript_for_llm import memory_transcript_from_segments
+
+    content = memory_transcript_from_segments(segments, user_name=user_name, people=people)
     if not content or not content.strip():
         return []
 
@@ -616,6 +623,10 @@ Respond with action, supersedes (indices), merged_content (only for merge), and 
 
 
 class DailySweepAgentMemory(BaseModel):
+    about: str = Field(
+        default="",
+        description="Named subject: user for the account owner, otherwise the person name",
+    )
     content: str = Field(description="One durable memory, stated as a standalone fact")
     conversation_ids: List[str] = Field(
         default=[], description="Ids of the conversations this memory came from (at least one)"
@@ -627,6 +638,10 @@ class DailySweepAgentMemory(BaseModel):
     slot: str = Field(
         default="",
         description="Snake_case standing-attribute name when this memory updates one (the ledger supersedes the old value); empty for one-off facts",
+    )
+    duplicate_of: str = Field(
+        default="",
+        description="Ledger memory id from a prior-memory lookup hit this fact merely restates; empty when the fact is new",
     )
 
 
@@ -670,11 +685,21 @@ DAILY_SWEEP_LOOKUP_RESULT_ROWS = 10
 DAILY_SWEEP_LOOKUP_RESULT_CHARACTERS = 400
 
 
-def daily_sweep_phase_b_overhead_characters(max_memory_lookups: int) -> int:
-    """Worst-case characters phase B adds beyond the spine and excerpts."""
+def daily_sweep_phase_b_overhead_characters(
+    max_memory_lookups: int,
+    *,
+    max_candidate_rows: int = DAILY_SWEEP_DRAFT_ROW_LIMIT,
+) -> int:
+    """Worst-case characters phase B adds beyond the spine and excerpts.
 
-    draft = DAILY_SWEEP_DRAFT_ROW_LIMIT * (DAILY_SWEEP_DRAFT_CONTENT_CHARACTERS + DAILY_SWEEP_DRAFT_CITED_IDS * 40)
-    reasons = DAILY_SWEEP_DRAFT_ROW_LIMIT * DAILY_SWEEP_REQUEST_REASON_CHARACTERS
+    ``max_candidate_rows`` is explicit so a tightly bounded qualification run
+    can price the same model path without charging for the production page.
+    Production keeps the historical default.
+    """
+
+    candidate_rows = max(0, min(DAILY_SWEEP_DRAFT_ROW_LIMIT, max_candidate_rows))
+    draft = candidate_rows * (DAILY_SWEEP_DRAFT_CONTENT_CHARACTERS + DAILY_SWEEP_DRAFT_CITED_IDS * 40)
+    reasons = candidate_rows * DAILY_SWEEP_REQUEST_REASON_CHARACTERS
     lookups = max(0, max_memory_lookups) * (
         DAILY_SWEEP_LOOKUP_QUERY_CHARACTERS + DAILY_SWEEP_LOOKUP_RESULT_ROWS * DAILY_SWEEP_LOOKUP_RESULT_CHARACTERS
     )
@@ -687,6 +712,25 @@ def _neutralize_fences(text: str) -> str:
     return text.replace("```", "'''")
 
 
+def _ledger_lookup_memory_id(row: str) -> str:
+    """Parse the bracketed canonical id the ledger searcher prefixes onto a hit."""
+
+    text = str(row or "").lstrip()
+    if not text.startswith("["):
+        return ""
+    close = text.find("]")
+    if close <= 1:
+        return ""
+    return text[1:close].strip()
+
+
+def _normalized_duplicate_of(value: str) -> str:
+    text = str(value or "").strip()
+    if text.startswith("[") and text.endswith("]") and len(text) > 2:
+        return text[1:-1].strip()
+    return text
+
+
 def _daily_sweep_summaries_block(summary_rows: Sequence[tuple[str, str]]) -> str:
     return "\n".join(f"[{conversation_id}] {_neutralize_fences(text)}" for conversation_id, text in summary_rows)
 
@@ -696,6 +740,42 @@ def _daily_sweep_folder_task(folder_options: Sequence[tuple[str, str]], needs_fo
         return "Folder task: none. folder_assignments must be empty."
     folders = ", ".join(f"{folder_id} ({name})" for folder_id, name in folder_options)
     return _DAILY_SWEEP_FOLDER_TASK.format(unfiled=", ".join(needs_folder_ids), folders=folders)
+
+
+def _daily_sweep_request_body_bytes(
+    model: Any,
+    prompt_value: Any,
+    invoke_kwargs: Mapping[str, Any],
+    *,
+    require_payload_builder: bool = False,
+) -> int:
+    """Measure the JSON body sent by the OpenAI-compatible client.
+
+    The QA gateway's input budget covers the serialized request envelope, not
+    only the rendered prompt. Keep the fallback for scripted/direct test
+    models outside the QA path; a bounded QA invocation must take the exact
+    payload path or fail closed.
+    """
+
+    prompt_text = prompt_value.to_string() if hasattr(prompt_value, "to_string") else str(prompt_value)
+    fallback = len(prompt_text.encode("utf-8"))
+    payload_builder = getattr(model, "_get_request_payload", None)
+    if not callable(payload_builder):
+        if require_payload_builder:
+            raise MemoryExtractionError("daily_sweep_summary_request_serialization")
+        return fallback
+    try:
+        payload = payload_builder(prompt_value, **dict(invoke_kwargs))
+        if not isinstance(payload, Mapping):
+            if require_payload_builder:
+                raise MemoryExtractionError("daily_sweep_summary_request_serialization")
+            return fallback
+        body = {key: value for key, value in payload.items() if key != "extra_headers"}
+        return len(json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+    except (TypeError, ValueError, OverflowError) as error:
+        if require_payload_builder:
+            raise MemoryExtractionError("daily_sweep_summary_request_serialization") from error
+        return fallback
 
 
 def run_daily_sweep_summary_agent(
@@ -712,6 +792,12 @@ def run_daily_sweep_summary_agent(
     max_memory_lookups: int = 4,
     cache_key: Optional[str] = None,
     llm: Optional[Any] = None,
+    max_provider_retries: Optional[int] = None,
+    max_input_tokens: Optional[int] = None,
+    max_output_tokens: Optional[int] = None,
+    jit_run_id: Optional[str] = None,
+    jit_max_spend_micro_usd: Optional[int] = None,
+    dispatch_evidence: Optional[MutableMapping[str, Any]] = None,
 ) -> DailySweepAgentPassOutput:
     """Run the bounded two-phase daily agent; raises MemoryExtractionError on failure.
 
@@ -740,9 +826,87 @@ def run_daily_sweep_summary_agent(
         'format_instructions': parser.get_format_instructions(),
     }
 
+    if dispatch_evidence is not None:
+        dispatch_evidence.clear()
+        dispatch_evidence.update(
+            {
+                'feature': 'memories',
+                'sdk_max_retries': max_provider_retries,
+                'jit_run_id': jit_run_id,
+                'requests': [],
+            }
+        )
+
     def invoke(prompt: Any, prompt_input: Dict[str, Any]) -> DailySweepAgentPassOutput:
-        model = llm if llm is not None else get_llm('memories', cache_key=cache_key)
-        return parser.invoke(model.invoke(prompt.invoke(prompt_input)))
+        model = llm if llm is not None else get_llm('memories', cache_key=cache_key, max_retries=max_provider_retries)
+        prompt_value = prompt.invoke(prompt_input)
+        request_id = str(uuid4()) if dispatch_evidence is not None else None
+        invoke_kwargs: Dict[str, Any] = {}
+        if max_output_tokens is not None:
+            if isinstance(max_output_tokens, bool) or max_output_tokens <= 0:
+                raise ValueError('daily sweep output token budget is invalid')
+            invoke_kwargs['max_completion_tokens'] = max_output_tokens
+        if jit_run_id is not None:
+            if (
+                request_id is None
+                or jit_max_spend_micro_usd is None
+                or max_input_tokens is None
+                or max_output_tokens is None
+            ):
+                raise ValueError('QA JIT budget requires request, input, output, and spend bounds')
+            invoke_kwargs['extra_headers'] = {
+                'x-omi-request-id': request_id,
+                'x-omi-jit-contract-version': 'jit-cloud-qa-v1',
+                'x-omi-jit-run-id': jit_run_id,
+                'x-omi-jit-max-attempts': '1',
+                'x-omi-jit-max-output-tokens': str(max_output_tokens),
+                'x-omi-jit-max-input-tokens': str(max_input_tokens),
+                'x-omi-jit-max-spend-micro-usd': str(jit_max_spend_micro_usd),
+            }
+        input_bytes = _daily_sweep_request_body_bytes(
+            model,
+            prompt_value,
+            invoke_kwargs,
+            require_payload_builder=jit_run_id is not None,
+        )
+        if max_input_tokens is not None and input_bytes > max_input_tokens:
+            raise MemoryExtractionError('daily_sweep_summary_input_budget')
+        request_evidence: Dict[str, Any] | None = None
+        if dispatch_evidence is not None:
+            request_evidence = {
+                'request_id': request_id,
+                'input_bytes': input_bytes,
+                'max_input_tokens': max_input_tokens,
+                'max_output_tokens': max_output_tokens,
+                'max_spend_micro_usd': jit_max_spend_micro_usd,
+                'usage_observed': False,
+            }
+            casted_requests = dispatch_evidence.setdefault('requests', [])
+            if not isinstance(casted_requests, list):
+                raise RuntimeError('daily sweep dispatch evidence requests is malformed')
+            # Persist the request identity before the provider call. A provider
+            # failure still consumed an admitted request and must remain
+            # joinable without claiming usage or a successful result.
+            casted_requests.append(request_evidence)
+        response = model.invoke(prompt_value, **invoke_kwargs)
+        usage = getattr(response, 'usage_metadata', None)
+        if isinstance(usage, Mapping):
+            numeric = {
+                key: usage[key]
+                for key in ('input_tokens', 'output_tokens', 'total_tokens')
+                if isinstance(usage.get(key), int) and not isinstance(usage.get(key), bool) and usage[key] >= 0
+            }
+            if numeric:
+                if request_evidence is not None:
+                    request_evidence['usage_observed'] = True
+                    request_evidence['usage_tokens'] = numeric
+        # Record the durable request before parsing. A malformed structured
+        # response still consumed a gateway attempt and must remain visible to
+        # the QA consumer instead of disappearing behind parser failure.
+        parsed = parser.invoke(response)
+        return parsed
+
+    lookup_memory_ids: set[str] = set()
 
     def lookup_results_block(lookups: Sequence[Any]) -> str:
         sections = []
@@ -756,6 +920,10 @@ def run_daily_sweep_summary_agent(
                     results = [str(item) for item in memory_searcher(query)]
                 except Exception:
                     results = []
+            for item in results[:DAILY_SWEEP_LOOKUP_RESULT_ROWS]:
+                memory_id = _ledger_lookup_memory_id(item)
+                if memory_id:
+                    lookup_memory_ids.add(memory_id)
             rendered = (
                 "\n".join(
                     f"- {_neutralize_fences(str(item)[:DAILY_SWEEP_LOOKUP_RESULT_CHARACTERS])}"
@@ -783,7 +951,8 @@ def run_daily_sweep_summary_agent(
             ][: max(0, max_transcript_fetches)]
             lookups = list(first.memory_lookups)[: max(0, max_memory_lookups)] if callable(memory_searcher) else []
             if not requests and not lookups:
-                return _sanitized_daily_sweep_output(first, known_ids, max_candidates)
+                sanitized = _sanitized_daily_sweep_output(first, known_ids, max_candidates, lookup_ids=set())
+                return sanitized
             excerpts = "\n\n".join(
                 f"[{request.conversation_id}] "
                 f"({_neutralize_fences(str(request.reason or '')[:DAILY_SWEEP_REQUEST_REASON_CHARACTERS])})\n"
@@ -812,35 +981,48 @@ def run_daily_sweep_summary_agent(
             memory_lookups=[],
             folder_assignments=second.folder_assignments or first.folder_assignments,
         )
-        return _sanitized_daily_sweep_output(merged, known_ids, max_candidates)
+        sanitized = _sanitized_daily_sweep_output(merged, known_ids, max_candidates, lookup_ids=lookup_memory_ids)
+        return sanitized
     except Exception as error:
         logger.error("Daily sweep summary agent failed: %s", type(error).__name__)
         raise MemoryExtractionError("daily_sweep_summary_agent") from error
 
 
 def _sanitized_daily_sweep_output(
-    output: DailySweepAgentPassOutput, known_ids: set, max_candidates: int
+    output: DailySweepAgentPassOutput,
+    known_ids: set,
+    max_candidates: int,
+    *,
+    lookup_ids: Optional[set[str]] = None,
 ) -> DailySweepAgentPassOutput:
     """Drop memories without valid provenance and assignments for unknown rows.
 
     folder_id is only checked for non-emptiness here; membership in the user's
     real folder set is enforced downstream in daily_memory_sweep (both when the
     page is staged and again on apply). Do not reuse this sanitizer anywhere
-    that lacks that second gate.
+    that lacks that second gate. A duplicate_of marker is kept only when it
+    cites a ledger id the model actually saw in lookup results; any other
+    non-empty marker is cleared so the candidate is processed as new.
     """
 
+    allowed_lookup_ids = lookup_ids if lookup_ids is not None else None
     memories = []
     for memory in output.memories:
         cited = [conversation_id for conversation_id in memory.conversation_ids if conversation_id in known_ids]
         content = " ".join((memory.content or "").split())
         if not cited or not content:
             continue
+        duplicate_of = (memory.duplicate_of or "").strip()
+        if allowed_lookup_ids is not None and _normalized_duplicate_of(duplicate_of) not in allowed_lookup_ids:
+            duplicate_of = ""
         memories.append(
             DailySweepAgentMemory(
                 content=content,
                 conversation_ids=cited,
                 basis=memory.basis,
+                about=memory.about,
                 slot=(memory.slot or "").strip()[:64],
+                duplicate_of=duplicate_of,
             )
         )
         if len(memories) >= max(0, max_candidates):
@@ -851,5 +1033,8 @@ def _sanitized_daily_sweep_output(
         if assignment.conversation_id in known_ids and assignment.folder_id.strip()
     ]
     return DailySweepAgentPassOutput(
-        memories=memories, transcript_requests=[], memory_lookups=[], folder_assignments=assignments
+        memories=memories,
+        transcript_requests=[],
+        memory_lookups=[],
+        folder_assignments=assignments,
     )

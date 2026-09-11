@@ -1,44 +1,287 @@
 import AppKit
 import ApplicationServices
 import CoreGraphics
+import CryptoKit
 import Foundation
 
-/// Where dictated text lands. The protocol exists so the session's delivery
-/// rules are testable without touching the clipboard or whatever app the
-/// developer happens to have focused.
+/// An exact field, caret and document revision. Text is hashed, never logged or
+/// persisted; the AX reference only lives for the current capture/undo window.
+struct TextInsertionTarget: Equatable {
+  let elementID: AnyHashable
+  let processID: pid_t
+  let bundleIdentifier: String
+  let selection: NSRange
+  let valueDigest: Data
+  let needsSeparatingSpace: Bool
+
+  func isSameField(as other: Self) -> Bool {
+    elementID == other.elementID && processID == other.processID
+      && bundleIdentifier == other.bundleIdentifier
+  }
+}
+
+struct FocusedDictationText {
+  let elementID: AnyHashable
+  let processID: pid_t
+  let bundleIdentifier: String
+  let value: String
+  let selection: NSRange
+  let canReplaceSelection: Bool
+
+  var target: TextInsertionTarget {
+    let prefix = (value as NSString).substring(to: selection.location)
+    return TextInsertionTarget(
+      elementID: elementID, processID: processID, bundleIdentifier: bundleIdentifier,
+      selection: selection, valueDigest: Self.digest(value),
+      needsSeparatingSpace: selection.length == 0
+        && prefix.last.map(PasteboardTextInsertionSink.needsSeparatingSpace(after:)) == true)
+  }
+
+  static func digest(_ value: String) -> Data { Data(SHA256.hash(data: Data(value.utf8))) }
+}
+
+/// A dispatched AX request can fail or time out after changing the editor.
+/// Only a rejection before dispatch proves that nothing was written.
+enum DictationTextReplacementResult: Equatable {
+  case notAttempted
+  case applied
+  case uncertain
+}
+
+enum TextInsertionResult: Equatable {
+  case inserted
+  /// A paste was dispatched and the editor never showed it landing, so it
+  /// carries no insertion receipt. A paste that *is* read back reports
+  /// `inserted` like any other verified insertion — only its Undo is missing,
+  /// because Cmd-V supplies no inserted range to take back.
+  case pastePosted
+  case notInserted
+  /// Text may already be partly or fully present. Do not copy for a retry.
+  case uncertain
+}
+
+/// All AX mutations are addressed to a captured element, never a generic Undo
+/// command. Injectable so the real validation boundary runs in hermetic tests.
+@MainActor
+protocol DictationTextAccess: AnyObject {
+  func readFocusedText() -> FocusedDictationText?
+  func replaceSelection(_ text: String, in target: TextInsertionTarget) -> DictationTextReplacementResult
+  func select(_ range: NSRange, in target: TextInsertionTarget) -> Bool
+}
+
 @MainActor
 protocol TextInsertionSink: AnyObject {
-  /// Puts `text` at the caret of the focused app in one step. Returns false
-  /// when nothing could be posted, so the caller can fall back to `copy`.
-  func paste(_ text: String) -> Bool
-  /// Leaves `text` on the clipboard for the user to paste themselves.
+  /// Asynchronous because an editor applies an addressed write or a posted
+  /// paste on its own run loop: the insertion is read back once the editor
+  /// has had a bounded moment to apply it, never on the same turn it was
+  /// dispatched.
+  func paste(_ text: String, into target: TextInsertionTarget) async -> TextInsertionResult
   func copy(_ text: String)
-  /// Whether the character just before the caret is part of a word — i.e. the
-  /// dictation is continuing a line, so it needs a separating space first.
-  /// False when there is no caret context to read.
-  func caretFollowsWordCharacter() -> Bool
-  /// Identifies where a paste would land right now — the frontmost
-  /// application. Nil when it cannot be read.
-  func focusTarget() -> String?
+  func focusTarget() -> TextInsertionTarget?
+  /// Receipt availability only. The action must separately validate the editor.
+  var canUndoInsertion: Bool { get }
+  var insertionReceiptDidChange: (() -> Void)? { get set }
+  func undoInsertion() -> Bool
+  func discardInsertionReceipt()
 }
 
 extension TextInsertionSink {
-  func caretFollowsWordCharacter() -> Bool { false }
-  func focusTarget() -> String? { nil }
+  var canUndoInsertion: Bool { false }
+  func undoInsertion() -> Bool { false }
+  func discardInsertionReceipt() {}
 }
 
-/// Delivers text the way a paste does: onto the general pasteboard, then one
-/// ⌘V into whichever application owns keyboard focus, then the previous
-/// clipboard contents back.
-///
-/// Pasting rather than typing keystrokes is what makes a whole paragraph land
-/// at once, in every app: keystroke injection is slow for long text and drops
-/// characters in Electron and Terminal first-responders, and a paste is the
-/// one insertion every text field already handles. The floating bar is a
-/// non-activating panel, so during push-to-talk focus is still the user's own
-/// app — the caret they were last in.
+/// Prefer an addressed AX insertion. Editors without writable selected text
+/// keep their existing paste behavior, gated by the exact target at dispatch.
+/// Only a synchronously verified AX insertion can offer Undo last dictation.
 @MainActor
 final class PasteboardTextInsertionSink: TextInsertionSink {
+  private let access: DictationTextAccess
+  private let now: () -> TimeInterval
+  private let clipboardPaste: ((String, TextInsertionTarget) -> Bool)?
+  private let clipboardCopy: ((String) -> Void)?
+  private let sleepForReceiptExpiry: @MainActor (TimeInterval) async throws -> Void
+  private let sleepForVerification: @MainActor (TimeInterval) async throws -> Void
+  private var receiptExpiryTask: Task<Void, Never>?
+  var insertionReceiptDidChange: (() -> Void)?
+  private struct InsertionReceipt {
+    let target: TextInsertionTarget
+    let insertedRange: NSRange
+    let originalDigest: Data
+    let expiresAt: TimeInterval
+  }
+  private var insertionReceipt: InsertionReceipt?
+
+  init(
+    access: DictationTextAccess = AccessibilityDictationTextAccess(),
+    now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+    clipboardPaste: ((String, TextInsertionTarget) -> Bool)? = nil,
+    clipboardCopy: ((String) -> Void)? = nil,
+    sleepForReceiptExpiry: @escaping @MainActor (TimeInterval) async throws -> Void = { remaining in
+      try await Task.sleep(for: .seconds(remaining))
+    },
+    sleepForVerification: @escaping @MainActor (TimeInterval) async throws -> Void = { interval in
+      try await Task.sleep(for: .seconds(interval))
+    }
+  ) {
+    self.access = access
+    self.now = now
+    self.clipboardPaste = clipboardPaste
+    self.clipboardCopy = clipboardCopy
+    self.sleepForReceiptExpiry = sleepForReceiptExpiry
+    self.sleepForVerification = sleepForVerification
+  }
+
+  deinit { receiptExpiryTask?.cancel() }
+
+  func focusTarget() -> TextInsertionTarget? { access.readFocusedText()?.target }
+
+  func paste(_ text: String, into target: TextInsertionTarget) async -> TextInsertionResult {
+    discardInsertionReceipt()
+    guard !text.isEmpty, let before = access.readFocusedText(), before.target == target else { return .notInserted }
+    let expected = (before.value as NSString).replacingCharacters(in: before.selection, with: text)
+    let caretAfterInsertion = NSRange(
+      location: before.selection.location + (text as NSString).length, length: 0)
+    var addressedWriteWasDropped = false
+    if before.canReplaceSelection {
+      // A reported write failure may be partial. Never retry with Cmd-V or
+      // restore the whole document after attempting an addressed mutation.
+      let replacement = access.replaceSelection(text, in: target)
+      guard replacement != .notAttempted else { return .notInserted }
+      if let after = await settledField(target, showing: expected) {
+        // The exact expected value in the captured field is the insertion.
+        // Where the editor then left the caret is a separate question, and
+        // only the Undo receipt's: an editor that leaves what it inserted
+        // selected, or that parks the caret at the end of the line, has still
+        // inserted it.
+        guard before.selection.length == 0, after.selection == caretAfterInsertion else { return .inserted }
+        installInsertionReceipt(
+          InsertionReceipt(
+            target: after.target,
+            insertedRange: NSRange(location: before.selection.location, length: (text as NSString).length),
+            originalDigest: target.valueDigest, expiresAt: now() + 30))
+        return .inserted
+      }
+      // Chromium answers this write with success and silently drops it.
+      // Measured live against a Chrome textarea: `AXSelectedText` reports as
+      // settable, the write returns `kAXErrorSuccess`, and the value never
+      // changes — while setting the selected *range* on that same element
+      // does take effect, so the element is reachable and the value is not
+      // merely stale. Every browser and Electron editor is on that path, and
+      // the turn ended as an unverified insertion with the dictation lost.
+      //
+      // A field that still holds exactly its captured text, caret and
+      // revision after an *acknowledged* write is proof that no part of it
+      // landed — the one case where falling through to Cmd-V cannot
+      // double-insert. An errored or timed-out reply proves nothing (the
+      // editor may still be processing it) and is never retried.
+      guard replacement == .applied, access.readFocusedText()?.target == target else { return .uncertain }
+      addressedWriteWasDropped = true
+    } else {
+      guard access.readFocusedText()?.target == target else { return .notInserted }
+    }
+    let pasted = clipboardPaste?(text, target) ?? pasteViaClipboard(text, into: target)
+    guard pasted else { return .notInserted }
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "voice_typing", from: "ax_selected_text", to: "clipboard_paste",
+      reason: addressedWriteWasDropped ? "capability_mismatch" : "policy", outcome: .degraded)
+    // Readable and writable are separate grants: an editor that refuses an
+    // addressed write still reports its value, so the same read-back that
+    // verifies a write verifies the Cmd-V. Only a paste that is never seen to
+    // land stays merely dispatched. Undo is still not offered — Cmd-V hands
+    // back no inserted range to take away.
+    return await settledField(target, showing: expected) == nil ? .pastePosted : .inserted
+  }
+
+  /// How long an editor gets to show an insertion before it is doubted, and
+  /// how the wait is spent: ten reads 30ms apart, under a hard elapsed cap.
+  /// Both bounds matter — every read is a synchronous Accessibility round
+  /// trip, so an app whose AX server is slow or wedged spends far more than
+  /// the interval per read, and the count alone would not bound the turn. The
+  /// whole window stays inside the pasteboard restore delay.
+  private static let verificationReads = 10
+  private static let verificationInterval: TimeInterval = 0.03
+  private static let verificationWindow: TimeInterval = 0.4
+
+  /// The captured field once it shows `expected`, or nil if it never does.
+  ///
+  /// Both an addressed AX write and a posted Cmd-V reach the editor
+  /// asynchronously. AppKit fields apply them before the next read, but
+  /// web-backed and Electron editors apply them a run-loop turn or two later,
+  /// and a single immediate read reported those correct insertions as
+  /// unverified — the dictation was in the field while the bar said
+  /// "Insertion unconfirmed". The read is repeated, briefly, before the
+  /// insertion is doubted.
+  private func settledField(
+    _ target: TextInsertionTarget, showing expected: String
+  ) async -> FocusedDictationText? {
+    let deadline = now() + Self.verificationWindow
+    for read in 0..<Self.verificationReads {
+      if read > 0 {
+        guard now() < deadline else { break }
+        try? await sleepForVerification(Self.verificationInterval)
+      }
+      guard let field = access.readFocusedText(), field.target.isSameField(as: target),
+        field.value == expected
+      else { continue }
+      return field
+    }
+    return nil
+  }
+
+  /// Opening an Omi menu can temporarily hide the focused text element. A
+  /// presentation read must not consume the receipt or decide where to edit.
+  var canUndoInsertion: Bool {
+    guard let receipt = insertionReceipt else { return false }
+    return now() < receipt.expiresAt
+  }
+
+  func undoInsertion() -> Bool {
+    guard canUndoInsertion, let receipt = insertionReceipt else { return false }
+    // One shot, including failure: a later retry must never affect a new edit.
+    discardInsertionReceipt()
+    guard let focused = access.readFocusedText(), focused.canReplaceSelection,
+      focused.target == receipt.target,
+      access.select(receipt.insertedRange, in: receipt.target),
+      let selected = access.readFocusedText(), selected.target.isSameField(as: receipt.target),
+      selected.target.valueDigest == receipt.target.valueDigest,
+      selected.selection == receipt.insertedRange,
+      access.replaceSelection("", in: selected.target) != .notAttempted
+    else { return false }
+    guard let after = access.readFocusedText(), after.target.isSameField(as: receipt.target),
+      after.target.valueDigest == receipt.originalDigest,
+      after.selection == NSRange(location: receipt.insertedRange.location, length: 0)
+    else { return false }
+    return true
+  }
+
+  func discardInsertionReceipt() {
+    receiptExpiryTask?.cancel()
+    receiptExpiryTask = nil
+    guard insertionReceipt != nil else { return }
+    insertionReceiptDidChange?()
+    insertionReceipt = nil
+  }
+
+  private func installInsertionReceipt(_ receipt: InsertionReceipt) {
+    discardInsertionReceipt()
+    insertionReceiptDidChange?()
+    insertionReceipt = receipt
+    let sleepForReceiptExpiry = self.sleepForReceiptExpiry
+    let expiresAt = receipt.expiresAt
+    receiptExpiryTask = Task { @MainActor [weak self] in
+      while !Task.isCancelled {
+        guard let remaining = self.map({ expiresAt - $0.now() }) else { return }
+        // The monotonic timestamp remains the authority. An early wake sleeps
+        // the remaining interval; cancellation fences a superseded receipt.
+        guard remaining > 0 else {
+          self?.discardInsertionReceipt()
+          return
+        }
+        do { try await sleepForReceiptExpiry(remaining) } catch { return }
+      }
+    }
+  }
 
   /// How long the focused app gets to read the pasteboard before the previous
   /// contents are put back. Apps read it synchronously on ⌘V; the delay only
@@ -66,7 +309,7 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
   /// that must win.
   private var writtenChangeCount = 0
 
-  func paste(_ text: String) -> Bool {
+  private func pasteViaClipboard(_ text: String, into target: TextInsertionTarget) -> Bool {
     guard !text.isEmpty else { return false }
     let pasteboard = NSPasteboard.general
     // A dictation this sink is still holding is not the user's clipboard —
@@ -89,7 +332,7 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
       Self.restore(previous, to: pasteboard)
       return false
     }
-    guard postCommandV() else {
+    guard access.readFocusedText()?.target == target, postCommandV(to: target.processID) else {
       Self.restore(previous, to: pasteboard)
       return false
     }
@@ -111,55 +354,37 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
 
   func copy(_ text: String) {
     guard !text.isEmpty else { return }
+    if let clipboardCopy {
+      clipboardCopy(text)
+      return
+    }
     let pasteboard = NSPasteboard.general
     pasteboard.clearContents()
     pasteboard.setString(text, forType: .string)
   }
 
-  func focusTarget() -> String? {
-    guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
-    return "\(app.processIdentifier):\(app.bundleIdentifier ?? "")"
+  /// Whether dictation landing after `character` needs a space before it: yes
+  /// after a word or the punctuation that closes one ("sentence." + "Next"),
+  /// no after whitespace or anything that opens what follows — a bracket, a
+  /// quote, a slash, a hyphen, "@". A rule on all non-whitespace put a stray
+  /// space after "(" and after an opening quote.
+  nonisolated static func needsSeparatingSpace(after character: Character) -> Bool {
+    if character.isWhitespace || character.isNewline { return false }
+    if character.isLetter || character.isNumber { return true }
+    return !Self.openers.contains(character)
   }
+  private nonisolated static let openers: Set<Character> = [
+    "(", "[", "{", "<", "\"", "'", "“", "‘", "«", "/", "\\", "-", "–", "—", "_", "@", "#", "$", "€", "£", "~", "`",
+  ]
 
-  /// Reads one character behind the caret through Accessibility. A second
-  /// dictation into the same line landed flush against the first ("voiceI
-  /// think") because nothing knew what the caret was sitting after. Only the
-  /// one character is fetched (`AXStringForRange`), never the document.
-  func caretFollowsWordCharacter() -> Bool {
-    var focusedRef: CFTypeRef?
-    guard
-      AXUIElementCopyAttributeValue(
-        AXUIElementCreateSystemWide(), kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
-      let focusedRef, CFGetTypeID(focusedRef) == AXUIElementGetTypeID()
-    else { return false }
-    let element = unsafeDowncast(focusedRef, to: AXUIElement.self)
-    var rangeRef: CFTypeRef?
-    guard
-      AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
-      let rangeRef, CFGetTypeID(rangeRef) == AXValueGetTypeID()
-    else { return false }
-    let rangeValue = unsafeDowncast(rangeRef, to: AXValue.self)
-    var selection = CFRange()
-    guard AXValueGetValue(rangeValue, .cfRange, &selection), selection.location > 0 else { return false }
-    var previous = CFRange(location: selection.location - 1, length: 1)
-    guard let parameter = AXValueCreate(.cfRange, &previous) else { return false }
-    var textRef: CFTypeRef?
-    guard
-      AXUIElementCopyParameterizedAttributeValue(
-        element, kAXStringForRangeParameterizedAttribute as CFString, parameter, &textRef) == .success,
-      let text = textRef as? String, let character = text.last
-    else { return false }
-    return !character.isWhitespace && !character.isNewline
-  }
-
-  private func postCommandV() -> Bool {
+  private func postCommandV(to processID: pid_t) -> Bool {
     guard let down = CGEvent(keyboardEventSource: source, virtualKey: Self.vKeyCode, keyDown: true),
       let up = CGEvent(keyboardEventSource: source, virtualKey: Self.vKeyCode, keyDown: false)
     else { return false }
     down.flags = .maskCommand
     up.flags = .maskCommand
-    down.post(tap: .cghidEventTap)
-    up.post(tap: .cghidEventTap)
+    down.postToPid(processID)
+    up.postToPid(processID)
     return true
   }
 
@@ -185,5 +410,71 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
       return item
     }
     if !restored.isEmpty { pasteboard.writeObjects(restored) }
+  }
+}
+
+/// AX text support varies by editor. A missing value/range, secure field, or
+/// invalid range means no reliable destination, so dictation falls back to copy.
+@MainActor
+final class AccessibilityDictationTextAccess: DictationTextAccess {
+  func readFocusedText() -> FocusedDictationText? {
+    let systemWide = AXUIElementCreateSystemWide()
+    AXUIElementSetMessagingTimeout(systemWide, 0.2)
+    guard AXIsProcessTrusted(), let app = NSWorkspace.shared.frontmostApplication,
+      let focused = attribute(kAXFocusedUIElementAttribute, of: systemWide),
+      CFGetTypeID(focused) == AXUIElementGetTypeID()
+    else { return nil }
+    let element = unsafeDowncast(focused, to: AXUIElement.self)
+    AXUIElementSetMessagingTimeout(element, 0.2)
+    var pid: pid_t = 0
+    guard AXUIElementGetPid(element, &pid) == .success, pid == app.processIdentifier,
+      let role = attribute(kAXRoleAttribute, of: element) as? String,
+      [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole].contains(role),
+      (attribute(kAXSubroleAttribute, of: element) as? String) != kAXSecureTextFieldSubrole,
+      let value = attribute(kAXValueAttribute, of: element) as? String,
+      value.utf16.count <= 200_000,
+      let rangeRef = attribute(kAXSelectedTextRangeAttribute, of: element),
+      CFGetTypeID(rangeRef) == AXValueGetTypeID()
+    else { return nil }
+    var range = CFRange()
+    guard AXValueGetValue(unsafeDowncast(rangeRef, to: AXValue.self), .cfRange, &range),
+      range.location >= 0, range.length >= 0, range.location <= value.utf16.count,
+      range.length <= value.utf16.count - range.location
+    else { return nil }
+    var writable = DarwinBoolean(false)
+    let canReplace =
+      AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &writable) == .success
+      && writable.boolValue
+    return FocusedDictationText(
+      elementID: AnyHashable(element), processID: pid, bundleIdentifier: app.bundleIdentifier ?? "",
+      value: value, selection: NSRange(location: range.location, length: range.length),
+      canReplaceSelection: canReplace)
+  }
+
+  func replaceSelection(_ text: String, in target: TextInsertionTarget) -> DictationTextReplacementResult {
+    guard readFocusedText()?.target == target else { return .notAttempted }
+    let object = target.elementID.base as AnyObject
+    guard CFGetTypeID(object) == AXUIElementGetTypeID() else { return .notAttempted }
+    let element = unsafeDowncast(object, to: AXUIElement.self)
+    let result = AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString)
+    // Even a timeout may have applied. An unchanged immediate reread is not
+    // proof of no write, because the editor may still be processing the request.
+    return result == .success ? .applied : .uncertain
+  }
+
+  func select(_ range: NSRange, in target: TextInsertionTarget) -> Bool {
+    guard readFocusedText()?.target == target else { return false }
+    var selection = CFRange(location: range.location, length: range.length)
+    guard let value = AXValueCreate(.cfRange, &selection) else { return false }
+    let object = target.elementID.base as AnyObject
+    guard CFGetTypeID(object) == AXUIElementGetTypeID() else { return false }
+    let element = unsafeDowncast(object, to: AXUIElement.self)
+    return AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, value) == .success
+  }
+
+  private func attribute(_ name: String, of element: AXUIElement) -> CFTypeRef? {
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
+    return value
   }
 }

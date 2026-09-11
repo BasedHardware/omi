@@ -34,6 +34,36 @@ enum ChatDailySummaryPresentation {
     calendar: Calendar = .current,
     locale: Locale = .current
   ) -> String? {
+    dateLabel(
+      for: date, now: now, calendar: calendar, locale: locale,
+      olderFormat: "EEE MMM d")
+  }
+
+  /// The dedicated recap page's eyebrow: "Today" / "Yesterday" / the full weekday and date
+  /// ("Wednesday, September 3"). Same arithmetic as `dateLabel`, one format wider — the page is
+  /// the full record, so its date names the day instead of abbreviating it.
+  static func pageDateLabel(
+    for date: String?,
+    now: Date,
+    calendar: Calendar = .current,
+    locale: Locale = .current
+  ) -> String? {
+    dateLabel(
+      for: date, now: now, calendar: calendar, locale: locale,
+      olderFormat: "EEEE, MMMM d")
+  }
+
+  /// The shared day-difference arithmetic behind both labels. The difference is counted in whole
+  /// calendar days, so a summary written just before midnight is still "Yesterday" the next
+  /// morning regardless of DST, and a month boundary is just another day boundary. The older-day
+  /// format is the only thing the two callers disagree on.
+  private static func dateLabel(
+    for date: String?,
+    now: Date,
+    calendar: Calendar,
+    locale: Locale,
+    olderFormat: String
+  ) -> String? {
     guard let day = day(from: date, calendar: calendar) else { return nil }
     let today = calendar.startOfDay(for: now)
     let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: day), to: today).day
@@ -47,7 +77,7 @@ enum ChatDailySummaryPresentation {
       // renders the previous evening.
       formatter.timeZone = calendar.timeZone
       formatter.locale = locale
-      formatter.setLocalizedDateFormatFromTemplate("EEE MMM d")
+      formatter.setLocalizedDateFormatFromTemplate(olderFormat)
       return formatter.string(from: day)
     }
   }
@@ -109,5 +139,83 @@ enum ChatDailySummaryPresentation {
     let headline = (record.headline ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     let text = headline.isEmpty ? "Your day in review" : headline
     return emoji.isEmpty ? text : "\(emoji) \(text)"
+  }
+
+  // MARK: - Section projection
+
+  /// Pure so the "render only what is there" rule is testable without a view: an empty section is
+  /// never drawn. Shared by every surface that renders a recap, so their sections cannot drift.
+  nonisolated static func highlights(in summary: DailySummaryRecord) -> [DailySummaryRecord.Highlight] {
+    (summary.highlights ?? []).filter { !($0.summary ?? "").isEmpty }
+  }
+
+  nonisolated static func actionItems(in summary: DailySummaryRecord) -> [DailySummaryRecord.ActionItem] {
+    (summary.actionItems ?? []).filter { !($0.description ?? "").isEmpty }
+  }
+
+  /// The review rows, and only from `memories_learned`.
+  ///
+  /// Deliberately never falls back to `knowledge_nuggets`: a nugget is LLM prose with no memory
+  /// behind it, so a ✓ on one would mutate nothing and a ✗ would teach extraction nothing. A day
+  /// with no qualifying memory shows no section, which is the honest empty state.
+  nonisolated static func memoriesLearned(in summary: DailySummaryRecord) -> [MemoryReviewItem] {
+    summary.memoriesLearned
+      .filter {
+        // Trimmed, not merely non-empty: a blank-but-present id would render a row whose ✓ / ✗ /
+        // Fix address no memory at all.
+        !$0.memoryID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      }
+      .prefix(MemoryReviewSection.maxRows)
+      .map(MemoryReviewItem.init)
+  }
+
+  /// Identity for a recap's memory-review section.
+  ///
+  /// The section holds one `MemoryReviewCardStore`, and the store captures its rows at init. A
+  /// summary regenerated for the same day keeps its id, so keying on the id alone kept the old
+  /// store alive: new memories never appeared and corrected ones kept the text the record no
+  /// longer contained. Folding the rows in rebuilds the section exactly when they change.
+  nonisolated static func reviewSectionIdentity(
+    summaryID: String, items: [MemoryReviewItem]
+  ) -> String {
+    let rows = items.map { "\($0.memoryID)\u{1F}\($0.content)" }.joined(separator: "\u{1E}")
+    return "memory-review-\(summaryID)\u{1E}\(rows)"
+  }
+
+  // MARK: - Actions
+
+  /// The follow-up affordance's whole action, separated from any view so it is testable: place the
+  /// question in the composer and stop. It never sends — the reader reads the recap, then decides
+  /// whether to ask. `MainChatNavigationRequestStore` is the one prefill seam both shells'
+  /// composers consume; a second path would race the first for the draft.
+  @MainActor
+  static func requestFollowUp(_ question: String) {
+    MainChatNavigationRequestStore.shared.request(draft: question)
+    AnalyticsManager.shared.trackDailySummary(.followUpTapped)
+  }
+
+  // MARK: - Generation failures
+
+  /// The one line a recap writer shows when the server did not produce a record.
+  ///
+  /// The backend's status codes are the contract, and three of them are answers rather than
+  /// failures: 400 is a decline — the day carries no conversation the recap can be written from;
+  /// 409 is another writer (almost always the nightly run) mid-generation; 429 is the spend
+  /// cooldown. Folding those into "Couldn't generate" read as a broken button on exactly the
+  /// days where the button had worked and the honest answer was "nothing recorded yet".
+  /// Anything else — a 5xx, a dropped connection, a decode failure — is `fallback`.
+  static func generationFailureMessage(for error: Error, fallback: String) -> String {
+    guard case APIError.httpError(let statusCode, _) = error else { return fallback }
+    switch statusCode {
+    case 400:
+      return "Nothing to summarize yet — a recap needs a recorded conversation from this day."
+    case 409:
+      return "Already being generated — check back in a moment."
+    case 429:
+      return "Just generated — wait a moment before trying again."
+    default:
+      return fallback
+    }
   }
 }

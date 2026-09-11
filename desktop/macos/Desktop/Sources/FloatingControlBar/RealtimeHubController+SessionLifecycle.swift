@@ -13,6 +13,10 @@ extension RealtimeHubController {
   /// `userInitiated: true` = direct user intent (PTT, launch, input-return);
   /// see `admitWarmRequest` — passive callers cannot clear an away deferral.
   func ensureWarm(userInitiated: Bool = false) {
+    guard !AppBuild.shouldDisableJITQARealtime else {
+      log("RealtimeHub: JIT QA realtime disabled by OMI_JIT_QA_DISABLE_REALTIME")
+      return
+    }
     guard admitWarmRequest(userInitiated: userInitiated) else { return }
     #if DEBUG
       // The local-profile action owns an already-installed hermetic transport.
@@ -114,6 +118,7 @@ extension RealtimeHubController {
     completedAuthorizedRealtimeInvocationIDs.removeAll()
     let terminalStatus = RealtimeExternalRunTerminalPolicy.status(for: reason)
     let errorCode = terminalStatus == .failed ? reason.rawValue : nil
+    let finalText = state.answer.snapshot
     let terminalizationID = UUID()
     let task = Task { @MainActor [weak self] in
       let resolution = await awaitWithTimeout(
@@ -140,7 +145,8 @@ extension RealtimeHubController {
         return await self.terminalizeExternalRun(
           binding: binding,
           terminalStatus: terminalStatus,
-          errorCode: errorCode)
+          errorCode: errorCode,
+          finalText: finalText)
       case .some(.failed(let code)):
         log("RealtimeHub: external run completion failed code=\(code)")
         return ExternalRunTerminalizationResult(
@@ -163,6 +169,7 @@ extension RealtimeHubController {
       ownerID: state.ownerID,
       terminalStatus: terminalStatus,
       errorCode: errorCode,
+      finalText: finalText,
       task: task)
   }
 
@@ -170,6 +177,7 @@ extension RealtimeHubController {
     binding: ExternalSurfaceRunBinding,
     terminalStatus: ExternalSurfaceRunTerminalStatus,
     errorCode: String?,
+    finalText: String?,
     cleanupCapability: RuntimeOwnerTransitionCleanupCapability? = nil
   ) async -> ExternalRunTerminalizationResult {
     let effectiveCleanupCapability =
@@ -182,25 +190,30 @@ extension RealtimeHubController {
           try await ownerBoundaryExternalRunCompletion(
             binding,
             terminalStatus,
+            finalText,
             errorCode,
             effectiveCleanupCapability)
         } else {
-          _ = try await AgentRuntimeProcess.shared.completeExternalSurfaceRun(
+          let completion = try await AgentRuntimeProcess.shared.completeExternalSurfaceRun(
             clientId: Self.externalRunClientID,
             harnessMode: Self.externalRunHarnessMode,
             binding: binding,
             terminalStatus: terminalStatus,
+            finalText: finalText,
             errorCode: errorCode,
             transitionCleanupCapability: effectiveCleanupCapability)
+          try Self.validateExternalRunCompletion(completion, finalText: finalText)
         }
       #else
-        _ = try await AgentRuntimeProcess.shared.completeExternalSurfaceRun(
+        let completion = try await AgentRuntimeProcess.shared.completeExternalSurfaceRun(
           clientId: Self.externalRunClientID,
           harnessMode: Self.externalRunHarnessMode,
           binding: binding,
           terminalStatus: terminalStatus,
+          finalText: finalText,
           errorCode: errorCode,
           transitionCleanupCapability: effectiveCleanupCapability)
+        try Self.validateExternalRunCompletion(completion, finalText: finalText)
       #endif
       return ExternalRunTerminalizationResult(
         binding: binding,
@@ -220,17 +233,35 @@ extension RealtimeHubController {
     }
   }
 
+  nonisolated static func validateExternalRunCompletion(
+    _ completion: ExternalSurfaceRunCompletion,
+    finalText: String?
+  ) throws {
+    // Same normalization the wire uses. Validating on `!= nil` while the wire sent
+    // only non-blank text made a whitespace-only answer demand a persistence receipt
+    // for something that was never sent.
+    guard ExternalSurfaceRunAnswer.normalized(finalText) != nil else { return }
+    if !completion.duplicate && !completion.finalTextPersisted {
+      throw ExternalSurfaceAuthorityError(code: "external_surface_final_text_not_persisted")
+    }
+    if completion.terminalStatus == .completed && !completion.journalMaterialized {
+      throw ExternalSurfaceAuthorityError(code: "external_surface_journal_not_materialized")
+    }
+  }
+
   func trackExternalRunTerminalization(
     id: UUID,
     ownerID: String,
     terminalStatus: ExternalSurfaceRunTerminalStatus,
     errorCode: String?,
+    finalText: String?,
     task: Task<ExternalRunTerminalizationResult, Never>
   ) {
     externalRunTerminalizations[id] = TrackedExternalRunTerminalization(
       ownerID: ownerID,
       terminalStatus: terminalStatus,
       errorCode: errorCode,
+      finalText: finalText,
       task: task)
 
     Task { @MainActor [weak self] in
@@ -257,10 +288,22 @@ extension RealtimeHubController {
   }
 
   func voiceTurnDidTerminate(turnID: VoiceTurnID) {
+    let continuityKey = Self.voiceContinuityKey(for: turnID)
+    let terminal = VoiceTurnCoordinator.shared.model.lastTerminal
+    let terminalForTurn = terminal?.turnID == turnID ? terminal : nil
+    if let key = turnEvidenceLedger.key(turnID: turnID, continuityKey: continuityKey) {
+      // In-flight journal writes and already-admitted producing rows may still
+      // receive the same-ID OCR result. Success without either is not a license.
+      let persistPending =
+        turnPersistenceLedger.pendingContinuityKeys.contains(continuityKey)
+        || streamingJournalWriteLedger.contains(continuityKey: continuityKey)
+      _ = RealtimeTurnEvidenceTerminalPolicy.finish(
+        ledger: turnEvidenceLedger,
+        key: key,
+        persistPending: persistPending)
+    }
     if admittedInputTurnID == turnID { admittedInputTurnID = nil }
-    if let terminal = VoiceTurnCoordinator.shared.model.lastTerminal,
-      terminal.turnID == turnID
-    {
+    if let terminal = terminalForTurn {
       completeExternalRunAuthority(turnID: turnID, reason: terminal.reason)
       if screenEvidence?.descriptor.turnID == turnID {
         clearScreenGrounding(stage: terminal.reason == .success ? "released" : "cancelled")
@@ -373,7 +416,8 @@ extension RealtimeHubController {
         surface: surface,
         ownerID: ownerID,
         continuityKey: continuityKey,
-        terminalReason: revision.terminalReason)
+        terminalReason: revision.terminalReason,
+        answerTextCompleted: revision.answerTextCompleted)
     }
   }
 
@@ -954,11 +998,18 @@ extension RealtimeHubController {
     terminal: VoiceTurnTerminalReason,
     idempotencyKey: String,
     acceptedSpawnOwnerID: String?,
-    delivery: VoiceTurnJournalStatusPolicy.AnswerDelivery = .pending
+    delivery: VoiceTurnJournalStatusPolicy.AnswerDelivery = .pending,
+    answerTextCompleted: Bool? = nil
   ) async -> Bool {
     var journalStatus = VoiceTurnJournalStatusPolicy.status(
       for: terminal, delivery: delivery)
     var terminalReason = journalStatus == .completed ? nil : terminal.rawValue
+    // Whether the journaled row should state that the answer text completed
+    // (only its spoken delivery was cut). Defaults to the caller's capture;
+    // a `.success` write whose answer never drained keeps the sealed-row
+    // revision's `answerTextCompleted: true` below, because that row was
+    // sealed at provider-response-finish.
+    var rowAnswerTextCompleted = answerTextCompleted
     // Delivery re-check at write time: this closure first awaited transcript
     // resolution (bounded by the 20s LID deadline), and the reducer may have
     // terminalized in that window — or even before the funnel was enqueued
@@ -973,6 +1024,7 @@ extension RealtimeHubController {
     {
       journalStatus = revision.status
       terminalReason = revision.terminalReason
+      rowAnswerTextCompleted = revision.answerTextCompleted
     }
     guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
       log("RealtimeHub: refusing voice journal write after authenticated owner changed")
@@ -985,16 +1037,20 @@ extension RealtimeHubController {
     if acceptedSpawnOwnerID == ownerID
       || (kernelOwnsExchange && !streamingJournalWriteLedger.contains(continuityKey: idempotencyKey))
     {
-      return await RealtimeTurnJournalAuthority.persist(
+      let accepted = await RealtimeTurnJournalAuthority.persist(
         turnOwnerID: ownerID,
         acceptedSpawnOwnerID: acceptedSpawnOwnerID,
         kernelOwnsExchange: kernelOwnsExchange,
         refreshAcceptedSpawn: {
           guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
           await FloatingControlBarManager.shared.refreshKernelJournal(surface: surface)
-          return AuthorizedToolExecution.isOwnerCurrent(ownerID)
+          guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+          return await self.persistNativeEvidenceAfterJournalAdmission(
+            ownerID: ownerID, continuityKey: idempotencyKey)
         },
         recordProviderExchange: { false })
+      fenceNativeTurnEvidence(ownerID: ownerID, continuityKey: idempotencyKey)
+      return accepted
     }
 
     switch await finalizeStreamingRealtimeProjection(
@@ -1003,9 +1059,11 @@ extension RealtimeHubController {
       assistantText: assistantText,
       continuityKey: idempotencyKey,
       assistantStatus: journalStatus,
-      terminalReason: terminalReason
+      terminalReason: terminalReason,
+      answerTextCompleted: rowAnswerTextCompleted
     ) {
     case .completed(let accepted):
+      fenceNativeTurnEvidence(ownerID: ownerID, continuityKey: idempotencyKey)
       return accepted
     case .absent, .recordRejected:
       break
@@ -1018,12 +1076,21 @@ extension RealtimeHubController {
       refreshAcceptedSpawn: {
         guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
         await FloatingControlBarManager.shared.refreshKernelJournal(surface: surface)
-        return AuthorizedToolExecution.isOwnerCurrent(ownerID)
+        guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+        return await self.persistNativeEvidenceAfterJournalAdmission(
+          ownerID: ownerID, continuityKey: idempotencyKey)
       },
       recordProviderExchange: {
         guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
         for attempt in 0..<2 {
           guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+          let turnID = Self.turnID(forVoiceContinuityKey: idempotencyKey)
+          let evidence: [ConversationEvidence] =
+            turnID.flatMap { turnID in
+              let key = RealtimeTurnEvidenceLedger.Key(
+                ownerID: ownerID, turnID: turnID, continuityKey: idempotencyKey)
+              return self.turnEvidenceLedger.evidence(for: key).map { [$0] }
+            } ?? []
           let accepted = await FloatingControlBarManager.shared.recordExchange(
             surface: surface,
             ownerID: ownerID,
@@ -1033,9 +1100,29 @@ extension RealtimeHubController {
             continuityKey: idempotencyKey,
             assistantStatus: journalStatus,
             terminalReason: terminalReason,
-            userScreenContext: self.screenContextByContinuityKey[idempotencyKey])
+            answerTextCompleted: rowAnswerTextCompleted,
+            userScreenContext: self.screenContextByContinuityKey[idempotencyKey],
+            userEvidence: evidence)
           guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
-          if accepted { return true }
+          if accepted {
+            if let turnID {
+              let key = RealtimeTurnEvidenceLedger.Key(
+                ownerID: ownerID, turnID: turnID, continuityKey: idempotencyKey)
+              _ = self.turnEvidenceLedger.attachJournalUserTurn(
+                key: key,
+                turnID: KernelTurnProjection.stableTurnID(
+                  continuityKey: idempotencyKey, role: "user"))
+              if let admittedEvidence = self.turnEvidenceLedger.evidence(for: key),
+                evidence.contains(admittedEvidence)
+              {
+                _ = self.turnEvidenceLedger.markEvidencePersisted(key: key)
+              }
+            }
+            let persisted = await self.persistNativeEvidenceAfterJournalAdmission(
+              ownerID: ownerID, continuityKey: idempotencyKey)
+            self.fenceNativeTurnEvidence(ownerID: ownerID, continuityKey: idempotencyKey)
+            return persisted
+          }
           if attempt == 0 { try? await Task.sleep(nanoseconds: 250_000_000) }
         }
         log("RealtimeHub: kernel journal rejected voice turn (code=journal_record_failed)")
@@ -1101,6 +1188,12 @@ extension RealtimeHubController {
     Task { @MainActor [weak self] in
       guard let self else { return }
       let receipt = await self.turnPersistenceLedger.consumeReceipt(for: idempotencyKey)
+      if let key = self.turnEvidenceLedger.key(turnID: turnID, continuityKey: idempotencyKey) {
+        _ = RealtimeTurnEvidenceTerminalPolicy.applyJournalReceipt(
+          ledger: self.turnEvidenceLedger,
+          key: key,
+          accepted: receipt?.accepted == true)
+      }
       guard VoiceTurnCoordinator.shared.activeTurnID == turnID else { return }
       let accepted = receipt?.accepted == true
       guard VoiceTurnCoordinator.shared.activeTurnID == turnID else { return }
@@ -1256,7 +1349,8 @@ extension RealtimeHubController {
               terminal: .interruptedByBargeIn,
               idempotencyKey: turn.idempotencyKey,
               acceptedSpawnOwnerID: turn.acceptedSpawnOwnerID,
-              delivery: turn.answerDelivered ? .delivered : .notDelivered) ?? false
+              delivery: turn.answerDelivered ? .delivered : .notDelivered,
+              answerTextCompleted: turn.answerTextCompleted ? true : nil) ?? false
           }
           return await task.value
         },
