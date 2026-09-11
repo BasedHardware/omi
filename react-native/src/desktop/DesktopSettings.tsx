@@ -98,7 +98,11 @@ function Segmented<Value extends string>({
           accessibilityState={{disabled, selected: value === option}}
           disabled={disabled}
           key={option}
-          onPress={() => onChange(option)}
+          onPress={() => {
+            if (value !== option) {
+              onChange(option);
+            }
+          }}
           style={({pressed}) => [
             styles.segment,
             value === option && styles.segmentActive,

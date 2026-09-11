@@ -121,6 +121,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatEpoch, setChatEpoch] = useState(0);
   const chatMutationSeqRef = useRef(0);
+  // Synchronous in-flight fence for send(). chatBusy is render state, so two
+  // submits in the same tick (composer + button, or a queued duplicate) would
+  // both pass the chatBusy check before React re-renders. The token also
+  // survives a gate transition: the gate clears it so the next session's
+  // composer is never bricked by a retired send still unwinding.
+  const sendInFlightRef = useRef<object | null>(null);
   // Monotonic chat session epoch. Each run of the chat-history effect (a gate
   // transition or a backend plane switch) bumps it, so a send or older-page
   // load that started under a retired session can never write transcript
@@ -238,6 +244,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       setLoadingOlderChat(false);
       setChatHistorySettled(false);
       setActiveGenerationId(null);
+      sendInFlightRef.current = null;
       stableChatMessageIds.clear();
       animatedChatMessageIds.clear();
       return () => {
@@ -249,13 +256,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       setChatHistorySettled(true);
       return () => undefined;
     }
-    // Capture the session this load belongs to. send() bumps mutation so an
-    // in-flight setMessages(page) cannot wipe optimistic rows — but that same
-    // bump must not discard the history page (cursor + prior messages). Always
-    // merge into whatever the session already shows; workspace reload / gate
-    // drop clear messages before bumping the epoch.
+    // Capture the session this load belongs to. Both branches merge into
+    // whatever the session already shows, so a concurrent send's optimistic
+    // rows survive; workspace reload / gate drop clear messages before
+    // bumping the epoch. A send must not suppress this load's settle/error
+    // bookkeeping either, or a failed history read would pin the "Loading
+    // conversation…" state forever.
     const session = chatSessionEpochRef.current;
-    const mutation = chatMutationSeqRef.current;
     loadNewestChatHistory(backend)
       .then(page => {
         if (!active || chatSessionEpochRef.current !== session) {
@@ -274,7 +281,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         if (
           active &&
           chatSessionEpochRef.current === session &&
-          mutation === chatMutationSeqRef.current &&
           onboardingRequired === false
         ) {
           setChatError(chatHistoryErrorCopy(error));
@@ -480,12 +486,20 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const send = async () => {
     const text = draft.trim();
     const backend = omiBackend;
-    if (backend === undefined || backend === null || text === '' || chatBusy) {
+    if (
+      backend === undefined ||
+      backend === null ||
+      text === '' ||
+      chatBusy ||
+      sendInFlightRef.current !== null
+    ) {
       return;
     }
     if (nativeSessionRequired && onboardingRequired !== false) {
       return;
     }
+    const sendToken = {};
+    sendInFlightRef.current = sendToken;
     const session = chatSessionEpochRef.current;
     chatMutationSeqRef.current += 1;
     let admitted = false;
@@ -606,6 +620,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }
       }
     } finally {
+      if (sendInFlightRef.current === sendToken) {
+        sendInFlightRef.current = null;
+      }
       if (
         chatSessionEpochRef.current === session &&
         (!requestStarted || omiRequestRef.current === localMessage.id)

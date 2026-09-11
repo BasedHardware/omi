@@ -105,15 +105,24 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       }
       const backend = omiBackend;
       if (backend === undefined || backend === null) {
+        // Mirror every other outcome writer: retire any in-flight refresh and
+        // keep the ref in sync so pagination/merge sources never read stale
+        // rows from a session whose credentials disappeared.
+        refreshSeqRef.current += 1;
+        refreshPendingRef.current = false;
+        conversationPagePendingRef.current = false;
+        taskPagePendingRef.current = false;
         const unavailable = {
           status: 'error',
           error: desktopBackendConfigurationCopy,
         } as const;
-        setReadOutcomes({
+        const next: DesktopReadOutcomes = {
           conversations: unavailable,
           memories: unavailable,
           tasks: unavailable,
-        });
+        };
+        readOutcomesRef.current = next;
+        setReadOutcomes(next);
         setReadsPhase('unavailable');
         return;
       }
