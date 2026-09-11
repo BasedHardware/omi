@@ -2032,16 +2032,16 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
   // this has no effect on installs that haven't configured a local model.
   const localBaseUrl = process.env.OMI_LOCAL_BASE_URL;
   const localModelId = process.env.OMI_LOCAL_MODEL_ID;
-  // Most local OpenAI-compatible servers (LM Studio, Ollama, etc.) don't
-  // check the key, but pi's openai-completions client requires a
-  // non-empty string or it throws before sending the request.
-  const localApiKey = process.env.OMI_LOCAL_API_KEY || "not-needed";
   if (localBaseUrl && localModelId) {
     await registerLocalProvider(pi, {
       name: "omi-local",
       baseUrl: localBaseUrl,
       modelId: localModelId,
-      apiKey: localApiKey,
+      // Most local OpenAI-compatible servers (LM Studio, Ollama, etc.) don't
+      // check the key, but pi's openai-completions client requires a
+      // non-empty string or it throws before sending the request. Swift
+      // never sets OMI_LOCAL_API_KEY, so there is nothing to read here.
+      apiKey: "not-needed",
     });
   }
 

@@ -3223,12 +3223,11 @@ test("omiProvider: registers omi-local with the resolved contextWindow from the 
   );
 });
 
-test("omiProvider: falls back to a non-empty apiKey placeholder for omi-local", async () => {
+test("omiProvider: registers a non-empty apiKey placeholder for omi-local", async () => {
   await withEnvAsync(
     {
       OMI_LOCAL_BASE_URL: "http://100.100.100.100:1234/v1",
       OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx",
-      OMI_LOCAL_API_KEY: undefined,
     },
     async () => {
       await withFakeFetch(alwaysFailFetch, async () => {
