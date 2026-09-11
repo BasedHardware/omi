@@ -1388,7 +1388,9 @@ def test_oversized_response_ids_are_not_retained_or_reported() -> None:
 def test_gpt_live_observer_emits_on_session_closed() -> None:
     observer = RealtimeRelayObserver(GPT_LIVE_PROVIDER, model='gpt-live-1')
     assert observer.observe_upstream_frame(_frame({'type': 'session.started'})) == ()
-    assert observer.starts == 0
+    # Opening the session is itself a start (billed provider session time), even
+    # before any response output; activity does not double-count it.
+    assert observer.starts == 1
     assert observer.observe_upstream_frame(_frame({'type': 'session.output_audio.delta', 'delta': 'AA=='})) == ()
     assert observer.starts == 1
     turns = observer.observe_upstream_frame(
@@ -1445,6 +1447,34 @@ def test_gpt_live_observer_counts_each_response_on_a_warm_session() -> None:
     closing = observer.observe_upstream_frame(_frame({'type': 'session.closed', 'usage': {}}))
     assert len(closing) == 1
     assert observer.starts == 2
+
+
+def test_gpt_live_session_started_counts_a_session_that_disconnects_before_output() -> None:
+    """Opening the session buys provider session time; a client that disconnects
+    before any output must still be counted for admission (and flushed cancelled)."""
+    observer = RealtimeRelayObserver(GPT_LIVE_PROVIDER, model='gpt-live-1')
+    assert observer.observe_upstream_frame(_frame({'type': 'session.started'})) == ()
+    assert observer.starts == 1
+
+    flushed = observer.flush()
+    assert len(flushed) == 1
+    assert flushed[0].outcome == 'cancelled'
+    assert flushed[0].error_class == 'client_disconnected'
+    assert observer.starts == 1
+
+
+def test_gpt_live_next_response_start_clears_a_stale_interruption() -> None:
+    observer = RealtimeRelayObserver(GPT_LIVE_PROVIDER, model='gpt-live-1')
+    # A barge-in frame before any response is in flight...
+    observer.observe_upstream_frame(_frame({'type': 'session.interrupted'}))
+    # ...must not mark the response that begins afterwards as interrupted.
+    observer.observe_upstream_frame(_frame({'type': 'session.output_transcript.delta', 'delta': 'hi'}))
+    done = observer.observe_upstream_frame(
+        _frame({'type': 'response.event', 'event': {'type': 'response.completed'}})
+    )
+    assert len(done) == 1
+    assert done[0].outcome == OUTCOME_SUCCESS
+    assert done[0].error_class == 'none'
 
 
 def test_default_realtime_models_include_gpt_live() -> None:

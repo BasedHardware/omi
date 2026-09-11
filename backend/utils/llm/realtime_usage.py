@@ -662,6 +662,9 @@ class RealtimeRelayObserver:
             return ()
         if has_activity and not self._gpt_live_started and not self._gpt_live_closed:
             self._gpt_live_started = True
+            # New response start: an interruption belonged to the response that just
+            # ended, so it must not taint this one.
+            self._gpt_live_interrupted = False
             self.starts += 1
         if not has_lifecycle:
             return ()
@@ -669,6 +672,16 @@ class RealtimeRelayObserver:
         if payload is None:
             return ()
         event_type = payload.get('type')
+        if event_type == 'session.started':
+            # Opening the session is a start: the provider has begun billable
+            # session work even if the client disconnects before any output. Count
+            # it for admission (the OpenAI `response.created` / Gemini first-activity
+            # equivalent); `session.closed`/flush then emit the cancelled row.
+            if not self._gpt_live_started and not self._gpt_live_closed:
+                self._gpt_live_started = True
+                self._gpt_live_interrupted = False
+                self.starts += 1
+            return ()
         if event_type == 'session.interrupted':
             self._gpt_live_interrupted = True
             return ()
