@@ -228,7 +228,15 @@ class SharedPreferencesUtil {
   BtDevice get btDevice {
     final String device = getString('btDevice');
     if (device.isEmpty) return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
-    return BtDevice.fromJson(jsonDecode(device));
+    try {
+      final decoded = jsonDecode(device);
+      if (decoded is Map<String, dynamic>) {
+        return BtDevice.fromJson(decoded);
+      }
+    } catch (e) {
+      Logger.debug('Error decoding stored device: $e');
+    }
+    return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
   }
 
   List<BtDevice> get btDevices {
