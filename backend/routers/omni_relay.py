@@ -33,7 +33,10 @@ from utils.llm.realtime_usage import (
     realtime_turn_metadata,
 )
 from utils.observability.fallback import record_fallback
-from utils.other.endpoints import _verify_ws_auth  # type: ignore[reportPrivateUsage]  # shared WS auth helper, intentionally reused cross-module
+from utils.other.endpoints import (  # type: ignore[reportPrivateUsage]  # shared WS auth helpers, intentionally reused cross-module
+    _verify_ws_auth,
+    get_current_user_uid_from_ws_message,
+)
 import database.llm_usage as llm_usage_db
 import database.user_usage as user_usage_db
 import database.users as users_db
@@ -68,6 +71,14 @@ OPENAI_URL = "wss://api.openai.com/v1/realtime?model={model}"
 GPT_LIVE_URL = "wss://api.openai.com/v1/live/sessions"
 OPENAI_DEFAULT_MODEL = DEFAULT_REALTIME_MODELS["openai"]
 GPT_LIVE_DEFAULT_MODEL = DEFAULT_REALTIME_MODELS["gpt_live"]
+
+# Hard cap on a single managed relay socket. Mint (`/v2/realtime/session`) advertises
+# `expires_at` at 30 minutes; the Firebase bearer we receive is not re-validated
+# after the upgrade and the upstream rides the long-lived platform key, so without
+# a server-side deadline a connected socket would keep buying provider time past
+# the advertised lifetime and past any credential/entitlement change. Every
+# provider's mint uses the same 30-minute window, so this applies to all lanes.
+OMNI_RELAY_MAX_SESSION_SECONDS = 30 * 60
 
 
 def _credential_provider(provider: str) -> str:
@@ -245,26 +256,60 @@ async def omni_relay(websocket: WebSocket):
         await websocket.close(code=1013, reason=str(exc)[:120])
         return
 
-    # Manual auth (read the header directly so we control logging and avoid any
-    # WS header-DI surprises). Token first, then BYOK validate, then the gate.
-    # Browsers cannot set Authorization on WebSocket, so managed GPT-Live clients
-    # pass the Omi auth token as ?token= (same Firebase ID token mint echoed).
+    # Manual auth. Clients that can set headers (macOS) authenticate on the
+    # upgrade Authorization header. Browser clients cannot set that header, so
+    # they authenticate in the first WS message exactly like /v4/web/listen:
+    # {"type": "auth", "token": "<Firebase ID token>"}. The token is NEVER read
+    # from the query string — WebSocket request targets (including query strings)
+    # are recorded by the default uvicorn access logger and ingress tooling, so
+    # a token there leaks to anyone with log access.
     authz = websocket.headers.get("authorization")
-    if not authz:
-        query_token = websocket.query_params.get("token")
-        if query_token:
-            authz = f"Bearer {query_token}"
     byok_present = [p for p, h in BYOK_HEADERS.items() if websocket.headers.get(h)]
     logger.info(
-        f"omni relay connect: auth_present={bool(authz)} byok={byok_present} "
+        f"omni relay connect: auth_header={bool(authz)} byok={byok_present} "
         f"provider={websocket.query_params.get('provider')}"
     )
-    try:
-        uid = await run_blocking(critical_executor, _verify_ws_auth, cast(str, authz))
-    except WebSocketException as e:
-        logger.warning(f"omni relay auth rejected: code={e.code} reason={e.reason}")
-        await websocket.close(code=e.code, reason=e.reason or "unauthorized")
-        return
+
+    accepted = False
+    uid: str
+    if authz:
+        try:
+            uid = await run_blocking(critical_executor, _verify_ws_auth, authz)
+        except WebSocketException as e:
+            logger.warning(f"omni relay auth rejected: code={e.code} reason={e.reason}")
+            await websocket.close(code=e.code, reason=e.reason or "unauthorized")
+            return
+    else:
+        # Accept before reading the first frame; the relay pumps were not started
+        # yet, so nothing is forwarded ahead of authentication.
+        await websocket.accept()
+        accepted = True
+        try:
+            first_message = await asyncio.wait_for(websocket.receive(), timeout=5.0)
+        except asyncio.TimeoutError:
+            await websocket.close(code=1008, reason="Auth timeout")
+            return
+        except WebSocketDisconnect:
+            return
+        try:
+            uid = await get_current_user_uid_from_ws_message(cast(dict, first_message), websocket=websocket)
+        except WebSocketException as e:
+            logger.warning(f"omni relay first-message auth rejected: code={e.code} reason={e.reason}")
+            try:
+                await websocket.send_json({"type": "auth_response", "success": False})
+            except Exception:
+                pass
+            await websocket.close(code=e.code, reason=e.reason or "unauthorized")
+            return
+        except Exception as e:
+            logger.warning(f"omni relay first-message auth rejected: {type(e).__name__}")
+            try:
+                await websocket.send_json({"type": "auth_response", "success": False})
+            except Exception:
+                pass
+            await websocket.close(code=1008, reason="Invalid authorization token")
+            return
+        await websocket.send_json({"type": "auth_response", "success": True})
 
     # BYOK: validate forwarded keys (same as /v4/listen). Keys then resolve via get_byok_key.
     byok = extract_byok_from_websocket(websocket)
@@ -290,11 +335,17 @@ async def omni_relay(websocket: WebSocket):
         await websocket.close(code=1008, reason="trial_expired")
         return
 
-    await _relay_entitled(websocket, uid, provider, validated_byok)
+    await _relay_entitled(websocket, uid, provider, validated_byok, accepted=accepted)
 
 
-async def _relay_entitled(websocket: WebSocket, uid: str, provider: str, validated_byok: dict[str, str]) -> None:
-    """The relay past auth and the paywall: quota admission, then the pumps."""
+async def _relay_entitled(
+    websocket: WebSocket, uid: str, provider: str, validated_byok: dict[str, str], *, accepted: bool
+) -> None:
+    """The relay past auth and the paywall: quota admission, then the pumps.
+
+    ``accepted`` is True when the socket was already accepted to read the
+    first-message auth frame; ``_relay_session`` must not accept it twice.
+    """
 
     # Monthly free-tier chat quota: realtime turns count as questions, so they
     # must also be blocked past the cap. Exempt only when THIS session will
@@ -351,13 +402,13 @@ async def _relay_entitled(websocket: WebSocket, uid: str, provider: str, validat
                 logger.info(f"omni relay session limit uid={uid}")
                 await websocket.close(code=1008, reason="session_limit")
                 return
-            await _relay_session(websocket, uid, provider, validated_byok, capped=True)
+            await _relay_session(websocket, uid, provider, validated_byok, capped=True, accepted=accepted)
             return
-    await _relay_session(websocket, uid, provider, validated_byok, capped=False)
+    await _relay_session(websocket, uid, provider, validated_byok, capped=False, accepted=accepted)
 
 
 async def _relay_session(
-    websocket: WebSocket, uid: str, provider: str, validated_byok: dict[str, str], *, capped: bool
+    websocket: WebSocket, uid: str, provider: str, validated_byok: dict[str, str], *, capped: bool, accepted: bool
 ) -> None:
     """An admitted relay session: provider connection, the two pumps, accounting and quota enforcement.
 
@@ -470,7 +521,10 @@ async def _relay_session(
                 logger.warning("omni relay accounting flush failed provider=%s", provider)
 
         quota_stop_reason: str | None = None
-        await websocket.accept()
+        # First-message-auth clients already accepted the socket to read the auth
+        # frame; only the header-auth path accepts here.
+        if not accepted:
+            await websocket.accept()
         try:
             async with websockets.connect(
                 url, extra_headers=headers or None, max_size=None, ping_interval=20, ping_timeout=20
@@ -520,7 +574,19 @@ async def _relay_session(
                 }
                 done: set[asyncio.Task[None]] = set()
                 try:
-                    done, _pending = await asyncio.wait(pumps, return_when=asyncio.FIRST_COMPLETED)
+                    done, _pending = await asyncio.wait(
+                        pumps,
+                        timeout=OMNI_RELAY_MAX_SESSION_SECONDS,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if not done:
+                        # The advertised 30-minute lifetime elapsed with no pump
+                        # finishing. Authentication is only checked at the
+                        # upgrade and the upstream rides the platform key, so
+                        # close the managed socket here rather than let it keep
+                        # buying provider time past `expires_at`.
+                        logger.info(f"omni relay session lifetime reached uid={uid} provider={provider}")
+                        quota_stop_reason = "session_expired"
                 finally:
                     # This handler owns the pumps: whichever way it leaves —
                     # a pump finished, or the handler itself was cancelled
