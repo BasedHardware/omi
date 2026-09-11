@@ -369,26 +369,29 @@ class GeminiStreamingSttSocket implements IPureSocket {
   @override
   Future disconnect() async {
     if (_bufferedBytes > 0 && _status == PureSocketStatus.connected) {
-      final combined = Uint8List(_bufferedBytes);
-      int offset = 0;
-      for (final frame in _frameBuffer) {
-        combined.setRange(offset, offset + frame.length, frame);
-        offset += frame.length;
-      }
-      _frameBuffer.clear();
-      _bufferedBytes = 0;
-
-      Uint8List? pcmData = combined;
+      Uint8List? pcmData;
       if (transcoder != null) {
         try {
-          pcmData = transcoder!.transcodeFrames([combined]);
+          // Keep the original frame list: Opus decodes per packet, so
+          // concatenating frames into one buffer would corrupt the tail.
+          pcmData = transcoder!.transcodeFrames(_frameBuffer);
         } catch (e) {
           // Don't ship un-transcoded bytes tagged as PCM — that produces a corrupted stream.
           // Skip only the tail send; teardown below must still run.
           CustomSttLogService.instance.error('GeminiStreaming', 'Transcode error (flush): $e');
           pcmData = null;
         }
+      } else {
+        final combined = Uint8List(_bufferedBytes);
+        int offset = 0;
+        for (final frame in _frameBuffer) {
+          combined.setRange(offset, offset + frame.length, frame);
+          offset += frame.length;
+        }
+        pcmData = combined;
       }
+      _frameBuffer.clear();
+      _bufferedBytes = 0;
 
       if (pcmData != null) {
         final realtimeInput = {
@@ -468,11 +471,18 @@ class GptLiveStreamingSttSocket implements IPureSocket {
   IPureSocketListener? _listener;
 
   late final SttAudioTimeline _timeline = SttAudioTimeline(sampleRate: sampleRate);
+  /// True once the server confirms `session.started`; audio is buffered, never
+  /// dropped, until then.
   bool _sessionStarted = false;
+  /// True once the `session.start` frame has been written (guards re-send).
+  bool _sessionStartSent = false;
 
   final List<Uint8List> _frameBuffer = [];
   int _bufferedBytes = 0;
   static const int _minBytesBeforeSend = 16000;
+  /// Bound on pre-ack buffering so a provider that never sends `session.started`
+  /// can't grow memory without limit; oldest frames are dropped first.
+  static const int _maxBufferedBytes = 1_920_000;
 
   GptLiveStreamingSttSocket({
     required this.apiKey,
@@ -510,6 +520,7 @@ class GptLiveStreamingSttSocket implements IPureSocket {
 
       _status = PureSocketStatus.connected;
       _sessionStarted = false;
+      _sessionStartSent = false;
       DebugLogManager.logEvent('gpt_live_streaming_connected', {
         'model': model,
         'language': language,
@@ -551,7 +562,7 @@ class GptLiveStreamingSttSocket implements IPureSocket {
   }
 
   Future<void> _sendSessionStart() async {
-    if (_sessionStarted) return;
+    if (_sessionStartSent) return;
 
     final startMessage = {
       'type': 'session.start',
@@ -568,7 +579,7 @@ class GptLiveStreamingSttSocket implements IPureSocket {
 
     try {
       _channel!.sink.add(jsonEncode(startMessage));
-      _sessionStarted = true;
+      _sessionStartSent = true;
       CustomSttLogService.instance.info('GptLive', 'Session start sent');
     } catch (e) {
       CustomSttLogService.instance.error('GptLive', 'Failed to send session.start: $e');
@@ -601,11 +612,23 @@ class GptLiveStreamingSttSocket implements IPureSocket {
 
       if (type == 'session.started') {
         CustomSttLogService.instance.info('GptLive', 'Session started');
+        _sessionStarted = true;
+        // Audio captured during the handshake was buffered, not dropped — send it
+        // now that the provider accepts input.
+        _flushBufferedAudio();
         return;
       }
 
       if (type == 'error') {
-        CustomSttLogService.instance.error('GptLive', 'Server error: ${json['error'] ?? json['message']}');
+        final raw = json['error'] ?? json['message'];
+        final errorMessage = raw is Map
+            ? (raw['message'] ?? raw.toString())
+            : (raw?.toString() ?? 'GPT-Live server error');
+        CustomSttLogService.instance.error('GptLive', 'Server error: $errorMessage');
+        // The socket may stay open after an error frame; surface it so the
+        // composite transcription service can tear down and recover instead of
+        // hanging until the idle timeout.
+        onError(StateError('GPT-Live server error: $errorMessage'), StackTrace.current);
         return;
       }
 
@@ -637,7 +660,7 @@ class GptLiveStreamingSttSocket implements IPureSocket {
 
   @override
   void send(dynamic message) {
-    if (_status != PureSocketStatus.connected || _channel == null || !_sessionStarted) {
+    if (_status != PureSocketStatus.connected || _channel == null) {
       return;
     }
 
@@ -653,8 +676,23 @@ class GptLiveStreamingSttSocket implements IPureSocket {
 
     _frameBuffer.add(audioData);
     _bufferedBytes += audioData.length;
+    // Bound pre-ack buffering; drop oldest frames first.
+    while (_bufferedBytes > _maxBufferedBytes && _frameBuffer.length > 1) {
+      _bufferedBytes -= _frameBuffer.removeAt(0).length;
+    }
 
-    if (_bufferedBytes < _minBytesBeforeSend) {
+    // Wait for `session.started`: the provider rejects audio sent before its
+    // ack, so hold the frames (don't drop) and flush them from _handleMessage.
+    if (!_sessionStarted || _bufferedBytes < _minBytesBeforeSend) {
+      return;
+    }
+
+    _flushBufferedAudio();
+  }
+
+  /// Transcode + send everything buffered. Precondition: `_sessionStarted`.
+  void _flushBufferedAudio() {
+    if (_bufferedBytes == 0 || _channel == null || _status != PureSocketStatus.connected) {
       return;
     }
 
@@ -696,27 +734,30 @@ class GptLiveStreamingSttSocket implements IPureSocket {
 
   @override
   Future disconnect() async {
-    if (_bufferedBytes > 0 && _status == PureSocketStatus.connected) {
-      final combined = Uint8List(_bufferedBytes);
-      int offset = 0;
-      for (final frame in _frameBuffer) {
-        combined.setRange(offset, offset + frame.length, frame);
-        offset += frame.length;
-      }
-      _frameBuffer.clear();
-      _bufferedBytes = 0;
-
-      Uint8List? pcmData = combined;
+    if (_bufferedBytes > 0 && _status == PureSocketStatus.connected && _sessionStarted) {
+      Uint8List? pcmData;
       if (transcoder != null) {
         try {
-          pcmData = transcoder!.transcodeFrames([combined]);
+          // Keep the original frame list: Opus decodes per packet, so
+          // concatenating frames into one buffer would corrupt the tail.
+          pcmData = transcoder!.transcodeFrames(_frameBuffer);
         } catch (e) {
           // Don't ship un-transcoded bytes tagged as PCM — that produces a corrupted stream.
           // Skip only the tail send; teardown below must still run.
           CustomSttLogService.instance.error('GptLive', 'Transcode error (flush): $e');
           pcmData = null;
         }
+      } else {
+        final combined = Uint8List(_bufferedBytes);
+        int offset = 0;
+        for (final frame in _frameBuffer) {
+          combined.setRange(offset, offset + frame.length, frame);
+          offset += frame.length;
+        }
+        pcmData = combined;
       }
+      _frameBuffer.clear();
+      _bufferedBytes = 0;
 
       if (pcmData != null) {
         final audioMessage = {
@@ -730,6 +771,10 @@ class GptLiveStreamingSttSocket implements IPureSocket {
         } catch (_) {}
       }
     }
+    // Drop any buffered audio even when the session never started, so a
+    // pre-ack disconnect can't leak frames into the next session.
+    _frameBuffer.clear();
+    _bufferedBytes = 0;
 
     await Future.delayed(const Duration(milliseconds: 500));
 
@@ -751,6 +796,7 @@ class GptLiveStreamingSttSocket implements IPureSocket {
     _bufferedBytes = 0;
     _timeline.reset();
     _sessionStarted = false;
+    _sessionStartSent = false;
   }
 
   @override
