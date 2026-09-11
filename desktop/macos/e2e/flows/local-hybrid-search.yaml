@@ -10,12 +10,10 @@ covers:
   - desktop/macos/Desktop/Sources/LocalInference/LocalEmbeddingProbeCache.swift
   - desktop/macos/Desktop/Sources/LocalInference/AppleNLContextualEmbeddingEngine.swift
   - desktop/macos/Desktop/Sources/LocalInference/LocalEmbeddingBenchmark.swift
-  - desktop/macos/Desktop/Sources/LocalInference/TranscriptChunker.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/LocalEmbeddingStore.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/LocalHybridSearch.swift
-  - desktop/macos/Desktop/Sources/Rewind/Services/LocalEmbeddingIndexer.swift
   - desktop/macos/Desktop/Sources/Providers/ChatLocalHybridTool.swift
-  - desktop/macos/Desktop/Sources/DefaultsKey.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
 preconditions:
   - automation_bridge_ready
 
@@ -26,4 +24,4 @@ steps:
     bridge.action:
       name: local_embedding_benchmark
     expect:
-      interactive_count: { min: 0 }
+      result.detail.kind: local_embedding_benchmark

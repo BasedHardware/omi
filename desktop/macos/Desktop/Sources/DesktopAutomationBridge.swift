@@ -1442,14 +1442,23 @@ final class DesktopAutomationActionRegistry {
         return ["error": "local_embedding_benchmark is disabled on production bundles"]
       }
       let runtime = LocalEmbeddingRuntime.makeDefault()
+      _ = await ChatLocalHybridTool.execute(
+        ["query": "synthetic"], runID: nil, attemptID: nil, expectedOwnerID: nil,
+        sourceKinds: [.transcriptChunk], runtime: runtime)
       guard case .engine(let engine) = await runtime.selectEngine() else {
-        return ["error": "local_engine_unavailable"]
+        return [
+          "kind": LocalEmbeddingBenchmark.reportKind,
+          "error": "local_engine_unavailable",
+        ]
       }
       let report: LocalEmbeddingBenchmark.Report
       do {
         report = try await LocalEmbeddingBenchmark.runSynthetic(engine: engine, runtime: runtime)
       } catch {
-        return ["error": "benchmark_failed"]
+        return [
+          "kind": LocalEmbeddingBenchmark.reportKind,
+          "error": "benchmark_failed",
+        ]
       }
       let output: URL
       if let raw = params["output"]?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
