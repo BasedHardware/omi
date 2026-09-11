@@ -742,10 +742,15 @@ checks:
     reason: "#9843 Ticket 07: adversarial fixtures for baseline guard and disable policy"
   - id: desktop-feature-sentinels
     command: ["bash", "desktop/macos/tests/test-feature-sentinel-negative-control.sh"]
-    triggers: ["desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/Tests/SemanticFeatureSentinels/**/*.swift", "desktop/macos/tests/test-feature-sentinel-negative-control.sh"]
+    triggers: ["desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/Tests/SemanticFeatureSentinels/**/*.swift", "desktop/macos/tests/test-feature-sentinel-negative-control.sh", "desktop/macos/tests/test-feature-sentinel-compile-scope.sh"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
-    reason: "#9843 Ticket 09: semantic feature sentinels prove flags are active; negative control proves silent-acceptance trap"
+    reason: "#9843/#13144: semantic feature sentinels prove flags are active without compiling every unrelated Swift test target"
+  - id: desktop-feature-sentinel-scope-test
+    command: ["bash", "desktop/macos/tests/test-feature-sentinel-compile-scope.sh"]
+    triggers: ["desktop/macos/Desktop/Package.swift", "desktop/macos/tests/test-feature-sentinel-negative-control.sh", "desktop/macos/tests/test-feature-sentinel-compile-scope.sh"]
+    lanes: ["local", "ci"]
+    reason: "#13144: the feature sentinel must select its compile-only target and never regress to a package-wide --build-tests invocation"
   - id: desktop-hub-controller-ratchet
     command: ["python3", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift", "desktop/macos/scripts/check-hub-controller-ratchet.py"]

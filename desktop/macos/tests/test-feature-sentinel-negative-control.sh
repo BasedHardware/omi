@@ -5,9 +5,10 @@
 # 1. POSITIVE (mode): the package declares `swiftLanguageModes: [.v6]`. Swift 6
 #    enforces strict concurrency inherently — there is no flag to silently
 #    remove — so verifying the declared mode is the durable guard.
-# 2. POSITIVE (compile + upcoming feature): the SemanticFeatureSentinels target
-#    builds, proving BareSlashRegexLiterals is active and the target compiles
-#    under Swift 6 strict concurrency.
+# 2. POSITIVE (compile + upcoming feature): the compile-only
+#    SemanticFeatureSentinels target builds in isolation, proving
+#    BareSlashRegexLiterals is active and the target compiles under Swift 6
+#    strict concurrency without compiling unrelated test bundles.
 # 3. POSITIVE (rejection): a deliberately unsafe non-Sendable `Task.detached`
 #    capture is *rejected* by the compiler under Swift 6 — the direct proof that
 #    strict concurrency is enforced (it was a warning under Swift 5 +
@@ -38,7 +39,7 @@ echo "== feature sentinel tests"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 MANIFEST="$MACOS_DIR/Desktop/Package.swift"
-SENTINEL="$MACOS_DIR/Desktop/Tests/SemanticFeatureSentinels/StrictConcurrencySentinelTests.swift"
+SENTINEL_DIR="$MACOS_DIR/Desktop/Tests/SemanticFeatureSentinels"
 
 # --- POSITIVE (mode): package declares Swift 6 language mode ---
 if grep -q 'swiftLanguageModes: \[.v6\]' "$MANIFEST"; then
@@ -52,11 +53,15 @@ fi
 # caller has already warmed the package build cache. Do not remove the target's
 # derived output-file map: SwiftPM owns that map and can otherwise reuse stale
 # build-plan metadata pointing at a file we just deleted.
-touch "$SENTINEL"
-# `SemanticFeatureSentinels` is a SwiftPM test target; `swift build --target`
-# accepts only regular targets. `--build-tests` compiles all test targets without
-# running their framework-dependent bundles, including this sentinel.
-if BUILD_OUTPUT=$(xcrun swift build --package-path "$MACOS_DIR/Desktop" --build-tests 2>&1); then
+touch "$SENTINEL_DIR"/*.swift
+# The probes deliberately live in a regular compile-only target so SwiftPM can
+# select it directly. `--build-tests` here would compile every test target and
+# turn an otherwise shell-only pre-push check into a full test-suite build.
+if BUILD_OUTPUT=$(
+  xcrun swift build \
+    --package-path "$MACOS_DIR/Desktop" \
+    --target SemanticFeatureSentinels 2>&1
+); then
   BUILD_STATUS=0
 else
   BUILD_STATUS=$?
