@@ -11,6 +11,7 @@ import {
   conversationListNewCopy,
   conversationGroupLabel,
   conversationCaptureCopy,
+  conversationPhotoCountCopy,
   conversationStatusCopy,
   conversationListStatusCopy,
   dataProtectionCopy,
@@ -2054,6 +2055,13 @@ test('conversation capture copy names GET capturedAtMs and never shows 1970', ()
     'Captured (device time) · Time unavailable',
   );
   expect(conversationCaptureCopy(0, now)).not.toContain('1970');
+});
+
+test('conversation photo count copy names GET photos without requiring discarded', () => {
+  expect(conversationPhotoCountCopy({photoCount: 3})).toBe('3 photos');
+  expect(conversationPhotoCountCopy({photoCount: 1})).toBe('1 photos');
+  expect(conversationPhotoCountCopy({photoCount: 0})).toBeNull();
+  expect(conversationPhotoCountCopy({})).toBeNull();
 });
 
 test('conversation list category names GET wire values and omits empty or discarded', () => {

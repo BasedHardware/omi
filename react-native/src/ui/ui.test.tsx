@@ -2797,6 +2797,8 @@ test('wide Home search and compact Currents name GET emoji tag and discarded pho
   const shownTree = JSON.stringify(shown.toJSON());
   expect(shownTree).toContain('🚀');
   expect(shownTree).toContain('Work');
+  const keptPhotos = render(<ProjectionRow item={{...item, photoCount: 3}} />);
+  expect(JSON.stringify(keptPhotos.toJSON())).toContain('3 photos');
   const currents = render(<ProjectionRow home item={item} />);
   const currentsTree = JSON.stringify(currents.toJSON());
   expect(currentsTree).toContain('🚀');

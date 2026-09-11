@@ -394,6 +394,16 @@ export function conversationVisibilityCopy(
   return null;
 }
 
+export function conversationPhotoCountCopy(item: {
+  photoCount?: number;
+}): string | null {
+  const count = item.photoCount;
+  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count <= 0) {
+    return null;
+  }
+  return `${count} photos`;
+}
+
 export function conversationDiscardedPhotoCopy(item: {
   discarded: boolean;
   photoCount?: number;
@@ -401,11 +411,7 @@ export function conversationDiscardedPhotoCopy(item: {
   if (!item.discarded) {
     return null;
   }
-  const count = item.photoCount;
-  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count <= 0) {
-    return null;
-  }
-  return `${count} photos`;
+  return conversationPhotoCountCopy(item);
 }
 
 export function conversationPhotoDiscardedCopy(): string {

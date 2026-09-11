@@ -875,7 +875,7 @@ test('library conversation rows name GET source remaps and omit ordinary sources
   expect(textOf(ordinary)).not.toContain('omi');
 });
 
-test('library conversation rows name discarded GET photo counts', () => {
+test('library conversation rows name GET photo counts', () => {
   const item: ConversationProjection = {
     kind: 'conversation',
     id: 'omi-photos',
@@ -904,6 +904,6 @@ test('library conversation rows name discarded GET photo counts', () => {
     );
   });
   expect(textOf(shown)).toContain('2 photos');
-  expect(textOf(hidden)).not.toContain('3 photos');
+  expect(textOf(hidden)).toContain('3 photos');
   expect(textOf(hidden)).not.toContain('2 photos');
 });

@@ -5,7 +5,7 @@ import MessageCircle from 'lucide-react-native/icons/message-circle';
 import Sparkles from 'lucide-react-native/icons/sparkles';
 import {
   conversationCaptureCopy,
-  conversationDiscardedPhotoCopy,
+  conversationPhotoCountCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationHasFinishClock,
@@ -66,7 +66,7 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
   const listenOverview = conversationListUsesListenOverview(item);
   const captureCopy = conversationCaptureCopy(item.capturedAtMs);
   const emoji = conversationListEmoji(item);
-  const photosCopy = conversationDiscardedPhotoCopy(item);
+  const photosCopy = conversationPhotoCountCopy(item);
   const tag = conversationListTag(item);
   const listStatusCopy = conversationListStatusCopy(item.status);
   const newCopy = conversationListNewCopy(

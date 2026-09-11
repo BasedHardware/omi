@@ -1568,7 +1568,7 @@ test('conversation list names GET source remaps and omits ordinary sources', () 
   expect(copy).not.toContain('omi');
 });
 
-test('conversation list names discarded GET photo counts and omits them otherwise', () => {
+test('conversation list names GET photo counts', () => {
   const base = {
     kind: 'conversation' as const,
     title: 'Morning standup',
@@ -1616,7 +1616,7 @@ test('conversation list names discarded GET photo counts and omits them otherwis
     );
   });
   expect(textOf(renderer)).toContain('2 photos');
-  expect(textOf(renderer)).not.toContain('3 photos');
+  expect(textOf(renderer)).toContain('3 photos');
 });
 
 test('conversation list names discarded GET transcript excerpt as the title', () => {
