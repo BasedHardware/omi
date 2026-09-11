@@ -967,6 +967,65 @@ test('keeps camelCase GET actionItems', async () => {
   ).toEqual([{description: 'Send notes', completed: false}]);
 });
 
+test('does not fail conversation detail when stored sections or action items cannot project', async () => {
+  mockRequest.mockResolvedValueOnce(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        sections: [
+          {heading: 'Notes', body_markdown: 'Full notes'},
+          {heading: 'Broken', body_markdown: 5},
+          'not-a-section',
+        ],
+        action_items: [
+          {description: 'Call Alex', completed: true},
+          {description: 'Bad completed', completed: 'false'},
+          {description: 1, completed: false},
+          'Plain reminder',
+          '',
+          12,
+        ],
+      },
+    }),
+  );
+  const mixed = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(mixed.title).toBe('A real conversation');
+  expect(mixed.sections).toEqual([
+    {heading: 'Notes', bodyMarkdown: 'Full notes'},
+  ]);
+  expect(mixed.actionItems).toEqual([
+    {description: 'Call Alex', completed: true},
+    {description: 'Plain reminder', completed: false},
+  ]);
+  expect(mixed.transcript).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: 'Full speech beyond the summary',
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+      },
+    ],
+  });
+  mockRequest.mockResolvedValueOnce(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        sections: 1,
+        action_items: {description: 'nope'},
+      },
+    }),
+  );
+  const omitted = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(omitted.title).toBe('A real conversation');
+  expect(omitted.sections).toEqual([]);
+  expect(omitted.actionItems).toEqual([]);
+});
+
 test.each([undefined, null])(
   'omitted/null transcript stays unknown (%s)',
   async transcript_segments => {
@@ -1033,20 +1092,6 @@ test.each([
   {
     ...fixture,
     transcript_segments: Array(20001).fill(fixture.transcript_segments[0]),
-  },
-  {
-    ...fixture,
-    structured: {
-      ...fixture.structured,
-      sections: [{heading: 'Notes', body_markdown: 5}],
-    },
-  },
-  {
-    ...fixture,
-    structured: {
-      ...fixture.structured,
-      action_items: [{description: 'Call Alex', completed: 'false'}],
-    },
   },
 ])(
   'rejects mismatched or malformed detail without partial acknowledgement',

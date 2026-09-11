@@ -88,6 +88,18 @@ function array(value: unknown, limit: number): unknown[] {
   }
   return value;
 }
+function optionalArray(value: unknown, limit: number): unknown[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  if (value.length > limit) {
+    throw new DetailError('invalid');
+  }
+  return value;
+}
 function appResultId(row: Record<string, unknown>): string | undefined {
   const raw = row.plugin_id ?? row.app_id;
   if (typeof raw !== 'string') {
@@ -299,32 +311,58 @@ export async function loadLegacyConversationDetail(
   }
   const structured = object(value.structured);
   const locked = boolean(value.is_locked ?? false);
-  const sections = array(structured.sections ?? [], 1000).map(raw => {
-    const section = object(raw);
-    return {
+  const sections: LegacyConversationDetail['sections'] = [];
+  for (const raw of optionalArray(structured.sections, 1000)) {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      continue;
+    }
+    const section = raw as Record<string, unknown>;
+    if (
+      typeof section.heading !== 'string' ||
+      typeof section.body_markdown !== 'string'
+    ) {
+      continue;
+    }
+    sections.push({
       heading: text(section.heading, 10000),
       bodyMarkdown: text(section.body_markdown),
-    };
-  });
-  const actionItems = array(
-    structured.action_items ?? structured.actionItems ?? [],
+    });
+  }
+  const actionItems: LegacyConversationDetail['actionItems'] = [];
+  for (const raw of optionalArray(
+    structured.action_items ?? structured.actionItems,
     1000,
-  ).flatMap(raw => {
+  )) {
     if (typeof raw === 'string') {
-      return [{description: raw, completed: false}];
+      if (raw === '') {
+        continue;
+      }
+      actionItems.push({description: text(raw, 10000), completed: false});
+      continue;
     }
-    const item = object(raw);
-    if (item.deleted === undefined ? false : boolean(item.deleted)) {
-      return [];
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      continue;
     }
-    return [
-      {
-        description: text(item.description, 10000),
-        completed:
-          item.completed === undefined ? false : boolean(item.completed),
-      },
-    ];
-  });
+    const item = raw as Record<string, unknown>;
+    if (item.deleted !== undefined) {
+      if (typeof item.deleted !== 'boolean') {
+        continue;
+      }
+      if (item.deleted) {
+        continue;
+      }
+    }
+    if (typeof item.description !== 'string') {
+      continue;
+    }
+    if (item.completed !== undefined && typeof item.completed !== 'boolean') {
+      continue;
+    }
+    actionItems.push({
+      description: text(item.description, 10000),
+      completed: item.completed === undefined ? false : item.completed,
+    });
+  }
   // Old list responses omit transcripts; even detail can redact locked data.
   // Only an explicit unlocked array establishes an empty or loaded transcript.
   let peopleError: string | undefined;
