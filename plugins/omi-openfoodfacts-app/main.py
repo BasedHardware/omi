@@ -106,11 +106,16 @@ def _invalid_body_response(message: str) -> ChatToolResponse:
 
 
 def _nutrient(product: Dict[str, Any], key: str) -> Optional[Any]:
+    """Return the per-100g nutrient only.
+
+    Unsuffixed nutriment keys depend on nutrition_data_per (often serving).
+    Falling back to them and labeling the result per_100g is wrong.
+    """
     nutriments = product.get("nutriments") or {}
     per_100g_key = f"{key}_100g"
     if per_100g_key in nutriments:
         return nutriments[per_100g_key]
-    return nutriments.get(key)
+    return None
 
 
 def _summarize_product(product: Dict[str, Any]) -> Dict[str, Any]:
@@ -185,10 +190,14 @@ async def _search_foods(query: str, page_size: int) -> Dict[str, Any]:
     if not query:
         return {"error": "query is required"}
 
+    # CGI search is the full-text product search; /api/v2/search is not.
     payload = await _openfoodfacts_get_async(
-        "/api/v2/search",
+        "/cgi/search.pl",
         {
+            "action": "process",
             "search_terms": query,
+            "search_simple": 1,
+            "json": 1,
             "page_size": page_size,
             "fields": PRODUCT_FIELDS,
         },
