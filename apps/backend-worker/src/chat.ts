@@ -107,7 +107,11 @@ export async function admitMessage(
       return "conflict";
     let message = await readMessage(db, accountId, input.id);
     if (message === null) return "conflict";
-    message = overlayCreateFields(message, input);
+    const detached = projectStoredChatMessage(message);
+    if (detached === null) {
+      throw new TypeError("invalid chat message record");
+    }
+    message = overlayCreateFields(detached, input);
     if (input.journalRevision > message.journalRevision) {
       message = {
         ...message,
