@@ -1,0 +1,3 @@
+{
+  "change": "Fixed: chat follow/pin scroll timers and recording timers no longer keep running after their owner is gone, removing a small idle CPU wake."
+}
