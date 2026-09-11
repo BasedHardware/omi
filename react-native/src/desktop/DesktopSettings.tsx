@@ -285,6 +285,7 @@ export function DesktopSettings({
   const [peopleNames, setPeopleNames] = useState<{id: string; name: string}[]>(
     [],
   );
+  const [peopleError, setPeopleError] = useState<string | null>(null);
   const [taskIntegrations, setTaskIntegrations] = useState<
     OmiTaskIntegration[]
   >([]);
@@ -349,6 +350,7 @@ export function DesktopSettings({
     } catch {}
     let nextAccount: AccountSettingsSnapshot | null = null;
     let nextPeople: {id: string; name: string}[] = [];
+    let nextPeopleError: string | null = null;
     let nextTaskIntegrations: OmiTaskIntegration[] = [];
     let nextIntegrations: OmiIntegration[] = [];
     let nextIntegrationsError: string | null = null;
@@ -372,8 +374,12 @@ export function DesktopSettings({
     let nextImportJobs: OmiImportJobRow[] = [];
     let nextWebhookUrls = new Map<OmiWebhookUrlType, OmiWebhookUrl>();
     if (backend !== undefined && backend !== null && session === 'ready') {
-      const peopleTask = loadOmiPeopleNames(backend).catch(
-        () => new Map<string, string>(),
+      const peopleTask = loadOmiPeopleNames(backend).then(
+        names => ({names, error: null as string | null}),
+        reason => ({
+          names: new Map<string, string>(),
+          error: desktopReadErrorCopy(reason),
+        }),
       );
       const taskIntegrationsTask = loadOmiTaskIntegrations(backend).then(
         rows => ({rows, error: null as string | null}),
@@ -421,7 +427,9 @@ export function DesktopSettings({
       } catch (reason) {
         nextAccount = failedAccountSettings(desktopReadErrorCopy(reason));
       }
-      nextPeople = peopleNameRows(await peopleTask);
+      const peopleResult = await peopleTask;
+      nextPeople = peopleNameRows(peopleResult.names);
+      nextPeopleError = peopleResult.error;
       const taskIntegrationsResult = await taskIntegrationsTask;
       nextTaskIntegrations = taskIntegrationsResult.rows;
       nextTaskIntegrationsError = taskIntegrationsResult.error;
@@ -470,6 +478,7 @@ export function DesktopSettings({
     }
     setAccount(nextAccount);
     setPeopleNames(nextPeople);
+    setPeopleError(nextPeopleError);
     setTaskIntegrations(nextTaskIntegrations);
     setTaskIntegrationsError(nextTaskIntegrationsError);
     setIntegrations(nextIntegrations);
@@ -803,9 +812,13 @@ export function DesktopSettings({
       {customVocabulary.map((row, index) => (
         <Row copy={row.copy} key={`${row.title}-${index}`} title={row.title} />
       ))}
-      {peopleNames.map(person => (
-        <Row copy={person.name} key={person.id} title="People" />
-      ))}
+      {peopleError !== null ? (
+        <Row copy={peopleError} title="People" />
+      ) : (
+        peopleNames.map(person => (
+          <Row copy={person.name} key={person.id} title="People" />
+        ))
+      )}
       {taskIntegrationsError !== null ? (
         <Row copy={taskIntegrationsError} title="Task integrations" />
       ) : (

@@ -210,6 +210,7 @@ export function SettingsPage({
   const [peopleNames, setPeopleNames] = useState<{id: string; name: string}[]>(
     [],
   );
+  const [peopleError, setPeopleError] = useState<string | null>(null);
   const [taskIntegrations, setTaskIntegrations] = useState<
     OmiTaskIntegration[]
   >([]);
@@ -298,6 +299,7 @@ export function SettingsPage({
     if (backend === undefined || backend === null) {
       setSnapshot(null);
       setPeopleNames([]);
+      setPeopleError(null);
       setTaskIntegrations([]);
       setTaskIntegrationsError(null);
       setIntegrations([]);
@@ -355,6 +357,7 @@ export function SettingsPage({
         // stay retryable instead of stranding the page on Loading forever.
         setSnapshot(null);
         setPeopleNames([]);
+        setPeopleError(null);
         setTaskIntegrations([]);
         setTaskIntegrationsError(null);
         setIntegrations([]);
@@ -381,6 +384,7 @@ export function SettingsPage({
       if (!hasSession) {
         setSnapshot(null);
         setPeopleNames([]);
+        setPeopleError(null);
         setTaskIntegrations([]);
         setTaskIntegrationsError(null);
         setIntegrations([]);
@@ -404,8 +408,12 @@ export function SettingsPage({
         return;
       }
     }
-    const peopleTask = loadOmiPeopleNames(backend).catch(
-      () => new Map<string, string>(),
+    const peopleTask = loadOmiPeopleNames(backend).then(
+      names => ({names, error: null as string | null}),
+      reason => ({
+        names: new Map<string, string>(),
+        error: desktopReadErrorCopy(reason),
+      }),
     );
     const taskIntegrationsTask = loadOmiTaskIntegrations(backend).then(
       rows => ({rows, error: null as string | null}),
@@ -465,7 +473,7 @@ export function SettingsPage({
       setSettingsCanRetry(true);
       setPhase('error');
     }
-    const names = await peopleTask;
+    const peopleResult = await peopleTask;
     const taskIntegrationsResult = await taskIntegrationsTask;
     const integrationsResult = await integrationsTask;
     const nextAppChangelogs = await appChangelogsTask;
@@ -484,7 +492,8 @@ export function SettingsPage({
     if (!current()) {
       return;
     }
-    setPeopleNames(peopleNameRows(names));
+    setPeopleNames(peopleNameRows(peopleResult.names));
+    setPeopleError(peopleResult.error);
     setTaskIntegrations(taskIntegrationsResult.rows);
     setTaskIntegrationsError(taskIntegrationsResult.error);
     setIntegrations(integrationsResult.rows);
@@ -692,9 +701,13 @@ export function SettingsPage({
             title={row.title}
           />
         ))}
-        {peopleNames.map(person => (
-          <SettingRow copy={person.name} key={person.id} title="People" />
-        ))}
+        {peopleError !== null ? (
+          <SettingRow copy={peopleError} title="People" />
+        ) : (
+          peopleNames.map(person => (
+            <SettingRow copy={person.name} key={person.id} title="People" />
+          ))
+        )}
         {taskIntegrationsError !== null ? (
           <SettingRow
             copy={taskIntegrationsError}
