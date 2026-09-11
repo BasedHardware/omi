@@ -105,6 +105,35 @@ test('uses the actual old detail wire and retains full notes and transcript', as
   });
 });
 
+test('names GET transcript start/end numeric strings', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          start: '0.25',
+          end: '4.5',
+        },
+      ],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: fixture.transcript_segments[0].text,
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+      },
+    ],
+  });
+});
+
 test('keeps GET calendar event title and attendees and omits missing events', async () => {
   mockRequest.mockResolvedValue(
     response({
@@ -1134,7 +1163,7 @@ test.each([
   {...fixture, transcript_segments: 'compressed-or-malformed'},
   {
     ...fixture,
-    transcript_segments: [{...fixture.transcript_segments[0], start: '0'}],
+    transcript_segments: [{...fixture.transcript_segments[0], start: ''}],
   },
   {
     ...fixture,

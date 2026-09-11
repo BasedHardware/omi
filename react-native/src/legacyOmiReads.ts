@@ -125,6 +125,13 @@ function photoCount(value: unknown): number {
   return value.length;
 }
 function finiteClock(value: unknown): number {
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (value.trim() === '' || !Number.isFinite(parsed)) {
+      throw new Error('Omi transcript is malformed');
+    }
+    return parsed;
+  }
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new Error('Omi transcript is malformed');
   }

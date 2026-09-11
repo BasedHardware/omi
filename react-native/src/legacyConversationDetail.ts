@@ -83,6 +83,13 @@ function boolean(value: unknown): boolean {
   return value;
 }
 function finite(value: unknown): number {
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (value.trim() === '' || !Number.isFinite(parsed)) {
+      throw new DetailError('invalid');
+    }
+    return parsed;
+  }
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new DetailError('invalid');
   }
