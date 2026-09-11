@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "FC-concurrent-ptt-stream-budget-overspend",
   "violated_contract": "Concurrent /v2/voice-message/transcribe-stream sessions for the same uid must not each admit against the same remaining daily STT duration slice. Probe-only check_budget at connect plus force-record at end lets N sessions freeze identical remaining_ms and overspend the shared voice_duration budget after the fact.",
-  "canonical_prevention": "Atomically reserve up to MAX_SESSION_DURATION_S at WS connect via try_reserve_session_budget (Lua force=2 consume-up-to). Cap mid-session audio to the reserved amount. On successful drain, settle_reserved_duration(reserved, actual); on terminal provider failure, refund the full reservation. Pin with fakeredis Lua tests that show probe+force overspend and reserve-up-to mutual exclusion.",
+  "canonical_prevention": "Atomically reserve up to MAX_SESSION_DURATION_S at WS connect via try_reserve_session_budget (Lua force=2 consume-up-to). Never admit mid-session audio past the cumulative reservation: when a stream outgrows it, atomically reserve another slice the same way and close only when that reservation is denied (one slice is an admission unit, not a cap on stream length — see FC-stream-budget-slice-treated-as-daily-cap). On successful drain, settle_reserved_duration(cumulative_reserved, actual); on terminal provider failure, refund the full reservation. Pin with fakeredis Lua tests that show probe+force overspend and reserve-up-to mutual exclusion.",
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_voice_duration_limiter.py",
     "backend/tests/unit/test_desktop_transcribe.py"
