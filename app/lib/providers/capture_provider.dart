@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:omi/services/capture/capture_controller.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/utils/logger.dart';
 
 class CaptureProvider extends CaptureController {
   CaptureProvider({
@@ -19,6 +20,9 @@ class CaptureProvider extends CaptureController {
 
   final LocalSegmentStore localSegmentStore;
   String? _lastPersistedFingerprint;
+  Future<void> _liveSegmentWrite = Future<void>.value();
+
+  Future<void> get pendingLiveSegmentWrite => _liveSegmentWrite;
 
   void _persistLiveSegments() {
     if (!localSegmentStore.enabled) return;
@@ -30,7 +34,12 @@ class CaptureProvider extends CaptureController {
         .join('\n');
     if (fingerprint == _lastPersistedFingerprint) return;
     _lastPersistedFingerprint = fingerprint;
-    unawaited(localSegmentStore.replaceSession(sessionId, List.of(segments)));
+    final pending = List.of(segments);
+    _liveSegmentWrite =
+        _liveSegmentWrite.then((_) => localSegmentStore.replaceSession(sessionId, pending)).catchError((Object e) {
+      Logger.debug('Error persisting live segments: $e');
+    });
+    unawaited(_liveSegmentWrite);
   }
 
   @override
