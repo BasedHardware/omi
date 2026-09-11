@@ -302,16 +302,45 @@ def _normalize_sql_result(result: Any) -> Any:
     if result.startswith("OK:"):
         return {"ok": True, "message": result}
 
-    footer = non_empty[-1]
+    # Find first non-empty line (header) and last non-empty line (footer)
+    header_idx = None
+    for idx, line in enumerate(lines):
+        if line.strip():
+            header_idx = idx
+            break
+
+    footer_idx = None
+    for idx in range(len(lines) - 1, -1, -1):
+        if lines[idx].strip():
+            footer_idx = idx
+            break
+
+    if header_idx is None or footer_idx is None or header_idx >= footer_idx:
+        return {"text": result}
+
+    footer = lines[footer_idx].strip()
     row_count_match = re.match(r"^(\d+) row\(s\)$", footer)
-    header = non_empty[0]
-    separator_index = 1 if len(non_empty) > 1 and set(non_empty[1]) <= {"-", " "} else None
-    if separator_index is None or not row_count_match:
+    if not row_count_match:
+        return {"text": result}
+
+    header = lines[header_idx].strip()
+    sep_idx = header_idx + 1
+    if sep_idx >= footer_idx or not set(lines[sep_idx].strip()) <= {"-", " "}:
         return {"text": result}
 
     expected_count = int(row_count_match.group(1))
-    data_lines = non_empty[2:-1]
+
+    # Extract raw data lines between separator line and footer line
+    data_lines = lines[sep_idx + 1 : footer_idx]
+    # Strip optional trailing blank line before footer
+    if data_lines and not data_lines[-1].strip():
+        data_lines.pop()
+
     if len(data_lines) != expected_count:
+        return {"text": result}
+
+    # Verify no embedded empty continuation lines inside data_lines
+    if any(not line.strip() for line in data_lines):
         return {"text": result}
 
     columns = [part.strip() for part in header.split("|")] if "|" in header else [header.strip()]
