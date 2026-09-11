@@ -276,10 +276,9 @@ struct AIProvider: Identifiable {
 
   /// A local model's time to first token is dominated by prompt prefill on
   /// the user's own hardware (measured 20 to 60s on 2026-09-10, longer as
-  /// the conversation grows), so the cloud-sized 20s voice provider-response
-  /// deadline (`VoiceTurnReducer.Deadlines.providerResponse`) declares the
-  /// turn dead while the reply is still coming. 180s matches the existing
-  /// `chatLaneTool` budget.
+  /// the conversation grows), so the cloud-sized 20s voice domain's
+  /// provider-response deadline declares the turn dead while the reply is
+  /// still coming. 180s matches the existing `chatLaneTool` budget.
   static let localVoiceProviderResponseDeadline: TimeInterval = 180
 
   /// Maps the active provider to the voice provider-response deadline
