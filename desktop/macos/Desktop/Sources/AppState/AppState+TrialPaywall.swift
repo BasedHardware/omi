@@ -101,12 +101,12 @@ extension AppState {
   /// True when screen capture / screenshot interpretation is exempt from the
   /// paywall: either the general BYOK exemption above, or because the Local
   /// provider is active AND the user has not opted cloud-assisted features
-  /// on. Unlike `isTranscriptionExemptFromPaywall`, this needs no
-  /// self-hosted-backend check: screen capture's own cloud dependency was
-  /// Omi's Gemini proxy for interpreting the image, and the local provider
-  /// already routes that through its own model instead (the screenshot is
-  /// attached directly to the request). Screen capture itself (the macOS
-  /// frame grab) never leaves the device under any
+  /// on. Unlike `isTranscriptionExemptFromPaywall`, this has a real Local
+  /// exemption: screen capture's own cloud dependency was Omi's Gemini proxy
+  /// for interpreting the image, and the local provider already routes that
+  /// through its own model instead (the screenshot is attached directly to
+  /// the request). Screen capture itself (the macOS frame grab) never
+  /// leaves the device under any
   /// provider, but the proactive assistants and live notes that consume it
   /// (task/memory/insight/suggestion extraction) go back to Omi's Gemini
   /// proxy the moment the user opts cloud-assist on, so this is metered again

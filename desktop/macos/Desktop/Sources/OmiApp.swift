@@ -959,12 +959,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // Quick toggles for screen capture and audio recording.
     // When paywalled (trial expired / usage limit hit) both render OFF — the
     // features can't run, and tapping a toggle surfaces the upgrade popup.
-    // Both have their own, narrower exemption beyond BYOK: audio recording is
-    // also off the hook once transcription is pointed at a self-hosted
-    // backend, and screen capture is also off the hook while the Local
-    // provider is active, since screenshot interpretation routes to the
-    // user's own server instead of Omi's Gemini proxy (see
-    // AppState.isScreenCaptureExemptFromPaywall).
+    // Screen capture has its own, narrower exemption beyond BYOK: it is also
+    // off the hook while the Local provider is active, since screenshot
+    // interpretation routes to the user's own server instead of Omi's Gemini
+    // proxy (see AppState.isScreenCaptureExemptFromPaywall). Audio recording
+    // has no Local-specific exemption: transcription always goes through
+    // Omi's Deepgram proxy regardless of the active chat provider.
     let screenCapturePaywalled = !AppState.isScreenCaptureExemptFromPaywall
     let transcriptionPaywalled = !AppState.isTranscriptionExemptFromPaywall
     let screenCaptureItem = NSMenuItem()
