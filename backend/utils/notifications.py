@@ -368,7 +368,12 @@ def send_client_displayed_notification(
     payload = _stringify_fcm_data(data)
     payload['push_type'] = 'chat_answer'
     payload['title'] = title
-    payload['body'] = body
+    # Do not set payload['body']: NotificationMessage already carries ``text``,
+    # and duplicating the full answer exceeds FCM's 4KB data limit on long
+    # replies. Clients resolve the shade body from ``text`` (#4375).
+    # APNS/webpush still receive display_body below for system-tray alerts.
+    if not payload.get('text'):
+        payload['text'] = body
     tag = _generate_tag(f"{user_id}:{title}:{body}:{payload.get('id', '')}")
     _send_to_user(
         user_id,
@@ -396,7 +401,9 @@ async def send_client_displayed_notification_async(
     payload = _stringify_fcm_data(data)
     payload['push_type'] = 'chat_answer'
     payload['title'] = title
-    payload['body'] = body
+    # Single copy of the answer in data (``text`` only) — see sync twin above.
+    if not payload.get('text'):
+        payload['text'] = body
     tag = _generate_tag(f"{user_id}:{title}:{body}:{payload.get('id', '')}")
     await _send_to_user_async(
         user_id,

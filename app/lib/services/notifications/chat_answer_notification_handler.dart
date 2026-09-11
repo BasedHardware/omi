@@ -8,6 +8,10 @@ import 'package:omi/utils/logger.dart';
 /// answers are therefore delivered as data-oriented pushes and rendered here
 /// so the shade shows more of the answer and the tap payload includes
 /// `navigate_to` for deep-linking into the matching chat.
+///
+/// Display policy matches [MergeNotificationHandler]: create a shade entry only
+/// when the app is backgrounded. Foreground answers are consumed in-app via
+/// ServerMessage; the FCM listen path also gates on speaking state.
 class ChatAnswerNotificationHandler {
   static final _awesomeNotifications = AwesomeNotifications();
 
@@ -20,11 +24,24 @@ class ChatAnswerNotificationHandler {
     return notificationType == 'plugin' && navigateTo.startsWith('/chat/');
   }
 
+  /// Shows a BigText shade notification when the app is backgrounded.
+  ///
+  /// Matches [MergeNotificationHandler]: foreground answers are consumed
+  /// in-app via ServerMessage; shade banners are for background delivery.
+  /// Callers that may still invoke this while foregrounded (FCM listen path)
+  /// must also gate on `!OmiVoicePlaybackService.instance.isSpeaking`.
   static Future<void> handle(
     Map<String, dynamic> data,
     String channelKey, {
     bool isAppInForeground = true,
   }) async {
+    // Explicit foreground semantics: do not create a local banner while the
+    // user is inside the app (merge-handler pattern; #4375 review).
+    if (isAppInForeground) {
+      Logger.debug('[ChatAnswerNotification] Skipping shade notification while foreground');
+      return;
+    }
+
     final title = (data['title']?.toString().isNotEmpty == true) ? data['title'].toString() : 'omi says';
     final body = _resolveBody(data);
     if (body.isEmpty) {
