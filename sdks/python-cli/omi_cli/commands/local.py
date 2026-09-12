@@ -345,8 +345,12 @@ def _normalize_sql_result(result: Any) -> Any:
         return {"text": result}
 
     columns = [part.strip() for part in header.split("|")] if "|" in header else [header.strip()]
+    if len(set(columns)) != len(columns):
+        return {"text": result}
     rows = []
     for line in data_lines:
+        if line.lstrip().startswith("Result truncated after "):
+            return {"text": result}
         values = [part.strip() for part in line.split("|")] if "|" in line else [line.strip()]
         if len(values) != len(columns):
             return {"text": result}

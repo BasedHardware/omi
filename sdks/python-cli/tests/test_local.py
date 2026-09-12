@@ -389,6 +389,39 @@ def test_sql_json_falls_back_to_raw_text_when_cells_contain_pipes_or_newlines(co
     assert json.loads(result_empty_cont.stdout) == {"text": sql_text_empty_cont}
 
 
+@pytest.mark.parametrize(
+    "table",
+    [
+        "preview\n--------------------\nleft | right\n\n1 row(s)",
+        "preview\n--------------------\nline one\nline two\n\n1 row(s)",
+        "preview\n--------------------\n\n\n1 row(s)",
+        "x | x\n--------------------\na | b\n\n1 row(s)",
+        "x\n--------------------\na\nResult truncated after 1 row(s) to protect chat context. Refine the projection or aggregate the result.\n\n2 row(s)",
+    ],
+)
+def test_sql_json_preserves_ambiguous_or_truncated_tables(config_path: Path, cli_runner, table: str) -> None:
+    _configure_local_profile(config_path)
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(table)))
+        result = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT 1"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"text": table}
+
+
+def test_sql_json_keeps_unambiguous_tables_structured(config_path: Path, cli_runner) -> None:
+    _configure_local_profile(config_path)
+    table = "id | name\n--------------------\n1 | café\n\n1 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(table)))
+        result = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT 1"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {
+        "columns": ["id", "name"],
+        "rows": [{"id": "1", "name": "café"}],
+        "row_count": 1,
+    }
+
+
 def test_task_commands_route_to_local_tools(config_path: Path, cli_runner) -> None:
     _configure_local_profile(config_path)
     with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
