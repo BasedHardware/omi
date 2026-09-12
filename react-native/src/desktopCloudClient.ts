@@ -484,19 +484,21 @@ export function parseWebhookStatuses(
   label: string,
 ): CloudWebhookStatus[] {
   const record = object(value, label);
-  return Object.entries(record).map(([type, entry]) => {
+  return Object.entries(record).flatMap(([type, entry]) => {
     if (typeof entry === 'boolean') {
-      return {type, enabled: entry, url: null};
+      return [{type, enabled: entry, url: null}];
     }
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
-      throw new Error(`${label} ${type} is malformed`);
+      return [];
     }
     const item = entry as Record<string, unknown>;
-    return {
-      type,
-      enabled: optionalBoolean(item.enabled ?? item.status),
-      url: optionalString(item.url),
-    };
+    return [
+      {
+        type,
+        enabled: optionalBoolean(item.enabled ?? item.status),
+        url: optionalString(item.url),
+      },
+    ];
   });
 }
 
