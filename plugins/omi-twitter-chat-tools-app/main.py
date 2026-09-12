@@ -180,7 +180,7 @@ def _parse_max_results(body: dict, default: int = 10, minimum: int = 5, maximum:
     Twitter API's documented bounds for the calling endpoint."""
     try:
         value = int(body.get("max_results", default))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return max(minimum, min(value, maximum))
 

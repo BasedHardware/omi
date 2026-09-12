@@ -119,6 +119,17 @@ class _EndpointCase(unittest.TestCase):
                 "params": params or {},
                 "json_data": json_data or {},
             }
+            if endpoint.startswith("/users/by/username/") or endpoint == "/users/me":
+                return {
+                    "data": {
+                        "name": "Ada",
+                        "username": "ada",
+                        "description": "",
+                        "verified": False,
+                        "public_metrics": {},
+                        "created_at": "2020-01-01T00:00:00.000Z",
+                    }
+                }
             return {"data": []}
 
         self._patches = [
@@ -140,6 +151,7 @@ class MaxResultsBoundsTests(_EndpointCase):
         self.assertEqual(main._parse_max_results({"max_results": "20"}), 20)
         self.assertIsNone(main._parse_max_results({"max_results": "abc"}))
         self.assertIsNone(main._parse_max_results({"max_results": None}))
+        self.assertIsNone(main._parse_max_results({"max_results": 1e309}))
         # Search endpoint has a higher documented minimum.
         self.assertEqual(
             main._parse_max_results({"max_results": 2}, minimum=10), 10
@@ -173,6 +185,14 @@ class MaxResultsBoundsTests(_EndpointCase):
         )
         self.assertIsNotNone(resp.error)
 
+    def test_overflowing_max_results_returns_error(self):
+        resp = _run(
+            main.tool_get_timeline(
+                _FakeRequest({"uid": "u1", "max_results": 1e309})
+            )
+        )
+        self.assertIsNotNone(resp.error)
+
 
 class PathInterpolationTests(_EndpointCase):
     def test_tweet_id_is_url_encoded_in_unlike_path(self):
@@ -194,11 +214,13 @@ class PathInterpolationTests(_EndpointCase):
         self.assertEqual(self.captured["endpoint"], "/tweets/1%3Fuser_id%3Devil")
 
     def test_username_is_url_encoded_in_profile_path(self):
-        _run(
+        resp = _run(
             main.tool_get_user_profile(
                 _FakeRequest({"uid": "u1", "username": "a/b"})
             )
         )
+        self.assertIsNone(resp.error)
+        self.assertIsNotNone(resp.result)
         self.assertEqual(self.captured["endpoint"], "/users/by/username/a%2Fb")
 
 
