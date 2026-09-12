@@ -514,14 +514,27 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         regression; they move only through this file's review.
         """
         verify_job = self.jobs["desktop-swift-verify"]
-        # Lane-aware through the same effective-lane output: the PR fast
-        # lane carries the tight budget; the full lane legitimately spans
-        # ~28-40m (measured 37m07s on run 34363659680) and carries 2700s
-        # against the 50m+ drift class. Keying on the event type alone made
+        # One budget for both lanes, because the wall this guards is not the
+        # thing the lanes differ on. The fast lane runs fewer suites but still
+        # compiles the whole test module (2120 units), so a cold SwiftPM cache
+        # costs it a full rebuild the 15m42s baseline never measured. PR #13498
+        # — three files, four unit tests executing in 0.007s — measured 2538s
+        # and 2505s on consecutive runs, both logging `skipping cache due to an
+        # error ... maintenance.lock doesn't exist`, while their slowest
+        # executed suite was 4.281s and main stayed green. At 1800s the fast
+        # lane was reading cache state as drift; it now carries the full lane's
+        # 2700s, the same number the same machine already gets for the same
+        # compile.
+        #
+        # The cost is real and deliberate: this halves fast-lane sensitivity,
+        # so a PR-lane drift from 15m to 44m would now pass. The durable fix is
+        # to time the test phase separately from the compile it cannot avoid.
+        # Earlier history kept for context: keying on the event type alone made
         # a re-baselined PR run the full suite against the PR number and
-        # false-red at 2013s vs 1800s (run 34369508858).
+        # false-red at 2013s vs 1800s (run 34369508858); the full lane's 2700s
+        # came from a measured 37m07s on run 34363659680.
         self.assertIn(
-            "OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ needs.changes.outputs.swift_test_effective_lane == 'pr' && '1800' || '2700' }}",
+            'OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: "2700"',
             verify_job,
         )
         self.assertIn('OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS: "60"', verify_job)

@@ -1,0 +1,3 @@
+{
+  "change": "Always-on listening no longer switches itself off when your microphone is briefly taken by another audio app — Omi now keeps trying to reconnect for several minutes instead of giving up after six seconds"
+}

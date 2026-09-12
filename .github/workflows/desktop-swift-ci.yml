@@ -310,14 +310,24 @@ jobs:
           # changes job's effective-lane output (same re-baseline rule as
           # the runner): the PR fast lane measured 15m42s at batch 50
           # (~12m at 100; ~24m worst case for auth PRs that wake the serial
-          # cluster), so 1800s holds it with headroom. The full lane
+          # cluster). 1800s held that until the wall stopped being test time:
+          # the fast lane still compiles the whole test module (2120 units),
+          # so a run whose SwiftPM cache is cold pays a full rebuild the
+          # baseline never measured. PR #13498 — three files, four unit tests
+          # executing in 0.007s — measured 2538s and 2505s on consecutive
+          # runs, both logging `skipping cache due to an error ...
+          # maintenance.lock doesn't exist` (grpc-binary, then abseil-cpp
+          # -binary), while the slowest executed suite in those same runs was
+          # 4.281s and main stayed green. The PR lane therefore carries the
+          # full lane's 2700s: it is the same machine doing the same compile,
+          # and 1800s was measuring cache state rather than drift. The full lane
           # (re-baselined runner diffs, main pushes, scheduled health)
           # legitimately spans ~28-40m on a slow runner day — 9.7m prebuild
           # + ~3.5m parallel batches + 15.3m sequential serial/solo tail —
           # so it carries 2700s to catch the 50m+ drift class without
           # failing quiet-day variance. Raise either only with measured
           # evidence in the PR that raises it.
-          OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ needs.changes.outputs.swift_test_effective_lane == 'pr' && '1800' || '2700' }}
+          OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: "2700"
           # Any PR-lane suite whose own test time exceeds this and is not
           # ratcheted in swift-test-slow-suites.json fails the run: the fast
           # lane cannot silently grow a slow tail. Deferred suites that woke
