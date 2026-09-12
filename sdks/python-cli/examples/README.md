@@ -15,3 +15,6 @@
 * [`quickstart.de.md`](quickstart.de.md) — omi-cli Schnellstartanleitung auf Deutsch (German Quickstart).
 * [`quickstart.pl.md`](quickstart.pl.md) — Przewodnik Szybkiego Startu omi-cli po Polsku (Polish Quickstart).
 * [`quickstart.nl.md`](quickstart.nl.md) — Snelstartgids omi-cli in het Nederlands (Dutch Quickstart).
+* [`quickstart.sv.md`](quickstart.sv.md) — Snabbstartsguide för omi-cli på Svenska (Swedish Quickstart).
+* [`quickstart.uk.md`](quickstart.uk.md) — Короткий посібник omi-cli Українською (Ukrainian Quickstart).
+* [`quickstart.ru.md`](quickstart.ru.md) — Краткое руководство omi-cli на Русском (Russian Quickstart).
