@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-unbounded-workflow-network-install",
+  "status": "open",
+  "violated_contract": "A blocking CI job must not let a package-manager network operation inherit only the job-wide timeout. Package managers such as apt can remain connected to a stalled mirror without making progress, turning a transient dependency fetch into an opaque job cancellation that consumes the entire acceptance-gate budget.",
+  "canonical_prevention": "Put repository-owned retry and per-request network timeouts around update and install in one shared action, retain a short step-level timeout at every caller, and statically reject direct unbounded installs on the guarded workflow.",
+  "canonical_prevention_artifact": [
+    ".github/actions/install-redis-server/action.yml",
+    "backend/tests/unit/test_listen_pusher_stack_ci_wiring.py"
+  ],
+  "scope_hints": [
+    ".github/workflows/**",
+    ".github/actions/**"
+  ],
+  "evidence_prs": [11872]
+}
