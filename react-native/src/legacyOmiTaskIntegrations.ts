@@ -64,7 +64,15 @@ export function parseOmiTaskIntegrations(body: string): OmiTaskIntegration[] {
     if (key === '') {
       continue;
     }
-    const details = object(integrations[rawKey]);
+    const rawDetails = integrations[rawKey];
+    if (
+      rawDetails === null ||
+      typeof rawDetails !== 'object' ||
+      Array.isArray(rawDetails)
+    ) {
+      continue;
+    }
+    const details = rawDetails as Record<string, unknown>;
     if (details.connected !== true) {
       continue;
     }

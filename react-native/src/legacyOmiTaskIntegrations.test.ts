@@ -75,15 +75,27 @@ test('omits non-boolean connected flags without hiding neighboring integrations'
   ).toEqual([{key: 'clickup', name: 'ClickUp', isDefault: false}]);
 });
 
+test('omits a GET task integration whose details cannot project without hiding neighbors', () => {
+  expect(
+    parseOmiTaskIntegrations(
+      JSON.stringify({
+        integrations: {
+          todoist: true,
+          clickup: {connected: true},
+          asana: null,
+          trello: [{connected: true}],
+        },
+      }),
+    ),
+  ).toEqual([{key: 'clickup', name: 'ClickUp', isDefault: false}]);
+});
+
 test('fails closed for malformed GET task integrations', () => {
   expect(() => parseOmiTaskIntegrations(JSON.stringify([]))).toThrow();
   expect(() =>
     parseOmiTaskIntegrations(
       JSON.stringify({integrations: [{connected: true}]}),
     ),
-  ).toThrow();
-  expect(() =>
-    parseOmiTaskIntegrations(JSON.stringify({integrations: {todoist: true}})),
   ).toThrow();
   expect(() =>
     parseOmiTaskIntegrations(
