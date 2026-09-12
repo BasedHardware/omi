@@ -147,10 +147,10 @@ omi --json memory list | jq '.[] | {id, content, category}'
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
 
 # Перечислить открытые элементы действий
-omi --json action-item list --open | jq '.[] | {id, title, due_at}'
+omi --json action-item list --open | jq '.[] | {id, description, due_at}'
 
 # Перечислить цели
-omi --json goal list | jq '.[] | {id, title, progress: .progress_percent}'
+omi --json goal list | jq '.[] | {id, title, current: .current_value, target: .target_value}'
 ```
 
 ---
@@ -188,7 +188,7 @@ omi auth login
 | `command not found: omi` | PATH не содержит каталог bin pipx | Выполните `pipx ensurepath` и перезапустите терминал |
 | `401 Unauthorized` | API-ключ недействителен или просрочен | Сгенерируйте новый ключ на app.omi.me и обновите |
 | `connection refused` | Нет доступа к сети сервера Omi | Проверьте подключение к Интернету и настройки прокси |
-| `permission denied` на файлах конфигурации | Каталог конфигурации недоступен для записи | Проверьте права доступа к `~/.config/omi` |
+| `permission denied` на файлах конфигурации | Каталог конфигурации недоступен для записи | Проверьте права доступа к `~/.omi/config.toml` |
 
 ---
 
