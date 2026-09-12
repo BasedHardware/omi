@@ -226,7 +226,7 @@ describe('Connections panel', () => {
         { timeout: 10000 }
       )
       // Codex is installed here → its row must resolve to "Connect".
-      await waitResolved(page, 'connector-chatgpt-codex')
+      await waitResolved(page, 'connector-codex')
       await new Promise((r) => setTimeout(r, 300))
       await page.screenshot({ path: path.join(shotsDir, 'connections-05-chatgpt-detail.png') })
 
