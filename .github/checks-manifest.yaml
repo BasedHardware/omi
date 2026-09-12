@@ -279,6 +279,11 @@ checks:
     triggers: ["desktop/macos/scripts/desktop_flow_contract.py", "desktop/macos/tests/test_desktop_flow_contract.py", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "bridge actions moved into DesktopAutomationBridge+Notifications.swift while the action-source list still named only the base file, so desktop-flow-lint called their flows unknown and failed the push gate on every branch"
+  - id: desktop-flow-lint-tests
+    command: ["python3", "desktop/macos/tests/test_desktop_flow_lint.py"]
+    triggers: ["desktop/macos/scripts/desktop-flow-lint.py", "desktop/macos/tests/test_desktop_flow_lint.py", "desktop/macos/e2e/flows/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13550: chat-first snapshots pin selectedTabIndex to nil, so waits on that field hang forever; the lint must keep rejecting it and the committed flows must not name it"
   - id: desktop-grdb-insert-idiom-tests
     command: ["python3", "desktop/macos/tests/test_check_grdb_insert_idiom.py"]
     triggers: ["desktop/macos/scripts/check-grdb-insert-idiom.py", "desktop/macos/tests/test_check_grdb_insert_idiom.py", ".github/checks-manifest.yaml"]
