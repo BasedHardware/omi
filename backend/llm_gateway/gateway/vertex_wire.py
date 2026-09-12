@@ -423,7 +423,17 @@ def _vertex_to_openai_response(
         candidates[0] if isinstance(candidates, list) and candidates and isinstance(candidates[0], Mapping) else None
     )
     content = _vertex_candidate_text(candidate)
-    finish_reason = _vertex_finish_reason(candidate.get('finishReason') if candidate is not None else 'SAFETY')
+    tool_calls = _vertex_tool_calls(candidate)
+    finish_reason = _vertex_finish_reason(
+        candidate.get('finishReason') if candidate is not None else 'SAFETY',
+        has_tool_calls=bool(tool_calls),
+    )
+    message: dict[str, Any] = {
+        'role': 'assistant',
+        'content': content if content else None if tool_calls else content,
+    }
+    if tool_calls:
+        message['tool_calls'] = tool_calls
     normalized: dict[str, Any] = {
         'id': str(response.get('responseId') or 'vertex_gateway'),
         'object': 'chat.completion',
@@ -432,7 +442,7 @@ def _vertex_to_openai_response(
         'choices': [
             {
                 'index': 0,
-                'message': {'role': 'assistant', 'content': content},
+                'message': message,
                 'finish_reason': finish_reason,
             }
         ],
@@ -455,10 +465,23 @@ def _vertex_to_openai_stream_chunk(
     if candidate is None and usage is None:
         return None, False
     text = _vertex_candidate_text(candidate)
+    tool_calls = _vertex_tool_calls(candidate)
     raw_finish_reason = candidate.get('finishReason') if candidate is not None else None
-    finish_reason = _vertex_finish_reason(raw_finish_reason) if raw_finish_reason else None
-    if not text and finish_reason is None and usage is None:
+    finish_reason = (
+        _vertex_finish_reason(raw_finish_reason, has_tool_calls=bool(tool_calls)) if raw_finish_reason else None
+    )
+    if finish_reason is None and tool_calls:
+        finish_reason = 'tool_calls'
+    if not text and not tool_calls and finish_reason is None and usage is None:
         return None, False
+    delta: dict[str, Any] = {}
+    if text:
+        delta['content'] = text
+    if tool_calls:
+        delta['tool_calls'] = [
+            {'index': index, 'id': call['id'], 'type': 'function', 'function': call['function']}
+            for index, call in enumerate(tool_calls)
+        ]
     body: dict[str, Any] = {
         'id': str(response.get('responseId') or 'vertex_gateway'),
         'object': 'chat.completion.chunk',
@@ -468,7 +491,7 @@ def _vertex_to_openai_stream_chunk(
             [
                 {
                     'index': 0,
-                    'delta': {'content': text} if text else {},
+                    'delta': delta,
                     'finish_reason': finish_reason,
                 }
             ]
@@ -481,28 +504,56 @@ def _vertex_to_openai_stream_chunk(
     return _openai_sse(body), finish_reason is not None
 
 
-def _vertex_candidate_text(candidate: Mapping[str, Any] | None) -> str:
+def _vertex_candidate_parts(candidate: Mapping[str, Any] | None) -> list[Any]:
     if candidate is None:
-        return ''
+        return []
     content = candidate.get('content')
     if not isinstance(content, Mapping):
-        return ''
+        return []
     parts = content.get('parts')
-    if not isinstance(parts, list):
-        return ''
+    return parts if isinstance(parts, list) else []
+
+
+def _vertex_candidate_text(candidate: Mapping[str, Any] | None) -> str:
     text_parts: list[str] = []
-    for part in parts:
+    for part in _vertex_candidate_parts(candidate):
         if isinstance(part, Mapping) and isinstance(part.get('text'), str):
             text_parts.append(part['text'])
     return ''.join(text_parts)
 
 
-def _vertex_finish_reason(value: object) -> str:
+def _vertex_tool_calls(candidate: Mapping[str, Any] | None) -> list[dict[str, Any]]:
+    """Vertex functionCall parts -> OpenAI tool_calls. Text-only candidates return []."""
+    tool_calls: list[dict[str, Any]] = []
+    for part in _vertex_candidate_parts(candidate):
+        if not isinstance(part, Mapping):
+            continue
+        call = part.get('functionCall') or part.get('function_call')
+        if not isinstance(call, Mapping):
+            continue
+        name = call.get('name')
+        if not isinstance(name, str) or not name:
+            continue
+        raw_args = call.get('args')
+        arguments = dict(cast(Mapping[str, Any], raw_args)) if isinstance(raw_args, Mapping) else {}
+        tool_calls.append(
+            {
+                'id': f'call_{name}_{len(tool_calls)}',
+                'type': 'function',
+                'function': {'name': name, 'arguments': json.dumps(arguments, separators=(',', ':'))},
+            }
+        )
+    return tool_calls
+
+
+def _vertex_finish_reason(value: object, *, has_tool_calls: bool = False) -> str:
     normalized = str(value or '').upper()
     if normalized in {'MAX_TOKENS', 'LENGTH'}:
         return 'length'
     if normalized in {'SAFETY', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'RECITATION'}:
         return 'content_filter'
+    if has_tool_calls:
+        return 'tool_calls'
     return 'stop'
 
 
