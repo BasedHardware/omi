@@ -103,6 +103,38 @@ test('old chat history keeps GET memory citations and omits empty titles', () =>
   ]);
 });
 
+test('keeps GET chat memories when more than 50', () => {
+  const memories = Array.from({length: 51}, (_, index) => ({
+    id: `conv-${index}`,
+    created_at: '2026-09-06T00:00:00Z',
+    structured: {title: `Memory ${index}`, emoji: '🚀'},
+  }));
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'cited-long',
+        sender: 'ai',
+        text: 'Many citations.',
+        created_at: '2026-09-07T01:02:03Z',
+        memories,
+      },
+      {
+        id: 'neighbor',
+        sender: 'ai',
+        text: 'Neighbor stays.',
+        created_at: '2026-09-07T01:02:04Z',
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'cited-long')?.memories).toEqual(
+    memories.map(row => ({title: row.structured.title, emoji: '🚀'})),
+  );
+  expect(page.messages.find(row => row.id === 'neighbor')?.text).toBe(
+    'Neighbor stays.',
+  );
+});
+
 test('old chat history names GET evidence and omits conversation refs already cited', () => {
   const page = parseOmiHistory(
     JSON.stringify([
@@ -236,6 +268,73 @@ test('old chat history keeps GET files when files_id is present', () => {
   expect(
     page.messages.find(row => row.id === 'file-hidden')?.attachments,
   ).toBeUndefined();
+});
+
+test('keeps GET chat files when more than 50', () => {
+  const files = Array.from({length: 51}, (_, index) => ({
+    id: `att-${index}`,
+    name: `file-${index}.txt`,
+    mime_type: 'text/plain',
+    openai_file_id: `file-${index}`,
+    created_at: '2026-09-07T01:00:00Z',
+  }));
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'file-long',
+        sender: 'human',
+        text: 'Many notes.',
+        created_at: '2026-09-07T01:02:03Z',
+        files_id: files.map(row => row.id),
+        files,
+      },
+      {
+        id: 'neighbor',
+        sender: 'ai',
+        text: 'Neighbor stays.',
+        created_at: '2026-09-07T01:02:04Z',
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'file-long')?.attachments).toEqual(
+    files.map(row => ({
+      id: row.id,
+      displayName: row.name,
+      mediaType: row.mime_type,
+    })),
+  );
+  expect(page.messages.find(row => row.id === 'neighbor')?.text).toBe(
+    'Neighbor stays.',
+  );
+});
+
+test('keeps GET chat files_id when more than 50 without hydrating missing files', () => {
+  const filesId = Array.from({length: 51}, (_, index) => `att-${index}`);
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'ids-long',
+        sender: 'human',
+        text: 'Ids only.',
+        created_at: '2026-09-07T01:02:03Z',
+        files_id: filesId,
+      },
+      {
+        id: 'neighbor',
+        sender: 'ai',
+        text: 'Neighbor stays.',
+        created_at: '2026-09-07T01:02:04Z',
+      },
+    ]),
+    0,
+  );
+  expect(
+    page.messages.find(row => row.id === 'ids-long')?.attachments,
+  ).toBeUndefined();
+  expect(page.messages.find(row => row.id === 'neighbor')?.text).toBe(
+    'Neighbor stays.',
+  );
 });
 
 test('old chat history keeps GET files thumbnail and omits empty paths', () => {

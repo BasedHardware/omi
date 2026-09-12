@@ -23,22 +23,19 @@ function parseOmiChatFiles(
     }
     if (
       !Array.isArray(filesId) ||
-      filesId.length > 50 ||
       !filesId.every(id => typeof id === 'string')
     ) {
       throw new Error('Omi chat files are malformed');
     }
     return [];
   }
-  if (!Array.isArray(files) || files.length > 50) {
+  if (!Array.isArray(files)) {
     throw new Error('Omi chat files are malformed');
   }
   const ids =
     filesId === undefined || filesId === null
       ? []
-      : Array.isArray(filesId) &&
-        filesId.length <= 50 &&
-        filesId.every(id => typeof id === 'string')
+      : Array.isArray(filesId) && filesId.every(id => typeof id === 'string')
       ? filesId
       : null;
   if (ids === null) {
@@ -84,7 +81,7 @@ function parseOmiChatMemories(
   if (value === undefined || value === null) {
     return [];
   }
-  if (!Array.isArray(value) || value.length > 50) {
+  if (!Array.isArray(value)) {
     throw new Error('Omi chat memories are malformed');
   }
   return value.map(raw => {
