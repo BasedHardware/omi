@@ -14,6 +14,11 @@ checks:
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
+  - id: plugin-sdk-combine-segments-tests
+    command: ["python3", "plugins/omi-plugin-sdk/test_combine_segments.py"]
+    triggers: ["plugins/omi-plugin-sdk/**"]
+    lanes: ["local", "ci"]
+    reason: "combine_segments normalized double spaces with replace('  ', '') which deleted them and joined words ('hello  world' -> 'helloworld'); the backend reference collapses to a single space"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]

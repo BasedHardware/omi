@@ -288,7 +288,7 @@ class TranscriptSegment(BaseModel):
 
         for i, segment in enumerate(segments):
             segments[i].text = (
-                segments[i].text.strip().replace("  ", "").replace(" ,", ",").replace(" .", ".").replace(" ?", "?")
+                segments[i].text.strip().replace("  ", " ").replace(" ,", ",").replace(" .", ".").replace(" ?", "?")
             )
         return segments
 
