@@ -169,7 +169,7 @@ function externalText(value: unknown): string | undefined {
   return copy === '' ? undefined : copy;
 }
 function calendarEventTimeCopy(value: unknown): string {
-  const parsed = Date.parse(text(value, 100));
+  const parsed = Date.parse(text(value, 10000));
   if (!Number.isFinite(parsed)) {
     throw new DetailError('invalid');
   }
