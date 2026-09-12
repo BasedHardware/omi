@@ -147,10 +147,10 @@ omi --json memory list | jq '.[] | {id, content, category}'
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
 
 # Наведите отворене акционе ставке
-omi --json action-item list --open | jq '.[] | {id, title, due_at}'
+omi --json action-item list --open | jq '.[] | {id, description, due_at}'
 
 # Наведите циљеве
-omi --json goal list | jq '.[] | {id, title, progress: .progress_percent}'
+omi --json goal list | jq '.[] | {id, title, current: .current_value, target: .target_value}'
 ```
 
 ---
@@ -188,7 +188,7 @@ omi auth login
 | `command not found: omi` | PATH не садржи pipx bin директоријум | Покрените `pipx ensurepath` и поново покрените терминал |
 | `401 Unauthorized` | API кључ је неважећи или је истекао | Генеришите нови кључ на app.omi.me и ажурирајте |
 | `connection refused` | Нема мрежног приступа Omi серверу | Проверите интернет конекцију и подешавања проксија |
-| `permission denied` на конфигурационим датотекама | Директоријум конфигурације се не може писати | Проверите дозволе за `~/.config/omi` |
+| `permission denied` на конфигурационим датотекама | Директоријум конфигурације се не може писати | Проверите дозволе за `~/.omi/config.toml` |
 
 ---
 
