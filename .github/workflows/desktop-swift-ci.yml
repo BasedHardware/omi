@@ -280,13 +280,36 @@ jobs:
           # overhead). The uncapped scaled budget (300s + 30s/suite) would
           # be 3270s at batch 100 — 54.5 minutes inside this job's
           # 60-minute ceiling, leaving a wedged batch no room for its
-          # bisect fallback — so the batch watchdog is independently capped
-          # at 25 minutes: a stalled batch fails over to isolation with
-          # half the job still ahead of it. The local default stays 25 and
-          # every invocation logs its wall seconds, so a regression is
-          # visible in the run log.
+          # bisect fallback — so the batch watchdog is independently
+          # capped.
+          #
+          # The cap is sized against the STEP budget, not the job timeout.
+          # 1500s cleared the job ceiling and still failed the step: a
+          # wedged batch spends the full cap before the bisect that clears
+          # it, and 1500s on top of a healthy ~870s step is 2400s against
+          # an 1800s guard. Three runs failed exactly that way — 34609469609
+          # (2414s), 34641438446 (2505s), 34655499561 (2511s) — each with
+          # zero failing suites and one `exit=143` batch at the cap, whose
+          # halves then passed in under 60s apiece.
+          #
+          # 600s keeps a wedged ORDINARY run inside the step guard (870 +
+          # 600 + the ~105s bisect) while staying ~9x the slowest healthy
+          # batch of 100 observed (67s). A batch that genuinely needs more is
+          # not killed, only re-run in halves.
+          #
+          # Scope, because it is not universal: a PR that wakes the deferred
+          # serial cluster already spends ~24m of the 30m step, so a wedge
+          # there has ~160s of room — less than one suite's own 300s budget,
+          # which no ceiling for a batch of 100 can honestly sit below. That
+          # case is not rescued by any value here; it needs the wedge itself
+          # fixed. All three observed failures were ordinary runs.
+          #
+          # Local runs are unaffected by either number: the script's own
+          # defaults are a batch of 25 with the ceiling disabled (0), so this
+          # cap exists only for CI's batch of 100. Every invocation logs its
+          # wall seconds, so a regression stays visible in the run log.
           OMI_SWIFT_TEST_SUITE_BATCH_SIZE: "100"
-          OMI_SWIFT_TEST_BATCH_CEILING_SECONDS: "1500"
+          OMI_SWIFT_TEST_BATCH_CEILING_SECONDS: "600"
           # PRs defer ratcheted slow suites (swift-test-slow-suites.json) to
           # the full lane unless this diff touches their own inputs; pushes,
           # scheduled health runs, and manual dispatch always run everything.
