@@ -140,7 +140,7 @@ class ClickUpClient:
             return []
     
     def get_lists(self, access_token: str, space_id: str) -> List[Dict]:
-        """Get all lists in a space."""
+        """Get folderless lists in a space."""
         try:
             headers = {"Authorization": access_token}
             response = requests.get(
@@ -171,6 +171,40 @@ class ClickUpClient:
             print(f"❌ Error getting lists: {e}", flush=True)
             return []
     
+    def get_folders(self, access_token: str, space_id: str) -> List[Dict]:
+        """Get non-archived folders in a space."""
+        try:
+            response = requests.get(
+                f"{self.base_url}/space/{space_id}/folder",
+                headers={"Authorization": access_token},
+                params={"archived": "false"}
+            )
+            if response.status_code == 200:
+                return response.json().get("folders", [])
+            print(f"❌ Error getting folders: {response.status_code}", flush=True)
+        except Exception:
+            print("❌ Error getting folders", flush=True)
+        return []
+
+    def get_folder_lists(self, access_token: str, space_id: str, folder_id: str) -> List[Dict]:
+        """Get non-archived lists in one folder, retaining selection metadata."""
+        try:
+            response = requests.get(
+                f"{self.base_url}/folder/{folder_id}/list",
+                headers={"Authorization": access_token},
+                params={"archived": "false"}
+            )
+            if response.status_code == 200:
+                return [
+                    {"id": lst.get("id"), "name": lst.get("name"),
+                     "space_id": space_id, "folder_id": folder_id}
+                    for lst in response.json().get("lists", [])
+                ]
+            print(f"❌ Error getting folder lists: {response.status_code}", flush=True)
+        except Exception:
+            print("❌ Error getting folder lists", flush=True)
+        return []
+
     def get_all_lists(self, access_token: str, team_id: str) -> List[Dict]:
         """Get all lists across all spaces in a workspace."""
         all_lists = []
@@ -181,6 +215,8 @@ class ClickUpClient:
         # Get lists for each space
         for space in spaces:
             lists = self.get_lists(access_token, space["id"])
+            for folder in self.get_folders(access_token, space["id"]):
+                lists.extend(self.get_folder_lists(access_token, space["id"], folder["id"]))
             for lst in lists:
                 lst["space_name"] = space["name"]
                 all_lists.append(lst)
