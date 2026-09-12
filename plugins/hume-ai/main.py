@@ -4,6 +4,7 @@ Main file with API endpoints only. Helper functions are in app.py
 """
 
 import os
+import re
 import tempfile
 from datetime import datetime
 from typing import Optional
@@ -135,7 +136,11 @@ async def handle_audio_stream(
         audio_dir.mkdir(exist_ok=True)
 
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
-        filename = f"{uid}_{timestamp}.wav"
+        # uid arrives as a query parameter and is interpolated into a file
+        # name; strip path separators and dot-segments so it cannot escape
+        # audio_dir (e.g. uid="../../x" wrote outside the sandbox before).
+        safe_uid = re.sub(r"[^A-Za-z0-9_-]", "_", uid)
+        filename = f"{safe_uid}_{timestamp}.wav"
         local_file_path = audio_dir / filename
 
         # Write WAV file with header

@@ -14,6 +14,11 @@ checks:
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
+  - id: hume-audio-path-safety-tests
+    command: ["python3", "plugins/hume-ai/test_audio_path_safety.py"]
+    triggers: ["plugins/hume-ai/**"]
+    lanes: ["local", "ci"]
+    reason: "/audio interpolated the uid query parameter into the WAV filename unsanitized, so uid='../../x' wrote attacker-controlled bytes outside audio_files"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
