@@ -82,12 +82,13 @@ struct ChatRunAccountingPolicy: Equatable {
   let usesOmiAccountQuota: Bool
   let recordsPersonalProviderUsage: Bool
 
-  /// `providerMode` must be what the bridge is actually running (e.g.
-  /// `ChatProvider.activeProviderMode`), not a fresh re-read of the Settings
-  /// preference: a provider switch is persisted immediately but only takes
-  /// effect in the running process after a restart, so re-deriving from
-  /// UserDefaults here could bill/meter a turn under a provider the
-  /// subprocess was never actually switched to.
+  /// `providerMode` must be what the bridge is actually running (the caller
+  /// passes `resolvedAgentClient().providerMode`, a read-through to
+  /// `AgentBridge.providerMode`/`AgentRuntimeProcess.launchedProviderMode`),
+  /// not a fresh re-read of the Settings preference: a provider switch is
+  /// persisted immediately but only takes effect in the running process
+  /// after a restart, so re-deriving from UserDefaults here could bill/meter
+  /// a turn under a provider the subprocess was never actually switched to.
   init(pinnedAdapterID: String, providerMode: String) {
     // piMono is shared by the Omi-billed "omi" provider and the free
     // "omi-local" provider (see AIProvider); only "omi" ever touches the
@@ -1335,23 +1336,38 @@ class ChatProvider: ObservableObject {
   private var activeBridgeHarness: String = "piMono"
   /// Same idea as `activeBridgeHarness`, one layer down: piMono and Local
   /// share that harness, differing only in which pi provider ("omi" /
-  /// "omi-local") it is actually configured with. Tracks what the bridge is
-  /// actually running, not the @AppStorage preference, for the same reason
-  /// and by the same rule: only `resolvedAgentClient()` (cold start) and
-  /// `switchBridgeMode()` (after a switch actually takes effect) may write
-  /// this. `ChatRunAccountingPolicy` reads it instead of re-deriving from
-  /// UserDefaults, so billing/quota tracks what is actually running even
-  /// when a provider switch is persisted but hasn't been applied yet.
+  /// "omi-local") it is actually configured with. Tracks what
+  /// `switchBridgeMode()` last confirmed applied (only written after its
+  /// restart/reconfigure actually succeeds, never optimistically), so a
+  /// failed switch leaves this exactly as it was and a retry is not wrongly
+  /// treated as a no-op by the guard in `switchBridgeMode()`.
+  ///
+  /// This is NOT the source billing/credential gating reads: that needs the
+  /// shared runtime's own truth (`AgentBridge.providerMode`, backed by
+  /// `AgentRuntimeProcess.launchedProviderMode`), reached via
+  /// `resolvedAgentClient().providerMode`, since this per-`ChatProvider`
+  /// property and the shared runtime process are two different things that
+  /// can transiently disagree (e.g. another `ChatProvider` instance, or the
+  /// floating bar, switched the shared process first).
   private var activeProviderMode: String = AIProvider.currentProviderMode
-  #if DEBUG
-    /// Test-only peek at the bridge's actual running state (harness + pi
-    /// provider), as opposed to the persisted `bridgeMode` preference. Lets a
-    /// test prove `switchBridgeMode` actually applied a change instead of
-    /// silently no-opping it.
-    var testingActiveBridgeState: (harness: String, providerMode: String) {
-      (activeBridgeHarness, activeProviderMode)
-    }
-  #endif
+  /// True from the moment `switchBridgeMode()` starts awaiting a restart or
+  /// reconfigure until that call returns. See the guard in `switchBridgeMode()`
+  /// for why a second, concurrent call must bypass the no-op check while this
+  /// is true instead of trusting `activeBridgeHarness`/`activeProviderMode`,
+  /// which are still stale until the in-flight call resolves.
+  private var switchApplyInFlight = false
+  /// Test-only peek at the bridge's actual running state (harness + pi
+  /// provider), as opposed to the persisted `bridgeMode` preference. Lets a
+  /// test prove `switchBridgeMode` actually applied a change instead of
+  /// silently no-opping it. Not `#if DEBUG`-gated: the release-compile CI
+  /// lane still compiles this file's tests, which reference this
+  /// unconditionally (see other `testing*` seams in this codebase, e.g.
+  /// `PushToTalkManager.testingTurnScreenEvidenceCapture`), so gating it
+  /// only breaks that lane without ever actually excluding it from a real
+  /// release binary's tests.
+  var testingActiveBridgeState: (harness: String, providerMode: String) {
+    (activeBridgeHarness, activeProviderMode)
+  }
   /// Orders rapid preference changes without treating them as runtime lifecycle.
   /// The kernel applies each preference only when creating future sessions.
   private var profilePreferenceChangeGeneration: UInt64 = 0
@@ -2361,19 +2377,51 @@ class ChatProvider: ObservableObject {
     // writes, so by the time this async function reads it, it may already
     // reflect `resolvedMode` — the exact dead-guard bug `activeBridgeHarness`
     // exists to avoid one layer up.
-    guard newHarness != previousHarness || newProviderMode != previousProviderMode else { return }
+    // `switchApplyInFlight`: a restart/reconfigure this function starts is
+    // awaited across a suspension point, during which a second call (a rapid
+    // re-toggle) can run on this same actor before the first one returns and
+    // updates `activeBridgeHarness`/`activeProviderMode`. If the second call's
+    // destination happens to match those still-stale trackers (e.g. the user
+    // flips back to the original provider before the first switch finished),
+    // comparing only against them would wrongly treat it as no change needed
+    // and silently do nothing. While a switch is in flight, always proceed —
+    // worst case this piggybacks on the in-flight restart/reconfigure (see
+    // AgentBridge.runLifecycleOperation's same-kind flight coalescing), or a
+    // later restart tears the process down under an earlier reconfigure RPC,
+    // whose `.stopped` failure the generation guard below swallows so only
+    // the newest switch reports — either way beats a switch nobody applied.
+    guard
+      newHarness != previousHarness || newProviderMode != previousProviderMode
+        || switchApplyInFlight
+    else { return }
     log("ChatProvider: Updating future-session profile from \(previousHarness) to \(resolvedMode.rawValue)")
     profilePreferenceChangeGeneration &+= 1
     let preferenceChange = profilePreferenceChangeGeneration
-    activeBridgeHarness = newHarness
-    activeProviderMode = newProviderMode
+    // `bridgeMode` (the persisted preference) is honored immediately: it
+    // drives the Settings UI and is what a fresh launch reads. But
+    // `activeBridgeHarness`/`activeProviderMode` claim to track what is
+    // ACTUALLY running (billing and credential gating depend on that), so
+    // they must not flip until the operation below actually applies the
+    // change — a failed restart (e.g. `requestAlreadyActive` because a chat
+    // request is in flight) must leave them exactly as they were, or a
+    // retry of the same switch would wrongly no-op against the guard above,
+    // and billing would treat a still-old-provider process as switched.
     bridgeMode = resolvedMode.rawValue
     AnalyticsManager.shared.chatBridgeModeChanged(from: previousHarness, to: resolvedMode.rawValue)
 
     if mode == .userClaude {
       checkClaudeConnectionStatus()
     }
-    guard agentBridgeStarted else { return }
+    guard agentBridgeStarted else {
+      // No running process to restart or reconfigure: nothing is "actually
+      // running" yet to disagree with, so the preference alone is authoritative
+      // until the first launch (which reads it fresh in resolvedAgentClient()).
+      activeBridgeHarness = newHarness
+      activeProviderMode = newProviderMode
+      return
+    }
+    switchApplyInFlight = true
+    defer { switchApplyInFlight = false }
     if newHarness == previousHarness {
       // Same harness, different provider (piMono <-> local): the running
       // process's env vars are stale, and no RPC can change them in place;
@@ -2381,6 +2429,8 @@ class ChatProvider: ObservableObject {
       do {
         try await resolvedAgentClient().restart()
         guard preferenceChange == profilePreferenceChangeGeneration else { return }
+        activeBridgeHarness = newHarness
+        activeProviderMode = newProviderMode
         log("ChatProvider: Runtime restarted for provider change: \(resolvedMode.rawValue)")
       } catch {
         guard preferenceChange == profilePreferenceChangeGeneration else { return }
@@ -2400,6 +2450,8 @@ class ChatProvider: ObservableObject {
         workingDirectory: effectiveAgentWorkingDirectory()
       )
       guard preferenceChange == profilePreferenceChangeGeneration else { return }
+      activeBridgeHarness = newHarness
+      activeProviderMode = newProviderMode
       log(
         "ChatProvider: Future-session profile configured "
           + "generation=\(configured.preferenceGeneration) adapter=\(configured.adapterId)"
@@ -4747,7 +4799,7 @@ class ChatProvider: ObservableObject {
     }
     let accountingPolicy = ChatRunAccountingPolicy(
       pinnedAdapterID: pinnedSession.profile.adapterId,
-      providerMode: activeProviderMode
+      providerMode: await resolvedAgentClient().providerMode
     )
     telemetryAttempt.bindSessionAdapter(pinnedSession.profile.adapterId)
     telemetryAttempt.bindBridgeModePreference(bridgeMode)

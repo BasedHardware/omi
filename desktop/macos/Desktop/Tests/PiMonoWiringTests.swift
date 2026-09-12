@@ -198,6 +198,146 @@ final class PiMonoWiringTests: XCTestCase {
       "switching back to Omi must apply too, not just the first flip")
   }
 
+  // omi-test-quality: source-inspection -- static contract: `switchBridgeMode`
+  // must assign `activeBridgeHarness`/`activeProviderMode` only after its
+  // `restart()`/`configureDefaultExecutionProfile` call actually succeeds, not
+  // before attempting it. Assigning first (as this code originally did) means a
+  // failed restart — e.g. `BridgeError.requestAlreadyActive` because a chat
+  // request is in flight, the exact scenario an automated review caught —
+  // leaves billing (`ChatRunAccountingPolicy`) and the no-op guard on the next
+  // call both trusting a switch that never actually took effect. Reaching the
+  // restart-failure path behaviorally needs a registered, live shared runtime
+  // with a genuinely in-flight request; this pins the ordering directly
+  // instead of standing up that whole stack.
+  //
+  // The function has exactly 3 assignment sites, one per sub-region, and each
+  // sub-region is isolated by an explicit textual boundary so a single loose
+  // "somewhere after restart()'s position in the whole function" check can't
+  // pass a regression where, say, the reconfigure-branch's assignment moved
+  // to before `configureDefaultExecutionProfile(` while staying textually
+  // after `restart()` (which appears earlier in the function body).
+  func testSwitchBridgeModeAssignsActiveStateOnlyAfterRestartOrReconfigureSucceeds() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Providers/ChatProvider.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    let functionStart = try XCTUnwrap(source.range(of: "func switchBridgeMode(to mode: BridgeMode) async {"))
+    let nextFunctionStart = try XCTUnwrap(
+      source.range(
+        of: "\n  func restartLocalBridgeIfActive()",
+        range: functionStart.upperBound..<source.endIndex))
+    let body = String(source[functionStart.upperBound..<nextFunctionStart.lowerBound])
+
+    // Region boundaries, in source order:
+    //   [not-yet-started guard] -> switchApplyInFlight = true -> [restart branch] -> do { -> [reconfigure branch]
+    let notYetStartedGuardStart = try XCTUnwrap(body.range(of: "guard agentBridgeStarted else {"))
+    let inFlightMarker = try XCTUnwrap(
+      body.range(of: "switchApplyInFlight = true", range: notYetStartedGuardStart.upperBound..<body.endIndex))
+    let restartBranchStart = try XCTUnwrap(
+      body.range(of: "if newHarness == previousHarness {", range: inFlightMarker.upperBound..<body.endIndex))
+    let reconfigureBranchStart = try XCTUnwrap(
+      body.range(
+        of: "\n    do {\n      guard let adapterId",
+        range: restartBranchStart.upperBound..<body.endIndex))
+
+    let notYetStartedRegion = notYetStartedGuardStart.lowerBound..<inFlightMarker.lowerBound
+    let restartRegion = restartBranchStart.lowerBound..<reconfigureBranchStart.lowerBound
+    let reconfigureRegion = reconfigureBranchStart.lowerBound..<body.endIndex
+
+    func assignmentRanges(in region: Range<String.Index>) -> [Range<String.Index>] {
+      var results: [Range<String.Index>] = []
+      var searchStart = region.lowerBound
+      while searchStart < region.upperBound,
+        let found = body.range(of: "activeProviderMode = newProviderMode", range: searchStart..<region.upperBound)
+      {
+        results.append(found)
+        searchStart = found.upperBound
+      }
+      return results
+    }
+
+    let notYetStartedAssignments = assignmentRanges(in: notYetStartedRegion)
+    let restartAssignments = assignmentRanges(in: restartRegion)
+    let reconfigureAssignments = assignmentRanges(in: reconfigureRegion)
+
+    XCTAssertEqual(
+      notYetStartedAssignments.count, 1,
+      "the not-yet-started branch has no async call to race, so it assigns exactly once, unconditionally")
+    XCTAssertEqual(restartAssignments.count, 1, "the restart branch must assign exactly once")
+    XCTAssertEqual(reconfigureAssignments.count, 1, "the reconfigure branch must assign exactly once")
+
+    let restartCallRange = try XCTUnwrap(
+      body.range(of: "try await resolvedAgentClient().restart()", range: restartRegion))
+    let configureCallRange = try XCTUnwrap(
+      body.range(
+        of: "try await resolvedAgentClient().configureDefaultExecutionProfile(", range: reconfigureRegion))
+
+    XCTAssertTrue(
+      restartAssignments[0].lowerBound > restartCallRange.upperBound,
+      "the restart branch's own assignment must come after its own restart() call, "
+        + "not merely after some restart() call elsewhere in the function")
+    XCTAssertTrue(
+      reconfigureAssignments[0].lowerBound > configureCallRange.upperBound,
+      "the reconfigure branch's own assignment must come after its own "
+        + "configureDefaultExecutionProfile( call, not merely after restart()'s earlier position")
+  }
+
+  // omi-test-quality: source-inspection -- static contract for the
+  // `switchApplyInFlight` fix: a second `switchBridgeMode` call issued while a
+  // first restart/reconfigure is still in-flight must not silently no-op even
+  // if its destination happens to match the still-stale trackers. Reaching
+  // this behaviorally needs two real concurrent calls racing across a genuine
+  // `await` suspension against a live shared runtime; this pins the 3
+  // invariants that make that race safe instead of standing up that stack:
+  // the flag is set before either async call, reset via `defer` (so it can't
+  // be skipped by an early return or a thrown error), and the no-op guard
+  // bypasses whenever it's set.
+  func testSwitchApplyInFlightGuardsBothAsyncCallsAndIsResetUnconditionally() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Providers/ChatProvider.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    let functionStart = try XCTUnwrap(source.range(of: "func switchBridgeMode(to mode: BridgeMode) async {"))
+    let nextFunctionStart = try XCTUnwrap(
+      source.range(
+        of: "\n  func restartLocalBridgeIfActive()",
+        range: functionStart.upperBound..<source.endIndex))
+    let body = String(source[functionStart.upperBound..<nextFunctionStart.lowerBound])
+
+    let guardRange = try XCTUnwrap(
+      body.range(
+        of:
+          "guard\n      newHarness != previousHarness || newProviderMode != previousProviderMode\n        || switchApplyInFlight\n    else { return }"
+      ))
+    let setRange = try XCTUnwrap(
+      body.range(of: "switchApplyInFlight = true", range: guardRange.upperBound..<body.endIndex))
+    let deferRange = try XCTUnwrap(
+      body.range(of: "defer { switchApplyInFlight = false }", range: setRange.upperBound..<body.endIndex))
+    let restartCallRange = try XCTUnwrap(
+      body.range(of: "try await resolvedAgentClient().restart()", range: deferRange.upperBound..<body.endIndex))
+    let configureCallRange = try XCTUnwrap(
+      body.range(
+        of: "try await resolvedAgentClient().configureDefaultExecutionProfile(",
+        range: deferRange.upperBound..<body.endIndex))
+
+    XCTAssertTrue(
+      setRange.lowerBound < restartCallRange.lowerBound && setRange.lowerBound < configureCallRange.lowerBound,
+      "switchApplyInFlight must be set to true before either async call, so a second concurrent "
+        + "call sees it while the first is still in flight")
+    XCTAssertTrue(
+      deferRange.lowerBound < restartCallRange.lowerBound && deferRange.lowerBound < configureCallRange.lowerBound,
+      "the reset must be a `defer` registered before either async call, not an explicit reset at "
+        + "specific return points, so an early return or thrown error can't skip it")
+    XCTAssertTrue(
+      guardRange.lowerBound < setRange.lowerBound,
+      "the no-op guard's `|| switchApplyInFlight` bypass must be the guard that runs before this "
+        + "function ever sets the flag for its own call")
+  }
+
   // MARK: - Cloud-assisted features gate
   // Regression coverage for the unified Local-provider "Cloud-assisted
   // features" setting as it applies to connector synthesis (Apple
