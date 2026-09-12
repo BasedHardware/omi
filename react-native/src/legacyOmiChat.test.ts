@@ -1285,6 +1285,44 @@ test('does not omit a neighboring recommended next step when GET lists more than
   ).toEqual(items.map(item => item.description));
 });
 
+test('does not omit a neighboring question option label when GET lists more than twenty', () => {
+  const options = Array.from({length: 21}, (_, i) => ({
+    option_id: `opt-${i + 1}`,
+    label: `Choice ${i + 1}`,
+  }));
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'many-options',
+        sender: 'ai',
+        text: 'Pick one.',
+        created_at: '2026-09-07T01:02:03Z',
+        content_blocks: [
+          {
+            type: 'question_card',
+            id: 'q-many',
+            question_id: 'q-1',
+            text: 'Which one?',
+            subject: {kind: 'task', id: 'task-1'},
+            options: [{option_id: 'empty', label: '  '}, ...options],
+          },
+        ],
+      },
+    ]),
+    0,
+  );
+  expect(
+    page.messages.find(row => row.id === 'many-options')?.contentBlocks,
+  ).toEqual([
+    {
+      eyebrow: 'Question',
+      title: 'Which one?',
+      detail: options.map(option => option.label).join(' · '),
+    },
+  ]);
+  expect(JSON.stringify(page.messages)).not.toContain('preparedAnswer');
+});
+
 test('old chat history names GET memory review cards without inventing writes', () => {
   const page = parseOmiHistory(
     JSON.stringify([

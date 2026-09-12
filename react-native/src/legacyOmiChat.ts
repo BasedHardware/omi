@@ -517,7 +517,7 @@ function parseQuestionOptionLabels(
     return undefined;
   }
   const labels: string[] = [];
-  for (const entry of rawOptions.slice(0, 20)) {
+  for (const entry of rawOptions) {
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
       continue;
     }
