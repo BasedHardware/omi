@@ -542,6 +542,57 @@ test('keeps GET transcript when speaker or stt_provider exceeds 256', async () =
   );
 });
 
+test('keeps GET conversation detail when transcript text exceeds 100000', async () => {
+  const text = 't'.repeat(100001);
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          text,
+        },
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      title: fixture.structured.title,
+      transcript: {
+        status: 'loaded',
+        segments: [
+          {
+            text,
+            speaker: 'SPEAKER_00',
+            isUser: true,
+            start: 0.25,
+            end: 4.5,
+          },
+        ],
+      },
+    },
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      apps_results: [{content: text}],
+      plugins_results: [],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummary,
+  ).toBe(text);
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      external_data: {text},
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).externalText,
+  ).toBe(text);
+});
+
 test('keeps GET conversation detail when person_id or folder_id exceeds 256', async () => {
   const folderId = 'f'.repeat(257);
   mockRequest.mockImplementation(async (request: {path?: string}) => {

@@ -138,7 +138,7 @@ function firstAppSummary(
     appRows.length > 0 ? appRows : optionalObjectRows(plugins);
   for (const raw of rows) {
     const row = object(raw);
-    const content = visibleDisplayText(text(row.content, 100000));
+    const content = visibleDisplayText(text(row.content));
     if (content !== '' && content !== overview) {
       const appId = appResultId(row);
       return appId === undefined ? {content} : {content, appId};
@@ -165,7 +165,7 @@ function externalText(value: unknown): string | undefined {
   if (data.text === undefined || data.text === null) {
     return undefined;
   }
-  const copy = visibleDisplayText(text(data.text, 100000));
+  const copy = visibleDisplayText(text(data.text));
   return copy === '' ? undefined : copy;
 }
 function calendarEventTimeCopy(value: unknown): string {
@@ -230,7 +230,7 @@ function segmentTranslations(value: unknown): string[] | undefined {
   for (const raw of value) {
     const row = object(raw);
     text(row.lang);
-    const copy = visibleDisplayText(text(row.text, 100000));
+    const copy = visibleDisplayText(text(row.text));
     if (copy !== '') {
       translations.push(copy);
     }
@@ -416,7 +416,7 @@ export async function loadLegacyConversationDetail(
                         text(segment.stt_provider, 10000),
                       );
                 return {
-                  text: text(segment.text, 100000),
+                  text: text(segment.text),
                   speaker:
                     segment.speaker == null
                       ? 'SPEAKER_00'
