@@ -1,12 +1,17 @@
 import { ArrowUpRight, Sparkles } from 'lucide-react'
 import { cn } from '../../../lib/utils'
-import { HUB_SUGGESTIONS } from './hubPrompts'
+import { useHomeSuggestions } from '../../../hooks/useHomeSuggestions'
 
 export function HubSuggestions({ onPick }: { onPick: (text: string) => void }): React.JSX.Element {
+  // The personalized daily feed the old static prompt list was a placeholder
+  // for: the lead chip plus two questions generated from the account's own
+  // context (cached per local day), padded by the static pair until a
+  // generation lands.
+  const suggestions = useHomeSuggestions()
   return (
     // VStack(spacing: 8) on Mac (DashboardPage.swift:961).
     <div className="flex w-full flex-col gap-2">
-      {HUB_SUGGESTIONS.map((text) => (
+      {suggestions.map((text) => (
         <button
           key={text}
           type="button"
