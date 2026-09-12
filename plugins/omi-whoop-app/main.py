@@ -1027,9 +1027,6 @@ async def whoop_callback(
     error: str = Query(None)
 ):
     """Handle Whoop OAuth2 callback."""
-    # uid is reflected into href/redirect URLs below — percent-encode
-    # it once so quotes/&/.. cannot break the attribute or the query.
-    uid_q = quote(uid or "", safe="")
     if error:
         return HTMLResponse(content=f"""
         <html>
@@ -1078,6 +1075,10 @@ async def whoop_callback(
         """, status_code=400)
 
     delete_oauth_state(state)
+
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid, safe="")
 
     # Exchange code for tokens
     try:

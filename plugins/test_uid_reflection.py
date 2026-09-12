@@ -11,6 +11,8 @@ Run: python3 plugins/test_uid_reflection.py
 """
 
 import asyncio
+import contextlib
+import inspect
 import importlib.util
 import sys
 import types
@@ -130,8 +132,121 @@ def test_normal_uid_still_links():
         assert "uid=user_123" in html, f"{plugin_dir}: normal uid missing"
 
 
+# plugin dir -> OAuth callback handler that also reflects uid into
+# success/retry href links.
+CALLBACKS = {
+    "omi-whoop-app": "whoop_callback",
+    "omi-twitter-chat-tools-app": "twitter_callback",
+    "omi-github-app": "auth_callback",
+    "omi-notion-app": "notion_callback",
+    "omi-clickup-app": "auth_callback",
+    "omi-slack-app": "auth_callback",
+}
+
+
+class _FakeResp:
+    status_code = 200
+    text = "ok"
+
+    def json(self):
+        return {
+            "access_token": "tok123",
+            "refresh_token": "ref123",
+            "expires_in": 3600,
+            "data": {"username": "u", "id": "1"},
+        }
+
+
+def _drive_callback(module, plugin_dir, uid):
+    """Run the plugin's OAuth callback with a seeded valid state and a
+    successful token exchange, so the uid-bearing success page renders."""
+    cb = getattr(module, CALLBACKS[plugin_dir])
+    patches = []
+    if plugin_dir in ("omi-github-app", "omi-clickup-app", "omi-slack-app"):
+        module.oauth_states["st"] = uid
+        state = "st"
+    else:
+        # notion/twitter derive uid as state.split(":")[0]; whoop resolves
+        # it via get_uid_from_oauth_state (patched below).
+        state = f"{uid}:nonce"
+    if plugin_dir == "omi-whoop-app":
+        patches.append(mock.patch.object(module, "get_uid_from_oauth_state", lambda s: uid))
+    if plugin_dir in ("omi-notion-app", "omi-twitter-chat-tools-app"):
+        patches.append(mock.patch.object(module, "get_oauth_state", lambda u: state))
+    req = getattr(module, "requests", None)
+    if req is not None:
+        patches.append(mock.patch.object(req, "post", lambda *a, **k: _FakeResp()))
+        patches.append(mock.patch.object(req, "get", lambda *a, **k: _FakeResp()))
+    kwargs = {"code": "code123", "state": state}
+    if "request" in inspect.signature(cb).parameters:
+        kwargs["request"] = None
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
+        return asyncio.run(cb(**kwargs))
+
+
+def test_callback_encodes_uid_after_state_lookup():
+    for plugin_dir in CALLBACKS:
+        module = _load_plugin(plugin_dir)
+        html = _drive_callback(module, plugin_dir, HOSTILE_UID)
+        assert isinstance(html, str), f"{plugin_dir}: callback did not return HTML"
+        assert '" onmouseover=' not in html, f"{plugin_dir}: raw uid reflected in callback"
+        assert "&admin=1" not in html, f"{plugin_dir}: raw uid reflected in callback"
+        assert "%22" in html, f"{plugin_dir}: encoded uid missing from callback page"
+
+
+def test_callback_rejects_unknown_state():
+    """Invalid-state early returns must not reference the unassigned uid_q."""
+    for plugin_dir, cb_name in CALLBACKS.items():
+        module = _load_plugin(plugin_dir)
+        patches = []
+        if plugin_dir == "omi-whoop-app":
+            patches.append(mock.patch.object(module, "get_uid_from_oauth_state", lambda s: None))
+        if plugin_dir in ("omi-notion-app", "omi-twitter-chat-tools-app"):
+            patches.append(mock.patch.object(module, "get_oauth_state", lambda u: None))
+        cb = getattr(module, cb_name)
+        kwargs = {"code": "c", "state": "never-registered"}
+        if "request" in inspect.signature(cb).parameters:
+            kwargs["request"] = None
+        with contextlib.ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
+            html = asyncio.run(cb(**kwargs))
+        assert isinstance(html, str), f"{plugin_dir}: invalid-state path crashed"
+
+
+def test_github_uid_js_escapes_script_close():
+    module = _load_plugin("omi-github-app")
+    uid = '</script><script>alert(1)</script>'
+    with mock.patch.object(
+        module.SimpleUserStorage, "get_user", lambda *a, **k: {"access_token": "t"}
+    ):
+        html = asyncio.run(module.root(uid=uid))
+    assert isinstance(html, str)
+    assert "<script>alert(1)" not in html, "uid broke out of the script block"
+    assert "\\u003c" in html, "uid_js not unicode-escaped"
+
+
+def test_slack_dev_page_encodes_uid_in_fetch_urls():
+    """The dev test page builds fetch() URLs from a DOM uid — every one
+    must go through encodeURIComponent, never a raw ${uid} interpolation."""
+    module = _load_plugin("omi-slack-app")
+    html = asyncio.run(module.test_interface(uid="user_123", dev="true"))
+    assert isinstance(html, str)
+    assert "${encodeURIComponent(uid)}" in html, "encoded uid interpolation missing"
+    assert "${uid}" not in html, "raw uid interpolation survived in fetch URL"
+
+
 if __name__ == "__main__":
-    tests = [test_uid_cannot_break_out_of_href, test_normal_uid_still_links]
+    tests = [
+        test_uid_cannot_break_out_of_href,
+        test_normal_uid_still_links,
+        test_callback_encodes_uid_after_state_lookup,
+        test_callback_rejects_unknown_state,
+        test_github_uid_js_escapes_script_close,
+        test_slack_dev_page_encodes_uid_in_fetch_urls,
+    ]
     for t in tests:
         t()
         print(f"PASS {t.__name__}")

@@ -434,9 +434,6 @@ async def auth_callback(
     state: str = Query(None)
 ):
     """Handle OAuth callback from Slack."""
-    # uid is reflected into href/redirect URLs below — percent-encode
-    # it once so quotes/&/.. cannot break the attribute or the query.
-    uid_q = quote(uid or "", safe="")
     if not code or not state:
         return HTMLResponse(
             content=f"""
@@ -481,6 +478,10 @@ async def auth_callback(
             status_code=400
         )
     
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid, safe="")
+
     try:
         redirect_uri = os.getenv("OAUTH_REDIRECT_URL", "http://localhost:8000/auth/callback")
         
@@ -1049,7 +1050,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                 async function checkAuth() {{
                     const uid = document.getElementById('uid').value;
                     try {{
-                        const response = await fetch(`/setup-completed?uid=${{uid}}`);
+                        const response = await fetch(`/setup-completed?uid=${{encodeURIComponent(uid)}}`);
                         const data = await response.json();
                         
                         const authStatus = document.getElementById('authStatus');
@@ -1068,7 +1069,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                 function authenticate() {{
                     const uid = document.getElementById('uid').value;
                     addLog('Opening Slack authentication...');
-                    window.open(`/auth?uid=${{uid}}`, '_blank');
+                    window.open(`/auth?uid=${{encodeURIComponent(uid)}}`, '_blank');
                     setTimeout(() => addLog('After authenticating, click "Check Auth Status"'), 1000);
                 }}
                 
@@ -1094,7 +1095,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                             end: 5.0
                         }}];
                         
-                        const response = await fetch(`/webhook?session_id=${{sessionId}}&uid=${{uid}}`, {{
+                        const response = await fetch(`/webhook?session_id=${{sessionId}}&uid=${{encodeURIComponent(uid)}}`, {{
                             method: 'POST',
                             headers: {{ 'Content-Type': 'application/json' }},
                             body: JSON.stringify(segments)
@@ -1138,7 +1139,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                     
                     try {{
                         addLog('Logging out...');
-                        const response = await fetch(`/logout?uid=${{uid}}`, {{
+                        const response = await fetch(`/logout?uid=${{encodeURIComponent(uid)}}`, {{
                             method: 'POST'
                         }});
                         

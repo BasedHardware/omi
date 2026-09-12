@@ -495,9 +495,6 @@ async def auth_callback(
     state: str = Query(None)
 ):
     """Handle OAuth callback from ClickUp."""
-    # uid is reflected into href/redirect URLs below — percent-encode
-    # it once so quotes/&/.. cannot break the attribute or the query.
-    uid_q = quote(uid or "", safe="")
     if not code or not state:
         return HTMLResponse(
             content=f"""
@@ -542,6 +539,10 @@ async def auth_callback(
             status_code=400
         )
     
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid, safe="")
+
     try:
         # Exchange code for access token
         token_data = clickup_client.exchange_code_for_token(code)

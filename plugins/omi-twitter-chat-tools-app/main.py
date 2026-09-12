@@ -1062,9 +1062,6 @@ async def twitter_callback(
     error: str = Query(None)
 ):
     """Handle Twitter OAuth2 callback."""
-    # uid is reflected into href/redirect URLs below — percent-encode
-    # it once so quotes/&/.. cannot break the attribute or the query.
-    uid_q = quote(uid or "", safe="")
     if error:
         return HTMLResponse(content=f"""
         <html>
@@ -1112,6 +1109,10 @@ async def twitter_callback(
         return HTMLResponse(content="Code verifier not found", status_code=400)
 
     delete_oauth_state(uid)
+
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid, safe="")
 
     # Exchange code for tokens
     try:
