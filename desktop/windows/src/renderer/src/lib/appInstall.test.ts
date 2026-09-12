@@ -51,6 +51,40 @@ describe('setupUrl', () => {
     expect(setupUrl(null, 'u')).toBeNull()
     expect(setupUrl(undefined, 'u')).toBeNull()
   })
+
+  it('appends uid with & when the step url already has a query', () => {
+    const integration = {
+      auth_steps: [{ name: 'Connect', url: 'https://ex.com/setup?ref=omi&lang=en' }]
+    }
+    expect(setupUrl(integration as ExternalIntegration, 'user-1')).toBe(
+      'https://ex.com/setup?ref=omi&lang=en&uid=user-1'
+    )
+  })
+
+  it('encodes a uid containing query/fragment characters', () => {
+    const integration = { auth_steps: [{ name: 'Connect', url: 'https://ex.com/setup' }] }
+    expect(setupUrl(integration as ExternalIntegration, 'a&b#c')).toBe(
+      'https://ex.com/setup?uid=a%26b%23c'
+    )
+  })
+
+  it('preserves existing query bytes verbatim (signed urls) and drops a stale uid', () => {
+    const integration = {
+      auth_steps: [{ name: 'Connect', url: 'https://ex.com/setup?sig=a+b%2Fc&uid=stale&x=1' }]
+    }
+    expect(setupUrl(integration as ExternalIntegration, 'u')).toBe(
+      'https://ex.com/setup?sig=a+b%2Fc&x=1&uid=u'
+    )
+  })
+
+  it('keeps the fragment after the appended uid', () => {
+    const integration = {
+      auth_steps: [{ name: 'Connect', url: 'https://ex.com/setup?a=1#section' }]
+    }
+    expect(setupUrl(integration as ExternalIntegration, 'u')).toBe(
+      'https://ex.com/setup?a=1&uid=u#section'
+    )
+  })
 })
 
 describe('isSetupCompleted', () => {

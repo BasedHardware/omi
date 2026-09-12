@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "External-app setup links now keep their existing query string intact when your user id is attached — integrations whose setup URL already carried parameters could silently fail to connect."
+  ]
+}
