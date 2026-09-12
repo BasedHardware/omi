@@ -189,6 +189,24 @@ class HeyOmiWebhookTests(unittest.TestCase):
         self.assertEqual(len(self.notifications), 1)
         self.assertIn("what is the weather", self.openai_calls[0])
 
+    def test_stale_question_without_mark_does_not_swallow_new_trigger(self):
+        # Cubic P2: a collected fragment with no '?' used to keep the
+        # trigger armed, so a later "hey omi" was ignored.
+        self._post("s1", ["hey omi, tell me the weather"])
+        self.assertEqual(self._buffer("s1")["collected_question"], ["tell me the weather"])
+
+        self.clock.now += 20
+        self._post("s1", ["hey omi, what time is it?"])
+
+        self.assertTrue(self._buffer("s1")["trigger_detected"])
+        self.assertEqual(self._buffer("s1")["collected_question"], ["what time is it?"])
+        self.assertEqual(self.openai_calls, [])
+
+        self.clock.now += 11
+        self._post("s1", ["follow up"])
+        self.assertEqual(self.openai_calls, ["what time is it?"])
+        self.assertEqual(len(self.notifications), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

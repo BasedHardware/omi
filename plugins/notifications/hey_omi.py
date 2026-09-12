@@ -205,16 +205,20 @@ async def webhook(request: WebhookRequest):
         text = segment['text'].lower().strip()
         logger.info(f"Processing text segment: '{text}'")
 
-        # Expire a stale trigger that collected no question within the window so a
-        # new "hey omi" can be detected again
-        if (
+        # Expire a stale trigger so a later "hey omi" can be detected again.
+        # Empty collections expire on their own. Non-empty collections expire
+        # only when the incoming segment itself is a new trigger; otherwise
+        # the post-window path still answers the collected question.
+        stale_trigger = (
             buffer_data['trigger_detected']
-            and not buffer_data['collected_question']
             and current_time - buffer_data['trigger_time'] > QUESTION_AGGREGATION_TIME * 1.5
-        ):
-            logger.info(f"Trigger expired without a question in session {session_id}")
+        )
+        new_trigger = any(trigger in text for trigger in (t.lower() for t in TRIGGER_PHRASES))
+        if stale_trigger and (not buffer_data['collected_question'] or new_trigger):
+            logger.info(f"Trigger expired in session {session_id}")
             buffer_data['trigger_detected'] = False
             buffer_data['trigger_time'] = 0
+            buffer_data['collected_question'] = []
             buffer_data['partial_trigger'] = False
 
         # Check for complete trigger phrases first
