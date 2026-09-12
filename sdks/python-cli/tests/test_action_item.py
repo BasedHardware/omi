@@ -83,8 +83,29 @@ def test_action_item_get_searches_beyond_five_pages(authed_profile, respx_mock, 
         assert json.loads(result.stdout) == {"id": "target"}
 
 
-def test_action_item_get_stops_after_short_page(authed_profile, respx_mock, cli_runner) -> None:
-    route = respx_mock.get("/v1/dev/user/action-items").respond(json=[{"id": "other"}])
+def test_action_item_get_continues_past_short_pages(authed_profile, respx_mock, cli_runner) -> None:
+    """A short page is not exhaustion: the API filters locked records after paging (#13214)."""
+    offsets = []
+
+    def respond(request):
+        offset = int(request.url.params["offset"])
+        offsets.append(offset)
+        if offset == 0:
+            # 199 items after one locked record was filtered from a 200-row page.
+            return httpx.Response(200, json=[{"id": f"a{i}"} for i in range(199)])
+        if offset == 200:
+            return httpx.Response(200, json=[{"id": "target"}])
+        return httpx.Response(200, json=[])
+
+    respx_mock.get("/v1/dev/user/action-items").mock(side_effect=respond)
+    result = cli_runner.invoke(app, ["--json", "action-item", "get", "target"])
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == {"id": "target"}
+    assert offsets == [0, 200]
+
+
+def test_action_item_get_stops_on_empty_page(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.get("/v1/dev/user/action-items").respond(json=[])
     result = cli_runner.invoke(app, ["--json", "action-item", "get", "missing"])
     assert result.exit_code == 5
     assert route.call_count == 1
