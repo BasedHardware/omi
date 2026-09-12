@@ -30,8 +30,14 @@ abstract class Env {
     _apiBaseUrlOverride = url;
   }
 
-  static void clearApiBaseUrlOverrideForTesting() {
+  static bool get hasApiBaseUrlOverride => _apiBaseUrlOverride != null;
+
+  static void clearApiBaseUrlOverride() {
     _apiBaseUrlOverride = null;
+  }
+
+  static void clearApiBaseUrlOverrideForTesting() {
+    clearApiBaseUrlOverride();
   }
 
   static String? get posthogApiKey => _instance.posthogApiKey;

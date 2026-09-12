@@ -1,8 +1,10 @@
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/backend_url_override.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -17,6 +19,7 @@ class DeveloperModeProvider extends BaseProvider {
   final TextEditingController webhookAudioBytesDelay = TextEditingController();
   final TextEditingController webhookWsAudioBytes = TextEditingController();
   final TextEditingController webhookDaySummary = TextEditingController();
+  final TextEditingController customBackendUrl = TextEditingController();
 
   bool conversationEventsToggled = false;
   bool transcriptsToggled = false;
@@ -105,6 +108,7 @@ class DeveloperModeProvider extends BaseProvider {
     webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
     webhookAudioBytes.text = SharedPreferencesUtil().webhookAudioBytes;
     webhookAudioBytesDelay.text = SharedPreferencesUtil().webhookAudioBytesDelay;
+    customBackendUrl.text = SharedPreferencesUtil().customBackendUrl;
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
@@ -154,6 +158,20 @@ class DeveloperModeProvider extends BaseProvider {
     if (savingSettingsLoading) return;
     setIsLoading(true);
     final prefs = SharedPreferencesUtil();
+
+    if (!kReleaseMode) {
+      try {
+        final rawBackendUrl = customBackendUrl.text.trim();
+        final normalizedBackendUrl = rawBackendUrl.isEmpty ? '' : BackendUrlOverride.parse(rawBackendUrl).url;
+        prefs.customBackendUrl = normalizedBackendUrl;
+        customBackendUrl.text = normalizedBackendUrl;
+        BackendUrlOverride.restore(normalizedBackendUrl);
+      } on FormatException catch (error) {
+        AppSnackbar.showSnackbarError(error.message);
+        setIsLoading(false);
+        return;
+      }
+    }
 
     if (webhookAudioBytes.text.isNotEmpty && !isValidUrl(webhookAudioBytes.text)) {
       AppSnackbar.showSnackbarError(
