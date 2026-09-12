@@ -235,14 +235,20 @@ assert_contains "$setup" "Screen Recording" "setup lists the system grants"
 
 
 # ── launch policy: a background session defaults acquires to isolated ──────
-"$POOL" release --quiet --slot 1
-"$POOL" release --quiet --slot 2
+# Race winners still hold live leases. Slot-only release from this checkout
+# must refuse those (the ownership contract); free them via their worktrees.
+for lane in a b c; do
+  "$POOL" release --quiet --worktree "$TMP/wt-race-$lane" >/dev/null 2>&1 || true
+done
+"$POOL" release --quiet --worktree "$WT_A" >/dev/null 2>&1 || true
+"$POOL" release --quiet --worktree "$WT_B" >/dev/null 2>&1 || true
+"$POOL" release --quiet --worktree "$WT_C" >/dev/null 2>&1 || true
 out="$(OMI_E2E_POOL_MANAGER_NAME=Background "$POOL" acquire --worktree "$WT_A" --holder lane-a 2>&1)"
 assert_eq "$(printf '%s\n' "$out" | tail -1)" "1" "background acquire still prints the slot number last"
 assert_contains "$out" "defaulting the slot to isolated auth" "background acquire announces the isolated default"
 assert_contains "$("$POOL" env --worktree "$WT_A")" "export OMI_SKIP_AUTH_SEED='1'" "background default is isolated"
 # an explicit --auth always wins over the session-derived default
-"$POOL" release --quiet --slot 1
+"$POOL" release --quiet --worktree "$WT_A"
 OMI_E2E_POOL_MANAGER_NAME=Background "$POOL" acquire --quiet --worktree "$WT_A" --auth shared >/dev/null
 if printf '%s' "$("$POOL" env --worktree "$WT_A")" | grep -q OMI_SKIP_AUTH_SEED; then
   fail "explicit --auth shared must win over the background default"
@@ -252,7 +258,7 @@ fi
 OMI_E2E_POOL_MANAGER_NAME=Background "$POOL" acquire --quiet --worktree "$WT_A" >/dev/null 2>&1
 assert_contains "$("$POOL" env --worktree "$WT_A")" "OMI_SKIP_AUTH_SEED" "background refresh flips a shared slot to isolated"
 # an Aqua session keeps the documented shared default
-"$POOL" release --quiet --slot 1
+"$POOL" release --quiet --worktree "$WT_A"
 "$POOL" acquire --quiet --worktree "$WT_A" --auth shared >/dev/null
 if printf '%s' "$("$POOL" env --worktree "$WT_A")" | grep -q OMI_SKIP_AUTH_SEED; then
   fail "an Aqua acquire must keep explicit shared auth"
