@@ -17,6 +17,7 @@ export var BleAudioCodec;
     BleAudioCodec["MULAW16"] = "mulaw16";
     BleAudioCodec["MULAW8"] = "mulaw8";
     BleAudioCodec["OPUS"] = "opus";
+    BleAudioCodec["OPUS_FS320"] = "opus_fs320";
     BleAudioCodec["UNKNOWN"] = "unknown";
 })(BleAudioCodec || (BleAudioCodec = {}));
 // Device connection state enum
@@ -104,6 +105,8 @@ export function getAudioCodec(deviceId) {
                 return BleAudioCodec.MULAW8;
             case 20:
                 return BleAudioCodec.OPUS;
+            case 21:
+                return BleAudioCodec.OPUS_FS320;
             default:
                 return BleAudioCodec.UNKNOWN;
         }

@@ -8,6 +8,7 @@ export var BleAudioCodec;
     BleAudioCodec["MULAW16"] = "mulaw16";
     BleAudioCodec["MULAW8"] = "mulaw8";
     BleAudioCodec["OPUS"] = "opus";
+    BleAudioCodec["OPUS_FS320"] = "opus_fs320";
     BleAudioCodec["UNKNOWN"] = "unknown";
 })(BleAudioCodec || (BleAudioCodec = {}));
 export var DeviceConnectionState;
