@@ -939,6 +939,11 @@ checks:
     triggers: ["plugins/omi-notion-app/**"]
     lanes: ["local", "ci"]
     reason: "#13181 failed content HTTP reads were indistinguishable from empty successful pages; production helper and handler regression"
+  - id: arxiv-search-encoding-tests
+    command: ["python3", "plugins/omi-arxiv-app/test_main.py"]
+    triggers: ["plugins/omi-arxiv-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13574: search_query was pre-encoded then form-encoded again by httpx, so multi-word and AND queries produced %2B and empty feeds"
 
   - id: hey-omi-question-extraction-tests
     command: ["python3", "plugins/notifications/test_hey_omi_extraction.py"]
