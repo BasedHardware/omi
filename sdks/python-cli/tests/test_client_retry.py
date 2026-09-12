@@ -99,6 +99,20 @@ def test_404_maps_to_not_found(authed_profile, respx_mock) -> None:
             client.get("/v1/dev/user/memories")
 
 
+def test_404_empty_body_raises_not_found(authed_profile, respx_mock) -> None:
+    respx_mock.get("/v1/dev/user/conversations/missing").respond(404)
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(NotFoundError):
+            client.get("/v1/dev/user/conversations/missing")
+
+
+def test_200_empty_body_returns_none(authed_profile, respx_mock) -> None:
+    respx_mock.delete("/v1/dev/user/conversations/c1").respond(200)
+    with OmiClient(authed_profile) as client:
+        result = client.delete("/v1/dev/user/conversations/c1")
+    assert result is None
+
+
 def test_401_maps_to_auth_error(authed_profile, respx_mock) -> None:
     respx_mock.get("/v1/dev/user/memories").respond(401, json={"detail": "Invalid API Key"})
     with OmiClient(authed_profile) as client:
