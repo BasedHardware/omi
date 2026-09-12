@@ -3,6 +3,7 @@ import base64
 import io
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -381,6 +382,26 @@ def test_signer_service_account_must_look_like_a_service_account(monkeypatch):
         assert caught.value.stage == 'signer_service_account'
 
 
+def test_explicit_signer_from_a_foreign_project_fails_closed_before_signing(monkeypatch):
+    """The named-signer path must keep the credentials-file path's fail-closed
+    pairing: a signer from a project other than --firebase-project can never
+    mint a token Identity Toolkit accepts, so reject before any IAM call."""
+    module = _load_module()
+
+    monkeypatch.setattr(module, '_run_gcloud', lambda args, *, stage: 'firebase-api-key')
+    monkeypatch.setattr(module, '_request_json', lambda *a, **k: pytest.fail('must reject before any signing call'))
+
+    with pytest.raises(module.ProbeTokenError) as caught:
+        module.mint_probe_token(
+            'based-hardware-dev',
+            'based-hardware',
+            signer_service_account='firebase-adminsdk@based-hardware-dev.iam.gserviceaccount.com',
+        )
+
+    assert caught.value.stage == 'signer_service_account'
+    assert caught.value.error_class == 'project_mismatch'
+
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PROBE_ACTION = REPOSITORY_ROOT / '.github/actions/transcription-release-candidate-probe/action.yml'
 DEPLOY_BACKEND_STACK_ACTION = REPOSITORY_ROOT / '.github/actions/deploy-backend-stack/action.yml'
@@ -409,3 +430,81 @@ def test_probe_action_stages_the_signer_key_as_transient_owner_only_material():
     # The key must not outlive the probe.
     assert 'rm -f "$token_file" ${signer_file:+"$signer_file"}' in action
     assert 'rm -f "$signer_file"' in action
+
+WORKFLOWS_DIR = REPOSITORY_ROOT / '.github' / 'workflows'
+SIGNER_ARGUMENT_PATTERN = re.compile(r'--signer-service-account[ =]"\$([A-Za-z_][A-Za-z0-9_]*)"')
+STEP_BOUNDARY = re.compile(r'(?m)^(?=\s*- name: )')
+
+
+def _signer_argument_violations(text: str, source: str) -> list[str]:
+    """A named probe signer must be the documented variable's value.
+
+    The env name consumed by --signer-service-account must resolve, inside the
+    same step, to vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT -- the one variable
+    documented to hold the Firebase project's signer. Anything else (an
+    unrelated secret whose name merely looks signer-ish, the lane's own deploy
+    identity, a literal) is rejected, so a workflow cannot pass this guard by
+    referencing a coincidental secret name.
+    """
+    violations: list[str] = []
+    for step in STEP_BOUNDARY.split(text):
+        for match in SIGNER_ARGUMENT_PATTERN.finditer(step):
+            env_name = match.group(1)
+            mapping = f'{env_name}: ${{{{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}}}'
+            if mapping not in step:
+                violations.append(
+                    f'{source}: --signer-service-account "${env_name}" must be fed from '
+                    'vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT in the same step; a signer '
+                    'named from any other source is not tied to the --firebase-project it '
+                    'must sign for.'
+                )
+    return violations
+
+
+def test_every_workflow_probe_signer_argument_is_the_documented_variable() -> None:
+    """Guards the wiring that unblocked the development Pusher lane.
+
+    7883c816db fed the pusher probe's signer from secrets.GCP_CREDENTIALS --
+    the lane's based-hardware-dev deploy identity -- while minting for
+    --firebase-project based-hardware, so the minter failed closed on every
+    run and froze production Pusher promotion from 2026-08-31. #13445's guard
+    accepted any non-GCP_CREDENTIALS source, so an unrelated
+    secrets.GCP_SERVICE_ACCOUNT reference made it pass; this one accepts only
+    the documented variable.
+    """
+    violations: list[str] = []
+    for pattern in ('*.yml', '*.yaml'):
+        for workflow in sorted(WORKFLOWS_DIR.glob(pattern)):
+            violations.extend(
+                _signer_argument_violations(workflow.read_text(encoding='utf-8'), workflow.name)
+            )
+    assert violations == []
+
+
+def test_signer_guard_rejects_the_deploy_identity_and_coincidental_secret_names() -> None:
+    def synthetic_probe_step(source: str) -> str:
+        return f'''  deploy:
+    steps:
+      - name: Probe
+        env:
+          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{{{ {source} }}}}
+        run: |
+          python3 backend/scripts/firebase_release_probe_token.py \\
+            --firebase-project based-hardware \\
+            --signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT"
+'''
+
+    for source in (
+        'secrets.GCP_CREDENTIALS',
+        'secrets.GCP_SERVICE_ACCOUNT',
+        'vars.SOME_OTHER_SIGNER',
+    ):
+        violations = _signer_argument_violations(synthetic_probe_step(source), 'probe.yml')
+        assert violations, source
+
+    assert (
+        _signer_argument_violations(
+            synthetic_probe_step('vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT'), 'probe.yml'
+        )
+        == []
+    )

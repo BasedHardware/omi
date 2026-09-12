@@ -78,9 +78,31 @@ def test_dev_qualification_runs_real_deployed_semantic_probe_before_recording_pa
     assert "firebase_release_probe_token.py" in probe_block
     assert "pusher_semantic_probe.py" in probe_block
     assert "https://api.omiapi.com" in probe_block
-    assert "secrets.GCP_CREDENTIALS" in probe_block
+    assert "vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" in probe_block
     assert "--semantic-probe-evidence pusher-dev-semantic-probe.json" in qualification_block
     assert "NOT_RUN" not in qualification_block
+
+
+def test_dev_probe_impersonates_a_named_firebase_project_signer() -> None:
+    """7883c816db signed this probe as the lane's based-hardware-dev deploy
+    identity while minting for --firebase-project based-hardware; the token
+    minter failed closed (signer/project_mismatch) on every run and froze the
+    qualification lane -- and with it every production Pusher promotion -- from
+    2026-08-31. The signer must be named from
+    vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT and impersonated via IAM signJwt:
+    a materialized key is forbidden in this backend image builder, and signing
+    as the deploy identity is unsatisfiable by construction.
+    """
+    probe = AUTO.index("Probe deployed development Pusher finalization semantics")
+    qualification = AUTO.index("Record development Pusher qualification evidence")
+    block = AUTO[probe:qualification]
+
+    assert "FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}" in block
+    assert '--signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT"' in block
+    assert 'if [[ -z "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" ]]' in block
+    assert "secrets.GCP_CREDENTIALS" not in block
+    assert "--signer-credentials-file" not in block
+    assert "GCP_SERVICE_ACCOUNT" not in AUTO
 
 
 def test_dev_rechecks_pusher_attributed_telemetry_after_rollout_before_semantic_probe() -> None:
