@@ -111,6 +111,28 @@ test('parseOmiApp keeps GET http(s) images and omits relative or unsafe URLs', (
   ).toEqual({name: 'Notes'});
 });
 
+test('does not omit a neighboring named chat app when GET lists more than twenty unique plugin ids', async () => {
+  const unique = Array.from({length: 21}, (_, i) => `app-${i + 1}`);
+  const request = jest.fn(async (input: {path: string}) => {
+    const id = decodeURIComponent(input.path.replace('/v1/apps/', ''));
+    return {
+      id: 'app',
+      status: 200,
+      body: JSON.stringify({id, name: `Name ${id}`}),
+    };
+  });
+  const backend = {request} as unknown as OmiBackend;
+  const apps = await loadOmiApps(backend, [
+    '  ',
+    unique[0],
+    unique[0],
+    ...unique.slice(1),
+  ]);
+  expect([...apps.keys()]).toEqual(unique);
+  expect(request).toHaveBeenCalledTimes(21);
+  expect(apps.get('app-21')).toEqual({name: 'Name app-21'});
+});
+
 test('loadOmiApps names resolved GET apps and omits failures', async () => {
   const request = jest.fn(async (input: {path: string}) => {
     if (input.path === '/v1/apps/notes') {

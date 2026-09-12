@@ -2,8 +2,6 @@ import type {ChatMessage} from './chatClient';
 import {appImageUrl, visibleDisplayText} from './desktopReadClient';
 import type {OmiBackend} from './omiNativeTypes';
 
-const MAX_CHAT_APP_LOOKUPS = 20;
-
 class AppError extends Error {
   constructor() {
     super('Omi app is malformed');
@@ -61,9 +59,6 @@ export async function loadOmiApps(
     }
     seen.add(id);
     unique.push(id);
-    if (unique.length === MAX_CHAT_APP_LOOKUPS) {
-      break;
-    }
   }
   const apps = new Map<string, OmiAppChrome>();
   await Promise.all(
