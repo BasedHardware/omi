@@ -97,7 +97,8 @@ class SlackClient:
         try:
             cursor = None
             page_count = 0
-            
+            seen_cursors = set()
+
             while True:
                 # Get channels with pagination
                 params = {
@@ -136,9 +137,15 @@ class SlackClient:
                 # Check if there are more pages
                 response_metadata = result.get("response_metadata", {})
                 cursor = response_metadata.get("next_cursor")
-                
+
+                if cursor and cursor in seen_cursors:
+                    print("⚠️  Pagination stalled: repeated cursor, stopping", flush=True)
+                    break
+
                 if not cursor:
                     break
+
+                seen_cursors.add(cursor)
             
             # Log summary
             public_channels = [c for c in channels if not c.get("is_private")]

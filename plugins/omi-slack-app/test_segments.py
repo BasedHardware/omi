@@ -95,5 +95,62 @@ class ProcessSegmentsTests(unittest.TestCase):
         self.detector.extract_message_content.assert_called_once()
 
 
+class ListChannelsPaginationTests(unittest.TestCase):
+    """list_channels looped forever when Slack kept returning the same cursor."""
+
+    def setUp(self):
+        slack = types.ModuleType("slack_sdk")
+        self.sdk = Mock()
+        slack.WebClient = Mock(return_value=self.sdk)
+        errors = types.ModuleType("slack_sdk.errors")
+        errors.SlackApiError = Exception
+        dotenv = types.ModuleType("dotenv")
+        dotenv.load_dotenv = lambda: None
+        modules = {"slack_sdk": slack, "slack_sdk.errors": errors,
+                   "requests": types.ModuleType("requests"), "dotenv": dotenv}
+        originals = {name: sys.modules.get(name) for name in modules}
+        sys.modules.update(modules)
+        try:
+            self.client_mod = load("slack_client_pages", "slack_client.py")
+        finally:
+            for name, original in originals.items():
+                if original is None:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = original
+
+    def test_repeated_cursor_stops(self):
+        self.sdk.conversations_list.side_effect = [
+            {"ok": True, "channels": [{"id": "C1", "name": "a"}],
+             "response_metadata": {"next_cursor": "abc"}},
+            {"ok": True, "channels": [{"id": "C2", "name": "b"}],
+             "response_metadata": {"next_cursor": "abc"}},
+        ]
+        channels = self.client_mod.SlackClient().list_channels("tok")
+        self.assertEqual(self.sdk.conversations_list.call_count, 2)
+        self.assertEqual(len(channels), 2)
+
+    def test_empty_cursor_stops(self):
+        self.sdk.conversations_list.return_value = {
+            "ok": True, "channels": [{"id": "C1", "name": "a"}],
+            "response_metadata": {"next_cursor": ""},
+        }
+        channels = self.client_mod.SlackClient().list_channels("tok")
+        self.assertEqual(self.sdk.conversations_list.call_count, 1)
+        self.assertEqual(len(channels), 1)
+
+    def test_fresh_cursor_followed(self):
+        self.sdk.conversations_list.side_effect = [
+            {"ok": True, "channels": [{"id": "C1", "name": "a"}],
+             "response_metadata": {"next_cursor": "p2"}},
+            {"ok": True, "channels": [{"id": "C2", "name": "b"}],
+             "response_metadata": {"next_cursor": ""}},
+        ]
+        channels = self.client_mod.SlackClient().list_channels("tok")
+        self.assertEqual(self.sdk.conversations_list.call_count, 2)
+        second_call_params = self.sdk.conversations_list.call_args.kwargs
+        self.assertEqual(second_call_params["cursor"], "p2")
+
+
 if __name__ == "__main__":
     unittest.main()
