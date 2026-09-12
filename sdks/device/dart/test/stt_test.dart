@@ -189,6 +189,46 @@ void main() {
     expect(channel.events, ['send', 'close']);
     expect(channel.closed, isTrue);
   });
+
+  test('Parakeet rejects PCM and a second finalize while draining', () async {
+    final channel = RecordingWebSocketChannel(completeStreamOnCloseStream: false);
+    final transcriber = ParakeetTranscriber(
+      apiUrl: 'https://parakeet.example',
+      onTranscript: (_) {},
+      channel: channel,
+      drainTimeout: const Duration(milliseconds: 50),
+    );
+    channel.addIncoming(jsonEncode({'type': 'ready'}));
+    await Future<void>.delayed(Duration.zero);
+
+    transcriber.appendPcm(Uint8List.fromList([1, 2]));
+    final stop = transcriber.stop();
+    await Future<void>.delayed(Duration.zero);
+    transcriber.appendPcm(Uint8List.fromList([3, 4]));
+    await transcriber.stop();
+    await stop;
+
+    expect(channel.sent, [Uint8List.fromList([1, 2]), 'finalize']);
+  });
+
+  test('Deepgram rejects PCM and a second CloseStream while draining', () async {
+    final channel = RecordingWebSocketChannel(completeStreamOnCloseStream: false);
+    final transcriber = DeepgramTranscriber(
+      apiKey: 'fake-key',
+      onTranscript: (_) {},
+      channel: channel,
+      drainTimeout: const Duration(milliseconds: 50),
+    );
+
+    transcriber.appendPcm(Uint8List.fromList([1, 2]));
+    final stop = transcriber.stop();
+    await Future<void>.delayed(Duration.zero);
+    transcriber.appendPcm(Uint8List.fromList([3, 4]));
+    await transcriber.stop();
+    await stop;
+
+    expect(channel.sent, [Uint8List.fromList([1, 2]), jsonEncode({'type': 'CloseStream'})]);
+  });
 }
 
 class RecordingWebSocketChannel extends StreamChannelMixin implements WebSocketChannel {

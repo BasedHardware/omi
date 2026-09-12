@@ -63,6 +63,7 @@ class DeepgramTranscriber implements StreamingTranscriber {
   final Duration drainTimeout;
   late final WebSocketChannel _channel;
   StreamSubscription? _sub;
+  bool _stopped = false;
   final Completer<void> _drained = Completer<void>();
 
   void _markDrained() {
@@ -71,11 +72,14 @@ class DeepgramTranscriber implements StreamingTranscriber {
 
   @override
   void appendPcm(Uint8List chunk) {
+    if (_stopped) return;
     _channel.sink.add(chunk);
   }
 
   @override
   Future<void> stop() async {
+    if (_stopped) return;
+    _stopped = true;
     var sentClose = false;
     try {
       _channel.sink.add(jsonEncode({'type': 'CloseStream'}));
@@ -127,6 +131,7 @@ class ParakeetTranscriber implements StreamingTranscriber {
   late final WebSocketChannel _channel;
   StreamSubscription? _sub;
   bool _ready = false;
+  bool _stopped = false;
   final Completer<void> _drained = Completer<void>();
 
   void _markDrained() {
@@ -141,11 +146,15 @@ class ParakeetTranscriber implements StreamingTranscriber {
 
   @override
   void appendPcm(Uint8List chunk) {
-    if (_ready) _channel.sink.add(chunk);
+    if (_stopped || !_ready) return;
+    _channel.sink.add(chunk);
   }
 
   @override
   Future<void> stop() async {
+    if (_stopped) return;
+    _stopped = true;
+    _ready = false;
     var sentFinalize = false;
     try {
       _channel.sink.add('finalize');
