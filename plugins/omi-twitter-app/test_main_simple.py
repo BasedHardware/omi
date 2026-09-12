@@ -97,9 +97,22 @@ def _install_module_stubs():
     sys.modules["dotenv"] = dotenv
 
 
+_STUBBED_MODULES = ("fastapi", "fastapi.responses", "tweepy", "openai", "dotenv")
+_saved_modules = {name: sys.modules.get(name) for name in _STUBBED_MODULES}
 _install_module_stubs()
-import main_simple  # noqa: E402
-from simple_storage import SimpleSessionStorage, sessions  # noqa: E402
+try:
+    import main_simple  # noqa: E402
+    from simple_storage import SimpleSessionStorage, sessions  # noqa: E402
+finally:
+    # Bound names inside main_simple keep referencing the stub objects after
+    # import, so restore the original sys.modules entries to avoid
+    # contaminating other tests in a shared process.
+    for _name, _original in _saved_modules.items():
+        if _original is None:
+            sys.modules.pop(_name, None)
+        else:
+            sys.modules[_name] = _original
+    del _name, _original, _saved_modules
 
 
 class ProcessSegmentsTests(unittest.TestCase):
