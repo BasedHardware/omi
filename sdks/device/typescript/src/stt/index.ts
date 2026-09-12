@@ -102,7 +102,11 @@ export function createWhisperTranscriber(opts: {
   runner: (pcm: Uint8Array) => Promise<string> | string;
   onTranscript: TranscriptHandler;
   batchSeconds?: number;
+  sampleRate?: number;
 }): StreamingTranscriber {
+  if (opts.sampleRate !== undefined && opts.sampleRate !== 16000) {
+    throw new Error('Whisper requires 16000 Hz PCM; resample audio before transcription');
+  }
   const batchBytes = (opts.batchSeconds ?? 5) * 16000 * 2;
   let buffer = new Uint8Array(0);
   let stopped = false;
@@ -157,7 +161,11 @@ export function createTranscriber(
   }
   if (engine === 'whisper') {
     if (!opts.whisperRunner) throw new Error('Whisper requires whisperRunner');
-    return createWhisperTranscriber({ runner: opts.whisperRunner, onTranscript: opts.onTranscript });
+    return createWhisperTranscriber({
+      runner: opts.whisperRunner,
+      onTranscript: opts.onTranscript,
+      sampleRate: opts.sampleRate,
+    });
   }
   throw new Error(`Unknown engine ${engine}`);
 }
