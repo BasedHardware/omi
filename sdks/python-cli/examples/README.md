@@ -18,3 +18,5 @@
 * [`quickstart.sv.md`](quickstart.sv.md) — Snabbstartsguide för omi-cli på Svenska (Swedish Quickstart).
 * [`quickstart.uk.md`](quickstart.uk.md) — Короткий посібник omi-cli Українською (Ukrainian Quickstart).
 * [`quickstart.ru.md`](quickstart.ru.md) — Краткое руководство omi-cli на Русском (Russian Quickstart).
+* [`quickstart.hi.md`](quickstart.hi.md) — omi-cli त्वरित प्रारंभ गाइड हिन्दी में (Hindi Quickstart).
+* [`quickstart.ur.md`](quickstart.ur.md) — omi-cli تیز آغاز گائیڈ اردو میں (Urdu Quickstart).
