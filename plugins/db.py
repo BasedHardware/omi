@@ -1,3 +1,4 @@
+import ast
 import os
 from typing import List
 
@@ -98,7 +99,7 @@ def get_upsert_segment_to_transcript_plugin(
     if not segments:
         segments = []
     else:
-        segments = eval(segments)
+        segments = ast.literal_eval(segments.decode())
 
     segments.extend([segment.dict() for segment in new_segments])
 
