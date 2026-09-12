@@ -232,29 +232,49 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                 f'secret {forbidden_secret} belongs only on memory-maintenance-job',
             )
         )
-    notifications_flex_capable = (
-        (_manifest_literal_env_value(notifications_env, 'OMI_BACKGROUND_FLEX_CAPABLE') or '').strip().lower()
-    )
-    if notifications_flex_capable != 'true':
+    x_sync_scope = f'{env}/cloud_run/jobs/x-connector-sync-job'
+    x_sync_job = _as_config_dict(jobs.get('x-connector-sync-job')) or {}
+    x_sync_env = _as_config_dict(x_sync_job.get('env')) or {}
+    x_sync_secrets = _as_config_dict(x_sync_job.get('secrets')) or {}
+    x_sync_flex_capable = (_manifest_literal_env_value(x_sync_env, 'OMI_BACKGROUND_FLEX_CAPABLE') or '').strip().lower()
+    if x_sync_flex_capable != 'true':
         errors.append(
             ValidationError(
-                notifications_scope,
+                x_sync_scope,
                 'OMI_BACKGROUND_FLEX_CAPABLE must be true so the shared live flag covers scheduled X extraction',
             )
         )
-    notifications_gateway_url = _as_config_dict(notifications_env.get('OMI_LLM_GATEWAY_URL'))
-    if notifications_gateway_url is None or notifications_gateway_url.get('env_var') != 'OMI_LLM_GATEWAY_URL':
+    x_sync_gateway_url = _as_config_dict(x_sync_env.get('OMI_LLM_GATEWAY_URL'))
+    if x_sync_gateway_url is None or x_sync_gateway_url.get('env_var') != 'OMI_LLM_GATEWAY_URL':
         errors.append(
             ValidationError(
-                notifications_scope,
+                x_sync_scope,
                 'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint for scheduled X Flex',
             )
         )
-    if 'OMI_LLM_GATEWAY_SERVICE_TOKEN' not in notifications_secrets:
+    if 'OMI_LLM_GATEWAY_SERVICE_TOKEN' not in x_sync_secrets:
+        errors.append(
+            ValidationError(
+                x_sync_scope,
+                'missing secret OMI_LLM_GATEWAY_SERVICE_TOKEN for scheduled X Flex',
+            )
+        )
+
+    # The split moves X extraction off notifications-job; the daily summary stays
+    # there and reads DAILY_SUMMARY_SELECTION_MODE at import. Unset falls back to
+    # 'legacy' silently, so the selection mode must not travel with the X job.
+    if 'DAILY_SUMMARY_SELECTION_MODE' not in notifications_env:
         errors.append(
             ValidationError(
                 notifications_scope,
-                'missing secret OMI_LLM_GATEWAY_SERVICE_TOKEN for scheduled X Flex',
+                'DAILY_SUMMARY_SELECTION_MODE must stay on notifications-job; unset falls back to legacy',
+            )
+        )
+    if 'DAILY_SUMMARY_SELECTION_MODE' in x_sync_env:
+        errors.append(
+            ValidationError(
+                x_sync_scope,
+                'DAILY_SUMMARY_SELECTION_MODE belongs only on notifications-job',
             )
         )
 
