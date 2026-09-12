@@ -3,15 +3,20 @@
 The RapidAPI helpers interpolated the user-supplied ``handle`` into the
 query string without percent-encoding, so a handle containing ``&``, ``#``
 or ``%`` corrupted the request (e.g. ``screenname=a&b=1`` injected a second
-query parameter). These tests stub the heavy backend modules so the file
-runs hermetically under ``python3`` or pytest.
+query parameter). Stubs go through ``testing.import_isolation`` so a stub-fed
+``utils.social`` cannot leak into a shared pytest process.
 """
 
 import asyncio
-import sys
 import types
 import unittest
+from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import Mock
+
+from testing.import_isolation import load_module_fresh, stub_modules
+
+_BACKEND = Path(__file__).resolve().parents[2]
 
 
 def _install_stubs():
@@ -124,58 +129,43 @@ def _make_httpx(captured):
     return httpx
 
 
-def _load_social(captured):
+@contextmanager
+def loaded_social(captured):
     stubs = _install_stubs()
     stubs["httpx"] = _make_httpx(captured)
-    originals = {name: sys.modules.get(name) for name in stubs}
-    sys.modules.update(stubs)
-    try:
-        sys.modules.pop("utils.social", None)
-        import importlib.util
-
-        spec = importlib.util.spec_from_file_location("utils.social", "utils/social.py")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
-    finally:
-        for name, original in originals.items():
-            if original is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = original
+    with stub_modules(stubs):
+        yield load_module_fresh("utils.social", str(_BACKEND / "utils" / "social.py"))
 
 
 class TwitterHandleEncodingTests(unittest.TestCase):
     def test_profile_url_encodes_ampersand(self):
         captured = []
-        social = _load_social(captured)
-        asyncio.run(social.get_twitter_profile("foo&x=1"))
+        with loaded_social(captured) as social:
+            asyncio.run(social.get_twitter_profile("foo&x=1"))
         self.assertTrue(captured)
         self.assertIn("screenname=foo%26x%3D1", captured[0])
 
     def test_profile_url_encodes_fragment(self):
         captured = []
-        social = _load_social(captured)
-        asyncio.run(social.get_twitter_profile("foo#bar"))
+        with loaded_social(captured) as social:
+            asyncio.run(social.get_twitter_profile("foo#bar"))
         self.assertIn("screenname=foo%23bar", captured[0])
 
     def test_profile_url_keeps_plain_handle(self):
         captured = []
-        social = _load_social(captured)
-        asyncio.run(social.get_twitter_profile("jack"))
+        with loaded_social(captured) as social:
+            asyncio.run(social.get_twitter_profile("jack"))
         self.assertIn("screenname=jack", captured[0])
         self.assertNotIn("%", captured[0])
 
     def test_timeline_url_encodes_ampersand(self):
         captured = []
-        social = _load_social(captured)
-
-        # Timeline returns a dict of tweets; keep the payload minimal.
-        social.TwitterTimeline = Mock(return_value=Mock())
-        try:
-            asyncio.run(social.get_twitter_timeline("a&b=1"))
-        except Exception:
-            pass  # parsing details are irrelevant; the URL is what we assert
+        with loaded_social(captured) as social:
+            social.TwitterTimeline = Mock(return_value=Mock())
+            try:
+                asyncio.run(social.get_twitter_timeline("a&b=1"))
+            except Exception:
+                pass  # parsing details are irrelevant; the URL is what we assert
         self.assertTrue(captured)
         self.assertIn("screenname=a%26b%3D1", captured[0])
 
