@@ -147,10 +147,10 @@ omi --json memory list | jq '.[] | {id, content, category}'
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
 
 # Listați elementele de acțiune deschise
-omi --json action-item list --open | jq '.[] | {id, title, due_at}'
+omi --json action-item list --open | jq '.[] | {id, description, due_at}'
 
 # Listați obiectivele
-omi --json goal list | jq '.[] | {id, title, progress: .progress_percent}'
+omi --json goal list | jq '.[] | {id, title, current: .current_value, target: .target_value}'
 ```
 
 ---
@@ -188,7 +188,7 @@ omi auth login
 | `command not found: omi` | PATH nu conține directorul bin pipx | Rulați `pipx ensurepath` și reporniți terminalul |
 | `401 Unauthorized` | Cheie API invalidă sau expirată | Generați o cheie nouă pe app.omi.me și actualizați |
 | `connection refused` | Fără acces la rețea la serverul Omi | Verificați conexiunea la internet și setările proxy |
-| `permission denied` pe fișierele de configurare | Directorul de configurare nu poate fi scris | Verificați permisiunile pentru `~/.config/omi` |
+| `permission denied` pe fișierele de configurare | Directorul de configurare nu poate fi scris | Verificați permisiunile pentru `~/.omi/config.toml` |
 
 ---
 
