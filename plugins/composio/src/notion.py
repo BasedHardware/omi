@@ -176,17 +176,18 @@ async def extract_all_pages(access_token: str, uid: str):
                         blocks_response.raise_for_status()
                         blocks_data = blocks_response.json()
 
-                        # Add blocks to our collection
-                        all_blocks.extend(blocks_data.get("results", []))
-
-                        # Check if there are more blocks
+                        results = blocks_data.get("results", [])
                         has_more = blocks_data.get("has_more", False)
                         next_cursor = blocks_data.get("next_cursor")
 
-                        # has_more without a fresh cursor cannot advance to
-                        # the next page; requesting again would re-fetch the
-                        # same page forever inside this async handler.
-                        if has_more and (not next_cursor or next_cursor in seen_cursors):
+                        # A repeated next_cursor means this response is a
+                        # stalled re-fetch of a page already stored. A
+                        # missing cursor still needs the first page stored.
+                        stalled_repeat = bool(has_more and next_cursor and next_cursor in seen_cursors)
+                        if not stalled_repeat:
+                            all_blocks.extend(results)
+
+                        if has_more and (not next_cursor or stalled_repeat):
                             logger.error(
                                 f"Pagination stalled for page {page_id}: has_more without a fresh cursor"
                             )

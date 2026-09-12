@@ -3,12 +3,8 @@
 Standard library only: requests, fastapi, pydantic, and the src.db /
 src.omi_api siblings are replaced with minimal stubs before importing the
 module under test so the suite runs without site-packages (the manifest
-lane runs plain python3). sys.modules is restored after import.
-
-Covers the unbounded pagination loop in extract_all_pages: `while has_more`
-re-requested the blocks/children endpoint whenever Notion returned
-has_more=true, even when next_cursor was missing or repeated - so a stalled
-cursor re-fetched the same page forever inside an async handler.
+lane runs plain python3). Stubs and the imported `src.notion` module are
+scoped to a context manager so pytest collection cannot leak fakes.
 """
 
 import asyncio
@@ -16,6 +12,7 @@ import os
 import sys
 import types
 import unittest
+from contextlib import contextmanager
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -130,17 +127,26 @@ def _install_module_stubs():
     sys.modules["src.omi_api"] = omi_api
 
 
-_saved_modules = {name: sys.modules.get(name) for name in _STUBBED_MODULES}
-_install_module_stubs()
-try:
-    import src.notion as notion  # noqa: E402
-finally:
-    for _name, _original in _saved_modules.items():
-        if _original is None:
-            sys.modules.pop(_name, None)
+@contextmanager
+def _isolated_notion_import():
+    saved = {name: sys.modules.get(name) for name in _STUBBED_MODULES}
+    saved_notion = sys.modules.get("src.notion")
+    _install_module_stubs()
+    try:
+        import src.notion as notion_mod  # noqa: E402
+
+        yield notion_mod
+    finally:
+        for name, original in saved.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+        if saved_notion is None:
+            sys.modules.pop("src.notion", None)
         else:
-            sys.modules[_name] = _original
-    del _name, _original, _saved_modules
+            sys.modules["src.notion"] = saved_notion
+
 
 _PAGE = {"id": "page-1", "properties": {"title": {"title": [{"plain_text": "Doc"}]}}}
 _BLOCK = {"type": "paragraph", "paragraph": {"rich_text": [{"plain_text": "hello world of testing"}]}}
@@ -158,7 +164,7 @@ class _Resp:
         pass
 
 
-def _run(children_pages):
+def _run(notion, children_pages, captured_facts=None):
     """Run extract_all_pages with canned children pages; count GET calls.
 
     children_pages: list of payloads returned in order by requests.get.
@@ -174,24 +180,41 @@ def _run(children_pages):
     def fake_post(url, json=None, headers=None):
         return _Resp({"results": [_PAGE]})
 
+    async def capture_fact(uid, fact_text, **kwargs):
+        if captured_facts is not None:
+            captured_facts.append(fact_text)
+        return {"success": True}
+
     with mock.patch.object(notion.requests, "post", side_effect=fake_post), mock.patch.object(
         notion.requests, "get", side_effect=fake_get
-    ), mock.patch.object(notion.asyncio, "sleep", new=mock.AsyncMock()):
+    ), mock.patch.object(notion, "store_fact", side_effect=capture_fact), mock.patch.object(
+        notion.asyncio, "sleep", new=mock.AsyncMock()
+    ):
         return asyncio.run(notion.extract_all_pages("tok", "u1")), get_calls
 
 
 class NotionPaginationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._cm = _isolated_notion_import()
+        cls.notion = cls._cm.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._cm.__exit__(None, None, None)
+
     def test_single_page_no_more(self):
-        facts, calls = _run([{"results": [_BLOCK], "has_more": False, "next_cursor": None}])
+        facts, calls = _run(self.notion, [{"results": [_BLOCK], "has_more": False, "next_cursor": None}])
         self.assertEqual(len(calls), 1)
         self.assertEqual(facts, 1)
 
     def test_two_pages_then_done(self):
         facts, calls = _run(
+            self.notion,
             [
                 {"results": [_BLOCK], "has_more": True, "next_cursor": "c2"},
                 {"results": [_BLOCK], "has_more": False, "next_cursor": None},
-            ]
+            ],
         )
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[1].get("start_cursor"), "c2")
@@ -200,19 +223,33 @@ class NotionPaginationTests(unittest.TestCase):
 
     def test_has_more_without_cursor_stops(self):
         # Old code re-requested page one forever.
-        facts, calls = _run([{"results": [_BLOCK], "has_more": True, "next_cursor": None}])
+        facts, calls = _run(self.notion, [{"results": [_BLOCK], "has_more": True, "next_cursor": None}])
         self.assertEqual(len(calls), 1)
         self.assertEqual(facts, 1)
 
-    def test_repeating_cursor_stops(self):
+    def test_repeating_cursor_stops_without_duplicating_blocks(self):
+        captured = []
         facts, calls = _run(
+            self.notion,
             [
                 {"results": [_BLOCK], "has_more": True, "next_cursor": "c2"},
                 {"results": [_BLOCK], "has_more": True, "next_cursor": "c2"},
-            ]
+            ],
+            captured_facts=captured,
         )
         self.assertEqual(len(calls), 2)
         self.assertEqual(facts, 1)
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0].count("hello world of testing"), 1)
+
+
+class NotionImportIsolationTests(unittest.TestCase):
+    def test_src_notion_is_dropped_when_the_context_exits(self):
+        self.assertNotIn("src.notion", sys.modules)
+        with _isolated_notion_import() as mod:
+            self.assertIsNotNone(mod)
+            self.assertIn("src.notion", sys.modules)
+        self.assertNotIn("src.notion", sys.modules)
 
 
 if __name__ == "__main__":
