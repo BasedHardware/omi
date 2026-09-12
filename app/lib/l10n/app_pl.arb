@@ -3292,5 +3292,12 @@
     "speechToTextUnavailableDesc": "Zamiana mowy na tekst jest teraz niedostępna. Sprawdź połączenie internetowe i ustawienia rozpoznawania mowy na urządzeniu, a następnie spróbuj ponownie.",
     "memoryHistoryPartial": "Część historii wspomnień jest niedostępna. Wyświetlana jest dotychczas otrzymana historia.",
     "tapPlusToStartRecording": "Dotknij +, aby rozpocząć nagrywanie",
-    "processingTakingLonger": "Nadal działa — trwa to dłużej niż zwykle."
+    "processingTakingLonger": "Nadal działa — trwa to dłużej niż zwykle.",
+    "deviceRenameTitle": "Zmień nazwę urządzenia",
+    "deviceRenameDescription": "Ustaw lokalną nazwę tego urządzenia. Jest zapisywana na telefonie i wyświetlana zamiast nazwy rozgłaszanej. Sama nazwa urządzenia nie jest zmieniana.",
+    "deviceRenameHint": "Nazwa urządzenia",
+    "deviceRenameTooShort": "Nazwa musi mieć co najmniej 2 znaki",
+    "deviceRenameSaved": "Zaktualizowano nazwę urządzenia",
+    "deviceRenameReset": "Nazwa niestandardowa usunięta; wyświetlana jest nazwa domyślna",
+    "deviceRenameResetAction": "Przywróć nazwę domyślną"
 }

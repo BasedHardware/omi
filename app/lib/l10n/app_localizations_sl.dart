@@ -10012,4 +10012,26 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Še poteka — traja dlje kot običajno.';
+
+  @override
+  String get deviceRenameTitle => 'Preimenuj napravo';
+
+  @override
+  String get deviceRenameDescription =>
+      'Nastavite lokalno ime za to napravo. Shrani se v telefon in prikaže namesto oglaševanega imena. Samo naprava se ne preimenuje.';
+
+  @override
+  String get deviceRenameHint => 'Ime naprave';
+
+  @override
+  String get deviceRenameTooShort => 'Ime mora imeti vsaj 2 znaka';
+
+  @override
+  String get deviceRenameSaved => 'Ime naprave je posodobljeno';
+
+  @override
+  String get deviceRenameReset => 'Ime po meri je izbrisano, prikazuje se privzeto ime';
+
+  @override
+  String get deviceRenameResetAction => 'Ponastavi na privzeto ime';
 }

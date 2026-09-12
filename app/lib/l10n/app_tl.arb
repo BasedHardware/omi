@@ -10823,5 +10823,12 @@
     "speechToTextUnavailableDesc": "Hindi available ang pag-convert ng boses sa teksto sa ngayon. Suriin ang iyong koneksyon sa internet at ang mga setting ng pagkilala sa boses ng iyong device, pagkatapos ay subukan muli.",
     "memoryHistoryPartial": "Hindi available ang ilang bahagi ng kasaysayan ng mga alaala. Ipinapakita ang kasaysayang natanggap sa ngayon.",
     "tapPlusToStartRecording": "I-tap ang + para magsimulang mag-record",
-    "processingTakingLonger": "Ginagawa pa — mas matagal ito kaysa karaniwan."
+    "processingTakingLonger": "Ginagawa pa — mas matagal ito kaysa karaniwan.",
+    "deviceRenameTitle": "Palitan ang Pangalan ng Device",
+    "deviceRenameDescription": "Magtakda ng lokal na pangalan para sa device na ito. Ise-save ito sa iyong telepono at ipapakita sa halip na inanunsyong pangalan. Hindi pinapalitan ang pangalan ng mismong device.",
+    "deviceRenameHint": "Pangalan ng device",
+    "deviceRenameTooShort": "Dapat may hindi bababa sa 2 karakter ang pangalan",
+    "deviceRenameSaved": "Na-update ang pangalan ng device",
+    "deviceRenameReset": "Inalis ang custom na pangalan, ipinapakita ang default na pangalan",
+    "deviceRenameResetAction": "I-reset sa default na pangalan"
 }

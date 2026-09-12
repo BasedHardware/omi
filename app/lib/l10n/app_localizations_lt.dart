@@ -10001,4 +10001,26 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Vis dar vyksta — tai užtrunka ilgiau nei įprasta.';
+
+  @override
+  String get deviceRenameTitle => 'Pervardyti įrenginį';
+
+  @override
+  String get deviceRenameDescription =>
+      'Nustatykite vietinį šio įrenginio pavadinimą. Jis išsaugomas telefone ir rodomas vietoje skelbiamo pavadinimo. Pats įrenginys nepervardinamas.';
+
+  @override
+  String get deviceRenameHint => 'Įrenginio pavadinimas';
+
+  @override
+  String get deviceRenameTooShort => 'Pavadinimas turi būti bent 2 simbolių';
+
+  @override
+  String get deviceRenameSaved => 'Įrenginio pavadinimas atnaujintas';
+
+  @override
+  String get deviceRenameReset => 'Tinkintas pavadinimas ištrintas, rodomas numatytasis';
+
+  @override
+  String get deviceRenameResetAction => 'Atkurti numatytąjį pavadinimą';
 }

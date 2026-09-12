@@ -128,15 +128,19 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             ),
           ),
           if (chipValue != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: chipColor ?? const Color(0xFF2A2A2E),
-                borderRadius: BorderRadius.circular(100),
-              ),
-              child: Text(
-                chipValue,
-                style: TextStyle(color: chipTextColor ?? Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: chipColor ?? const Color(0xFF2A2A2E),
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Text(
+                  chipValue,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: chipTextColor ?? Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                ),
               ),
             ),
             if (showChevron) const SizedBox(width: 8),
@@ -541,7 +545,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   }
 
   Widget _buildDeviceInfoSection(DeviceProvider provider) {
-    final deviceName = provider.pairedDevice?.name ?? context.l10n.unknownDevice;
+    final customName =
+        provider.pairedDevice == null ? '' : SharedPreferencesUtil().deviceCustomName(provider.pairedDevice!.id);
+    final deviceName = customName.isNotEmpty ? customName : (provider.pairedDevice?.name ?? context.l10n.unknownDevice);
     final modelNumber = provider.pairedDevice?.modelNumber ?? context.l10n.unknown;
     final manufacturer = provider.pairedDevice?.manufacturerName ?? context.l10n.unknown;
     final firmware = provider.pairedDevice?.firmwareRevision ?? context.l10n.unknown;
@@ -670,11 +676,16 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 // Device Title and Status
                 Column(
                   children: [
-                    Text(
-                      provider.pairedDevice?.name ?? context.l10n.unknownDevice,
-                      style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
-                    ),
+                    Builder(builder: (context) {
+                      final custom = provider.pairedDevice == null
+                          ? ''
+                          : SharedPreferencesUtil().deviceCustomName(provider.pairedDevice!.id);
+                      return Text(
+                        custom.isNotEmpty ? custom : (provider.pairedDevice?.name ?? context.l10n.unknownDevice),
+                        style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                      );
+                    }),
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

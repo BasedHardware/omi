@@ -11829,5 +11829,40 @@
     "processingTakingLonger": "Still working — this is taking longer than usual.",
     "@processingTakingLonger": {
         "description": "Shown on the homepage processing card after ~2 minutes with a Retry action (#5481)."
+    },
+    "deviceRenameTitle": "Rename Device",
+    "@deviceRenameTitle": {
+        "type": "text",
+        "description": "Title of the device rename dialog"
+    },
+    "deviceRenameDescription": "Set a local name for this device. It is stored on your phone and shown instead of the advertised name. The device itself is not renamed.",
+    "@deviceRenameDescription": {
+        "type": "text",
+        "description": "Explains that the new name is stored locally on the phone only"
+    },
+    "deviceRenameHint": "Device name",
+    "@deviceRenameHint": {
+        "type": "text",
+        "description": "Hint text of the device rename input field"
+    },
+    "deviceRenameTooShort": "Name must be at least 2 characters",
+    "@deviceRenameTooShort": {
+        "type": "text",
+        "description": "Validation error when the entered device name is shorter than 2 characters"
+    },
+    "deviceRenameSaved": "Device name updated",
+    "@deviceRenameSaved": {
+        "type": "text",
+        "description": "Snackbar shown after the device name was updated"
+    },
+    "deviceRenameReset": "Custom name cleared, showing default name",
+    "@deviceRenameReset": {
+        "type": "text",
+        "description": "Snackbar shown after the custom device name was cleared"
+    },
+    "deviceRenameResetAction": "Reset to default name",
+    "@deviceRenameResetAction": {
+        "type": "text",
+        "description": "Action that clears the custom device name"
     }
 }

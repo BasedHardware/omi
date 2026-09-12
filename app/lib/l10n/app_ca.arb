@@ -3235,5 +3235,12 @@
     "speechToTextUnavailableDesc": "La transcripció de veu no està disponible ara mateix. Comprova la connexió a Internet i la configuració del reconeixement de veu del dispositiu i torna-ho a provar.",
     "memoryHistoryPartial": "Una part de l'historial de records no està disponible. Es mostra l'historial rebut fins ara.",
     "tapPlusToStartRecording": "Toca + per començar a gravar",
-    "processingTakingLonger": "Encara en curs: això està trigant més del normal."
+    "processingTakingLonger": "Encara en curs: això està trigant més del normal.",
+    "deviceRenameTitle": "Canvia el nom del dispositiu",
+    "deviceRenameDescription": "Establiu un nom local per a aquest dispositiu. Es desa al telèfon i es mostra en lloc del nom difós. El dispositiu en si no canvia de nom.",
+    "deviceRenameHint": "Nom del dispositiu",
+    "deviceRenameTooShort": "El nom ha de tenir com a mínim 2 caràcters",
+    "deviceRenameSaved": "S’ha actualitzat el nom del dispositiu",
+    "deviceRenameReset": "S’ha esborrat el nom personalitzat; es mostra el nom per defecte",
+    "deviceRenameResetAction": "Restaura el nom per defecte"
 }

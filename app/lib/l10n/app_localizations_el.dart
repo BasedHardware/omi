@@ -10052,4 +10052,26 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ακόμα σε εξέλιξη — χρειάζεται περισσότερο χρόνο από το συνηθισμένο.';
+
+  @override
+  String get deviceRenameTitle => 'Μετονομασία συσκευής';
+
+  @override
+  String get deviceRenameDescription =>
+      'Ορίστε ένα τοπικό όνομα για αυτή τη συσκευή. Αποθηκεύεται στο τηλέφωνό σας και εμφανίζεται αντί για το διαφημιζόμενο όνομα. Η ίδια η συσκευή δεν μετονομάζεται.';
+
+  @override
+  String get deviceRenameHint => 'Όνομα συσκευής';
+
+  @override
+  String get deviceRenameTooShort => 'Το όνομα πρέπει να έχει τουλάχιστον 2 χαρακτήρες';
+
+  @override
+  String get deviceRenameSaved => 'Το όνομα της συσκευής ενημερώθηκε';
+
+  @override
+  String get deviceRenameReset => 'Το προσαρμοσμένο όνομα διαγράφηκε, εμφανίζεται το προεπιλεγμένο';
+
+  @override
+  String get deviceRenameResetAction => 'Επαναφορά στο προεπιλεγμένο όνομα';
 }

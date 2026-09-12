@@ -9992,4 +9992,26 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Masih diproses — ini memakan waktu lebih lama dari biasanya.';
+
+  @override
+  String get deviceRenameTitle => 'Ganti Nama Perangkat';
+
+  @override
+  String get deviceRenameDescription =>
+      'Tetapkan nama lokal untuk perangkat ini. Nama ini disimpan di ponsel Anda dan ditampilkan menggantikan nama yang diiklankan. Nama perangkat itu sendiri tidak diubah.';
+
+  @override
+  String get deviceRenameHint => 'Nama perangkat';
+
+  @override
+  String get deviceRenameTooShort => 'Nama harus minimal 2 karakter';
+
+  @override
+  String get deviceRenameSaved => 'Nama perangkat diperbarui';
+
+  @override
+  String get deviceRenameReset => 'Nama kustom dihapus, menampilkan nama bawaan';
+
+  @override
+  String get deviceRenameResetAction => 'Kembalikan ke nama bawaan';
 }

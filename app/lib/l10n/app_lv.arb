@@ -3257,5 +3257,12 @@
     "speechToTextUnavailableDesc": "Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.",
     "memoryHistoryPartial": "Daļa atmiņu vēstures nav pieejama. Tiek rādīta līdz šim saņemtā vēsture.",
     "tapPlusToStartRecording": "Pieskarieties +, lai sāktu ierakstīšanu",
-    "processingTakingLonger": "Joprojām notiek — tas aizņem ilgāk nekā parasti."
+    "processingTakingLonger": "Joprojām notiek — tas aizņem ilgāk nekā parasti.",
+    "deviceRenameTitle": "Pārdēvēt ierīci",
+    "deviceRenameDescription": "Iestatiet lokālu nosaukumu šai ierīcei. Tas tiek saglabāts telefonā un tiek rādīts reklāmētā nosaukuma vietā. Pati ierīce netiek pārdēvēta.",
+    "deviceRenameHint": "Ierīces nosaukums",
+    "deviceRenameTooShort": "Nosaukumam jābūt vismaz 2 rakstzīmēm",
+    "deviceRenameSaved": "Ierīces nosaukums atjaunināts",
+    "deviceRenameReset": "Pielāgotais nosaukums dzēsts; tiek rādīts noklusējuma nosaukums",
+    "deviceRenameResetAction": "Atjaunot noklusējuma nosaukumu"
 }

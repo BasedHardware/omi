@@ -63,6 +63,14 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   int get nearbyDeviceCount => deviceList.length;
 
+  /// Display name for the pairing list: the user-set local name when one was
+  /// saved for this device id, otherwise the BLE-advertised name. The BLE name
+  /// itself stays untouched so scan filtering keeps matching hardware names.
+  String displayNameFor(BtDevice device) {
+    final custom = SharedPreferencesUtil().deviceCustomName(device.id);
+    return custom.isNotEmpty ? custom : device.name;
+  }
+
   void _syncSavedDevices() {
     savedDeviceList = SharedPreferencesUtil().btDevices.where((device) => device.id.isNotEmpty).toList();
   }

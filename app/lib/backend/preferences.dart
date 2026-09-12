@@ -285,6 +285,41 @@ class SharedPreferencesUtil {
 
   String get deviceName => getString('deviceName');
 
+  // User-set display names keyed by device id. Used to rename a paired device
+  // after connection; the BLE-advertised name is left untouched so device-type
+  // detection and scan filtering keep working.
+  Map<String, String> get deviceCustomNames {
+    final raw = getString('deviceCustomNames');
+    if (raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return {};
+      // Keep only string values so corrupt/non-string persisted entries
+      // (false, null, nested objects) are discarded, never rendered.
+      return {
+        for (final entry in decoded.entries)
+          if (entry.value is String) entry.key: entry.value as String,
+      };
+    } catch (e) {
+      return {};
+    }
+  }
+
+  String deviceCustomName(String deviceId) => deviceCustomNames[deviceId] ?? '';
+
+  void setDeviceCustomName(String deviceId, String name) {
+    final names = deviceCustomNames;
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || trimmed.length < 2) {
+      names.remove(deviceId);
+    } else {
+      names[deviceId] = trimmed;
+    }
+    saveString('deviceCustomNames', jsonEncode(names));
+  }
+
+  void clearDeviceCustomName(String deviceId) => setDeviceCustomName(deviceId, '');
+
   bool get deviceIsV2 => getBool('deviceIsV2');
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);

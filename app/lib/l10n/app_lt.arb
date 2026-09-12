@@ -3257,5 +3257,12 @@
     "speechToTextUnavailableDesc": "Kalbos vertimas tekstu šiuo metu nepasiekiamas. Patikrinkite interneto ryšį ir įrenginio kalbos atpažinimo nustatymus, tada bandykite dar kartą.",
     "memoryHistoryPartial": "Dalis prisiminimų istorijos nepasiekiama. Rodoma iki šiol gauta istorija.",
     "tapPlusToStartRecording": "Norėdami pradėti įrašymą, palieskite +",
-    "processingTakingLonger": "Vis dar vyksta — tai užtrunka ilgiau nei įprasta."
+    "processingTakingLonger": "Vis dar vyksta — tai užtrunka ilgiau nei įprasta.",
+    "deviceRenameTitle": "Pervardyti įrenginį",
+    "deviceRenameDescription": "Nustatykite vietinį šio įrenginio pavadinimą. Jis išsaugomas telefone ir rodomas vietoje skelbiamo pavadinimo. Pats įrenginys nepervardinamas.",
+    "deviceRenameHint": "Įrenginio pavadinimas",
+    "deviceRenameTooShort": "Pavadinimas turi būti bent 2 simbolių",
+    "deviceRenameSaved": "Įrenginio pavadinimas atnaujintas",
+    "deviceRenameReset": "Tinkintas pavadinimas ištrintas, rodomas numatytasis",
+    "deviceRenameResetAction": "Atkurti numatytąjį pavadinimą"
 }

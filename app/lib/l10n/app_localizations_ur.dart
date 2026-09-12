@@ -9994,4 +9994,26 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'ابھی کام جاری ہے — اس میں معمول سے زیادہ وقت لگ رہا ہے۔';
+
+  @override
+  String get deviceRenameTitle => 'ڈیوائس کا نام تبدیل کریں';
+
+  @override
+  String get deviceRenameDescription =>
+      'اس ڈیوائس کے لیے ایک مقامی نام مقرر کریں۔ یہ آپ کے فون پر محفوظ ہوتا ہے اور اشتہاری نام کے بجائے دکھایا جاتا ہے۔ خود ڈیوائس کا نام تبدیل نہیں ہوتا۔';
+
+  @override
+  String get deviceRenameHint => 'ڈیوائس کا نام';
+
+  @override
+  String get deviceRenameTooShort => 'نام میں کم از کم 2 حروف ہونے چاہئیں';
+
+  @override
+  String get deviceRenameSaved => 'ڈیوائس کا نام اپ ڈیٹ ہو گیا';
+
+  @override
+  String get deviceRenameReset => 'اپنی مرضی کا نام ہٹا دیا گیا، ڈیفالٹ نام دکھایا جا رہا ہے';
+
+  @override
+  String get deviceRenameResetAction => 'ڈیفالٹ نام پر ری سیٹ کریں';
 }

@@ -10023,4 +10023,26 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Még folyamatban — ez tovább tart a szokásosnál.';
+
+  @override
+  String get deviceRenameTitle => 'Eszköz átnevezése';
+
+  @override
+  String get deviceRenameDescription =>
+      'Állítson be egy helyi nevet ehhez az eszközhöz. A név a telefonon tárolódik, és a hirdetett név helyett jelenik meg. Maga az eszköz nem neveződik át.';
+
+  @override
+  String get deviceRenameHint => 'Eszköz neve';
+
+  @override
+  String get deviceRenameTooShort => 'A név legalább 2 karakter legyen';
+
+  @override
+  String get deviceRenameSaved => 'Az eszköz neve frissült';
+
+  @override
+  String get deviceRenameReset => 'Egyéni név törölve; az alapértelmezett név jelenik meg';
+
+  @override
+  String get deviceRenameResetAction => 'Visszaállítás alapértelmezett névre';
 }
