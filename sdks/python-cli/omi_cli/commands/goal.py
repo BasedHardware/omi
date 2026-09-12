@@ -134,8 +134,6 @@ def update_goal(
     max_value: Optional[float] = typer.Option(None, "--max"),
     unit: Optional[str] = typer.Option(None, "--unit"),
     clear_unit: bool = typer.Option(False, "--clear-unit", help="Remove the existing unit label."),
-    desired_outcome: Optional[str] = typer.Option(None, "--desired-outcome"),
-    clear_desired_outcome: bool = typer.Option(False, "--clear-desired-outcome"),
     why_it_matters: Optional[str] = typer.Option(None, "--why-it-matters"),
     clear_why_it_matters: bool = typer.Option(False, "--clear-why-it-matters"),
     success_criterion: Optional[list[str]] = typer.Option(None, "--success-criterion", help="Repeatable."),
@@ -146,11 +144,6 @@ def update_goal(
     ctx = _ctx(typer_ctx)
     if clear_unit and unit is not None:
         raise UsageError(message="Conflicting options", detail="--unit and --clear-unit are mutually exclusive.")
-    if clear_desired_outcome and desired_outcome is not None:
-        raise UsageError(
-            message="Conflicting options",
-            detail="--desired-outcome and --clear-desired-outcome are mutually exclusive.",
-        )
     if clear_why_it_matters and why_it_matters is not None:
         raise UsageError(
             message="Conflicting options",
@@ -181,16 +174,13 @@ def update_goal(
         body["unit"] = None
     elif unit is not None:
         body["unit"] = unit
-    if clear_desired_outcome:
-        body["desired_outcome"] = None
-    elif desired_outcome is not None:
-        body["desired_outcome"] = desired_outcome
     if clear_why_it_matters:
         body["why_it_matters"] = None
     elif why_it_matters is not None:
         body["why_it_matters"] = why_it_matters
     if clear_success_criteria:
-        body["success_criteria"] = None
+        # API rejects null; empty list is the supported clear.
+        body["success_criteria"] = []
     elif success_criterion:
         criteria = [c for c in success_criterion if c and str(c).strip()]
         if criteria:
@@ -204,7 +194,7 @@ def update_goal(
             message="No fields to update",
             detail=(
                 "Provide one of --title/--target/--current/--min/--max/--unit/"
-                "--desired-outcome/--why-it-matters/--success-criterion/--horizon-at "
+                "--why-it-matters/--success-criterion/--horizon-at "
                 "or a matching --clear-* flag."
             ),
         )

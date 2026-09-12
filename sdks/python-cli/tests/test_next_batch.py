@@ -11,12 +11,12 @@ def test_goal_update_horizon_and_context(authed_profile, respx_mock, cli_runner)
     route = respx_mock.patch("/v1/dev/user/goals/g1").respond(json={"id": "g1"})
     result = cli_runner.invoke(
         app,
-        ["--json", "goal", "update", "g1", "--horizon-at", "2026-12-01T00:00:00", "--desired-outcome", "ship"],
+        ["--json", "goal", "update", "g1", "--horizon-at", "2026-12-01T00:00:00", "--why-it-matters", "backup"],
     )
     assert result.exit_code == 0, result.output
     body = json.loads(route.calls.last.request.content)
     assert body["horizon_at"].startswith("2026-12-01")
-    assert body["desired_outcome"] == "ship"
+    assert body["why_it_matters"] == "backup"
 
 
 def test_goal_update_clear_horizon(authed_profile, respx_mock, cli_runner):
@@ -25,6 +25,14 @@ def test_goal_update_clear_horizon(authed_profile, respx_mock, cli_runner):
     assert result.exit_code == 0, result.output
     body = json.loads(route.calls.last.request.content)
     assert body == {"horizon_at": None}
+
+
+def test_goal_update_clear_success_criteria_sends_empty_list(authed_profile, respx_mock, cli_runner):
+    route = respx_mock.patch("/v1/dev/user/goals/g1").respond(json={"id": "g1"})
+    result = cli_runner.invoke(app, ["--json", "goal", "update", "g1", "--clear-success-criteria"])
+    assert result.exit_code == 0, result.output
+    body = json.loads(route.calls.last.request.content)
+    assert body == {"success_criteria": []}
 
 
 def test_goal_update_rejects_conflicting_horizon(authed_profile, respx_mock, monkeypatch, capsys):
