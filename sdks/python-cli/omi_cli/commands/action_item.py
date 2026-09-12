@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import typer
 
 from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import NotFoundError, UsageError
+from omi_cli.json_input import load_json_input
 from omi_cli.output import shorten
 
 if TYPE_CHECKING:
@@ -112,6 +114,65 @@ def create_action_item(
         result = client.post("/v1/dev/user/action-items", json_body=body)
     ctx.renderer.success(f"Action item created: [bold]{result.get('id')}[/bold]")
     ctx.renderer.emit(result)
+
+
+@app.command("create-batch", help="Create multiple action items from a JSON file (max 50).")
+def create_action_items_batch(
+    typer_ctx: typer.Context,
+    batch_file: Path = typer.Argument(
+        ..., help="Path to a JSON file containing an array of action items or an object with 'action_items'."
+    ),
+) -> None:
+    ctx = _ctx(typer_ctx)
+    if not batch_file.is_file():
+        raise UsageError(message=f"File not found: {batch_file}")
+    try:
+        payload = load_json_input(batch_file.read_bytes())
+    except OSError as exc:
+        raise UsageError(message=f"Cannot read {batch_file}", detail=str(exc))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise UsageError(message=f"Invalid JSON in {batch_file}", detail=str(exc))
+
+    items = payload.get("action_items") if isinstance(payload, dict) else payload
+    if not isinstance(items, list):
+        raise UsageError(
+            message="JSON must be a list of action items, or an object with 'action_items' key",
+            detail="Each action item needs at least 'description'.",
+        )
+    if not items:
+        raise UsageError(message="Action items list cannot be empty")
+    if len(items) > 50:
+        raise UsageError(message="Maximum 50 action items per batch request", detail=f"Provided {len(items)} items.")
+
+    for i, it in enumerate(items):
+        if not isinstance(it, dict) or not isinstance(it.get("description"), str) or not it["description"].strip():
+            raise UsageError(
+                message=f"Item #{i + 1} must be an object with a non-empty 'description'",
+                detail="All action items in the batch must have valid non-empty descriptions.",
+            )
+
+    body: dict[str, object] = {"action_items": items}
+    with ctx.make_client() as client:
+        result = client.post("/v1/dev/user/action-items/batch", json_body=body)
+
+    created_count = result.get("created_count", len(result.get("action_items", [])))
+    ctx.renderer.success(f"Action items batch created: [bold]{created_count}[/bold] items")
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit(result)
+        return
+
+    rows = []
+    for it in result.get("action_items") or []:
+        rows.append(
+            {
+                "id": shorten(it.get("id"), 14),
+                "completed": it.get("completed"),
+                "description": shorten(it.get("description"), 60),
+                "due_at": it.get("due_at"),
+                "created_at": it.get("created_at"),
+            }
+        )
+    ctx.renderer.emit(rows, columns=_LIST_COLUMNS, title=f"created action items ({created_count})")
 
 
 @app.command("update", help="Update an existing action item.")
