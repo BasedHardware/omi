@@ -11,14 +11,27 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Widget showing top 3 today's tasks with "Show all ->" button
-class TodayTasksWidget extends StatelessWidget {
+class TodayTasksWidget extends StatefulWidget {
   const TodayTasksWidget({super.key});
+
+  @override
+  State<TodayTasksWidget> createState() => _TodayTasksWidgetState();
+}
+
+class _TodayTasksWidgetState extends State<TodayTasksWidget> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(context.read<ActionItemsProvider>().ensureHomeTodayTasksLoaded());
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<ActionItemsProvider>(
       builder: (context, provider, child) {
-        unawaited(provider.ensureHomeTodayTasksLoaded());
         final displayTasks = provider.todayPreviewTasks();
 
         // Hide if no today tasks
