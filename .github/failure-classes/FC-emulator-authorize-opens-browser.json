@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-emulator-authorize-opens-browser",
+  "violated_contract": "When FIREBASE_AUTH_EMULATOR_HOST is set, /v1/auth/authorize must complete PKCE against the Auth emulator (JSON code or app-scheme redirect) instead of redirecting to Google or Apple. The offline harness has no OAuth client, and iOS will not render the plain-HTTP authorize page, so launching Safari leaves the user on a blank screen. A production deployment without the emulator must reject response_mode=json.",
+  "canonical_prevention": "Gate the emulator completion on FIREBASE_AUTH_EMULATOR_HOST, reject response_mode=json when the emulator is unset, and have the local_dev client skip Safari and GET authorize with response_mode=json. Behavioral tests drive auth_authorize and the JSON-callback helpers without a browser.",
+  "canonical_prevention_artifact": [
+    "backend/routers/auth.py",
+    "backend/tests/unit/test_auth_redirect_uri.py",
+    "app/lib/services/auth_service.dart",
+    "app/test/unit/emulator_authorize_callback_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/auth.py",
+    "app/lib/services/auth_service.dart"
+  ],
+  "status": "open"
+}
