@@ -55,7 +55,11 @@ async def require_omi_credentials() -> None:
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 # Database path
-DB_PATH = Path(__file__).parent / "iq_rating.db"
+DB_PATH = Path(os.getenv("IQ_RATING_DB_PATH", Path(__file__).parent / "iq_rating.db"))
+
+# Bound HTTP 429 retries so a persistently rate-limited upstream cannot pin a
+# background thread forever
+RATE_LIMIT_MAX_RETRIES = 3
 
 # In-memory cache for quick access
 _cache = {}
@@ -317,6 +321,7 @@ def fetch_all_memories(uid: str) -> List[dict]:
         all_memories = []
         offset = 0
         limit = 100
+        rate_limit_retries = 0
         
         while True:
             url = f"{OMI_BASE_API_URL}/v2/integrations/{OMI_APP_ID}/memories"
@@ -342,6 +347,10 @@ def fetch_all_memories(uid: str) -> List[dict]:
                 
                 offset += limit
             elif response.status_code == 429:
+                rate_limit_retries += 1
+                if rate_limit_retries > RATE_LIMIT_MAX_RETRIES:
+                    logger.error("Rate limit retries exhausted while fetching memories")
+                    break
                 logger.warning("Rate limited, waiting 2 seconds...")
                 time.sleep(2)
                 continue
@@ -362,6 +371,7 @@ def fetch_all_conversations(uid: str) -> List[dict]:
         all_conversations = []
         offset = 0
         limit = 100
+        rate_limit_retries = 0
         
         while True:
             url = f"{OMI_BASE_API_URL}/v2/integrations/{OMI_APP_ID}/conversations"
@@ -387,6 +397,10 @@ def fetch_all_conversations(uid: str) -> List[dict]:
                 
                 offset += limit
             elif response.status_code == 429:
+                rate_limit_retries += 1
+                if rate_limit_retries > RATE_LIMIT_MAX_RETRIES:
+                    logger.error("Rate limit retries exhausted while fetching conversations")
+                    break
                 logger.warning("Rate limited, waiting 2 seconds...")
                 time.sleep(2)
                 continue
