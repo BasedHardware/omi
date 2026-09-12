@@ -147,10 +147,10 @@ omi --json memory list | jq '.[] | {id, content, category}'
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
 
 # แสดงรายการดำเนินการที่เปิดอยู่
-omi --json action-item list --open | jq '.[] | {id, title, due_at}'
+omi --json action-item list --open | jq '.[] | {id, description, due_at}'
 
 # แสดงเป้าหมาย
-omi --json goal list | jq '.[] | {id, title, progress: .progress_percent}'
+omi --json goal list | jq '.[] | {id, title, current: .current_value, target: .target_value}'
 ```
 
 ---
@@ -188,7 +188,7 @@ omi auth login
 | `command not found: omi` | PATH ไม่มีไดเรกทอรี bin ของ pipx | รัน `pipx ensurepath` และรีสตาร์ทเทอร์มินัล |
 | `401 Unauthorized` | คีย์ API ไม่ถูกต้องหรือหมดอายุ | สร้างคีย์ใหม่บน app.omi.me และอัปเดต |
 | `connection refused` | ไม่มีการเข้าถึงเครือข่ายไปยังเซิร์ฟเวอร์ Omi | ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและการตั้งค่าพร็อกซี |
-| `permission denied` บนไฟล์การกำหนดค่า | ไดเรกทอรีการกำหนดค่าไม่สามารถเขียนได้ | ตรวจสอบสิทธิ์ของ `~/.config/omi` |
+| `permission denied` บนไฟล์การกำหนดค่า | ไดเรกทอรีการกำหนดค่าไม่สามารถเขียนได้ | ตรวจสอบสิทธิ์ของ `~/.omi/config.toml` |
 
 ---
 
