@@ -122,9 +122,9 @@ def test_conversation_get_srt_writes_stdout(authed_profile, respx_mock, cli_runn
     result = cli_runner.invoke(app, ["conversation", "get", "c1", "--include-transcript", "--format", "srt"])
 
     assert result.exit_code == 0, result.output
-    # Cue numbering starts at 1, timestamps are comma-separated, and cues are blank-line separated.
-    assert result.stdout.startswith("1\n00:00:00,000 --> 00:00:01,000\nhi\n")
-    assert "2\n00:00:01,500 --> 00:00:02,500\nhello\n" in result.stdout
+    # SRT consumers expect CRLF; cue numbering starts at 1 and timestamps use a comma.
+    assert result.stdout.startswith("1\r\n00:00:00,000 --> 00:00:01,000\r\nhi\r\n")
+    assert "2\r\n00:00:01,500 --> 00:00:02,500\r\nhello\r\n" in result.stdout
 
 
 def test_conversation_get_srt_writes_file(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
@@ -139,8 +139,9 @@ def test_conversation_get_srt_writes_file(authed_profile, respx_mock, cli_runner
     )
 
     assert result.exit_code == 0, result.output
-    written = target.read_text(encoding="utf-8")
-    assert written.startswith("1\n00:00:00,000 --> 00:00:01,000\nhi\n")
+    # Read as bytes: text mode would translate CRLF and hide the line endings.
+    written = target.read_bytes().decode("utf-8")
+    assert written.startswith("1\r\n00:00:00,000 --> 00:00:01,000\r\nhi\r\n")
     assert "hello" in written
 
 
@@ -161,7 +162,7 @@ def test_conversation_get_srt_skips_segments_without_start(authed_profile, respx
     # The untimed segment is dropped rather than given a fabricated cue time; the
     # surviving cue keeps index 1 so the track stays contiguous.
     assert "no timestamp" not in result.stdout
-    assert result.stdout.startswith("1\n00:00:03,000 --> 00:00:04,000\nkept\n")
+    assert result.stdout.startswith("1\r\n00:00:03,000 --> 00:00:04,000\r\nkept\r\n")
 
 
 def test_conversation_get_srt_clamps_negative_start(authed_profile, respx_mock, cli_runner) -> None:
@@ -172,7 +173,135 @@ def test_conversation_get_srt_clamps_negative_start(authed_profile, respx_mock, 
     result = cli_runner.invoke(app, ["conversation", "get", "c1", "--include-transcript", "--format", "srt"])
 
     assert result.exit_code == 0, result.output
-    assert result.stdout.startswith("1\n00:00:00,000 --> 00:00:00,500\nearly\n")
+    assert result.stdout.startswith("1\r\n00:00:00,000 --> 00:00:00,500\r\nearly\r\n")
+
+
+def test_conversation_get_srt_orders_cues_by_start(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/conversations/c1").respond(
+        json={
+            "id": "c1",
+            "transcript_segments": [
+                {"text": "second", "start": 5.0, "end": 6.0},
+                {"text": "first", "start": 1.0, "end": 2.0},
+            ],
+        }
+    )
+
+    result = cli_runner.invoke(app, ["conversation", "get", "c1", "--include-transcript", "--format", "srt"])
+
+    assert result.exit_code == 0, result.output
+    # The response order is not guaranteed to be a timeline, and SRT readers need one.
+    assert result.stdout.index("first") < result.stdout.index("second")
+    assert result.stdout.startswith("1\r\n00:00:01,000 --> 00:00:02,000\r\nfirst\r\n")
+
+
+def test_conversation_get_srt_folds_blank_lines_in_text(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/conversations/c1").respond(
+        json={
+            "id": "c1",
+            "transcript_segments": [{"text": "para one\n\npara two", "start": 0.0, "end": 1.0}],
+        }
+    )
+
+    result = cli_runner.invoke(app, ["conversation", "get", "c1", "--include-transcript", "--format", "srt"])
+
+    assert result.exit_code == 0, result.output
+    # A blank line ends a cue, so an embedded one would emit a malformed extra cue.
+    assert "\r\n\r\n" not in result.stdout.strip()
+    assert "para one\r\npara two" in result.stdout
+
+def test_conversation_get_srt_skips_non_finite_start(authed_profile, respx_mock, cli_runner) -> None:
+    # Sent as raw JSON text: Python's strict JSON encoder refuses NaN, but a real
+    # server can emit it and the CLI's own decoder accepts it.
+    payload = (
+        '{"id": "c1", "transcript_segments": ['
+        '{"text": "nan start", "start": NaN, "end": 1.0},'
+        '{"text": "inf start", "start": Infinity, "end": 1.0},'
+        '{"text": "kept", "start": 1.0, "end": 2.0}]}'
+    )
+    respx_mock.get("/v1/dev/user/conversations/c1").respond(
+        content=payload, headers={"content-type": "application/json"}
+    )
+
+    result = cli_runner.invoke(app, ["conversation", "get", "c1", "--include-transcript", "--format", "srt"])
+
+    # Non-finite starts must be skipped, not crash the export on int() conversion.
+    assert result.exit_code == 0, result.output
+    assert "nan start" not in result.stdout
+    assert "inf start" not in result.stdout
+    assert result.stdout.startswith("1\r\n00:00:01,000 --> 00:00:02,000\r\nkept\r\n")
+
+
+def test_conversation_get_srt_output_refuses_overwrite(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    respx_mock.get("/v1/dev/user/conversations/c1").respond(
+        json={"id": "c1", "transcript_segments": _TRANSCRIPT_SEGMENTS}
+    )
+    target = tmp_path / "transcript.srt"
+    target.write_text("previous export", encoding="utf-8")
+
+    result = cli_runner.invoke(
+        app,
+        ["conversation", "get", "c1", "--include-transcript", "--format", "srt", "--output", str(target)],
+    )
+
+    assert result.exit_code == 1
+    assert "Refusing to overwrite" in result.stderr
+    assert target.read_text(encoding="utf-8") == "previous export"
+
+
+def test_conversation_get_srt_output_overwrites_with_force(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    respx_mock.get("/v1/dev/user/conversations/c1").respond(
+        json={"id": "c1", "transcript_segments": _TRANSCRIPT_SEGMENTS}
+    )
+    target = tmp_path / "transcript.srt"
+    target.write_text("previous export", encoding="utf-8")
+
+    result = cli_runner.invoke(
+        app,
+        [
+            "conversation",
+            "get",
+            "c1",
+            "--include-transcript",
+            "--format",
+            "srt",
+            "--output",
+            str(target),
+            "--force",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert target.read_bytes().decode("utf-8").startswith("1\r\n00:00:00,000")
+
+
+def test_conversation_get_srt_json_mode_stays_json(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/conversations/c1").respond(
+        json={"id": "c1", "transcript_segments": _TRANSCRIPT_SEGMENTS}
+    )
+
+    result = cli_runner.invoke(
+        app, ["--json", "conversation", "get", "c1", "--include-transcript", "--format", "srt"]
+    )
+
+    assert result.exit_code == 0, result.output
+    # --json reserves stdout for a JSON payload; raw subtitle text would break callers.
+    payload = json.loads(result.stdout)
+    assert payload["format"] == "srt"
+    assert payload["srt"].startswith("1\r\n00:00:00,000 --> 00:00:01,000\r\nhi\r\n")
+
+
+def test_conversation_get_json_output_writes_file(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    respx_mock.get("/v1/dev/user/conversations/c1").respond(
+        json={"id": "c1", "transcript_segments": _TRANSCRIPT_SEGMENTS}
+    )
+    target = tmp_path / "conversation.json"
+
+    result = cli_runner.invoke(app, ["conversation", "get", "c1", "--output", str(target)])
+
+    assert result.exit_code == 0, result.output
+    # The JSON path serializes separately from the renderer, so assert the payload.
+    assert json.loads(target.read_text(encoding="utf-8"))["id"] == "c1"
 
 
 def test_conversation_get_srt_requires_transcript_flag(authed_profile, cli_runner) -> None:

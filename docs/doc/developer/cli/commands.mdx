@@ -84,7 +84,7 @@ Visibility: `public` or `private`.
 | Command                                       | Endpoint                                                       |
 | --------------------------------------------- | -------------------------------------------------------------- |
 | `omi conversation list [...filters]`          | `GET /v1/dev/user/conversations`                               |
-| `omi conversation get ID [--include-transcript]` | `GET /v1/dev/user/conversations/{id}`                       |
+| `omi conversation get ID [--include-transcript] [--format json\|srt] [--output FILE] [--force]` | `GET /v1/dev/user/conversations/{id}`                       |
 | `omi conversation create --text ... [...]`    | `POST /v1/dev/user/conversations`                              |
 | `omi conversation from-segments FILE.json [--source ...]` | `POST /v1/dev/user/conversations/from-segments`    |
 | `omi conversation update ID [--title ... --discarded/--no-discarded]` | `PATCH /v1/dev/user/conversations/{id}` |
@@ -95,6 +95,23 @@ The `--text` flag accepts `-` to read from stdin:
 ```bash
 cat meeting_notes.md | omi conversation create --text - --text-source message
 ```
+
+`omi conversation get` can export the timed transcript as SRT. This needs
+`--include-transcript`, because the API only returns `transcript_segments` when it is set:
+
+```bash
+# to stdout
+omi conversation get CONVERSATION_ID --include-transcript --format srt
+
+# to a file; refuses to overwrite an existing one unless --force is passed
+omi conversation get CONVERSATION_ID --include-transcript --format srt \
+  --output transcript.srt
+```
+
+Cues are ordered by start time, segments without a usable start time are skipped rather
+than given a fabricated timestamp, and output uses CRLF line endings. With the global
+`--json` flag the subtitles are returned as a `{"format": "srt", "srt": "..."}` object so
+stdout stays machine-readable.
 
 ## `omi action-item`
 

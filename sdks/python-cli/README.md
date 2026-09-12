@@ -213,7 +213,7 @@ omi
 │   └── delete <id> [-y]
 ├── conversation
 │   ├── list [--limit N] [--start-date ...] [--end-date ...] [--include-transcript]
-│   ├── get <id> [--include-transcript]
+│   ├── get <id> [--include-transcript] [--format json|srt] [--output FILE] [--force]
 │   ├── create [--text ...] [--text-source ...] [...]
 │   ├── from-segments <file.json> [--source ...]
 │   ├── update <id> [--title ...] [--discarded/--no-discarded]
