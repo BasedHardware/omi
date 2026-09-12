@@ -1,3 +1,4 @@
+import math
 import unittest
 from pathlib import Path
 import sys
@@ -36,6 +37,55 @@ class UberDeepLinkTests(unittest.TestCase):
     def test_whitespace_destination_is_rejected(self):
         with self.assertRaises(ValueError):
             build_uber_deep_links(destination="   ")
+
+    # --- new coordinate-validation regression tests (issue #13291) ---
+
+    def test_latitude_above_90_is_rejected(self):
+        with self.assertRaises(ValueError, msg="latitude 91 should be rejected"):
+            build_location(latitude=91, longitude=0)
+
+    def test_latitude_below_minus_90_is_rejected(self):
+        with self.assertRaises(ValueError):
+            build_location(latitude=-91, longitude=0)
+
+    def test_longitude_above_180_is_rejected(self):
+        with self.assertRaises(ValueError, msg="longitude 181 should be rejected"):
+            build_location(latitude=0, longitude=181)
+
+    def test_longitude_below_minus_180_is_rejected(self):
+        with self.assertRaises(ValueError):
+            build_location(latitude=0, longitude=-181)
+
+    def test_non_finite_latitude_nan_is_rejected(self):
+        with self.assertRaises(ValueError):
+            build_location(latitude=float("nan"), longitude=0)
+
+    def test_non_finite_latitude_inf_is_rejected(self):
+        with self.assertRaises(ValueError):
+            build_location(latitude=float("inf"), longitude=0)
+
+    def test_non_finite_longitude_nan_is_rejected(self):
+        with self.assertRaises(ValueError):
+            build_location(latitude=0, longitude=float("nan"))
+
+    def test_boundary_values_are_accepted(self):
+        # exact boundary values should be valid
+        loc = build_location(latitude=90, longitude=180)
+        self.assertEqual(loc.latitude, 90.0)
+        self.assertEqual(loc.longitude, 180.0)
+
+        loc2 = build_location(latitude=-90, longitude=-180)
+        self.assertEqual(loc2.latitude, -90.0)
+        self.assertEqual(loc2.longitude, -180.0)
+
+    def test_valid_coordinates_pass_through_unchanged(self):
+        pickup = build_location(latitude=37.775818, longitude=-122.418028)
+        self.assertAlmostEqual(pickup.latitude, 37.775818)
+        self.assertAlmostEqual(pickup.longitude, -122.418028)
+
+    def test_pickup_out_of_range_coordinate_raises_on_build_location(self):
+        with self.assertRaises(ValueError):
+            build_location(latitude=91, longitude=0)
 
 
 if __name__ == "__main__":
