@@ -106,12 +106,27 @@ export function createWhisperTranscriber(opts: {
   const batchBytes = (opts.batchSeconds ?? 5) * 16000 * 2;
   let buffer = new Uint8Array(0);
   let stopped = false;
-  async function flush(deliverWhenStopped = false) {
+  let nextBatch = 0;
+  let nextDelivery = 0;
+  const completed = new Map<number, string>();
+  async function flush() {
     if (!buffer.byteLength) return;
     const pcm = buffer;
     buffer = new Uint8Array(0);
-    const text = await opts.runner(pcm);
-    if (text && (!stopped || deliverWhenStopped)) opts.onTranscript(text);
+    const batch = nextBatch++;
+    let text = '';
+    try {
+      text = await opts.runner(pcm);
+    } finally {
+      // Accepted audio (including in-flight full batches) still delivers after
+      // stop. Empty/failed slots must not stall later results.
+      completed.set(batch, text);
+      while (completed.has(nextDelivery)) {
+        const result = completed.get(nextDelivery);
+        completed.delete(nextDelivery++);
+        if (result) opts.onTranscript(result);
+      }
+    }
   }
   return {
     appendPcm(chunk) {
@@ -125,7 +140,7 @@ export function createWhisperTranscriber(opts: {
     },
     stop() {
       stopped = true;
-      void flush(true);
+      void flush();
     },
   };
 }
