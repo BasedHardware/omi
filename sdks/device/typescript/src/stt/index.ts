@@ -38,6 +38,8 @@ export function createDeepgramTranscriber(opts: {
   /** Header-capable authenticated WebSocket factory (or an authenticated proxy).
    *  The factory owns Deepgram authentication so credentials never enter the URL. */
   createWebSocket: (url: string) => WebSocket;
+  /** How long Stop waits for Deepgram to close after CloseStream. Default 5s. */
+  drainTimeoutMs?: number;
 }): StreamingTranscriber {
   if (!opts.createWebSocket) throw new Error('Deepgram requires createWebSocket');
   const url = deepgramWsUrl(opts.sampleRate ?? 16000);
@@ -55,7 +57,39 @@ export function createDeepgramTranscriber(opts: {
       if (ws.readyState === 1) ws.send(chunk as any);
     },
     stop() {
-      try { ws.close(); } catch { /* ignore */ }
+      let sentClose = false;
+      try {
+        if (ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: 'CloseStream' }));
+          sentClose = true;
+        }
+      } catch {
+        // CloseStream is best-effort; still tear down the socket.
+      }
+
+      let finished = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        if (timer !== undefined) clearTimeout(timer);
+        try {
+          ws.close();
+        } catch { /* ignore */ }
+      };
+
+      if (!sentClose) {
+        finish();
+        return;
+      }
+
+      const drainTimeoutMs = opts.drainTimeoutMs ?? 5000;
+      timer = setTimeout(finish, drainTimeoutMs);
+      const prevClose = ws.onclose;
+      ws.onclose = (ev) => {
+        finish();
+        if (typeof prevClose === 'function') prevClose.call(ws, ev);
+      };
     },
   };
 }
