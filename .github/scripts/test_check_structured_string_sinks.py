@@ -96,6 +96,17 @@ class StructuredStringSinkRegistryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "fixtures.failing"):
                 CHECKER.validate_entry(original, source=source, root=REPOSITORY_ROOT)
 
+    def test_bash_c_payload_exposes_registered_sink_violations(self) -> None:
+        entry = next(entry for entry in self.entries if entry["id"] == "llm-gateway-probe-split-argv")
+        fixture_dir = REPOSITORY_ROOT / ".github/scripts/fixtures/structured_string_sinks"
+        passing = fixture_dir / "llm-gateway-probe-bash-c-wrap.pass.yml"
+        failing = fixture_dir / "llm-gateway-probe-bash-c-wrap.fail.yml"
+        self.assertEqual(CHECKER.check_entry_paths(entry, [passing], REPOSITORY_ROOT), [])
+        violations = CHECKER.check_entry_paths(entry, [failing], REPOSITORY_ROOT)
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0].entry_id, entry["id"])
+        self.assertIn("12860", failing.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

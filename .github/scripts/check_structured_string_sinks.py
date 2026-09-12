@@ -260,6 +260,47 @@ def _check_action_delimited_map(entry: dict[str, Any], path: Path, document: obj
     return violations
 
 
+SHELL_INTERPRETERS = frozenset({"bash", "sh", "zsh"})
+_SHELL_C_RECURSION_CAP = 3
+
+
+def _command_basename(token: str) -> str:
+    return token.rstrip(";,|").rsplit("/", 1)[-1]
+
+
+def _expand_shell_c_payloads(tokens: list[str], *, depth: int = 0) -> Iterator[list[str]]:
+    yield tokens
+    if depth >= _SHELL_C_RECURSION_CAP:
+        return
+    if not tokens or _command_basename(tokens[0]) not in SHELL_INTERPRETERS:
+        return
+    for index, token in enumerate(tokens[1:], start=1):
+        if token != "-c" or index + 1 >= len(tokens):
+            continue
+        payload = tokens[index + 1]
+        try:
+            inner_tokens = shlex.split(payload, posix=True)
+        except ValueError:
+            if ".sh" in payload:
+                yield ["__UNPARSEABLE__", payload]
+            return
+        yield from _expand_shell_c_payloads(inner_tokens, depth=depth + 1)
+        return
+
+
+def _yield_logical_tokens(pending: str) -> Iterator[list[str]]:
+    try:
+        tokens = shlex.split(pending, posix=True)
+    except ValueError:
+        # Shell syntax outside a registered command is not this check's
+        # responsibility. If the registered basename is visible, fail
+        # closed with a diagnostic instead of silently skipping it.
+        if ".sh" in pending:
+            yield ["__UNPARSEABLE__", pending]
+        return
+    yield from _expand_shell_c_payloads(tokens)
+
+
 def _logical_shell_commands(run: str) -> Iterator[list[str]]:
     masked = GITHUB_EXPRESSION_RE.sub("__GITHUB_EXPRESSION__", run)
     pending = ""
@@ -271,25 +312,10 @@ def _logical_shell_commands(run: str) -> Iterator[list[str]]:
         if pending.endswith("\\"):
             pending = pending[:-1].rstrip()
             continue
-        try:
-            yield shlex.split(pending, posix=True)
-        except ValueError:
-            # Shell syntax outside a registered command is not this check's
-            # responsibility. If the registered basename is visible, fail
-            # closed with a diagnostic instead of silently skipping it.
-            if ".sh" in pending:
-                yield ["__UNPARSEABLE__", pending]
+        yield from _yield_logical_tokens(pending)
         pending = ""
     if pending:
-        try:
-            yield shlex.split(pending, posix=True)
-        except ValueError:
-            if ".sh" in pending:
-                yield ["__UNPARSEABLE__", pending]
-
-
-def _command_basename(token: str) -> str:
-    return token.rstrip(";,|").rsplit("/", 1)[-1]
+        yield from _yield_logical_tokens(pending)
 
 
 def _registered_invocations(document: object, command: str) -> Iterator[tuple[list[str], int]]:
