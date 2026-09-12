@@ -189,7 +189,16 @@ function calendarEvent(
   const title = visibleDisplayText(text(event.title, 10000));
   const startCopy = calendarEventTimeCopy(event.start_time);
   const endCopy = calendarEventTimeCopy(event.end_time);
-  const attendees = array(event.attendees ?? [], 1000).flatMap(raw => {
+  if (
+    event.attendees !== undefined &&
+    event.attendees !== null &&
+    !Array.isArray(event.attendees)
+  ) {
+    throw new DetailError('invalid');
+  }
+  const attendees = (
+    Array.isArray(event.attendees) ? event.attendees : []
+  ).flatMap(raw => {
     const name = visibleDisplayText(text(raw, 10000));
     return name === '' ? [] : [name];
   });

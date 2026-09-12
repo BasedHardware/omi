@@ -226,6 +226,28 @@ test('keeps GET calendar event title and attendees and omits missing events', as
   ).toBeUndefined();
 });
 
+test('keeps GET calendar event attendees when more than 1000', async () => {
+  const attendees = Array.from({length: 1001}, (_, index) => `Person ${index}`);
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-long',
+        title: 'Standup',
+        attendees,
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+      },
+    }),
+  );
+  const loaded = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(loaded.title).toBe(fixture.structured.title);
+  expect(loaded.calendarEvent).toMatchObject({
+    title: 'Standup',
+    attendees,
+  });
+});
+
 test('names GET transcript translations and omits empty or missing lists', async () => {
   mockRequest.mockResolvedValue(
     response({
