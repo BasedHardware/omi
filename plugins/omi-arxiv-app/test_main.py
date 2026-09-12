@@ -73,7 +73,7 @@ EMPTY_FEED = (
 )
 
 
-def captured_params(payload):
+def captured_params(payload, handler=app.search_papers):
     """Run the real handler, capture the params dict sent to the HTTP layer."""
     seen = {}
 
@@ -83,7 +83,7 @@ def captured_params(payload):
 
     async def run():
         with patch.object(app, "_request_arxiv", side_effect=fake_request):
-            return await app.search_papers(payload)
+            return await handler(payload)
 
     response = asyncio.run(run())
     return seen, response
@@ -113,10 +113,9 @@ class WireEncodingTests(unittest.TestCase):
     separator — so the pre-encoded value must never reach `params=`."""
 
     def test_multi_word_wire_shape_matches_arxiv_manual(self):
-        _, response = captured_params({"query": "machine learning"})
+        seen, response = captured_params({"query": "machine learning"})
         self.assertIsNone(response.error)
-        self.assertEqual(wire(captured_params({"query": "machine learning"})[0]["search_query"]),
-                         "search_query=all%3Amachine+learning")
+        self.assertEqual(wire(seen["search_query"]), "search_query=all%3Amachine+learning")
 
     def test_combined_fields_wire_shape_matches_arxiv_manual(self):
         seen, _ = captured_params({"query": "transformer", "title": "attention"})
@@ -134,17 +133,7 @@ class WireEncodingTests(unittest.TestCase):
 
 class SearchAuthorTests(unittest.TestCase):
     def test_author_name_reaches_the_wire_unencoded(self):
-        seen = {}
-
-        async def fake_request(params):
-            seen.update(params)
-            return EMPTY_FEED
-
-        async def run():
-            with patch.object(app, "_request_arxiv", side_effect=fake_request):
-                return await app.search_author({"author": "Yann LeCun"})
-
-        asyncio.run(run())
+        seen, _ = captured_params({"author": "Yann LeCun"}, handler=app.search_author)
         self.assertEqual(seen["search_query"], "au:Yann LeCun")
         self.assertEqual(wire(seen["search_query"]), "search_query=au%3AYann+LeCun")
 
