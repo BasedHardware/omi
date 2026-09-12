@@ -19,10 +19,10 @@ describe('creates.create_memory', () => {
       text: 'remember this',
       source: 'other_text',
       language: 'en',
-      started_at: undefined,
-      finished_at: undefined,
-      geolocation: undefined,
     });
+    expect(payload).not.toHaveProperty('started_at');
+    expect(payload).not.toHaveProperty('finished_at');
+    expect(payload).not.toHaveProperty('geolocation');
   });
 
   it('forwards optional timestamps and geolocation', async () => {

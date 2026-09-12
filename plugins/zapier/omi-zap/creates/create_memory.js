@@ -1,13 +1,14 @@
 const body = async (z, bundle) => {
   const input = (bundle && bundle.inputData) || {};
-  return {
+  const payload = {
     text: input.text,
     source: input.source,
     language: input.language,
-    started_at: input.started_at,
-    finished_at: input.finished_at,
-    geolocation: input.geolocation,
   };
+  if (input.started_at != null) payload.started_at = input.started_at;
+  if (input.finished_at != null) payload.finished_at = input.finished_at;
+  if (input.geolocation != null) payload.geolocation = input.geolocation;
+  return payload;
 };
 
 module.exports = {
