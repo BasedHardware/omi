@@ -946,6 +946,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
 
+  - id: hume-audio-uid-filename-tests
+    command: ["python3", "plugins/hume-ai/test_audio_path_safety.py"]
+    triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "POST /audio interpolated the client-controlled uid query param into the WAV filename, so ../ in uid wrote outside audio_files/; regression keeps every generated path inside the audio dir"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
