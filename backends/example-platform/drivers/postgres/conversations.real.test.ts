@@ -376,6 +376,11 @@ realTest(
       expect((await call()).status).toBe(503);
       await owner.unsafe(
         "UPDATE omi_memory.listen_audio_transcriptions SET provider_result=$3::text::jsonb WHERE account_id=$1 AND session_id=$2",
+        [account, silent, JSON.stringify({ durationSeconds: 1, segments: [{ text: "🌍".repeat(751), start: 0, end: 1 }] })]
+      );
+      expect((await call()).status).toBe(503);
+      await owner.unsafe(
+        "UPDATE omi_memory.listen_audio_transcriptions SET provider_result=$3::text::jsonb WHERE account_id=$1 AND session_id=$2",
         [account, silent, JSON.stringify({ durationSeconds: 1, segments: [{ text: "hi" }] })]
       );
       expect((await call()).status).toBe(503);

@@ -97,6 +97,21 @@ test("completed device rows whose providerResult cannot parse as Listen speech c
       ],
     }),
   ).toThrow("conversation_snapshot_invalid");
+  expect(() =>
+    parseConversationReadSnapshot({
+      revision: 1,
+      records: [
+        row({
+          excerpt: "🌍".repeat(80),
+          locked: false,
+          provider_result: {
+            durationSeconds: 1,
+            segments: [{ text: "🌍".repeat(751), start: 0, end: 1 }],
+          },
+        }),
+      ],
+    }),
+  ).toThrow("conversation_snapshot_invalid");
 });
 
 test("keeps queued and failed recordings visible and never publishes an unfinished provider result", () => {

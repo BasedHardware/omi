@@ -1347,5 +1347,10 @@ describe("static PostgreSQL schema contract", () => {
     expect(trimEmptyListenSql).not.toContain("OR btrim(v_text)='' OR");
     expect(trimEmptyListenSql).toContain("v_chars>1000000 OR v_bytes>1000000");
     expect(trimEmptyListenSql).toContain("REVOKE ALL ON FUNCTION omi_memory.listen_provider_result_readable(jsonb) FROM PUBLIC");
+    const utf16ListenSql = migrationSql.find((migration) => migration.version === 68)!.sql;
+    expect(utf16ListenSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.listen_provider_result_readable");
+    expect(utf16ListenSql).toContain("octet_length(convert_to(v_text,'UTF16BE'))>3000");
+    expect(utf16ListenSql).not.toContain("OR length(v_text)>1500 OR");
+    expect(utf16ListenSql).toContain("REVOKE ALL ON FUNCTION omi_memory.listen_provider_result_readable(jsonb) FROM PUBLIC");
   });
 });
