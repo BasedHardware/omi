@@ -59,11 +59,18 @@ def parakeet_ws_url(api_url: str, sample_rate: int = 16000) -> str:
 class ParakeetTranscriber:
     """Hosted Parakeet /v3/stream client (same wire format as backend streaming)."""
 
-    def __init__(self, api_url: Optional[str] = None, *, sample_rate: int = 16000) -> None:
+    def __init__(
+        self,
+        api_url: Optional[str] = None,
+        *,
+        sample_rate: int = 16000,
+        drain_timeout: float = 5.0,
+    ) -> None:
         self.api_url = api_url or os.getenv("HOSTED_PARAKEET_API_URL") or ""
         if not self.api_url:
             raise ValueError("HOSTED_PARAKEET_API_URL or api_url is required for Parakeet")
         self.sample_rate = sample_rate
+        self.drain_timeout = drain_timeout
 
     async def run(
         self,
@@ -102,11 +109,9 @@ class ParakeetTranscriber:
                         else:
                             print(text)
 
-            tasks = (
-                asyncio.create_task(send_audio()),
-                asyncio.create_task(receive()),
-            )
-            caller_stopped = False
+            send_task = asyncio.create_task(send_audio())
+            recv_task = asyncio.create_task(receive())
+            tasks = (send_task, recv_task)
             try:
                 done, _ = await asyncio.wait(
                     tasks, return_when=asyncio.FIRST_COMPLETED
@@ -114,17 +119,22 @@ class ParakeetTranscriber:
                 for task in done:
                     task.result()
             except asyncio.CancelledError:
-                caller_stopped = True
+                try:
+                    await ws.send("finalize")
+                except Exception:
+                    pass
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(recv_task), timeout=self.drain_timeout
+                    )
+                except Exception:
+                    pass
                 raise
             finally:
                 for task in tasks:
-                    task.cancel()
+                    if not task.done():
+                        task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
-                if caller_stopped:
-                    try:
-                        await ws.send("finalize")
-                    except Exception:
-                        pass
 
 
 def _extract_text(data: object) -> str:

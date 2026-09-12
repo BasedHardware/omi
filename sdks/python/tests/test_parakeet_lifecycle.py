@@ -159,7 +159,9 @@ def test_parakeet_caller_cancellation():
         queue: asyncio.Queue[bytes] = asyncio.Queue()
 
         with patch("websockets.connect", return_value=fake_ws):
-            transcriber = ParakeetTranscriber("https://test.parakeet.example")
+            transcriber = ParakeetTranscriber(
+                "https://test.parakeet.example", drain_timeout=0.05
+            )
             task = asyncio.create_task(transcriber.run(queue))
             await asyncio.sleep(0.05)
             task.cancel()
