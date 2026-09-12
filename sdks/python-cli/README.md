@@ -59,6 +59,30 @@ machine-readable output, ready for `jq`, agent harnesses, or whatever else:
 omi --json memory list | jq '.[] | {id, content}'
 ```
 
+## Export memories
+
+```bash
+omi --json memory export > memories.json
+omi --json memory export --categories work,skills --max-items 20000 > work-memories.json
+```
+
+Export reads the Developer API in pages of up to 1,000 and writes one JSON array,
+preserving all returned fields. `--max-items` defaults to 10,000 (maximum 100,000).
+If more records are available, or any page fails, the command exits with an error
+without writing a partial array. It buffers the records in memory until retrieval
+finishes. Shell redirection still creates or truncates its destination before the
+command runs, so use a new file when keeping an earlier export.
+
+This exports the API's visible memory view, not a complete account backup.
+Offset pagination is not a consistent snapshot: concurrent changes can cause
+missing or repeated records. Server filtering also applies; category-filtered
+requests currently scan at most 5,000 underlying memories. Conversations,
+recordings, and archived data are not included.
+
+Export uses at most 101 requests for the 100,000-item ceiling. Memory reads share
+the API’s hourly request quota with other clients, so earlier requests or concurrent
+activity can still cause HTTP 429. Wait for the quota to reset before retrying.
+
 Pretty output displays returned text literally, including square brackets and
 emoji-like codes such as `:warning:`. Styling applies to the table layout, not
 to the contents of your memories or conversations.
@@ -207,6 +231,7 @@ omi
 │       └── delete <name>
 ├── memory
 │   ├── list [--limit N] [--offset N] [--categories ...]
+│   ├── export [--max-items N] [--categories ...]  # requires global --json
 │   ├── get <id>
 │   ├── create <content> [--category ...] [--visibility ...] [--tag ...]
 │   ├── update <id> [--content ...] [--category ...] [--visibility ...] [--tag ...]

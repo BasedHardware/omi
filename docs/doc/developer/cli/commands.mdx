@@ -10,7 +10,7 @@ The full command tree (run `omi --help` for the live version):
 omi
 ├── auth          login [--browser] [--api-key KEY] | logout | status | whoami | refresh
 ├── config        show | set <k> <v> | path | profile {list, use <name>, delete <name>}
-├── memory        list | get | create | update | delete
+├── memory        list | export | get | create | update | delete
 ├── conversation  list | get | create | from-segments | update | delete
 ├── action-item   list | get | create | update | complete | delete
 └── goal          list | get | create | update | progress | history | delete
@@ -70,6 +70,7 @@ hand. The refresh token rotates if Firebase decides to.
 | Command                                        | Endpoint                                              |
 | ---------------------------------------------- | ----------------------------------------------------- |
 | `omi memory list [--limit N --offset N --categories CSV]` | `GET /v1/dev/user/memories`                |
+| `omi --json memory export [--max-items N --categories CSV]` | paginated `GET /v1/dev/user/memories` |
 | `omi memory get ID`                            | client-side scan (no direct GET in the dev API)       |
 | `omi memory create CONTENT [--category C --visibility V --tag T...]` | `POST /v1/dev/user/memories`                |
 | `omi memory update ID [--content ... --category ... --visibility ... --tag ...]` | `PATCH /v1/dev/user/memories/{id}` |
@@ -78,6 +79,29 @@ hand. The refresh token rotates if Firebase decides to.
 Categories: `core`, `hobbies`, `lifestyle`, `interests`, `habits`, `work`,
 `skills`, `learnings`, `other`, `system`.
 Visibility: `public` or `private`.
+
+### Export
+
+```bash
+omi --json memory export --max-items 10000 > memories.json
+omi --json memory export --categories work,skills > work-memories.json
+```
+
+Requires the global `--json` flag. Retrieves pages of up to 1,000 records and emits
+one array with all returned fields. `--max-items` defaults to 10,000 and accepts
+1–100,000. Exceeding it is an error, not a successful truncated export. API errors
+also leave stdout empty. Records are buffered in memory until every page succeeds.
+Use a new output filename: shell redirection truncates existing files even if the
+command fails.
+
+The result covers the Developer API's visible memory view, not a full account
+backup. Offset pagination can miss or repeat records during concurrent changes.
+Category filtering currently scans at most 5,000 underlying memories on the
+server. Conversations, recordings, and archived data are outside this export.
+
+Export uses at most 101 requests for the 100,000-item ceiling. Memory reads share
+the API’s hourly request quota with other clients, so earlier requests or concurrent
+activity can still cause HTTP 429. Wait for the quota to reset before retrying.
 
 ## `omi conversation`
 
