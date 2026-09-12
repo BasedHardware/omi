@@ -809,4 +809,40 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
       PushToTalkManager.transcriptionTerminalReason(for: NSError(domain: "test", code: -1)),
       .transcriptionFailed)
   }
+
+  // MARK: - PushToTalkManager.terminalReasonKeepsWarmCapture
+
+  /// The full batch-STT 402 chain, HTTP status code through to the
+  /// warm-capture decision: `batchTranscriptionError(forStatusCode:)` maps 402
+  /// to `.planLimitReached`, `transcriptionTerminalReason(for:)` maps that to
+  /// `.transcriptionPlanLimit`, and this is the one assertion that a plan-limit
+  /// refusal never lands in the "keep the mic warm, a follow-up is likely"
+  /// bucket alongside benign endings like `.success`/`.tooShort`: a user who
+  /// hit their transcription plan limit must not be silently invited to just
+  /// try again, mirroring `KernelJournalBackendReconcileTests`' 4xx
+  /// classification for the analogous journal-reconcile path.
+  func testTranscriptionPlanLimitDoesNotKeepWarmCapture() {
+    let batchError = TranscriptionService.batchTranscriptionError(forStatusCode: 402)
+    let terminalReason = PushToTalkManager.transcriptionTerminalReason(for: batchError)
+    XCTAssertEqual(terminalReason, .transcriptionPlanLimit)
+    XCTAssertFalse(
+      PushToTalkManager.terminalReasonKeepsWarmCapture(terminalReason),
+      "a 402 plan-limit refusal must not be treated like a benign ending that invites an immediate retry")
+  }
+
+  func testTranscriptionFailedDoesNotKeepWarmCapture() {
+    XCTAssertFalse(PushToTalkManager.terminalReasonKeepsWarmCapture(.transcriptionFailed))
+  }
+
+  /// Regression guard for the benign side of the same function: these are the
+  /// only reasons allowed to keep the mic warm, per its own doc comment.
+  func testBenignTerminalReasonsKeepWarmCapture() {
+    for reason: VoiceTurnTerminalReason in [
+      .success, .tooShort, .silentRejected, .interruptedByBargeIn, .captureNotReady,
+    ] {
+      XCTAssertTrue(
+        PushToTalkManager.terminalReasonKeepsWarmCapture(reason),
+        "\(reason) is documented as a benign ending that should keep the mic warm")
+    }
+  }
 }
