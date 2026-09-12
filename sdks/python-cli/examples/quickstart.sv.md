@@ -147,10 +147,10 @@ omi --json memory list | jq '.[] | {id, content, category}'
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
 
 # Lista öppna åtgärdsposter
-omi --json action-item list --open | jq '.[] | {id, title, due_at}'
+omi --json action-item list --open | jq '.[] | {id, description, due_at}'
 
 # Lista mål
-omi --json goal list | jq '.[] | {id, title, progress: .progress_percent}'
+omi --json goal list | jq '.[] | {id, title, current: .current_value, target: .target_value}'
 ```
 
 ---
@@ -188,7 +188,7 @@ omi auth login
 | `command not found: omi` | PATH innehåller inte pipx bin-katalogen | Kör `pipx ensurepath` och starta om terminalen |
 | `401 Unauthorized` | API-nyckel är ogiltig eller har gått ut | Generera en ny nyckel på app.omi.me och uppdatera |
 | `connection refused` | Ingen nätverksåtkomst till Omi-servern | Kontrollera internetanslutning och proxyinställningar |
-| `permission denied` på konfigurationsfiler | Konfigurationskatalogen är inte skrivbar | Kontrollera behörigheterna för `~/.config/omi` |
+| `permission denied` på konfigurationsfiler | Konfigurationskatalogen är inte skrivbar | Kontrollera behörigheterna för `~/.omi/config.toml` |
 
 ---
 
