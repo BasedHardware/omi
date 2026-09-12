@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+import re
 import sys
 import types
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+
+import pytest
 
 from omi.stt.deepgram import DeepgramTranscriber
 
@@ -17,9 +22,24 @@ def test_pyproject_requires_handshake_capable_websockets() -> None:
     assert '"websockets>=14.0"' in text
 
 
-def test_requirements_requires_handshake_capable_websockets() -> None:
+def test_requirements_pins_handshake_capable_websockets() -> None:
     text = (ROOT / "requirements.txt").read_text(encoding="utf-8")
-    assert "websockets>=14.0" in text.splitlines()
+    pins = [line for line in text.splitlines() if line.startswith("websockets==")]
+    assert pins == ["websockets==14.2"]
+    major = int(pins[0].split("==", 1)[1].split(".", 1)[0])
+    assert major >= 14
+
+
+def test_installed_websockets_connect_accepts_additional_headers() -> None:
+    websockets = pytest.importorskip("websockets")
+    try:
+        installed = version("websockets")
+    except PackageNotFoundError:
+        pytest.skip("websockets metadata missing")
+    major = int(re.split(r"[.-]", installed, maxsplit=1)[0])
+    assert major >= 14, installed
+    params = inspect.signature(websockets.connect).parameters
+    assert "additional_headers" in params
 
 
 def test_deepgram_passes_token_as_additional_headers(monkeypatch) -> None:
