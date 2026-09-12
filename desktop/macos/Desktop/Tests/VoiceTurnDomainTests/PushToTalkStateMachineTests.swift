@@ -78,6 +78,77 @@ final class PushToTalkStateMachineTests: XCTestCase {
     XCTAssertTrue(VoiceTurnPhase.terminal(.success).isTerminal)
   }
 
+  @MainActor
+  func testProviderResponseDeadlineOverrideIsScheduledOnHubCommitAccepted() {
+    let turnID = VoiceTurnID()
+    let sessionID = VoiceSessionID()
+    let domain = VoiceTurnDomain(providerResponseDeadline: { 180 })
+
+    _ = domain.publish(.start(turnID: turnID, ownerID: nil, intent: .hold))
+    _ = domain.publish(.selectRoute(turnID: turnID, route: .hub(sessionID: sessionID)))
+    _ = domain.publish(.finalize(turnID: turnID))
+    let reduction = domain.publish(
+      .hubCommitAccepted(turnID: turnID, sessionID: sessionID, responseID: nil))
+
+    XCTAssertTrue(
+      reduction.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .providerResponse, after: 180)))
+  }
+
+  @MainActor
+  func testProviderResponseDeadlineDefaultsToTwentySecondsWhenNoOverrideIsGiven() {
+    let turnID = VoiceTurnID()
+    let sessionID = VoiceSessionID()
+    let domain = VoiceTurnDomain()
+
+    _ = domain.publish(.start(turnID: turnID, ownerID: nil, intent: .hold))
+    _ = domain.publish(.selectRoute(turnID: turnID, route: .hub(sessionID: sessionID)))
+    _ = domain.publish(.finalize(turnID: turnID))
+    let reduction = domain.publish(
+      .hubCommitAccepted(turnID: turnID, sessionID: sessionID, responseID: nil))
+
+    XCTAssertTrue(
+      reduction.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .providerResponse, after: 20)))
+  }
+
+  /// The override closure must be read on every `publish(_:)`, not captured once
+  /// at init, so a provider switch after `VoiceTurnDomain` is constructed (e.g. a
+  /// long-lived `VoiceTurnCoordinator.shared`) applies to the very next turn
+  /// instead of requiring a relaunch.
+  @MainActor
+  func testProviderResponseDeadlineOverrideIsReadPerPublishNotCapturedAtInit() {
+    var overrideDeadline: TimeInterval?
+    let domain = VoiceTurnDomain(providerResponseDeadline: { overrideDeadline })
+
+    let firstTurnID = VoiceTurnID()
+    let firstSessionID = VoiceSessionID()
+    _ = domain.publish(.start(turnID: firstTurnID, ownerID: nil, intent: .hold))
+    _ = domain.publish(.selectRoute(turnID: firstTurnID, route: .hub(sessionID: firstSessionID)))
+    _ = domain.publish(.finalize(turnID: firstTurnID))
+    let firstReduction = domain.publish(
+      .hubCommitAccepted(turnID: firstTurnID, sessionID: firstSessionID, responseID: nil))
+
+    XCTAssertTrue(
+      firstReduction.effects.contains(
+        .scheduleDeadline(turnID: firstTurnID, deadline: .providerResponse, after: 20)))
+
+    overrideDeadline = 180
+
+    let secondTurnID = VoiceTurnID()
+    let secondSessionID = VoiceSessionID()
+    _ = domain.publish(.start(turnID: secondTurnID, ownerID: nil, intent: .hold))
+    _ = domain.publish(
+      .selectRoute(turnID: secondTurnID, route: .hub(sessionID: secondSessionID)))
+    _ = domain.publish(.finalize(turnID: secondTurnID))
+    let secondReduction = domain.publish(
+      .hubCommitAccepted(turnID: secondTurnID, sessionID: secondSessionID, responseID: nil))
+
+    XCTAssertTrue(
+      secondReduction.effects.contains(
+        .scheduleDeadline(turnID: secondTurnID, deadline: .providerResponse, after: 180)))
+  }
+
   func testCaptureStartAfterFinalizationProducesStopEffect() {
     let reducer = VoiceTurnReducer()
     let turnID = VoiceTurnID()
@@ -91,6 +162,25 @@ final class PushToTalkStateMachineTests: XCTestCase {
 
     XCTAssertEqual(result.model.turn?.phase, .finalizing)
     XCTAssertTrue(result.effects.contains(.stopCapture(turnID: turnID, captureID: captureID)))
+  }
+
+  /// A batch-transcription failure Omi's backend attributes to the account's
+  /// transcription plan limit terminates the turn with its own typed reason
+  /// (not the generic `transcriptionFailed`) and carries the plan-limit hint,
+  /// never the "try again" hint.
+  func testFinishWithTranscriptionPlanLimitTerminatesFromFinalizingWithPlanLimitHint() {
+    let reducer = VoiceTurnReducer()
+    let turnID = VoiceTurnID()
+    var model = reducer.reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reducer.reduce(model, .finalize(turnID: turnID)).model
+    XCTAssertEqual(model.turn?.phase, .finalizing)
+
+    let result = reducer.reduce(model, .finish(turnID: turnID, reason: .transcriptionPlanLimit))
+
+    XCTAssertEqual(result.model.turn?.phase, .terminal(.transcriptionPlanLimit))
+    XCTAssertEqual(
+      result.model.turn?.projection.hint,
+      "Transcription is over your plan's limit. Check Settings → Plan and Usage.")
   }
 
   func testCancelFromRecordingStopsCaptureAndTerminatesOnce() {

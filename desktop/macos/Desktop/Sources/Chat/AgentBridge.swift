@@ -625,6 +625,27 @@ actor AgentBridge {
 
   let harnessMode: String
 
+  /// Which pi provider the "piMono" harness is (or is about to be) configured
+  /// with: "omi" (routed through the Rust backend, requires Firebase auth) or
+  /// "omi-local" (talks directly to a user-configured OpenAI-compatible
+  /// endpoint, no auth, no Rust backend, no cost logging). Meaningless for
+  /// "acp".
+  ///
+  /// Before the shared `AgentRuntimeProcess` has ever launched, this predicts
+  /// from the app-global Settings preference (what it is about to be spawned
+  /// with). Once it has launched, it reflects what the process was ACTUALLY
+  /// spawned with (`runtime.launchedProviderMode`) rather than a fresh
+  /// preference re-read: a provider switch is persisted immediately but only
+  /// takes effect in the running process after a restart, and re-reading the
+  /// live preference here would disagree with the already-running process
+  /// until that restart completes. `async` because `launchedProviderMode`
+  /// lives on the `runtime` actor, a different actor from this one.
+  var providerMode: String {
+    get async {
+      await runtime.launchedProviderMode ?? AIProvider.currentProviderMode
+    }
+  }
+
   let clientId = UUID().uuidString
   let runtime: AgentRuntimeProcess
   private var registered = false
@@ -655,6 +676,17 @@ actor AgentBridge {
 
   private var isPiMonoHarness: Bool {
     AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue
+  }
+
+  /// Whether this run requires the managed Omi credential (Firebase ID
+  /// token). True only for the "omi" provider on the piMono harness; the
+  /// "omi-local" provider shares that harness but talks to a user-configured
+  /// endpoint and must never be blocked on, or fetch, a Firebase token.
+  private var requiresManagedPiMonoCredentials: Bool {
+    get async {
+      if !isPiMonoHarness { return false }
+      return await providerMode == "omi"
+    }
   }
 
   private func captureAuthorization(
@@ -819,7 +851,7 @@ actor AgentBridge {
       isNonProduction: AppBuild.isNonProduction,
       hermeticFaultModelToken: hermeticFaultModelToken)
     let requiresPiMonoCredentials = AgentRuntimeCredentialPolicy.shouldRequirePiMonoCredentials(
-      preferredAdapterIsPiMono: isPiMonoHarness,
+      preferredAdapterIsPiMono: await requiresManagedPiMonoCredentials,
       requestedCredentials: requiresCredentials,
       isNonProduction: AppBuild.isNonProduction,
       hermeticFaultModelToken: hermeticFaultModelToken)
@@ -944,7 +976,7 @@ actor AgentBridge {
       isNonProduction: AppBuild.isNonProduction,
       hermeticFaultModelToken: hermeticFaultModelToken)
     let requiresPiMonoCredentials = AgentRuntimeCredentialPolicy.shouldRequirePiMonoCredentials(
-      preferredAdapterIsPiMono: isPiMonoHarness,
+      preferredAdapterIsPiMono: await requiresManagedPiMonoCredentials,
       requestedCredentials: true,
       isNonProduction: AppBuild.isNonProduction,
       hermeticFaultModelToken: hermeticFaultModelToken)
@@ -1516,6 +1548,7 @@ actor AgentBridge {
     surface: AgentSurfaceReference,
     mode: String? = nil,
     imageData: Data? = nil,
+    imageIsScreenCapture: Bool = false,
     attachments: [AgentQueryAttachment] = [],
     producingTurnId: String? = nil,
     expectedContext: AgentContextFreshness? = nil,
@@ -1551,6 +1584,7 @@ actor AgentBridge {
       surface: surface,
       mode: mode,
       imageData: imageData,
+      imageIsScreenCapture: imageIsScreenCapture,
       attachments: attachments,
       producingTurnId: producingTurnId,
       expectedContext: expectedContext,
@@ -1574,6 +1608,7 @@ actor AgentBridge {
     surface: AgentSurfaceReference,
     mode: String? = nil,
     imageData: Data? = nil,
+    imageIsScreenCapture: Bool = false,
     attachments: [AgentQueryAttachment] = [],
     producingTurnId: String? = nil,
     expectedContext: AgentContextFreshness? = nil,
@@ -1616,7 +1651,13 @@ actor AgentBridge {
       throw BridgeError.requestAlreadyActive
     }
 
-    let usesManagedCloud = session.profile.credentialScope == .managedCloud
+    // Local sessions share the piMono adapter/credentialScope with "omi";
+    // gate on providerMode too, or a local session would still hit Omi's
+    // quota check and the Firebase-token retry path below despite never
+    // authenticating to Omi in the first place.
+    let resolvedProviderMode = await providerMode
+    let usesManagedCloud =
+      session.profile.credentialScope == .managedCloud && resolvedProviderMode == "omi"
     if usesManagedCloud {
       // Refresh before the cached verdict is applied, not after it: a blocking
       // snapshot must never be the reason it is itself never re-fetched. When
@@ -1694,6 +1735,7 @@ actor AgentBridge {
         surface: surface,
         mode: mode,
         imageData: imageData,
+        imageIsScreenCapture: imageIsScreenCapture,
         attachments: attachments,
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
@@ -1741,6 +1783,7 @@ actor AgentBridge {
         surface: surface,
         mode: mode,
         imageData: imageData,
+        imageIsScreenCapture: imageIsScreenCapture,
         attachments: attachments,
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
@@ -2088,6 +2131,8 @@ enum BridgeError: LocalizedError {
   case agentRuntimeFailure(AgentRuntimeFailure)
   case quotaExceeded(plan: String, unit: String, used: Double, limit: Double?, resetAtUnix: Int?)
   case authMissing
+  /// Local provider selected but its base URL / model id aren't configured yet.
+  case localConfigMissing
 
   var isContextSnapshotProjectionMismatch: Bool {
     let exactCode = "context_snapshot_projection_mismatch"
@@ -2099,7 +2144,7 @@ enum BridgeError: LocalizedError {
       return failure.userMessage == exactCode || failure.technicalMessage == exactCode
     case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
       .encodingError, .timeout, .processExited, .outOfMemory, .failedToStart, .stopped, .restarting,
-      .requestAlreadyActive, .quotaExceeded, .authMissing:
+      .requestAlreadyActive, .quotaExceeded, .authMissing, .localConfigMissing:
       return false
     }
   }
@@ -2118,7 +2163,7 @@ enum BridgeError: LocalizedError {
         || (failure.technicalMessage.map(Self.isSessionAuthenticationFailureMessage) ?? false)
     case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
       .encodingError, .timeout, .processExited, .outOfMemory, .failedToStart, .stopped, .restarting,
-      .requestAlreadyActive, .quotaExceeded:
+      .requestAlreadyActive, .quotaExceeded, .localConfigMissing:
       return false
     }
   }
@@ -2183,6 +2228,8 @@ enum BridgeError: LocalizedError {
       return "Please sign in to use AI chat."
     case .agentRuntimeFailure(let failure):
       return failure.displayMessage
+    case .localConfigMissing:
+      return "Set up your local model's endpoint and model in Settings first."
     case .agentError(let msg):
       return Self.userFacingAgentErrorMessage(msg)
     case .quotaExceeded(let plan, let unit, let used, let limit, _):

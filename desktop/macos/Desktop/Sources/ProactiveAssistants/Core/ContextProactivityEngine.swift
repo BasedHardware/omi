@@ -1262,13 +1262,15 @@ actor ContextProactivityEngine {
 
   func recordDirectorFailure(deliveryID: String, error: Error) async {
     let classification = ProactiveLaneFailureClassification.classify(error)
+    let terminalState = classification.isDeliberateSuppression ? "suppressed" : "failed"
     log(
-      "Context director \(ModelQoS.Proactivity.reasoningOperation) failed: \(classification.logDescription)")
+      "Context director \(ModelQoS.Proactivity.reasoningOperation) \(terminalState): \(classification.logDescription)"
+    )
     await terminalize(
       deliveryID: deliveryID,
       decisionType: ContextDeliveryLifecycle.unresolvedDecisionType,
       provenanceJSON: classification.provenanceJSON,
-      state: "failed")
+      state: terminalState)
   }
 
   nonisolated static func presentationSurfaceAvailable(
@@ -1335,18 +1337,29 @@ actor ContextProactivityEngine {
     }
   }
 
+  /// `lastGlobalPresentationAt` defaults to reading `NotificationService.shared`,
+  /// which registers with the real `UNUserNotificationCenter` on first access
+  /// and crashes outside an app bundle (see `ProactiveListenEventTests`'s
+  /// note on the same hazard). Every production call site keeps that default
+  /// untouched; a test that only cares about the other fields (in particular
+  /// the paywall-exemption wiring, shared via `contextDirectorGate()`) passes
+  /// `nil` explicitly instead, which never evaluates the default expression
+  /// and so never touches `.shared`.
+  ///
+  /// The only thing this adds over `NotificationService.contextDirectorGateInput()`
+  /// (the same shared builder) is `dailyLimit` computed with the plan
+  /// multiplier and a real `lastGlobalPresentationAt` — this is a live
+  /// delivery attempt, not a pre-flight eligibility check.
   @MainActor
-  static func liveDeliveryGateInput() -> ContextDeliveryGateInput {
+  static func liveDeliveryGateInput(
+    lastGlobalPresentationAt: Date? = NotificationService.shared.lastProactivePresentationAtForCurrentOwner()
+  ) -> ContextDeliveryGateInput {
     let frequencyLevel = NotificationService.currentFrequencyLevel()
-    return ContextDeliveryGateInput(
-      masterEnabled: NotificationService.areNotificationsEnabled(),
-      frequencyLevel: frequencyLevel,
-      paywalled: AppState.isPaywalledEffective,
-      cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: frequencyLevel),
+    return .contextDirectorGate(
       dailyLimit: ContextDeliveryBudget.dailyLimit(
         frequencyLevel: frequencyLevel,
         planMultiplier: FloatingBarUsageLimiter.proactiveBudgetMultiplier()),
-      lastGlobalPresentationAt: NotificationService.shared.lastProactivePresentationAtForCurrentOwner())
+      lastGlobalPresentationAt: lastGlobalPresentationAt)
   }
 
   static var schema: [String: Any] { schema(allowLookup: false) }

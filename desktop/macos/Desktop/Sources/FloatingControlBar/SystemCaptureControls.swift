@@ -40,14 +40,20 @@ enum AudioRecordingPermissionTransitionPolicy {
 enum SystemCaptureControls {
   // MARK: - Current state
 
+  // Reflects runtime truth (is monitoring actually running), not a paywall
+  // gate: the paywall only ever blocks *starting* monitoring (see
+  // setScreenCapture below, whose `enabled == false` branch is ungated), so
+  // gating this display too made the switch lie about a still-running
+  // monitor and get stuck: showing OFF while paywalled made the next click
+  // request `enabled: true` (blocked, switch snaps back OFF) instead of the
+  // `enabled: false` that would have actually stopped it.
   static var isScreenCaptureOn: Bool {
-    !AppState.isPaywalledEffective
-      && AssistantSettings.shared.screenAnalysisEnabled
+    AssistantSettings.shared.screenAnalysisEnabled
       && ProactiveAssistantsPlugin.shared.isMonitoring
   }
 
   static var isAudioRecordingOn: Bool {
-    !AppState.isPaywalledEffective && AssistantSettings.shared.audioRecordingMode != .off
+    AppState.isTranscriptionExemptFromPaywall && AssistantSettings.shared.audioRecordingMode != .off
   }
 
   // MARK: - Transitions
@@ -62,9 +68,13 @@ enum SystemCaptureControls {
       return .disabled
     }
 
-    if AppState.isPaywalledEffective {
+    // Posts its own "screen_capture" reason (not "trial_expired") so the
+    // central `AppState.isUsageLimitExemptLocally` choke point can match this
+    // gate's exemption exactly instead of relying on a shared, less precise
+    // reason string.
+    if !AppState.isScreenCaptureExemptFromPaywall {
       NotificationCenter.default.post(
-        name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
+        name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "screen_capture"])
       return .blockedPaywall
     }
 
@@ -88,9 +98,16 @@ enum SystemCaptureControls {
 
   @discardableResult
   static func setAudioRecording(_ enabled: Bool) -> SystemCaptureOutcome {
-    if enabled && AppState.isPaywalledEffective {
+    // Same general paywall check as everything else (see
+    // AppState.isTranscriptionExemptFromPaywall): voice transcription always
+    // runs through Omi's Deepgram proxy, so the Local provider earns no
+    // exemption here. Posts its own "transcription" reason (not
+    // "trial_expired") so the central
+    // `AppState.isUsageLimitExemptLocally` choke point can tell this gate
+    // apart from screen capture's and apply the right exemption to each.
+    if enabled && !AppState.isTranscriptionExemptFromPaywall {
       NotificationCenter.default.post(
-        name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
+        name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "transcription"])
       return .blockedPaywall
     }
 

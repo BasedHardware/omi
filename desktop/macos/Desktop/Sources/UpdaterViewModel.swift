@@ -827,6 +827,18 @@ final class UpdaterViewModel: ObservableObject {
   private let updaterDelegate = UpdaterDelegate()
   private var isInitialized = false
 
+  /// `AppBuild.allowsSparkleUpdates` keys off a `com.omi.*` bundle id. The xctest host
+  /// bundle has none, so `isNonProduction` reads false and the check falls through to
+  /// true, the opposite of a preview/dev build's "never start Sparkle" intent. Starting
+  /// the real updater under xctest lets its automatic check present a blocking
+  /// "Unable to Check For Updates" NSAlert on the main thread, hanging any test that
+  /// runs long enough for the check to land (LocalProviderSettingsRestartTests).
+  /// Suppress only this startup trigger, mirroring how `OmiUISound.isRunningUnderXCTest`
+  /// suppresses its own call site rather than teaching bundle-id detection about tests.
+  private static let isRunningUnderXCTest: Bool =
+    ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    || NSClassFromString("XCTestCase") != nil
+
   var usesManagedUpdatePolicy: Bool {
     AppBuild.allowsSparkleUpdates && !AnalyticsManager.isDevBuild
   }
@@ -927,9 +939,14 @@ final class UpdaterViewModel: ObservableObject {
 
   private init() {
     // Preview builds must not use the shared update feed. Do not start Sparkle for those
-    // artifacts; its manual and background entry points are guarded below as well.
+    // artifacts. xctest is excluded the same way, see `isRunningUnderXCTest` above — and
+    // `checkForUpdates()`/`checkForUpdatesInBackground()` repeat the same check
+    // themselves (not just `AppBuild.allowsSparkleUpdates`, which alone is true
+    // under xctest — no `com.omi.` bundle id in a test host): relying on Sparkle's
+    // own updater no-op'ing when asked to check while never started here was the
+    // bug this class shipped with (see the automated-review finding this fixed).
     updaterController = SPUStandardUpdaterController(
-      startingUpdater: AppBuild.allowsSparkleUpdates,
+      startingUpdater: AppBuild.allowsSparkleUpdates && !Self.isRunningUnderXCTest,
       updaterDelegate: updaterDelegate,
       userDriverDelegate: nil
     )
@@ -982,16 +999,38 @@ final class UpdaterViewModel: ObservableObject {
     canCheckForUpdates && !updateSessionInProgress
   }
 
+  /// Shared guard for `checkForUpdates()`/`checkForUpdatesInBackground()`. A
+  /// pure predicate so the xctest-suppression logic is directly unit-testable
+  /// without relying on Sparkle's own no-op behavior under `startingUpdater:
+  /// false` as a proxy signal (that no-op happens regardless of this guard,
+  /// so it cannot tell a reverted guard apart from a working one).
+  nonisolated static func shouldPerformUpdateCheck(
+    allowsSparkleUpdates: Bool,
+    isRunningUnderXCTest: Bool
+  ) -> Bool {
+    allowsSparkleUpdates && !isRunningUnderXCTest
+  }
+
   /// Manually check for updates
   func checkForUpdates() {
-    guard AppBuild.allowsSparkleUpdates else { return }
+    guard
+      Self.shouldPerformUpdateCheck(
+        allowsSparkleUpdates: AppBuild.allowsSparkleUpdates,
+        isRunningUnderXCTest: Self.isRunningUnderXCTest)
+    else { return }
     userInitiatedCheckInProgress = true
     updaterController.checkForUpdates(nil)
   }
 
   /// Background update check (no UI). Used after channel changes.
+  /// `checkForUpdatesImmediatelyAfterLaunchIfNeeded()` and the `updateChannel`
+  /// didSet both funnel through here, so this one guard covers all three.
   func checkForUpdatesInBackground() {
-    guard AppBuild.allowsSparkleUpdates else { return }
+    guard
+      Self.shouldPerformUpdateCheck(
+        allowsSparkleUpdates: AppBuild.allowsSparkleUpdates,
+        isRunningUnderXCTest: Self.isRunningUnderXCTest)
+    else { return }
     // Background polls must not inherit a stale user-initiated "Checking…" chip.
     userInitiatedCheckInProgress = false
     updaterController.updater.checkForUpdatesInBackground()

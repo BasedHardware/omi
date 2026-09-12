@@ -1,0 +1,3 @@
+{
+  "change": "Added a Context per turn setting under the Local provider that lets you send a quarter, half, or three quarters of the usual context on the first turn of a chat, instead of always sending the full amount. When a screenshot is attached, local models now answer from it directly instead of taking a new screen capture."
+}

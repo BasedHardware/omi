@@ -164,6 +164,7 @@ extension ChatErrorState {
   ///   - opaque `.agentError`    (varied; existing banner already classifies)
   ///   - `.agentRuntimeFailure`  (already carries runtime-specific copy)
   ///   - `.requestAlreadyActive` (the existing banner explains the active turn)
+  ///   - `.localConfigMissing`   (its own errorDescription is already the banner copy)
   static func from(_ bridgeError: BridgeError) -> ChatErrorState? {
     switch bridgeError {
     case .timeout:
@@ -184,7 +185,8 @@ extension ChatErrorState {
       return .authRequired
     case .agentError(let message):
       return BridgeError.agentError(message).isSessionAuthenticationFailure ? .authRequired : nil
-    case .encodingError, .quotaExceeded, .agentRuntimeFailure, .requestAlreadyActive:
+    case .encodingError, .quotaExceeded, .agentRuntimeFailure, .requestAlreadyActive,
+      .localConfigMissing:
       return nil
     }
   }

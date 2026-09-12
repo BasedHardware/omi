@@ -1,0 +1,3 @@
+{
+  "change": "There is now a single 'Cloud-assisted features' setting for the Local AI provider (off by default): when off, proactive assistants and live notes (task/memory/suggestion/insight extraction from screen and transcripts), dictation polish, Rewind semantic-search embeddings, and web search all stay local instead of running; turning it on sends them to Omi's servers and meters them like any other provider. Also fixed the free-plan paywall for Local: chat and push-to-talk are always exempt, screen-capture-driven proactive features are exempt only while Cloud-assisted features is off, and a stale trial flag can no longer swallow a notification the local model generated"
+}

@@ -127,6 +127,10 @@ export function bindingMetadata(input: ExecuteAgentRunInput, adapter?: RuntimeAd
     systemPromptCacheIdentity: input.systemPromptCacheIdentity ?? null,
     dynamicContextIdentity: input.dynamicContextIdentity ?? null,
     contextPlanId: input.contextPlanId ?? null,
+    // Present only when `inputWithManagedArtifactCwd` rewrote `cwd` this
+    // attempt; absent metadata means older code opened this binding, or this
+    // attempt used a caller-supplied cwd verbatim. See isBindingCompatible.
+    ...(input.requestedCwd !== undefined ? { requestedCwd: input.requestedCwd } : {}),
   });
 }
 

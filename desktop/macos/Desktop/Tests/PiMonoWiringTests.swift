@@ -106,16 +106,307 @@ final class PiMonoWiringTests: XCTestCase {
       "Error: I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
   }
 
+  // MARK: - ChatProvider.BridgeMode → (Node harness, pi provider) mapping
+  // Mirrors the real mapping used by AgentRuntimeRouting.harnessMode(for:)
+  // and AIProvider.currentProviderMode, via the actual APIs (not a
+  // reimplementation) so this exercises the real logic.
+
+  func testBridgeModeLocalSharesNodeHarnessButDifferentProvider() {
+    // Local must run the same Node harness as piMono (the pi-mono subprocess);
+    // they differ only in which pi provider AgentRuntimeProcess configures
+    // that harness with (see AIProvider.currentProviderMode). This is
+    // exactly what makes a piMono <-> local no-op guard bug possible if
+    // identity is derived from the Node harness string instead of the raw
+    // BridgeMode. See ChatProvider.switchBridgeMode's newHarness comparison.
+    XCTAssertEqual(
+      ChatProvider.harnessMode(for: .local),
+      ChatProvider.harnessMode(for: .piMono)
+    )
+    XCTAssertNotEqual(ChatProvider.BridgeMode.local.rawValue, ChatProvider.BridgeMode.piMono.rawValue)
+  }
+
+  func testCurrentProviderModeReflectsSelectedBridgeMode() {
+    let key = AIProvider.selectedProviderRawValueKey
+    let previous = UserDefaults.standard.string(forKey: key)
+    defer {
+      if let previous {
+        UserDefaults.standard.set(previous, forKey: key)
+      } else {
+        UserDefaults.standard.removeObject(forKey: key)
+      }
+    }
+
+    UserDefaults.standard.set(ChatProvider.BridgeMode.piMono.rawValue, forKey: key)
+    XCTAssertEqual(AIProvider.currentProviderMode, "omi")
+
+    UserDefaults.standard.set(ChatProvider.BridgeMode.local.rawValue, forKey: key)
+    XCTAssertEqual(AIProvider.currentProviderMode, "omi-local")
+  }
+
+  func testProviderModeForBridgeModeRawValueMatchesCurrentProviderMode() {
+    // `providerMode(forBridgeModeRawValue:)` is the same mapping
+    // `currentProviderMode` uses, but for a caller that already has a raw
+    // value in hand (e.g. one it actually applied) instead of one that wants
+    // a fresh UserDefaults read. ChatProvider.activeProviderMode depends on
+    // both agreeing.
+    XCTAssertEqual(
+      AIProvider.providerMode(forBridgeModeRawValue: ChatProvider.BridgeMode.piMono.rawValue), "omi")
+    XCTAssertEqual(
+      AIProvider.providerMode(forBridgeModeRawValue: ChatProvider.BridgeMode.local.rawValue), "omi-local")
+  }
+
+  /// Regression: `switchBridgeMode` must actually apply a piMono <-> local
+  /// switch even when the "chatBridgeMode" UserDefaults key already reflects
+  /// the destination value before the call starts — exactly what happens in
+  /// production when the Settings picker's own `@AppStorage("chatBridgeMode")`
+  /// binding (a separate property from `ChatProvider.bridgeMode`, sharing the
+  /// same key) writes the new value synchronously, before its `.onChange`
+  /// handler's Task gets around to calling `switchBridgeMode` (see
+  /// SettingsContentView+FloatingBarAndChat.swift). A guard that re-reads
+  /// `bridgeMode` to detect "did this actually change" always sees the new
+  /// value already in place in that ordering and silently no-ops — this is
+  /// exactly why `activeProviderMode` exists instead.
+  @MainActor
+  func testSwitchBridgeModeAppliesPiMonoLocalSwitchEvenWhenThePreferenceKeyAlreadyReflectsIt() async {
+    let defaults = UserDefaults.standard
+    let key = "chatBridgeMode"
+    let previous = defaults.string(forKey: key)
+    defer {
+      if let previous {
+        defaults.set(previous, forKey: key)
+      } else {
+        defaults.removeObject(forKey: key)
+      }
+    }
+
+    defaults.set(ChatProvider.BridgeMode.piMono.rawValue, forKey: key)
+    let provider = ChatProvider()
+    XCTAssertEqual(provider.testingActiveBridgeState.providerMode, "omi")
+
+    // Simulate the picker's own binding already having written the
+    // destination value before switchBridgeMode is called.
+    defaults.set(ChatProvider.BridgeMode.local.rawValue, forKey: key)
+    await provider.switchBridgeMode(to: .local)
+    XCTAssertEqual(
+      provider.testingActiveBridgeState.providerMode, "omi-local",
+      "switching to Local must apply even though the preference key already said 'local'")
+
+    defaults.set(ChatProvider.BridgeMode.piMono.rawValue, forKey: key)
+    await provider.switchBridgeMode(to: .piMono)
+    XCTAssertEqual(
+      provider.testingActiveBridgeState.providerMode, "omi",
+      "switching back to Omi must apply too, not just the first flip")
+  }
+
+  // omi-test-quality: source-inspection -- static contract: `switchBridgeMode`
+  // must assign `activeBridgeHarness`/`activeProviderMode` only after its
+  // `restart()`/`configureDefaultExecutionProfile` call actually succeeds, not
+  // before attempting it. Assigning first (as this code originally did) means a
+  // failed restart — e.g. `BridgeError.requestAlreadyActive` because a chat
+  // request is in flight, the exact scenario an automated review caught —
+  // leaves billing (`ChatRunAccountingPolicy`) and the no-op guard on the next
+  // call both trusting a switch that never actually took effect. Reaching the
+  // restart-failure path behaviorally needs a registered, live shared runtime
+  // with a genuinely in-flight request; this pins the ordering directly
+  // instead of standing up that whole stack.
+  //
+  // The function has exactly 3 assignment sites, one per sub-region, and each
+  // sub-region is isolated by an explicit textual boundary so a single loose
+  // "somewhere after restart()'s position in the whole function" check can't
+  // pass a regression where, say, the reconfigure-branch's assignment moved
+  // to before `configureDefaultExecutionProfile(` while staying textually
+  // after `restart()` (which appears earlier in the function body).
+  func testSwitchBridgeModeAssignsActiveStateOnlyAfterRestartOrReconfigureSucceeds() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Providers/ChatProvider.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    let functionStart = try XCTUnwrap(source.range(of: "func switchBridgeMode(to mode: BridgeMode) async {"))
+    let nextFunctionStart = try XCTUnwrap(
+      source.range(
+        of: "\n  func restartLocalBridgeIfActive()",
+        range: functionStart.upperBound..<source.endIndex))
+    let body = String(source[functionStart.upperBound..<nextFunctionStart.lowerBound])
+
+    // Region boundaries, in source order:
+    //   [not-yet-started guard] -> switchApplyInFlight = true -> [restart branch] -> do { -> [reconfigure branch]
+    let notYetStartedGuardStart = try XCTUnwrap(body.range(of: "guard agentBridgeStarted else {"))
+    let inFlightMarker = try XCTUnwrap(
+      body.range(of: "switchApplyInFlight = true", range: notYetStartedGuardStart.upperBound..<body.endIndex))
+    let restartBranchStart = try XCTUnwrap(
+      body.range(of: "if newHarness == previousHarness {", range: inFlightMarker.upperBound..<body.endIndex))
+    let reconfigureBranchStart = try XCTUnwrap(
+      body.range(
+        of: "\n    do {\n      guard let adapterId",
+        range: restartBranchStart.upperBound..<body.endIndex))
+
+    let notYetStartedRegion = notYetStartedGuardStart.lowerBound..<inFlightMarker.lowerBound
+    let restartRegion = restartBranchStart.lowerBound..<reconfigureBranchStart.lowerBound
+    let reconfigureRegion = reconfigureBranchStart.lowerBound..<body.endIndex
+
+    func assignmentRanges(in region: Range<String.Index>) -> [Range<String.Index>] {
+      var results: [Range<String.Index>] = []
+      var searchStart = region.lowerBound
+      while searchStart < region.upperBound,
+        let found = body.range(of: "activeProviderMode = newProviderMode", range: searchStart..<region.upperBound)
+      {
+        results.append(found)
+        searchStart = found.upperBound
+      }
+      return results
+    }
+
+    let notYetStartedAssignments = assignmentRanges(in: notYetStartedRegion)
+    let restartAssignments = assignmentRanges(in: restartRegion)
+    let reconfigureAssignments = assignmentRanges(in: reconfigureRegion)
+
+    XCTAssertEqual(
+      notYetStartedAssignments.count, 1,
+      "the not-yet-started branch has no async call to race, so it assigns exactly once, unconditionally")
+    XCTAssertEqual(restartAssignments.count, 1, "the restart branch must assign exactly once")
+    XCTAssertEqual(reconfigureAssignments.count, 1, "the reconfigure branch must assign exactly once")
+
+    let restartCallRange = try XCTUnwrap(
+      body.range(of: "try await resolvedAgentClient().restart()", range: restartRegion))
+    let configureCallRange = try XCTUnwrap(
+      body.range(
+        of: "try await resolvedAgentClient().configureDefaultExecutionProfile(", range: reconfigureRegion))
+
+    XCTAssertTrue(
+      restartAssignments[0].lowerBound > restartCallRange.upperBound,
+      "the restart branch's own assignment must come after its own restart() call, "
+        + "not merely after some restart() call elsewhere in the function")
+    XCTAssertTrue(
+      reconfigureAssignments[0].lowerBound > configureCallRange.upperBound,
+      "the reconfigure branch's own assignment must come after its own "
+        + "configureDefaultExecutionProfile( call, not merely after restart()'s earlier position")
+  }
+
+  // omi-test-quality: source-inspection -- static contract for the
+  // `switchApplyInFlight` fix: a second `switchBridgeMode` call issued while a
+  // first restart/reconfigure is still in-flight must not silently no-op even
+  // if its destination happens to match the still-stale trackers. Reaching
+  // this behaviorally needs two real concurrent calls racing across a genuine
+  // `await` suspension against a live shared runtime; this pins the 3
+  // invariants that make that race safe instead of standing up that stack:
+  // the flag is set before either async call, reset via `defer` (so it can't
+  // be skipped by an early return or a thrown error), and the no-op guard
+  // bypasses whenever it's set.
+  func testSwitchApplyInFlightGuardsBothAsyncCallsAndIsResetUnconditionally() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Providers/ChatProvider.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    let functionStart = try XCTUnwrap(source.range(of: "func switchBridgeMode(to mode: BridgeMode) async {"))
+    let nextFunctionStart = try XCTUnwrap(
+      source.range(
+        of: "\n  func restartLocalBridgeIfActive()",
+        range: functionStart.upperBound..<source.endIndex))
+    let body = String(source[functionStart.upperBound..<nextFunctionStart.lowerBound])
+
+    let guardRange = try XCTUnwrap(
+      body.range(
+        of:
+          "guard\n      newHarness != previousHarness || newProviderMode != previousProviderMode\n        || switchApplyInFlight\n    else { return }"
+      ))
+    let setRange = try XCTUnwrap(
+      body.range(of: "switchApplyInFlight = true", range: guardRange.upperBound..<body.endIndex))
+    let deferRange = try XCTUnwrap(
+      body.range(of: "defer { switchApplyInFlight = false }", range: setRange.upperBound..<body.endIndex))
+    let restartCallRange = try XCTUnwrap(
+      body.range(of: "try await resolvedAgentClient().restart()", range: deferRange.upperBound..<body.endIndex))
+    let configureCallRange = try XCTUnwrap(
+      body.range(
+        of: "try await resolvedAgentClient().configureDefaultExecutionProfile(",
+        range: deferRange.upperBound..<body.endIndex))
+
+    XCTAssertTrue(
+      setRange.lowerBound < restartCallRange.lowerBound && setRange.lowerBound < configureCallRange.lowerBound,
+      "switchApplyInFlight must be set to true before either async call, so a second concurrent "
+        + "call sees it while the first is still in flight")
+    XCTAssertTrue(
+      deferRange.lowerBound < restartCallRange.lowerBound && deferRange.lowerBound < configureCallRange.lowerBound,
+      "the reset must be a `defer` registered before either async call, not an explicit reset at "
+        + "specific return points, so an early return or thrown error can't skip it")
+    XCTAssertTrue(
+      guardRange.lowerBound < setRange.lowerBound,
+      "the no-op guard's `|| switchApplyInFlight` bypass must be the guard that runs before this "
+        + "function ever sets the flag for its own call")
+  }
+
+  // MARK: - Cloud-assisted features gate
+  // Regression coverage for the unified Local-provider "Cloud-assisted
+  // features" setting as it applies to connector synthesis (Apple
+  // Notes/Calendar/Gmail/AI-profile): Local+Off must skip (the default),
+  // Local+Cloud must send, and every other provider must send regardless of
+  // the setting.
+
+  func testConnectorSynthesisGate() {
+    let bridgeModeKey = AIProvider.selectedProviderRawValueKey
+    let cloudAssistModeKey = AIProvider.cloudAssistModeKey
+    // AIProvider.localCloudAssistMode falls back to (and migrates from) this
+    // legacy key when cloudAssistModeKey is unset, so a stale "cloud" value
+    // left here by an earlier run/session would flake the "Off" assertion
+    // below. Save/restore it alongside the other two keys.
+    let legacyKey = AIProvider.connectorSynthesisModeKey
+    let previousBridgeMode = UserDefaults.standard.string(forKey: bridgeModeKey)
+    let previousCloudAssistMode = UserDefaults.standard.string(forKey: cloudAssistModeKey)
+    let previousLegacyMode = UserDefaults.standard.string(forKey: legacyKey)
+    defer {
+      if let previousBridgeMode {
+        UserDefaults.standard.set(previousBridgeMode, forKey: bridgeModeKey)
+      } else {
+        UserDefaults.standard.removeObject(forKey: bridgeModeKey)
+      }
+      if let previousCloudAssistMode {
+        UserDefaults.standard.set(previousCloudAssistMode, forKey: cloudAssistModeKey)
+      } else {
+        UserDefaults.standard.removeObject(forKey: cloudAssistModeKey)
+      }
+      if let previousLegacyMode {
+        UserDefaults.standard.set(previousLegacyMode, forKey: legacyKey)
+      } else {
+        UserDefaults.standard.removeObject(forKey: legacyKey)
+      }
+    }
+
+    // Local + Off (the default, including an unset key): skip.
+    UserDefaults.standard.set(ChatProvider.BridgeMode.local.rawValue, forKey: bridgeModeKey)
+    UserDefaults.standard.removeObject(forKey: cloudAssistModeKey)
+    UserDefaults.standard.removeObject(forKey: legacyKey)
+    XCTAssertEqual(AIProvider.localCloudAssistMode, .off)
+    XCTAssertTrue(AIProvider.shouldSkipConnectorSynthesis())
+
+    UserDefaults.standard.set(AIProvider.CloudAssistMode.off.rawValue, forKey: cloudAssistModeKey)
+    XCTAssertTrue(AIProvider.shouldSkipConnectorSynthesis())
+
+    // Local + Cloud (opted in): send.
+    UserDefaults.standard.set(AIProvider.CloudAssistMode.cloud.rawValue, forKey: cloudAssistModeKey)
+    XCTAssertEqual(AIProvider.localCloudAssistMode, .cloud)
+    XCTAssertFalse(AIProvider.shouldSkipConnectorSynthesis())
+
+    // Omi AI (any non-local provider): always sends, regardless of the
+    // cloud-assist setting: the setting is meaningless off Local.
+    UserDefaults.standard.set(ChatProvider.BridgeMode.piMono.rawValue, forKey: bridgeModeKey)
+    UserDefaults.standard.set(AIProvider.CloudAssistMode.off.rawValue, forKey: cloudAssistModeKey)
+    XCTAssertFalse(AIProvider.shouldSkipConnectorSynthesis())
+  }
+
   // MARK: - ApiKeysResponse shape assertion
   // After #6594, the response must NOT contain anthropic_api_key.
 
   func testApiKeysResponseDecodesWithoutAnthropicKey() throws {
-    let json = """
+    let json = Data(
+      """
       {
         "firebase_api_key": "AIza-test",
         "google_calendar_api_key": "cal-key"
       }
-      """.data(using: .utf8)!
+      """.utf8)
     let response = try JSONDecoder().decode(APIClient.ApiKeysResponse.self, from: json)
     XCTAssertEqual(response.firebaseApiKey, "AIza-test")
     XCTAssertEqual(response.googleCalendarApiKey, "cal-key")
@@ -123,13 +414,14 @@ final class PiMonoWiringTests: XCTestCase {
 
   func testApiKeysResponseIgnoresUnknownAnthropicField() throws {
     // If the backend ever sends anthropic_api_key, the client must ignore it
-    let json = """
+    let json = Data(
+      """
       {
         "firebase_api_key": "AIza-test",
         "anthropic_api_key": "sk-ant-LEAKED",
         "google_calendar_api_key": "cal-key"
       }
-      """.data(using: .utf8)!
+      """.utf8)
     let response = try JSONDecoder().decode(APIClient.ApiKeysResponse.self, from: json)
     XCTAssertEqual(response.firebaseApiKey, "AIza-test")
     // Verify no property named anthropicApiKey exists on the response
@@ -237,7 +529,48 @@ final class PiMonoWiringTests: XCTestCase {
   }
 
   func testAIProviderAllContainsSupportedProviders() {
-    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude", "hermes", "openclaw"])
+    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude", "hermes", "openclaw", "local"])
+  }
+
+  func testAIProviderLocalHasCorrectValues() {
+    let p = AIProvider.local
+    XCTAssertEqual(p.id, "local")
+    XCTAssertEqual(p.displayName, "Local")
+    XCTAssertEqual(p.bridgeModeRawValue, "local")
+    XCTAssertNil(p.attributionURL)
+    XCTAssertFalse(p.tagline.isEmpty)
+  }
+
+  // MARK: - LocalModelsResponse decoding (GET /models)
+
+  func testLocalModelsResponseDecodesRealLMStudioShape() throws {
+    // Captured verbatim (trimmed) from a live `curl .../v1/models` against
+    // an actual LM Studio server, locks in the real response shape rather
+    // than a guessed one.
+    let json = Data(
+      """
+      {
+        "data": [
+          {"id": "qwen2.5-7b-instruct", "object": "model", "owned_by": "organization_owner"},
+          {"id": "qwen3.8-27b-optiq", "object": "model", "owned_by": "organization_owner"},
+          {"id": "qwen3.8-27b-mlx@6bit", "object": "model", "owned_by": "organization_owner"}
+        ],
+        "object": "list"
+      }
+      """.utf8)
+    let decoded = try JSONDecoder().decode(AIProvider.LocalModelsResponse.self, from: json)
+    XCTAssertEqual(decoded.data.map(\.id), ["qwen2.5-7b-instruct", "qwen3.8-27b-optiq", "qwen3.8-27b-mlx@6bit"])
+  }
+
+  func testLocalModelsResponseDecodesEmptyList() throws {
+    let json = Data("{\"data\": [], \"object\": \"list\"}".utf8)
+    let decoded = try JSONDecoder().decode(AIProvider.LocalModelsResponse.self, from: json)
+    XCTAssertTrue(decoded.data.isEmpty)
+  }
+
+  func testLocalModelsResponseFailsOnMissingDataKey() {
+    let json = Data("{\"object\": \"list\"}".utf8)
+    XCTAssertThrowsError(try JSONDecoder().decode(AIProvider.LocalModelsResponse.self, from: json))
   }
 
   func testAIProviderFromBridgeModeReturnsCorrectProvider() {
@@ -245,6 +578,7 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(AIProvider.from(bridgeMode: "claudeCode")?.id, "claude")
     XCTAssertEqual(AIProvider.from(bridgeMode: "hermes")?.id, "hermes")
     XCTAssertEqual(AIProvider.from(bridgeMode: "openclaw")?.id, "openclaw")
+    XCTAssertEqual(AIProvider.from(bridgeMode: "local")?.id, "local")
     XCTAssertNil(AIProvider.from(bridgeMode: "unknown"))
     XCTAssertNil(AIProvider.from(bridgeMode: "agentSDK"))
   }

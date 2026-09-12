@@ -366,6 +366,33 @@ struct SettingsContentView: View {
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") var chatBridgeMode: String = "piMono"
+  @AppStorage(AIProvider.localBaseURLKey) var localLLMBaseURL: String = AIProvider.defaultLocalBaseURL
+  @AppStorage(AIProvider.localModelIDKey) var localLLMModelID: String = AIProvider.defaultLocalModelID
+  @AppStorage(AIProvider.cloudAssistModeKey) var localCloudAssistMode: String =
+    AIProvider.CloudAssistMode.off.rawValue
+  @AppStorage(AIProvider.contextBudgetPercentKey) var localContextBudgetPercent: Int =
+    AIProvider.ContextBudgetPercent.full.rawValue
+  @State var localModelOptions: [String] = []
+  @State var isFetchingLocalModels = false
+  @State var localModelsFetchFailed = false
+  // Base URL value the local bridge was last restarted against. The focus-loss
+  // commit compares against it so Return-then-click-away, or focusing the
+  // field and leaving it untouched, do not refetch and restart for nothing.
+  // Not private: read/written from the localProviderFields computed view in
+  // SettingsContentView+FloatingBarAndChat.swift.
+  @State var lastCommittedLocalBaseURL = ""
+  // Bumped on every fetchLocalModelOptions call; a completion whose
+  // generation no longer matches was superseded by a newer commit and must
+  // not apply its results, auto-select, or restart. See fetchLocalModelOptions.
+  @State var localModelsFetchGeneration = 0
+  // Seam for tests: `fetchLocalModelOptions` (SettingsContentView+FloatingBarAndChat.swift)
+  // calls this instead of `AIProvider.fetchLocalModels` directly, so tests can substitute a
+  // deterministic stub instead of racing real networking against a URLProtocol stub on
+  // URLSession.shared. See LocalProviderSettingsRestartTests.
+  var localModelsFetcher: (String) async throws -> [String] = AIProvider.fetchLocalModels
+  // Not private: read from the localProviderFields computed view in the
+  // SettingsContentView+FloatingBarAndChat.swift extension file.
+  @FocusState var isLocalBaseURLFieldFocused: Bool
   @AppStorage("realtimeOmniProvider") var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
   @AppStorage("askModeEnabled") var askModeEnabled = false
   @AppStorage("aiChatWorkingDirectory") var aiChatWorkingDirectory: String = ""
@@ -562,12 +589,14 @@ struct SettingsContentView: View {
     selectedSection: Binding<SettingsSection>,
     highlightedSettingId: Binding<String?> = .constant(nil),
     chatProvider: ChatProvider? = nil,
+    localModelsFetcher: @escaping (String) async throws -> [String] = AIProvider.fetchLocalModels,
     showResetOnboardingConfirm: Binding<Bool>
   ) {
     self.appState = appState
     self._selectedSection = selectedSection
     self._highlightedSettingId = highlightedSettingId
     self.chatProvider = chatProvider
+    self.localModelsFetcher = localModelsFetcher
     self._showResetOnboardingConfirm = showResetOnboardingConfirm
     let settings = AssistantSettings.shared
     _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)

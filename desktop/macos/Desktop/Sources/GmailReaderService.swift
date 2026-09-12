@@ -236,6 +236,10 @@ actor GmailReaderService {
     memories: Int, tasks: Int, profileSummary: String
   ) {
     guard !emails.isEmpty else { return (0, 0, "") }
+    guard !AIProvider.shouldSkipConnectorSynthesis() else {
+      log("GmailReaderService: skipping email synthesis: Local provider, Connector synthesis is Off")
+      return (0, 0, "")
+    }
 
     // Format emails compactly for the backend
     var emailLines: [String] = []

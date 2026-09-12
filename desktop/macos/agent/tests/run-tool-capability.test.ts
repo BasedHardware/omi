@@ -24,6 +24,7 @@ function fixture(
   role: "coordinator" | "leaf" = "coordinator",
   mode: "ask" | "act" = "act",
   surfaceKind?: string,
+  adapterId = "acp",
 ) {
   const root = mkdtempSync(join(tmpdir(), "omi-capability-"));
   roots.push(root);
@@ -32,7 +33,7 @@ function fixture(
   const session = store.insertSession({
     ownerId: "owner-1",
     surfaceKind: surfaceKind ?? (role === "leaf" ? "background_agent" : "main_chat"),
-    defaultAdapterId: "acp",
+    defaultAdapterId: adapterId,
     executionRole: role,
   });
   const run = store.insertRun({
@@ -46,7 +47,7 @@ function fixture(
     runId: run.runId,
     attemptNo: 1,
     status: "running",
-    adapterId: "acp",
+    adapterId,
     adapterInstanceId: "worker",
   });
   return { databasePath, store, session, run, attempt };
@@ -555,6 +556,61 @@ describe("RunToolCapabilityBroker", () => {
     expect(chatCapability.allowedToolNames).not.toContain("point_click");
     expect(chatCapability.allowedToolNames).not.toContain("record_interject_feedback");
     chat.store.close();
+  });
+
+  it("authorizes screenshot for realtime voice runs but not for main_chat", () => {
+    // Regression: pi-mono unconditionally advertised screenshot, so every
+    // typed-chat and push-to-talk batch run got a guaranteed-failure tool
+    // (the Swift executor rejects screenshot outside realtime voice as
+    // unknown_realtime_invocation). The surface projection alone already
+    // authorizes it for realtime voice; the adapter projection must not
+    // duplicate that outside realtime voice.
+    const voice = fixture("coordinator", "act", "realtime_voice");
+    const voiceCapability = createBroker(voice.store).register({
+      ownerId: voice.session.ownerId,
+      sessionId: voice.session.sessionId,
+      runId: voice.run.runId,
+      attemptId: voice.attempt.attemptId,
+    });
+    expect(voiceCapability.allowedToolNames).toContain("screenshot");
+    voice.store.close();
+
+    const chat = fixture();
+    const chatCapability = createBroker(chat.store).register({
+      ownerId: chat.session.ownerId,
+      sessionId: chat.session.sessionId,
+      runId: chat.run.runId,
+      attemptId: chat.attempt.attemptId,
+    });
+    expect(chatCapability.allowedToolNames).not.toContain("screenshot");
+    chat.store.close();
+
+    // The assertions above pass even without the adapter-projection fix,
+    // because ACP's "omi-tools-stdio" adapter never advertises screenshot at
+    // all — only "pi-mono" does. The real regression (pi-mono advertising
+    // screenshot unconditionally to every non-realtime run) needs a pi-mono
+    // fixture on both surfaces to actually be exercised.
+    const piChat = fixture("coordinator", "act", "main_chat", "pi-mono");
+    const piChatCapability = createBroker(piChat.store).register({
+      ownerId: piChat.session.ownerId,
+      sessionId: piChat.session.sessionId,
+      runId: piChat.run.runId,
+      attemptId: piChat.attempt.attemptId,
+    });
+    expect(piChatCapability.adapterId).toBe("pi-mono");
+    expect(piChatCapability.allowedToolNames).not.toContain("screenshot");
+    piChat.store.close();
+
+    const piVoice = fixture("coordinator", "act", "realtime_voice", "pi-mono");
+    const piVoiceCapability = createBroker(piVoice.store).register({
+      ownerId: piVoice.session.ownerId,
+      sessionId: piVoice.session.sessionId,
+      runId: piVoice.run.runId,
+      attemptId: piVoice.attempt.attemptId,
+    });
+    expect(piVoiceCapability.adapterId).toBe("pi-mono");
+    expect(piVoiceCapability.allowedToolNames).toContain("screenshot");
+    piVoice.store.close();
   });
 
   it("keeps capability state internal and revokes it at terminal attempt", () => {

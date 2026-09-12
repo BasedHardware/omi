@@ -71,6 +71,14 @@ export interface ExecuteAgentRunInput extends KernelSessionResolutionInput {
   mode?: RunMode;
   adapterId?: string;
   cwd?: string;
+  /**
+   * Kernel-populated: the caller's requested cwd, captured by
+   * `inputWithManagedArtifactCwd` before it rewrites `cwd` to a fresh
+   * per-attempt artifact directory. `isBindingCompatible` compares this
+   * instead of `cwd` so two per-attempt directories of the same session
+   * are not treated as different working directories. Callers cannot set it.
+   */
+  requestedCwd?: string;
   model?: string;
   mcpServers?: Record<string, unknown>[];
   maxAttempts?: number;
@@ -483,6 +491,12 @@ export interface AgentRuntimeKernelOptions {
   artifactStorage?: OmiArtifactStorage;
   recoverRunInput?: KernelRunRecoveryPolicy;
   onToolCapabilityRejected?: (code: RunToolCapabilityRejectCode) => void;
+  /**
+   * Local-provider-only context budget as a percentage of today's default
+   * kernel context snapshot (100 = byte-identical to unbudgeted rendering).
+   * Set from OMI_CONTEXT_BUDGET_PERCENT in src/index.ts; defaults to 100.
+   */
+  contextBudgetPercent?: number;
   /**
    * Canonical execution-profile repository. Production uses the immutable
    * SQLite profile reader; tests with synthetic adapters may inject an

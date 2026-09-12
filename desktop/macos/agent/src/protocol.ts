@@ -35,6 +35,10 @@ export interface QueryMessage extends ProtocolEnvelope {
   prompt: string;
   mode?: "ask" | "act";
   imageBase64?: string;
+  /** True only when imageBase64 is an actual capture of the user's current
+   *  screen (never sent as `false`; absence means "not a screen capture" or
+   *  no image at all). See jsonl-transport.ts's omi-local prompt marker. */
+  imageIsScreenCapture?: boolean;
   attachments?: QueryAttachment[];
   /** Freshness precondition only; it cannot select or mutate context. */
   expectedContextSnapshotVersion?: string;
@@ -1084,6 +1088,9 @@ export interface ContextSnapshotProjection {
     olderHistoryStrategy: "none" | "truncated";
     stableCacheIdentity: string;
     dynamicContextIdentity: string;
+    /** Present only when the Local provider's context budget trimmed retained
+     * turns below 100% for this render. See context-snapshot.ts's ContextRenderBudget. */
+    contextBudgetPercent?: number;
   };
   ownerId: string;
   sessionId: string;

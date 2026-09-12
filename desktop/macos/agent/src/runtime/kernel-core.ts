@@ -217,6 +217,8 @@ export class KernelCore {
   protected readonly activeExecutions = new Map<string, ActiveExecution>();
   protected readonly bindingResolutionLocks = new Map<string, Promise<void>>();
   protected readonly contextDeliveryByBinding = new Map<string, ContextDeliveryCursor>();
+  /** Local-provider-only context budget percentage; see AgentRuntimeKernelOptions. */
+  protected readonly contextBudgetPercent: number;
   protected readonly toolCapabilities: RunToolCapabilityBroker;
   /**
    * The one immutable server-derived Main Chat sample for this process, keyed
@@ -248,6 +250,7 @@ export class KernelCore {
     this.runtimeNodeId = options.runtimeNodeId ?? "desktop-local";
     this.artifactStorage = options.artifactStorage;
     this.recoverRunInput = options.recoverRunInput;
+    this.contextBudgetPercent = options.contextBudgetPercent ?? 100;
     this.toolCapabilities = new RunToolCapabilityBroker({
       store: this.store,
       onRejected: options.onToolCapabilityRejected,
@@ -1327,20 +1330,27 @@ export class KernelCore {
               accepted.session.surfaceKind,
               accepted.session.executionRole,
               this.contextDeliveryByBinding.get(handle.bindingId),
+              { percent: this.contextBudgetPercent },
             )
           : {
               rendered: renderContextSnapshot(
                 snapshot,
                 accepted.session.surfaceKind,
                 accepted.session.executionRole,
+                { percent: this.contextBudgetPercent },
               ),
               next: undefined,
             };
         nextContextDelivery = renderedContext.next;
         effectivePrompt = `${renderedContext.rendered}${attachments}\n\n# User Message\n${input.prompt}`;
+        // The transport's promptBlocks() may append per-provider instructions to the user's
+        // text block (e.g. the local-provider screenshot marker); rebuilding from the
+        // raw input.prompt instead of the block's own text silently dropped them.
         effectivePromptBlocks = attemptInput.promptBlocks
           ? attemptInput.promptBlocks.map((block) =>
-              block.type === "text" ? { ...block, text: effectivePrompt } : block,
+              block.type === "text"
+                ? { ...block, text: `${renderedContext.rendered}${attachments}\n\n# User Message\n${block.text}` }
+                : block,
             )
           : undefined;
       }
@@ -2016,10 +2026,33 @@ export class KernelCore {
     if (binding.profileGeneration !== input.session.executionProfileGeneration) {
       return false;
     }
+    const metadata = parseJsonObject(binding.metadataJson);
     const requestedCwd = input.input.cwd ?? input.session.defaultCwd ?? process.cwd();
-    const bindingCwd = binding.cwd ?? process.cwd();
-    if (bindingCwd !== requestedCwd) {
-      return false;
+    // `inputWithManagedArtifactCwd` rewrites the cwd of every leaf run (and any
+    // non-leaf run with no caller cwd, or the artifact root) to a fresh
+    // per-attempt artifact directory before this input reaches us. Comparing
+    // those rewritten directories verbatim made every binding incompatible
+    // with its own successor (each attempt gets a new directory), so the
+    // binding was replaced, and its delta-context cursor destroyed, on every
+    // single turn (measured 2026-09-10: `binding.stale` with reason
+    // `binding_context_changed` fired before every desktop chat follow-up).
+    // `metadata.requestedCwd`, stamped at open/resume time, is the
+    // caller-facing cwd from before that rewrite; comparing it instead treats
+    // same-session per-attempt directories as equivalent, while a genuinely
+    // different caller-supplied cwd (e.g. a project directory) still fails
+    // this comparison and replaces the binding as before. Bindings created by
+    // older code have no `requestedCwd` in their metadata, so they fall back
+    // to the historical raw-cwd comparison.
+    if (typeof metadata.requestedCwd === "string") {
+      const effectiveRequestedCwd = input.input.requestedCwd ?? requestedCwd;
+      if (metadata.requestedCwd !== effectiveRequestedCwd) {
+        return false;
+      }
+    } else {
+      const bindingCwd = binding.cwd ?? process.cwd();
+      if (bindingCwd !== requestedCwd) {
+        return false;
+      }
     }
     if (input.input.model !== undefined && binding.modelId !== input.input.model) {
       return false;
@@ -2029,7 +2062,6 @@ export class KernelCore {
     if (binding.systemPromptHash !== null && binding.systemPromptHash !== requestedSystemPromptHash) {
       return false;
     }
-    const metadata = parseJsonObject(binding.metadataJson);
     const effectiveMcpServers = input.adapter?.effectiveMcpServers
       ? input.adapter.effectiveMcpServers(input.input.mcpServers ?? [])
       : input.input.mcpServers ?? [];
@@ -2318,7 +2350,11 @@ export class KernelCore {
       runId,
       attemptId,
     });
-    return { ...input, cwd };
+    // Stamp the caller-facing cwd from before this rewrite (or the artifact
+    // root, when no caller cwd was requested) so `isBindingCompatible` can
+    // compare what was actually requested instead of two different
+    // per-attempt artifact directories that can never equal each other.
+    return { ...input, cwd, requestedCwd: requestedCwd ?? this.artifactStorage.rootDir };
   }
 
   protected finishAttemptAndRun(input: {

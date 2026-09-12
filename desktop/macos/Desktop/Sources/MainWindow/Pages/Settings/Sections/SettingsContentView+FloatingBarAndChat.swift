@@ -164,6 +164,261 @@ extension SettingsContentView {
     ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
   }
 
+  /// Restarts every live local-mode bridge, not just the main window's. The
+  /// floating control bar keeps its own independent ChatProvider (see
+  /// FloatingControlBarManager.sharedFloatingProvider) that never picks up a
+  /// Settings change on its own; restarting only `chatProvider` here would
+  /// leave it running indefinitely on whatever model config it started
+  /// with, silently diverging from the main window after any later edit.
+  func restartLocalBridgesIfActive() {
+    Task {
+      await chatProvider?.restartLocalBridgeIfActive()
+      await FloatingControlBarManager.shared.sharedFloatingProvider?.restartLocalBridgeIfActive()
+    }
+  }
+
+  /// Endpoint/model fields for the Local provider, shown under the AI Provider
+  /// picker (in both aiChatSection and the Advanced AI Provider card) when
+  /// Local is selected.
+  var localProviderFields: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      GlassSeparator()
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+        Text("Base URL")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundColor(Ink.secondary)
+        TextField(AIProvider.defaultLocalBaseURL, text: $localLLMBaseURL)
+          .textFieldStyle(.roundedBorder)
+          .focused($isLocalBaseURLFieldFocused)
+          .onSubmit {
+            // Return always commits, even if the value is unchanged: it is
+            // also the user's explicit retry after a failed restart ("Could
+            // not apply local model change. Try again."), which must not be
+            // deduped away.
+            commitLocalBaseURL()
+          }
+          // Enter (onSubmit) commits the field, but a user who just clicks
+          // away without pressing Enter would otherwise keep the old bridge
+          // talking to the old server indefinitely, the exact stale-process
+          // bug restartLocalBridgesIfActive was added to fix for the model
+          // fields (see 5f3abca24a), just missed here for Base URL. Only
+          // commit on an actual edit though: Return already committed (so a
+          // click-away right after would otherwise restart a second time for
+          // one edit), and focusing then leaving the field untouched should
+          // do nothing at all.
+          .onChange(of: isLocalBaseURLFieldFocused) { wasFocused, isFocused in
+            if wasFocused && !isFocused && localLLMBaseURL != lastCommittedLocalBaseURL {
+              commitLocalBaseURL()
+            }
+          }
+      }
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+        HStack(spacing: 6) {
+          Text("Model")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(Ink.secondary)
+          if isFetchingLocalModels {
+            ProgressView()
+              .controlSize(.small)
+          }
+          Spacer()
+          Button {
+            fetchLocalModelOptions()
+          } label: {
+            Image(systemName: "arrow.clockwise")
+              .scaledFont(size: OmiType.caption)
+          }
+          .buttonStyle(.plain)
+          .foregroundColor(Ink.secondary)
+          .help("Refresh the model list from the server")
+        }
+
+        if localModelOptions.isEmpty {
+          // No fetched list yet (not tried, still loading, or the server was
+          // unreachable), fall back to manual entry so Local always works
+          // even when the server can't be reached from Settings.
+          TextField(AIProvider.defaultLocalModelID, text: $localLLMModelID)
+            .textFieldStyle(.roundedBorder)
+            .onChange(of: localLLMModelID) { _, _ in
+              restartLocalBridgesIfActive()
+            }
+          if localModelsFetchFailed {
+            Text("Couldn't reach the server to list models, enter the model id manually.")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+          }
+        } else {
+          Picker("", selection: $localLLMModelID) {
+            ForEach(localModelOptions, id: \.self) { modelId in
+              Text(modelId).tag(modelId)
+            }
+          }
+          .pickerStyle(.menu)
+          .labelsHidden()
+          .onChange(of: localLLMModelID) { _, _ in
+            restartLocalBridgesIfActive()
+          }
+        }
+      }
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+        Text("Cloud-assisted features")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundColor(Ink.secondary)
+
+        Picker("", selection: $localCloudAssistMode) {
+          Text("Off").tag(AIProvider.CloudAssistMode.off.rawValue)
+          Text("Send to Omi cloud").tag(AIProvider.CloudAssistMode.cloud.rawValue)
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .onAppear {
+          // Force the migrated value to be read (and, if migrating, written)
+          // through AIProvider's lazy one-time migration before this picker
+          // renders, so an existing pre-unification connector-synthesis
+          // choice is reflected here immediately rather than only after some
+          // other call site happens to read it first.
+          localCloudAssistMode = AIProvider.localCloudAssistMode.rawValue
+        }
+
+        Text(
+          "Off (default): connector synthesis (Notes, Calendar, Gmail, AI profile), proactive assistants and live notes (memory, task, suggestion, and insight extraction from screen and transcripts), dictation polish, Rewind semantic-search embeddings, and web search do not run under the Local provider."
+        )
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+
+        if localCloudAssistMode == AIProvider.CloudAssistMode.cloud.rawValue {
+          Text(
+            "That content goes to Omi's servers and cloud models, and counts against your plan the same as it would on any other provider."
+          )
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+        }
+      }
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+        Text("Context per turn")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundColor(Ink.secondary)
+
+        Picker("", selection: $localContextBudgetPercent) {
+          ForEach(AIProvider.ContextBudgetPercent.allCases, id: \.rawValue) { option in
+            Text(option.displayName).tag(option.rawValue)
+          }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .onChange(of: localContextBudgetPercent) { _, _ in
+          restartLocalBridgesIfActive()
+        }
+
+        Text(
+          "100% (default) sends the same context as every other provider. Lower values shorten the first turn of a chat by keeping fewer recent journal turns and trimming the largest context sources (workspace, memories) on the local model. Follow-up turns already send only what changed. Applies only to the Local provider."
+        )
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+      }
+
+      Text("An OpenAI-compatible endpoint (e.g. LM Studio, Ollama). Never routed through Omi's servers.")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+    }
+    .task {
+      // The bridge already runs on the persisted value at appear; this is
+      // the baseline commitLocalBaseURL()'s dedup check compares against.
+      lastCommittedLocalBaseURL = localLLMBaseURL
+      fetchLocalModelOptions()
+    }
+  }
+
+  /// Commits the Base URL field: records it as the last-committed value (so
+  /// the focus-loss handler above can dedup a no-op blur) and fetches the
+  /// model list, restarting the local bridge once that settles.
+  func commitLocalBaseURL() {
+    lastCommittedLocalBaseURL = localLLMBaseURL
+    fetchLocalModelOptions(onComplete: restartLocalBridgesIfActive)
+  }
+
+  /// Fetches the model list from the configured local endpoint and populates
+  /// `localModelOptions`. Falls back to manual text entry (leaves the list
+  /// empty) on any failure: the server may be asleep, off-network, or the
+  /// base URL may not be a real server yet, none of which should block Local
+  /// from being usable via manual model-id entry.
+  /// - Parameter onComplete: runs on the main actor after the fetch settles,
+  ///   success or failure. Callers that change a provider-relevant field
+  ///   (Base URL) pass `restartLocalBridgesIfActive` here so the restart
+  ///   happens after the model list (and possibly the auto-selected model
+  ///   id) has settled, not racing ahead of it.
+  ///
+  /// A commit (`onComplete != nil`) always starts a new fetch, superseding
+  /// any fetch already in flight: dropping it would silently drop its
+  /// restart too, leaving the bridge on a stale endpoint. A plain refresh
+  /// (`onComplete == nil`, the Model field's refresh button or this view's
+  /// own `.task`) is redundant while one is already in flight and is the
+  /// only case the guard below still short-circuits. `localModelsFetchGeneration`
+  /// is bumped on every call and captured per-call, so a superseded fetch's
+  /// completion (results, auto-select, and restart) is discarded once a
+  /// newer commit has started.
+  ///
+  /// The actual request goes through `localModelsFetcher` (defaults to
+  /// `AIProvider.fetchLocalModels`) rather than calling it directly, so tests
+  /// can substitute a stub instead of exercising real networking.
+  func fetchLocalModelOptions(onComplete: (() -> Void)? = nil) {
+    if isFetchingLocalModels && onComplete == nil { return }
+    localModelsFetchGeneration += 1
+    let generation = localModelsFetchGeneration
+    isFetchingLocalModels = true
+    localModelsFetchFailed = false
+    let baseURL = localLLMBaseURL
+    let currentModelId = localLLMModelID
+    Task {
+      do {
+        var models = try await localModelsFetcher(baseURL)
+        // Keep the currently configured model selectable even if the server's
+        // list doesn't (yet) include it: Picker needs a matching tag.
+        if !currentModelId.isEmpty && !models.contains(currentModelId) {
+          models.insert(currentModelId, at: 0)
+        }
+        await MainActor.run {
+          // Superseded by a newer commit: these results, the auto-select,
+          // and the restart all belong to a Base URL the user has since
+          // replaced.
+          guard generation == self.localModelsFetchGeneration else { return }
+          self.localModelOptions = models
+          self.isFetchingLocalModels = false
+          // No model configured yet: there's no hardcoded default to fall
+          // back to, so pick the first id the server actually reports
+          // instead of leaving the Picker's selection unmatched. That
+          // assignment fires the Model field's own onChange handler, which
+          // already calls restartLocalBridgesIfActive() once. Skip calling
+          // onComplete in that case so a Base URL commit whose model id was
+          // empty doesn't fire a second, redundant restart request (the
+          // second one used to be rejected as BridgeError.restarting and
+          // surface a false "Could not apply local model change" error).
+          // Re-checks self.localLLMModelID here (not the pre-fetch
+          // `currentModelId` snapshot) so a model id the user typed in while
+          // this fetch was in flight is never clobbered by the server's
+          // first listed model.
+          if self.localLLMModelID.isEmpty, let firstModel = models.first {
+            self.localLLMModelID = firstModel
+          } else {
+            onComplete?()
+          }
+        }
+      } catch {
+        await MainActor.run {
+          guard generation == self.localModelsFetchGeneration else { return }
+          self.localModelOptions = []
+          self.isFetchingLocalModels = false
+          self.localModelsFetchFailed = true
+          onComplete?()
+        }
+      }
+    }
+  }
+
   var aiChatSection: some View {
     VStack(spacing: OmiSpacing.xl) {
       // AI Provider card
@@ -206,6 +461,10 @@ extension SettingsContentView {
                 .scaledFont(size: OmiType.caption)
                 .foregroundColor(Ink.secondary)
             }
+          }
+
+          if chatBridgeMode == AIProvider.local.bridgeModeRawValue {
+            localProviderFields
           }
 
           if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
