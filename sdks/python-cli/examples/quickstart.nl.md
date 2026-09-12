@@ -147,10 +147,10 @@ omi --json memory list | jq '.[] | {id, content, category}'
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
 
 # Toon openstaande actie-items
-omi --json action-item list --open | jq '.[] | {id, title, due_at}'
+omi --json action-item list --open | jq '.[] | {id, description, due_at}'
 
 # Toon doelen
-omi --json goal list | jq '.[] | {id, title, progress: .progress_percent}'
+omi --json goal list | jq '.[] | {id, title, current: .current_value, target: .target_value}'
 ```
 
 ---
@@ -188,7 +188,7 @@ omi auth login
 | `command not found: omi` | PATH bevat de pipx-bin directory niet | Voer `pipx ensurepath` uit en herstart de terminal |
 | `401 Unauthorized` | API-sleutel ongeldig of verlopen | Genereer een nieuwe sleutel op app.omi.me en update |
 | `connection refused` | Geen netwerktoegang tot de Omi-server | Controleer internetverbinding en proxy-instellingen |
-| `permission denied` op configuratiebestanden | Configuratiedirectory is niet beschrijfbaar | Controleer rechten van `~/.config/omi` |
+| `permission denied` op configuratiebestanden | Configuratiedirectory is niet beschrijfbaar | Controleer rechten van `~/.omi/config.toml` |
 
 ---
 
