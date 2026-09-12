@@ -77,7 +77,7 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
     const version =
       row.app_version === undefined || row.app_version === null
         ? ''
-        : visibleDisplayText(text(row.app_version, 64));
+        : visibleDisplayText(text(row.app_version, 10000));
     const content = object(row.content);
     if (
       content.changes !== undefined &&

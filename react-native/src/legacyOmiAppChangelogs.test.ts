@@ -183,6 +183,39 @@ test('keeps GET app changelog icon longer than 32', () => {
   ]);
 });
 
+test('keeps GET app changelog app_version longer than 64', () => {
+  const app_version = 'x'.repeat(65);
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-version',
+          type: 'changelog',
+          app_version,
+          content: {changes: [{title: 'Faster sync', description: ''}]},
+        },
+        {
+          id: 'ann-good',
+          type: 'changelog',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-version:0',
+      title: `What's New in ${app_version}`,
+      copy: 'Faster sync',
+    },
+    {
+      key: 'ann-good:0',
+      title: "What's New in 1.2.0",
+      copy: 'Offline replay',
+    },
+  ]);
+});
+
 test('loadOmiAppChangelogs names GET rows and omits failures', async () => {
   const request = jest.fn(async () => ({
     id: 'changelogs',
