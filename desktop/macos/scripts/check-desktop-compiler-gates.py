@@ -27,7 +27,8 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_DESKTOP_ROOT = SCRIPT_DIR.parent / "Desktop"
 
-COMPILER_GATE_RE = re.compile(r"^\s*#(?:if|elseif)\s+compiler\s*\(")
+DIRECTIVE_RE = re.compile(r"^\s*#(?:if|elseif)\b(.*)$")
+COMPILER_CALL_RE = re.compile(r"\bcompiler\s*\(")
 SCANNED_SUBROOTS = ("Sources", "Tests")
 
 
@@ -72,14 +73,84 @@ def _is_allowed(finding: Finding, root: Path, allowlist: tuple[AllowlistEntry, .
     )
 
 
+def _active_code_lines(text: str) -> list[tuple[int, str]]:
+    """Yield (line_number, code) with Swift strings and comments stripped.
+
+    Line numbers stay aligned with the original file so findings point at the
+    directive, not at a collapsed buffer. Nested ``/* */`` is Swift-legal.
+    """
+    lines = text.splitlines()
+    active: list[tuple[int, str]] = []
+    in_block = 0
+    in_string: str | None = None
+    for line_number, original in enumerate(lines, start=1):
+        out: list[str] = []
+        i = 0
+        while i < len(original):
+            ch = original[i]
+            nxt = original[i + 1] if i + 1 < len(original) else ""
+            if in_string:
+                out.append(" ")
+                if ch == "\\" and nxt:
+                    i += 2
+                    continue
+                if ch == in_string:
+                    in_string = None
+                i += 1
+                continue
+            if in_block:
+                if ch == "*" and nxt == "/":
+                    in_block -= 1
+                    i += 2
+                    continue
+                if ch == "/" and nxt == "*":
+                    in_block += 1
+                    i += 2
+                    continue
+                i += 1
+                continue
+            if ch == "/" and nxt == "/":
+                break
+            if ch == "/" and nxt == "*":
+                in_block += 1
+                i += 2
+                continue
+            if ch in "\"'":
+                in_string = ch
+                out.append(" ")
+                i += 1
+                continue
+            out.append(ch)
+            i += 1
+        active.append((line_number, "".join(out)))
+    return active
+
+
 def find_compiler_gates(path: Path) -> list[Finding]:
-    """Return every active ``#if compiler(...)``/``#elseif compiler(...)`` line."""
+    """Return every active ``#if``/``#elseif`` whose condition calls ``compiler(``."""
     findings: list[Finding] = []
-    text = path.read_text(encoding="utf-8", errors="replace")
-    for line_number, line in enumerate(text.splitlines(), start=1):
-        if COMPILER_GATE_RE.match(line):
-            findings.append(Finding(path=path, line_number=line_number, line=line))
+    original_lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    text = "\n".join(original_lines)
+    for line_number, active in _active_code_lines(text):
+        match = DIRECTIVE_RE.match(active)
+        if not match:
+            continue
+        if not COMPILER_CALL_RE.search(match.group(1)):
+            continue
+        raw = original_lines[line_number - 1] if 0 < line_number <= len(original_lines) else active
+        findings.append(Finding(path=path, line_number=line_number, line=raw))
     return findings
+
+
+def scan_root_errors(desktop_root: Path) -> list[str]:
+    """Fail closed when the checker would otherwise scan nothing."""
+    present = [name for name in SCANNED_SUBROOTS if (desktop_root / name).is_dir()]
+    if not present:
+        return [f"missing Sources/ and Tests/ under {desktop_root}"]
+    swift_count = sum(1 for name in present for _ in (desktop_root / name).rglob("*.swift"))
+    if swift_count == 0:
+        return [f"no .swift files under {desktop_root}/Sources or Tests"]
+    return []
 
 
 def find_all_compiler_gates(
@@ -110,6 +181,12 @@ def main() -> int:
         help="Desktop package root containing Sources/ and Tests/ (default: the real tree)",
     )
     args = parser.parse_args()
+    root_errors = scan_root_errors(args.root)
+    if root_errors:
+        print("FAIL: compiler-gate checker scanned nothing:", file=sys.stderr)
+        for error in root_errors:
+            print(f"  {error}", file=sys.stderr)
+        return 1
 
     violations, allowed = find_all_compiler_gates(args.root)
     for finding in allowed:

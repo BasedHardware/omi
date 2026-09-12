@@ -192,6 +192,43 @@ class DesktopCompilerGatesTests(unittest.TestCase):
             )
             self.assertEqual(removed.returncode, 0, removed.stderr + removed.stdout)
 
+    def test_combined_predicate_is_flagged(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            path = self._write(
+                root,
+                "Sources/MainWindow/GlassTabBar.swift",
+                "#if os(macOS) && compiler(>=6.2)\nlet bar = 1\n#endif\n",
+            )
+
+            violations, _ = self.guard.find_all_compiler_gates(root)
+
+            self.assertEqual([finding.path for finding in violations], [path])
+            self.assertIn("compiler(>=6.2)", violations[0].line)
+
+    def test_block_commented_directive_is_inactive(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            self._write(
+                root,
+                "Sources/MainWindow/Legacy.swift",
+                "/*\n#if compiler(>=6.2)\nlet hidden = 1\n#endif\n*/\nlet visible = 1\n",
+            )
+
+            violations, _ = self.guard.find_all_compiler_gates(root)
+
+            self.assertEqual(violations, [])
+
+    def test_cli_fails_closed_when_scan_root_is_empty(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            empty = subprocess.run(
+                [sys.executable, str(GUARD_PATH), "--root", temp_dir],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(empty.returncode, 1, empty.stderr)
+            self.assertIn("scanned nothing", empty.stderr)
+
     def test_real_desktop_tree_has_no_compiler_gates(self):
         violations, _ = self.guard.find_all_compiler_gates(REAL_DESKTOP_ROOT)
 
