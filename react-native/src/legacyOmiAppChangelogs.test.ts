@@ -302,6 +302,62 @@ test('keeps GET app changelog app_version longer than 10000', () => {
   ]);
 });
 
+test('keeps GET app changelogs when a non-changelog type exceeds 64', () => {
+  const type = 'f'.repeat(65);
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-feature',
+          type,
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        {
+          id: 'ann-good',
+          type: 'changelog',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-good:0',
+      title: "What's New in 1.2.0",
+      copy: 'Offline replay',
+    },
+  ]);
+});
+
+test('keeps GET app changelogs when a non-changelog type exceeds 10000', () => {
+  const type = 'f'.repeat(10001);
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-feature',
+          type,
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Skip me', description: ''}]},
+        },
+        {
+          id: 'ann-good',
+          type: 'changelog',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-good:0',
+      title: "What's New in 1.2.0",
+      copy: 'Offline replay',
+    },
+  ]);
+});
+
 test('keeps GET app changelogs when an announcement id exceeds 256', () => {
   const id = 'a'.repeat(257);
   expect(

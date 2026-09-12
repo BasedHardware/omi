@@ -61,7 +61,7 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
       break;
     }
     const row = object(raw);
-    const type = visibleDisplayText(text(row.type, 64));
+    const type = visibleDisplayText(text(row.type, 1_000_000));
     if (type !== 'changelog') {
       continue;
     }
