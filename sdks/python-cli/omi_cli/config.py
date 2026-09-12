@@ -250,7 +250,11 @@ def _ensure_private_config_parents(path: Path) -> None:
             break
         directory = parent
     for directory in reversed(missing):
-        directory.mkdir(mode=0o700, exist_ok=True)
+        old_umask = os.umask(0o077)
+        try:
+            directory.mkdir(mode=0o700, exist_ok=True)
+        finally:
+            os.umask(old_umask)
 
 
 def save(config: Config) -> None:

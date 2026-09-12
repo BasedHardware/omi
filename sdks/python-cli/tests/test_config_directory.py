@@ -53,3 +53,15 @@ def test_failed_save_does_not_chmod_parent(tmp_path, monkeypatch) -> None:
     with pytest.raises(ValueError):
         cfg.save(cfg.Config(path=tmp_path / "config.toml"))
     assert stat.S_IMODE(tmp_path.stat().st_mode) == 0o750
+
+
+def test_new_directory_is_traversable_under_restrictive_umask(tmp_path) -> None:
+    path = tmp_path / "nested" / "config.toml"
+    old_umask = os.umask(0o177)
+    try:
+        cfg.save(cfg.Config(path=path))
+    finally:
+        os.umask(old_umask)
+    assert path.is_file()
+    assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
