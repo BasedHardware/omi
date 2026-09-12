@@ -50,8 +50,10 @@ static NSURL *OmiValidatedV5URL(NSString *value);
 
 static BOOL OmiSoftwarePlaneIsNew(void) {
   NSString *stored = [NSUserDefaults.standardUserDefaults stringForKey:OmiSoftwarePlaneDefaultsKey];
-  if (stored.length > 0) return [stored isEqualToString:@"new"];
-  return OmiValidatedV5URL(NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"]) != nil;
+  BOOL stamped = OmiValidatedV5URL(NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"]) != nil;
+  return omi_backend_software_plane_is_new(
+    [stored isKindOfClass:NSString.class] ? stored.UTF8String : nullptr,
+    stamped ? 1 : 0) == 1;
 }
 
 static NSString *OmiSoftwarePlaneValue(void) {

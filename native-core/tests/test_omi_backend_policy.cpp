@@ -115,12 +115,23 @@ static void test_hosts() {
          "untrusted");
 }
 
+static void test_software_plane() {
+  expect(omi_backend_software_plane_is_new(nullptr, 1) == 1, "stamped new");
+  expect(omi_backend_software_plane_is_new(nullptr, 0) == 0, "stamped old");
+  expect(omi_backend_software_plane_is_new("", 1) == 1, "empty stored new");
+  expect(omi_backend_software_plane_is_new("new", 0) == 1, "stored new");
+  expect(omi_backend_software_plane_is_new("old", 1) == 0, "stored old");
+  expect(omi_backend_software_plane_is_new("unexpected", 1) == 0,
+         "unknown stored");
+}
+
 int main() {
   test_route_strip();
   test_capture_paths();
   test_timeouts();
   test_example_platform();
   test_hosts();
+  test_software_plane();
   if (failures != 0) {
     std::cerr << failures << " failure(s)\n";
     return 1;
