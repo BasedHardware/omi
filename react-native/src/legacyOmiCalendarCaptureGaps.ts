@@ -129,7 +129,7 @@ export function parseOmiCalendarCaptureGaps(
   const seen = new Set<string>();
   for (const raw of rows) {
     const row = object(raw);
-    const eventId = visibleDisplayText(text(row.event_id, 256));
+    const eventId = visibleDisplayText(text(row.event_id, 10000));
     if (eventId === '') {
       throw new CaptureGapError();
     }
