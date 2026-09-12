@@ -36,6 +36,8 @@ import {
 } from '../chatClient';
 import {omiBackend} from '../omiNative';
 import {
+  conversationHasFinishClock,
+  conversationListDurationCopy,
   conversationListEmoji,
   conversationListNewCopy,
   conversationListTag,
@@ -1125,6 +1127,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               item.finishedAt,
               recapNow,
             ),
+            ...(conversationHasFinishClock(item)
+              ? {duration: conversationListDurationCopy(item)}
+              : {}),
             title: conversationRecapTitle(item),
           }))
         : [];

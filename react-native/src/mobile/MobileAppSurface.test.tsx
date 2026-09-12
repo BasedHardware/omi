@@ -983,6 +983,45 @@ test('Daily Recaps name GET structured.emoji and list tags without inventing def
   expect(renderedText(plain)).not.toContain('✨');
 });
 
+test('Daily Recaps name GET duration instead of title-only', () => {
+  const withDuration = render({
+    recaps: [
+      {
+        id: 'recap-duration',
+        title: 'Product review',
+        dateLabel: 'Yesterday',
+        duration: '< 1 min',
+      },
+    ],
+  });
+  expect(renderedText(withDuration)).toContain('< 1 min');
+
+  const unavailable = render({
+    recaps: [
+      {
+        id: 'recap-unavailable',
+        title: 'Product review',
+        dateLabel: 'Yesterday',
+        duration: 'Duration unavailable',
+      },
+    ],
+  });
+  expect(renderedText(unavailable)).toContain('Duration unavailable');
+
+  const processing = render({
+    recaps: [
+      {
+        id: 'recap-processing-clock',
+        title: 'Product review',
+        dateLabel: 'Yesterday',
+        processing: true,
+      },
+    ],
+  });
+  expect(renderedText(processing)).not.toContain('< 1 min');
+  expect(renderedText(processing)).not.toContain('Duration unavailable');
+});
+
 test('Daily Recaps name Flutter New chrome instead of the day clock', () => {
   const flagged = render({
     recaps: [

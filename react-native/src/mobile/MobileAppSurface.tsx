@@ -71,6 +71,7 @@ export type MobileRecap = {
   emoji?: string | null;
   tag?: string | null;
   newCopy?: string | null;
+  duration?: string;
 };
 
 export type MobileDeviceState = {
@@ -307,6 +308,9 @@ const RecapCard = memo(function RecapCard({
           style={styles.recapStar}>
           Processing
         </Text>
+      ) : null}
+      {recap.duration != null && recap.duration !== '' ? (
+        <Text style={styles.recapDate}>{recap.duration}</Text>
       ) : null}
       <Text style={styles.recapDate}>{recap.newCopy ?? recap.dateLabel}</Text>
     </View>
