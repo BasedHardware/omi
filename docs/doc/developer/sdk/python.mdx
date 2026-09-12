@@ -92,7 +92,13 @@ The SDK requires the Opus audio codec library:
     ```
     0. Omi [7F52EC55-50C9-D1B9-E8D7-19B83217C97D]
     ```
-  </Step>
+    For scripted discovery, emit JSON with a bounded scan:
+
+    ```bash
+    omi-scan --json --timeout 3
+    # [{"name": "Omi", "id": "7F52EC55-50C9-D1B9-E8D7-19B83217C97D"}]
+    ```
+</Step>
   <Step title="Write Your Code">
     ```python
     import asyncio
