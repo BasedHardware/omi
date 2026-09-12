@@ -37,7 +37,7 @@ def _router(fixtures):
             if url.endswith(suffix):
                 body, status = payload if isinstance(payload, tuple) else (payload, 200)
                 return _response(body, status)
-        return _response({})
+        return _response({}, 404)
 
     return fake_get, calls
 
@@ -104,6 +104,48 @@ class GetAllListsTests(unittest.TestCase):
         result, _ = self._run(fixtures)
 
         self.assertEqual({lst["id"] for lst in result}, {"list-a", "list-b"})
+
+    def test_duplicate_list_names_in_two_folders_keep_distinct_identities(self):
+        fixtures = {
+            "/team/team-1/space": {"spaces": [{"id": "space-1", "name": "Ops"}]},
+            "/space/space-1/list": {"lists": []},
+            "/space/space-1/folder": {
+                "folders": [
+                    {"id": "fold-a", "name": "Projects"},
+                    {"id": "fold-b", "name": "Archive"},
+                ]
+            },
+            "/folder/fold-a/list": {"lists": [{"id": "list-1", "name": "Sprint"}]},
+            "/folder/fold-b/list": {"lists": [{"id": "list-2", "name": "Sprint"}]},
+        }
+        result, _ = self._run(fixtures)
+        by_ident = {
+            clickup_client.ClickUpClient.list_identity(lst): lst["id"] for lst in result
+        }
+        self.assertEqual(by_ident["Sprint (Projects)"], "list-1")
+        self.assertEqual(by_ident["Sprint (Archive)"], "list-2")
+        self.assertEqual(
+            clickup_client.ClickUpClient.resolve_list(result, "Sprint (Projects)")["id"],
+            "list-1",
+        )
+        self.assertIsNone(clickup_client.ClickUpClient.resolve_list(result, "Sprint"))
+
+    def test_unique_bare_list_name_still_resolves(self):
+        lists = [
+            {"id": "list-a", "name": "Inbox", "space_name": "Ops"},
+            {"id": "list-b", "name": "Sprint", "folder_name": "Projects", "space_name": "Ops"},
+        ]
+        hit = clickup_client.ClickUpClient.resolve_list(lists, "Inbox")
+        self.assertEqual(hit["id"], "list-a")
+        self.assertEqual(
+            clickup_client.ClickUpClient.list_identity(lists[0]),
+            "Inbox (Ops)",
+        )
+
+    def test_unknown_fixture_url_is_not_an_empty_200(self):
+        fake_get, _ = _router({"/known": {"ok": True}})
+        resp = fake_get("https://api.clickup.com/api/v2/space/x/unknown")
+        self.assertEqual(resp.status_code, 404)
 
 
 if __name__ == "__main__":

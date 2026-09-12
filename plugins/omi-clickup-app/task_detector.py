@@ -1,9 +1,11 @@
 import re
+from collections import Counter
 from typing import Optional, Tuple, List
 from openai import AsyncOpenAI
 import os
 from datetime import datetime
 from dotenv import load_dotenv
+from clickup_client import ClickUpClient
 
 load_dotenv()
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -79,18 +81,8 @@ class TaskDetector:
         current_date_str = now.strftime("%A, %B %d, %Y at %I:%M %p")
         current_iso = now.strftime("%Y-%m-%d")
         
-        # Create list mapping for AI
-        list_names = [lst["name"] for lst in available_lists]
-        list_map = {lst["name"]: lst["id"] for lst in available_lists}
-        
-        # Include space names for better context
-        list_with_spaces = []
-        for lst in available_lists:
-            space_name = lst.get("space_name", "")
-            if space_name:
-                list_with_spaces.append(f"{lst['name']} (in {space_name})")
-            else:
-                list_with_spaces.append(lst['name'])
+        list_names = [ClickUpClient.list_identity(lst) for lst in available_lists]
+        list_with_spaces = list_names
         
         # Create member mapping for AI
         member_names = []
@@ -311,37 +303,39 @@ CRITICAL RULES:
                 print(f"⚠️  No list identified in command", flush=True)
                 return None, None, task_name, description, priority, due_date, assignee_ids
             
-            # Get list ID from map (case insensitive)
-            list_id = None
-            for name, id in list_map.items():
-                if name.lower() == list_name.lower():
-                    list_id = id
-                    list_name = name  # Use exact name from map
-                    break
+            resolved = ClickUpClient.resolve_list(available_lists, list_name)
+            list_id = resolved["id"] if resolved else None
+            if resolved:
+                list_name = ClickUpClient.list_identity(resolved)
             
             if not list_id:
-                # Try fuzzy match - more flexible matching
+                # Try fuzzy match on identities. Duplicate bare names stay
+                # unresolved unless the spoken text includes the folder.
                 list_name_lower = list_name.lower()
                 best_match = None
                 best_score = 0
+                name_counts = Counter((lst.get("name") or "") for lst in available_lists)
                 
                 for lst in available_lists:
-                    name = lst["name"].lower()
+                    name = ClickUpClient.list_identity(lst).lower()
+                    bare = (lst.get("name") or "").lower()
+                    ambiguous_bare = name_counts[lst.get("name") or ""] > 1
                     
-                    # Exact match
                     if name == list_name_lower:
                         best_match = lst
                         break
+                    if bare == list_name_lower and not ambiguous_bare:
+                        best_match = lst
+                        break
+                    if ambiguous_bare and list_name_lower == bare:
+                        continue
                     
-                    # Contains match
                     if list_name_lower in name or name in list_name_lower:
-                        # Score based on length similarity
                         score = min(len(list_name_lower), len(name)) / max(len(list_name_lower), len(name))
                         if score > best_score:
                             best_score = score
                             best_match = lst
                     
-                    # Word match (e.g., "manufacturing" in "Manufacturing Tasks")
                     list_words = list_name_lower.split()
                     name_words = name.split()
                     for word in list_words:
@@ -353,7 +347,7 @@ CRITICAL RULES:
                 
                 if best_match:
                     list_id = best_match["id"]
-                    matched_name = best_match["name"]
+                    matched_name = ClickUpClient.list_identity(best_match)
                     print(f"🔍 Fuzzy matched '{list_name}' to '{matched_name}' (score: {best_score:.2f})", flush=True)
                     list_name = matched_name
             
@@ -384,7 +378,7 @@ CRITICAL RULES:
         if not available_lists:
             return None
         
-        list_names = [lst["name"] for lst in available_lists]
+        list_names = [ClickUpClient.list_identity(lst) for lst in available_lists]
         
         try:
             response = await client.chat.completions.create(
@@ -426,22 +420,16 @@ User said: "xyz123" (not in list) → NONE"""
             if matched.upper() == "NONE":
                 return None
             
-            # Find the list with this name
-            for lst in available_lists:
-                if lst["name"].lower() == matched.lower():
-                    print(f"🎯 AI matched '{spoken_list}' → {lst['name']}", flush=True)
-                    return lst
+            resolved = ClickUpClient.resolve_list(available_lists, matched)
+            if resolved:
+                print(f"🎯 AI matched '{spoken_list}' → {ClickUpClient.list_identity(resolved)}", flush=True)
+                return resolved
             
             return None
             
         except Exception as e:
             print(f"⚠️  AI list matching failed: {e}", flush=True)
-            # Fallback to simple matching
-            spoken_lower = spoken_list.lower()
-            for lst in available_lists:
-                if lst["name"].lower() == spoken_lower:
-                    return lst
-            return None
+            return ClickUpClient.resolve_list(available_lists, spoken_list)
     
     @classmethod
     def clean_content(cls, content: str) -> str:

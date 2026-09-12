@@ -13,6 +13,42 @@ class ClickUpClient:
         self.client_id = os.getenv("CLICKUP_CLIENT_ID")
         self.client_secret = os.getenv("CLICKUP_CLIENT_SECRET")
         self.base_url = "https://api.clickup.com/api/v2"
+
+    @staticmethod
+    def list_identity(lst: Dict) -> str:
+        """Stable display/AI name. Folder-contained lists include the folder so
+        two same-named lists in one space do not collapse to one ID."""
+        name = lst.get("name") or ""
+        folder = (lst.get("folder_name") or "").strip()
+        space = (lst.get("space_name") or "").strip()
+        if folder:
+            return f"{name} ({folder})"
+        if space:
+            return f"{name} ({space})"
+        return name
+
+    @staticmethod
+    def resolve_list(available_lists: List[Dict], spoken: str) -> Optional[Dict]:
+        """Resolve a spoken/AI list name to one list. Duplicate bare names
+        require the folder-qualified identity; they never collapse to one ID."""
+        if not spoken or not available_lists:
+            return None
+        spoken_l = spoken.strip().lower()
+        identity_hits = [
+            lst for lst in available_lists
+            if ClickUpClient.list_identity(lst).lower() == spoken_l
+        ]
+        if len(identity_hits) == 1:
+            return identity_hits[0]
+        if len(identity_hits) > 1:
+            return None
+        bare_hits = [
+            lst for lst in available_lists
+            if (lst.get("name") or "").lower() == spoken_l
+        ]
+        if len(bare_hits) == 1:
+            return bare_hits[0]
+        return None
     
     def get_authorization_url(self, redirect_uri: str, state: str) -> str:
         """Generate ClickUp OAuth authorization URL."""

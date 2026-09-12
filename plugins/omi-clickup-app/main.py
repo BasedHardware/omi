@@ -90,7 +90,7 @@ async def monitor_session_timeouts():
                                 if list_id:
                                     for lst in lists:
                                         if lst["id"] == list_id:
-                                            list_name = lst["name"]
+                                            list_name = ClickUpClient.list_identity(lst)
                                             break
                             
                             if list_id and task_name and len(task_name.strip()) >= 3:
@@ -248,8 +248,7 @@ async def root(uid: str = Query(None)):
     list_options = '<option value="">Select a list...</option>'
     for lst in lists:
         selected_attr = 'selected' if lst['id'] == selected_list else ''
-        space_name = lst.get('space_name', '')
-        display_name = f"{lst['name']}" + (f" ({space_name})" if space_name else "")
+        display_name = ClickUpClient.list_identity(lst)
         list_options += f'<option value="{lst["id"]}" {selected_attr}>{display_name}</option>'
     
     return HTMLResponse(content=f"""
@@ -871,7 +870,7 @@ async def process_segments(
                     # Find list name
                     for lst in lists:
                         if lst["id"] == list_id:
-                            list_name = lst["name"]
+                            list_name = ClickUpClient.list_identity(lst)
                             break
                     print(f"📌 Using default list: {list_name}", flush=True)
                 else:
@@ -971,7 +970,7 @@ async def process_segments(
                 if list_id:
                     for lst in lists:
                         if lst["id"] == list_id:
-                            list_name = lst["name"]
+                            list_name = ClickUpClient.list_identity(lst)
                             break
                     print(f"📌 Using default list: {list_name}", flush=True)
                 else:
