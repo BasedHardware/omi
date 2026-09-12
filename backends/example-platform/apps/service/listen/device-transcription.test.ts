@@ -43,6 +43,15 @@ test("completed empty segments join to empty text like production Listen GET", (
   });
 });
 
+test("completed SQL-null providerResult cannot be served as success", () => {
+  expect(
+    deviceTranscriptionProjection({
+      ...completed,
+      providerResult: null,
+    }),
+  ).toBeNull();
+});
+
 test("failed Listen transcripts keep the stored errorCode without inventing empty success text", () => {
   expect(
     deviceTranscriptionProjection({

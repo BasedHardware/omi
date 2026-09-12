@@ -98,8 +98,10 @@ export function createPostgresFirebaseDeviceSessionRuntime(options: PostgresFire
               },
             });
           if (record === null) return error(404, "device_session_not_found");
+          const transcription = deviceTranscriptionProjection(record);
+          if (transcription === null) return nestedNonRetryable("service_unavailable");
           const pending = record.state === "queued" || record.state === "running";
-          return Response.json({ transcription: deviceTranscriptionProjection(record) }, {
+          return Response.json({ transcription }, {
             status: match[2] === "transcribe" && pending ? 202 : 200,
             headers: { "cache-control": "no-store", ...(pending ? { "retry-after": "2" } : {}) },
           });

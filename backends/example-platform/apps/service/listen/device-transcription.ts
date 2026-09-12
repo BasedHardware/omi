@@ -24,6 +24,7 @@ export interface DeviceTranscriptionRepository {
 }
 
 export function deviceTranscriptionProjection(record: DeviceTranscriptionRecord) {
+  if (record.state === "completed" && record.providerResult === null) return null;
   const result = record.state === "completed" ? record.providerResult : null;
   return Object.freeze({ sessionId: record.sessionId, state: record.state,
     text: result === null ? null : result.segments.map(segment => segment.text).join(" "),
