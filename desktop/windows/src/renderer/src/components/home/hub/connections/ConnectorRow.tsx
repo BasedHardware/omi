@@ -43,7 +43,7 @@ export function ConnectorRow(props: {
           (Icon && <Icon className="h-[17px] w-[17px] text-home-secondary" strokeWidth={1.75} />)}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="text-[14px] font-semibold text-home-ink">{title}</div>
+        <div className="truncate text-[14px] font-semibold text-home-ink">{title}</div>
         {/* One line, clamped: a longer status/description must never make one row
             taller than its siblings (the Sticky Notes row used to wrap and stand
             proud of the list). */}
