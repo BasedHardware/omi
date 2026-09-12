@@ -1418,3 +1418,49 @@ test('old chat history names GET followUp text and omits empty or send chips', (
   expect(serialized).not.toContain('preparedAnswer');
   expect(serialized).not.toContain('onSend');
 });
+
+test('keeps GET chat content_blocks when more than 24', () => {
+  const blocks = Array.from({length: 25}, (_, index) => ({
+    type: 'followUp',
+    text: `Follow-up ${index}?`,
+  }));
+  const thinking = Array.from({length: 25}, (_, index) => ({
+    type: 'thinking',
+    id: `think-${index}`,
+    text: `Thought ${index}`,
+  }));
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'blocks-long',
+        sender: 'ai',
+        text: 'Here is what I found.',
+        created_at: '2026-09-07T01:02:03Z',
+        content_blocks: blocks,
+      },
+      {
+        id: 'fallback-long',
+        sender: 'ai',
+        text: '',
+        created_at: '2026-09-07T01:02:04Z',
+        content_blocks: thinking,
+      },
+      {
+        id: 'neighbor',
+        sender: 'ai',
+        text: 'Neighbor stays.',
+        created_at: '2026-09-07T01:02:05Z',
+      },
+    ]),
+    0,
+  );
+  expect(
+    page.messages.find(row => row.id === 'blocks-long')?.contentBlocks,
+  ).toEqual(blocks.map((_, index) => ({eyebrow: `Follow-up ${index}?`})));
+  expect(page.messages.find(row => row.id === 'fallback-long')?.text).toBe(
+    thinking.map((_, index) => `Thinking - Thought ${index}`).join('\n'),
+  );
+  expect(page.messages.find(row => row.id === 'neighbor')?.text).toBe(
+    'Neighbor stays.',
+  );
+});

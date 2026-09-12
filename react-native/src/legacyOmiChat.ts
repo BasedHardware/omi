@@ -759,7 +759,7 @@ function parseOmiChatContentBlocks(
     if (raw === null) {
       return [];
     }
-    return raw.slice(0, 24).flatMap(parseContentBlock);
+    return raw.flatMap(parseContentBlock);
   } catch {
     return [];
   }
@@ -772,7 +772,6 @@ function parseOmiChatFallbackText(row: Record<string, unknown>): string {
       return '';
     }
     return raw
-      .slice(0, 24)
       .flatMap(block => {
         if (parseContentBlock(block).length > 0) {
           return [];
