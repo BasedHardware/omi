@@ -225,7 +225,7 @@ def parse_datetime(dt_str: str) -> tuple[datetime, bool]:
 
     # Default: try to parse as ISO format
     try:
-        parsed = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(dt_str.replace("z", "+00:00"))
         if parsed.tzinfo is not None:
             # Convert the instant to UTC wall time before dropping tzinfo so
             # callers that attach timeZone: UTC do not shift the event.
