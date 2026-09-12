@@ -337,6 +337,45 @@ const insertChatMessage = async (input: {
     .run();
 };
 
+const insertCompletedAssistantTerminal = async (input: {
+  id: string;
+  accountId: string;
+  text: string;
+  createdAt: number;
+  position: number;
+  chatSessionId: string | null;
+  appId?: string | null;
+}) => {
+  const message = {
+    id: input.id,
+    text: input.text,
+    sender: "ai" as const,
+    type: "text",
+    createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+    chatSessionId: input.chatSessionId,
+    appId: input.appId ?? null,
+    journalRevision: 0,
+    payloadHash: "sha256:test",
+    messageSource: "assistant_generation",
+    rating: null,
+    reported: false,
+    generationOutcome: "completed" as const,
+    revision: String(input.position),
+    attachments: [],
+  };
+  await d1Mock
+    .prepare(
+      "INSERT INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '2', 2, ?)"
+    )
+    .bind(
+      input.id,
+      input.accountId,
+      JSON.stringify({ id: "2", kind: "done", message })
+    )
+    .run();
+};
+
 beforeEach(() => {
   d1Mock = createD1Mock();
   admissions.clear();
@@ -2614,6 +2653,14 @@ describe("worker request contract", () => {
       chatSessionId: "title-ai",
       sender: "ai",
     });
+    await insertCompletedAssistantTerminal({
+      id: "title-ai",
+      accountId: "test-account",
+      text: "Assistant words",
+      createdAt: 2,
+      position: 2,
+      chatSessionId: "title-ai",
+    });
 
     const listed = await fetchWorker("/v1/conversations", {
       headers: authenticatedHeaders,
@@ -2653,6 +2700,14 @@ describe("worker request contract", () => {
       position: 2,
       chatSessionId: "overview-visible",
       sender: "ai",
+    });
+    await insertCompletedAssistantTerminal({
+      id: "overview-later",
+      accountId: "test-account",
+      text: "Later speech",
+      createdAt: 150,
+      position: 2,
+      chatSessionId: "overview-visible",
     });
     await insertChatMessage({
       id: "overview-nel",
@@ -2789,6 +2844,14 @@ describe("worker request contract", () => {
       position: 2,
       chatSessionId: "still-open",
       sender: "ai",
+    });
+    await insertCompletedAssistantTerminal({
+      id: "chat-open-ai",
+      accountId: "test-account",
+      text: "Answered",
+      createdAt: 20,
+      position: 2,
+      chatSessionId: "still-open",
     });
 
     const listed = await fetchWorker("/v1/conversations", {
