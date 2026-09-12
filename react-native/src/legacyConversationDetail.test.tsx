@@ -280,6 +280,38 @@ test('keeps GET calendar event when start_time or end_time exceeds 100', async (
   });
 });
 
+test('keeps GET calendar event when start_time or end_time exceeds 10000', async () => {
+  const startTime = `2026-09-10T15:00:00.${'0'.repeat(9980)}Z`;
+  const endTime = `2026-09-10T16:00:00.${'0'.repeat(9980)}Z`;
+  expect(startTime.length).toBe(10001);
+  expect(endTime.length).toBe(10001);
+  const clock = (iso: string) =>
+    new Date(Date.parse(iso)).toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-long-clock',
+        title: 'Standup',
+        attendees: [],
+        start_time: startTime,
+        end_time: endTime,
+      },
+    }),
+  );
+  const loaded = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(loaded.title).toBe(fixture.structured.title);
+  expect(loaded.calendarEvent).toEqual({
+    title: 'Standup',
+    attendees: [],
+    startCopy: clock('2026-09-10T15:00:00.000Z'),
+    endCopy: clock('2026-09-10T16:00:00.000Z'),
+  });
+});
+
 test('names GET transcript translations and omits empty or missing lists', async () => {
   mockRequest.mockResolvedValue(
     response({
