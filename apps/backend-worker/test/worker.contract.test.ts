@@ -1737,6 +1737,73 @@ describe("worker request contract", () => {
     });
   });
 
+  test("conversations GET does not omit a neighboring row when completed segment windows are not objects", async () => {
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_sessions (id, account_id, device_id, codec, state, r2_prefix, started_at, ended_at, created_at, updated_at) VALUES (?, ?, 'pendant', 21, 'complete', ?, 1, 1, 1, 1)"
+      )
+      .bind("session-readable-windows", "test-account", "r2-readable-windows")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_transcriptions (session_id, account_id, state, available_at, text, updated_at) VALUES (?, ?, 'completed', 1, 'Recorded words', 1)"
+      )
+      .bind("session-readable-windows", "test-account")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_sessions (id, account_id, device_id, codec, state, r2_prefix, started_at, ended_at, created_at, updated_at) VALUES (?, ?, 'pendant', 21, 'complete', ?, 2, 2, 2, 2)"
+      )
+      .bind(
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01",
+        "test-account",
+        "r2-nonobject-windows"
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO device_transcriptions (session_id, account_id, state, available_at, text, segments, updated_at) VALUES (?, ?, 'completed', 1, 'Stored speech', ?, 2)"
+      )
+      .bind(
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01",
+        "test-account",
+        JSON.stringify(["invalid"])
+      )
+      .run();
+
+    const envelope = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(envelope.status).toBe(500);
+    expect(envelope.headers.get("retry-after")).toBeNull();
+    expect((await envelope.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+
+    const offset = await fetchWorker("/v1/conversations?limit=50&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    expect(offset.status).toBe(500);
+    expect(offset.headers.get("retry-after")).toBeNull();
+    expect((await offset.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+
+    const transcript = await fetchWorker(
+      "/v1/device-sessions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01/transcript",
+      { headers: authenticatedHeaders }
+    );
+    expect(transcript.status).toBe(503);
+    expect(transcript.headers.get("retry-after")).toBeNull();
+    expect((await transcript.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
+  });
+
   test("conversations GET does not omit a neighboring row when completed text is SQL-null", async () => {
     await d1Mock
       .prepare(

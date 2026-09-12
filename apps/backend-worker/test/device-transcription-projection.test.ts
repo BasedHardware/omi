@@ -49,6 +49,22 @@ describe("device transcription client projection", () => {
     expect(projectDeviceTranscription(null)).toBeNull();
   });
 
+  test("completed JSON-array segments with no well-formed string windows cannot be served as success", () => {
+    for (const segments of [
+      ["invalid"],
+      [{ start: 0, end: 0.1, text: 1 }],
+      [null],
+    ]) {
+      expect(
+        projectDeviceTranscription({
+          ...completed,
+          text: "Stored speech",
+          segments: JSON.stringify(segments),
+        })
+      ).toBeNull();
+    }
+  });
+
   test("failed GET hides leftover speech like production Listen", () => {
     expect(
       projectDeviceTranscription({

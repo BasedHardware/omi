@@ -367,6 +367,12 @@ export function projectDeviceTranscription(
   }
   const segments = parseStoredTranscriptSegments(row.segments);
   if (segments === null) return null;
+  if (
+    joinWellFormedSegmentTexts(segments, false) === null &&
+    joinWellFormedSegmentTexts(segments, true) === null
+  ) {
+    return null;
+  }
   return {
     sessionId: row.sessionId,
     state: row.state,
