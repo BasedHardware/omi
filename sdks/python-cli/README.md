@@ -112,6 +112,9 @@ State lives at `~/.omi/config.toml` (overridable via `$OMI_CONFIG`). The file
 holds one or more named profiles, each with its own auth method and API base.
 Saving configuration preserves unknown settings at both the root and profile
 levels, so editing a known setting does not discard extensions from newer clients.
+If saving fails during serialization or atomic replacement, the CLI attempts to
+remove its own temporary file and reports the original error. It leaves other
+writers' temporary files alone; cleanup is best-effort if the filesystem refuses it.
 Switch between them with `--profile`:
 
 ```bash

@@ -282,6 +282,61 @@ def test_save_retries_when_unique_temp_name_collides(config_path: Path, monkeypa
     assert reloaded.api_key == "omi_dev_retry"
 
 
+@pytest.mark.parametrize("failure_type", [PermissionError, KeyboardInterrupt, SystemExit])
+def test_save_cleans_own_temp_when_replace_fails(config_path: Path, monkeypatch, failure_type) -> None:
+    config = cfg.load()
+    profile = config.get_profile()
+    profile.auth_method = "api_key"
+    profile.api_key = "omi_dev_original"
+    cfg.save(config)
+    original = config_path.read_bytes()
+    other_temp = config_path.with_suffix(".toml.other-writer.tmp")
+    other_temp.write_bytes(b"another writer")
+    profile.api_key = "omi_dev_replacement"
+    failure = failure_type("replacement interrupted or failed")
+    attempted = []
+
+    def fail_replace(source, destination):
+        attempted.append(Path(source))
+        assert Path(destination) == config_path
+        assert b"omi_dev_replacement" in Path(source).read_bytes()
+        raise failure
+
+    monkeypatch.setattr(cfg.os, "replace", fail_replace)
+    with pytest.raises(failure_type) as exc:
+        cfg.save(config)
+
+    assert exc.value is failure
+    assert config_path.read_bytes() == original
+    assert attempted and not attempted[0].exists()
+    assert other_temp.read_bytes() == b"another writer"
+
+
+@pytest.mark.parametrize("failure_type", [PermissionError, KeyboardInterrupt, SystemExit])
+def test_save_cleanup_failure_preserves_replace_error(config_path: Path, monkeypatch, failure_type) -> None:
+    config = cfg.load()
+    config.get_profile().api_key = "omi_dev_synthetic"
+    failure = failure_type("replacement interrupted or failed")
+    cleanup_attempts = []
+
+    def fail_replace(source, destination):
+        raise failure
+
+    def fail_unlink(path):
+        cleanup_attempts.append(Path(path))
+        raise OSError("cleanup also failed")
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(cfg.os, "replace", fail_replace)
+        patcher.setattr(cfg.os, "unlink", fail_unlink)
+        with pytest.raises(failure_type) as exc:
+            cfg.save(config)
+
+    assert exc.value is failure
+    assert len(cleanup_attempts) == 1
+    cleanup_attempts[0].unlink()
+
+
 def test_save_concurrent_writers_retry_on_unique_name_collision(config_path: Path) -> None:
     """Real interleaving: a nested save() inside the first writer's dump
     claims a temp path; the outer writer's own path cannot collide with it
