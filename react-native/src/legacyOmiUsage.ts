@@ -1,6 +1,6 @@
 import type {OmiBackend} from './omiNativeTypes';
 
-export type OmiUsagePeriod = 'monthly' | 'yearly' | 'all_time';
+export type OmiUsagePeriod = 'today' | 'monthly' | 'yearly' | 'all_time';
 
 export type OmiUsageStats = {
   transcriptionSeconds: number;

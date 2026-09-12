@@ -21,7 +21,6 @@ import {
   accountFieldCopy,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
-  usageStatsCopy,
   usagePeriodStatsCopy,
   subscriptionPeriodCopy,
   primaryLanguageCopy,
@@ -942,7 +941,7 @@ export function DesktopSettings({
           <Row copy={account.usageError} title="Remembering" />
         </>
       ) : (
-        usageStatsCopy(account?.usage)?.map(row => (
+        usagePeriodStatsCopy('Today', account?.usage)?.map(row => (
           <Row copy={row.copy} key={row.title} title={row.title} />
         ))
       )}

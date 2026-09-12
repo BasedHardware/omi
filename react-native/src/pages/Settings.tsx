@@ -34,7 +34,6 @@ import {
   connectionIdentityCopy,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
-  usageStatsCopy,
   usagePeriodStatsCopy,
   subscriptionPeriodCopy,
   primaryLanguageCopy,
@@ -832,7 +831,7 @@ export function SettingsPage({
             <SettingRow copy={snapshot.usageError} title="Remembering" />
           </>
         ) : (
-          usageStatsCopy(snapshot.usage)?.map(row => (
+          usagePeriodStatsCopy('Today', snapshot.usage)?.map(row => (
             <SettingRow copy={row.copy} key={row.title} title={row.title} />
           ))
         )}

@@ -2750,13 +2750,13 @@ test('Settings names GET usage today without Upgrade', async () => {
       .props.onPress();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Listening');
+  expect(tree).toContain('Today · Listening');
   expect(tree).toContain('2 minutes');
-  expect(tree).toContain('Understanding');
+  expect(tree).toContain('Today · Understanding');
   expect(tree).toContain('12 words');
-  expect(tree).toContain('Providing');
+  expect(tree).toContain('Today · Providing');
   expect(tree).toContain('3 insights');
-  expect(tree).toContain('Remembering');
+  expect(tree).toContain('Today · Remembering');
   expect(tree).toContain('1 memories');
   expect(tree).not.toContain('Upgrade');
 });

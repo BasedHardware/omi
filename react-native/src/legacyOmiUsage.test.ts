@@ -43,6 +43,25 @@ test('parses GET usage period buckets and omits missing periods', () => {
   expect(
     parseOmiUsagePeriod(
       JSON.stringify({
+        today: {
+          transcription_seconds: 90,
+          words_transcribed: 12,
+          insights_gained: 3,
+          memories_created: 1,
+          speech_seconds: 99,
+        },
+      }),
+      'today',
+    ),
+  ).toEqual({
+    transcriptionSeconds: 90,
+    wordsTranscribed: 12,
+    insightsGained: 3,
+    memoriesCreated: 1,
+  });
+  expect(
+    parseOmiUsagePeriod(
+      JSON.stringify({
         all_time: {
           transcription_seconds: 0,
           words_transcribed: 0,
@@ -121,6 +140,30 @@ test('loadOmiUsagePeriod names resolved GET periods and omits failures', async (
   expect(
     request.mock.calls.some(call => `${call[0].path}`.includes('period=today')),
   ).toBe(false);
+  request.mockResolvedValueOnce({
+    id: 'usage',
+    status: 200,
+    body: JSON.stringify({
+      today: {
+        transcription_seconds: 90,
+        words_transcribed: 12,
+        insights_gained: 3,
+        memories_created: 1,
+      },
+    }),
+  });
+  expect(await loadOmiUsagePeriod(backend, 'today')).toEqual({
+    transcriptionSeconds: 90,
+    wordsTranscribed: 12,
+    insightsGained: 3,
+    memoriesCreated: 1,
+  });
+  expect(request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/users/me/usage?period=today',
+  });
   request.mockResolvedValueOnce({id: 'usage', status: 404, body: null});
   expect(await loadOmiUsagePeriod(backend, 'yearly')).toBeNull();
   request.mockResolvedValueOnce({id: 'usage', status: 200, body: '{'});

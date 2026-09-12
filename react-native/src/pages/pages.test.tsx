@@ -1191,6 +1191,7 @@ test('Settings names GET usage today without Upgrade', async () => {
             words_transcribed: 12,
             insights_gained: 3,
             memories_created: 1,
+            speech_seconds: 99,
           },
         }),
       };
@@ -1199,15 +1200,16 @@ test('Settings names GET usage today without Upgrade', async () => {
   });
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Listening');
+  expect(tree).toContain('Today · Listening');
   expect(tree).toContain('2 minutes');
-  expect(tree).toContain('Understanding');
+  expect(tree).toContain('Today · Understanding');
   expect(tree).toContain('12 words');
-  expect(tree).toContain('Providing');
+  expect(tree).toContain('Today · Providing');
   expect(tree).toContain('3 insights');
-  expect(tree).toContain('Remembering');
+  expect(tree).toContain('Today · Remembering');
   expect(tree).toContain('1 memories');
   expect(tree).not.toContain('Upgrade');
+  expect(tree).not.toContain('99');
 });
 
 test('Settings names a failed usage today GET instead of empty success', async () => {
