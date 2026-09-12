@@ -147,10 +147,10 @@ omi --json memory list | jq '.[] | {id, content, category}'
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
 
 # 미해결 액션 아이템 나열
-omi --json action-item list --open | jq '.[] | {id, title, due_at}'
+omi --json action-item list --open | jq '.[] | {id, description, due_at}'
 
 # 목표 나열
-omi --json goal list | jq '.[] | {id, title, progress: .progress_percent}'
+omi --json goal list | jq '.[] | {id, title, current: .current_value, target: .target_value}'
 ```
 
 ---
@@ -188,7 +188,7 @@ omi auth login
 | `command not found: omi` | PATH에 pipx bin 디렉터리가 없음 | `pipx ensurepath` 실행 후 터미널 재시작 |
 | `401 Unauthorized` | API 키가 잘못되었거나 만료됨 | app.omi.me에서 새 키 생성 및 업데이트 |
 | `connection refused` | Omi 서버에 대한 네트워크 접근 없음 | 인터넷 연결 및 프록시 설정 확인 |
-| 설정 파일에 대한 `permission denied` | 설정 디렉터리에 쓸 수 없음 | `~/.config/omi` 권한 확인 |
+| 설정 파일에 대한 `permission denied` | 설정 디렉터리에 쓸 수 없음 | `~/.omi/config.toml` 권한 확인 |
 
 ---
 
