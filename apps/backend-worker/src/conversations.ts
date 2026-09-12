@@ -160,6 +160,12 @@ export async function readConversations(
       updated_at: number;
     }>();
   for (const recording of recordings.results) {
+    if (
+      typeof recording.id !== "string" ||
+      !/^[!-~]{1,256}$/.test(recording.id)
+    ) {
+      throw new UnprojectableConversationRecordError();
+    }
     const parsed =
       recording.segments === null
         ? null

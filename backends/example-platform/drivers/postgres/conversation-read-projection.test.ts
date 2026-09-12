@@ -151,6 +151,27 @@ test("rejects corrupt, ambiguous, oversized or reordered snapshots instead of si
   ).toThrow();
 });
 
+test("rejects listen session_id that exceeds printable ASCII 256 or carries whitespace", () => {
+  expect(() =>
+    parseConversationReadSnapshot({
+      revision: 1,
+      records: [row({ device: false, session_id: "x".repeat(257) })],
+    })
+  ).toThrow();
+  expect(() =>
+    parseConversationReadSnapshot({
+      revision: 1,
+      records: [row({ device: false, session_id: "session space" })],
+    })
+  ).toThrow();
+  expect(
+    parseConversationReadSnapshot({
+      revision: 1,
+      records: [row({ device: false, session_id: "x".repeat(256) })],
+    }).records[0]?.record.id
+  ).toBe("conversation-one");
+});
+
 test("device capture provenance survives the canonical page without replacing server lifecycle times", () => {
   for (const capturedAtMs of [undefined, null, 0, 8640000000000000]) {
     const snapshot = parseConversationReadSnapshot({
