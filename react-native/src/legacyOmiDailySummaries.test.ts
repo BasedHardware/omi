@@ -121,6 +121,23 @@ test('keeps GET daily summaries when date or day_emoji is longer than 32', () =>
   ]);
 });
 
+test('keeps GET daily summaries when a summary id exceeds 256', () => {
+  const id = 's'.repeat(257);
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {id, headline: 'Met with the team'},
+          {id: 'sum-kept', headline: 'Shipped the recap'},
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id, date: '', headline: 'Met with the team'},
+    {id: 'sum-kept', date: '', headline: 'Shipped the recap'},
+  ]);
+});
+
 test('fails closed for malformed GET daily summaries', () => {
   expect(() => parseOmiDailySummaries(JSON.stringify([]))).toThrow();
   expect(() =>
