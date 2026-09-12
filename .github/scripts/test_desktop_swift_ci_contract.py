@@ -167,6 +167,14 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """
         job = self.jobs["desktop-swift-verify"]
         self.assertIn('OMI_SWIFT_TEST_SUITE_BATCH_SIZE: "100"', job)
+        suite_timeout_match = re.search(
+            r'OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS: "(\d+)"', job
+        )
+        if suite_timeout_match is None:
+            self.fail(
+                "desktop-swift-verify must set OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS"
+            )
+        suite_timeout_seconds = int(suite_timeout_match.group(1))
         match = re.search(
             r'OMI_SWIFT_TEST_BATCH_CEILING_SECONDS: "(\d+)"', job
         )
@@ -212,22 +220,50 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         # pays healthy-run + ceiling + bisect. At a 1500s ceiling that was
         # ~2400s against an 1800s guard, and three runs failed exactly there
         # (34609469561, 34641438446, 34655499561) with zero failing suites.
-        measured_healthy_step_seconds = 900  # 780s and 873s on green runs
+        ordinary_healthy_step_seconds = 900  # 780s and 873s on green runs
         bisect_allowance_seconds = 200  # two halves, measured 48-57s each
         pr_step_budget_seconds = 1800
+        # The workflow's own budget comment: the PR lane measures ~12m at
+        # batch 100, and ~24m worst case for auth PRs that wake the deferred
+        # serial cluster.
+        serial_wake_healthy_step_seconds = 24 * 60
         self.assertIn(
             "'pr' && '1800'",
             self.jobs["desktop-swift-verify"],
-            "the PR lane's step budget moved; re-derive the ceiling bound "
+            "the PR lane's step budget moved; re-derive the ceiling bounds "
             "below against the new number",
         )
         self.assertLessEqual(
-            measured_healthy_step_seconds + ceiling + bisect_allowance_seconds,
+            ordinary_healthy_step_seconds + ceiling + bisect_allowance_seconds,
             pr_step_budget_seconds,
             f"ceiling {ceiling}s does not fit the PR lane's "
             f"{pr_step_budget_seconds}s step budget: one wedged batch on top "
-            f"of a healthy ~{measured_healthy_step_seconds}s run would fail "
+            f"of an ordinary ~{ordinary_healthy_step_seconds}s run would fail "
             f"the step with nothing wrong in the suite",
+        )
+
+        # Scope, stated as an assertion rather than left implicit: the bound
+        # above covers the ordinary PR-lane run, which is where all three
+        # observed failures happened. It does NOT cover a PR that wakes the
+        # serial cluster. There, the step is already ~1440s, so a wedge plus
+        # its bisect has ~160s of headroom — less than one suite's own 300s
+        # budget, i.e. below any ceiling a batch of 100 could honestly carry.
+        # No value of this ceiling rescues that case; only not wedging does.
+        # If this assertion ever fails, a ceiling CAN cover the serial-wake
+        # case and the bound above should be re-derived against it instead.
+        serial_wake_headroom_seconds = (
+            pr_step_budget_seconds
+            - serial_wake_healthy_step_seconds
+            - bisect_allowance_seconds
+        )
+        self.assertLess(
+            serial_wake_headroom_seconds,
+            suite_timeout_seconds,
+            f"a serial-cluster PR now leaves {serial_wake_headroom_seconds}s "
+            f"for a wedged batch, at or above the {suite_timeout_seconds}s "
+            f"per-suite budget: the ceiling can cover that case too, so bound "
+            f"it against the ~{serial_wake_healthy_step_seconds}s worst case "
+            f"rather than the ordinary run",
         )
 
     def test_no_closed_pull_request_runs_exist(self):

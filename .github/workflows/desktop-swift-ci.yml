@@ -292,12 +292,20 @@ jobs:
           # zero failing suites and one `exit=143` batch at the cap, whose
           # halves then passed in under 60s apiece.
           #
-          # 600s keeps a wedged run inside the step guard (870 + 600 + the
-          # ~105s bisect) while staying ~9x the slowest healthy batch of 100
-          # observed (67s). A batch that genuinely needs more is not killed,
-          # only re-run in halves. The local default stays 25 and every
-          # invocation logs its wall seconds, so a regression is visible in
-          # the run log.
+          # 600s keeps a wedged ORDINARY run inside the step guard (870 +
+          # 600 + the ~105s bisect) while staying ~9x the slowest healthy
+          # batch of 100 observed (67s). A batch that genuinely needs more is
+          # not killed, only re-run in halves.
+          #
+          # Scope, because it is not universal: a PR that wakes the deferred
+          # serial cluster already spends ~24m of the 30m step, so a wedge
+          # there has ~160s of room — less than one suite's own 300s budget,
+          # which no ceiling for a batch of 100 can honestly sit below. That
+          # case is not rescued by any value here; it needs the wedge itself
+          # fixed. All three observed failures were ordinary runs.
+          #
+          # The local default stays 25 and every invocation logs its wall
+          # seconds, so a regression is visible in the run log.
           OMI_SWIFT_TEST_SUITE_BATCH_SIZE: "100"
           OMI_SWIFT_TEST_BATCH_CEILING_SECONDS: "600"
           # PRs defer ratcheted slow suites (swift-test-slow-suites.json) to
