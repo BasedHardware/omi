@@ -30,13 +30,19 @@ const runCreateMemory = (inputData) =>
   });
 
 describe('creates.create_memory', () => {
+  // A request that stops matching the interceptor must fail here, not fall
+  // through to the live Modal endpoint — nock allows real connections unless
+  // they are disabled.
+  beforeAll(() => nock.disableNetConnect());
   afterEach(() => nock.cleanAll());
+  afterAll(() => nock.enableNetConnect());
 
   it('sends the input fields as the request body', async () => {
     // Regression: `body` was an async function with no return, so the POST went
-    // out empty and the API rejected every Zap run with a 422. Expected field
-    // names and the required/optional split come from
-    // ZapierActionCreateConversation in plugins/zapier/models.py.
+    // out empty and the API rejected every Zap run with a 422. Field names come
+    // from ZapierActionCreateConversation in plugins/zapier/models.py; text and
+    // source are required there — language is optional server-side but required
+    // by this action's inputFields.
     const { scope, getPostedBody } = mockCreateMemory();
 
     const results = await runCreateMemory({
@@ -82,6 +88,28 @@ describe('creates.create_memory', () => {
       text: 'Hello',
       source: 'other_text',
       language: 'en',
+    });
+  });
+
+  it('sends a geolocation with only the required coordinates', async () => {
+    // latitude/longitude are the only required children in the backend
+    // Geolocation model; the optional children must be absent from the posted
+    // body, not nulled or emptied into it.
+    const { scope, getPostedBody } = mockCreateMemory();
+
+    await runCreateMemory({
+      text: 'Hello',
+      source: 'other_text',
+      language: 'en',
+      geolocation: { latitude: 37.422, longitude: -122.084 },
+    });
+
+    expect(scope.isDone()).toBe(true);
+    expect(getPostedBody()).toEqual({
+      text: 'Hello',
+      source: 'other_text',
+      language: 'en',
+      geolocation: { latitude: 37.422, longitude: -122.084 },
     });
   });
 });
