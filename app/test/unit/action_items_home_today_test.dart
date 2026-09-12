@@ -118,4 +118,39 @@ void main() {
     expect(provider.todayPreviewTasks(now: now).map((i) => i.id), ['first-page-due']);
     provider.dispose();
   });
+
+  test('failed due-window fetch does not pin Home; a later call can load', () async {
+    final hiddenDue = _item(id: 'hidden-due', completed: false, dueAt: now);
+    var dueAttempts = 0;
+    final provider = ActionItemsProvider(
+      getActionItems: ({
+        limit = 50,
+        offset = 0,
+        completed,
+        conversationId,
+        startDate,
+        endDate,
+        dueStartDate,
+        dueEndDate,
+      }) async {
+        if (dueStartDate != null || dueEndDate != null) {
+          dueAttempts += 1;
+          if (dueAttempts == 1) {
+            throw StateError('due-window unavailable');
+          }
+          return ActionItemsResponse(actionItems: [hiddenDue], hasMore: false);
+        }
+        return const ActionItemsResponse(actionItems: [], hasMore: false);
+      },
+    );
+
+    await provider.ensureHomeTodayTasksLoaded(now: now);
+    expect(provider.todayPreviewTasks(now: now), isEmpty);
+    expect(dueAttempts, 1);
+
+    await provider.ensureHomeTodayTasksLoaded(now: now);
+    expect(provider.todayPreviewTasks(now: now).map((i) => i.id), ['hidden-due']);
+    expect(dueAttempts, 2);
+    provider.dispose();
+  });
 }

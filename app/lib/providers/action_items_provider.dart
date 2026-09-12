@@ -216,8 +216,11 @@ class ActionItemsProvider extends ChangeNotifier {
   Future<void> ensureHomeTodayTasksLoaded({DateTime? now}) {
     final existing = _homeTodayLoad;
     if (existing != null) return existing;
+    if (_homeDayLoaded) return Future.value();
 
-    final load = _fetchHomeTodayTasks(now: now ?? DateTime.now());
+    final load = _fetchHomeTodayTasks(now: now ?? DateTime.now()).whenComplete(() {
+      _homeTodayLoad = null;
+    });
     _homeTodayLoad = load;
     return load;
   }
