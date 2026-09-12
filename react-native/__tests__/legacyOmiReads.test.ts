@@ -183,6 +183,26 @@ test('old discarded conversations name GET transcript start/end numeric strings'
   expect(result.items[0]).toMatchObject({transcriptEndSeconds: 120});
 });
 
+test('old conversations keep GET timestamps Flutter DateTime.tryParse accepts', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'space-created',
+      created_at: '2026-09-07 00:00:00Z',
+    },
+    {
+      ...conversation,
+      id: 'neighbor',
+    },
+  ]);
+  const result = await loadConversations(api);
+  expect(result.items.map(row => row.id)).toEqual([
+    'space-created',
+    'neighbor',
+  ]);
+  expect(result.items[0]?.createdAt).toBe('2026-09-07T00:00:00.000Z');
+});
+
 test('old conversations keep wire-non-empty category and omit whitespace', async () => {
   const {api} = backend([
     {

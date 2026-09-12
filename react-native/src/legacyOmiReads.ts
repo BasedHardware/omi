@@ -41,11 +41,7 @@ function bool(value: unknown, fallback = false): boolean {
 }
 function date(value: unknown): string | null {
   if (value === undefined || value === null) return null;
-  if (
-    typeof value !== 'string' ||
-    !/^\d{4}-\d{2}-\d{2}T/.test(value) ||
-    !Number.isFinite(Date.parse(value))
-  )
+  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value)))
     throw new Error('Omi timestamp is malformed');
   return new Date(value).toISOString();
 }
