@@ -14,6 +14,11 @@ checks:
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
+  - id: hive-errors-payload-tests
+    command: ["python3", "plugins/omi-hive-app/test_errors_payload.py"]
+    triggers: ["plugins/omi-hive-app/**"]
+    lanes: ["local", "ci"]
+    reason: "tool handlers indexed result[\"errors\"][0] on presence alone, so an empty or non-list errors payload surfaced 'list index out of range' instead of the API error"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]

@@ -787,7 +787,7 @@ async def tool_hive_create_task(request: Request):
         result = hive_rest_request(uid, "POST", "actions/create", data=create_data)
         
         if "errors" in result:
-            error_msg = result["errors"][0].get("message", "Unknown error")
+            error_msg = get_graphql_error(result) or "Unknown error"
             return ChatToolResponse(error=f"Failed to create task: {error_msg}")
         
         success_msg = f"✅ Created task **{task_name}** in project **{target_project.name}**!"
@@ -903,7 +903,7 @@ async def tool_hive_update_task_status(request: Request):
         result = hive_rest_request(uid, "PUT", f"actions/{task_id}", data={"status": hive_status})
         
         if "errors" in result:
-            error_msg = result["errors"][0].get("message", "Unknown error")
+            error_msg = get_graphql_error(result) or "Unknown error"
             return ChatToolResponse(error=f"Failed to update task: {error_msg}")
             
         return ChatToolResponse(
