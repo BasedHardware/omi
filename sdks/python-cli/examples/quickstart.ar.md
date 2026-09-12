@@ -1,6 +1,6 @@
 # البدء باستخدام omi-cli
 
-[English reference](README.md) · [التوثيق الكامل](https://docs.omi.me/doc/developer/cli/introduction)
+[English reference](../README.md) · [التوثيق الكامل](https://docs.omi.me/doc/developer/cli/introduction)
 
 تتيح أداة `omi-cli` الوصول من الطرفية إلى الذكريات والمحادثات والمهام والأهداف
 المحفوظة في حساب Omi. هذا دليل بدء مختصر، وليس ترجمة لكل خيارات الأداة.
@@ -104,7 +104,7 @@ omi config path
 ```
 
 يمكن حفظ أكثر من ملف إعدادات مسمّى داخل هذا الملف. يشرح
-[قسم Profiles](README.md#profiles) كيفية اختيار الحساب المناسب.
+[قسم Profiles](../README.md#profiles) كيفية اختيار الحساب المناسب.
 لا تشارك ملف الإعدادات؛ قد يحتوي على بيانات اعتماد.
 
 ```shell
@@ -116,4 +116,4 @@ omi auth logout
 
 هذا الدليل يستخدم واجهة Omi السحابية. أوامر `omi local` لها إعداد منفصل
 وتحتاج إلى تطبيق Omi Desktop يعمل ويوفر واجهته المحلية؛ راجع
-[Local Omi Desktop API](README.md#local-omi-desktop-api).
+[Local Omi Desktop API](../README.md#local-omi-desktop-api).
