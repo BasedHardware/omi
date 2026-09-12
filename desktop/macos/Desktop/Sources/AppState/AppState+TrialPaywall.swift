@@ -24,11 +24,18 @@ extension AppState {
   /// cloud model usage; a reason names WHICH feature is asking, so each one
   /// gets exactly the exemption its own model/network path earns:
   ///
-  /// - `"chat"`/`"ptt"`: the completion itself always runs against the
-  ///   user's own server under Local (`AIProvider.currentProviderMode`
-  ///   never routes text to Omi regardless of the cloud-assist setting), so
-  ///   the free-tier question quota does not apply: `isLocalProviderActive`
+  /// - `"chat"`: the completion itself always runs against the user's own
+  ///   server under Local (`AIProvider.currentProviderMode` never routes
+  ///   text to Omi regardless of the cloud-assist setting), so the
+  ///   free-tier question quota does not apply: `isLocalProviderActive`
   ///   alone is enough.
+  /// - `"ptt"`: exempted for a different reason than `"chat"` — a PTT turn
+  ///   does NOT run its completion against the user's own server. Online,
+  ///   it runs end to end (audio in, transcript, and the reply) inside
+  ///   Omi's cloud realtime hub, regardless of the active chat provider.
+  ///   This is a client-side suppression of the free-tier popup only (a
+  ///   Local user shouldn't see an "upgrade to Omi AI" message); the server
+  ///   still enforces its own realtime quota independently of this check.
   /// - `"screen_capture"`: matches `isScreenCaptureExemptFromPaywall`'s
   ///   Local-specific clause exactly, so this backstop can never disagree
   ///   with the leaf gate it backstops (see `isScreenCaptureExemptFromPaywall`'s
