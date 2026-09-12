@@ -1365,6 +1365,17 @@ describe("kernel ContextSnapshot", () => {
     expect(applyContextBudget(payload, 20_000, 50)).toEqual(trimmed);
   });
 
+  it("applyContextBudget keeps a wrapped non-object payload within maxChars too", () => {
+    // Regression: the non-object branch wraps the trimmed value as
+    // `{ value, contextBudget }`, adding a `,"value":` key the budget
+    // reservation didn't account for, so the wrapped result could overshoot
+    // maxChars by exactly that many characters.
+    const oversized = "x".repeat(5_000);
+    const result = applyContextBudget(oversized, 1_000, 50) as { value: string; contextBudget: unknown };
+    expect(stableJsonStringify(result).length).toBeLessThanOrEqual(1_000);
+    expect(result.contextBudget).toMatchObject({ truncated: true, percent: 50 });
+  });
+
   it("truncates an oversized workspace source payload through a full render at 50% budget, and leaves it untouched at 100%", () => {
     const { store, session } = fixture("main_chat");
     const item = "a".repeat(1_000);
@@ -1431,6 +1442,52 @@ describe("kernel ContextSnapshot", () => {
     const payload = deltaPayload(delta.rendered);
     expect(payload.contextDelivery.includedTurnCount).toBe(0);
     expect(delta.rendered).toContain('"recentTurns":[]');
+    store.close();
+  });
+
+  it("reports the budgeted contextPlan (not the raw one) on a delta that follows a budgeted full render", () => {
+    // Regression: the delta path used to compute contextPlan from the raw,
+    // never-budgeted snapshot, so a later turn's delta would tell the model
+    // "all N turns are retained, nothing omitted" even though the prior full
+    // render's budget had already told it only the most recent slice was
+    // available. This fires on essentially every follow-up turn (the plan's
+    // dynamicContextIdentity changes whenever a turn is added), so `full`
+    // below intentionally leads into one real delta, not a no-op one.
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-budget-delta-plan",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "budget-delta-plan" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    for (let sequence = 1; sequence <= 10; sequence += 1) {
+      recordJournalTurn(store, journalTurn(
+        "owner-budget-delta-plan", surface.conversationId, `bdp-turn-${sequence}`, `budget delta plan canonical turn ${sequence}`, sequence,
+      ));
+    }
+    const first = buildContextSnapshot(store, surface.agentSessionId, "owner-budget-delta-plan", 10);
+    const full = renderContextSnapshotForBinding(first, "main_chat", "coordinator", undefined, { percent: 50 });
+    expect(full.deliveryMode).toBe("full");
+    const fullPayload = renderedPayload(full.rendered);
+    expect(fullPayload.contextPlan).toMatchObject({
+      retainedTurnCount: 5, omittedTurnCount: 5, olderHistoryStrategy: "truncated", contextBudgetPercent: 50,
+    });
+
+    recordJournalTurn(store, journalTurn(
+      "owner-budget-delta-plan", surface.conversationId, "bdp-turn-11", "budget delta plan canonical turn 11", 11,
+    ));
+    const second = buildContextSnapshot(store, surface.agentSessionId, "owner-budget-delta-plan", 11);
+    const delta = renderContextSnapshotForBinding(second, "main_chat", "coordinator", full.next, { percent: 50 });
+    expect(delta.deliveryMode).toBe("delta");
+    const deltaHeader = deltaPayload(delta.rendered);
+    const deltaBody = renderedPayload(delta.rendered);
+    // The plan changed (a turn was added), so it must be present in the delta.
+    expect(deltaHeader.contextDelivery.unchangedSections).not.toContain("contextPlan");
+    expect(deltaBody.contextPlan).toMatchObject({
+      omittedTurnCount: (deltaBody.contextPlan.totalTurnCount as number) - (deltaBody.contextPlan.retainedTurnCount as number),
+      olderHistoryStrategy: "truncated",
+      contextBudgetPercent: 50,
+    });
+    expect(deltaHeader.contextDelivery.retainedTurnCount).toBe(deltaBody.contextPlan.retainedTurnCount);
     store.close();
   });
 });

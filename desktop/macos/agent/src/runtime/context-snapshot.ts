@@ -699,12 +699,15 @@ export function applyContextBudget(payload: unknown, maxChars: number, percent: 
   const originalJson = stableJsonStringify(payload);
   if (originalJson.length <= maxChars) return payload;
   // Reserve room for the marker itself so the final JSON (content + marker)
-  // still fits within maxChars; slightly conservative for the wrapped
-  // (non-object) shape, which is fine since callers only need "at most".
+  // still fits within maxChars. A non-object payload adds a `"value":` key
+  // around the trimmed content on top of the marker (see the wrap below), so
+  // its overhead must be reserved too or the wrapped result can overshoot
+  // maxChars by exactly that much.
   const markerOverhead = stableJsonStringify({
     contextBudget: { truncated: true, droppedChars: originalJson.length, percent },
   }).length;
-  const contentBudget = Math.max(0, maxChars - markerOverhead);
+  const wrapperOverhead = isPlainObject(payload) ? 0 : ',"value":'.length;
+  const contentBudget = Math.max(0, maxChars - markerOverhead - wrapperOverhead);
   const trimmed = trimValueToBudget(payload, contentBudget);
   const droppedChars = Math.max(0, originalJson.length - stableJsonStringify(trimmed).length);
   const marker: ContextBudgetMarker = { truncated: true, droppedChars, percent };
@@ -781,11 +784,15 @@ function budgetedRecentTurns<T>(recentTurns: T[], percent: number): T[] {
 }
 
 /**
- * Applies the retained-turn budget to a full render's recentTurns and
- * reflects the drop in the fields the plan already reports (omittedTurnCount,
- * olderHistoryStrategy), plus contextBudgetPercent so the model knows a
- * budget is active. Only used for full renders: delta selection is
- * deliberately unaffected by budget (see renderContextSnapshotForBinding).
+ * Applies the retained-turn budget to recentTurns and reflects the drop in
+ * the fields the plan already reports (omittedTurnCount, olderHistoryStrategy),
+ * plus contextBudgetPercent so the model knows a budget is active. Used both
+ * to trim a full render's recentTurns AND (via renderContextSnapshotForBinding)
+ * to derive the budgeted contextPlan a delta reports — turn *selection* on
+ * the delta path stays unaffected by budget (delta only ever sends turns
+ * whose hash changed), but the *plan* must match what a full render would
+ * have said, or a later delta can tell the model retained turns are
+ * available that an earlier budgeted full render already dropped.
  */
 function applyTurnBudgetForFullRender(
   snapshot: Pick<ContextSnapshotProjection, "recentTurns" | "contextPlan">,
@@ -934,8 +941,16 @@ export function renderContextSnapshotForBinding(
     return !unchanged;
   });
 
+  // applyTurnBudgetForFullRender is normally only used for full renders (see
+  // its doc comment), but the *plan* it derives must also be what the delta
+  // path reports: contextPlan here would otherwise be the raw, unbudgeted
+  // plan (retainedTurnCount/omittedTurnCount/contextBudgetPercent all wrong),
+  // contradicting the budgeted plan a prior full render already told the
+  // model. Turn *selection* stays unaffected by budget either way (delta
+  // only ever sends turns whose hash changed, per the comment above).
+  const budgetedContextPlan = applyTurnBudgetForFullRender(snapshot, budget).contextPlan;
   const relevant = relevantSnapshotMaterial(
-    { ...snapshot, recentTurns: changedTurns, sourceOutcomes: deltaSourceOutcomes },
+    { ...snapshot, recentTurns: changedTurns, sourceOutcomes: deltaSourceOutcomes, contextPlan: budgetedContextPlan },
     surfaceKind,
     executionRole,
     budget,
@@ -956,7 +971,7 @@ export function renderContextSnapshotForBinding(
   const json = stableJsonStringify({
     contextDelivery: {
       mode: "delta",
-      retainedTurnCount: snapshot.recentTurns.length,
+      retainedTurnCount: budgetedContextPlan.retainedTurnCount,
       includedTurnCount: changedTurns.length,
       unchangedSources: unchangedSourceIds,
       unchangedSections,
