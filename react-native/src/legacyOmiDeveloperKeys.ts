@@ -60,7 +60,7 @@ function optionalScopes(value: unknown): string[] | undefined {
   }
   const scopes: string[] = [];
   for (const raw of value) {
-    const scope = visibleDisplayText(text(raw, 256));
+    const scope = visibleDisplayText(text(raw, 10000));
     if (scope === '') {
       continue;
     }
