@@ -372,6 +372,14 @@ def mint_probe_token(
                 if signer_service_account
                 else _active_service_account()
             )
+            if signer_service_account and not service_account.endswith(
+                f'@{firebase_project}.iam.gserviceaccount.com'
+            ):
+                # Same fail-closed pairing as the credentials-file path: a
+                # named signer from another project cannot mint a token
+                # Identity Toolkit accepts for this Firebase project, so
+                # reject before any IAM call.
+                raise ProbeTokenError('signer_service_account', 'project_mismatch')
             access_token = _access_token()
             custom_token = _signed_custom_token(service_account, access_token)
         else:
