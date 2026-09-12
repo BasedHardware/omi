@@ -7,15 +7,6 @@ environment_shared:
     ingress_name: '{env}-omi-llm-gateway'
   gcp_project: '{compute_project}'
   gke:
-    parakeet:
-      env:
-        PARAKEET_STREAM_CAPACITY:
-          value: '25'
-          category: reliability
-        PARAKEET_STREAM_ALLOCATION_PERCENT:
-          value: '100'
-          category: rollout
-      values_file: backend/charts/parakeet/{env}_omi_parakeet_values.yaml
     backend-listen:
       capabilities:
       - conversation.finalize.persisted
@@ -68,14 +59,14 @@ environment_shared:
           value: '{env}'
           category: runtime_identity
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: modulate-velma-2,dg-nova-3,parakeet
           category: stt_policy
         CONVERSATION_SUMMARIZED_APP_IDS:
           config_map:
             name: '{env}-omi-backend-config'
             key: CONVERSATION_SUMMARIZED_APP_IDS
         CONVERSATION_NOTES_V2_ENABLED:
-          value: 'false'
+          value: 'true'
           category: rollout
         LLM_GATEWAY_ACCOUNTING_ENABLED:
           value: 'true'
@@ -87,10 +78,8 @@ environment_shared:
           value: 'true'
           category: rollout
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-          value: 'false'
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
-          value: 'false'
           category: rollout
         WAKE_WORD_ADJUDICATION_ENABLED:
           value: 'true'
@@ -134,8 +123,6 @@ environment_shared:
             key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
         GOOGLE_CLOUD_PROJECT:
           value: '{compute_project}'
-        OMI_FIRESTORE_DATA_PLANE_PROJECT:
-          value: '{data_plane_project}'
         POSTHOG_PROJECT_API_KEY:
           secret:
             name: '{env}-omi-backend-secrets'
@@ -170,9 +157,8 @@ environment_shared:
             key: TWILIO_ACCOUNT_SID
         MEMORY_ENABLED:
           category: memory_rollout
-          value: 'off'
+          value: 'on'
         MEMORY_BELIEF_MODEL_ENABLED:
-          value: 'false'
           category: rollout
         MEMORY_TYPESENSE_COLLECTION:
           value: canonical_memory_atoms
@@ -181,10 +167,78 @@ environment_shared:
           config_map:
             name: '{env}-omi-backend-config'
             key: MCP_RESOURCE_URL
+        REFERRAL_PUBLIC_BASE_URL:
+          category: service_discovery
       values_file: backend/charts/backend-listen/{env}_omi_backend_listen_values.yaml
+    parakeet:
+      env:
+        PARAKEET_STREAM_CAPACITY:
+          value: '25'
+          category: reliability
+        PARAKEET_STREAM_ALLOCATION_PERCENT:
+          value: '100'
+          category: rollout
+      values_file: backend/charts/parakeet/{env}_omi_parakeet_values.yaml
+    pusher:
+      capabilities:
+      - conversation.finalize.persisted
+      - memory.canonical.mutate
+      values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
+      env:
+        LLM_GATEWAY_ACCOUNTING_ENABLED:
+          value: 'true'
+          category: rollout
+        MEMORY_ENABLED:
+          value: 'on'
+        CONVERSATION_NOTES_V2_ENABLED:
+          value: 'true'
+          category: rollout
+        CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+          category: rollout
+        CONVERSATION_OCR_CONTEXT_ENABLED:
+          category: rollout
+    config_map:
+      name: '{env}-omi-backend-config'
+      entries:
+        CONVERSATION_SUMMARIZED_APP_IDS:
+          source: environment
+        GOOGLE_CLIENT_ID:
+          source: environment
+        MCP_AUTHORIZATION_SERVER_URL:
+          source: environment
+        MCP_OAUTH_CHATGPT_CLIENT_ID:
+          source: environment
+        MCP_OAUTH_CHATGPT_REDIRECT_URIS:
+          source: environment
+        MCP_OAUTH_PUBLIC_CLIENT_ID:
+          source: environment
+        MCP_OAUTH_PUBLIC_REDIRECT_URIS:
+          source: environment
+        MCP_RESOURCE_URL:
+          source: environment
+        RAPID_API_HOST:
+          source: environment
+        REDIS_DB_HOST:
+          source: environment
+        STT_PRERECORDED_MODEL:
+          source: literal
+          value: parakeet,modulate-velma-2
+        STT_SERVICE_MODELS:
+          source: literal
+          value: modulate-velma-2,dg-nova-3,parakeet
+        TYPESENSE_HOST:
+          source: environment
+        TWILIO_ACCOUNT_SID:
+          source: environment
+        TWILIO_API_KEY_SID:
+          source: environment
+        TWILIO_TWIML_APP_SID:
+          source: environment
+        X_OAUTH_CLIENT_ID:
+          source: environment
+        X_OAUTH_REDIRECT_URI:
+          source: environment
   region: us-central1
-  # Separate Cloud Run release vector from gcp_backend.yml. Compose + tests pin
-  # Vertex PT; desktop_backend_*.yml is what actually deploys these env vars.
   desktop_backend:
     env:
       USE_VERTEX_AI:
@@ -193,18 +247,9 @@ environment_shared:
         value: '{compute_project}'
       GCP_LOCATION:
         value: us-central1
-      # The customer data plane (memory ledger, JIT proactivity state, screen
-      # sync) for this deployment family — see backend/database/_client.py's
-      # get_data_plane_firestore_client(). Equal to compute_project in prod by
-      # construction, so this is a no-op there; only dev's compute project
-      # (based-hardware-dev) diverges from it.
-      OMI_FIRESTORE_DATA_PLANE_PROJECT:
-        value: '{data_plane_project}'
       PROMETHEUS_SIDECAR_PORT:
         value: '9090'
         category: telemetry
-      # Direct-provider surfaces (desktop_proxy, omni_relay) write their
-      # attempts to the gateway's llm_gateway_attempts ledger under this switch.
       LLM_GATEWAY_ACCOUNTING_ENABLED:
         value: 'true'
         category: rollout
@@ -220,84 +265,12 @@ environment_shared:
       flags:
         --vpc-egress: private-ranges-only
     services:
-      backend-integration:
-        secrets:
-          GOOGLE_CLIENT_SECRET:
-            secret: GOOGLE_CLIENT_SECRET
-            version: latest
-          MODULATE_API_KEY:
-            secret: MODULATE_API_KEY
-            version: latest
-          ENCRYPTION_SECRET:
-            secret: ENCRYPTION_SECRET
-            version: latest
-          OMI_LLM_GATEWAY_SERVICE_TOKEN:
-            secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
-            version: latest
-        env:
-          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-            value: 'false'
-            category: rollout
-          OMI_LLM_GATEWAY_URL:
-            env_var: OMI_LLM_GATEWAY_URL
-            default: http://127.0.0.1:9
-            category: service_discovery
-          MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-            value: 'false'
-            category: memory_rollout
-          OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
-            category: rollout
-          OMI_LLM_CHAT_AGENT_ROUTE:
-            value: gateway
-            category: rollout
-          GOOGLE_CLIENT_ID:
-            env_var: GOOGLE_CLIENT_ID
-            category: oauth_metadata
-          USE_VERTEX_AI:
-            value: 'true'
-          OMI_ENV_STAGE:
-            value: '{env}'
-            category: runtime_identity
-          STT_PRERECORDED_MODEL:
-            value: parakeet,modulate-velma-2
-            category: stt_policy
-          HOSTED_PARAKEET_API_URL:
-            category: service_discovery
-          LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
-            value: '900'
-            category: reliability
-          MEMORY_ENABLED:
-            category: memory_rollout
-            value: 'off'
-          MEMORY_BELIEF_MODEL_ENABLED:
-            value: 'false'
-            category: rollout
-          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-            value: 'off'
-            category: rollout
-          ACCOUNT_CUTOVER_ENFORCEMENT:
-            value: 'off'
-            category: rollout
-          MEMORY_TYPESENSE_COLLECTION:
-            value: canonical_memory_atoms
-            category: memory_rollout
-          POSTHOG_HOST:
-            value: https://app.posthog.com
-            category: telemetry
-          BUCKET_FRAME_REQUESTS:
-            env_var: BUCKET_FRAME_REQUESTS
-            default: '{env}-omi-frame-requests'
-            provisional: true
-            category: storage_retention
-          BUCKET_FRAME_REQUESTS_TEMPORARY:
-            env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
-            default: '{env}-omi-frame-requests-temporary'
-            provisional: true
-            category: storage_retention
-          GCP_LOCATION:
-            value: us-central1
       backend:
+        forbidden_env:
+        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         capabilities:
         - conversation.finalize.persisted
         - memory.canonical.mutate
@@ -317,25 +290,18 @@ environment_shared:
           METRICS_SECRET:
             secret: METRICS_SECRET
             version: latest
-          # Same secret the day3-reengagement-email-job uses to MINT unsubscribe
-          # tokens; this service VERIFIES them at /email/unsubscribe. Bound on
-          # only one side, every unsubscribe link and every RFC 8058 one-click
-          # POST is a neutral 400 — the link is live, correctly addressed, and
-          # silently inert, which is the failure this whole path exists to
-          # prevent. It is here, not only on the job, for that reason.
           LIFECYCLE_EMAIL_SIGNING_SECRET:
             secret: LIFECYCLE_EMAIL_SIGNING_SECRET
+            version: latest
+          MEMORY_V3_CURSOR_SECRET:
+            secret: MEMORY_V3_CURSOR_SECRET
             version: latest
         env:
           PROMETHEUS_SIDECAR_PORT:
             value: '9090'
             category: telemetry
-          # The conversation summary pipeline runs in two services: backend-listen
-          # finalizes a live conversation, and this one runs process_conversation
-          # inline for POST /v1/conversations/{id}/reprocess. Declaring the rollout
-          # flags on only one of them makes regenerate disagree with live capture.
           CONVERSATION_NOTES_V2_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           LLM_GATEWAY_ACCOUNTING_ENABLED:
             value: 'true'
@@ -344,10 +310,8 @@ environment_shared:
             value: 'false'
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-            value: 'false'
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            value: 'false'
             category: rollout
           WAKE_WORD_ADJUDICATION_ENABLED:
             value: 'true'
@@ -415,109 +379,15 @@ environment_shared:
             category: rollout
           MEMORY_ENABLED:
             category: memory_rollout
-            value: 'off'
+            value: 'on'
           MEMORY_BELIEF_MODEL_ENABLED:
-            value: 'false'
             category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
-      backend-sync-backfill:
-        secrets:
-          GOOGLE_CLIENT_SECRET:
-            secret: GOOGLE_CLIENT_SECRET
-            version: latest
-          MODULATE_API_KEY:
-            secret: MODULATE_API_KEY
-            version: latest
-          ENCRYPTION_SECRET:
-            secret: ENCRYPTION_SECRET
-            version: latest
-          OMI_LLM_GATEWAY_SERVICE_TOKEN:
-            secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
-            version: latest
-        env:
-          OMI_LLM_GATEWAY_URL:
-            env_var: OMI_LLM_GATEWAY_URL
-            default: http://127.0.0.1:9
-            category: service_discovery
-          SYNC_BACKFILL_ENABLED:
-            provisional: true
-            value: 'true'
-            category: rollout
-          USE_VERTEX_AI:
-            value: 'true'
-          STT_PRERECORDED_MODEL:
-            value: parakeet,modulate-velma-2
-            category: stt_policy
-          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-            value: 'false'
-            category: rollout
-          OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
-            category: rollout
-          OMI_LLM_CHAT_AGENT_ROUTE:
-            value: gateway
-            category: rollout
-          SYNC_BACKFILL_USER_DAILY_HOURS:
-            provisional: true
-            value: '4'
-            category: rollout
-          GOOGLE_CLIENT_ID:
-            env_var: GOOGLE_CLIENT_ID
-            category: oauth_metadata
-          OMI_ENV_STAGE:
-            value: '{env}'
-            category: runtime_identity
-          HOSTED_PARAKEET_API_URL:
-            category: service_discovery
-          LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
-            value: '900'
-            category: reliability
-          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-            value: 'off'
-            category: rollout
-          ACCOUNT_CUTOVER_ENFORCEMENT:
-            value: 'off'
-            category: rollout
-          SYNC_BACKFILL_MAX_AGE_SECONDS:
-            provisional: true
-            value: '2592000'
-            category: rollout
-          SYNC_FRESH_MAX_AGE_SECONDS:
-            provisional: true
-            value: '21600'
-            category: rollout
-          MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-            value: 'false'
+          MEMORY_V3_CURSOR_SECRET_VERSION:
+            value: '{env}-v1'
             category: memory_rollout
-          POSTHOG_HOST:
-            value: https://app.posthog.com
-            category: telemetry
-          SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
-            provisional: true
-            value: '300'
-            category: rollout
-          GCP_LOCATION:
-            value: us-central1
-          SYNC_LEDGER_FENCE_MODE:
-            env_var: SYNC_LEDGER_FENCE_MODE
-            default: legacy
-            category: rollout
-          MEMORY_ENABLED:
-            category: memory_rollout
-            value: 'off'
-          MEMORY_BELIEF_MODEL_ENABLED:
-            value: 'false'
-            category: rollout
-          SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
-            provisional: true
-            value: '555'
-            category: rollout
-          MEMORY_TYPESENSE_COLLECTION:
-            value: canonical_memory_atoms
-            category: memory_rollout
-        provisional: true
       backend-sync:
         capabilities:
         - conversation.finalize.persisted
@@ -608,9 +478,15 @@ environment_shared:
             category: rollout
           MEMORY_ENABLED:
             category: memory_rollout
-            value: 'off'
+            value: 'on'
           MEMORY_BELIEF_MODEL_ENABLED:
-            value: 'false'
+            category: rollout
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+            category: rollout
+          CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
@@ -619,6 +495,177 @@ environment_shared:
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
+      backend-sync-backfill:
+        secrets:
+          GOOGLE_CLIENT_SECRET:
+            secret: GOOGLE_CLIENT_SECRET
+            version: latest
+          MODULATE_API_KEY:
+            secret: MODULATE_API_KEY
+            version: latest
+          ENCRYPTION_SECRET:
+            secret: ENCRYPTION_SECRET
+            version: latest
+          OMI_LLM_GATEWAY_SERVICE_TOKEN:
+            secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+            version: latest
+        env:
+          OMI_LLM_GATEWAY_URL:
+            env_var: OMI_LLM_GATEWAY_URL
+            default: http://127.0.0.1:9
+            category: service_discovery
+          SYNC_BACKFILL_ENABLED:
+            provisional: true
+            value: 'true'
+            category: rollout
+          USE_VERTEX_AI:
+            value: 'true'
+          STT_PRERECORDED_MODEL:
+            value: parakeet,modulate-velma-2
+            category: stt_policy
+          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+            value: 'false'
+            category: rollout
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: gateway
+            category: rollout
+          SYNC_BACKFILL_USER_DAILY_HOURS:
+            provisional: true
+            value: '4'
+            category: rollout
+          GOOGLE_CLIENT_ID:
+            env_var: GOOGLE_CLIENT_ID
+            category: oauth_metadata
+          OMI_ENV_STAGE:
+            value: '{env}'
+            category: runtime_identity
+          HOSTED_PARAKEET_API_URL:
+            category: service_discovery
+          LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+            value: '900'
+            category: reliability
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
+            value: 'off'
+            category: rollout
+          SYNC_BACKFILL_MAX_AGE_SECONDS:
+            provisional: true
+            value: '2592000'
+            category: rollout
+          SYNC_FRESH_MAX_AGE_SECONDS:
+            provisional: true
+            value: '21600'
+            category: rollout
+          MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+            value: 'false'
+            category: memory_rollout
+          POSTHOG_HOST:
+            value: https://app.posthog.com
+            category: telemetry
+          SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
+            provisional: true
+            value: '300'
+            category: rollout
+          GCP_LOCATION:
+            value: us-central1
+          SYNC_LEDGER_FENCE_MODE:
+            env_var: SYNC_LEDGER_FENCE_MODE
+            default: legacy
+            category: rollout
+          MEMORY_ENABLED:
+            category: memory_rollout
+            value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            category: rollout
+          SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
+            provisional: true
+            value: '555'
+            category: rollout
+          MEMORY_TYPESENSE_COLLECTION:
+            value: canonical_memory_atoms
+            category: memory_rollout
+        provisional: true
+      backend-integration:
+        secrets:
+          GOOGLE_CLIENT_SECRET:
+            secret: GOOGLE_CLIENT_SECRET
+            version: latest
+          MODULATE_API_KEY:
+            secret: MODULATE_API_KEY
+            version: latest
+          ENCRYPTION_SECRET:
+            secret: ENCRYPTION_SECRET
+            version: latest
+          OMI_LLM_GATEWAY_SERVICE_TOKEN:
+            secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+            version: latest
+        env:
+          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+            value: 'false'
+            category: rollout
+          OMI_LLM_GATEWAY_URL:
+            env_var: OMI_LLM_GATEWAY_URL
+            default: http://127.0.0.1:9
+            category: service_discovery
+          MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+            value: 'false'
+            category: memory_rollout
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: gateway
+            category: rollout
+          GOOGLE_CLIENT_ID:
+            env_var: GOOGLE_CLIENT_ID
+            category: oauth_metadata
+          USE_VERTEX_AI:
+            value: 'true'
+          OMI_ENV_STAGE:
+            value: '{env}'
+            category: runtime_identity
+          STT_PRERECORDED_MODEL:
+            value: parakeet,modulate-velma-2
+            category: stt_policy
+          HOSTED_PARAKEET_API_URL:
+            category: service_discovery
+          LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+            value: '900'
+            category: reliability
+          MEMORY_ENABLED:
+            category: memory_rollout
+            value: 'on'
+          MEMORY_BELIEF_MODEL_ENABLED:
+            category: rollout
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
+          ACCOUNT_CUTOVER_ENFORCEMENT:
+            value: 'off'
+            category: rollout
+          MEMORY_TYPESENSE_COLLECTION:
+            value: canonical_memory_atoms
+            category: memory_rollout
+          POSTHOG_HOST:
+            value: https://app.posthog.com
+            category: telemetry
+          BUCKET_FRAME_REQUESTS:
+            env_var: BUCKET_FRAME_REQUESTS
+            default: '{env}-omi-frame-requests'
+            provisional: true
+            category: storage_retention
+          BUCKET_FRAME_REQUESTS_TEMPORARY:
+            env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
+            default: '{env}-omi-frame-requests-temporary'
+            provisional: true
+            category: storage_retention
+          GCP_LOCATION:
+            value: us-central1
     jobs:
       notifications-job:
         flags:
@@ -646,10 +693,10 @@ environment_shared:
             default: http://127.0.0.1:9
             category: service_discovery
           OMI_BACKGROUND_FLEX_CAPABLE:
-            value: 'false'
+            value: 'true'
             category: memory_rollout
           DAILY_SUMMARY_SELECTION_MODE:
-            value: legacy
+            value: indexed
             category: rollout
           PINECONE_INDEX_NAME:
             category: integrations
@@ -684,6 +731,7 @@ environment_shared:
             version: latest
         flags:
           --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --task-timeout: 3600s
         env:
           BUCKET_FRAME_REQUESTS:
             env_var: BUCKET_FRAME_REQUESTS
@@ -711,10 +759,13 @@ environment_shared:
             category: rollout
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
             category: memory_rollout
+            value: 'true'
           MEMORY_CANONICAL_MAINTENANCE_FLEX:
             category: memory_rollout
+            value: 'true'
           MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
             category: memory_rollout
+            value: 'false'
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
@@ -725,9 +776,8 @@ environment_shared:
             category: memory_rollout
           MEMORY_ENABLED:
             category: memory_rollout
-            value: 'off'
+            value: 'on'
           MEMORY_BELIEF_MODEL_ENABLED:
-            value: 'false'
             category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
@@ -736,7 +786,7 @@ environment_shared:
             value: 'true'
             category: memory_rollout
           OMI_BACKGROUND_FLEX_CAPABLE:
-            value: 'false'
+            value: 'true'
             category: memory_rollout
       frame-request-retention-job:
         secrets:
@@ -760,6 +810,9 @@ environment_shared:
             default: '{env}-omi-frame-requests-temporary'
             provisional: false
             category: storage_retention
+        flags:
+          --task-timeout: 900s
+          --max-retries: '3'
       daily-memory-sweep-job:
         flags:
           --remove-env-vars: HOSTED_PUSHER_API_URL
@@ -781,43 +834,33 @@ environment_shared:
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
-          GOOGLE_CLOUD_PROJECT:
-            value: '{compute_project}'
           MEMORY_ENABLED:
-            value: 'off'
+            value: 'on'
             category: memory_rollout
           MEMORY_BELIEF_MODEL_ENABLED:
-            value: 'false'
             category: rollout
           MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
-            value: 'false'
             category: memory_rollout
           MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH:
             value: 'false'
             category: memory_rollout
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
-            value: 'false'
             category: memory_rollout
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME:
-            value: disabled
             category: memory_rollout
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES:
             value: '8'
             category: memory_rollout
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
-            value: '0'
             category: memory_rollout
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
-            value: 'false'
             category: memory_rollout
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG:
-            value: ''
             category: memory_rollout
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS:
             value: '3'
             category: memory_rollout
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
-            value: 'false'
             category: memory_rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
@@ -839,24 +882,14 @@ environment_shared:
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
-          GOOGLE_CLOUD_PROJECT:
-            value: '{compute_project}'
           MEMORY_ENABLED:
-            value: 'off'
+            value: 'on'
             category: memory_rollout
           KNOWLEDGE_LEDGER_DRAIN_ENABLED:
             value: 'false'
             category: memory_rollout
           KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
-            value: ''
             category: memory_rollout
-      # EXP-001. Ships default-off: both the enable flag and the kill switch
-      # must be set deliberately before a single message is sent.
-      #
-      # LIFECYCLE_EMAIL_SIGNING_SECRET must ALSO be present on the API service,
-      # not just here -- this job mints unsubscribe tokens and the API verifies
-      # them, so a secret configured on only one side produces links that
-      # silently fail to verify.
       day3-reengagement-email-job:
         flags:
           --remove-env-vars: HOSTED_PUSHER_API_URL
@@ -883,12 +916,6 @@ environment_shared:
             category: runtime_identity
           GOOGLE_CLOUD_PROJECT:
             value: '{compute_project}'
-          # The API origin that serves /email/unsubscribe. Set per overlay
-          # (api.omi.me / api.omiapi.com) because it differs by environment.
-          # Not the share origin: unsubscribe is a FastAPI route, and a link
-          # built from the conversation-share host 404s.
-          BASE_API_URL:
-            value: ''
           DAY3_REENGAGEMENT_EMAIL_ENABLED:
             value: 'false'
             category: lifecycle_email
@@ -897,3 +924,4 @@ environment_shared:
             category: lifecycle_email
         forbidden_env:
         - HOSTED_PUSHER_API_URL
+  compute_project: '{compute_project}'

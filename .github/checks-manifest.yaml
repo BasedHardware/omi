@@ -9,11 +9,21 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Issue #13130: exercise production list discovery across folderless and folder-contained ClickUp lists"
+  - id: omi-hacker-news-tests
+    command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
+    triggers: ["plugins/omi-hacker-news-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13211: escaped literal angle-bracket text must survive Hacker News provider markup cleaning"
   - id: usgs-earthquake-tests
     command: ["python3", "plugins/omi-usgs-earthquake-app/test_main.py"]
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
+  - id: linear-graphql-errors-tests
+    command: ["python3", "plugins/omi-linear-app/test_graphql_errors.py"]
+    triggers: ["plugins/omi-linear-app/**"]
+    lanes: ["local", "ci"]
+    reason: "linear_graphql_request indexed result['errors'][0] on key presence alone, so an empty/null/non-list errors payload crashed the error path instead of returning a clean error"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
@@ -120,7 +130,7 @@ checks:
     command: ["python3", ".github/scripts/check_release_rings.py"]
     triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/check_release_rings.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "the canonical production backend deploy remains the only release authority"
+    reason: "the canonical production backend release remains the only release authority"
   - id: backend-production-release-vector-guard-tests
     command: ["python3", ".github/scripts/test_check_release_rings.py"]
     triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
@@ -452,6 +462,11 @@ checks:
     triggers: ["web/frontend/**", "scripts/run-web-frontend-tests.sh", "config/public-build-contract.json", ".github/actions/deploy-public-build/action.yml", ".github/workflows/gcp_frontend.yml", ".github/checks-manifest.yaml", "app/android/app/src/main/AndroidManifest.xml"]
     lanes: ["local", "ci"]
     reason: "web/frontend's node --test suite had no lane, so its guards never ran in CI and a deleted frontend test had to be re-homed into a backend pytest to keep running"
+  - id: web-admin-tests
+    command: ["bash", "scripts/run-web-admin-tests.sh"]
+    triggers: ["web/admin/lib/**", "web/admin/app/api/**", "scripts/run-web-admin-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "web/admin hermetic guards (e.g. Firestore doc-id rejection) had no CI lane; pure node --test files need no npm install"
   - id: web-llm-gateway-only-tests
     command: ["python3", ".github/scripts/test_check_web_llm_gateway_only.py"]
     triggers: [".github/scripts/check_web_llm_gateway_only.py", ".github/scripts/test_check_web_llm_gateway_only.py", ".github/checks-manifest.yaml"]
@@ -912,11 +927,29 @@ checks:
     lanes: ["local", "ci"]
     reason: "hermetic fixture coverage for the duplicate-route scanner: shadowed duplicate fails with the colliding path, unique routes pass, same path on different apps is not a duplicate, api_route methods expand"
 
+  - id: slack-explicit-channel-search-tests
+    command: ["python3", "plugins/omi-slack-app/test_slack_search.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13156 executes the Slack client and chat handler to prevent unresolved explicit channels from widening search scope"
+
+  - id: slack-segments-tests
+    command: ["python3", "plugins/omi-slack-app/test_segments.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "process_segments called seg.get(\"text\") on every transcript segment, so a non-dict segment crashed the realtime webhook with AttributeError; list_channels also re-requested forever when Slack returned a repeated next_cursor"
+
   - id: notion-page-content-tests
     command: ["python3", "plugins/omi-notion-app/test_main.py"]
     triggers: ["plugins/omi-notion-app/**"]
     lanes: ["local", "ci"]
     reason: "#13181 failed content HTTP reads were indistinguishable from empty successful pages; production helper and handler regression"
+
+  - id: hey-omi-question-extraction-tests
+    command: ["python3", "plugins/notifications/test_hey_omi_extraction.py"]
+    triggers: ["plugins/notifications/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

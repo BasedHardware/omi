@@ -13,6 +13,10 @@ extension RealtimeHubController {
   /// `userInitiated: true` = direct user intent (PTT, launch, input-return);
   /// see `admitWarmRequest` — passive callers cannot clear an away deferral.
   func ensureWarm(userInitiated: Bool = false) {
+    guard !AppBuild.shouldDisableJITQARealtime else {
+      log("RealtimeHub: JIT QA realtime disabled by OMI_JIT_QA_DISABLE_REALTIME")
+      return
+    }
     guard admitWarmRequest(userInitiated: userInitiated) else { return }
     #if DEBUG
       // The local-profile action owns an already-installed hermetic transport.
@@ -63,7 +67,12 @@ extension RealtimeHubController {
       return
     }
 
-    if let key = APIKeyService.selectedRealtimeBYOKKey(for: provider.byokProvider) {
+    // Offered for a provider the user picked themselves, withheld from one reached by
+    // failover or by `.auto` resolving there — see RealtimeHubSettings.isVoiceModelChoice.
+    if let key = APIKeyService.selectedRealtimeBYOKKey(
+      for: provider.byokProvider,
+      chosenForVoice: RealtimeHubSettings.shared.isVoiceModelChoice(provider))
+    {
       let fingerprint = APIKeyService.byokFingerprint(key)
       guard
         CredentialHealthManager.shared.canUseBYOK(

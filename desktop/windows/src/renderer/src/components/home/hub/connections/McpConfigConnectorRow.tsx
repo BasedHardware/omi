@@ -145,7 +145,7 @@ export function McpConfigConnectorRow({
   return (
     <ConnectorRow
       iconNode={<ConnectorBrandMark brand={connector.brand} />}
-      title={connector.title}
+      title={connector.tool}
       description={description(connector, status)}
       action={action}
     >

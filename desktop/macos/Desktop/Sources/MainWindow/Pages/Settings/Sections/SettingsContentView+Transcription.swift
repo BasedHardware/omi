@@ -296,6 +296,33 @@ extension SettingsContentView {
         }
       }
 
+      // Silent Type
+      settingsCard(settingId: "transcription.silenttype") {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack {
+            Image(systemName: "keyboard.badge.eye")
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
+
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Silent Type")
+                .scaledFont(size: OmiType.subheading, weight: .medium)
+                .foregroundColor(Ink.primary)
+
+              Text("Keeps what you dictate with Omi Type out of the chat.")
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(Ink.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $shortcutSettings.silentTypeEnabled)
+              .toggleStyle(OmiToggleStyle())
+          }
+        }
+      }
+
     }
   }
 
