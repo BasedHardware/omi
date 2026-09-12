@@ -39,6 +39,12 @@ class FakeRedis:
     def delete(self, key):
         self.store.pop(key, None)
 
+    def eval(self, script, numkeys, *keys):
+        key = keys[0]
+        val = self.get(key)
+        self.delete(key)
+        return val
+
 
 class OAuthStateTests(unittest.TestCase):
     def setUp(self):
@@ -80,8 +86,11 @@ class OAuthStateTests(unittest.TestCase):
         )
 
         def pop_state(state):
-            val = self.redis_client.get(f"oauth_state:{state}")
-            self.redis_client.delete(f"oauth_state:{state}")
+            val = self.redis_client.eval(
+                "GETDEL",
+                1,
+                f"oauth_state:{state}",
+            )
             return val.decode("utf-8") if val else None
 
         db.pop_oauth_state = pop_state
@@ -163,9 +172,44 @@ class OAuthStateTests(unittest.TestCase):
         asyncio.run(self.module.setup_notion_crm(request=Mock(), uid="uid-9"))
         call = self.module.get_notion().get_oauth_url.call_args
         issued_state = call.args[0]
-        self.assertNotEqual(issued_state, "uid-9")
-        # state must resolve back to the uid
         self.assertEqual(self.db.pop_oauth_state(issued_state), "uid-9")
+
+    def test_pop_oauth_state_is_a_single_redis_round_trip(self):
+        ops = []
+
+        class RecordingRedis:
+            def eval(self, script, numkeys, *keys):
+                ops.append(("eval", keys[0]))
+                return b"uid-1"
+
+            def get(self, key):
+                ops.append(("get", key))
+                return b"uid-1"
+
+            def delete(self, key):
+                ops.append(("delete", key))
+
+        redis_mod = types.ModuleType("redis")
+        redis_mod.Redis = Mock(return_value=RecordingRedis())
+        models = types.ModuleType("models")
+        models.TranscriptSegment = object
+        originals = {name: sys.modules.get(name) for name in ("redis", "models")}
+        sys.modules["redis"] = redis_mod
+        sys.modules["models"] = models
+        try:
+            spec = importlib.util.spec_from_file_location(
+                "plugins_db_under_test", PLUGIN_DIR.parent / "db.py"
+            )
+            db_mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(db_mod)
+        finally:
+            for name, original in originals.items():
+                if original is None:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = original
+        self.assertEqual(db_mod.pop_oauth_state("once"), "uid-1")
+        self.assertEqual(ops, [("eval", "oauth_state:once")])
 
 
 if __name__ == "__main__":

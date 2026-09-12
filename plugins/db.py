@@ -52,9 +52,16 @@ def store_oauth_state(state: str, uid: str):
 
 
 def pop_oauth_state(state: str) -> str:
-    val = r.get(f'oauth_state:{state}')
-    r.delete(f'oauth_state:{state}')
-    return val.decode('utf-8') if val else None
+    # GET+DEL must be one Redis round-trip so two callbacks cannot both
+    # resolve the same state token.
+    val = r.eval(
+        "local val = redis.call('GET', KEYS[1]); redis.call('DEL', KEYS[1]); return val",
+        1,
+        f'oauth_state:{state}',
+    )
+    if val is None:
+        return None
+    return val.decode('utf-8') if isinstance(val, bytes) else val
 
 
 # **********************************************************
