@@ -18,6 +18,7 @@ class _FakeRedisClient:
 
     def __init__(self, *args, **kwargs):
         self.store = {}
+        self.ttl = {}
 
     def get(self, key):
         value = self.store.get(key)
@@ -25,6 +26,7 @@ class _FakeRedisClient:
 
     def set(self, key, value, ex=None):
         self.store[key] = value
+        self.ttl[key] = ex
 
     def expire(self, key, seconds):
         return True
@@ -77,22 +79,31 @@ class TranscriptSegmentPersistenceTests(unittest.TestCase):
     def test_segments_round_trip_through_store(self):
         result = self.db.get_upsert_segment_to_transcript_plugin('mentor-01', 's1', [self._segment('hello')])
         self.assertEqual([s.dict()['text'] for s in result], ['hello'])
+        self.assertEqual(self.db.r.ttl['plugin:mentor-01:session:s1:transcript_segments'], 300)
 
         again = self.db.get_upsert_segment_to_transcript_plugin('mentor-01', 's1', [self._segment('world')])
         self.assertEqual([s.dict()['text'] for s in again], ['hello', 'world'])
 
     def test_stored_payload_is_parsed_not_executed(self):
-        pwned = Path(tempfile.gettempdir()) / 'omi_db_eval_pwned'
-        pwned.unlink(missing_ok=True)
-        self.db.r.store['plugin:mentor-01:session:s1:transcript_segments'] = (
-            f"__import__('pathlib').Path({str(pwned)!r}).touch() or []"
-        )
-        try:
-            with self.assertRaises((ValueError, SyntaxError)):
-                self.db.get_upsert_segment_to_transcript_plugin('mentor-01', 's1', [])
+        with tempfile.TemporaryDirectory() as tmp:
+            pwned = Path(tmp) / 'pwned'
+            self.db.r.store['plugin:mentor-01:session:s1:transcript_segments'] = (
+                f"__import__('pathlib').Path({str(pwned)!r}).touch() or []"
+            )
+            result = self.db.get_upsert_segment_to_transcript_plugin('mentor-01', 's1', [self._segment('hi')])
             self.assertFalse(pwned.exists(), 'stored Redis payload executed code')
-        finally:
-            pwned.unlink(missing_ok=True)
+            self.assertEqual([s.dict()['text'] for s in result], ['hi'])
+
+    def test_malformed_value_resets_buffer(self):
+        self.db.r.store['plugin:mentor-01:session:s1:transcript_segments'] = 'not a literal'
+        result = self.db.get_upsert_segment_to_transcript_plugin('mentor-01', 's1', [self._segment('hi')])
+        self.assertEqual([s.dict()['text'] for s in result], ['hi'])
+
+    def test_non_dict_elements_are_dropped(self):
+        legacy = str([{'text': 'ok', 'is_user': True, 'start': 0.0, 'end': 1.0}, 42, 'junk'])
+        self.db.r.store['plugin:mentor-01:session:s1:transcript_segments'] = legacy
+        result = self.db.get_upsert_segment_to_transcript_plugin('mentor-01', 's1', [])
+        self.assertEqual([s.dict()['text'] for s in result], ['ok'])
 
     def test_value_written_by_previous_version_still_reads(self):
         legacy = str([{'text': 'hi', 'speaker': 'SPEAKER_00', 'is_user': True, 'start': 0.0, 'end': 1.0}])

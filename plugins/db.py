@@ -99,9 +99,13 @@ def get_upsert_segment_to_transcript_plugin(
     if not segments:
         segments = []
     else:
-        segments = ast.literal_eval(segments.decode('utf-8'))
+        try:
+            segments = ast.literal_eval(segments.decode('utf-8'))
+        except (ValueError, SyntaxError):
+            segments = []
         if not isinstance(segments, list):
             segments = []
+        segments = [segment for segment in segments if isinstance(segment, dict)]
 
     segments.extend([segment.dict() for segment in new_segments])
 
