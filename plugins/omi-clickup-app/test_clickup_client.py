@@ -37,7 +37,7 @@ def _router(fixtures):
             if url.endswith(suffix):
                 body, status = payload if isinstance(payload, tuple) else (payload, 200)
                 return _response(body, status)
-        return _response({}, 404)
+        raise AssertionError(f"Unexpected URL not covered by fixtures: {url}")
 
     return fake_get, calls
 
@@ -144,8 +144,8 @@ class GetAllListsTests(unittest.TestCase):
 
     def test_unknown_fixture_url_is_not_an_empty_200(self):
         fake_get, _ = _router({"/known": {"ok": True}})
-        resp = fake_get("https://api.clickup.com/api/v2/space/x/unknown")
-        self.assertEqual(resp.status_code, 404)
+        with self.assertRaises(AssertionError):
+            fake_get("https://api.clickup.com/api/v2/space/x/unknown")
 
 
 if __name__ == "__main__":
