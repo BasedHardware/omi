@@ -701,8 +701,12 @@ struct DesktopHomeView: View {
     }
     highlightedSettingId = settingId
 
-    if target.lowercased().replacingOccurrences(of: "-", with: "_") == "rewind" {
-      navigateToLegacyDestination(.rewind)
+    // Sidebar-named targets (including Conversations/Memories/Rewind) must go
+    // through the same hub-view adapter as the menu and keyboard. Selecting only
+    // the chat-first route leaves the hub on its remembered page — default
+    // Memories — so `navigate conversations` opened Memories.
+    if let item = SidebarNavItem.automationDestination(named: target) {
+      navigateToLegacyDestination(item, automationTarget: target)
       reportAutomationState()
       return
     }
@@ -1059,13 +1063,19 @@ struct DesktopHomeView: View {
   /// Existing menu, keyboard, and automation callers retain their legacy
   /// names. This is the sole root adapter between those callers and typed
   /// Chat-first navigation.
-  private func navigateToLegacyDestination(_ item: SidebarNavItem) {
+  private func navigateToLegacyDestination(
+    _ item: SidebarNavItem,
+    automationTarget: String? = nil
+  ) {
     if item == .permissions {
       selectedSettingsSection = .permissions
       chatFirstNavigation.selectMore(.settings)
       return
     }
-    if let destination = MemoryHubDestination.destination(for: item) {
+    if let destination =
+      automationTarget.flatMap(MemoryHubDestination.destination(forAutomationTarget:))
+      ?? MemoryHubDestination.destination(for: item)
+    {
       memoryDestinationRawValue = destination.rawValue
     }
     chatFirstNavigation.selectLegacyDestination(item)

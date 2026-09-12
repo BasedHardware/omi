@@ -65,4 +65,27 @@ final class MemoryHubSidebarRoutingTests: XCTestCase {
     XCTAssertEqual(MemoryHubDestination.destination(for: .memories), .memories)
     XCTAssertEqual(MemoryHubDestination.destination(for: .rewind), .rewind)
   }
+
+  /// `bridge.navigate conversations` used to select only the memories *route*,
+  /// so the hub stayed on its remembered view (default Memories). Automation
+  /// resolves the hub through `destination(forAutomationTarget:)` inside
+  /// `navigateToLegacyDestination(_:automationTarget:)` — the same helper this
+  /// test calls — before selecting the chat-first route.
+  func testAutomationNameConversationsSelectsConversationsHubNotRememberedMemories() {
+    XCTAssertEqual(
+      MemoryHubDestination.destination(forAutomationTarget: "conversations"),
+      .conversations)
+    XCTAssertEqual(
+      MemoryHubDestination.destination(forAutomationTarget: "CONVERSATIONS"),
+      .conversations)
+    XCTAssertEqual(
+      MemoryHubDestination.destination(forAutomationTarget: "memories"),
+      .memories)
+    XCTAssertEqual(
+      MemoryHubDestination.destination(forAutomationTarget: "rewind"),
+      .rewind)
+    XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "dashboard"))
+    XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "tasks"))
+    XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "help"))
+  }
 }
