@@ -14,6 +14,11 @@ checks:
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
+  - id: arxiv-search-query-encoding-tests
+    command: ["python3", "plugins/omi-arxiv-app/test_main.py"]
+    triggers: ["plugins/omi-arxiv-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13574: search_query was pre-encoded with quote_plus before httpx form-encoded it a second time, turning the AND/space separator '+' into a literal '%2B' and emptying multi-word and multi-field arXiv searches"
   - id: linear-graphql-errors-tests
     command: ["python3", "plugins/omi-linear-app/test_graphql_errors.py"]
     triggers: ["plugins/omi-linear-app/**"]

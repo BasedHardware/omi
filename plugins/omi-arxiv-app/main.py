@@ -12,14 +12,12 @@ import asyncio
 import re
 import time
 from typing import Any, Optional
-from urllib.parse import quote_plus
 import xml.etree.ElementTree as ET
 
 import httpx
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-
 
 ARXIV_API_URL = "https://export.arxiv.org/api/query"
 REQUEST_TIMEOUT_SECONDS = 12
@@ -220,20 +218,19 @@ def _build_search_query(payload: dict[str, Any]) -> Optional[str]:
     category = _safe_category(payload.get("category"))
     parts = []
     if query:
-        parts.append(f"all:{quote_plus(query)}")
+        parts.append(f"all:{query}")
     if title:
-        parts.append(f"ti:{quote_plus(title)}")
+        parts.append(f"ti:{title}")
     if author:
-        parts.append(f"au:{quote_plus(author)}")
+        parts.append(f"au:{author}")
     if category:
         parts.append(f"cat:{category}")
-    return "+AND+".join(parts) if parts else None
+    return " AND ".join(parts) if parts else None
 
 
 @app.get("/")
 async def root():
-    return HTMLResponse(
-        """
+    return HTMLResponse("""
         <html>
         <head><title>arXiv x Omi</title></head>
         <body style="font-family: sans-serif; max-width: 640px; margin: 48px auto; line-height: 1.5;">
@@ -242,8 +239,7 @@ async def root():
             <p>No sign-in or API key is required.</p>
         </body>
         </html>
-        """
-    )
+        """)
 
 
 @app.get("/health")
@@ -404,7 +400,7 @@ async def search_author(payload: dict[str, Any]):
         entries = _parse_entries(
             await _request_arxiv(
                 {
-                    "search_query": f"au:{quote_plus(author)}",
+                    "search_query": f"au:{author}",
                     "start": 0,
                     "max_results": limit,
                     "sortBy": "submittedDate",
