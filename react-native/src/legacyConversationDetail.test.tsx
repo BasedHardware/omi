@@ -500,6 +500,20 @@ test('keeps GET photo counts and captions and omits empty lists', async () => {
   expect(missing).not.toHaveProperty('photoCaptions');
 });
 
+test('keeps GET conversation photos when more than 1000', async () => {
+  const photos = Array.from({length: 1001}, (_, index) => ({
+    description: `Photo ${index}`,
+  }));
+  mockRequest.mockResolvedValue(response({...fixture, photos}));
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      title: fixture.structured.title,
+      photoCount: 1001,
+      photoCaptions: photos.map(row => row.description),
+    },
+  );
+});
+
 test('names GET discarded photos and photos still analyzing', async () => {
   mockRequest.mockResolvedValue(
     response({

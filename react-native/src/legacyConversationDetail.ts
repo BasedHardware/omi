@@ -237,7 +237,10 @@ function conversationPhotos(value: unknown):
   if (value === undefined || value === null) {
     return undefined;
   }
-  const rows = array(value, 1000);
+  if (!Array.isArray(value)) {
+    throw new DetailError('invalid');
+  }
+  const rows = value;
   if (rows.length === 0) {
     return undefined;
   }
