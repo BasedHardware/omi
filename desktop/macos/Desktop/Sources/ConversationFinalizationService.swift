@@ -393,7 +393,8 @@ actor ConversationFinalizationService {
           id: clientConversationId,
           sessionId: sessionId,
           allowForceProcess: allowForceProcess,
-          allowBackendIdOverride: true
+          allowBackendIdOverride: true,
+          localSource: ConversationSource(rawValue: session.source)
         ) {
           return nil
         }
@@ -410,13 +411,17 @@ actor ConversationFinalizationService {
         id: conversation.id,
         boundBackendId: backendId,
         status: conversation.status,
-        source: conversation.source
+        source: conversation.source,
+        localSource: ConversationSource(rawValue: session.source)
       ) {
         let status = LocalConversationStatus(rawValue: conversation.status.rawValue) ?? .processing
         try await TranscriptionStorage.shared.markSessionCompleted(
           id: sessionId,
           backendId: conversation.id,
-          conversationStatus: status
+          conversationStatus: status,
+          emitCreationTelemetry: !(
+            conversation.source == .omi && ConversationSource(rawValue: session.source) == .desktop
+          )
         )
         log("ConversationFinalization: Finalized cloud session \(sessionId) by backend id \(conversation.id)")
         return nil
@@ -428,7 +433,8 @@ actor ConversationFinalizationService {
       if try await completeCloudConversation(
         id: clientConversationId,
         sessionId: sessionId,
-        allowForceProcess: true
+        allowForceProcess: true,
+        localSource: ConversationSource(rawValue: session.source)
       ) {
         return nil
       }
@@ -477,7 +483,8 @@ actor ConversationFinalizationService {
         if try await completeCloudConversation(
           id: clientConversationId,
           sessionId: sessionId,
-          allowForceProcess: true
+          allowForceProcess: true,
+          localSource: ConversationSource(rawValue: session.source)
         ) {
           return nil
         }
@@ -584,7 +591,8 @@ actor ConversationFinalizationService {
     id conversationId: String,
     sessionId: Int64,
     allowForceProcess: Bool,
-    allowBackendIdOverride: Bool = false
+    allowBackendIdOverride: Bool = false,
+    localSource: ConversationSource? = nil
   ) async throws -> Bool {
     let conversation: ServerConversation
     do {
@@ -602,7 +610,8 @@ actor ConversationFinalizationService {
         id: conversation.id,
         boundBackendId: conversationId,
         status: conversation.status,
-        source: conversation.source
+        source: conversation.source,
+        localSource: localSource
       )
     else {
       return false
@@ -613,7 +622,8 @@ actor ConversationFinalizationService {
       id: sessionId,
       backendId: conversation.id,
       conversationStatus: status,
-      allowBackendIdOverride: allowBackendIdOverride
+      allowBackendIdOverride: allowBackendIdOverride,
+      emitCreationTelemetry: !(conversation.source == .omi && localSource == .desktop)
     )
     log("ConversationFinalization: Reconciled cloud session \(sessionId) by conversation id \(conversation.id)")
     return true

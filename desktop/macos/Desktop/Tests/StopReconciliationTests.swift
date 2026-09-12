@@ -328,6 +328,17 @@ final class StopReconciliationTests: XCTestCase {
       ))
   }
 
+  func testBoundBackendConversationCompletionAcceptsPairedOmiConversationForDesktopSession() {
+    XCTAssertTrue(
+      DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+        id: "omi-conversation",
+        boundBackendId: "omi-conversation",
+        status: .completed,
+        source: .omi,
+        localSource: .desktop
+      ))
+  }
+
   func testRecordingSessionWithBackendIdCanStillBeFinishedForRetryReconciliation() {
     var session = TranscriptionSessionRecord(
       source: "desktop",
@@ -374,6 +385,39 @@ final class StopReconciliationTests: XCTestCase {
       ))
   }
 
+  func testSharedCaptureAcceptsCanonicalConversationWithLocalRecordingProof() {
+    XCTAssertTrue(
+      DesktopConversationMatchPolicy.shouldBindConversationSession(
+        incomingBackendId: "omi-conversation",
+        expectedBackendId: "desktop-recording",
+        activeBackendId: nil,
+        ignoredRotatedBackendIds: [],
+        recordingSessionId: "desktop-recording",
+        sharedCapture: true
+      ))
+  }
+
+  func testSharedCaptureRejectsCanonicalConversationWithoutMarkerOrProof() {
+    XCTAssertFalse(
+      DesktopConversationMatchPolicy.shouldBindConversationSession(
+        incomingBackendId: "omi-conversation",
+        expectedBackendId: "desktop-recording",
+        activeBackendId: nil,
+        ignoredRotatedBackendIds: [],
+        recordingSessionId: "desktop-recording",
+        sharedCapture: false
+      ))
+    XCTAssertFalse(
+      DesktopConversationMatchPolicy.shouldBindConversationSession(
+        incomingBackendId: "omi-conversation",
+        expectedBackendId: "desktop-recording",
+        activeBackendId: nil,
+        ignoredRotatedBackendIds: [],
+        recordingSessionId: "other-recording",
+        sharedCapture: true
+      ))
+  }
+
   func testLifecycleEventRejectsStaleRecordingIdentity() {
     XCTAssertFalse(
       DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
@@ -398,6 +442,23 @@ final class StopReconciliationTests: XCTestCase {
         memoryId: "recording-conversation",
         recordingSessionId: nil,
         expectedBackendId: "recording-conversation"
+      ))
+  }
+
+  func testSharedLifecycleEventAcceptsCanonicalConversationWithLocalRecordingProof() {
+    XCTAssertTrue(
+      DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+        memoryId: "omi-conversation",
+        recordingSessionId: "desktop-recording",
+        expectedBackendId: "desktop-recording",
+        sharedCapture: true
+      ))
+    XCTAssertFalse(
+      DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+        memoryId: "omi-conversation",
+        recordingSessionId: "other-recording",
+        expectedBackendId: "desktop-recording",
+        sharedCapture: true
       ))
   }
 
@@ -538,6 +599,21 @@ final class StopReconciliationTests: XCTestCase {
         expectedLifecyclePhase: "processing",
         expectedBackendId: "recording-conversation",
         lastAcceptedSequence: 1
+      ))
+  }
+
+  func testVersionedSharedLifecycleEnvelopeAllowsCanonicalConversationId() {
+    XCTAssertTrue(
+      DesktopConversationMatchPolicy.acceptsLifecycleEnvelope(
+        recordingSessionId: "desktop-recording",
+        conversationId: "omi-conversation",
+        lifecycleVersion: 1,
+        lifecyclePhase: "processing",
+        lifecycleSequence: 2,
+        expectedLifecyclePhase: "processing",
+        expectedBackendId: "desktop-recording",
+        lastAcceptedSequence: 1,
+        sharedCapture: true
       ))
   }
 

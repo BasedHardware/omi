@@ -40,6 +40,7 @@ class RecordingSessionBinding(TypedDict):
     lifecycle_phase: str
     lifecycle_sequence: int
     mapping_conflict: bool
+    shared_capture: bool
 
 
 class RecordingSessionEvent(TypedDict):
@@ -50,6 +51,7 @@ class RecordingSessionEvent(TypedDict):
     lifecycle_sequence: int
     accepted: bool
     discard_reason: str | None
+    shared_capture: bool
 
 
 def _now() -> datetime:
@@ -77,6 +79,7 @@ def _binding(data: dict[str, Any], recording_session_id: str, *, mapping_conflic
         'lifecycle_phase': str(data.get('lifecycle_phase') or 'in_progress'),
         'lifecycle_sequence': int(data.get('lifecycle_sequence') or 0),
         'mapping_conflict': mapping_conflict,
+        'shared_capture': bool(data.get('shared_capture', False)),
     }
 
 
@@ -86,6 +89,7 @@ def _create_or_get_recording_session_txn(
     uid: str,
     recording_session_id: str,
     proposed_conversation_id: str,
+    shared_capture: bool,
     now: datetime,
 ) -> RecordingSessionBinding:
     snapshot = session_ref.get(transaction=transaction)
@@ -93,6 +97,9 @@ def _create_or_get_recording_session_txn(
         current = snapshot.to_dict() or {}
         if current.get('uid') != uid or current.get('recording_session_id') != recording_session_id:
             raise ValueError('recording session identity does not match its document binding')
+        if shared_capture and not bool(current.get('shared_capture', False)):
+            current = {**current, 'shared_capture': True, 'updated_at': now}
+            transaction.update(session_ref, {'shared_capture': True, 'updated_at': now})
         return _binding(
             current,
             recording_session_id,
@@ -107,6 +114,7 @@ def _create_or_get_recording_session_txn(
         'lifecycle_version': LIFECYCLE_ENVELOPE_VERSION,
         'lifecycle_phase': 'in_progress',
         'lifecycle_sequence': 0,
+        'shared_capture': shared_capture,
         'created_at': now,
         'updated_at': now,
     }
@@ -119,6 +127,7 @@ def create_or_get_recording_session(
     recording_session_id: str,
     proposed_conversation_id: str,
     *,
+    shared_capture: bool = False,
     firestore_client: Any = None,
 ) -> RecordingSessionBinding:
     """Atomically bind a session to exactly one canonical conversation ID."""
@@ -133,6 +142,7 @@ def create_or_get_recording_session(
         uid,
         recording_session_id,
         proposed_conversation_id,
+        shared_capture,
         _now(),
     )
 
@@ -244,8 +254,10 @@ def _record_lifecycle_event_txn(
             'lifecycle_sequence': 0,
             'accepted': False,
             'discard_reason': 'missing_session',
+            'shared_capture': False,
         }
     current = snapshot.to_dict() or {}
+    shared_capture = bool(current.get('shared_capture', False))
     bound_conversation_id = str(current.get('conversation_id') or '')
     version = int(current.get('lifecycle_version') or LIFECYCLE_ENVELOPE_VERSION)
     sequence = int(current.get('lifecycle_sequence') or 0)
@@ -259,6 +271,7 @@ def _record_lifecycle_event_txn(
             'lifecycle_sequence': sequence,
             'accepted': False,
             'discard_reason': 'mapping_conflict',
+            'shared_capture': shared_capture,
         }
     if current_phase in _TERMINAL_PHASES and phase != current_phase:
         return {
@@ -269,6 +282,7 @@ def _record_lifecycle_event_txn(
             'lifecycle_sequence': sequence,
             'accepted': False,
             'discard_reason': 'terminal_immutable',
+            'shared_capture': shared_capture,
         }
     if _PHASE_ORDER[phase] < _PHASE_ORDER.get(current_phase, -1):
         return {
@@ -279,6 +293,7 @@ def _record_lifecycle_event_txn(
             'lifecycle_sequence': sequence,
             'accepted': False,
             'discard_reason': 'stale_event',
+            'shared_capture': shared_capture,
         }
     if phase == current_phase:
         return {
@@ -289,6 +304,7 @@ def _record_lifecycle_event_txn(
             'lifecycle_sequence': sequence,
             'accepted': True,
             'discard_reason': None,
+            'shared_capture': shared_capture,
         }
 
     next_sequence = sequence + 1
@@ -304,6 +320,7 @@ def _record_lifecycle_event_txn(
         'lifecycle_sequence': next_sequence,
         'accepted': True,
         'discard_reason': None,
+        'shared_capture': shared_capture,
     }
 
 

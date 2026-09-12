@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-08-30 (provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts)
+> Last updated: 2026-09-11 (provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; paired Omi/desktop capture binding)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -98,6 +98,21 @@ The resource atomically binds the recording to exactly one conversation, so
 reconnects return the original canonical mapping rather than falling back to a
 user-global Redis pointer.
 
+An Omi hardware socket and the macOS desktop socket are the one explicit
+cross-source pairing. When the second socket finds the other source's fresh
+`in_progress` conversation, it creates its own durable recording-session binding
+to that canonical conversation and marks both the binding and conversation
+`shared_capture`. Other cross-source combinations remain separate conversations.
+The active listen-session registry propagates the pairing state to an already-
+running first socket; the durable marker remains lifecycle provenance rather
+than a permanent dedupe switch. In a shared capture,
+the live transcript writer applies shrink-only dedupe for substantial text that
+matches after punctuation/case normalization and has nearly the same timeline;
+short backchannels and repeated text at different times remain distinct. The
+desktop client accepts a canonical ID different from its local client ID only
+when the versioned event carries both the shared marker and the local recording
+session identity, then persists the canonical ID for crash-safe finalization.
+
 The backend emits a `conversation_session` event carrying that recording
 identity:
 
@@ -109,14 +124,17 @@ identity:
   "status": "in_progress",
   "lifecycle_version": 1,
   "lifecycle_phase": "in_progress",
-  "lifecycle_sequence": 0
+  "lifecycle_sequence": 0,
+  "shared_capture": false
 }
 ```
 
 `conversation_session`, `memory_processing_started`, and `memory_created`
 carry the same versioned envelope. Clients must accept an envelope only when
 the recording and conversation IDs match their local session and the sequence
-is higher than the last accepted sequence. The phase is part of the contract:
+is higher than the last accepted sequence. For a paired Omi/desktop capture,
+`shared_capture: true` permits the canonical conversation ID to differ from the
+local client ID only with the local recording-session proof. The phase is part of the contract:
 `in_progress`, then `processing`, then a terminal `completed`/`failed`/
 `discarded`. Older events without the envelope retain the legacy identity and
 timestamp compatibility path only.

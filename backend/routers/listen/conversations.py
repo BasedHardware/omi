@@ -28,8 +28,11 @@ from utils.transcribe_decisions import (
     recording_session_id_for_lifecycle_event,
     select_recording_session_id,
     should_attach_to_existing_in_progress,
+    should_pair_omi_desktop_capture,
 )
 from utils.transcribe_store import calendar_db, conversations_db, redis_db
+
+from .registry import mark_shared_capture
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +74,7 @@ class LiveConversationController:
                 recording_session_id,
                 conversation_id,
                 phase,
+                shared_capture=bool(getattr(self.host, 'shared_capture', False)),
             )
         except Exception:
             logger.exception(
@@ -92,6 +96,7 @@ class LiveConversationController:
                 lifecycle_version=binding['lifecycle_version'],
                 lifecycle_phase=binding['lifecycle_phase'],
                 lifecycle_sequence=binding['lifecycle_sequence'],
+                shared_capture=binding.get('shared_capture', False),
             )
         )
 
@@ -123,6 +128,7 @@ class LiveConversationController:
                 lifecycle_version=envelope['lifecycle_version'],
                 lifecycle_phase=envelope['lifecycle_phase'],
                 lifecycle_sequence=envelope['lifecycle_sequence'],
+                shared_capture=envelope.get('shared_capture', False),
             )
         )
 
@@ -218,7 +224,9 @@ class LiveConversationController:
             latest and (latest.get('transcript_segments') or latest.get('has_content') or latest.get('photos'))
         ) and await self.schedule_finalization(conversation_id)
 
-    async def create_new_in_progress_conversation(self, *, rollover: bool = False) -> None:
+    async def create_new_in_progress_conversation(
+        self, *, rollover: bool = False, proposed_conversation_id: Optional[str] = None
+    ) -> None:
         request = self.host.request
         self.host.recording_session_id = select_recording_session_id(
             client_conversation_id=self.host.client_conversation_id,
@@ -231,19 +239,28 @@ class LiveConversationController:
         except ValueError:
             logger.error('Invalid conversation source %s; using omi', request.source)
             source = ConversationSource.omi
-        use_client_conversation_id = bool(self.host.client_conversation_id) and not rollover
-        proposed_id = self.host.client_conversation_id if use_client_conversation_id else str(uuid.uuid4())
-        proposed_id_is_server_generated = not use_client_conversation_id
+        use_client_conversation_id = (
+            bool(self.host.client_conversation_id) and not rollover and proposed_conversation_id is None
+        )
+        proposed_id = proposed_conversation_id or (
+            self.host.client_conversation_id if use_client_conversation_id else str(uuid.uuid4())
+        )
+        proposed_id_is_server_generated = not use_client_conversation_id and proposed_conversation_id is None
+        shared_capture_requested = proposed_conversation_id is not None
         binding = await self.host.persistence.call(
             lifecycle_service.open_live_recording_session,
             request.uid,
             self.host.recording_session_id,
             proposed_id,
+            shared_capture=shared_capture_requested,
         )
         if binding['requires_rollover']:
             await self.create_new_in_progress_conversation(rollover=True)
             return
+        self.host.shared_capture = shared_capture_requested
         conversation_id = binding['conversation_id']
+        if shared_capture_requested and not binding.get('mapping_conflict'):
+            mark_shared_capture(request.uid, conversation_id)
         self.host.recording_session_ids_by_conversation[conversation_id] = self.host.recording_session_id
         if proposed_id_is_server_generated and conversation_id == proposed_id:
             # proposed_id was invented for this call and the binding adopted it
@@ -349,19 +366,34 @@ class LiveConversationController:
         if self.host.is_multi_channel:
             await self.create_new_in_progress_conversation()
             return None
-        if self.host.client_conversation_id:
+        if self.host.request.onboarding_mode and self.host.onboarding_admitted:
+            # An admitted speech-profile recording is its own conversation,
+            # even when the client also supplied an id from another flow.
             await self.create_new_in_progress_conversation()
             return None
-        if self.host.request.onboarding_mode and self.host.onboarding_admitted:
-            # A speech-profile recording (onboarding step or Settings redo) is its
-            # own conversation. Attaching to a still-open one from a previous
-            # attempt makes combine_segments() merge the new speech into that
-            # conversation's last segment, and the client then shows the words
-            # from last time as soon as the user starts talking again.
-            # Admission, not the raw request flag, owns this decision: the
-            # runtime refuses onboarding provenance for completed accounts, and
-            # an unadmitted onboarding claim must keep the ordinary session's
-            # existing-conversation behavior instead of dodging it.
+        if self.host.client_conversation_id:
+            # Client IDs normally force a new conversation for idempotent client
+            # sessions. Omi hardware and the desktop app are the exception: if
+            # the other capture is already live, both sockets must fan into it.
+            existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
+            existing_source = existing.get('source') if existing else None
+            if isinstance(existing_source, ConversationSource):
+                existing_source = existing_source.value
+            if existing and should_pair_omi_desktop_capture(
+                existing_source=existing_source if isinstance(existing_source, str) else None,
+                request_source=self.host.request.source,
+            ):
+                finished_at = datetime.fromisoformat(existing['finished_at'].isoformat())
+                seconds = (datetime.now(timezone.utc) - finished_at).total_seconds()
+                if (
+                    decide_existing_conversation_action(
+                        seconds_since_last_segment=seconds,
+                        conversation_creation_timeout=self.host.conversation_creation_timeout,
+                    )
+                    == ConversationLifecycleAction.continue_current
+                ):
+                    await self.create_new_in_progress_conversation(proposed_conversation_id=existing['id'])
+                    return None
             await self.create_new_in_progress_conversation()
             return None
         existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
@@ -369,9 +401,10 @@ class LiveConversationController:
             await self.create_new_in_progress_conversation()
             return None
         existing_source = existing.get('source')
-        if hasattr(existing_source, 'value'):
+        if isinstance(existing_source, ConversationSource):
             existing_source = existing_source.value
-        # Cross-source sockets (pendant + web meeting) must not share one conversation (#5388).
+        # Unrelated cross-source sockets (for example, pendant + web meeting)
+        # must not share one conversation; Omi + macOS is the explicit pair.
         if not should_attach_to_existing_in_progress(
             existing_source=existing_source if isinstance(existing_source, str) else None,
             request_source=self.host.request.source,
@@ -389,15 +422,23 @@ class LiveConversationController:
         ):
             await self.create_new_in_progress_conversation()
             return existing['id']
+        shared_capture_requested = should_pair_omi_desktop_capture(
+            existing_source=existing_source if isinstance(existing_source, str) else None,
+            request_source=self.host.request.source,
+        )
         binding = await self.host.persistence.call(
             lifecycle_service.open_live_recording_session,
             self.host.request.uid,
             self.host.recording_session_id,
             existing['id'],
+            shared_capture=shared_capture_requested,
         )
         if binding['requires_rollover']:
             await self.create_new_in_progress_conversation(rollover=True)
             return None
+        self.host.shared_capture = shared_capture_requested
+        if shared_capture_requested and not binding.get('mapping_conflict'):
+            mark_shared_capture(self.host.request.uid, binding['conversation_id'])
         self.host.state.current_conversation_id = existing['id']
         self.host.recording_session_ids_by_conversation[existing['id']] = self.host.recording_session_id
         self.send_conversation_session(binding, self.host.recording_session_id)

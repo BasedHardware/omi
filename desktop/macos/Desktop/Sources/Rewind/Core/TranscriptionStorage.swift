@@ -135,7 +135,11 @@ actor TranscriptionStorage {
 
   /// Bind a local recording session to the backend conversation id announced by `/v4/listen`.
   /// This is not completion: the backend conversation may still be `in_progress` until stop/finalize.
-  func bindBackendConversation(id: Int64, backendId: String) async throws {
+  func bindBackendConversation(
+    id: Int64,
+    backendId: String,
+    adoptAsClientConversationId: Bool = false
+  ) async throws {
     let db = try await ensureInitialized()
 
     try await db.write { database in
@@ -151,6 +155,16 @@ actor TranscriptionStorage {
       }
 
       record.backendId = backendId
+      if adoptAsClientConversationId,
+        let clientConversationId = record.clientConversationId,
+        !clientConversationId.isEmpty,
+        clientConversationId != backendId
+      {
+        // A shared capture may use the other client's canonical conversation
+        // id. Keep the local recording pointed at that id for crash recovery
+        // and finalization; the recording-session id remains the event proof.
+        record.clientConversationId = backendId
+      }
       record.conversationStatus = .inProgress
       record.updatedAt = Date()
       try record.update(database)
@@ -205,7 +219,8 @@ actor TranscriptionStorage {
     id: Int64,
     backendId: String,
     conversationStatus: LocalConversationStatus = .completed,
-    allowBackendIdOverride: Bool = false
+    allowBackendIdOverride: Bool = false,
+    emitCreationTelemetry: Bool = true
   ) async throws -> Bool {
     let db = try await ensureInitialized()
 
@@ -239,7 +254,7 @@ actor TranscriptionStorage {
       record.updatedAt = completedAt
       try record.update(database)
       let telemetry =
-        wasAlreadyCompleted
+        wasAlreadyCompleted || !emitCreationTelemetry
         ? nil : ConversationCreatedTelemetry(session: record, conversationId: backendId)
       return (true, telemetry)
     }
