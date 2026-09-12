@@ -701,8 +701,12 @@ struct DesktopHomeView: View {
     }
     highlightedSettingId = settingId
 
-    if target.lowercased().replacingOccurrences(of: "-", with: "_") == "rewind" {
-      navigateToLegacyDestination(.rewind)
+    // Sidebar-named targets (including Conversations/Memories/Rewind) must go
+    // through the same hub-view adapter as the menu and keyboard. Selecting only
+    // the chat-first route leaves the hub on its remembered page — default
+    // Memories — so `navigate conversations` opened Memories.
+    if let item = SidebarNavItem.automationDestination(named: target) {
+      navigateToLegacyDestination(item)
       reportAutomationState()
       return
     }

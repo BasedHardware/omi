@@ -55,6 +55,13 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     }
   }
 
+  /// Automation names reuse the sidebar vocabulary. Conversations, Memories, and
+  /// Rewind must select the hub page they name, not whichever view was last persisted.
+  static func destination(forAutomationTarget target: String) -> MemoryHubDestination? {
+    guard let item = SidebarNavItem.automationDestination(named: target) else { return nil }
+    return destination(for: item)
+  }
+
   static func apply(
     _ item: SidebarNavItem,
     to selectedIndex: inout Int,
