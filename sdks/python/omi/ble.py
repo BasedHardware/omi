@@ -25,15 +25,33 @@ AsyncPacketHandler = Callable[[bytes], Union[None, Awaitable[None]]]
 DisconnectCallback = Callable[[BleakClient], None]
 
 
+def _signature_accepts_disconnect_kwarg(cls) -> bool:
+    try:
+        inspect.signature(cls).bind("probe-address", disconnected_callback=lambda *_a: None)
+        return True
+    except TypeError:
+        return False
+
+
 def _client_with_disconnect(address: str, on_disconnect: DisconnectCallback) -> BleakClient:
-    """Prefer BleakClient(disconnected_callback=...); fall back to set_disconnected_callback."""
+    """Prefer BleakClient(disconnected_callback=...); fall back to set_disconnected_callback.
+
+    Constructor TypeErrors that are not a missing-keyword signature mismatch are re-raised.
+    A client with neither callback API is an error: hanging on idle sleep is the bug this
+    helper exists to prevent.
+    """
     try:
         return BleakClient(address, disconnected_callback=on_disconnect)
-    except TypeError:
+    except TypeError as exc:
+        if _signature_accepts_disconnect_kwarg(BleakClient):
+            raise
         client = BleakClient(address)
         setter = getattr(client, "set_disconnected_callback", None)
-        if setter is not None:
-            setter(on_disconnect)
+        if setter is None:
+            raise TypeError(
+                "BleakClient provides no disconnected_callback; cannot signal peripheral drop"
+            ) from exc
+        setter(on_disconnect)
         return client
 
 

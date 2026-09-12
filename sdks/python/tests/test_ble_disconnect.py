@@ -55,6 +55,27 @@ class LegacyBleakClient:
         self.notify_handler = handler
 
 
+class BareBleakClient:
+    """Rejects the keyword and has no setter — must not hang on idle sleep."""
+
+    def __init__(self, address: str):
+        self.address = address
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        return False
+
+    async def start_notify(self, _char_uuid, _handler):
+        return None
+
+
+class InnerTypeErrorClient:
+    def __init__(self, address: str, disconnected_callback=None):
+        raise TypeError("address must be a string")
+
+
 class FailingNotifyClient(DisconnectingBleakClient):
     async def start_notify(self, _char_uuid, _handler):
         raise RuntimeError("start_notify failed")
@@ -105,7 +126,7 @@ def test_listen_payload_raises_connection_error_on_disconnect():
 def test_listen_to_omi_raises_connection_error_on_disconnect():
     async def _test():
         DisconnectingBleakClient.instances.clear()
-        with patch("omi.bluetooth.BleakClient", new=DisconnectingBleakClient):
+        with patch("omi.ble.BleakClient", new=DisconnectingBleakClient):
             task = asyncio.create_task(
                 listen_to_omi("AA:BB:CC:DD:EE:FF", "char-uuid", lambda _sender, _data: None)
             )
@@ -149,7 +170,7 @@ def test_listen_legacy_client_fallback():
 def test_listen_to_omi_legacy_client_fallback():
     async def _test():
         LegacyBleakClient.instances.clear()
-        with patch("omi.bluetooth.BleakClient", new=LegacyBleakClient):
+        with patch("omi.ble.BleakClient", new=LegacyBleakClient):
             task = asyncio.create_task(listen_to_omi("legacy-omi", "char-uuid", lambda _s, _d: None))
             await asyncio.sleep(0)
             client = LegacyBleakClient.instances[-1]
@@ -157,6 +178,33 @@ def test_listen_to_omi_legacy_client_fallback():
             client.disconnected_callback(client)
             with pytest.raises(ConnectionError, match="Device legacy-omi disconnected"):
                 await asyncio.wait_for(task, timeout=2)
+
+    asyncio.run(_test())
+
+
+def test_listen_raises_when_no_disconnect_api():
+    async def _test():
+        with patch("omi.ble.BleakClient", new=BareBleakClient):
+            with pytest.raises(TypeError, match="no disconnected_callback"):
+                await listen("bare-1", lambda _data: None)
+
+    asyncio.run(_test())
+
+
+def test_listen_to_omi_raises_when_no_disconnect_api():
+    async def _test():
+        with patch("omi.ble.BleakClient", new=BareBleakClient):
+            with pytest.raises(TypeError, match="no disconnected_callback"):
+                await listen_to_omi("bare-omi", "char-uuid", lambda _s, _d: None)
+
+    asyncio.run(_test())
+
+
+def test_listen_reraises_constructor_typeerror_when_signature_accepts_callback():
+    async def _test():
+        with patch("omi.ble.BleakClient", new=InnerTypeErrorClient):
+            with pytest.raises(TypeError, match="address must be a string"):
+                await listen("bad-addr", lambda _data: None)
 
     asyncio.run(_test())
 

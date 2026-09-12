@@ -1,9 +1,9 @@
 import asyncio
 from typing import Callable, Any
-from bleak import BleakScanner, BleakClient
+from bleak import BleakScanner
 
 # Re-export for callers that want the default Omi audio stream UUID.
-from .ble import _wait_while_connected
+from .ble import _client_with_disconnect, _wait_while_connected
 from .constants import AUDIO_DATA_UUID  # noqa: F401
 
 
@@ -29,18 +29,10 @@ async def listen_to_omi(
     """
     disconnected = asyncio.Event()
 
-    def _on_disconnect(_client: BleakClient) -> None:
+    def _on_disconnect(_client) -> None:
         disconnected.set()
 
-    try:
-        client = BleakClient(mac_address, disconnected_callback=_on_disconnect)
-    except TypeError:
-        client = BleakClient(mac_address)
-        setter = getattr(client, "set_disconnected_callback", None)
-        if setter is not None:
-            setter(_on_disconnect)
-
-    async with client:
+    async with _client_with_disconnect(mac_address, _on_disconnect) as client:
         print(f"Connected to {mac_address}")
         await client.start_notify(char_uuid, data_handler)
         print("Listening for data...")
