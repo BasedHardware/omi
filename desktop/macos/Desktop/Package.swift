@@ -168,14 +168,16 @@ let package = Package(
       path: "Tests/VoiceTurnDomainTests",
       linkerSettings: [testBundleFrameworkSearchPath]
     ),
-    .testTarget(
+    // Compile-only target for the semantic feature probes. Keeping this as a
+    // regular target lets the negative-control script build just these two
+    // sources instead of asking SwiftPM to compile every test bundle.
+    .target(
       name: "SemanticFeatureSentinels",
       dependencies: [],
       path: "Tests/SemanticFeatureSentinels",
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete"])
       ],
-      linkerSettings: [testBundleFrameworkSearchPath]
     ),
   ],
   swiftLanguageModes: [.v6]
