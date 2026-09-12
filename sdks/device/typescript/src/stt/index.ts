@@ -65,6 +65,8 @@ export function createParakeetTranscriber(opts: {
   sampleRate?: number;
   onTranscript: TranscriptHandler;
   WebSocketImpl?: typeof WebSocket;
+  /** How long Stop waits after finalize before closing. Default 5s. */
+  drainTimeoutMs?: number;
 }): StreamingTranscriber {
   const WS = opts.WebSocketImpl ?? WebSocket;
   const url = parakeetWsUrl(opts.apiUrl, opts.sampleRate ?? 16000);
@@ -90,10 +92,39 @@ export function createParakeetTranscriber(opts: {
       if (ready && ws.readyState === WS.OPEN) ws.send(chunk as any);
     },
     stop() {
+      let sentFinalize = false;
       try {
-        if (ws.readyState === WS.OPEN) ws.send('finalize');
-        ws.close();
-      } catch { /* ignore */ }
+        if (ws.readyState === 1) {
+          ws.send('finalize');
+          sentFinalize = true;
+        }
+      } catch {
+        // finalize is best-effort; still tear down the socket.
+      }
+
+      let finished = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        if (timer !== undefined) clearTimeout(timer);
+        try {
+          ws.close();
+        } catch { /* ignore */ }
+      };
+
+      if (!sentFinalize) {
+        finish();
+        return;
+      }
+
+      const drainTimeoutMs = opts.drainTimeoutMs ?? 5000;
+      timer = setTimeout(finish, drainTimeoutMs);
+      const prevClose = ws.onclose;
+      ws.onclose = (ev) => {
+        finish();
+        if (typeof prevClose === 'function') prevClose.call(ws, ev);
+      };
     },
   };
 }

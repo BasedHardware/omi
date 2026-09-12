@@ -163,4 +163,101 @@ describe('createParakeetTranscriber', () => {
 
     expect(openedUrl).toBe('wss://parakeet.example/gateway/v3/stream?region=eu&sample_rate=16000');
   });
+
+  test('sends finalize before closing the socket', async () => {
+    const sent: unknown[] = [];
+    const events: Array<'send' | 'close'> = [];
+    class FakeWebSocket {
+      binaryType: string = 'blob';
+      readyState = 1;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: Event) => void) | null = null;
+      constructor(_url: string) {}
+      send(data: unknown) {
+        events.push('send');
+        sent.push(data);
+      }
+      close() {
+        events.push('close');
+        this.readyState = 3;
+      }
+    }
+
+    const transcriber = createParakeetTranscriber({
+      apiUrl: 'https://parakeet.example',
+      onTranscript: () => {},
+      WebSocketImpl: FakeWebSocket as any,
+      drainTimeoutMs: 50,
+    });
+    transcriber.stop();
+    expect(events).toEqual(['send']);
+    await new Promise((resolve) => setTimeout(resolve, 70));
+
+    expect(events).toEqual(['send', 'close']);
+    expect(sent).toEqual(['finalize']);
+  });
+
+  test('drains a trailing transcript after finalize', async () => {
+    const transcripts: string[] = [];
+    class FakeWebSocket {
+      binaryType: string = 'blob';
+      readyState = 1;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: Event) => void) | null = null;
+      constructor(_url: string) {}
+      send(_data: unknown) {}
+      close() {
+        this.readyState = 3;
+      }
+    }
+
+    const socketHolder: { socket?: FakeWebSocket } = {};
+    class CapturingSocket extends FakeWebSocket {
+      constructor(url: string) {
+        super(url);
+        socketHolder.socket = this;
+      }
+    }
+
+    const transcriber = createParakeetTranscriber({
+      apiUrl: 'https://parakeet.example',
+      onTranscript: (text) => transcripts.push(text),
+      WebSocketImpl: CapturingSocket as any,
+      drainTimeoutMs: 50,
+    });
+    transcriber.stop();
+    socketHolder.socket?.onmessage?.({
+      data: JSON.stringify({ text: 'late para' }),
+    } as MessageEvent);
+    await new Promise((resolve) => setTimeout(resolve, 70));
+
+    expect(transcripts).toEqual(['late para']);
+  });
+
+  test('closes the socket when finalize send fails', () => {
+    const events: Array<'send' | 'close'> = [];
+    class FakeWebSocket {
+      binaryType: string = 'blob';
+      readyState = 1;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      constructor(_url: string) {}
+      send(_data: unknown) {
+        events.push('send');
+        throw new Error('synthetic send failure');
+      }
+      close() {
+        events.push('close');
+        this.readyState = 3;
+      }
+    }
+
+    const transcriber = createParakeetTranscriber({
+      apiUrl: 'https://parakeet.example',
+      onTranscript: () => {},
+      WebSocketImpl: FakeWebSocket as any,
+    });
+    transcriber.stop();
+
+    expect(events).toEqual(['send', 'close']);
+  });
 });
