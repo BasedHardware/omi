@@ -1397,6 +1397,11 @@ checks:
     triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Open Food Facts app must guard _safe_int, sanitize barcodes (4-18 digits, URL extraction), handle 404s gracefully, and test hermetically"
+  - id: omi-zap-tests
+    command: ["bash", "plugins/zapier/omi-zap/run-tests.sh"]
+    triggers: ["plugins/zapier/omi-zap/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13541: the create-memory action shipped a body that resolved to undefined, so every Zap run POSTed empty and the API 422'd; the jest suite pins the request shape against ZapierActionCreateConversation and must run in CI to catch a regression"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
