@@ -247,6 +247,7 @@ def test_search_screen_no_results_is_structured_in_json(config_path: Path, cli_r
     }
     assert bodies[1]["name"] == "execute_sql"
     assert "appName LIKE '%Discord%'" in bodies[1]["arguments"]["query"]
+    assert "timestamp >= datetime('now', '-1 days')" in bodies[1]["arguments"]["query"]
     payload = json.loads(result.stdout)
     assert payload["results"] == []
     assert payload["query"] == "Discord"
@@ -271,6 +272,7 @@ def test_search_screen_exact_fallback_constrains_app_filter(config_path: Path, c
     assert result.exit_code == 0, result.output
     fallback_query = json.loads(route.calls[1].request.content)["arguments"]["query"]
     assert "WHERE (appName LIKE '%Discord%' ESCAPE '!') AND" in fallback_query
+    assert "timestamp >= datetime('now', '-7 days')" in fallback_query
 
 
 @pytest.mark.parametrize("literal,decoy", [("50%", "500"), ("a_b", "axb"), ("a!b", "ab"), ("it's", "its")])
@@ -300,7 +302,7 @@ def test_search_screen_fallback_matches_literal_text(
             rows = [dict(row) for row in db.execute(body["arguments"]["query"])]
             return httpx.Response(200, json=_tool_response({"rows": rows}))
 
-        args = ["--json", "local", "search-screen", "notes" if field == "app_filter" else literal]
+        args = ["--json", "local", "search-screen", "notes" if field == "app_filter" else literal, "--days", "365"]
         if field == "app_filter":
             args.extend(["--app", literal])
         with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
