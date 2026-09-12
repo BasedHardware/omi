@@ -197,22 +197,8 @@ do not hand-edit those paths to match a specific machine.
   callback/continuation, or await a deterministic state signal. An unavoidable
   real-scheduler integration wait needs
   `// omi-test-quality: wall-clock-wait -- <why injection cannot test this boundary>`.
-- Use `makeIsolatedDefaults()` from `Tests/Support/IsolatedTestDefaults.swift`
-  and inject the returned defaults into the subject. The helper owns a unique
-  domain and registers XCTest teardown; shared auth domains raced in #13260.
-  New direct `UserDefaults.standard` mutations are ratcheted. Only singleton
-  integration tests lacking an injection seam may annotate an individual site:
-  `// omi-test-quality: shared-defaults -- integration: <why the shared domain is required>`.
-  Preserve/restore the affected keys for those exceptions; the annotation does
-  not provide isolation. The static check counts direct calls, not aliases.
-- For chat repeating timers, use `OwnedRunLoopTimer` and retain explicit stop
-  calls. The token invalidates on release; callbacks must capture feature owners
-  weakly. `ManualRunLoopTimerScheduler` drives unscheduled timers and a fixed
-  date in tests, so cancellation and elapsed-time behavior need no sleeps.
-- `python3 scripts/check_desktop_test_quality.py` ratchets legacy source
-  inspection, wall-clock waits, and direct shared defaults mutations; its
-  baselines may only decrease. The check and its fixture tests run in the
-  existing desktop suite and the local/CI check manifest.
+- The [test isolation guide](../../.github/agent-docs/desktop-test-isolation.md)
+  covers shared fixtures and the test-quality ratchet.
 
 ## Key Architecture Notes
 
