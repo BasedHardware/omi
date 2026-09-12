@@ -235,6 +235,24 @@ def load(path: Optional[Path] = None) -> Config:
     return Config(path=p, active_profile=active, profiles=profiles, extra=extra)
 
 
+def _ensure_private_config_parents(path: Path) -> None:
+    """Create missing config directories as ``0o700`` without chmod'ing existing ones.
+
+    ``OMI_CONFIG`` may point at a shared directory the user already locked down
+    (or opened) themselves. Newly created ancestors still get owner-only access.
+    """
+    missing: list[Path] = []
+    directory = path.parent
+    while not directory.exists():
+        missing.append(directory)
+        parent = directory.parent
+        if parent == directory:
+            break
+        directory = parent
+    for directory in reversed(missing):
+        directory.mkdir(mode=0o700, exist_ok=True)
+
+
 def save(config: Config) -> None:
     """Persist the config to disk with secure (owner-only) permissions.
 
@@ -252,13 +270,7 @@ def save(config: Config) -> None:
             f"refusing to overwrite {config.path}: {config.load_error}. "
             "Fix or remove the config file and try again."
         )
-    config.path.parent.mkdir(parents=True, exist_ok=True)
-    # Tighten parent dir perms too — credentials live underneath. Best-effort:
-    # don't fail if the user has a custom mode they want to keep.
-    try:
-        os.chmod(config.path.parent, 0o700)
-    except OSError:
-        pass
+    _ensure_private_config_parents(config.path)
 
     payload: dict[str, Any] = {
         **config.extra,
