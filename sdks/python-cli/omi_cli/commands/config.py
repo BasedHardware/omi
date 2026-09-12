@@ -151,3 +151,31 @@ def profile_delete(
     config.delete_profile(name)
     cfg.save(config)
     ctx.renderer.success(f"Deleted profile [bold]{escape(name)}[/bold].")
+
+
+@profile_app.command("rename", help="Rename a local profile without recreating its credentials.")
+def profile_rename(
+    typer_ctx: typer.Context,
+    old: str = typer.Argument(..., help="Current profile name."),
+    new: str = typer.Argument(..., help="New profile name."),
+) -> None:
+    ctx = _ctx(typer_ctx)
+    config = ctx.load_config()
+    try:
+        config.rename_profile(old, new)
+    except KeyError as exc:
+        raise UsageError(message=str(exc)) from exc
+    except ValueError as exc:
+        raise UsageError(message=str(exc)) from exc
+    cfg.save(config)
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit(
+            {
+                "active_profile": config.active_profile,
+                "profiles": config.list_profiles(),
+            }
+        )
+        return
+    ctx.renderer.success(
+        f"Renamed profile [bold]{escape(old)}[/bold] → [bold]{escape(new.strip())}[/bold]."
+    )

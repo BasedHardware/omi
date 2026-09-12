@@ -163,6 +163,28 @@ class Config:
         if self.active_profile == name:
             self.active_profile = DEFAULT_PROFILE_NAME
 
+    def rename_profile(self, old: str, new: str) -> None:
+        """Rename a profile in place, keeping credentials and extra keys.
+
+        Updates ``active_profile`` when the renamed profile is the active one.
+        Identical names are a no-op. Blank destination names and collisions
+        raise ``ValueError``; a missing source raises ``KeyError``.
+        """
+        dest = new.strip()
+        if not dest:
+            raise ValueError("new profile name cannot be blank")
+        if old == dest:
+            return
+        if old not in self.profiles:
+            raise KeyError(f"No such profile: '{old}'")
+        if dest in self.profiles:
+            raise ValueError(f"profile '{dest}' already exists")
+        profile = self.profiles.pop(old)
+        profile.name = dest
+        self.profiles[dest] = profile
+        if self.active_profile == old:
+            self.active_profile = dest
+
     def list_profiles(self) -> list[str]:
         return sorted(self.profiles.keys())
 

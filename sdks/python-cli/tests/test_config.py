@@ -463,3 +463,92 @@ def test_active_profile_non_string_diagnostics_succeed(config_path: Path, cli_ru
 
     result_path = cli_runner.invoke(app, ["config", "path"])
     assert result_path.exit_code == 0, result_path.output
+
+
+def test_rename_profile_dataclass_contract(tmp_path: Path) -> None:
+    config = cfg.Config(path=tmp_path / "config.toml")
+    p1 = cfg.Profile(
+        name="work",
+        auth_method="api_key",
+        api_key="omi_dev_secret123",
+        api_base="https://api.work.omi.local",
+        extra={"custom_key": "val"},
+    )
+    p2 = cfg.Profile(name="personal", auth_method="oauth", id_token="tok123")
+    config.set_profile(p1)
+    config.set_profile(p2)
+    config.active_profile = "work"
+
+    config.rename_profile("work", "work-new")
+    assert "work" not in config.profiles
+    assert "work-new" in config.profiles
+    assert config.active_profile == "work-new"
+    renamed = config.profiles["work-new"]
+    assert renamed.name == "work-new"
+    assert renamed.api_key == "omi_dev_secret123"
+    assert renamed.api_base == "https://api.work.omi.local"
+    assert renamed.extra == {"custom_key": "val"}
+
+    config.rename_profile("personal", "personal-renamed")
+    assert "personal" not in config.profiles
+    assert "personal-renamed" in config.profiles
+    assert config.active_profile == "work-new"
+
+    with pytest.raises(KeyError, match="No such profile: 'missing'"):
+        config.rename_profile("missing", "target")
+
+    with pytest.raises(ValueError, match="cannot be blank"):
+        config.rename_profile("work-new", "   ")
+
+    with pytest.raises(ValueError, match="already exists"):
+        config.rename_profile("work-new", "personal-renamed")
+
+    config.rename_profile("work-new", "work-new")
+    assert "work-new" in config.profiles
+
+    config.rename_profile("work-new", "work-ü")
+    assert "work-ü" in config.profiles
+    assert config.active_profile == "work-ü"
+
+
+def test_config_profile_rename_cli_command(config_path: Path, cli_runner) -> None:
+    config = cfg.load()
+    p = config.get_profile("old-profile")
+    p.auth_method = "api_key"
+    p.api_key = "omi_dev_testkey"
+    config.set_profile(p)
+    config.active_profile = "old-profile"
+    cfg.save(config)
+
+    res = cli_runner.invoke(app, ["config", "profile", "rename", "old-profile", "new-profile"])
+    assert res.exit_code == 0, res.output
+    assert "Renamed profile" in res.stderr
+
+    reloaded = cfg.load()
+    assert "old-profile" not in reloaded.profiles
+    assert "new-profile" in reloaded.profiles
+    assert reloaded.active_profile == "new-profile"
+    assert reloaded.profiles["new-profile"].api_key == "omi_dev_testkey"
+
+    res_json = cli_runner.invoke(app, ["--json", "config", "profile", "rename", "new-profile", "final-profile"])
+    assert res_json.exit_code == 0, res_json.output
+    data = json.loads(res_json.stdout)
+    assert data["active_profile"] == "final-profile"
+    assert "final-profile" in data["profiles"]
+    assert "new-profile" not in data["profiles"]
+    assert set(data.keys()) == {"active_profile", "profiles"}
+
+    res_missing = cli_runner.invoke(app, ["config", "profile", "rename", "does-not-exist", "foo"])
+    assert res_missing.exit_code != 0
+    assert "No such profile" in res_missing.stderr
+
+    res_self = cli_runner.invoke(app, ["config", "profile", "rename", "final-profile", "final-profile"])
+    assert res_self.exit_code == 0
+
+    config_with_two = cfg.load()
+    p2 = config_with_two.get_profile("other-profile")
+    config_with_two.set_profile(p2)
+    cfg.save(config_with_two)
+    res_collision = cli_runner.invoke(app, ["config", "profile", "rename", "final-profile", "other-profile"])
+    assert res_collision.exit_code != 0
+    assert "already exists" in res_collision.stderr
