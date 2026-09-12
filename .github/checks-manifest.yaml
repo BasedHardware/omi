@@ -924,6 +924,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "#13181 failed content HTTP reads were indistinguishable from empty successful pages; production helper and handler regression"
 
+  - id: twitter-segment-shape-tests
+    command: ["python3", "plugins/omi-twitter-app/test_main_simple.py"]
+    triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a JSON list of raw-string transcript segments crashed process_segments with AttributeError on seg.get, producing a 500 instead of processing the webhook"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
