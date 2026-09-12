@@ -83,6 +83,13 @@ class ProcessSegmentsTests(unittest.TestCase):
         self.detector.detect_trigger.return_value = False
         self.assertEqual(self.process(["hello world"]), "listening")
 
+    def test_process_segments_annotation_allows_non_dicts(self):
+        import typing
+
+        hints = typing.get_type_hints(self.handler.process_segments)
+        self.assertEqual(typing.get_origin(hints["segments"]), list)
+        self.assertEqual(typing.get_args(hints["segments"]), (typing.Any,))
+
     def test_mixed_segments_do_not_crash(self):
         self.detector.detect_trigger.return_value = False
         self.assertEqual(self.process([{"text": "hi"}, "raw string", 42]), "listening")

@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import os
 import sys
 from dotenv import load_dotenv
-from typing import List, Dict, Any
+from typing import List, Any
 import secrets
 import asyncio
 
@@ -723,7 +723,7 @@ async def webhook(
 
 async def process_segments(
     session: dict,
-    segments: List[Dict[str, Any]],
+    segments: List[Any],
     user: dict
 ) -> str:
     """
