@@ -143,7 +143,7 @@ a normal action response returns:
     action: open_ask_omi
     params:
       wait: false
-    target: floating
+    target: main
     frames: 8
     interval_ms: 16
 ```

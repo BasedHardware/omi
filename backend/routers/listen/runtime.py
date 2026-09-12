@@ -48,7 +48,7 @@ from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
-from utils.observability.transcription import LiveSTTAttempt
+from utils.observability.transcription import LiveSTTAttempt, record_live_stt_audio_seconds
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.product_telemetry import emit_product_event
 from utils.stt.streaming import get_stt_service_for_language
@@ -614,6 +614,21 @@ class ListenSessionRuntime:
         if self.receiver.vad_gate is not None:
             speech_ms = self.receiver.vad_gate.consume_speech_ms_delta()
             speech_seconds = speech_ms // 1000
+            if speech_ms:
+                # Live provider minutes: VAD speech seconds actually sent for
+                # STT (not wall-clock, not fair-use transcription_seconds),
+                # attributed to the provider serving at flush time — failover
+                # can switch it mid-session, same read-at-use rule as
+                # _serving_provider(). The consumed delta makes each
+                # millisecond reach this counter exactly once. Custom-STT
+                # sessions returned above: their audio runs on the user's own
+                # STT and is not a provider's minutes.
+                provider = getattr(self, 'stt_service', None)
+                record_live_stt_audio_seconds(
+                    provider=getattr(provider, 'value', provider),
+                    platform=getattr(getattr(self, 'client_device_context', None), 'platform', None),
+                    seconds=speech_ms / 1000,
+                )
             if FAIR_USE_ENABLED and speech_ms:
                 await self.persistence.call(record_speech_ms, self.request.uid, speech_ms)
         now = time.time()

@@ -912,6 +912,9 @@ def create_voice_message_stream(
             route='voice_chat_sse',
             provider=stt_provider,
             platform=x_app_platform,
+            # Measured first-wav duration (the only file transcribed); None when
+            # the WAV header was unreadable, so provider minutes stay measured-only.
+            audio_seconds=duration_ms / 1000 if duration_ms is not None else None,
         )
         quota_recorded = False
         try:
@@ -1076,6 +1079,10 @@ async def transcribe_voice_message(
             route='voice_rest_pcm',
             provider=stt_provider,
             platform=x_app_platform,
+            # compute_pcm_duration_ms assumes 16-bit PCM. Compressed encodings
+            # still use that figure for the daily budget (pre-existing); do not
+            # charge provider minutes from a byte-length that is not audio time.
+            audio_seconds=duration_ms / 1000 if encoding == 'linear16' else None,
         )
         try:
             transcript, detected_language = await run_blocking(
@@ -1185,9 +1192,15 @@ async def transcribe_voice_message(
         # An unreadable duration must not skip the budget check (STT still
         # runs on it) — charge the worst case instead of charging nothing.
         total_duration_ms = 0
+        measured_duration_ms = 0
         for wav_path in wav_paths:
             duration_ms = await run_blocking(storage_executor, read_wav_duration_ms, wav_path)
             total_duration_ms += duration_ms if duration_ms is not None else MAX_SESSION_DURATION_S * 1000
+            if duration_ms is not None:
+                # Audio-seconds metrics record measured durations only; an
+                # unreadable file still charges the budget worst case above
+                # but must not inflate provider minutes.
+                measured_duration_ms += duration_ms
         allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
         if not allowed:
             raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
@@ -1197,6 +1210,7 @@ async def transcribe_voice_message(
             route='voice_rest_multipart',
             provider=stt_provider,
             platform=x_app_platform,
+            audio_seconds=measured_duration_ms / 1000,
         )
         for wav_path in wav_paths:
             transcript, detected_language = await run_blocking(

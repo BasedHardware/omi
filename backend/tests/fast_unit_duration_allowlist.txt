@@ -270,7 +270,7 @@ tests/unit/test_translation_optimization.py::test_confident_language_detection_h
 tests/unit/test_upstream_boundary.py::TestExtractionSeamFanOut::test_fan_out_invokes_memory_action_item_and_goal_paths_separately
 tests/unit/test_user_speaker_embedding.py::TestSetUserSpeakerEmbedding::test_stores_embedding_on_user_document
 tests/unit/test_user_speaker_embedding.py::TestSpeechProfileEmbeddingExtraction::test_extraction_called_after_upload
-tests/unit/test_user_speaker_embedding.py::TestSpeechProfileEmbeddingExtraction::test_extraction_failure_does_not_block_upload
+tests/unit/test_user_speaker_embedding.py::TestSpeechProfileEmbeddingExtraction::test_extraction_failure_fails_the_request
 tests/unit/test_v3_real_router_default_off_f4.py::test_production_default_dependency_is_disabled_and_preserves_legacy_get_behavior
 tests/unit/test_v3_real_router_default_off_f4.py::test_router_logs_are_sanitized_and_mutating_route_dependencies_unchanged
 tests/unit/test_workstream_router_contract.py::test_openapi_exposes_intent_and_thread_resources_without_manual_workstream_create
@@ -337,6 +337,22 @@ tests/unit/test_llm_gateway_vertex_provider.py::test_gateway_registry_uses_nativ
 # File-level: red-proof AST walks of production sources exceed 0.30s CPU per
 # test under saturated pre-push once this file is in the changed set.
 tests/unit/test_client_processing_trust_boundary.py
+# Saturated full-suite measurements (2026-09-10, 1126-file file-isolation fanout,
+# 10 cores): only these pre-existing contract tests crossed the 0.10s warn target
+# (0.19-0.26s CPU), so they keep guard suppression against a busier host. Every
+# other runtime_env validator and rollout test touched by this change measured
+# under 0.10s CPU even saturated and stays guard-visible.
+tests/unit/test_backend_runtime_env_validator.py::test_jit_admission_surface_omission_fails_compose[dev]
+tests/unit/test_backend_runtime_env_validator.py::test_jit_admission_surface_omission_fails_compose[prod]
+tests/unit/test_backend_runtime_env_validator.py::test_jit_admission_surfaces_require_posthog_and_listen_data_plane[dev]
+tests/unit/test_backend_runtime_env_validator.py::test_jit_admission_surfaces_require_posthog_and_listen_data_plane[prod]
+tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_host_and_requires_posthog[dev]
+tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_host_and_requires_posthog[prod]
 # First route test in its file: amortizes the routers.users FastAPI/pydantic import into its call
 # phase. Structural (the file-isolation runner model), not a per-test regression.
 tests/unit/test_daily_summary_generation.py::test_create_route_happy_path
+# D2 plan-quota retirement: drives the real runtime-env workflow validator over the repository's own
+# manifest and composite deploy actions (parses ~2k lines of YAML per environment); hermetic, required
+# in the unit lane so a dropped --remove-env-vars entry fails before the deploy does.
+tests/unit/test_plan_quota_env_retirement.py::test_deploy_actions_strip_the_overlays_from_every_cloud_run_service[dev]
+tests/unit/test_plan_quota_env_retirement.py::test_deploy_actions_strip_the_overlays_from_every_cloud_run_service[prod]

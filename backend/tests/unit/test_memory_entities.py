@@ -6,7 +6,7 @@ from utils.conversations.subjects import infer_subject_from_segments
 
 
 def test_infer_subject_from_user_only_segments():
-    subject_id, attribution = infer_subject_from_segments([SimpleNamespace(is_user=True, person_id=None)])
+    subject_id, attribution = infer_subject_from_segments([SimpleNamespace(is_user=True, person_id=None, speaker_id=0)])
 
     assert subject_id == entities.USER_ENTITY_ID
     assert attribution == SubjectAttribution.user
@@ -21,7 +21,7 @@ def test_infer_subject_from_non_user_person_segments():
 
 def test_infer_subject_from_mixed_segments_is_unknown():
     subject_id, attribution = infer_subject_from_segments(
-        [SimpleNamespace(is_user=True, person_id=None), SimpleNamespace(is_user=False, person_id='p1')]
+        [SimpleNamespace(is_user=True, person_id=None, speaker_id=0), SimpleNamespace(is_user=False, person_id='p1')]
     )
 
     assert subject_id is None

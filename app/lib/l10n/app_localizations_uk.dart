@@ -10000,4 +10000,7 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Перетворення мовлення на текст зараз недоступне. Перевірте підключення до інтернету та налаштування розпізнавання мовлення на пристрої й спробуйте ще раз.';
+
+  @override
+  String get processingTakingLonger => 'Ще обробляється — це триває довше, ніж зазвичай.';
 }
