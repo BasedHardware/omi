@@ -14,7 +14,8 @@
     "zapier-platform-core": "15.11.1"
   },
   "devDependencies": {
-    "jest": "^29.6.0"
+    "jest": "^29.6.0",
+    "nock": "^13.5.6"
   },
   "overrides": {
     "form-data": "^4.0.4",
