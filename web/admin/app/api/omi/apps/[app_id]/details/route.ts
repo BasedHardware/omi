@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase/admin';
 import { verifyAdmin } from '@/lib/auth';
+import { isSafeDocumentId } from '@/lib/firestore-doc-id.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,8 +10,8 @@ export async function GET(request: NextRequest, props: { params: Promise<{ app_i
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 
-  const { app_id } = params;
-  if (!app_id) {
+  const app_id = params.app_id;
+  if (!app_id || !isSafeDocumentId(app_id)) {
     return NextResponse.json({ error: 'App ID is required' }, { status: 400 });
   }
 

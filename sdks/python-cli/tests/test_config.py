@@ -282,6 +282,36 @@ def test_save_retries_when_unique_temp_name_collides(config_path: Path, monkeypa
     assert reloaded.api_key == "omi_dev_retry"
 
 
+def test_save_cleans_up_temp_file_when_replace_fails(config_path: Path, monkeypatch) -> None:
+    """A failed os.replace() (e.g. the destination is locked on Windows) must
+    not leave the fully serialized, credential-bearing temp file on disk."""
+    config = cfg.load()
+    profile = config.get_profile()
+    profile.auth_method = "api_key"
+    profile.api_key = "omi_dev_secret"
+    config.set_profile(profile)
+
+    written_tmp_path: list[Path] = []
+    original_replace = cfg.os.replace
+
+    def failing_replace(src, dst):
+        written_tmp_path.append(Path(src))
+        raise PermissionError("destination is locked")
+
+    monkeypatch.setattr(cfg.os, "replace", failing_replace)
+
+    with pytest.raises(PermissionError, match="destination is locked"):
+        cfg.save(config)
+
+    assert written_tmp_path
+    assert not written_tmp_path[0].exists()
+    assert not config_path.exists()
+
+    monkeypatch.setattr(cfg.os, "replace", original_replace)
+    cfg.save(config)
+    assert cfg.load().get_profile().api_key == "omi_dev_secret"
+
+
 def test_save_concurrent_writers_retry_on_unique_name_collision(config_path: Path) -> None:
     """Real interleaving: a nested save() inside the first writer's dump
     claims a temp path; the outer writer's own path cannot collide with it
@@ -380,3 +410,86 @@ def test_is_authenticated_states() -> None:
     p.id_token = None
     p.refresh_token = "refr..."
     assert p.is_authenticated()
+
+
+# -- Regression tests for non-table profile containers (PR #13349) --
+
+
+def test_profiles_string_value(config_path: Path) -> None:
+    """profiles = 'mistake' should report load error, not crash."""
+    config_path.write_text('profiles = "mistake"\n', encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert "profiles" in config.load_error.lower()
+
+
+def test_profiles_nested_string(config_path: Path) -> None:
+    """[profiles] default = 'mistake' should report load error."""
+    config_path.write_text('[profiles]\ndefault = "mistake"\n', encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert "default" in config.load_error
+
+
+def test_valid_profiles_still_work(config_path: Path) -> None:
+    """Valid profiles should load normally."""
+    config_path.write_text('[profiles.default]\napi_base = "https://api.example.com"\n', encoding="utf-8")
+    config = cfg.load()
+    assert not config.was_load_error
+    assert "default" in config.profiles
+
+
+def test_no_profiles_section(config_path: Path) -> None:
+    """Missing profiles section should load normally."""
+    config_path.write_text('active_profile = "other"\n', encoding="utf-8")
+    config = cfg.load()
+    assert not config.was_load_error
+    assert config.active_profile == "other"
+
+
+# -- Regression tests for non-string active_profile selector (Issue #13442) --
+
+
+@pytest.mark.parametrize(
+    "invalid_toml,expected_type",
+    [
+        ('active_profile = ["work"]\n', "list"),
+        ("active_profile = 42\n", "int"),
+        ("active_profile = true\n", "bool"),
+        ("[active_profile]\nname = 'work'\n", "dict"),
+    ],
+)
+def test_active_profile_non_string_records_load_error(config_path: Path, invalid_toml: str, expected_type: str) -> None:
+    """active_profile must be a string; non-string values should set load_error instead of crashing."""
+    config_path.write_text(invalid_toml, encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.load_error is not None
+    assert f"'active_profile' must be a string, got {expected_type}" in config.load_error
+
+
+def test_active_profile_non_string_refuses_save_overwrite(config_path: Path) -> None:
+    """A config with invalid active_profile type must not be overwritten by save()."""
+    config_path.write_text(
+        'active_profile = ["work"]\n[profiles.work]\napi_base = "https://api.omi.me"\n', encoding="utf-8"
+    )
+    config = cfg.load()
+    assert config.was_load_error
+
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
+
+    # The file on disk is preserved intact
+    assert 'active_profile = ["work"]' in config_path.read_text(encoding="utf-8")
+
+
+def test_active_profile_non_string_diagnostics_succeed(config_path: Path, cli_runner) -> None:
+    """Read-only diagnostics commands must still succeed when active_profile is invalid."""
+    config_path.write_text('active_profile = ["work"]\n', encoding="utf-8")
+    result = cli_runner.invoke(app, ["version"])
+    assert result.exit_code == 0, result.output
+
+    result_path = cli_runner.invoke(app, ["config", "path"])
+    assert result_path.exit_code == 0, result_path.output

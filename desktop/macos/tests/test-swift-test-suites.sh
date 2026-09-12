@@ -521,11 +521,18 @@ fi
 # lowered to 4: h0 = {ActionItemsFTSRepairTests, AlphaTests,
 # APIClientRoutingTests} fails and isolates its 3 members; h1 passes as a
 # single invocation.
-export OMI_SWIFT_TEST_FALLBACK_BISECT_MIN=4
+# MIN=1 makes even the 3-suite halves "large", pinning the single-pass
+# rule: a red half NEVER bisects again — it descends straight to isolated
+# singles (a wedged co-resident sub-batch burned its full scaled budget at
+# every bisect level on run 34395704115: ~38 min for one chain).
+export OMI_SWIFT_TEST_FALLBACK_BISECT_MIN=1
 export OMI_SWIFT_TEST_DISCOVERY_ROOT="$TMPDIR/fallback-tests"
 : >"$FAKE_XCRUN_LOG"
 if "$RUNNER" >"$TMPDIR/bisect-runner.out" 2>"$TMPDIR/bisect-runner.err"; then
   fail "bisect fallback runner unexpectedly succeeded despite AlphaTests failure"
+fi
+if grep -qE -- "--- BATCH worker-0-0-h[01]-h[01] " "$TMPDIR/bisect-runner.out"; then
+  fail "a red bisect half was bisected again instead of descending to singles"
 fi
 if ! grep -q -- "--- BATCH worker-0-0-h0 exited 42; re-running its 3 suite(s) in isolation ---" \
   "$TMPDIR/bisect-runner.out"; then

@@ -28,4 +28,9 @@ describe('ConnectorRow', () => {
     render(<ConnectorRow icon={Mail} title="Sticky Notes" description="d" />)
     expect(screen.getByTestId('connector-sticky-notes')).toBeTruthy()
   })
+
+  it('exposes the full title as a native tooltip when truncated', () => {
+    render(<ConnectorRow icon={Mail} title="Claude Code" description="d" />)
+    expect(screen.getByText('Claude Code').getAttribute('title')).toBe('Claude Code')
+  })
 })
