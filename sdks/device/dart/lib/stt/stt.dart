@@ -30,9 +30,17 @@ String parakeetWsUrl(String apiUrl, {int sampleRate = 16000}) {
 }
 
 class DeepgramTranscriber implements StreamingTranscriber {
-  DeepgramTranscriber({required this.apiKey, required this.onTranscript, this.sampleRate = 16000}) {
-    final uri = Uri.parse(deepgramWsUrl(sampleRate: sampleRate));
-    _channel = IOWebSocketChannel.connect(uri, headers: {'Authorization': 'Token $apiKey'});
+  DeepgramTranscriber({
+    required this.apiKey,
+    required this.onTranscript,
+    this.sampleRate = 16000,
+    WebSocketChannel? channel,
+  }) {
+    _channel = channel ??
+        IOWebSocketChannel.connect(
+          Uri.parse(deepgramWsUrl(sampleRate: sampleRate)),
+          headers: {'Authorization': 'Token $apiKey'},
+        );
     _sub = _channel.stream.listen((event) {
       if (event is! String) return;
       try {
@@ -57,6 +65,9 @@ class DeepgramTranscriber implements StreamingTranscriber {
 
   @override
   Future<void> stop() async {
+    try {
+      _channel.sink.add(jsonEncode({'type': 'CloseStream'}));
+    } catch (_) {}
     await _sub?.cancel();
     await _channel.sink.close();
   }
