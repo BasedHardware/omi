@@ -1223,6 +1223,66 @@ test('does not fail conversation detail when stored sections or action items can
   expect(omitted.actionItems).toEqual([]);
 });
 
+test('keeps GET conversation sections when more than 1000', async () => {
+  const sections = Array.from({length: 1001}, (_, index) => ({
+    heading: `Note ${index}`,
+    body_markdown: `Body ${index}`,
+  }));
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        sections,
+      },
+    }),
+  );
+  const loaded = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(loaded.title).toBe(fixture.structured.title);
+  expect(loaded.sections).toEqual(
+    sections.map(section => ({
+      heading: section.heading,
+      bodyMarkdown: section.body_markdown,
+    })),
+  );
+  expect(loaded.transcript).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: 'Full speech beyond the summary',
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+      },
+    ],
+  });
+});
+
+test('keeps GET conversation action items when more than 1000', async () => {
+  const action_items = Array.from({length: 1001}, (_, index) => ({
+    description: `Task ${index}`,
+    completed: index % 2 === 0,
+  }));
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        action_items,
+      },
+    }),
+  );
+  const loaded = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(loaded.title).toBe(fixture.structured.title);
+  expect(loaded.actionItems).toEqual(
+    action_items.map(item => ({
+      description: item.description,
+      completed: item.completed,
+    })),
+  );
+});
+
 test('does not fail conversation detail when stored title or overview is omitted', async () => {
   mockRequest.mockResolvedValueOnce(
     response({

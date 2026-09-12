@@ -110,15 +110,12 @@ function optionalObjectRows(value: unknown): unknown[] {
   }
   return value;
 }
-function optionalArray(value: unknown, limit: number): unknown[] {
+function optionalArray(value: unknown): unknown[] {
   if (value === undefined || value === null) {
     return [];
   }
   if (!Array.isArray(value)) {
     return [];
-  }
-  if (value.length > limit) {
-    throw new DetailError('invalid');
   }
   return value;
 }
@@ -344,7 +341,7 @@ export async function loadLegacyConversationDetail(
   const structured = object(value.structured);
   const locked = boolean(value.is_locked ?? false);
   const sections: LegacyConversationDetail['sections'] = [];
-  for (const raw of optionalArray(structured.sections, 1000)) {
+  for (const raw of optionalArray(structured.sections)) {
     if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
       continue;
     }
@@ -363,7 +360,6 @@ export async function loadLegacyConversationDetail(
   const actionItems: LegacyConversationDetail['actionItems'] = [];
   for (const raw of optionalArray(
     structured.action_items ?? structured.actionItems,
-    1000,
   )) {
     if (typeof raw === 'string') {
       if (raw === '') {
