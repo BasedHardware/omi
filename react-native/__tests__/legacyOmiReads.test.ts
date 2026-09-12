@@ -203,6 +203,26 @@ test('old conversations keep GET timestamps Flutter DateTime.tryParse accepts', 
   expect(result.items[0]?.createdAt).toBe('2026-09-07T00:00:00.000Z');
 });
 
+test('old conversations keep GET timestamps with hour-only offsets Dart DateTime.tryParse accepts', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'hour-offset',
+      created_at: '2026-09-07T00:00:00+00',
+    },
+    {
+      ...conversation,
+      id: 'neighbor',
+    },
+  ]);
+  const result = await loadConversations(api);
+  expect(result.items.map(row => row.id)).toEqual([
+    'hour-offset',
+    'neighbor',
+  ]);
+  expect(result.items[0]?.createdAt).toBe('2026-09-07T00:00:00.000Z');
+});
+
 test('old conversations keep wire-non-empty category and omit whitespace', async () => {
   const {api} = backend([
     {

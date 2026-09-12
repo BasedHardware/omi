@@ -41,9 +41,12 @@ function bool(value: unknown, fallback = false): boolean {
 }
 function date(value: unknown): string | null {
   if (value === undefined || value === null) return null;
-  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value)))
+  if (typeof value !== 'string')
     throw new Error('Omi timestamp is malformed');
-  return new Date(value).toISOString();
+  const parsed = Date.parse(value.replace(/([+-]\d{2})$/, '$1:00'));
+  if (!Number.isFinite(parsed))
+    throw new Error('Omi timestamp is malformed');
+  return new Date(parsed).toISOString();
 }
 function milliseconds(value: unknown): number | null {
   const parsed = date(value);
