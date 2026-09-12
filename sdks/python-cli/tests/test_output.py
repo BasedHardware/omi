@@ -68,7 +68,6 @@ def test_json_mode_serializes_datetime() -> None:
         (["alpha", "beta"], ["alpha", "beta"]),
         ([17, 3.5], ["17", "3.5"]),
         ([True, False, None], ["✓", "✗"]),
-        (["alpha", 17, {"k": 1}], ["alpha", "17"]),
     ],
 )
 def test_pretty_mode_renders_scalar_and_mixed_arrays(capsys, rows, expected) -> None:
@@ -76,6 +75,20 @@ def test_pretty_mode_renders_scalar_and_mixed_arrays(capsys, rows, expected) -> 
     output = capsys.readouterr().out
     for token in expected:
         assert token in output
+    first = expected[0]
+    second = expected[1]
+    assert output.index(first) < output.index(second)
+
+
+def test_pretty_mode_renders_mapping_row_inside_mixed_array(capsys) -> None:
+    Renderer(no_color=True).emit(["alpha", 17, {"k": 1}])
+    output = capsys.readouterr().out
+    assert "value" in output
+    assert "k" in output
+    assert "alpha" in output
+    assert "17" in output
+    assert "1" in output
+    assert output.index("alpha") < output.index("17")
 
 
 def test_json_mode_preserves_scalar_array_shape(capsys) -> None:
