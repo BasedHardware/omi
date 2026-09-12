@@ -36,6 +36,7 @@ import {
   subscriptionStatusCopy,
   usagePeriodStatsCopy,
   subscriptionPeriodCopy,
+  subscriptionTranscriptionQuotaCopy,
   primaryLanguageCopy,
   peopleNameRows,
   fairUseCopy,
@@ -813,10 +814,10 @@ export function SettingsPage({
             copy={[
               subscriptionPlanCopy(snapshot.subscription.plan),
               subscriptionStatusCopy(snapshot.subscription.status),
-              snapshot.subscription.transcriptionSecondsUsed !== null &&
-              snapshot.subscription.transcriptionSecondsLimit !== null
-                ? `${snapshot.subscription.transcriptionSecondsUsed} / ${snapshot.subscription.transcriptionSecondsLimit} transcribed seconds`
-                : null,
+              subscriptionTranscriptionQuotaCopy(
+                snapshot.subscription.transcriptionSecondsUsed,
+                snapshot.subscription.transcriptionSecondsLimit,
+              ),
             ]
               .filter(item => item !== null)
               .join(' · ')}

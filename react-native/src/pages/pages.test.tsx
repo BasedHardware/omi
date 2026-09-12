@@ -1268,6 +1268,31 @@ test('Settings names GET subscription period quotas without Upgrade', async () =
   expect(tree).not.toContain('Upgrade');
 });
 
+test('Settings names GET subscription transcription quota as minutes this month', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/subscription') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          plan: 'basic',
+          status: 'active',
+          transcription_seconds_used: 90,
+          transcription_seconds_limit: 3600,
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Basic · Active · 2 of 60 min used this month');
+  expect(tree).not.toContain('90 / 3600');
+  expect(tree).not.toContain('transcribed seconds');
+  expect(tree).not.toContain('Upgrade');
+});
+
 test('Settings names GET primary language without a write sheet', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

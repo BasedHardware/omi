@@ -81,6 +81,7 @@ import {
   projectionTimestamp,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
+  subscriptionTranscriptionQuotaCopy,
   usageStatsCopy,
   primaryLanguageCopy,
   peopleNameRows,
@@ -936,6 +937,15 @@ test('account subscription copy is not a raw wire token', () => {
   expect(subscriptionPlanCopy('')).toBe('Plan unavailable');
   expect(subscriptionStatusCopy('')).toBe('Plan unavailable');
   expect(subscriptionPlanCopy('\u0085')).toBe('Plan unavailable');
+  expect(subscriptionTranscriptionQuotaCopy(90, 3600)).toBe(
+    '2 of 60 min used this month',
+  );
+  expect(subscriptionTranscriptionQuotaCopy(0, 1800)).toBe(
+    '0 of 30 min used this month',
+  );
+  expect(subscriptionTranscriptionQuotaCopy(90, 0)).toBeNull();
+  expect(subscriptionTranscriptionQuotaCopy(null, 3600)).toBeNull();
+  expect(subscriptionTranscriptionQuotaCopy(90, null)).toBeNull();
   expect(dataProtectionCopy('standard')).toBe('Standard');
   expect(dataProtectionCopy('')).toBe('Data protection unavailable');
   expect(dataProtectionCopy('\u0085')).toBe('Data protection unavailable');

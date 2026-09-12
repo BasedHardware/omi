@@ -23,6 +23,7 @@ import {
   subscriptionStatusCopy,
   usagePeriodStatsCopy,
   subscriptionPeriodCopy,
+  subscriptionTranscriptionQuotaCopy,
   primaryLanguageCopy,
   peopleNameRows,
   fairUseCopy,
@@ -909,14 +910,14 @@ export function DesktopSettings({
       ) : null}
       {account?.subscription != null ? (
         <Row
-          copy={[
-            subscriptionPlanCopy(account.subscription.plan),
-            subscriptionStatusCopy(account.subscription.status),
-            account.subscription.transcriptionSecondsUsed !== null &&
-            account.subscription.transcriptionSecondsLimit !== null
-              ? `${account.subscription.transcriptionSecondsUsed} / ${account.subscription.transcriptionSecondsLimit} transcribed seconds`
-              : null,
-          ]
+            copy={[
+              subscriptionPlanCopy(account.subscription.plan),
+              subscriptionStatusCopy(account.subscription.status),
+              subscriptionTranscriptionQuotaCopy(
+                account.subscription.transcriptionSecondsUsed,
+                account.subscription.transcriptionSecondsLimit,
+              ),
+            ]
             .filter(item => item !== null)
             .join(' · ')}
           title="Current plan"

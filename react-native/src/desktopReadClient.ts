@@ -664,6 +664,22 @@ export function subscriptionPlanCopy(plan: string): string {
   return accountWireCopy(plan, 'Plan unavailable');
 }
 
+export function subscriptionTranscriptionQuotaCopy(
+  used: number | null | undefined,
+  limit: number | null | undefined,
+): string | null {
+  if (
+    typeof used !== 'number' ||
+    typeof limit !== 'number' ||
+    !Number.isFinite(used) ||
+    !Number.isFinite(limit) ||
+    limit <= 0
+  ) {
+    return null;
+  }
+  return `${Math.round(used / 60)} of ${Math.round(limit / 60)} min used this month`;
+}
+
 export function usageStatsCopy(
   stats:
     | {

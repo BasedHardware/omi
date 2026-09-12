@@ -2581,7 +2581,7 @@ test('Settings reports a subscription read failure as unavailable', async () => 
   );
 });
 
-test('Settings shows already-loaded transcription seconds on Current plan', async () => {
+test('Settings shows already-loaded transcription quota as minutes on Current plan', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;
   };
@@ -2625,7 +2625,7 @@ test('Settings shows already-loaded transcription seconds on Current plan', asyn
       .props.onPress();
   });
   expect(renderedText(renderer)).toContain(
-    'Plus · Active · 90 / 3600 transcribed seconds',
+    'Plus · Active · 2 of 60 min used this month',
   );
   expect(renderedText(renderer)).not.toContain('Plan is unavailable.');
   expect(renderedText(renderer)).not.toContain('Company');
