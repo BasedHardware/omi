@@ -873,10 +873,10 @@ import XCTest
     /// routes it past `CFFIXED_USER_HOME`), and a concurrent suite that has `auth_userId`
     /// set there turns this into a no-op transition that leaves the revocation in place.
     func testAnOwnerTransitionDissolvesAnOutstandingRevocation() async throws {
-      let defaults = try makeIsolatedDefaults()
       var observedInsideBody: Bool?
 
-      await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
+      try await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
+        let defaults = try makeIsolatedDefaults()
         XCTAssertTrue(
           RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
           "precondition: the revocation is outstanding on entry")

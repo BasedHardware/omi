@@ -2814,7 +2814,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_awareness_snapshot",
-      effects: [.networkOrModel],
+      effects: [.localState, .localArtifact, .networkOrModel],
       summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging",
       params: ["limit"]
     ) { params in
@@ -2825,7 +2825,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "agent_lifecycle_convergence_snapshot",
-      effects: [.networkOrModel],
+      effects: [.localState, .localArtifact, .networkOrModel],
       summary: "Read canonical child-run status alongside the rendered pill and journal-completion projection",
       params: ["runIds"],
       category: "read",
@@ -2843,7 +2843,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_inspect_run",
-      effects: [.networkOrModel],
+      effects: [.localState, .localArtifact, .networkOrModel],
       summary: "Inspect one owner-scoped kernel run and its bounded tool-invocation ledger",
       params: ["runId"]
     ) { params in
@@ -2890,7 +2890,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_action_queue",
-      effects: [.networkOrModel],
+      effects: [.localState, .localArtifact, .networkOrModel],
       summary: "Read the derived Swift coordinator attention queue",
       params: ["limit"]
     ) { params in
@@ -2901,7 +2901,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_open_loops",
-      effects: [.networkOrModel],
+      effects: [.localState, .localArtifact, .networkOrModel],
       summary: "Read unresolved agent/coordinator loops from the Swift projection"
     ) { _ in
       let loops = try await DesktopCoordinatorService.shared.openLoopsJSON()

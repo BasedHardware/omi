@@ -8,7 +8,7 @@ extension DesktopAutomationActionRegistry {
   func registerRatingPromptActions() {
     register(
       name: "rating_prompt_state",
-      effects: [],
+      effects: [.localState],
       summary: "Return the rating prompt's persisted trigger state and visibility"
     ) { _ in
       await MainActor.run {

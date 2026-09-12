@@ -68,7 +68,7 @@ final class DesktopAutomationActionEffectTests: XCTestCase {
       "conversation_list_snapshot", "screen_frame_quick_look_probe",
       "permissions_snapshot", "coordinator_awareness_snapshot", "coordinator_inspect_run",
       "coordinator_action_queue", "coordinator_open_loops", "agent_lifecycle_convergence_snapshot",
-      "recent_screen_frames_snapshot", "kernel_turn_tail", "integration_nudge_evaluate",
+      "recent_screen_frames_snapshot", "kernel_turn_tail", "integration_nudge_evaluate", "rating_prompt_state",
     ] {
       do {
         // No params: a wrongly admitted handler would run or fail parameter validation.

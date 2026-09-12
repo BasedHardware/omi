@@ -22,7 +22,6 @@ final class IsolatedTestDefaults: Sendable {
 
 extension XCTestCase {
   /// Teardown retains the domain identity, never the subject's defaults handle.
-  @MainActor
   func makeIsolatedDefaults() throws -> sending UserDefaults {
     let fixture = IsolatedTestDefaults()
     addTeardownBlock { fixture.cleanUp() }
