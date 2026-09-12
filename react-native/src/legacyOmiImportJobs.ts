@@ -192,7 +192,7 @@ export function parseOmiImportJobs(body: string): OmiImportJob[] {
       throw new ImportJobError();
     }
     seen.add(id);
-    const status = visibleDisplayText(text(row.status, 64));
+    const status = visibleDisplayText(text(row.status, 1_000_000));
     const created = createdAtMs(row.created_at);
     const conversationsCreated = optionalCount(row.conversations_created);
     const conversationsSkipped = optionalCount(row.conversations_skipped);

@@ -233,6 +233,36 @@ test('keeps GET import jobs when error exceeds 10000', () => {
   ]);
 });
 
+test('keeps GET import jobs when status exceeds 64', () => {
+  const status = 's'.repeat(65);
+  expect(
+    parseOmiImportJobs(
+      JSON.stringify([
+        {job_id: 'job-long-status', status},
+        {job_id: 'job-neighbor', status: 'completed'},
+      ]),
+    ),
+  ).toEqual([
+    {id: 'job-long-status', status},
+    {id: 'job-neighbor', status: 'completed'},
+  ]);
+});
+
+test('keeps GET import jobs when status exceeds 10000', () => {
+  const status = 's'.repeat(10001);
+  expect(
+    parseOmiImportJobs(
+      JSON.stringify([
+        {job_id: 'job-long-status', status},
+        {job_id: 'job-neighbor', status: 'completed'},
+      ]),
+    ),
+  ).toEqual([
+    {id: 'job-long-status', status},
+    {id: 'job-neighbor', status: 'completed'},
+  ]);
+});
+
 test('fails closed for malformed GET import jobs', () => {
   expect(() => parseOmiImportJobs(JSON.stringify({}))).toThrow();
   expect(() =>
