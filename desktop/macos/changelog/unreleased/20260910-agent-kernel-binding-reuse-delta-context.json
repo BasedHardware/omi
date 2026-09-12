@@ -1,3 +1,3 @@
 {
-  "change": "Follow-up chat messages no longer re-send the whole conversation context on every turn: the app now keeps its agent session between turns and sends only what changed. This makes follow-ups noticeably faster on local models and cheaper on cloud ones. Follow-up turns now send only the context that changed, including unchanged memory, workspace, and plan sections being referenced instead of re-sent."
+  "change": "Follow-up chat messages are now faster on local models and cheaper on cloud ones, because follow-ups no longer re-send the whole conversation context on every turn - only what changed since the last message."
 }
