@@ -524,6 +524,46 @@ test('old chat history rejects malformed GET files', () => {
   ).toThrow('Omi chat files are malformed');
 });
 
+test('does not omit neighboring GET messages when a file id is empty', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'kept',
+        sender: 'human',
+        text: 'Hello',
+        created_at: '2026-09-07T01:02:03Z',
+      },
+      {
+        id: 'empty-file',
+        sender: 'human',
+        text: 'Here is the note.',
+        created_at: '2026-09-07T01:02:04Z',
+        files_id: ['att-notes'],
+        files: [
+          {
+            id: '',
+            name: 'notes.txt',
+            mime_type: 'text/plain',
+            openai_file_id: 'file-abc',
+            created_at: '2026-09-07T01:00:00Z',
+          },
+        ],
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.map(row => row.id)).toEqual(['empty-file', 'kept']);
+  expect(page.messages.find(row => row.id === 'empty-file')?.attachments).toEqual(
+    [
+      {
+        id: '',
+        displayName: 'notes.txt',
+        mediaType: 'text/plain',
+      },
+    ],
+  );
+});
+
 test('old chat history keeps GET plugin_id over app_id and omits empty ids', () => {
   const page = parseOmiHistory(
     JSON.stringify([

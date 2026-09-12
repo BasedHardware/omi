@@ -53,7 +53,6 @@ function parseOmiChatFiles(
       typeof row.created_at === 'string' ? Date.parse(row.created_at) : NaN;
     if (
       typeof row.id !== 'string' ||
-      row.id.length === 0 ||
       typeof row.name !== 'string' ||
       typeof row.mime_type !== 'string' ||
       typeof row.openai_file_id !== 'string' ||
