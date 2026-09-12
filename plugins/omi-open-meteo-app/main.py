@@ -252,10 +252,19 @@ async def get_current_weather(request: CurrentWeatherRequest) -> ChatToolRespons
         place_name = _format_place(place)
         condition = _format_weather_code(current.get("weather_code"))
         observed_at = current.get("time") or "unknown time"
+        tz_abbr = payload.get("timezone_abbreviation", "")
+        utc_offset = payload.get("utc_offset_seconds")
+        if utc_offset is not None:
+            sign = "+" if utc_offset >= 0 else "-"
+            h, m = divmod(abs(utc_offset) // 60, 60)
+            tz_offset = f"{sign}{h:02d}:{m:02d}"
+        else:
+            tz_offset = ""
+        observed_label = f"{observed_at} {tz_abbr}{(' UTC' + tz_offset) if tz_offset and not tz_abbr else tz_offset}".strip()
 
         lines = [
             f"Current weather for {place_name}",
-            f"Observed: {observed_at}",
+            f"Observed: {observed_label}",
             f"Condition: {condition}",
             f"Temperature: {_format_number(current.get('temperature_2m'), units.get('temperature_2m', ''))}",
             f"Feels like: {_format_number(current.get('apparent_temperature'), units.get('apparent_temperature', ''))}",
@@ -345,10 +354,19 @@ async def get_air_quality(request: AirQualityRequest) -> ChatToolResponse:
                 observed_at = datetime.fromisoformat(observed_at).isoformat(timespec="minutes")
             except ValueError:
                 pass
+        tz_abbr = payload.get("timezone_abbreviation", "")
+        utc_offset = payload.get("utc_offset_seconds")
+        if utc_offset is not None:
+            sign = "+" if utc_offset >= 0 else "-"
+            h, m = divmod(abs(utc_offset) // 60, 60)
+            tz_offset = f"{sign}{h:02d}:{m:02d}"
+        else:
+            tz_offset = ""
+        observed_label = f"{observed_at or 'unknown time'} {tz_abbr}{(' UTC' + tz_offset) if tz_offset and not tz_abbr else tz_offset}".strip()
 
         lines = [
             f"Air quality for {place_name}",
-            f"Observed: {observed_at or 'unknown time'}",
+            f"Observed: {observed_label}",
             f"US AQI: {_format_number(current.get('us_aqi'))}",
             f"PM2.5: {_format_number(current.get('pm2_5'), ' ' + units.get('pm2_5', ''))}",
             f"PM10: {_format_number(current.get('pm10'), ' ' + units.get('pm10', ''))}",
