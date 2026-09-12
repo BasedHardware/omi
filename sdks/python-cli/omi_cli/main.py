@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 import click
@@ -77,21 +77,23 @@ class AppContext:
         profile = config.get_profile(self.profile_name)
         if self.api_base_override:
             profile.api_base = self.api_base_override
-        # Allow OMI_API_KEY to take effect even if the on-disk profile has no key.
-        # Validate the prefix here so an obviously-bad env value fails fast with the
-        # same friendly UsageError the paste flow uses, instead of bouncing off the
-        # API as a cryptic 401.
-        env_key = os.environ.get(cfg.ENV_API_KEY)
-        if env_key and not profile.api_key:
-            profile.auth_method = "api_key"
-            profile.api_key = validate_api_key_format(env_key)
         env_base = os.environ.get(cfg.ENV_API_BASE)
         if env_base and not self.api_base_override:
             profile.api_base = env_base
         return profile
 
     def make_client(self) -> OmiClient:
-        return OmiClient(self.get_profile(), verbose=self.verbose)
+        profile = self.get_profile()
+        env_key = os.environ.get(cfg.ENV_API_KEY)
+        if env_key:
+            # Per-command override for cloud API only. Do not mutate the
+            # in-memory saved profile (auth status / local Desktop keep it).
+            profile = replace(
+                profile,
+                auth_method="api_key",
+                api_key=validate_api_key_format(env_key),
+            )
+        return OmiClient(profile, verbose=self.verbose)
 
     def make_local_client(self) -> LocalOmiClient:
         profile = self.get_profile()
