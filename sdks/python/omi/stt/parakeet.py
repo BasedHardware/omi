@@ -5,12 +5,28 @@ import json
 import os
 from asyncio import Queue
 from typing import Callable, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 def parakeet_ws_url(api_url: str, sample_rate: int = 16000) -> str:
-    base = api_url.strip().rstrip("/")
-    base = base.replace("https://", "wss://").replace("http://", "ws://")
-    return f"{base}/v3/stream?sample_rate={sample_rate}"
+    """Append the stream path, preserving query values and overriding sample_rate."""
+    base = urlsplit(api_url.strip())
+    scheme = {"https": "wss", "http": "ws"}.get(base.scheme, base.scheme)
+    query = [
+        (key, value)
+        for key, value in parse_qsl(base.query, keep_blank_values=True)
+        if key != "sample_rate"
+    ]
+    query.append(("sample_rate", str(sample_rate)))
+    return urlunsplit(
+        (
+            scheme,
+            base.netloc,
+            base.path.rstrip("/") + "/v3/stream",
+            urlencode(query),
+            "",
+        )
+    )
 
 
 class ParakeetTranscriber:
