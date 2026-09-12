@@ -55,9 +55,11 @@ function optionalScopes(value: unknown): string[] | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
-  const rows = array(value, 32);
+  if (!Array.isArray(value)) {
+    throw new DeveloperKeyError();
+  }
   const scopes: string[] = [];
-  for (const raw of rows) {
+  for (const raw of value) {
     const scope = visibleDisplayText(text(raw, 256));
     if (scope === '') {
       continue;

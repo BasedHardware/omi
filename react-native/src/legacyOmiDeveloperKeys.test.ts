@@ -88,6 +88,23 @@ test('fails closed for malformed GET developer keys', () => {
   ).toThrow();
 });
 
+test('does not omit neighboring GET developer keys when scopes exceed 32', () => {
+  const scopes = Array.from({length: 33}, (_, index) => `scope-${index}`);
+  const keys = parseOmiDeveloperKeys(
+    JSON.stringify([
+      {id: 'kept', name: 'Local', key_prefix: 'omi_sk_ab'},
+      {
+        id: 'many-scopes',
+        name: 'Wide',
+        key_prefix: 'omi_sk_cd',
+        scopes,
+      },
+    ]),
+  );
+  expect(keys.map(row => row.id)).toEqual(['kept', 'many-scopes']);
+  expect(keys.find(row => row.id === 'many-scopes')?.scopes).toEqual(scopes);
+});
+
 test('loadOmiDevApiKeys and loadOmiMcpApiKeys name resolved GET keys and omit failures', async () => {
   const request = jest.fn(async (input: {path: string}) => {
     if (input.path === '/v1/dev/keys') {
