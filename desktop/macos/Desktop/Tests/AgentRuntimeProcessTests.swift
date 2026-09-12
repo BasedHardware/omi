@@ -415,6 +415,36 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(skipped)
   }
 
+  /// A fresh, never-launched `AgentRuntimeProcess` instance (not `.shared`,
+  /// so this cannot be polluted by another test's real spawn attempt in the
+  /// same process) has `launchedProviderMode == nil`; `AgentBridge.providerMode`
+  /// must fall back to the live Settings preference in that case, since there
+  /// is nothing "actually running" yet to prefer over it.
+  func testAgentBridgeProviderModeFallsBackToPreferenceBeforeAnyLaunch() async throws {
+    let key = AIProvider.selectedProviderRawValueKey
+    let previous = UserDefaults.standard.string(forKey: key)
+    defer {
+      if let previous {
+        UserDefaults.standard.set(previous, forKey: key)
+      } else {
+        UserDefaults.standard.removeObject(forKey: key)
+      }
+    }
+
+    let freshRuntime = AgentRuntimeProcess()
+    let bridge = AgentBridge(harnessMode: "piMono", runtime: freshRuntime)
+
+    UserDefaults.standard.set(ChatProvider.BridgeMode.piMono.rawValue, forKey: key)
+    let omiMode = await bridge.providerMode
+    XCTAssertEqual(omiMode, "omi")
+
+    UserDefaults.standard.set(ChatProvider.BridgeMode.local.rawValue, forKey: key)
+    let localMode = await bridge.providerMode
+    XCTAssertEqual(
+      localMode, "omi-local",
+      "before any launch, providerMode predicts from the preference, same as currentProviderMode")
+  }
+
   func testNamedBundleStartupUsesValidSeededCredentialWithoutForcedRefresh() {
     XCTAssertFalse(
       AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
@@ -962,6 +992,35 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "openclaw"), "openclaw")
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "openClaw"), "openclaw")
     XCTAssertNil(AgentRuntimeProcess.adapterId(forHarnessMode: "unknown"))
+  }
+
+  // omi-test-quality: source-inspection -- static contract: `startProcess`'s catch
+  // must let `BridgeError.localConfigMissing` pass through unchanged (same as
+  // `.authMissing`), or a Local user's missing base URL/model id is flattened into
+  // a generic `.failedToStart` before it ever reaches `ChatQueryTelemetry`'s
+  // distinct classification (see `ChatQueryTelemetryTests`) or the actionable
+  // error message `AgentBridge`'s `.localConfigMissing` case returns. Reaching
+  // this catch block behaviorally needs a real owner-authorization snapshot and
+  // an attempted process spawn — this pins the ordering directly instead.
+  func testLocalConfigMissingSurvivesStartProcessCatchInsteadOfBecomingFailedToStart() throws {
+    let source = try agentRuntimeSource()
+    let catchStart = try XCTUnwrap(source.range(of: "receipt = try await startupSingleFlight.run"))
+    let performStartProcessDecl = try XCTUnwrap(
+      source.range(
+        of: "\n  private func performStartProcess(",
+        range: catchStart.upperBound..<source.endIndex))
+    let catchBody = String(source[catchStart.upperBound..<performStartProcessDecl.lowerBound])
+
+    let authMissingRange = try XCTUnwrap(catchBody.range(of: "case .authMissing = bridgeError"))
+    let localConfigRange = try XCTUnwrap(
+      catchBody.range(of: "case .localConfigMissing = bridgeError"))
+    let genericFallbackRange = try XCTUnwrap(
+      catchBody.range(of: "throw BridgeError.failedToStart(failure)"))
+
+    XCTAssertLessThan(authMissingRange.lowerBound, genericFallbackRange.lowerBound)
+    XCTAssertLessThan(
+      localConfigRange.lowerBound, genericFallbackRange.lowerBound,
+      "localConfigMissing must be re-thrown before the generic .failedToStart fallback")
   }
 
   func testPiMonoAliasUsesCanonicalAdapterForAuthGuards() throws {

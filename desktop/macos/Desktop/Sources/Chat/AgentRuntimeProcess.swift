@@ -2495,6 +2495,14 @@ actor AgentRuntimeProcess {
         if let bridgeError = error as? BridgeError, case .authMissing = bridgeError {
           throw error
         }
+        // A missing Local base URL/model id is a user misconfiguration, not a
+        // bridge-process defect: let it pass through so the UI shows the
+        // actionable "set up your local model" message (AgentBridge's
+        // .localConfigMissing case) and telemetry classifies it separately
+        // from a real .failedToStart, instead of both being flattened here.
+        if let bridgeError = error as? BridgeError, case .localConfigMissing = bridgeError {
+          throw error
+        }
         if let bridgeError = error as? BridgeError, case .failedToStart(_) = bridgeError {
           throw bridgeError
         }
