@@ -665,7 +665,7 @@ function parseContentBlock(
       if (!Array.isArray(rawItems)) {
         return rows;
       }
-      for (const entry of rawItems.slice(0, 20)) {
+      for (const entry of rawItems) {
         if (
           entry === null ||
           typeof entry !== 'object' ||

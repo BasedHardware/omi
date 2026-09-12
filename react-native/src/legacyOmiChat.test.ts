@@ -1251,6 +1251,40 @@ test('old chat history names empty-text GET malformed content_block fallbacks wi
   expect(copy).not.toContain('Show more');
 });
 
+test('does not omit a neighboring recommended next step when GET lists more than twenty', () => {
+  const items = Array.from({length: 21}, (_, i) => ({
+    description: `Step ${i + 1}`,
+  }));
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'many-steps',
+        sender: 'ai',
+        text: 'Here is the recap.',
+        created_at: '2026-09-07T01:02:03Z',
+        content_blocks: [
+          {
+            type: 'conversation_link',
+            id: 'c-many',
+            conversation_id: 'conv-1',
+            summary: 'Standup recap',
+            recommended_action_items: [{description: '  '}, ...items],
+          },
+        ],
+      },
+    ]),
+    0,
+  );
+  expect(
+    page.messages
+      .find(row => row.id === 'many-steps')
+      ?.contentBlocks?.filter(
+        block => block.eyebrow === 'Recommended next steps',
+      )
+      .map(block => block.title),
+  ).toEqual(items.map(item => item.description));
+});
+
 test('old chat history names GET memory review cards without inventing writes', () => {
   const page = parseOmiHistory(
     JSON.stringify([
