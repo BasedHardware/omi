@@ -137,11 +137,20 @@ def retired_state_field_errors(path: Path, step: dict) -> list[str]:
         payload = step.get(field)
         if not isinstance(payload, dict):
             continue
-        for key in payload:
-            leaf = str(key).rsplit(".", 1)[-1]
-            reason = RETIRED_STATE_FIELDS.get(leaf)
-            if reason:
-                errors.append(f"{path.name}: step {step_id} {field} uses retired {key}; {reason}")
+        mappings = [payload]
+        nested = payload.get("equals")
+        if field == "state.expect" and isinstance(nested, dict):
+            mappings.append(nested)
+        for mapping in mappings:
+            for key in mapping:
+                if key == "equals":
+                    continue
+                leaf = str(key).rsplit(".", 1)[-1]
+                reason = RETIRED_STATE_FIELDS.get(leaf)
+                if reason:
+                    errors.append(
+                        f"{path.name}: step {step_id} {field} uses retired {key}; {reason}"
+                    )
     return errors
 
 

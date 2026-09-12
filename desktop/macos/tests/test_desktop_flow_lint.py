@@ -50,6 +50,15 @@ class DesktopFlowLintRetiredStateTests(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("state.expect", errors[0])
 
+    def test_state_expect_equals_wrapper_selected_tab_index_is_rejected(self):
+        errors = LINT.retired_state_field_errors(
+            pathlib.Path("harness-smoke.yaml"),
+            {"id": "S3", "state.expect": {"equals": {"state.selectedTabIndex": 0}}},
+        )
+        self.assertEqual(len(errors), 1)
+        self.assertIn("selectedTabIndex", errors[0])
+        self.assertIn("state.expect", errors[0])
+
     def test_wait_on_chat_first_route_is_clean(self):
         errors = LINT.retired_state_field_errors(
             pathlib.Path("harness-smoke.yaml"),
