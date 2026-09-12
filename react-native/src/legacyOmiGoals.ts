@@ -29,7 +29,7 @@ function goalMetric(value: unknown): number | null {
 
 function goalId(value: unknown): string | null {
   if (typeof value === 'string') {
-    const id = visibleDisplayText(text(value, 256));
+    const id = visibleDisplayText(text(value, 10000));
     return id === '' ? null : id;
   }
   if (typeof value === 'number' && Number.isFinite(value)) {
