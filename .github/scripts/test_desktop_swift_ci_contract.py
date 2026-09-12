@@ -38,6 +38,30 @@ EXPECTED_XCODE_VERSION = "16.4"
 EXPECTED_XCODE_BUILD = "16F6"
 EXPECTED_XCODE_APP = f"/Applications/Xcode_{EXPECTED_XCODE_VERSION}.app"
 JOBS = ["changes", "desktop-swift-verify", "desktop-swift", "desktop-swift-release-compile"]
+
+
+def _step_block(job_text: str, step_name: str) -> str | None:
+    """Return one `- name: <step_name>` step's own YAML, not the whole job.
+
+    A job-wide substring search is not a contract: the release job repeats
+    should_notification_release_regression in its job-level `if:` and in
+    RELEASE_REQUIRED, so a search over the job body cannot tell whether a step
+    still carries what the assertion claims.
+    """
+    lines = job_text.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() != f"- name: {step_name}":
+            continue
+        indent = len(line) - len(line.lstrip())
+        block = [line]
+        for candidate in lines[index + 1 :]:
+            stripped = candidate.strip()
+            candidate_indent = len(candidate) - len(candidate.lstrip())
+            if stripped.startswith("- name:") and candidate_indent <= indent:
+                break
+            block.append(candidate)
+        return "\n".join(block)
+    return None
 MACOS_JOBS = ["desktop-swift-verify", "desktop-swift-release-compile"]
 # Hosted macOS budgets are per-job: the consolidated verify lane needs a longer
 # cold-runner ceiling than the narrower release-compile job.
@@ -117,16 +141,22 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             "OMI_SWIFT_RELEASE_BUILD_TESTS: ${{ "
             "needs.changes.outputs.should_notification_release_regression }}"
         )
-        self.assertEqual(
-            release_job.count(gate),
-            2,
-            "the release build and the regression step must both read "
-            "should_notification_release_regression, or --skip-build finds no "
-            "test bundle and the step rebuilds the world",
+        # Scoped to each step rather than the job body: the same output also
+        # appears in the job-level `if:` and in RELEASE_REQUIRED, so a job-wide
+        # assertIn would keep passing after the step's own condition was
+        # removed or re-keyed.
+        build_step = _step_block(release_job, "Release compile")
+        regression_step = _step_block(
+            release_job, "Test UserNotifications callback regression in release mode"
         )
+        self.assertIsNotNone(build_step, "the release build step was renamed")
+        self.assertIsNotNone(regression_step, "the regression step was renamed")
+        self.assertIn(gate, build_step, "the release build must carry the gate")
+        self.assertIn(gate, regression_step, "the regression step must carry the gate")
         self.assertIn(
-            "needs.changes.outputs.should_notification_release_regression == 'true'",
-            release_job,
+            "if: ${{ needs.changes.outputs."
+            "should_notification_release_regression == 'true' }}",
+            regression_step,
             "the regression step's own condition must key on the same output "
             "the build step is gated by",
         )
