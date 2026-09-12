@@ -1,12 +1,25 @@
 from pathlib import Path
 import importlib.util
+import sys
+import types
 import unittest
 from unittest.mock import patch
+
+# github_client.py imports requests and dotenv at load time. The suite never
+# performs real I/O (requests.get is patched per test), so stub both modules
+# during the import — the same pattern as the sibling plugin suites — and this
+# file runs on a stdlib-only interpreter. The stubs stay bound inside the
+# loaded module, so patching github_client.requests still intercepts.
+_requests = types.ModuleType("requests")
+_requests.get = _requests.post = None
+_dotenv = types.ModuleType("dotenv")
+_dotenv.load_dotenv = lambda *args, **kwargs: None
 
 MODULE_PATH = Path(__file__).with_name("github_client.py")
 spec = importlib.util.spec_from_file_location("github_client", MODULE_PATH)
 github_client = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(github_client)
+with patch.dict(sys.modules, {"requests": _requests, "dotenv": _dotenv}):
+    spec.loader.exec_module(github_client)
 
 
 class FakeResponse:
@@ -78,6 +91,100 @@ class GitHubClientTests(unittest.TestCase):
             ],
         ), patch.object(github_client, "print"):
             self.assertEqual(client.list_user_repos("token"), [])
+
+    def test_list_user_repos_returns_empty_on_malformed_item(self):
+        # A page item missing keys the projection requires must fail closed
+        # inside _get_paginated's boundary, not raise out of the fetcher.
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            return_value=FakeResponse([{"name": "no-owner"}]),
+        ), patch.object(github_client, "print"):
+            self.assertEqual(client.list_user_repos("token"), [])
+
+    def test_get_repo_labels_follows_next_page(self):
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            side_effect=[
+                FakeResponse([{"name": "bug"}, {"name": "docs"}], links={"next": {"url": "page-2"}}),
+                FakeResponse([{"name": "wontfix"}]),
+            ],
+        ) as get:
+            labels = client.get_repo_labels("token", "owner/repo")
+
+        self.assertEqual(labels, ["bug", "docs", "wontfix"])
+        self.assertEqual(get.call_count, 2)
+        self.assertEqual(get.call_args_list[0].kwargs["params"], {"per_page": 100, "page": 1})
+        self.assertEqual(get.call_args_list[1].kwargs["params"], {"per_page": 100, "page": 2})
+
+    def test_get_repo_labels_with_details_follows_next_page(self):
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            side_effect=[
+                FakeResponse(
+                    [{"name": "bug", "color": "d73a4a", "description": "Something broke"}],
+                    links={"next": {"url": "page-2"}},
+                ),
+                FakeResponse([{"name": "wontfix", "color": "ffffff", "description": None}]),
+            ],
+        ) as get:
+            labels = client.get_repo_labels_with_details("token", "owner/repo")
+
+        self.assertEqual(
+            labels,
+            [
+                {"name": "bug", "color": "d73a4a", "description": "Something broke"},
+                {"name": "wontfix", "color": "ffffff", "description": None},
+            ],
+        )
+        self.assertEqual(get.call_count, 2)
+
+    def test_get_repo_labels_discards_partial_results_on_later_page_error(self):
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            side_effect=[
+                FakeResponse([{"name": "bug"}], links={"next": {"url": "page-2"}}),
+                FakeResponse([], status_code=500),
+            ],
+        ), patch.object(github_client, "print"):
+            self.assertEqual(client.get_repo_labels("token", "owner/repo"), [])
+
+    def test_get_repo_labels_with_details_discards_partial_results_on_later_page_error(self):
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            side_effect=[
+                FakeResponse(
+                    [{"name": "bug", "color": "d73a4a", "description": "x"}],
+                    links={"next": {"url": "page-2"}},
+                ),
+                FakeResponse([], status_code=500),
+            ],
+        ), patch.object(github_client, "print"):
+            self.assertEqual(client.get_repo_labels_with_details("token", "owner/repo"), [])
+
+    def test_get_repo_labels_with_details_returns_empty_on_malformed_item(self):
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            return_value=FakeResponse([{"description": "no name or color"}]),
+        ), patch.object(github_client, "print"):
+            self.assertEqual(client.get_repo_labels_with_details("token", "owner/repo"), [])
 
 
 if __name__ == "__main__":
