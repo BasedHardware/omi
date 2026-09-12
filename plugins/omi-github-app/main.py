@@ -10,6 +10,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import os
 from dotenv import load_dotenv
 import secrets
+import json
+from urllib.parse import quote
 
 from simple_storage import SimpleUserStorage
 from github_client import GitHubClient
@@ -595,6 +597,10 @@ async def tool_add_comment(request: Request):
 @app.get("/")
 async def root(uid: str = Query(None)):
     """Root endpoint - Homepage with repo selection (mobile-first UI)."""
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid or "", safe="")
+    uid_js = json.dumps(uid)
     if not uid:
         return {
             "app": "OMI GitHub Issues Integration",
@@ -612,7 +618,7 @@ async def root(uid: str = Query(None)):
 
     if not user or not user.get("access_token"):
         # Not authenticated - show auth page
-        auth_url = f"/auth?uid={uid}"
+        auth_url = f"/auth?uid={uid_q}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -853,7 +859,7 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        const response = await fetch('/update-repo?uid={uid}&repo=' + encodeURIComponent(repo), {{
+                        const response = await fetch('/update-repo?uid={uid_q}&repo=' + encodeURIComponent(repo), {{
                             method: 'POST'
                         }});
 
@@ -873,7 +879,7 @@ async def root(uid: str = Query(None)):
                     if (!confirm('Refresh your repository list from GitHub?')) return;
 
                     try {{
-                        const response = await fetch('/refresh-repos?uid={uid}', {{
+                        const response = await fetch('/refresh-repos?uid={uid_q}', {{
                             method: 'POST'
                         }});
 
@@ -900,7 +906,7 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        const response = await fetch('/check-repo-access?uid={uid}&repo=' + encodeURIComponent(repo), {{
+                        const response = await fetch('/check-repo-access?uid={uid_q}&repo=' + encodeURIComponent(repo), {{
                             method: 'POST'
                         }});
                         const data = await response.json();
@@ -934,7 +940,7 @@ async def root(uid: str = Query(None)):
                 async function saveAgentProvider() {{
                     const provider = getSelectedProvider();
                     try {{
-                        const response = await fetch('/save-agent-provider?uid={uid}&provider=' + encodeURIComponent(provider), {{
+                        const response = await fetch('/save-agent-provider?uid={uid_q}&provider=' + encodeURIComponent(provider), {{
                             method: 'POST'
                         }});
                         const data = await response.json();
@@ -960,7 +966,7 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        await fetch('/save-agent-key?uid={uid}&provider=' + encodeURIComponent(provider) + '&key=' + encodeURIComponent(apiKey), {{
+                        await fetch('/save-agent-key?uid={uid_q}&provider=' + encodeURIComponent(provider) + '&key=' + encodeURIComponent(apiKey), {{
                             method: 'POST'
                         }});
 
@@ -975,7 +981,7 @@ async def root(uid: str = Query(None)):
                     if (!confirm('Remove the API key for this provider?')) return;
 
                     try {{
-                        await fetch('/delete-agent-key?uid={uid}&provider=' + encodeURIComponent(provider), {{
+                        await fetch('/delete-agent-key?uid={uid_q}&provider=' + encodeURIComponent(provider), {{
                             method: 'POST'
                         }});
 
@@ -1007,7 +1013,7 @@ async def root(uid: str = Query(None)):
                                 'Content-Type': 'application/json'
                             }},
                             body: JSON.stringify({{
-                                uid: '{uid}',
+                                uid: {uid_js},
                                 prompt,
                                 provider,
                                 repo,
@@ -1077,6 +1083,9 @@ async def auth_callback(
     state: str = Query(None)
 ):
     """Handle OAuth callback from GitHub."""
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid or "", safe="")
     if not code or not state:
         return HTMLResponse(
             content=f"""
@@ -1169,7 +1178,7 @@ async def auth_callback(
                             </p>
                         </div>
 
-                        <a href="/?uid={uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
+                        <a href="/?uid={uid_q}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
                             Continue to Settings
                         </a>
 
@@ -1204,7 +1213,7 @@ async def auth_callback(
                         <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
                             <h2 style="font-size: 24px; margin-bottom: 12px;">Authentication Error</h2>
                             <p style="margin-bottom: 16px;">Failed to complete authentication: {str(e)}</p>
-                            <a href="/auth?uid={uid}" class="btn btn-primary">Try again</a>
+                            <a href="/auth?uid={uid_q}" class="btn btn-primary">Try again</a>
                         </div>
                     </div>
                 </body>

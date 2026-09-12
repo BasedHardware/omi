@@ -11,7 +11,7 @@ import hashlib
 import base64
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 import requests
 from dotenv import load_dotenv
@@ -932,6 +932,9 @@ async def tool_get_user_profile(request: Request):
 @app.get("/")
 async def root(uid: str = Query(None)):
     """Root endpoint - Homepage."""
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid or "", safe="")
     if not uid:
         return {
             "app": "Twitter Omi Integration",
@@ -947,7 +950,7 @@ async def root(uid: str = Query(None)):
     tokens = get_twitter_tokens(uid)
 
     if not tokens:
-        auth_url = f"/auth/twitter?uid={uid}"
+        auth_url = f"/auth/twitter?uid={uid_q}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -1013,7 +1016,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"Who mentioned me on Twitter?"</div>
                 </div>
 
-                <a href="/disconnect?uid={uid}" class="btn btn-secondary btn-block">
+                <a href="/disconnect?uid={uid_q}" class="btn btn-secondary btn-block">
                     Disconnect Twitter
                 </a>
 
@@ -1059,6 +1062,9 @@ async def twitter_callback(
     error: str = Query(None)
 ):
     """Handle Twitter OAuth2 callback."""
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid or "", safe="")
     if error:
         return HTMLResponse(content=f"""
         <html>
@@ -1177,7 +1183,7 @@ async def twitter_callback(
                         <p>Your Twitter account @{username} is now linked to Omi</p>
                     </div>
 
-                    <a href="/?uid={uid}" class="btn btn-primary btn-block">
+                    <a href="/?uid={uid_q}" class="btn btn-primary btn-block">
                         Continue to Settings
                     </a>
 
@@ -1210,8 +1216,11 @@ async def check_setup(uid: str = Query(...)):
 @app.get("/disconnect")
 async def disconnect(uid: str = Query(...)):
     """Disconnect Twitter."""
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid or "", safe="")
     delete_twitter_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={uid_q}")
 
 
 @app.get("/health")

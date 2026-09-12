@@ -9,7 +9,7 @@ import sys
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Tuple
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 import requests
 from dotenv import load_dotenv
@@ -899,6 +899,9 @@ async def tool_get_profile(request: Request):
 @app.get("/")
 async def root(uid: str = Query(None)):
     """Root endpoint - Homepage."""
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid or "", safe="")
     if not uid:
         return {
             "app": "Whoop Omi Integration",
@@ -914,7 +917,7 @@ async def root(uid: str = Query(None)):
     tokens = get_whoop_tokens(uid)
 
     if not tokens:
-        auth_url = f"/auth/whoop?uid={uid}"
+        auth_url = f"/auth/whoop?uid={uid_q}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -978,7 +981,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"Show my recent workouts"</div>
                 </div>
 
-                <a href="/disconnect?uid={uid}" class="btn btn-secondary btn-block">
+                <a href="/disconnect?uid={uid_q}" class="btn btn-secondary btn-block">
                     Disconnect Whoop
                 </a>
 
@@ -1024,6 +1027,9 @@ async def whoop_callback(
     error: str = Query(None)
 ):
     """Handle Whoop OAuth2 callback."""
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid or "", safe="")
     if error:
         return HTMLResponse(content=f"""
         <html>
@@ -1117,7 +1123,7 @@ async def whoop_callback(
                         <p>Your Whoop is now linked to Omi</p>
                     </div>
 
-                    <a href="/?uid={uid}" class="btn btn-primary btn-block">
+                    <a href="/?uid={uid_q}" class="btn btn-primary btn-block">
                         Continue to Settings
                     </a>
 
@@ -1150,8 +1156,11 @@ async def check_setup(uid: str = Query(...)):
 @app.get("/disconnect")
 async def disconnect(uid: str = Query(...)):
     """Disconnect Whoop."""
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid or "", safe="")
     delete_whoop_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={uid_q}")
 
 
 @app.get("/health")
