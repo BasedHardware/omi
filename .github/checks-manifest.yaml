@@ -918,6 +918,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "#13156 executes the Slack client and chat handler to prevent unresolved explicit channels from widening search scope"
 
+  - id: slack-segments-tests
+    command: ["python3", "plugins/omi-slack-app/test_segments.py"]
+    triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "process_segments called seg.get(\"text\") on every transcript segment, so a non-dict segment crashed the realtime webhook with AttributeError"
+
   - id: notion-page-content-tests
     command: ["python3", "plugins/omi-notion-app/test_main.py"]
     triggers: ["plugins/omi-notion-app/**"]

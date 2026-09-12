@@ -737,7 +737,7 @@ async def process_segments(
     For test interface: processes the entire text immediately.
     """
     # Extract text from segments
-    segment_texts = [seg.get("text", "") for seg in segments]
+    segment_texts = [seg.get("text", "") if isinstance(seg, dict) else str(seg) for seg in segments]
     full_text = " ".join(segment_texts)
     
     session_id = session["session_id"]
