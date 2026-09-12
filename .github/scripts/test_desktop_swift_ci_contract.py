@@ -47,9 +47,8 @@ MACOS_JOB_TIMEOUT_MINUTES = {
     # which still executes every suite on runner-changing diffs. Two #13219
     # runs were cancelled by tighter ceilings before completing.
     "desktop-swift-verify": 60,
-    # A notification-boundary change compiles release mode AND builds the
-    # release test target for the regression (~50 min observed on
-    # run 34239723019), so this lane keeps the same bound.
+    # One combined app/test build avoids the duplicate compilation reported
+    # in #13481; keep the existing ceiling until hosted timing proves otherwise.
     "desktop-swift-release-compile": 60,
 }
 
@@ -100,6 +99,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
         self.assertIn("run-swift-ci.sh --test", verify_job)
         self.assertIn("run-swift-ci.sh --release-compile", release_job)
+        self.assertIn("run-swift-ci.sh --release-test-compile", release_job)
         # The release-mode regression runs next to the release build it
         # consumes; a second release build on the verify runner cost ~31 min
         # of scarce hosted-macOS time per notification-boundary change.
@@ -226,6 +226,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
                 self.assertTrue(plan.includes("desktop-ci-only"))
                 self.assertTrue(plan.includes("desktop-swift-tests"))
                 self.assertTrue(plan.includes("desktop-swift-release-compile"))
+                self.assertTrue(plan.includes("desktop-swift-release-test-compile"))
 
     def test_required_release_check_names_are_literals(self):
         """GitHub does not evaluate `name:` for a skipped job.
@@ -264,6 +265,18 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("--release-notification-regression", job)
         self.assertIn("should_notification_release_regression", job)
         self.assertIn("UserNotificationCallbackBridgeTests/", _runner_text())
+
+    def test_release_test_phase_is_forwarded_and_gates_the_existing_job(self):
+        """Static workflow contract; executable runner/selector tests own behavior."""
+        self.assertIn(
+            "should_release_test_compile: ${{ steps.changed.outputs.should_release_test_compile }}",
+            self.jobs["changes"],
+        )
+        for job_id in ("desktop-swift", "desktop-swift-release-compile"):
+            self.assertIn("needs.changes.outputs.should_release_test_compile == 'true'", self.jobs[job_id])
+        release = self.jobs["desktop-swift-release-compile"]
+        self.assertIn('if [ "$BUILD_RELEASE_TESTS" = true ]; then', release)
+        self.assertRegex(release, r"--release-test-compile\s+else\s+./scripts/run-swift-ci.sh --release-compile")
 
     def test_stable_release_gate_requires_the_selected_macos_job(self):
         """The required check name must fail closed on its selected lanes."""
@@ -387,6 +400,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("push-time budget bloat", pre_push)
         self.assertNotIn("desktop/macos/scripts/run-swift-ci.sh --test", pre_push)
         self.assertNotIn("desktop/macos/scripts/run-swift-ci.sh --release-compile", pre_push)
+        self.assertNotIn("--release-test-compile", pre_push)
 
     # --- cache-key assertions ----------------------------------------------
 

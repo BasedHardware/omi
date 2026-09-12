@@ -35,6 +35,7 @@ jobs:
       should_run_static: ${{ steps.changed.outputs.should_run_static }}
       should_run_tests: ${{ steps.changed.outputs.should_run_tests }}
       should_release_compile: ${{ steps.changed.outputs.should_release_compile }}
+      should_release_test_compile: ${{ steps.changed.outputs.should_release_test_compile }}
       should_notification_release_regression: ${{ steps.changed.outputs.should_notification_release_regression }}
       desktop_swift_changed_files: ${{ steps.changed.outputs.desktop_swift_changed_files }}
       swift_test_effective_lane: ${{ steps.changed.outputs.swift_test_effective_lane }}
@@ -448,7 +449,7 @@ jobs:
           RELEASE_RESULT: ${{ needs.desktop-swift-release-compile.result }}
           STATIC_REQUIRED: ${{ needs.changes.outputs.should_run_static }}
           TESTS_REQUIRED: ${{ needs.changes.outputs.should_run_tests }}
-          RELEASE_REQUIRED: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
+          RELEASE_REQUIRED: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_release_test_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
         run: |
           if [ "$STATIC_REQUIRED" = true ] || [ "$TESTS_REQUIRED" = true ]; then
             test "$VERIFY_RESULT" = success
@@ -471,15 +472,12 @@ jobs:
     # Literal for the same reason as `desktop-swift` above.
     name: Desktop Swift Release Compile
     needs: changes
-    # Ordinary PRs no longer claim this second hosted Mac: a release compile
-    # holds it for ~25 min, and one runner per PR halved concurrent macos-15
-    # demand against the ~5-runner cap that was producing 60-97 min queues
-    # (2026-09-08). The lane still runs for every main push, the scheduled
-    # health run, manual dispatch, PRs that change the package manifest (the
-    # inputs most likely to shift whole-module behavior), and notification
-    # boundary paths — the notification flag is gated on both outputs so a
-    # future pathspec change cannot silently skip the regression's runner.
-    if: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
+    # Source/test/package changes compile every release test target, including
+    # on PRs: DEBUG-only seams can break any test (#13123/#13467). Schedule and
+    # manual health runs require this independently of the final commit's paths.
+    # Reuse one combined app/test build within the existing 60-minute budget
+    # (#13481); resource-only main pushes retain the app-only path.
+    if: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_release_test_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -517,7 +515,14 @@ jobs:
 
       - name: Release compile
         working-directory: desktop/macos
-        run: ./scripts/run-swift-ci.sh --release-compile
+        env:
+          BUILD_RELEASE_TESTS: ${{ needs.changes.outputs.should_release_test_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
+        run: |
+          if [ "$BUILD_RELEASE_TESTS" = true ]; then
+            ./scripts/run-swift-ci.sh --release-test-compile
+          else
+            ./scripts/run-swift-ci.sh --release-compile
+          fi
 
       # Runs here, not in the verify job: the regression needs release-mode
       # artifacts, and building them twice on two hosted Macs cost ~31 min per

@@ -47,6 +47,9 @@ After a successful full launch, `run.sh` automatically uses its fast lane for or
 
 `git push` is the bounded desktop acceptance gate: desktop source changes run only the fast `xcrun swift build -c debug --package-path Desktop` check on the installed Xcode. This is intentionally less than CI: the parallel, isolated Swift suite, clean release compile, and pinned `/Applications/Xcode_16.4.app` (Xcode 16.4 build 16F6) belong to GitHub Actions. Do not move those CI jobs into pre-push; preserving push-time budget keeps normal iteration fast. Use `dev-feedback.py --watch` while editing.
 
+Desktop source, test, native-target, package, and runner changes select release test compilation in the existing CI job on PRs and main pushes. Scheduled/manual health runs require it regardless of changed paths. On pinned Xcode 16.4, run `./scripts/run-swift-ci.sh --release-test-compile` to build the app and every test target together with the ARM release triple and explicit testability. The notification boundary check then runs `./scripts/run-swift-ci.sh --release-notification-regression` with identical options and `--skip-build`; compile first. This catches non-Notification tests referencing DEBUG-only seams (#13123/#13467) and avoids a second app build (#13481). The existing 60-minute job ceiling remains; PRs touching target inputs now consume a release runner as well as debug verification. Non-target release inputs retain app-only compilation on main pushes.
+
+
 Named bundles derive an isolated bundle ID and OAuth callback URL scheme from `OMI_APP_NAME`. `Omi Dev` keeps `com.omi.desktop-dev` / `omi-computer-dev`, while `OMI_APP_NAME="omi-subagent-test"` uses `com.omi.omi-subagent-test` / `omi-omi-subagent-test`. The app reads that scheme from `CFBundleURLTypes` for OAuth redirects, so parallel dev bundles do not claim the canonical `omi-computer-dev` callback.
 
 ## License

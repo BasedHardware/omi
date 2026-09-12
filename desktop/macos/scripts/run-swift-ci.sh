@@ -7,9 +7,13 @@ MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 EXPECTED_XCODE_VERSION="16.4"
 EXPECTED_XCODE_BUILD="16F6"
 XCODE_APP="${OMI_SWIFT_CI_XCODE_APP:-/Applications/Xcode_16.4.app}"
+# Identical configuration and destination are required for --skip-build reuse.
+RELEASE_OPTIONS=(-c release --package-path Desktop --triple arm64-apple-macosx)
+# swift build --build-tests does not enable @testable imports in release.
+RELEASE_TEST_OPTIONS=("${RELEASE_OPTIONS[@]}" -Xswiftc -enable-testing)
 
 usage() {
-  echo "usage: $0 --select-toolchain | --test | --release-compile | --release-notification-regression" >&2
+  echo "usage: $0 --select-toolchain | --test | --release-compile | --release-test-compile | --release-notification-regression" >&2
   exit 2
 }
 
@@ -63,7 +67,7 @@ case "${1:-}" in
     OMI_SWIFT_TEST_SUITE_WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-4}" \
       "$SCRIPT_DIR/swift-test-suites.sh"
     ;;
-  --release-compile)
+  --release-compile|--release-test-compile)
     [ "$#" -eq 1 ] || usage
     select_toolchain
     cd "$MACOS_DIR"
@@ -73,8 +77,14 @@ case "${1:-}" in
     # source change, so the measured compile time was 23-25 min with or
     # without a restored archive, while each 5.3 GB save evicted the small
     # tool caches from the repository's cache budget.
-    # The release-notification-regression mode below also reuses this build.
-    xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
+    # Build app and tests together: an app-only build followed by swift test
+    # can recompile the app with testability enabled and exhaust the job budget
+    # (#13481). --build-tests also compiles non-Notification tests (#13123/#13467).
+    if [ "$1" = --release-test-compile ]; then
+      xcrun swift build "${RELEASE_TEST_OPTIONS[@]}" --build-tests
+    else
+      xcrun swift build "${RELEASE_OPTIONS[@]}"
+    fi
     ;;
   --release-notification-regression)
     [ "$#" -eq 1 ] || usage
@@ -83,7 +93,8 @@ case "${1:-}" in
     # Keep this narrow enough for a PR boundary check while exercising the
     # release compiler mode used for signed candidates. This is the direct
     # UserNotifications private-callback-to-MainActor regression suite.
-    xcrun swift test -c release --package-path Desktop --filter UserNotificationCallbackBridgeTests/
+    # Requires --release-test-compile first; never silently start another build.
+    xcrun swift test "${RELEASE_TEST_OPTIONS[@]}" --skip-build --filter UserNotificationCallbackBridgeTests/
     ;;
   *)
     usage

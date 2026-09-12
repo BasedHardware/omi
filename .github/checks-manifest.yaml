@@ -594,7 +594,7 @@ checks:
     reason: "conversation lifecycle has one mutation owner"
   - id: desktop-swift-ci-contract
     command: ["python3", ".github/scripts/test_desktop_swift_ci_contract.py"]
-    triggers: [".github/workflows/desktop-swift-ci.yml", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_swift_ci_contract.py"]
+    triggers: [".github/workflows/desktop-swift-ci.yml", "scripts/pre_push_ci_prediction.py", "scripts/pre-push", "desktop/macos/scripts/run-swift-ci.sh", "desktop/macos/scripts/swift-test-suites.sh", "desktop/macos/tests/test-run-swift-ci.sh", ".github/scripts/test_desktop_swift_ci_contract.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved"
   - id: desktop-windows-ci-contract
