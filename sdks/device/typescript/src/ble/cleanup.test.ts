@@ -38,7 +38,7 @@ test('releases the peripheral when connectAsync fails', async () => {
 
 test('releases the peripheral when discovery fails', async () => {
   let disconnected = 0;
-  const { characteristic, peripheral } = fixture({
+  const { peripheral } = fixture({
     discoverSomeServicesAndCharacteristicsAsync: async () => {
       throw new Error('synthetic discovery error');
     },
@@ -47,7 +47,6 @@ test('releases the peripheral when discovery fails', async () => {
     },
   });
   await assert.rejects(() => listenOnConnectedPeripheral(peripheral, 'test-device', () => {}), /discovery error/);
-  characteristic.emit('data', new Uint8Array([1, 2, 3]));
   assert.equal(disconnected, 1);
 });
 
