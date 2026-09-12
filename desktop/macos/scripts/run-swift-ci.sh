@@ -4,9 +4,24 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-EXPECTED_XCODE_VERSION="16.4"
-EXPECTED_XCODE_BUILD="16F6"
-XCODE_APP="${OMI_SWIFT_CI_XCODE_APP:-/Applications/Xcode_16.4.app}"
+# Single source of truth for the desktop Swift ship/CI toolchain: version,
+# build, and expected app path live in ci/xcode-pin.json. Never duplicate
+# those literals here; the CI contract test enforces that this script,
+# desktop-swift-ci.yml, codemagic.yaml, and the pin file all agree.
+PIN_FILE="$MACOS_DIR/ci/xcode-pin.json"
+
+if [ ! -f "$PIN_FILE" ]; then
+  echo "FAIL: missing Xcode pin file: $PIN_FILE" >&2
+  exit 1
+fi
+
+read_pin() {
+  python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$PIN_FILE" "$1"
+}
+
+EXPECTED_XCODE_VERSION="$(read_pin version)"
+EXPECTED_XCODE_BUILD="$(read_pin build)"
+XCODE_APP="${OMI_SWIFT_CI_XCODE_APP:-$(read_pin app_path)}"
 
 usage() {
   echo "usage: $0 --select-toolchain | --test | --release-compile | --release-notification-regression" >&2

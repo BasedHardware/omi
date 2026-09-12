@@ -594,9 +594,9 @@ checks:
     reason: "conversation lifecycle has one mutation owner"
   - id: desktop-swift-ci-contract
     command: ["python3", ".github/scripts/test_desktop_swift_ci_contract.py"]
-    triggers: [".github/workflows/desktop-swift-ci.yml", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_swift_ci_contract.py"]
+    triggers: [".github/workflows/desktop-swift-ci.yml", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_swift_ci_contract.py", "desktop/macos/ci/xcode-pin.json", "desktop/macos/scripts/run-swift-ci.sh", "desktop/macos/tests/test-run-swift-ci.sh", "codemagic.yaml"]
     lanes: ["local", "ci"]
-    reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved"
+    reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved; the pin (version+build+app path) lives only in desktop/macos/ci/xcode-pin.json and the workflow, runner script, and the two Codemagic desktop Swift workflows must agree with it (#12867/#13548 ship-vs-CI divergence class)"
   - id: desktop-windows-ci-contract
     command: ["python3", ".github/scripts/test_desktop_windows_ci_contract.py"]
     triggers: [".github/workflows/desktop-windows-ci.yml", ".github/scripts/test_desktop_windows_ci_contract.py", ".github/checks-manifest.yaml"]
@@ -723,6 +723,16 @@ checks:
     triggers: ["desktop/macos/scripts/check-main-actor-xctest-hooks.py", ".github/scripts/test_check_main_actor_xctest_hooks.py"]
     lanes: ["local", "ci"]
     reason: "adversarial fixtures for the @MainActor XCTest lifecycle compiler-failure tripwire"
+  - id: desktop-compiler-gates
+    command: ["python3", "desktop/macos/scripts/check-desktop-compiler-gates.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check-desktop-compiler-gates.py"]
+    lanes: ["local", "ci"]
+    reason: "#12867/#13548: `#if compiler(...)` compiled Liquid Glass APIs out of the pinned ship toolchain so CI stayed green while the shipped app silently built the system fallback; runtime `#available` with a fallback is the only sanctioned gate"
+  - id: desktop-compiler-gates-fixtures
+    command: ["python3", ".github/scripts/test_check_desktop_compiler_gates.py"]
+    triggers: ["desktop/macos/scripts/check-desktop-compiler-gates.py", ".github/scripts/test_check_desktop_compiler_gates.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "planted glass-style `#if compiler(>=6.2)` sabotage must fail the tripwire and removing it must pass; the allowlist is asserted by exact contents so it cannot silently grow"
   - id: desktop-swift-format-lint
     command: ["bash", "desktop/macos/scripts/swift-format-wrapper.sh", "lint-scope"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/Desktop/.swift-format", "desktop/macos/scripts/swift-format-wrapper.sh"]
