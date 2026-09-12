@@ -100,6 +100,21 @@ test('parses GET latest firmware changelog and omits production empty-string def
   });
 });
 
+test('does not omit GET firmware version when changelog exceeds 32', () => {
+  const changelog = Array.from(
+    {length: 33},
+    (_, index) => `Change ${index + 1}`,
+  );
+  expect(
+    parseOmiLatestFirmware(JSON.stringify({version: '1.3.0', changelog})),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+    changelog,
+  });
+});
+
 test('fails closed for malformed GET latest firmware', () => {
   expect(() => parseOmiLatestFirmware(JSON.stringify([]))).toThrow();
   expect(() => parseOmiLatestFirmware(JSON.stringify({version: 1}))).toThrow();

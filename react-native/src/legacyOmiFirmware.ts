@@ -21,13 +21,6 @@ function text(value: unknown, limit: number): string {
   return value;
 }
 
-function array(value: unknown, limit: number): unknown[] {
-  if (!Array.isArray(value) || value.length > limit) {
-    throw new FirmwareError();
-  }
-  return value;
-}
-
 function firmwareChangelog(value: unknown): string[] | undefined {
   if (value === undefined || value === null || typeof value === 'string') {
     return undefined;
@@ -35,9 +28,8 @@ function firmwareChangelog(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
   }
-  const rows = array(value, 32);
   const changelog: string[] = [];
-  for (const raw of rows) {
+  for (const raw of value) {
     if (typeof raw !== 'string') {
       continue;
     }
