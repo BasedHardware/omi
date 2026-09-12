@@ -3,9 +3,8 @@ import SwiftUI
 
 /// The constant floating top bar.
 ///
-/// **It carries the destinations flat, and nothing opens.** On the left, the system tab bar — a native
-/// segmented control (`TopNavigationDestinationRow`), one tab per destination: `Chat`, `Memories`,
-/// `Tasks`, `Apps`. On the right, operational status and Settings
+/// **It carries the destinations flat, and nothing opens.** On the left, one pill per destination:
+/// `Chat`, `Brain`, `Tasks`, `Apps`. On the right, operational status and Settings
 /// stay persistent; referral remains available from Settings without competing
 /// with the product's primary destinations.
 ///
@@ -43,16 +42,27 @@ import SwiftUI
 struct DesktopTopBar: View {
   @Binding var selectedIndex: Int
   @Binding var memoryDestinationRawValue: Int
-  /// The three stores are observed by `TopNavigationBadgedRow`, not here: a tick in any of them
-  /// re-diffs only the counts it feeds and stops at the row's equality, instead of re-running the
-  /// whole bar on its way past. `ShellStatusIcons` observes `appState` itself.
-  let appState: AppState
-  let memoriesViewModel: MemoriesViewModel
-  let tasksStore: TasksStore
+  @ObservedObject var appState: AppState
+  @ObservedObject var memoriesViewModel: MemoriesViewModel
+  @ObservedObject var tasksStore: TasksStore
   /// Items created after this instant count as "new" — updated whenever Omi
   /// last resigned front (see DesktopHomeView).
   let sinceDate: Date
   @State private var showingReferral = false
+
+  private var newConversations: Int {
+    appState.conversations.filter { $0.createdAt > sinceDate && $0.deleted != true }.count
+  }
+  private var newMemories: Int {
+    memoriesViewModel.memories.filter { $0.createdAt > sinceDate }.count
+  }
+  private var newTasks: Int {
+    tasksStore.tasks.filter { $0.createdAt > sinceDate && !$0.isRetired }.count
+  }
+
+  private var badges: TopNavigationDestinationBadges {
+    TopNavigationDestinationBadges(library: newConversations + newMemories, tasks: newTasks)
+  }
 
   var body: some View {
     GeometryReader { proxy in
@@ -62,10 +72,8 @@ struct DesktopTopBar: View {
         Spacer(minLength: 0)
         TopNavigationBarLayout(
           expandedNavigation: {
-            TopNavigationBadgedRow(
-              appState: appState, memoriesViewModel: memoriesViewModel, tasksStore: tasksStore,
-              sinceDate: sinceDate, selectedIndex: selectedIndex, onSelect: navigate
-            )
+            TopNavigationDestinationRow(
+              selectedIndex: selectedIndex, badges: badges, onSelect: navigate)
           },
           compactNavigation: { compactNavigationMenu },
           persistentControls: {
@@ -168,43 +176,6 @@ struct DesktopTopBar: View {
   }
 }
 
-/// The expanded tab bar plus the three stores its `+N` counts read.
-///
-/// The observations live here rather than on `DesktopTopBar` so a store tick re-diffs nothing but
-/// these three filters, and the row it feeds is `.equatable()`: a tick that moves no count — a
-/// Tasks multi-select, or one of the several ticks a page transition fires mid-animation — re-runs
-/// this small body and stops at the row's equality, instead of re-measuring and re-animating the
-/// glass bar.
-private struct TopNavigationBadgedRow: View {
-  @ObservedObject var appState: AppState
-  @ObservedObject var memoriesViewModel: MemoriesViewModel
-  @ObservedObject var tasksStore: TasksStore
-  /// Items created after this instant count as "new" — updated whenever Omi
-  /// last resigned front (see DesktopHomeView).
-  let sinceDate: Date
-  let selectedIndex: Int
-  let onSelect: (Int) -> Void
-
-  var body: some View {
-    TopNavigationDestinationRow(selectedIndex: selectedIndex, badges: badges, onSelect: onSelect)
-      .equatable()
-  }
-
-  private var badges: TopNavigationDestinationBadges {
-    TopNavigationDestinationBadges(library: newConversations + newMemories, tasks: newTasks)
-  }
-
-  private var newConversations: Int {
-    appState.conversations.filter { $0.createdAt > sinceDate && $0.deleted != true }.count
-  }
-  private var newMemories: Int {
-    memoriesViewModel.memories.filter { $0.createdAt > sinceDate }.count
-  }
-  private var newTasks: Int {
-    tasksStore.tasks.filter { $0.createdAt > sinceDate && !$0.isRetired }.count
-  }
-}
-
 /// The right-side controls in their visual order. These are persistent because
 /// they report live app state; promotional actions live in Settings instead.
 struct TopNavigationTrailingControlsLayout<UpdateStatus: View, StatusControls: View>: View {
@@ -244,8 +215,7 @@ enum TopNavigationLayoutMetrics {
 
   /// The bar's own height.
   ///
-  /// The row inside it is 32 pt (the icon buttons; the native tab bar is a hair under), so this is
-  /// that plus a band of
+  /// The row inside it is 32 pt (the icon buttons; the pills are 30), so this is that plus a band of
   /// air top and bottom. Comfortably more than twice `barCornerRadius`, which matters: at exactly
   /// twice, the 22 pt corner degenerates into a capsule and the bar stops being the same *shape* as
   /// the panels under it — it becomes a giant pill sitting on two rounded rectangles.

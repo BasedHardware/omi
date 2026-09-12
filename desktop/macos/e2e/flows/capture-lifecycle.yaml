@@ -159,7 +159,7 @@ steps:
       target: conversations
       activateApp: false
     wait:
-      state.selectedTabIndex: 1
+      state.chatFirstRoute: memories
 
   - id: S9
     name: Reconcile cached list and canonical detail
