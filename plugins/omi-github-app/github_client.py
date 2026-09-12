@@ -1,6 +1,6 @@
 import os
 import requests
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Callable, Any
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -84,11 +84,13 @@ class GitHubClient:
         path: str,
         params: Dict,
         resource: str,
-    ) -> List[Dict]:
+        project: Callable[[Dict], Any],
+    ) -> List[Any]:
         """
-        Fetch every page of a GitHub list endpoint by following `next` links.
-        Returns [] on any page failure — a truncated list misleads callers
-        more than an empty one.
+        Fetch every page of a GitHub list endpoint by following `next` links,
+        mapping each item through `project`. Returns [] on any page or item
+        failure — a truncated or malformed list misleads callers more than
+        an empty one.
         """
         try:
             items = []
@@ -108,7 +110,7 @@ class GitHubClient:
                     print(f"⚠️  Could not fetch {resource}: {response.status_code}")
                     return []
 
-                items.extend(response.json())
+                items.extend(project(item) for item in response.json())
 
                 if "next" not in response.links:
                     break
@@ -126,36 +128,33 @@ class GitHubClient:
         List all repositories the user has access to (owned + collaborator).
         Returns list of {name, full_name, owner, private, description}
         """
-        repos = self._get_paginated(
+        return self._get_paginated(
             access_token,
             "/user/repos",
             {"per_page": per_page, "sort": "updated"},
             "repositories",
-        )
-        return [
-            {
+            lambda repo: {
                 "name": repo["name"],
                 "full_name": repo["full_name"],
                 "owner": repo["owner"]["login"],
                 "private": repo["private"],
                 "description": repo.get("description", ""),
                 "url": repo["html_url"]
-            }
-            for repo in repos
-        ]
+            },
+        )
 
     def get_repo_labels(self, access_token: str, repo_full_name: str) -> List[str]:
         """
         Fetch all labels from a repository.
         Returns list of label names.
         """
-        labels = self._get_paginated(
+        return self._get_paginated(
             access_token,
             f"/repos/{repo_full_name}/labels",
             {"per_page": 100},
             "labels",
+            lambda label: label["name"],
         )
-        return [label["name"] for label in labels]
     
     async def create_issue(
         self,
@@ -359,20 +358,17 @@ class GitHubClient:
         Fetch all labels from a repository with full details.
         Returns list of label dicts with name, color, description.
         """
-        labels = self._get_paginated(
+        return self._get_paginated(
             access_token,
             f"/repos/{repo_full_name}/labels",
             {"per_page": 100},
             "labels",
-        )
-        return [
-            {
+            lambda label: {
                 "name": label["name"],
                 "color": label["color"],
                 "description": label.get("description", "")
-            }
-            for label in labels
-        ]
+            },
+        )
 
     def get_repo_permissions(self, access_token: str, repo_full_name: str) -> Optional[Dict]:
         """
