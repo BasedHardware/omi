@@ -422,6 +422,20 @@ def test_sql_json_keeps_unambiguous_tables_structured(config_path: Path, cli_run
     }
 
 
+def test_sql_json_keeps_cell_that_only_starts_like_truncation_notice(config_path: Path, cli_runner) -> None:
+    _configure_local_profile(config_path)
+    table = "preview\n--------------------\nResult truncated after lunch\n\n1 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(table)))
+        result = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT 1"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {
+        "columns": ["preview"],
+        "rows": [{"preview": "Result truncated after lunch"}],
+        "row_count": 1,
+    }
+
+
 def test_task_commands_route_to_local_tools(config_path: Path, cli_runner) -> None:
     _configure_local_profile(config_path)
     with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:

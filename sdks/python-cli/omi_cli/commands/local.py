@@ -349,7 +349,10 @@ def _normalize_sql_result(result: Any) -> Any:
         return {"text": result}
     rows = []
     for line in data_lines:
-        if line.lstrip().startswith("Result truncated after "):
+        if re.fullmatch(
+            r"Result truncated after \d+ row\(s\) to protect chat context\. Refine the projection or aggregate the result\.",
+            line.strip(),
+        ):
             return {"text": result}
         values = [part.strip() for part in line.split("|")] if "|" in line else [line.strip()]
         if len(values) != len(columns):
