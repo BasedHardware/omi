@@ -185,6 +185,30 @@ test('keeps GET developer keys when created_at exceeds 10000', () => {
   ]);
 });
 
+test('keeps GET developer keys when created_at uses hour-only offsets Dart DateTime.tryParse accepts', () => {
+  expect(
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {
+          id: 'key-hour',
+          name: 'Local',
+          key_prefix: 'omi_sk_ab',
+          created_at: '2026-09-09T12:00:00+00',
+        },
+        {id: 'key-neighbor', name: 'Cursor', key_prefix: 'omi_mcp_cd'},
+      ]),
+    ),
+  ).toEqual([
+    {
+      id: 'key-hour',
+      name: 'Local',
+      keyPrefix: 'omi_sk_ab',
+      createdAtMs: Date.parse('2026-09-09T12:00:00.000Z'),
+    },
+    {id: 'key-neighbor', name: 'Cursor', keyPrefix: 'omi_mcp_cd'},
+  ]);
+});
+
 test('keeps GET developer keys when id or key_prefix exceeds 256', () => {
   const id = 'k'.repeat(257);
   const keyPrefix = 'p'.repeat(257);

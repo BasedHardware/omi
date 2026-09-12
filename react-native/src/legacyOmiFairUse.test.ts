@@ -119,6 +119,20 @@ test('fails closed for malformed GET fair use status', () => {
   ).toBeUndefined();
 });
 
+test('keeps GET fair use resets_at with hour-only offsets Dart DateTime.tryParse accepts', () => {
+  expect(
+    parseOmiFairUseStatus(
+      JSON.stringify({
+        ...status,
+        dg_budget: {
+          ...status.dg_budget,
+          resets_at: '2026-09-11T00:00:00+00',
+        },
+      }),
+    ).resetsAtMs,
+  ).toBe(Date.parse('2026-09-11T00:00:00.000Z'));
+});
+
 test('loadOmiFairUseStatus names resolved GET status and omits failures', async () => {
   const request = jest.fn(async () => ({
     id: 'fair-use',

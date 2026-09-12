@@ -54,7 +54,7 @@ function createdAtMs(value: unknown): number | undefined {
   if (raw === '') {
     return undefined;
   }
-  const parsed = Date.parse(raw);
+  const parsed = Date.parse(raw.replace(/([+-]\d{2})$/, '$1:00'));
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return undefined;
   }

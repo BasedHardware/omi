@@ -199,6 +199,32 @@ test('keeps GET import jobs when created_at exceeds 100', () => {
   ]);
 });
 
+test('keeps GET import jobs when created_at uses hour-only offsets Dart DateTime.tryParse accepts', () => {
+  expect(
+    parseOmiImportJobs(
+      JSON.stringify([
+        {
+          job_id: 'job-hour',
+          status: 'completed',
+          created_at: '2026-09-10T14:30:00+00',
+        },
+        {
+          job_id: 'job-neighbor',
+          status: 'failed',
+          error: 'Zip could not be read.',
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      id: 'job-hour',
+      status: 'completed',
+      createdAtMs: Date.parse('2026-09-10T14:30:00.000Z'),
+    },
+    {id: 'job-neighbor', status: 'failed', error: 'Zip could not be read.'},
+  ]);
+});
+
 test('keeps GET import jobs when created_at exceeds 10000', () => {
   const createdAt = 'c'.repeat(10001);
   expect(
