@@ -212,11 +212,13 @@ function segmentTranslations(value: unknown): string[] | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
-  const rows = array(value, 32);
+  if (!Array.isArray(value)) {
+    throw new DetailError('invalid');
+  }
   const translations: string[] = [];
-  for (const raw of rows) {
+  for (const raw of value) {
     const row = object(raw);
-    text(row.lang, 32);
+    text(row.lang);
     const copy = visibleDisplayText(text(row.text, 100000));
     if (copy !== '') {
       translations.push(copy);

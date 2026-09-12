@@ -283,6 +283,69 @@ test('names GET transcript translations and omits empty or missing lists', async
   });
 });
 
+test('keeps GET conversation transcript translations when more than 32', async () => {
+  const translations = Array.from({length: 33}, (_, index) => ({
+    lang: `l${index}`,
+    text: `copy ${index}`,
+  }));
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          translations,
+        },
+      ],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: fixture.transcript_segments[0].text,
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+        translations: translations.map(row => row.text),
+      },
+    ],
+  });
+});
+
+test('keeps GET conversation transcript translation language longer than 32', async () => {
+  const lang = 'x'.repeat(33);
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          translations: [{lang, text: 'Hola alli'}],
+        },
+      ],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: fixture.transcript_segments[0].text,
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+        translations: ['Hola alli'],
+      },
+    ],
+  });
+});
+
 test('names GET transcript stt_provider without inventing Flutter Omi for unknown', async () => {
   mockRequest.mockResolvedValue(
     response({
