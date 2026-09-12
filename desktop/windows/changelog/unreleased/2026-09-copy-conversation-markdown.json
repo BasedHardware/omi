@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Copy a cloud conversation summary as Markdown from its detail toolbar, or from the conversation list's right-click menu when summary data is cached, including the capture time, overview, and task checkboxes."
+  ]
+}
