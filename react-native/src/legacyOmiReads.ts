@@ -338,7 +338,7 @@ export async function loadOmiTasks(
       source: text(row.source, 'legacy'),
       provenance: evidence.map(item => {
         const ref = object(item);
-        id(ref.id);
+        text(ref.id);
         return JSON.stringify(ref);
       }),
       sortOrder: integer(row.sort_order),

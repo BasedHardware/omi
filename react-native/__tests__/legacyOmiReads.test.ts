@@ -881,6 +881,28 @@ test('old task wrapper preserves dates in milliseconds, nullable epochs and sour
   );
 });
 
+test('does not omit neighboring GET tasks when a provenance id is empty', async () => {
+  const {api} = backend({
+    action_items: [
+      {id: 'kept', description: 'Call Sam', completed: false},
+      {
+        id: 'empty-provenance',
+        description: 'Follow up',
+        completed: false,
+        provenance: [{kind: 'conversation', id: '', scope: 'canonical'}],
+      },
+    ],
+  });
+  const result = await loadTasks(api);
+  expect(result.items.map(row => row.id)).toEqual([
+    'kept',
+    'empty-provenance',
+  ]);
+  expect(
+    result.items.find(row => row.id === 'empty-provenance')?.provenance,
+  ).toEqual([JSON.stringify({kind: 'conversation', id: '', scope: 'canonical'})]);
+});
+
 test('truncated old task scan remains incomplete without advancing an unsafe offset', async () => {
   const {api} = backend({
     action_items: [{id: 'task', description: '', completed: true}],
