@@ -924,6 +924,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "#13181 failed content HTTP reads were indistinguishable from empty successful pages; production helper and handler regression"
 
+  - id: hey-omi-question-extraction-tests
+    command: ["python3", "plugins/notifications/test_hey_omi_extraction.py"]
+    triggers: ["plugins/notifications/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

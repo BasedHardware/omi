@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 import logging
+import re
 import time
 import os
 import requests
@@ -42,6 +43,15 @@ TRIGGER_PHRASES = ["hey omi", "hey, omi"]  # Base triggers
 PARTIAL_FIRST = ["hey", "hey,"]  # First part of trigger
 PARTIAL_SECOND = ["omi"]  # Second part of trigger
 QUESTION_AGGREGATION_TIME = 10  # seconds to wait for collecting the question
+
+
+def question_after_trigger(text: str) -> str:
+    """Return the words following the 'omi' trigger word in a lowercased
+    segment, or '' when nothing follows it. Splitting on 'omi,' dropped the
+    question whenever the speaker skipped the comma ('hey omi what time
+    is it')."""
+    match = re.search(r'\bomi\b', text)
+    return text[match.end():].strip(' ,') if match else ''
 
 
 # Replace the message buffer with a class to better manage state
@@ -219,7 +229,7 @@ async def webhook(request: WebhookRequest):
             # Note: cooldown is now set when notification is actually sent, not when trigger is detected
 
             # Extract any question part that comes after the trigger
-            question_part = text.split('omi,')[-1].strip() if 'omi,' in text.lower() else ''
+            question_part = question_after_trigger(text)
             if question_part:
                 buffer_data['collected_question'].append(question_part)
                 logger.info(f"Collected question part from trigger: {question_part}")
@@ -247,7 +257,7 @@ async def webhook(request: WebhookRequest):
                         buffer_data['partial_trigger'] = False
 
                         # Extract any question part that comes after "omi"
-                        question_part = text.split('omi,')[-1].strip() if 'omi,' in text.lower() else ''
+                        question_part = question_after_trigger(text)
                         if question_part:
                             buffer_data['collected_question'].append(question_part)
                             logger.info(f"Collected question part from second trigger part: {question_part}")
