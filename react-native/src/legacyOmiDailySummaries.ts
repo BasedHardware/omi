@@ -120,8 +120,8 @@ export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
       continue;
     }
     seen.add(id);
-    const date = optionalWireString(summary.date, 10000);
-    const dayEmoji = optionalWireString(summary.day_emoji, 10000);
+    const date = optionalWireString(summary.date, 1_000_000);
+    const dayEmoji = optionalWireString(summary.day_emoji, 1_000_000);
     const overview = optionalWireString(summary.overview, 1_000_000);
     const stats = summaryStats(summary.stats);
     items.push({

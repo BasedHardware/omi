@@ -121,6 +121,29 @@ test('keeps GET daily summaries when date or day_emoji is longer than 32', () =>
   ]);
 });
 
+test('keeps GET daily summaries when date or day_emoji exceeds 10000', () => {
+  const date = 'D'.repeat(10001);
+  const dayEmoji = 'E'.repeat(10001);
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {
+            id: 'sum-long',
+            headline: 'Shipped the recap',
+            date,
+            day_emoji: dayEmoji,
+          },
+          {id: 'sum-kept', headline: 'Met with the team'},
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id: 'sum-long', date, headline: 'Shipped the recap', dayEmoji},
+    {id: 'sum-kept', date: '', headline: 'Met with the team'},
+  ]);
+});
+
 test('keeps GET daily summaries when a summary id exceeds 256', () => {
   const id = 's'.repeat(257);
   expect(
