@@ -946,6 +946,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
 
+  - id: shopify-oauth-shop-host-tests
+    command: ["python3", "plugins/omi-shopify-app/test_shop_host.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the client-controlled shop param was used as the OAuth token-exchange host, sending client_secret/code to an attacker domain; the auth flow also produced open-redirect authorization URLs via # or / smuggling"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
