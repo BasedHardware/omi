@@ -1,0 +1,3 @@
+{
+  "change": "Settings \u2192 Advanced \u2192 AI Provider now respects the Hermes and OpenClaw selections in chat (previously both silently ran the Claude engine and failed with \"Claude sign-in is required\")"
+}
