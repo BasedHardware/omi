@@ -79,6 +79,18 @@ class GitHubClientTests(unittest.TestCase):
         ), patch.object(github_client, "print"):
             self.assertEqual(client.list_user_repos("token"), [])
 
+    def test_list_user_repos_returns_empty_on_malformed_item(self):
+        # A page item missing keys the projection requires must fail closed
+        # inside _get_paginated's boundary, not raise out of the fetcher.
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            return_value=FakeResponse([{"name": "no-owner"}]),
+        ), patch.object(github_client, "print"):
+            self.assertEqual(client.list_user_repos("token"), [])
+
     def test_get_repo_labels_follows_next_page(self):
         client = github_client.GitHubClient()
 
@@ -148,6 +160,16 @@ class GitHubClientTests(unittest.TestCase):
                 ),
                 FakeResponse([], status_code=500),
             ],
+        ), patch.object(github_client, "print"):
+            self.assertEqual(client.get_repo_labels_with_details("token", "owner/repo"), [])
+
+    def test_get_repo_labels_with_details_returns_empty_on_malformed_item(self):
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            return_value=FakeResponse([{"description": "no name or color"}]),
         ), patch.object(github_client, "print"):
             self.assertEqual(client.get_repo_labels_with_details("token", "owner/repo"), [])
 
