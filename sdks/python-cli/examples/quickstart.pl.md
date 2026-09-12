@@ -147,10 +147,10 @@ omi --json memory list | jq '.[] | {id, content, category}'
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
 
 # Wyświetl otwarte elementy akcji
-omi --json action-item list --open | jq '.[] | {id, title, due_at}'
+omi --json action-item list --open | jq '.[] | {id, description, due_at}'
 
 # Wyświetl cele
-omi --json goal list | jq '.[] | {id, title, progress: .progress_percent}'
+omi --json goal list | jq '.[] | {id, title, current: .current_value, target: .target_value}'
 ```
 
 ---
@@ -188,7 +188,7 @@ omi auth login
 | `command not found: omi` | PATH nie zawiera katalogu bin pipx | Uruchom `pipx ensurepath` i uruchom ponownie terminal |
 | `401 Unauthorized` | Klucz API jest nieprawidłowy lub wygasł | Wygeneruj nowy klucz na app.omi.me i zaktualizuj |
 | `connection refused` | Brak dostępu sieciowego do serwera Omi | Sprawdź połączenie internetowe i ustawienia proxy |
-| `permission denied` na plikach konfiguracyjnych | Katalog konfiguracyjny nie jest zapisywalny | Sprawdź uprawnienia `~/.config/omi` |
+| `permission denied` na plikach konfiguracyjnych | Katalog konfiguracyjny nie jest zapisywalny | Sprawdź uprawnienia `~/.omi/config.toml` |
 
 ---
 
