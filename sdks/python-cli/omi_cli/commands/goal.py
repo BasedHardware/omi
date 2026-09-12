@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 import typer
 
+from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import UsageError
 from omi_cli.models import GoalType
 from omi_cli.output import shorten
@@ -132,10 +134,26 @@ def update_goal(
     max_value: Optional[float] = typer.Option(None, "--max"),
     unit: Optional[str] = typer.Option(None, "--unit"),
     clear_unit: bool = typer.Option(False, "--clear-unit", help="Remove the existing unit label."),
+    horizon_at: Optional[datetime] = typer.Option(
+        None,
+        "--horizon-at",
+        formats=ISO_DATETIME_FORMATS,
+        help="Target horizon datetime with explicit timezone.",
+    ),
+    clear_horizon: bool = typer.Option(
+        False,
+        "--clear-horizon",
+        help="Remove the target horizon datetime.",
+    ),
 ) -> None:
     ctx = _ctx(typer_ctx)
     if clear_unit and unit is not None:
         raise UsageError(message="Conflicting options", detail="--unit and --clear-unit are mutually exclusive.")
+    if clear_horizon and horizon_at is not None:
+        raise UsageError(
+            message="Conflicting options",
+            detail="--horizon-at and --clear-horizon are mutually exclusive.",
+        )
     body: dict[str, object] = {}
     if title is not None:
         body["title"] = title
@@ -151,10 +169,19 @@ def update_goal(
         body["unit"] = None
     elif unit is not None:
         body["unit"] = unit
+    if clear_horizon:
+        body["horizon_at"] = None
+    elif horizon_at is not None:
+        if horizon_at.tzinfo is None:
+            raise UsageError(
+                message="Missing timezone",
+                detail="--horizon-at requires an explicit timezone (e.g. +00:00 or Z).",
+            )
+        body["horizon_at"] = horizon_at.isoformat()
     if not body:
         raise UsageError(
             message="No fields to update",
-            detail="Provide one of --title/--target/--current/--min/--max/--unit/--clear-unit.",
+            detail="Provide one of --title/--target/--current/--min/--max/--unit/--clear-unit/--horizon-at/--clear-horizon.",
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/goals/{goal_id}", json_body=body)
