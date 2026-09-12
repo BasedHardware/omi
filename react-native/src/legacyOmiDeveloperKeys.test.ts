@@ -122,6 +122,24 @@ test('does not omit neighboring GET developer keys when a scope exceeds 256', ()
   expect(keys.find(row => row.id === 'long-scope')?.scopes).toEqual([scope]);
 });
 
+test('keeps GET developer keys when id or key_prefix exceeds 256', () => {
+  const id = 'k'.repeat(257);
+  const keyPrefix = 'p'.repeat(257);
+  expect(
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {id, name: 'Local', key_prefix: 'omi_sk_ab'},
+        {id: 'key-prefix', name: 'Wide', key_prefix: keyPrefix},
+        {id: 'key-neighbor', name: 'Cursor', key_prefix: 'omi_mcp_cd'},
+      ]),
+    ),
+  ).toEqual([
+    {id, name: 'Local', keyPrefix: 'omi_sk_ab'},
+    {id: 'key-prefix', name: 'Wide', keyPrefix: keyPrefix},
+    {id: 'key-neighbor', name: 'Cursor', keyPrefix: 'omi_mcp_cd'},
+  ]);
+});
+
 test('loadOmiDevApiKeys and loadOmiMcpApiKeys name resolved GET keys and omit failures', async () => {
   const request = jest.fn(async (input: {path: string}) => {
     if (input.path === '/v1/dev/keys') {

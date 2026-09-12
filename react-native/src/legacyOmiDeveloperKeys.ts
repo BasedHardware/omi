@@ -75,7 +75,7 @@ export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
   const seen = new Set<string>();
   for (const raw of rows) {
     const row = object(raw);
-    const id = visibleDisplayText(text(row.id, 256));
+    const id = visibleDisplayText(text(row.id, 10000));
     if (id === '') {
       throw new DeveloperKeyError();
     }
@@ -87,7 +87,7 @@ export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
     if (name === '') {
       continue;
     }
-    const keyPrefix = visibleDisplayText(text(row.key_prefix, 256));
+    const keyPrefix = visibleDisplayText(text(row.key_prefix, 10000));
     const created = createdAtMs(row.created_at);
     const scopes = optionalScopes(row.scopes);
     keys.push({
