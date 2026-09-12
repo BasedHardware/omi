@@ -22,6 +22,8 @@ import {
 import { failureFromError, messageFrom } from './failures'
 import { isRecoverableAcpAuthError } from './acp'
 import { claudeAuthStatus } from './claudeOAuth'
+import { classifyTask, rankAgentsForTask, type TaskTag } from './agentConcierge'
+import { recordAgentOutcome } from './agentOutcomeLedger'
 import type {
   CodingAgentEvent,
   CodingAgentResult,
@@ -31,17 +33,33 @@ import type {
 
 const CLAUDE_SIGN_IN_HINT = 'Sign in to Claude to use Claude Code.'
 
-/** Preference order when no agent is named (or the named one falls over). */
+/** Declared preference order — every connected agent's floor, and the
+ *  tie-break when agentConcierge scores two of them the same. No longer the
+ *  fallback order by itself; see candidateAgents. */
 export const AGENT_FALLBACK_ORDER = PRODUCTION_ADAPTER_IDS
 
+/**
+ * Who to try, and in what order. The named agent (if any) always goes first —
+ * asking for Hermes by name and getting routed to Claude Code instead because
+ * Claude scored higher would be its own kind of bug. Everyone else connected
+ * is ranked by fit for this task (agentConcierge.rankAgentsForTask) rather
+ * than just handed back in declared order, so "no agent named" actually means
+ * "pick the best connected one" the way CodingAgentRunArgs.agentId's doc
+ * comment already promises.
+ *
+ * Takes the already-classified `taskTag` (see runCodingAgentTask) rather than
+ * a raw prompt, so a single call site's prompt is only ever classified once.
+ */
 export function candidateAgents(
   named: CodingAgentAdapterId | undefined,
   overrides: AdapterCommandOverrides,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  taskTag: TaskTag = 'general'
 ): CodingAgentAdapterId[] {
   const connected = AGENT_FALLBACK_ORDER.filter((id) => adapterIsActivated(id, overrides, env))
-  if (!named) return [...connected]
-  return [named, ...connected.filter((id) => id !== named)]
+  const ranked = rankAgentsForTask(connected, taskTag)
+  if (!named) return ranked
+  return [named, ...ranked.filter((id) => id !== named)]
 }
 
 const CONNECTION_TEST_TIMEOUT_MS = 20_000
@@ -127,7 +145,8 @@ export async function runCodingAgentTask(
   log: (message: string) => void = () => {}
 ): Promise<CodingAgentResult> {
   const overrides = args.commandOverrides ?? {}
-  const candidates = candidateAgents(args.agentId, overrides)
+  const taskTag = classifyTask(args.prompt)
+  const candidates = candidateAgents(args.agentId, overrides, process.env, taskTag)
   if (candidates.length === 0) {
     return {
       taskId: args.taskId,
@@ -148,6 +167,27 @@ export async function runCodingAgentTask(
     for (let i = 0; i < candidates.length; i++) {
       const adapterId = candidates[i]
       if (abort.signal.aborted) break
+
+      // The one case candidateAgents still puts an unconnected adapter in the
+      // list: the user named it explicitly. Asking for Codex has to actually
+      // try Codex first (never silently reroute to whatever's connected), but
+      // there's no point spawning a process we already know is missing its
+      // launch command — that would just trade this precise, actionable hint
+      // for whatever raw exception the adapter throws while trying to find a
+      // command that was never configured.
+      if (i === 0 && args.agentId === adapterId && !adapterIsActivated(adapterId, overrides)) {
+        const namedProfile = ADAPTER_PROFILES[adapterId]
+        const hint =
+          adapterActivationError(adapterId) ?? `${namedProfile.displayName} isn't connected.`
+        lastError = hint
+        emit({
+          type: 'status',
+          taskId: args.taskId,
+          message: i < candidates.length - 1 ? `${hint} Trying the next agent…` : hint
+        })
+        continue
+      }
+
       const profile = ADAPTER_PROFILES[adapterId]
       const adapter = profile.createAdapter({
         log: (message) => log(`[${adapterId}] ${message}`),
@@ -186,6 +226,16 @@ export async function runCodingAgentTask(
           },
           abort.signal
         )
+        // A cancellation isn't a verdict on the agent — the user pulled the
+        // plug, the agent didn't fail at anything. Only succeeded/failed feed
+        // the ledger agentConcierge ranks future tasks against.
+        if (result.terminalStatus !== 'cancelled') {
+          recordAgentOutcome({
+            adapterId,
+            tag: taskTag,
+            outcome: result.terminalStatus === 'succeeded' ? 'success' : 'failure'
+          })
+        }
         return {
           taskId: args.taskId,
           ok: result.terminalStatus === 'succeeded',
@@ -216,6 +266,10 @@ export async function runCodingAgentTask(
         if (abort.signal.aborted) {
           return { taskId: args.taskId, ok: false, adapterId, text: '', error: 'Cancelled.' }
         }
+        // A real attempt that actually got to run and blew up — worth
+        // recording. (The not-activated case above never reaches this catch
+        // at all, so this never charges an agent for not being installed.)
+        recordAgentOutcome({ adapterId, tag: taskTag, outcome: 'failure' })
         // Visible output already reached the user — retrying elsewhere would
         // double-answer. Surface the failure instead.
         if (producedOutput || i === candidates.length - 1) {
