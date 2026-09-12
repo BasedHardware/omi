@@ -35,6 +35,7 @@ from models import (
     LinearUser,
     WorkflowState,
 )
+from issue_lookup import resolve_issue_by_identifier
 
 load_dotenv()
 
@@ -735,34 +736,14 @@ async def tool_update_issue_status(request: Request):
         if not get_linear_tokens(uid):
             return ChatToolResponse(error="Please connect your Linear account first in the app settings.")
         
-        # Search for the issue by identifier using searchIssues
-        search_query = """
-        query($term: String!) {
-            searchIssues(term: $term, first: 1) {
-                nodes {
-                    id
-                    identifier
-                    title
-                    team {
-                        id
-                    }
-                }
-            }
-        }
-        """
+        looked = resolve_issue_by_identifier(linear_graphql_request, uid, issue_identifier)
+        if "error" in looked:
+            err = looked["error"]
+            if err.startswith("Could not find issue") or err.startswith("Issue identifier"):
+                return ChatToolResponse(error=err)
+            return ChatToolResponse(error=f"Failed to find issue: {err}")
         
-        result = linear_graphql_request(uid, search_query, {
-            "term": issue_identifier.upper()
-        })
-        
-        if "error" in result:
-            return ChatToolResponse(error=f"Failed to find issue: {result['error']}")
-        
-        issues = result.get("searchIssues", {}).get("nodes", [])
-        if not issues:
-            return ChatToolResponse(error=f"Could not find issue: {issue_identifier}")
-        
-        issue = issues[0]
+        issue = looked["issue"]
         team_id = issue["team"]["id"]
         issue_id = issue["id"]
         
@@ -942,57 +923,14 @@ async def tool_get_issue(request: Request):
         if not get_linear_tokens(uid):
             return ChatToolResponse(error="Please connect your Linear account first in the app settings.")
         
-        query = """
-        query($term: String!) {
-            searchIssues(term: $term, first: 1) {
-                nodes {
-                    id
-                    identifier
-                    title
-                    description
-                    priority
-                    estimate
-                    state {
-                        name
-                        type
-                    }
-                    assignee {
-                        name
-                    }
-                    creator {
-                        name
-                    }
-                    team {
-                        name
-                    }
-                    project {
-                        name
-                    }
-                    labels {
-                        nodes {
-                            name
-                        }
-                    }
-                    url
-                    createdAt
-                    updatedAt
-                }
-            }
-        }
-        """
+        looked = resolve_issue_by_identifier(linear_graphql_request, uid, issue_identifier)
+        if "error" in looked:
+            err = looked["error"]
+            if err.startswith("Could not find issue") or err.startswith("Issue identifier"):
+                return ChatToolResponse(error=err)
+            return ChatToolResponse(error=f"Failed to get issue: {err}")
         
-        result = linear_graphql_request(uid, query, {
-            "term": issue_identifier.upper()
-        })
-        
-        if "error" in result:
-            return ChatToolResponse(error=f"Failed to get issue: {result['error']}")
-        
-        issues = result.get("searchIssues", {}).get("nodes", [])
-        if not issues:
-            return ChatToolResponse(error=f"Could not find issue: {issue_identifier}")
-        
-        issue = issues[0]
+        issue = looked["issue"]
         
         # Format the issue details
         priority_map = {0: "No priority", 1: "🔴 Urgent", 2: "🟠 High", 3: "🟡 Medium", 4: "🔵 Low"}
@@ -1065,31 +1003,14 @@ async def tool_add_comment(request: Request):
         if not get_linear_tokens(uid):
             return ChatToolResponse(error="Please connect your Linear account first in the app settings.")
         
-        # First, get the issue ID using search
-        query = """
-        query($term: String!) {
-            searchIssues(term: $term, first: 1) {
-                nodes {
-                    id
-                    identifier
-                    title
-                }
-            }
-        }
-        """
+        looked = resolve_issue_by_identifier(linear_graphql_request, uid, issue_identifier)
+        if "error" in looked:
+            err = looked["error"]
+            if err.startswith("Could not find issue") or err.startswith("Issue identifier"):
+                return ChatToolResponse(error=err)
+            return ChatToolResponse(error=f"Failed to find issue: {err}")
         
-        result = linear_graphql_request(uid, query, {
-            "term": issue_identifier.upper()
-        })
-        
-        if "error" in result:
-            return ChatToolResponse(error=f"Failed to find issue: {result['error']}")
-        
-        issues = result.get("searchIssues", {}).get("nodes", [])
-        if not issues:
-            return ChatToolResponse(error=f"Could not find issue: {issue_identifier}")
-        
-        issue = issues[0]
+        issue = looked["issue"]
         
         # Add the comment
         mutation = """
