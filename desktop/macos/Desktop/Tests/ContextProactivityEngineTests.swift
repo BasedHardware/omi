@@ -1,3 +1,4 @@
+import Foundation
 import GRDB
 import XCTest
 
@@ -701,6 +702,66 @@ final class ContextProactivityEngineTests: XCTestCase {
     }
     return queue
   }
+
+  /// Every way into `evaluateAndDeliver` must pass JIT admission first.
+  ///
+  /// `evaluateFromSpeech` was added without it (#12407): dwell and departure both consulted
+  /// `JITProactivityCoordinator.shared.handle` and returned early on `true`, while speech
+  /// called `evaluateAndDeliver` directly.
+  ///
+  /// The kill switch was never the gap. `permitsNewLane` false — kill switch included —
+  /// yields `.legacyContextBucketFallback` and `handle()` answers `false`, so all three
+  /// lanes fall through to the legacy director alike. What speech escaped was `.suppressed`:
+  /// JIT enabled and declining on dedup, continuity keys, or planned-trigger precedence,
+  /// where dwell and departure stop and speech did not.
+  ///
+  /// A source scrape, not behavioral coverage — the engine has no seam that lets a test
+  /// drive all three entry points against a fake coordinator. Counted rather than pinned to
+  /// a signature so reformatting cannot break it; a fourth entry point must either route
+  /// through the coordinator or change this number deliberately.
+  func testEveryProactivityEntryPointPassesJITAdmission() throws {
+    let source = try contextProactivityEngineSource()
+    let entryPoints = ["func contextEntered(", "func evaluateAfterDeparture(", "func evaluateFromSpeech("]
+    for entryPoint in entryPoints {
+      XCTAssertTrue(source.contains(entryPoint), "missing entry point \(entryPoint)")
+    }
+
+    // Counting one admission call per entry point was the wrong shape once the dwell
+    // lanes were consolidated onto a single shared call behind the injected
+    // `jitHandle` seam. What has to hold is not a count but a route: every lane
+    // reaches the coordinator through that seam, and none of them around it. The
+    // only surviving mention of the singleton is the seam's own default argument.
+    let singletonReferences =
+      source.components(separatedBy: "JITProactivityCoordinator.shared.handle(").count - 1
+    XCTAssertEqual(
+      singletonReferences, 1,
+      "the coordinator singleton belongs only in jitHandle's default; a lane calling it "
+        + "directly cannot be driven against a fake in tests")
+
+    // Presence is not enough for the speech lane: an admission check placed after
+    // delivery would still read as present. Pin the order within its body.
+    guard let speechStart = source.range(of: "func evaluateFromSpeech(") else {
+      return XCTFail("missing func evaluateFromSpeech(")
+    }
+    let speechBody = source[speechStart.upperBound...]
+    guard let admission = speechBody.range(of: "await jitHandle("),
+      let delivery = speechBody.range(of: "await evaluateAndDeliver(")
+    else {
+      return XCTFail("evaluateFromSpeech must consult jitHandle and then evaluateAndDeliver")
+    }
+    XCTAssertTrue(
+      admission.lowerBound < delivery.lowerBound,
+      "speech must clear JIT admission before it delivers, not after")
+  }
+
+  private func contextProactivityEngineSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/ProactiveAssistants/Core/ContextProactivityEngine.swift")
+    // omi-test-quality: source-inspection -- static contract: every entry point into evaluateAndDeliver must consult JIT admission, and the engine exposes no seam to drive all three against a fake coordinator.
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
 }
 
 final class ContextProactivityDirectorFailureTests: XCTestCase {
@@ -1302,4 +1363,28 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
       AssistantCoordinator.shared.isTracking(
         app: "GuardTestApp", windowTitle: "Different Document"))
   }
+
+  /// Both lanes draw on one daily allocation, so a reviewer asked whether transcript triggers
+  /// crowd out screen ones. That was unanswerable: gate rejections recorded a stage but not
+  /// which lane started the evaluation, so a speech rejection and a screen rejection were the
+  /// same row. The speech lane is the only entry point that carries a transcript section, so
+  /// the argument already separates them.
+  func testGateTriggerSeparatesTheSpeechLaneFromTheScreenLane() {
+    XCTAssertEqual(ContextProactivityTelemetry.GateTrigger.forSpeechSection(nil), .screenVisit)
+    XCTAssertEqual(
+      ContextProactivityTelemetry.GateTrigger.forSpeechSection("user said something"), .speech)
+  }
+
+  /// An empty section still came from the speech lane. Treating it as a screen visit would
+  /// silently move rows into the wrong column of the comparison this dimension exists for.
+  func testEmptySpeechSectionIsStillTheSpeechLane() {
+    XCTAssertEqual(ContextProactivityTelemetry.GateTrigger.forSpeechSection(""), .speech)
+  }
+
+  /// The raw values land in the analytics payload; renaming one silently breaks the split.
+  func testGateTriggerRawValuesArePinned() {
+    XCTAssertEqual(ContextProactivityTelemetry.GateTrigger.screenVisit.rawValue, "screen_visit")
+    XCTAssertEqual(ContextProactivityTelemetry.GateTrigger.speech.rawValue, "speech")
+  }
+
 }
