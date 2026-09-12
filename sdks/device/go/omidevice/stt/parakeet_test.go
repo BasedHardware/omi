@@ -87,6 +87,10 @@ func testTranscriberReadiness(t *testing.T, parakeet bool) {
 			if err != nil {
 				return
 			}
+			if kind == websocket.TextMessage {
+				// Provider shutdown (Deepgram CloseStream or Parakeet finalize).
+				return
+			}
 			if kind == websocket.BinaryMessage {
 				select {
 				case received <- data:
