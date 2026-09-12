@@ -36,6 +36,17 @@ test('keeps GET people names when a name exceeds 10000', () => {
   expect(names.get('person-neighbor')).toBe('Jordan Lee');
 });
 
+test('does not omit neighboring GET people names when the catalogue exceeds 1000', () => {
+  const rows = Array.from({length: 1001}, (_, index) => ({
+    id: `person-${index}`,
+    name: `Person ${index}`,
+  }));
+  const names = parseOmiPeopleNames(JSON.stringify(rows));
+  expect(names.get('person-0')).toBe('Person 0');
+  expect(names.get('person-1000')).toBe('Person 1000');
+  expect(names.size).toBe(1001);
+});
+
 test('fails closed for malformed GET people', () => {
   expect(() =>
     parseOmiPeopleNames(JSON.stringify({id: 'person-alex'})),

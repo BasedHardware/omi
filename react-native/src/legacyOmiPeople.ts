@@ -18,15 +18,15 @@ function text(value: unknown, limit: number): string {
   }
   return value;
 }
-function array(value: unknown, limit: number): unknown[] {
-  if (!Array.isArray(value) || value.length > limit) {
+function array(value: unknown): unknown[] {
+  if (!Array.isArray(value)) {
     throw new PeopleError();
   }
   return value;
 }
 
 export function parseOmiPeopleNames(body: string): Map<string, string> {
-  const rows = array(JSON.parse(body), 1000);
+  const rows = array(JSON.parse(body));
   const names = new Map<string, string>();
   for (const raw of rows) {
     const person = object(raw);
