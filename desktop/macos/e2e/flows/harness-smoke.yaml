@@ -18,6 +18,7 @@ covers:
   - desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift
   - desktop/macos/Desktop/Sources/Auth/SessionRecoveryView.swift
   - desktop/macos/Desktop/Sources/Auth/AuthStorageCanary.swift
+  - desktop/macos/Desktop/Sources/Auth/DesktopDeveloperSecretStore.swift
   - desktop/macos/Desktop/Sources/DesktopKeychainStore.swift
   - desktop/macos/Desktop/Sources/Logger.swift
   - desktop/macos/Desktop/Sources/Observability/SentryBeforeSendPolicy.swift

@@ -265,7 +265,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future _bleDisconnectDevice(BtDevice btDevice) async {
-    await ServiceManager.instance().device.disconnectDevice();
+    await ServiceManager.instance().device.disconnectDevice(btDevice.id);
   }
 
   Future<int> _retrieveBatteryLevel(String deviceId) async {
@@ -556,6 +556,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       deviceType: 'omi',
       isConnected: false,
     );
+
+    // #3328: do not create a user-facing disconnect / "wear your Omi" push.
+    // Onboard storage keeps recording across BLE drops; backend daily wear
+    // reminder is also off.
 
     // Notify interactive device onboarding of disconnect
     captureProvider?.deviceOnboardingProvider?.onDeviceDisconnected();

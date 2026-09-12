@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import re
 from typing import Any, List, Optional
 from zoneinfo import ZoneInfo
 
@@ -69,13 +69,22 @@ def build_conversation_prompt_prefix(
     language_code: str,
     calendar_context: Optional[CalendarMeetingContext] = None,
     photos: Optional[List[ConversationPhoto]] = None,
+    speaker_map: Optional[Mapping[int, Optional[str]]] = None,
 ) -> ConversationPromptPrefix:
+    """Render the shared context prefix for conversation-wide LLM tasks.
+
+    ``speaker_map`` (from ``conversation_transcript_and_speaker_map``) is rendered
+    once as compact ``spk <cluster> <name|?>`` metadata lines, so the transcript
+    below it can key turns by cluster instead of carrying ``Speaker N:`` labels the
+    model copies into titles (SCA-454).
+    """
     try:
         user_tz = ZoneInfo(timezone_name) if timezone_name else timezone.utc
     except Exception:
         user_tz = timezone.utc
     aware_started_at = started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)
     started_at_local = aware_started_at.astimezone(user_tz).replace(tzinfo=None).isoformat()
+    speaker_names: dict[int, Optional[str]] = dict(speaker_map) if speaker_map else {}
     metadata_lines = [
         f'- Captured at: {started_at_local} ({timezone_name or "UTC"})',
     ]
@@ -102,24 +111,22 @@ def build_conversation_prompt_prefix(
             ]
         )
 
-        placeholder_ids = set(re.findall(r'(?m)^(?:\[segment:[^\]]+\] )?Speaker (\d+):', transcript))
-        named_labels = {
-            match.casefold()
-            for match in re.findall(r'(?m)^(?:\[segment:[^\]]+\] )?([^:\n]+):', transcript)
-            if not match.startswith('Speaker ')
-        }
+        # One-name rename guard (SCA-454), keyed off the spk map rather than a
+        # ``Speaker N:`` dialogue label: when exactly one cluster is unresolved and
+        # exactly one calendar participant is not already bound, that participant
+        # names the cluster. Anything less certain stays ``?`` — never invented.
+        unresolved_keys = [key for key, name in speaker_names.items() if not name]
+        bound_names = {name.casefold() for name in speaker_names.values() if name}
         remaining_names = [
             participant.name
             for participant in calendar_context.participants
-            if participant.name and participant.name.casefold() not in named_labels
+            if participant.name and participant.name.casefold() not in bound_names
         ]
-        if len(placeholder_ids) == 1 and len(remaining_names) == 1:
-            speaker_id = next(iter(placeholder_ids))
-            transcript = re.sub(
-                rf'(?m)^((?:\[segment:[^\]]+\] )?)Speaker {re.escape(speaker_id)}:',
-                rf'\1{remaining_names[0]}:',
-                transcript,
-            )
+        if len(unresolved_keys) == 1 and len(remaining_names) == 1:
+            speaker_names[unresolved_keys[0]] = remaining_names[0]
+
+    if speaker_names:
+        metadata_lines.extend(f'spk {key} {name}' if name else f'spk {key} ?' for key, name in speaker_names.items())
 
     context_parts = ['CONVERSATION METADATA\n' + '\n'.join(metadata_lines), f'FULL TRANSCRIPT\n{transcript.strip()}']
     if photos:

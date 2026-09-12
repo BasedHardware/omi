@@ -25,7 +25,11 @@ set -euo pipefail
 # ── Pinned provenance ──────────────────────────────────────────────────
 SWIFT_FORMAT_VERSION="602.0.0"
 SWIFT_FORMAT_COMMIT="62eaad2822b865407b8cde56c36386c00800f7ec"
-SWIFT_FORMAT_REPO="https://github.com/swiftlang/swift-format.git"
+# The pinned upstream. The SWIFT_FORMAT_REPO_URL override exists so the
+# hermetic fixtures can point the bootstrap at a local repository instead of
+# the network; the clone must still reach the pinned commit or the wrapper
+# fails closed below.
+SWIFT_FORMAT_REPO="${SWIFT_FORMAT_REPO_URL:-https://github.com/swiftlang/swift-format.git}"
 
 # ── Cache layout ───────────────────────────────────────────────────────
 CACHE_DIR="${SWIFT_FORMAT_CACHE_DIR:-${HOME}/.cache/omi-swift-format}"

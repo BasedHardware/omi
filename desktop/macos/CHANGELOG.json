@@ -2,6 +2,162 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.341",
+      "date": "2026-09-12",
+      "changes": [
+        "Restored icons and labels in the main window's top navigation for Chat, Memories, Tasks and Apps"
+      ]
+    },
+    {
+      "version": "0.12.340",
+      "date": "2026-09-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.339",
+      "date": "2026-09-11",
+      "changes": [
+        "Voice replies now use your own OpenAI or Gemini key when you pick that model under Advanced → Voice Model, instead of falling back to Omi's managed service and failing on billing — and a billing error now says which service declined and what to do about it"
+      ]
+    },
+    {
+      "version": "0.12.338",
+      "date": "2026-09-11",
+      "changes": [
+        "Fixed: chat follow/pin scroll timers and recording timers no longer keep running after their owner is gone, removing a small idle CPU wake."
+      ]
+    },
+    {
+      "version": "0.12.337",
+      "date": "2026-09-11",
+      "changes": [
+        "The main window's top navigation is now a Liquid Glass segmented control on macOS 26: press and drag to slide the glass selection between Chat, Memories, Tasks and Apps. Earlier macOS releases get the system segmented control. The custom pills are gone, so the bar follows your system appearance and accessibility settings.",
+        "Added Silent Type in Transcription settings — dictation still types into the app you are in, but the text is kept out of Omi's chat context"
+      ]
+    },
+    {
+      "version": "0.12.336",
+      "date": "2026-09-10",
+      "changes": [
+        "Fixed the notch collapsing to its narrow idle width while a notification card, a voice status message, or the thinking indicator was still showing in it",
+        "Fixed Settings switches ignoring the first click when it moved slightly — they now flip on the first click and are readable by accessibility tools",
+        "Fixed task Undo showing a restored task under a deleted identity until refresh"
+      ]
+    },
+    {
+      "version": "0.12.335",
+      "date": "2026-09-10",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.334",
+      "date": "2026-09-10",
+      "changes": [
+        "Chat now retries a failed turn on a fresh local agent when the server briefly returns HTTP 503, instead of asking you to send the same message again."
+      ]
+    },
+    {
+      "version": "0.12.333",
+      "date": "2026-09-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.332",
+      "date": "2026-09-09",
+      "changes": [
+        "Added a Hide button to the notch hover panel. It hides the notch like the Show floating bar switch in Settings, which now stays in sync, and Push-to-Talk brings it back.",
+        "The Rewind timeline now draws apps in soft pastel colors that blend into each other instead of switching hard from one color to the next",
+        "The Rewind timeline can now zoom in six times further, down to ten seconds across the bar, with second-by-second tick labels",
+        "Settings → General gains a Transparency slider under Font Size that sets how much of the desktop shows through the app's glass; every panel follows the thumb while you drag, the value persists across launches, and the system Reduce Transparency setting still forces solid panels",
+        "Rewind's screenshot no longer wears the app-coloured outline, and every control that used to sit on the picture — the date pill, the previous/next app buttons and the zoom buttons — moved into one row directly beneath it, with the app buttons centred as simple glass circles",
+        "Shortened the dashboard search placeholders: Search chat, Search activity, Search conversations, Search memories, Search rewind, and Search brain",
+        "Added a draggable scrubber to conversation audio playback; clicking any transcript bubble jumps the audio to that sentence and starts playing; the transcript header's refresh button re-fetches the transcript and re-syncs it to the audio on this Mac, so playback starts at 0:00 and bubbles line up with what is heard",
+        "Fixed voice typing losing a dictation in browsers and Electron apps, where it reported \"Insertion unconfirmed\" instead of typing the text"
+      ]
+    },
+    {
+      "version": "0.12.331",
+      "date": "2026-09-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.330",
+      "date": "2026-09-09",
+      "changes": [
+        "Fixed voice typing dropping the first word when a dictation starts with \"this\" — \"type this is a test\" now types \"This is a test\", not \"Is a test\""
+      ]
+    },
+    {
+      "version": "0.12.329",
+      "date": "2026-09-09",
+      "changes": [
+        "Stopped push-to-talk follow-ups re-answering an earlier question whose spoken reply was cut off by the next press — a reply whose text finished is now treated as given, and the assistant continues from where it stopped instead of restarting that thread"
+      ]
+    },
+    {
+      "version": "0.12.328",
+      "date": "2026-09-09",
+      "changes": [
+        "Fixed undoing the deletion of a completed task duplicating it instead of restoring it"
+      ]
+    },
+    {
+      "version": "0.12.327",
+      "date": "2026-09-09",
+      "changes": [
+        "Fixed voice turns dropping the on-screen context captured when you pressed the talk button",
+        "Fixed a push-to-talk stall so an automation voice turn starts responding immediately instead of waiting on the first screen capture."
+      ]
+    },
+    {
+      "version": "0.12.326",
+      "date": "2026-09-09",
+      "changes": [
+        "Fixed a finished chat answer briefly jumping back to an older, shorter version with its tool chips while it settled, and made long transcripts stay responsive while an answer streams",
+        "Stopped developer macOS builds from asking for Keychain access on every rebuild"
+      ]
+    },
+    {
+      "version": "0.12.325",
+      "date": "2026-09-09",
+      "changes": [
+        "Fixed sent chat attachments showing a blank placeholder once the picked screenshot's temporary file was removed",
+        "Fixed the Home chat input bar spreading its controls across the window — the message field, paperclip, microphone, and send button now keep their usual layout"
+      ]
+    },
+    {
+      "version": "0.12.324",
+      "date": "2026-09-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.323",
+      "date": "2026-09-08",
+      "changes": [
+        "Fixed a bug where a task completed while offline could reappear as incomplete after the app reconnected"
+      ]
+    },
+    {
+      "version": "0.12.322",
+      "date": "2026-09-08",
+      "changes": [
+        "Fixed remaining macOS permission prompts and file-index loss after skipping onboarding permissions",
+        "The top-bar listening control now shows the Only Meetings icon in place of the microphone while that mode is selected, reads as on while armed for a call, and explains the mode in its tooltip",
+        "The chat composer now always reads \"Ask Omi\" instead of \"Ask a follow-up…\"",
+        "Fixed black transparent bands being baked into Rewind window captures"
+      ]
+    },
+    {
       "version": "0.12.321",
       "date": "2026-09-08",
       "changes": [

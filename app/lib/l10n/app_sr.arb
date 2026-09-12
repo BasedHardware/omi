@@ -10822,5 +10822,6 @@
     "speechProfileTopicGoal": "Који је ваш дугорочни циљ?",
     "speechToTextUnavailableDesc": "Претварање говора у текст тренутно није доступно. Проверите интернет везу и подешавања препознавања говора на уређају, па покушајте поново.",
     "memoryHistoryPartial": "Део историје сећања није доступан. Приказује се до сада примљена историја.",
-    "tapPlusToStartRecording": "Додирните + да започнете снимање"
+    "tapPlusToStartRecording": "Додирните + да започнете снимање",
+    "processingTakingLonger": "Još traje — ovo traje duže nego inače."
 }
