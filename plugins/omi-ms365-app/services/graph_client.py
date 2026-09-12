@@ -15,6 +15,21 @@ GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 MAX_RETRIES = 3
 
 
+def _retry_delay(retry_after: str | None, attempt: int) -> int:
+    """Honor schedulable Graph delay-seconds; otherwise back off locally."""
+    if retry_after is not None:
+        value = retry_after.strip()
+        if value.isascii() and value.isdecimal():
+            try:
+                delay = int(value)
+                # asyncio timers add the delay to a floating-point loop clock.
+                float(delay)  # Reject integers that overflow that conversion.
+                return delay
+            except (ValueError, OverflowError):
+                pass
+    return 2 ** attempt + 1
+
+
 class GraphError(Exception):
     def __init__(self, status: int, payload: Any) -> None:
         super().__init__(f"Graph {status}: {payload}")
@@ -58,8 +73,7 @@ class GraphClient:
             if resp.status_code == 429 or resp.status_code >= 500:
                 if attempt == MAX_RETRIES - 1:
                     raise GraphError(resp.status_code, resp.text)
-                retry_after = int(resp.headers.get("Retry-After", "2"))
-                backoff = min(retry_after, 2 ** attempt + 1)
+                backoff = _retry_delay(resp.headers.get("Retry-After"), attempt)
                 log.warning("Graph %s on %s — backing off %ss", resp.status_code, path, backoff)
                 await asyncio.sleep(backoff)
                 continue
@@ -118,8 +132,7 @@ class GraphClient:
             if resp.status_code == 429 or resp.status_code >= 500:
                 if attempt == MAX_RETRIES - 1:
                     raise GraphError(resp.status_code, resp.text)
-                retry_after = int(resp.headers.get("Retry-After", "2"))
-                backoff = min(retry_after, 2 ** attempt + 1)
+                backoff = _retry_delay(resp.headers.get("Retry-After"), attempt)
                 log.warning("Graph %s on %s — backing off %ss", resp.status_code, path, backoff)
                 await asyncio.sleep(backoff)
                 continue
