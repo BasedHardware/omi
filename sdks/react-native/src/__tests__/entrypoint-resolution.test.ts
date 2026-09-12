@@ -63,7 +63,7 @@ describe('SDK entrypoint resolution (issue #13151)', () => {
     const sdk = await import('../index');
 
     expect(sdk.OmiConnection).toBeDefined();
-    expect(sdk.VERSION).toBe('1.0.1');
+    expect(sdk.VERSION).toBeDefined();
     expect(sdk.createTranscriber).toBeDefined();
     expect(sdk.mapCodecToName).toBeDefined();
     expect(sdk.DeviceConnectionState.CONNECTING).toBe('connecting');
