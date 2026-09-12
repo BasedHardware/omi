@@ -541,6 +541,80 @@ test('old chat history names GET chart_data numeric-string values', () => {
   ).toBeUndefined();
 });
 
+test('keeps GET chart_data points when more than 200', () => {
+  const data_points = Array.from({length: 201}, (_, index) => ({
+    label: `d${index}`,
+    value: index,
+  }));
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'chart-long',
+        sender: 'ai',
+        text: 'Here is the trend.',
+        created_at: '2026-09-07T01:02:03Z',
+        chart_data: {
+          chart_type: 'bar',
+          title: 'Talk time',
+          datasets: [{label: 'Minutes', data_points}],
+        },
+      },
+      {
+        id: 'neighbor',
+        sender: 'ai',
+        text: 'Neighbor stays.',
+        created_at: '2026-09-07T01:02:04Z',
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'chart-long')?.chart).toEqual({
+    title: 'Talk time',
+    points: data_points,
+  });
+  expect(page.messages.find(row => row.id === 'neighbor')?.text).toBe(
+    'Neighbor stays.',
+  );
+});
+
+test('keeps GET chart_data when more than 20 datasets', () => {
+  const datasets = Array.from({length: 21}, (_, index) => ({
+    label: `Series ${index}`,
+    data_points: [{label: 'Mon', value: index}],
+  }));
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'chart-datasets',
+        sender: 'ai',
+        text: 'Here is the trend.',
+        created_at: '2026-09-07T01:02:03Z',
+        chart_data: {
+          chart_type: 'line',
+          title: 'Talk time',
+          datasets,
+        },
+      },
+      {
+        id: 'neighbor',
+        sender: 'ai',
+        text: 'Neighbor stays.',
+        created_at: '2026-09-07T01:02:04Z',
+      },
+    ]),
+    0,
+  );
+  expect(
+    page.messages.find(row => row.id === 'chart-datasets')?.chart,
+  ).toEqual({
+    title: 'Talk time',
+    points: [{label: 'Mon', value: 0}],
+  });
+  expect(page.messages.find(row => row.id === 'neighbor')?.text).toBe(
+    'Neighbor stays.',
+  );
+});
+
 test('does not omit a neighboring chat message when stored chart_data cannot project', () => {
   const page = parseOmiHistory(
     JSON.stringify([

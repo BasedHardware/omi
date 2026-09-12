@@ -116,7 +116,6 @@ function parseOmiChatChart(
   }
   if (
     row.datasets.length === 0 ||
-    row.datasets.length > 20 ||
     row.datasets[0] === null ||
     typeof row.datasets[0] !== 'object' ||
     Array.isArray(row.datasets[0])
@@ -124,11 +123,7 @@ function parseOmiChatChart(
     return undefined;
   }
   const dataset = row.datasets[0] as Record<string, unknown>;
-  if (
-    !Array.isArray(dataset.data_points) ||
-    dataset.data_points.length === 0 ||
-    dataset.data_points.length > 200
-  ) {
+  if (!Array.isArray(dataset.data_points) || dataset.data_points.length === 0) {
     return undefined;
   }
   const points: {label: string; value: number}[] = [];
