@@ -8,7 +8,11 @@ OMI_MAIN="$SCRIPT_DIR/../scripts/omi-main"
 # below creates independent repositories, so inheriting them would reinitialize
 # the caller's worktree instead of the temporary source repository.
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/omi-dev-test.XXXXXX")"
+# omi-dev creates linked worktrees. The managed git wrapper refuses destinations
+# outside $OMI_WORKTREES, so the fixture cannot live in $TMPDIR on this host.
+MANAGED_ROOT="${OMI_WORKTREES:-${SCRATCH_ROOT:-/Volumes/scratch}/worktrees/omi}"
+mkdir -p "$MANAGED_ROOT"
+TEST_ROOT="$(mktemp -d "$MANAGED_ROOT/omi-dev-test.XXXXXX")"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
 ORIGIN="$TEST_ROOT/origin.git"
