@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.graph_client import GraphClient
+from services.graph_client import GraphClient, path_segment
 
 
 def _slim_item(it: dict[str, Any]) -> dict[str, Any]:
@@ -29,7 +29,7 @@ async def search_files(user_id: str, query: str, limit: int = 15) -> list[dict[s
     safe_query = query.replace("'", "''")
     async with GraphClient(user_id) as g:
         data = await g.get(
-            f"/me/drive/root/search(q='{safe_query}')",
+            f"/me/drive/root/search(q='{path_segment(safe_query)}')",
             params={"$top": limit},
         )
         return [_slim_item(i) for i in data.get("value", [])]
@@ -46,7 +46,8 @@ async def upload_text_file(
     folder_path: e.g. "Documents/OMI-Notes" (relative to OneDrive root).
     """
     folder_path = folder_path.strip("/")
-    path = f"/me/drive/root:/{folder_path}/{filename}:/content"
+    encoded_folder = "/".join(path_segment(part) for part in folder_path.split("/") if part)
+    path = f"/me/drive/root:/{encoded_folder}/{path_segment(filename)}:/content"
     async with GraphClient(user_id) as g:
         data = await g.put_bytes(path, content.encode("utf-8"), content_type="text/plain")
         return _slim_item(data) if data else {"status": "uploaded", "name": filename}
@@ -54,9 +55,10 @@ async def upload_text_file(
 
 async def read_file_text(user_id: str, item_id: str) -> dict[str, Any]:
     async with GraphClient(user_id) as g:
-        meta = await g.get(f"/me/drive/items/{item_id}")
+        item_path = path_segment(item_id)
+        meta = await g.get(f"/me/drive/items/{item_path}")
         # Reuse the GraphClient session so we inherit throttling + retry.
-        content = await g.get_bytes(f"/me/drive/items/{item_id}/content")
+        content = await g.get_bytes(f"/me/drive/items/{item_path}/content")
         try:
             text = content.decode("utf-8")
         except UnicodeDecodeError:

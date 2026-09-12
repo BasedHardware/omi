@@ -946,6 +946,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
 
+  - id: ms365-graph-path-encoding-tests
+    command: ["python3", "plugins/omi-ms365-app/test_graph_paths.py"]
+    triggers: ["plugins/omi-ms365-app/**"]
+    lanes: ["local", "ci"]
+    reason: "Graph resource ids (message/chat/item) can contain /, +, =, #, ?; raw interpolation split the path or truncated the URL, and setup uid could break the HTML href attribute"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

@@ -15,6 +15,20 @@ GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 MAX_RETRIES = 3
 
 
+def path_segment(value: str) -> str:
+    """Percent-encode one URL path segment.
+
+    Graph resource ids are not URL-safe — message ids are base64 of the store
+    entry id and can contain `/`, `+`, `=`; Teams chat ids contain `:` and `@`;
+    drive item names can contain `#`, `?`, `%`. Interpolating them raw splits
+    the path or truncates the URL. httpx preserves existing percent-escapes,
+    so encoding here reaches the wire exactly once.
+    """
+    from urllib.parse import quote
+
+    return quote(str(value), safe="")
+
+
 class GraphError(Exception):
     def __init__(self, status: int, payload: Any) -> None:
         super().__init__(f"Graph {status}: {payload}")
