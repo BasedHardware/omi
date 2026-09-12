@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import typer
@@ -25,6 +26,35 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
 
 
 _LIST_COLUMNS = ["id", "category", "visibility", "content", "tags", "created_at"]
+
+
+def _read_memory_file(path: Path) -> str:
+    """Read UTF-8 memory content from a file, mapping failures to UsageError."""
+    try:
+        content = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise UsageError(
+            message=f"Memory file not found: {path}",
+            detail="Check the path and try again.",
+        ) from None
+    except IsADirectoryError:
+        raise UsageError(message=f"Memory file is a directory: {path}") from None
+    except UnicodeDecodeError:
+        raise UsageError(
+            message=f"Memory file is not valid UTF-8: {path}",
+            detail="Encode the file as UTF-8 and try again.",
+        ) from None
+    except OSError:
+        raise UsageError(
+            message=f"Cannot read memory file: {path}",
+            detail="Check permissions and try again.",
+        ) from None
+    if not content.strip():
+        raise UsageError(
+            message="Memory file is empty",
+            detail="Provide a file with non-empty text.",
+        )
+    return content
 
 
 @app.command("list", help="List memories.")
@@ -93,12 +123,21 @@ def get_memory(
 @app.command("create", help="Create a new memory.")
 def create_memory(
     typer_ctx: typer.Context,
-    content: str = typer.Argument(..., help="Memory content (1-500 chars)."),
+    content: Optional[str] = typer.Argument(None, help="Memory content (1-500 chars)."),
+    file_path: Optional[Path] = typer.Option(None, "--file", help="Read memory content from a UTF-8 file."),
     category: Optional[MemoryCategory] = typer.Option(None, "--category", help="Category. Auto-detected if omitted."),
     visibility: MemoryVisibility = typer.Option(MemoryVisibility.private, "--visibility", help="public or private."),
     tag: list[str] = typer.Option([], "--tag", help="Tag (repeat for multiple)."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    if (content is None) == (file_path is None):
+        raise UsageError(
+            message="Provide exactly one of memory content or --file",
+            detail="Pass text as the positional argument or use --file PATH, not both.",
+        )
+    if file_path is not None:
+        content = _read_memory_file(file_path)
+    assert content is not None
     body: dict[str, object] = {"content": content, "visibility": visibility.value, "tags": tag}
     if category is not None:
         body["category"] = category.value
