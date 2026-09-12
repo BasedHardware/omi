@@ -26,6 +26,61 @@ def test_conversation_list_renders(authed_profile, respx_mock, cli_runner) -> No
     assert payload[0]["id"] == "c1"
 
 
+def test_conversation_list_forwards_folder_and_starred_filters(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.get("/v1/dev/user/conversations").respond(json=[])
+
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "conversation",
+            "list",
+            "--folder-id",
+            "folder-work",
+            "--starred",
+            "--limit",
+            "10",
+            "--offset",
+            "20",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    params = route.calls.last.request.url.params
+    assert params["folder_id"] == "folder-work"
+    assert params["starred"] == "true"
+    assert params["limit"] == "10"
+    assert params["offset"] == "20"
+
+
+def test_conversation_list_forwards_not_starred_filter(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.get("/v1/dev/user/conversations").respond(json=[])
+
+    result = cli_runner.invoke(app, ["--json", "conversation", "list", "--not-starred"])
+
+    assert result.exit_code == 0, result.output
+    assert route.calls.last.request.url.params["starred"] == "false"
+
+
+def test_conversation_list_omits_folder_and_starred_by_default(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.get("/v1/dev/user/conversations").respond(json=[])
+
+    result = cli_runner.invoke(app, ["--json", "conversation", "list"])
+
+    assert result.exit_code == 0, result.output
+    params = route.calls.last.request.url.params
+    assert "folder_id" not in params
+    assert "starred" not in params
+
+
+def test_conversation_list_rejects_empty_folder_id(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["conversation", "list", "--folder-id", ""])
+
+    assert result.exit_code == 1
+    assert "invalid folder id" in result.stderr.lower()
+    assert not respx_mock.calls
+
+
 def test_conversation_create_posts_text(authed_profile, respx_mock, cli_runner) -> None:
     route = respx_mock.post("/v1/dev/user/conversations").respond(
         json={"id": "c1", "status": "completed", "discarded": False}
