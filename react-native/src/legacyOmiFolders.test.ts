@@ -56,6 +56,21 @@ test('does not omit a neighboring named folder when stored name cannot project',
   ).toEqual([{id: 'folder-work', name: 'Work'}]);
 });
 
+test('keeps GET folders when a folder id exceeds 256', () => {
+  const id = 'f'.repeat(257);
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {id, name: 'Work'},
+        {id: 'folder-neighbor', name: 'Personal'},
+      ]),
+    ),
+  ).toEqual([
+    {id, name: 'Work'},
+    {id: 'folder-neighbor', name: 'Personal'},
+  ]);
+});
+
 test('fails closed for malformed GET folders', () => {
   expect(() =>
     parseOmiFolderNames(JSON.stringify({id: 'folder-work'})),

@@ -52,7 +52,7 @@ export function parseOmiFolders(body: string): OmiFolder[] {
   const names = new Map<string, string>();
   for (const raw of rows) {
     const folder = object(raw);
-    const id = visibleDisplayText(text(folder.id, 256));
+    const id = visibleDisplayText(text(folder.id, 10000));
     if (id === '') {
       throw new FoldersError();
     }
