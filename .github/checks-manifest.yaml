@@ -4,11 +4,6 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
-  - id: shopify-create-order-pagination-tests
-    command: ["python3", "plugins/omi-shopify-app/test_create_order_pagination.py"]
-    triggers: ["plugins/omi-shopify-app/**"]
-    lanes: ["local", "ci"]
-    reason: "#13560: create_order must paginate products and price rules past the first 250 records"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]

@@ -278,8 +278,3 @@ For issues or feature requests, please open an issue on GitHub or contact the Om
 ---
 
 Made with ❤️ for Omi
-
-### Hermetic create-order catalog pagination tests
-
-Run `python3 plugins/omi-shopify-app/test_create_order_pagination.py` from the repository root.
-The production `shopify_fetch_all_pages` helper and `tool_create_order` run with framework, storage, and API doubles; no Shopify credentials or network are needed. A product that exists only on page 2 of `/products.json` is matched instead of reported missing. Routing and serialization are not covered by this harness.
