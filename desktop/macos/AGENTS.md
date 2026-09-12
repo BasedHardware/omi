@@ -226,9 +226,10 @@ do not hand-edit those paths to match a specific machine.
 
 ### Screen activity sync rollout
 
-- `screen_activity_lossless_sync` enables durable per-row delivery, five-minute `(app, window)` compaction, and bounded embedding recovery. Production-family bundles stay on the legacy path until that PostHog flag is true; non-production bundles dogfood it by default and `OMI_FORCE_LOSSLESS_SCREEN_SYNC=0` disables it locally.
+- `screen_activity_lossless_sync` enables durable per-row delivery, five-minute `(app, window)` compaction, and bounded embedding recovery. Production-family bundles wait for that PostHog flag; non-production dogfoods it (`OMI_FORCE_LOSSLESS_SCREEN_SYNC=0` off).
 - OCR-bearing rows sync independently from embeddings. Embeddings are an optional later projection and must never gate capture, OCR, or text delivery.
 - Firestore screen-activity timestamps use the lexicographically sortable UTC form `yyyy-MM-dd HH:mm:ss.SSS`. The backend normalizes ISO-8601 input before storage.
+- Local embeddings (opt-in): [`ARCHITECTURE.md`](Desktop/Sources/LocalInference/ARCHITECTURE.md).
 
 ### Feature-flag authority
 
@@ -246,8 +247,7 @@ User-managed MCP servers (~/.omi/mcp.json, incl. native OAuth) and skills
 runtime wiring: [`.github/agent-docs/desktop-user-extensions.md`](../../.github/agent-docs/desktop-user-extensions.md).
 
 ### Known Limitations
-- Firestore has no collection group indexes for `source` field
-- Counting users by platform requires iterating all users (slow)
+- Firestore has no collection group indexes for `source`; counting users by platform is a full scan
 - Apple Sign-In: Only one Services ID per Firebase project
 
 ## Development Workflow

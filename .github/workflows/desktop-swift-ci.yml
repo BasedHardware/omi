@@ -481,7 +481,13 @@ jobs:
     # future pathspec change cannot silently skip the regression's runner.
     if: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
     runs-on: macos-15
-    timeout-minutes: 60
+    # Ceiling must admit a whole-module release compile of a branch that grew
+    # the Desktop package: attempts 1-3 of the local-embeddings hybrid PR were
+    # all cancelled at the previous 60m ceiling with the compile finished and
+    # the regression tests passing <1s before the kill (2026-09-11). The
+    # baseline main compile remains ~25 min; this only stops re-running and
+    # re-cancelling ~60 min of work that already succeeded.
+    timeout-minutes: 90
     steps:
       - name: Checkout code
         uses: actions/checkout@v7

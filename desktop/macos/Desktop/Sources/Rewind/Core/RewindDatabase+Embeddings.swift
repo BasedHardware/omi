@@ -9,6 +9,20 @@ import Foundation
 /// stored property is file-private to the main declaration.
 extension RewindDatabase {
 
+  /// Shared completed-bucket winner grain for cloud and local vector projections.
+  static let compactedScreenshotRankingSQL = """
+            SELECT id, ocrText, appName, windowTitle, embedding,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY appName, COALESCE(windowTitle, ''),
+                                  CAST(strftime('%s', timestamp) AS INTEGER) / 300
+                     ORDER BY LENGTH(ocrText) DESC, id DESC
+                   ) AS bucketRank
+            FROM screenshots
+            WHERE ocrText IS NOT NULL
+              AND LENGTH(ocrText) >= 20
+              AND (CAST(strftime('%s', timestamp) AS INTEGER) / 300 + 1) * 300 <= ?
+    """
+
   /// Store embedding BLOB for a screenshot
   func updateScreenshotEmbedding(id: Int64, embedding: Data) throws {
     guard let dbQueue = getDatabaseQueue() else {
@@ -77,16 +91,7 @@ extension RewindDatabase {
         db,
         sql: """
           WITH ranked AS (
-            SELECT id, ocrText, appName, windowTitle, embedding,
-                   ROW_NUMBER() OVER (
-                     PARTITION BY appName, COALESCE(windowTitle, ''),
-                                  CAST(strftime('%s', timestamp) AS INTEGER) / 300
-                     ORDER BY LENGTH(ocrText) DESC, id DESC
-                   ) AS bucketRank
-            FROM screenshots
-            WHERE ocrText IS NOT NULL
-              AND LENGTH(ocrText) >= 20
-              AND (CAST(strftime('%s', timestamp) AS INTEGER) / 300 + 1) * 300 <= ?
+            \(Self.compactedScreenshotRankingSQL)
           )
           SELECT id, ocrText, appName, windowTitle
           FROM ranked

@@ -1429,6 +1429,58 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "local_embedding_benchmark",
+      summary: "Run synthetic local hybrid retrieval metrics (recall@10 / nDCG@10) and write JSON",
+      params: ["output"],
+      category: "debug",
+      surfaces: ["app"],
+      safety: "local_debug",
+      sideEffects: ["writes a JSON report under Application Support; uses an in-memory synthetic DB"],
+      examples: ["./scripts/omi-ctl action local_embedding_benchmark"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "local_embedding_benchmark is disabled on production bundles"]
+      }
+      let runtime = LocalEmbeddingRuntime.makeDefault()
+      _ = await ChatLocalHybridTool.execute(
+        ["query": "synthetic"], runID: nil, attemptID: nil, expectedOwnerID: nil,
+        sourceKinds: [.transcriptChunk], runtime: runtime)
+      guard case .engine(let engine) = await runtime.selectEngine() else {
+        return [
+          "kind": LocalEmbeddingBenchmark.reportKind,
+          "error": "local_engine_unavailable",
+        ]
+      }
+      let report: LocalEmbeddingBenchmark.Report
+      do {
+        report = try await LocalEmbeddingBenchmark.runSynthetic(engine: engine, runtime: runtime)
+      } catch {
+        return [
+          "kind": LocalEmbeddingBenchmark.reportKind,
+          "error": "benchmark_failed",
+        ]
+      }
+      let output: URL
+      if let raw = params["output"]?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+        output = URL(fileURLWithPath: raw)
+      } else {
+        output = LocalEmbeddingBenchmark.defaultReportURL()
+      }
+      do {
+        try LocalEmbeddingBenchmark.write(report, to: output)
+      } catch {
+        return ["error": "report_write_failed"]
+      }
+      return [
+        "path": output.path,
+        "engine": engine.engineID,
+        "kind": report.kind,
+        "fixture": report.fixture,
+        "metric_count": "\(report.metrics.count)",
+      ]
+    }
+
+    register(
       name: "conversation_list_snapshot",
       summary: "Return conversation list counts and recent titles for harness assertions",
       params: ["limit"]
