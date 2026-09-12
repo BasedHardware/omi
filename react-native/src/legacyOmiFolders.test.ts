@@ -71,6 +71,21 @@ test('keeps GET folders when a folder id exceeds 256', () => {
   ]);
 });
 
+test('keeps GET folders when a name exceeds 10000', () => {
+  const name = 'W'.repeat(10001);
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {id: 'folder-long', name},
+        {id: 'folder-neighbor', name: 'Personal'},
+      ]),
+    ),
+  ).toEqual([
+    {id: 'folder-long', name},
+    {id: 'folder-neighbor', name: 'Personal'},
+  ]);
+});
+
 test('does not omit neighboring GET folders when the catalogue exceeds 1000', () => {
   const rows = Array.from({length: 1001}, (_, index) => ({
     id: `folder-${index}`,

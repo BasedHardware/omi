@@ -62,7 +62,7 @@ export function parseOmiFolders(body: string): OmiFolder[] {
     if (typeof folder.name !== 'string') {
       continue;
     }
-    const name = visibleDisplayText(text(folder.name, 10000));
+    const name = visibleDisplayText(text(folder.name, 1_000_000));
     if (name === '') {
       continue;
     }
