@@ -1009,6 +1009,10 @@ export type OmiBridgeApi = {
   /** Phase 1 of a Rewind search: KEYWORD (FTS5/BM25) results, immediately. Never
    *  waits on the network — semantic hits follow on `onRewindSearchResults`. */
   rewindSearch: (query: string) => Promise<RewindSearchGroup[]>
+  /** One search over every local corpus. Conversations are absent: only the last
+   *  200 are cached locally, so the renderer searches them against the backend,
+   *  which is the only place the full history lives. */
+  searchLocal: (query: string, limit?: number) => Promise<DesktopSearchResult>
   /** Phase 2: the same result list with semantic hits merged in, delivered if and
    *  when the embedding round-trip lands. Never fires when semantic search is
    *  unavailable (signed out, backend down, nothing indexed) — the keyword results
@@ -2099,6 +2103,34 @@ export type RewindFrame = {
   width: number
   height: number
   indexed: number // 0 = not yet OCR'd, 1 = OCR done
+}
+
+/** Which corpus a search hit came from. `conversation` is produced only in the
+ *  renderer: conversations live in the cloud, so they are searched against the
+ *  backend rather than the local index. */
+export type CorpusKind = 'conversation' | 'memory' | 'task' | 'screen'
+
+export type CorpusHit = {
+  kind: CorpusKind
+  /** Stable within a corpus; not unique across corpora. */
+  id: string
+  title: string
+  detail: string
+  /** Epoch ms. */
+  timestamp: number
+}
+
+export type CorpusSlice = {
+  hits: CorpusHit[]
+  /** Matches in the whole corpus, before the per-corpus limit, so the UI can say
+   *  how much it is not showing. */
+  total: number
+}
+
+export type DesktopSearchResult = {
+  memories: CorpusSlice
+  tasks: CorpusSlice
+  screen: CorpusSlice
 }
 
 export type RewindSearchGroup = {
