@@ -147,10 +147,10 @@ omi --json memory list | jq '.[] | {id, content, category}'
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
 
 # کھلے ایکشن آئٹمز کی فہرست
-omi --json action-item list --open | jq '.[] | {id, title, due_at}'
+omi --json action-item list --open | jq '.[] | {id, description, due_at}'
 
 # اہداف کی فہرست
-omi --json goal list | jq '.[] | {id, title, progress: .progress_percent}'
+omi --json goal list | jq '.[] | {id, title, current: .current_value, target: .target_value}'
 ```
 
 ---
@@ -188,7 +188,7 @@ omi auth login
 | `command not found: omi` | PATH میں pipx bin ڈائریکٹری نہیں ہے | `pipx ensurepath` چلائیں اور ٹرمینل دوبارہ شروع کریں |
 | `401 Unauthorized` | API کلید غلط یا ختم ہو گئی | app.omi.me پر نئی کلید بنائیں اور اپ ڈیٹ کریں |
 | `connection refused` | Omi سرور تک کوئی نیٹ ورک رسائی نہیں | انٹرنیٹ کنکشن اور پراکسی سیٹنگز کی جانچ کریں |
-| کنفیگریشن فائلوں پر `permission denied` | کنفیگریشن ڈائریکٹری قابل تحریر نہیں ہے | `~/.config/omi` کی اجازتوں کی جانچ کریں |
+| کنفیگریشن فائلوں پر `permission denied` | کنفیگریشن ڈائریکٹری قابل تحریر نہیں ہے | `~/.omi/config.toml` کی اجازتوں کی جانچ کریں |
 
 ---
 
