@@ -9,22 +9,8 @@ class GoalError extends Error {
   }
 }
 
-function object(value: unknown): Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new GoalError();
-  }
-  return value as Record<string, unknown>;
-}
-
 function text(value: unknown, limit: number): string {
   if (typeof value !== 'string' || value.length > limit) {
-    throw new GoalError();
-  }
-  return value;
-}
-
-function array(value: unknown, limit: number): unknown[] {
-  if (!Array.isArray(value) || value.length > limit) {
     throw new GoalError();
   }
   return value;
@@ -69,14 +55,20 @@ function goalRawNum(value: number): string {
 }
 
 export function parseOmiGoals(body: string): OmiGoal[] {
-  const rows = array(JSON.parse(body), 32);
+  const parsed: unknown = JSON.parse(body);
+  if (!Array.isArray(parsed)) {
+    throw new GoalError();
+  }
   const items: OmiGoal[] = [];
   const seen = new Set<string>();
-  for (const raw of rows) {
+  for (const raw of parsed) {
     if (items.length === MAX_GOALS) {
       break;
     }
-    const row = object(raw);
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      continue;
+    }
+    const row = raw as Record<string, unknown>;
     const id = goalId(row.id);
     if (id === null) {
       continue;

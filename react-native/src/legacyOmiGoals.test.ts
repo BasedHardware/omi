@@ -111,6 +111,57 @@ test('does not omit a neighboring titled goal when stored identity cannot projec
   ]);
 });
 
+test('does not omit a neighboring titled goal when a stored row is not an object', () => {
+  const rows = parseOmiGoals(
+    JSON.stringify([
+      {
+        id: 'goal-read',
+        title: 'Read 20 books',
+        current_value: 3,
+        target_value: 10,
+      },
+      null,
+      7,
+      'nope',
+      ['nested'],
+      {
+        id: 'goal-run',
+        title: 'Run weekly',
+        current_value: 1.5,
+        target_value: 4,
+      },
+    ]),
+  );
+  expect(rows).toEqual([
+    {id: 'goal-read', title: 'Read 20 books', current: 3, target: 10},
+    {id: 'goal-run', title: 'Run weekly', current: 1.5, target: 4},
+  ]);
+});
+
+test('does not omit titled goals when GET lists more than thirty-two rows', () => {
+  const rows = parseOmiGoals(
+    JSON.stringify([
+      {
+        id: 'goal-read',
+        title: 'Read 20 books',
+        current_value: 3,
+        target_value: 10,
+      },
+      ...Array.from({length: 32}, () => null),
+      {
+        id: 'goal-run',
+        title: 'Run weekly',
+        current_value: 1.5,
+        target_value: 4,
+      },
+    ]),
+  );
+  expect(rows).toEqual([
+    {id: 'goal-read', title: 'Read 20 books', current: 3, target: 10},
+    {id: 'goal-run', title: 'Run weekly', current: 1.5, target: 4},
+  ]);
+});
+
 test('fails closed for malformed GET goals', () => {
   expect(() => parseOmiGoals(JSON.stringify({id: 'goal-1'}))).toThrow();
   expect(() =>
@@ -169,6 +220,7 @@ test('loadOmiGoals names resolved GET goals and omits failures', async () => {
         current_value: 1,
         target_value: 2,
       },
+      null,
     ]),
   });
   expect(await loadOmiGoals(backend)).toEqual([
