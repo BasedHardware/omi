@@ -190,10 +190,23 @@ class AudioPathSafetyTests(unittest.TestCase):
         uid_part = filename.rsplit("_", 3)[0]
         self.assertEqual(uid_part, "a_b_c_d_e")
 
-    def test_empty_stem_uid_still_writes(self):
+    def test_dots_only_uid_sanitizes_to_underscores(self):
         resp = _post_audio("...")
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(len(self._written_files()), 1)
+        uid_part = resp.content["filename"].rsplit("_", 3)[0]
+        self.assertEqual(uid_part, "___")
+
+    def test_empty_stem_uid_still_writes(self):
+        resp = _post_audio("")
+        self.assertEqual(resp.status_code, 200)
+        files = self._written_files()
+        self.assertEqual(len(files), 1)
+        filename = resp.content["filename"]
+        # empty uid sanitizes to "" so the name is "_{timestamp}.wav"
+        self.assertTrue(filename.startswith("_"))
+        self.assertTrue(filename.endswith(".wav"))
+        self.assertNotIn("..", filename)
+        self.assertEqual(files[0].parent.resolve(), self.audio_dir.resolve())
 
 
 if __name__ == "__main__":
