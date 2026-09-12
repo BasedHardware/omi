@@ -135,7 +135,7 @@ jobs:
     name: Desktop Swift Static & Test Contracts
     needs: changes
     if: ${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}
-    runs-on: macos-15
+    runs-on: macos-26
     # Bounds manifest checks, launcher coverage, and the debug suite — a
     # wedge-guard, not a lane budget: the ceiling must admit one legitimate
     # cold-tools run (~15 min from-source bootstrap ahead of the full lane,
@@ -152,7 +152,7 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      - name: Select and assert pinned Xcode 16.4
+      - name: Select and assert pinned Xcode 26.6
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
 
       - name: Restore Swift formatter and linter tools
@@ -171,9 +171,9 @@ jobs:
           path: |
             ~/.cache/omi-swift-format/*/.build/release/swift-format
             ~/.cache/omi-swiftlint/*/swiftlint
-          key: ${{ runner.os }}-desktop-swift-tools-v3-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
+          key: ${{ runner.os }}-desktop-swift-tools-v3-xcode266-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
           restore-keys: |
-            ${{ runner.os }}-desktop-swift-tools-v3-xcode164-
+            ${{ runner.os }}-desktop-swift-tools-v3-xcode266-
 
       - name: Warm pinned formatter and linter tools
         # One explicit bootstrap instead of whichever launcher test happens
@@ -194,7 +194,7 @@ jobs:
           path: |
             ~/.cache/omi-swift-format/*/.build/release/swift-format
             ~/.cache/omi-swiftlint/*/swiftlint
-          key: ${{ runner.os }}-desktop-swift-tools-v3-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
+          key: ${{ runner.os }}-desktop-swift-tools-v3-xcode266-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
 
       - name: Install uv for manifest checks
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' }}
@@ -240,9 +240,9 @@ jobs:
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
-          key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
+          key: ${{ runner.os }}-desktop-swift-build-xcode266-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-desktop-swift-build-xcode164-
+            ${{ runner.os }}-desktop-swift-build-xcode266-
 
       - name: Install Swift system dependencies
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
@@ -405,7 +405,7 @@ jobs:
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
-          key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
+          key: ${{ runner.os }}-desktop-swift-build-xcode266-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
 
       - name: Require independent macOS phase verdicts
         if: ${{ always() && !cancelled() }}
@@ -472,15 +472,16 @@ jobs:
     name: Desktop Swift Release Compile
     needs: changes
     # Ordinary PRs no longer claim this second hosted Mac: a release compile
-    # holds it for ~25 min, and one runner per PR halved concurrent macos-15
+    # holds it for ~25 min, and one runner per PR halved concurrent macos-26
     # demand against the ~5-runner cap that was producing 60-97 min queues
-    # (2026-09-08). The lane still runs for every main push, the scheduled
-    # health run, manual dispatch, PRs that change the package manifest (the
-    # inputs most likely to shift whole-module behavior), and notification
-    # boundary paths — the notification flag is gated on both outputs so a
-    # future pathspec change cannot silently skip the regression's runner.
+    # (2026-09-08, macos-15 era). The lane still runs for every main push, the
+    # scheduled health run, manual dispatch, PRs that change the package
+    # manifest (the inputs most likely to shift whole-module behavior), and
+    # notification boundary paths — the notification flag is gated on both
+    # outputs so a future pathspec change cannot silently skip the
+    # regression's runner.
     if: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - name: Checkout code
@@ -488,7 +489,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Select and assert pinned Xcode 16.4
+      - name: Select and assert pinned Xcode 26.6
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
 
       # Same dependency cache as the verify job: without it every release
@@ -499,9 +500,9 @@ jobs:
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
-          key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
+          key: ${{ runner.os }}-desktop-swift-build-xcode266-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-desktop-swift-build-xcode164-
+            ${{ runner.os }}-desktop-swift-build-xcode266-
 
       # No Desktop/.build build-products cache, by measurement: the release
       # compile step took 23-25 min on every recent run whether a 5.3 GB
@@ -536,4 +537,4 @@ jobs:
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
-          key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
+          key: ${{ runner.os }}-desktop-swift-build-xcode266-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}

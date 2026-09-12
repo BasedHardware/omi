@@ -7,11 +7,16 @@ identity. It also preserves the runner-saving test selector and the serial CI
 execution required by SwiftPM's shared build-directory lock. This is the Rung-0
 guard from #9843: every downstream strictness claim depends on knowing which
 compiler the flags run against.
+
+The pinned Xcode version/build/app path are read from desktop/macos/ci/xcode-pin.json
+(the single source of truth); this test fails if the workflow, the canonical
+runner script, or the two Codemagic desktop Swift workflows drift from that file.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 import sys
 import unittest
@@ -22,6 +27,8 @@ WORKFLOW_PATH = REPO_ROOT / ".github/workflows/desktop-swift-ci.yml"
 RUNNER_PATH = REPO_ROOT / "desktop/macos/scripts/run-swift-ci.sh"
 SUITE_RUNNER_PATH = REPO_ROOT / "desktop/macos/scripts/swift-test-suites.sh"
 PRE_PUSH_PATH = REPO_ROOT / "scripts/pre-push"
+PIN_PATH = REPO_ROOT / "desktop/macos/ci/xcode-pin.json"
+CODEMAGIC_PATH = REPO_ROOT / "codemagic.yaml"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from pre_push_ci_prediction import DESKTOP_RELEASE_PATHSPECS, resolve_impact  # noqa: E402
@@ -34,9 +41,15 @@ assert _PLANNER_SPEC and _PLANNER_SPEC.loader
 planner = importlib.util.module_from_spec(_PLANNER_SPEC)
 _PLANNER_SPEC.loader.exec_module(planner)
 
-EXPECTED_XCODE_VERSION = "16.4"
-EXPECTED_XCODE_BUILD = "16F6"
-EXPECTED_XCODE_APP = f"/Applications/Xcode_{EXPECTED_XCODE_VERSION}.app"
+# Single source of truth: desktop/macos/ci/xcode-pin.json. Every consumer
+# (run-swift-ci.sh, desktop-swift-ci.yml, codemagic.yaml desktop workflows)
+# is asserted against these values; none of them may carry their own literal.
+PIN = json.loads(PIN_PATH.read_text(encoding="utf-8"))
+EXPECTED_XCODE_VERSION = PIN["version"]
+EXPECTED_XCODE_BUILD = PIN["build"]
+EXPECTED_XCODE_APP = PIN["app_path"]
+EXPECTED_XCODE_CACHE_TOKEN = "xcode" + EXPECTED_XCODE_VERSION.replace(".", "")
+CODEMAGIC_DESKTOP_WORKFLOWS = ["omi-desktop-swift-release", "omi-desktop-swift-preview"]
 JOBS = ["changes", "desktop-swift-verify", "desktop-swift", "desktop-swift-release-compile"]
 MACOS_JOBS = ["desktop-swift-verify", "desktop-swift-release-compile"]
 # Hosted macOS budgets are per-job: the consolidated verify lane needs a longer
@@ -260,7 +273,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertTrue(resolve_impact([path]).includes("desktop-swift-notification-release-regression"))
-        self.assertIn("runs-on: macos-15", job)
+        self.assertIn("runs-on: macos-26", job)
         self.assertIn("--release-notification-regression", job)
         self.assertIn("should_notification_release_regression", job)
         self.assertIn("UserNotificationCallbackBridgeTests/", _runner_text())
@@ -364,7 +377,12 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
     def test_canonical_runner_fails_closed_on_the_pinned_toolchain(self):
         runner = _runner_text()
 
-        self.assertIn(EXPECTED_XCODE_APP, runner)
+        # The runner reads the pin file rather than carrying version literals;
+        # a missing pin file must fail closed before any toolchain use.
+        self.assertIn("ci/xcode-pin.json", runner)
+        self.assertIn('EXPECTED_XCODE_VERSION="$(read_pin version)"', runner)
+        self.assertIn('EXPECTED_XCODE_BUILD="$(read_pin build)"', runner)
+        self.assertIn('XCODE_APP="${OMI_SWIFT_CI_XCODE_APP:-$(read_pin app_path)}"', runner)
         self.assertIn("DEVELOPER_DIR", runner)
         self.assertIn("exit 1", runner)
         self.assertRegex(runner, r"if\s*\[\s*!\s*-d\s+\"\$XCODE_APP")
@@ -372,6 +390,46 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("xcrun swift --version", runner)
         self.assertIn(f'"Xcode $EXPECTED_XCODE_VERSION"', runner)
         self.assertIn(f'"$EXPECTED_XCODE_BUILD"', runner)
+
+    def test_pin_file_is_the_only_toolchain_literal(self):
+        """One source of truth: the pin file, its derived consumers, and nothing else."""
+        self.assertEqual(EXPECTED_XCODE_APP, f"/Applications/Xcode_{EXPECTED_XCODE_VERSION}.app")
+        self.assertRegex(EXPECTED_XCODE_BUILD, r"^[0-9A-F]+$")
+        workflow = _workflow_text()
+        self.assertNotIn("xcode164", workflow)
+        self.assertIn(EXPECTED_XCODE_CACHE_TOKEN, workflow)
+        runner = _runner_text()
+        self.assertNotIn("16.4", runner)
+        self.assertNotIn("16F6", runner)
+        for step_name in (
+            f"Select and assert pinned Xcode {EXPECTED_XCODE_VERSION}",
+        ):
+            for job_id in MACOS_JOBS:
+                self.assertIn(step_name, self.jobs[job_id])
+
+    def test_macos_jobs_run_on_the_pinned_runner_image(self):
+        """#12867 class: the ship toolchain must be the one CI actually compiles with."""
+        for job_id in MACOS_JOBS:
+            with self.subTest(job=job_id):
+                self.assertIn("runs-on: macos-26", self.jobs[job_id])
+        self.assertNotIn("runs-on: macos-15", _workflow_text())
+
+    def test_codemagic_desktop_workflows_match_the_pin(self):
+        """Codemagic desktop Swift release/preview must build with the pinned Xcode."""
+        text = CODEMAGIC_PATH.read_text(encoding="utf-8")
+        for workflow_id in CODEMAGIC_DESKTOP_WORKFLOWS:
+            with self.subTest(workflow=workflow_id):
+                body = _job_text(text, workflow_id)
+                self.assertIn("instance_type: mac_mini_m4", body)
+                match = re.search(r"^\s+xcode:\s*(\S+)\s*$", body, re.MULTILINE)
+                self.assertIsNotNone(match, f"{workflow_id} must declare an xcode: version")
+                self.assertEqual(
+                    match.group(1),
+                    EXPECTED_XCODE_VERSION,
+                    f"{workflow_id} xcode must equal the pin (string compare)",
+                )
+                self.assertNotIn("xcode: latest", body)
+                self.assertNotIn("xcode: edge", body)
 
     def test_canonical_runner_exports_the_selected_toolchain_for_ci_steps(self):
         runner = _runner_text()
@@ -401,9 +459,9 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         # Toolchain identity in the key prefix prevents a tool change from
         # silently reusing a stale cache built with a different compiler.
         self.assertIn(
-            f"xcode{EXPECTED_XCODE_VERSION.replace('.', '')}",
+            EXPECTED_XCODE_CACHE_TOKEN,
             key,
-            "cache key must embed toolchain identity (xcode164)",
+            f"cache key must embed toolchain identity ({EXPECTED_XCODE_CACHE_TOKEN})",
         )
         # Package.swift hash
         self.assertIn(
@@ -446,7 +504,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """
         release_job = self.jobs["desktop-swift-release-compile"]
         self.assertNotIn("desktop/macos/Desktop/.build", release_job)
-        self.assertNotIn("desktop-swift-release-xcode164", release_job)
+        self.assertNotIn(f"desktop-swift-release-{EXPECTED_XCODE_CACHE_TOKEN}", release_job)
         self.assertIn("Restore SwiftPM dependency cache", release_job)
 
     def test_tools_cache_covers_the_launcher_test_lane(self):
@@ -642,8 +700,8 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """A cache key without Package.resolved or toolchain identity is caught."""
         wf_text = WORKFLOW_PATH.read_text(encoding="utf-8")
         tampered = wf_text.replace(
-            "desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}",
-            "desktop-swift-${{ hashFiles('desktop/macos/Desktop/Package.swift') }}",
+            f"desktop-swift-build-{EXPECTED_XCODE_CACHE_TOKEN}-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}",
+            f"desktop-swift-${{ hashFiles('desktop/macos/Desktop/Package.swift') }}",
         )
         job = _job_text(tampered, "desktop-swift-verify")
         key = re.search(r"key:\s*([^\n]+)", job).group(1)
