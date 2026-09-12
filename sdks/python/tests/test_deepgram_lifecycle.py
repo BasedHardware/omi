@@ -19,7 +19,7 @@ class FakeWebSocket:
         self.messages = list(messages or [])
         self.send_error = send_error
         self.receive_error = receive_error
-        self.sent_chunks: list[bytes] = []
+        self.sent_chunks: list[bytes | str] = []
         self.closed = False
 
     async def send(self, chunk: bytes | str) -> None:
