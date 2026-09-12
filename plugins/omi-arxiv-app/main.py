@@ -12,7 +12,6 @@ import asyncio
 import re
 import time
 from typing import Any, Optional
-from urllib.parse import quote_plus
 import xml.etree.ElementTree as ET
 
 import httpx
@@ -220,14 +219,18 @@ def _build_search_query(payload: dict[str, Any]) -> Optional[str]:
     category = _safe_category(payload.get("category"))
     parts = []
     if query:
-        parts.append(f"all:{quote_plus(query)}")
+        parts.append(f"all:{query}")
     if title:
-        parts.append(f"ti:{quote_plus(title)}")
+        parts.append(f"ti:{title}")
     if author:
-        parts.append(f"au:{quote_plus(author)}")
+        parts.append(f"au:{author}")
     if category:
         parts.append(f"cat:{category}")
-    return "+AND+".join(parts) if parts else None
+    # httpx form-encodes params once on the wire; keeping the raw query lets
+    # spaces become `+` and the AND separators arrive as `+AND+`, which is the
+    # encoding the arXiv API documents. Pre-encoding here double-encodes and
+    # arXiv returns an empty feed.
+    return " AND ".join(parts) if parts else None
 
 
 @app.get("/")
@@ -404,7 +407,7 @@ async def search_author(payload: dict[str, Any]):
         entries = _parse_entries(
             await _request_arxiv(
                 {
-                    "search_query": f"au:{quote_plus(author)}",
+                    "search_query": f"au:{author}",
                     "start": 0,
                     "max_results": limit,
                     "sortBy": "submittedDate",
