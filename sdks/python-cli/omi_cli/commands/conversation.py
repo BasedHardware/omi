@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -151,8 +150,18 @@ def from_segments(
     ctx = _ctx(typer_ctx)
     if not segments_file.exists():
         raise UsageError(message=f"File not found: {segments_file}")
+    if segments_file.is_dir():
+        raise UsageError(
+            message=f"Expected a file, but found a directory: {segments_file}",
+            detail="Provide the path to a JSON file containing transcript_segments.",
+        )
     try:
-        payload = load_json_input(segments_file.read_bytes())
+        data = segments_file.read_bytes()
+    except OSError as exc:
+        raise UsageError(message=f"Cannot read file {segments_file}", detail=str(exc))
+
+    try:
+        payload = load_json_input(data)
     except (ValueError, UnicodeDecodeError) as exc:
         raise UsageError(message=f"Invalid JSON in {segments_file}", detail=str(exc))
 

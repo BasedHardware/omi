@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 
 import pytest
 
-from omi_cli.main import app
+from omi_cli.main import app, main
 
 
 def test_conversation_list_renders(authed_profile, respx_mock, cli_runner) -> None:
@@ -105,4 +107,34 @@ def test_conversation_from_segments_rejects_invalid_unicode(config_path, respx_m
 
     assert result.exit_code == 1
     assert "Invalid JSON" in result.stderr
+    assert not respx_mock.calls
+
+def test_conversation_from_segments_rejects_directory(config_path, respx_mock, monkeypatch, capsys, tmp_path) -> None:
+    test_dir = tmp_path / "somedir"
+    test_dir.mkdir()
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(test_dir)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    output = capsys.readouterr()
+    err = json.loads(output.err)
+    assert "Expected a file, but found a directory" in err["error"]
+    assert not respx_mock.calls
+
+
+def test_conversation_from_segments_rejects_unreadable_file(config_path, respx_mock, monkeypatch, capsys, tmp_path) -> None:
+    f = tmp_path / "unreadable.json"
+    f.write_text("{}")
+
+    def fail_read(*args, **kwargs):
+        raise PermissionError("Access denied")
+
+    monkeypatch.setattr(Path, "read_bytes", fail_read)
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(f)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    output = capsys.readouterr()
+    err = json.loads(output.err)
+    assert "Cannot read file" in err["error"]
     assert not respx_mock.calls
