@@ -95,6 +95,29 @@ def test_pretty_table_respects_explicit_columns(capsys) -> None:
     assert "hidden-value" not in output
 
 
+@pytest.mark.parametrize(
+    "data,expected",
+    [
+        (["alpha", "beta"], ["alpha", "beta"]),
+        ([17, 3.5], ["17", "3.5"]),
+        ([{"id": "x"}, "y"], ["x", "y"]),
+    ],
+)
+def test_pretty_mode_renders_scalar_and_mixed_lists(data, expected, capsys) -> None:
+    Renderer(no_color=True).emit(data)
+    output = capsys.readouterr().out
+    assert "value" in output
+    for value in expected:
+        assert value in output
+
+
+def test_pretty_table_explicit_columns_do_not_expose_scalar_rows(capsys) -> None:
+    Renderer(no_color=True).emit(["alpha", "beta"], columns=["id"])
+    output = capsys.readouterr().out
+    assert "alpha" not in output
+    assert "beta" not in output
+
+
 def test_shorten_basic() -> None:
     assert shorten("abcdef", 3) == "ab…"
     assert shorten("abcdef", 10) == "abcdef"
