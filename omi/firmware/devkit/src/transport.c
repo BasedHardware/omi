@@ -490,6 +490,7 @@ static struct bt_conn_cb _callback_references = {
 //
 
 #define NET_BUFFER_HEADER_SIZE 3
+#define ATT_NOTIFICATION_HEADER_SIZE 3 // ATT opcode (1 byte) and attribute handle (2 bytes)
 #define RING_BUFFER_HEADER_SIZE 2
 static uint8_t tx_queue[NETWORK_RING_BUF_SIZE * (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)];
 static uint8_t tx_buffer[CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE];
@@ -568,7 +569,8 @@ static bool push_to_gatt(struct bt_conn *conn)
     while (offset < tx_buffer_size) {
         // Recombine packet
         uint32_t id = packet_next_index++;
-        uint32_t packet_size = MIN(current_mtu - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
+        uint32_t packet_size =
+            MIN(bt_gatt_get_mtu(conn) - ATT_NOTIFICATION_HEADER_SIZE - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
         pusher_temp_data[0] = id & 0xFF;
         pusher_temp_data[1] = (id >> 8) & 0xFF;
         pusher_temp_data[2] = index;
@@ -586,7 +588,7 @@ static bool push_to_gatt(struct bt_conn *conn)
             // Log failure
             if (err) {
                 LOG_DBG("bt_gatt_notify failed (err %d)", err);
-                LOG_DBG("MTU: %d, packet_size: %d", current_mtu, packet_size + NET_BUFFER_HEADER_SIZE);
+                LOG_DBG("MTU: %d, packet_size: %d", bt_gatt_get_mtu(conn), packet_size + NET_BUFFER_HEADER_SIZE);
                 k_sleep(K_MSEC(1));
                 retry_count++;
                 continue;
