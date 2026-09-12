@@ -132,10 +132,33 @@ def update_goal(
     max_value: Optional[float] = typer.Option(None, "--max"),
     unit: Optional[str] = typer.Option(None, "--unit"),
     clear_unit: bool = typer.Option(False, "--clear-unit", help="Remove the existing unit label."),
+    desired_outcome: Optional[str] = typer.Option(
+        None, "--desired-outcome", help="Concrete outcome the user wants."
+    ),
+    why_it_matters: Optional[str] = typer.Option(None, "--why-it-matters", help="Motivation / why it matters."),
+    clear_why_it_matters: bool = typer.Option(
+        False, "--clear-why-it-matters", help="Clear why_it_matters (JSON null)."
+    ),
+    success_criterion: Optional[list[str]] = typer.Option(
+        None, "--success-criterion", help="Replace success_criteria (repeat for multiple)."
+    ),
+    clear_success_criteria: bool = typer.Option(
+        False, "--clear-success-criteria", help="Clear success_criteria (empty list)."
+    ),
 ) -> None:
     ctx = _ctx(typer_ctx)
     if clear_unit and unit is not None:
         raise UsageError(message="Conflicting options", detail="--unit and --clear-unit are mutually exclusive.")
+    if clear_why_it_matters and why_it_matters is not None:
+        raise UsageError(
+            message="Conflicting options",
+            detail="--why-it-matters and --clear-why-it-matters are mutually exclusive.",
+        )
+    if clear_success_criteria and success_criterion is not None:
+        raise UsageError(
+            message="Conflicting options",
+            detail="--success-criterion and --clear-success-criteria are mutually exclusive.",
+        )
     body: dict[str, object] = {}
     if title is not None:
         body["title"] = title
@@ -151,10 +174,24 @@ def update_goal(
         body["unit"] = None
     elif unit is not None:
         body["unit"] = unit
+    if desired_outcome is not None:
+        body["desired_outcome"] = desired_outcome
+    if clear_why_it_matters:
+        body["why_it_matters"] = None
+    elif why_it_matters is not None:
+        body["why_it_matters"] = why_it_matters
+    if clear_success_criteria:
+        body["success_criteria"] = []
+    elif success_criterion is not None:
+        body["success_criteria"] = list(success_criterion)
     if not body:
         raise UsageError(
             message="No fields to update",
-            detail="Provide one of --title/--target/--current/--min/--max/--unit/--clear-unit.",
+            detail=(
+                "Provide one of --title/--target/--current/--min/--max/--unit/--clear-unit/"
+                "--desired-outcome/--why-it-matters/--clear-why-it-matters/"
+                "--success-criterion/--clear-success-criteria."
+            ),
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/goals/{goal_id}", json_body=body)

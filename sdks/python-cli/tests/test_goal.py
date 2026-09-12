@@ -207,3 +207,92 @@ def test_goal_update_rejects_set_and_clear_unit(authed_profile, respx_mock, monk
     assert "--unit" in error["detail"]
     assert "--clear-unit" in error["detail"]
     assert not respx_mock.calls
+
+
+def test_goal_update_sends_context_fields(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.patch("/v1/dev/user/goals/g1").respond(
+        json={"id": "g1", "desired_outcome": "ship the cli", "why_it_matters": "users copy IDs"}
+    )
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "goal",
+            "update",
+            "g1",
+            "--desired-outcome",
+            "ship the cli",
+            "--why-it-matters",
+            "users copy IDs",
+            "--success-criterion",
+            "pretty list keeps full ids",
+            "--success-criterion",
+            "get accepts copied ids",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(route.calls.last.request.content) == {
+        "desired_outcome": "ship the cli",
+        "why_it_matters": "users copy IDs",
+        "success_criteria": ["pretty list keeps full ids", "get accepts copied ids"],
+    }
+
+
+def test_goal_update_clears_optional_context_fields(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.patch("/v1/dev/user/goals/g1").respond(json={"id": "g1"})
+    result = cli_runner.invoke(
+        app,
+        ["--json", "goal", "update", "g1", "--clear-why-it-matters", "--clear-success-criteria"],
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(route.calls.last.request.content) == {
+        "why_it_matters": None,
+        "success_criteria": [],
+    }
+
+
+@pytest.mark.parametrize(
+    ("options", "left", "right"),
+    [
+        (["--why-it-matters", "x", "--clear-why-it-matters"], "--why-it-matters", "--clear-why-it-matters"),
+        (
+            ["--success-criterion", "x", "--clear-success-criteria"],
+            "--success-criterion",
+            "--clear-success-criteria",
+        ),
+    ],
+)
+def test_goal_update_rejects_set_and_clear_context(
+    authed_profile, respx_mock, monkeypatch, capsys, options, left, right
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "goal", "update", "g1", *options])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    output = capsys.readouterr()
+    assert output.out == ""
+    error = json.loads(output.err)
+    assert left in error["detail"]
+    assert right in error["detail"]
+    assert not respx_mock.calls
+
+
+def test_goal_update_preserves_api_validation_error(
+    authed_profile, respx_mock, monkeypatch, capsys
+) -> None:
+    respx_mock.patch("/v1/dev/user/goals/g1").respond(
+        status_code=422, json={"detail": "required goal text cannot be null or blank"}
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["omi", "--json", "goal", "update", "g1", "--desired-outcome", "   "]
+    )
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    output = capsys.readouterr()
+    assert output.out == ""
+    error = json.loads(output.err)
+    assert error["error"] == "HTTP 422"
+    assert "required goal text cannot be null or blank" in error["detail"]
+    assert respx_mock.calls
+
