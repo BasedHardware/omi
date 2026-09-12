@@ -247,4 +247,64 @@ final class UpdaterViewModelTests: XCTestCase {
       )
     )
   }
+
+  /// Regression: `checkForUpdates()` used to guard only on
+  /// `AppBuild.allowsSparkleUpdates`, which is true under xctest (no
+  /// `com.omi.*` bundle id in a test host), relying on Sparkle's own updater
+  /// to silently no-op since `startingUpdater: false` never actually started
+  /// it. `checkForUpdates()` sets `userInitiatedCheckInProgress = true`
+  /// synchronously *before* touching Sparkle, so under the old bug that flag
+  /// would flip to `true` here even though nothing else in this test resets
+  /// it. With the `isRunningUnderXCTest` guard in place, the whole call is a
+  /// no-op and the flag never moves.
+  @MainActor
+  func testCheckForUpdatesAloneDoesNotSetUserInitiatedFlagUnderXCTest() {
+    let viewModel = UpdaterViewModel.shared
+    XCTAssertFalse(viewModel.userInitiatedCheckInProgress)
+
+    viewModel.checkForUpdates()
+
+    XCTAssertFalse(
+      viewModel.userInitiatedCheckInProgress,
+      "checkForUpdates() must no-op under XCTest instead of driving Sparkle's real updater")
+  }
+
+  /// `checkForUpdates()`/`checkForUpdatesInBackground()` both guard on this
+  /// shared, pure predicate instead of duplicating the condition inline. This
+  /// tests the predicate directly, independent of Sparkle's own behavior:
+  /// with `startingUpdater: false` (the xctest posture), Sparkle's own
+  /// `checkForUpdatesInBackground()` already no-ops on its own regardless of
+  /// this guard, so a call-site test using that path as its only signal
+  /// cannot actually distinguish a reverted guard from a working one — this
+  /// predicate test is what closes that gap.
+  func testShouldPerformUpdateCheckRequiresBothSparkleAllowedAndNotUnderXCTest() {
+    XCTAssertTrue(
+      UpdaterViewModel.shouldPerformUpdateCheck(allowsSparkleUpdates: true, isRunningUnderXCTest: false))
+    XCTAssertFalse(
+      UpdaterViewModel.shouldPerformUpdateCheck(allowsSparkleUpdates: true, isRunningUnderXCTest: true))
+    XCTAssertFalse(
+      UpdaterViewModel.shouldPerformUpdateCheck(allowsSparkleUpdates: false, isRunningUnderXCTest: false))
+    XCTAssertFalse(
+      UpdaterViewModel.shouldPerformUpdateCheck(allowsSparkleUpdates: false, isRunningUnderXCTest: true))
+  }
+
+  /// Not a guard-specific regression test (see
+  /// `testShouldPerformUpdateCheckRequiresBothSparkleAllowedAndNotUnderXCTest`
+  /// for that): with `startingUpdater: false`, Sparkle's own
+  /// `checkForUpdatesInBackground()` no-ops regardless of this guard, so this
+  /// call completing promptly can't by itself prove the guard fired. Kept as
+  /// a broader smoke test against the original incident class — a blocking
+  /// "Unable to Check For Updates" `NSAlert` on the main thread hanging a
+  /// test — in case some future change makes this call path block again for
+  /// an unrelated reason.
+  @MainActor
+  func testCheckForUpdatesInBackgroundCompletesPromptlyUnderXCTest() {
+    let viewModel = UpdaterViewModel.shared
+    let completed = expectation(description: "checkForUpdatesInBackground() returned")
+    DispatchQueue.main.async {
+      viewModel.checkForUpdatesInBackground()
+      completed.fulfill()
+    }
+    wait(for: [completed], timeout: 2)
+  }
 }
