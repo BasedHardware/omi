@@ -47,12 +47,22 @@ def run_claude_code_on_repo(
 
             # Clone repo with auth
             auth_url = repo_url.replace('https://', f'https://{github_token}@')
-            clone_result = subprocess.run(
-                ['git', 'clone', auth_url, tmpdir],
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
+            try:
+                clone_result = subprocess.run(
+                    ['git', 'clone', auth_url, tmpdir],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+            except subprocess.TimeoutExpired as e:
+                # TimeoutExpired.cmd includes the authenticated URL; never
+                # surface or log it. The completed-process path below cannot
+                # run when clone is still hung.
+                logger.error("Clone timed out: %s", _redact(str(e), github_token))
+                return {
+                    'success': False,
+                    'message': f'Failed to clone repo: {_redact(str(e), github_token)}'
+                }
 
             if clone_result.returncode != 0:
                 return {
@@ -177,10 +187,11 @@ def run_claude_code_on_repo(
             }
 
     except Exception as e:
-        logger.error(f"Error running Claude Code: {e}", exc_info=True)
+        safe = _redact(str(e), github_token)
+        logger.error("Error running Claude Code: %s", safe)
         return {
             'success': False,
-            'message': f'Failed to run Claude Code: {str(e)}'
+            'message': f'Failed to run Claude Code: {safe}'
         }
 
 

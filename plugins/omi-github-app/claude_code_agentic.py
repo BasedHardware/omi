@@ -51,12 +51,19 @@ def run_agentic_claude_on_repo(
 
             # Clone repo with auth
             auth_url = repo_url.replace('https://', f'https://{github_token}@')
-            clone_result = subprocess.run(
-                ['git', 'clone', auth_url, tmpdir],
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
+            try:
+                clone_result = subprocess.run(
+                    ['git', 'clone', auth_url, tmpdir],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+            except subprocess.TimeoutExpired as e:
+                logger.error("Clone timed out: %s", _redact(str(e), github_token))
+                return {
+                    'success': False,
+                    'message': f'Failed to clone repo: {_redact(str(e), github_token)}'
+                }
 
             if clone_result.returncode != 0:
                 return {
@@ -297,10 +304,11 @@ Start by exploring the repository structure."""
             }
 
     except Exception as e:
-        logger.error(f"Error: {e}", exc_info=True)
+        safe = _redact(str(e), github_token)
+        logger.error("Error: %s", safe)
         return {
             'success': False,
-            'message': str(e)
+            'message': safe
         }
 
 

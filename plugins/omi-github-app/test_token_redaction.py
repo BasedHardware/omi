@@ -98,7 +98,42 @@ class TokenRedactionTests(unittest.TestCase):
         ])
         self.assertIn("repository not found", result["message"])
 
-    def test_redact_helper_edges(self):
+    def test_clone_timeout_redacts_token_from_message_and_logs(self):
+        import subprocess as sp
+
+        def fake_run(cmd, **kwargs):
+            raise sp.TimeoutExpired(cmd=cmd, timeout=60)
+
+        with patch.object(self.module.subprocess, "run", side_effect=fake_run):
+            with patch.object(self.module.logger, "error") as logged:
+                result = self.module.run_claude_code_on_repo(
+                    repo_url="https://github.com/o/r.git",
+                    feature_description="add a button",
+                    branch_name="b1",
+                    github_token="ghp_SECRET123",
+                    anthropic_key="sk-ant",
+                )
+        self.assertFalse(result["success"])
+        self.assertNotIn("ghp_SECRET123", result["message"])
+        self.assertIn("Failed to clone repo:", result["message"])
+        joined = " ".join(str(c) for c in logged.call_args_list)
+        self.assertNotIn("ghp_SECRET123", joined)
+
+    def test_unexpected_exception_redacts_token(self):
+        def fake_run(cmd, **kwargs):
+            raise RuntimeError("clone died https://ghp_SECRET123@github.com/o/r.git")
+
+        with patch.object(self.module.subprocess, "run", side_effect=fake_run):
+            result = self.module.run_claude_code_on_repo(
+                repo_url="https://github.com/o/r.git",
+                feature_description="add a button",
+                branch_name="b1",
+                github_token="ghp_SECRET123",
+                anthropic_key="sk-ant",
+            )
+        self.assertFalse(result["success"])
+        self.assertNotIn("ghp_SECRET123", result["message"])
+        self.assertIn("***", result["message"])
         redact = self.module._redact
         self.assertEqual(redact(None, "tok"), "")
         self.assertEqual(redact("no secret here", "tok"), "no secret here")
@@ -130,6 +165,24 @@ class AgenticTokenRedactionTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertNotIn("ghp_SECRET123", result["message"])
         self.assertIn("***", result["message"])
+
+    def test_agentic_clone_timeout_redacts_token(self):
+        import subprocess as sp
+
+        def fake_run(cmd, **kwargs):
+            raise sp.TimeoutExpired(cmd=cmd, timeout=60)
+
+        with patch.object(self.module.subprocess, "run", side_effect=fake_run):
+            result = self.module.run_agentic_claude_on_repo(
+                repo_url="https://github.com/o/r.git",
+                feature_description="add a button",
+                branch_name="b1",
+                github_token="ghp_SECRET123",
+                anthropic_key="sk-ant",
+            )
+        self.assertFalse(result["success"])
+        self.assertNotIn("ghp_SECRET123", result["message"])
+        self.assertIn("Failed to clone repo:", result["message"])
 
     def test_agentic_redact_helper(self):
         redact = self.module._redact
