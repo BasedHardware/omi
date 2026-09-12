@@ -37,6 +37,13 @@ int32_t omi_backend_is_loopback_hostname(const char* hostname);
 int32_t omi_backend_is_cloud_hostname(const char* hostname);
 int32_t omi_backend_is_allowed_v5_hostname(const char* hostname);
 
+/**
+ * 1 when the new software plane is selected. A non-empty stored preference
+ * wins ("new" only); otherwise the stamped v5 origin decides.
+ */
+int32_t omi_backend_software_plane_is_new(const char* stored,
+                                          int32_t stamped_valid);
+
 #ifdef __cplusplus
 }
 #endif

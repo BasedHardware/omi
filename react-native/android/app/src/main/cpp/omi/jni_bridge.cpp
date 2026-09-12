@@ -229,3 +229,11 @@ Java_com_rnruntime_OmiBackendTransport_nativeRecordingUuidValid(JNIEnv* env, jcl
   env->ReleaseStringUTFChars(value, utf);
   return result == 1 ? JNI_TRUE : JNI_FALSE;
 }
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeSoftwarePlaneIsNew(JNIEnv* env, jclass, jstring stored, jboolean stampedValid) {
+  const char* storedUtf = stored == nullptr ? nullptr : env->GetStringUTFChars(stored, nullptr);
+  const int32_t result = omi_backend_software_plane_is_new(storedUtf, stampedValid == JNI_TRUE ? 1 : 0);
+  if (stored != nullptr && storedUtf != nullptr) env->ReleaseStringUTFChars(stored, storedUtf);
+  return result == 1 ? JNI_TRUE : JNI_FALSE;
+}

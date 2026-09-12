@@ -158,3 +158,11 @@ int32_t omi_backend_is_allowed_v5_hostname(const char* hostname) {
              ? 1
              : 0;
 }
+
+int32_t omi_backend_software_plane_is_new(const char* stored,
+                                          int32_t stamped_valid) {
+  if (stored != nullptr && stored[0] != '\0') {
+    return std::strcmp(stored, "new") == 0 ? 1 : 0;
+  }
+  return stamped_valid != 0 ? 1 : 0;
+}

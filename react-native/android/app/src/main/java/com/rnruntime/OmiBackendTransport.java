@@ -64,6 +64,8 @@ public final class OmiBackendTransport {
 
   private static native boolean nativeRecordingUuidValid(String value);
 
+  private static native boolean nativeSoftwarePlaneIsNew(String stored, boolean stampedValid);
+
   public static final class RequestPlan {
     public final boolean valid;
     public final int timeoutMillis;
@@ -205,10 +207,15 @@ public final class OmiBackendTransport {
   public static final String SOFTWARE_PLANE_KEY = "softwarePlane";
 
   public static String resolvedSoftwarePlane(String stored, boolean stampedValid) {
-    if (stored != null && !stored.isEmpty()) {
-      return "new".equals(stored) ? "new" : "old";
+    if (HAS_NATIVE_POLICY) {
+      return nativeSoftwarePlaneIsNew(stored, stampedValid) ? "new" : "old";
     }
-    return stampedValid ? "new" : "old";
+    return mirrorSoftwarePlaneIsNew(stored, stampedValid) ? "new" : "old";
+  }
+
+  static boolean mirrorSoftwarePlaneIsNew(String stored, boolean stampedValid) {
+    if (stored != null && !stored.isEmpty()) return "new".equals(stored);
+    return stampedValid;
   }
 
   public static boolean softwarePlaneIsNew(String plane) {
