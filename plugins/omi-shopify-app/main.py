@@ -5,6 +5,7 @@ This app provides Shopify integration through OAuth authentication
 and chat tools for analytics, orders, and customer management.
 """
 import os
+import re
 import hmac
 import hashlib
 import urllib.parse
@@ -78,6 +79,24 @@ templates = Jinja2Templates(directory=templates_dir)
 # ============================================
 # Helper Functions
 # ============================================
+
+_SHOP_DOMAIN_RE = re.compile(r"[a-z0-9][a-z0-9-]*\.myshopify\.com")
+
+
+def _normalize_shop_domain(shop: Optional[str]) -> Optional[str]:
+    """Return a canonical <store>.myshopify.com domain, or None otherwise.
+
+    `shop` is client-controlled on /auth/shopify and the OAuth callback, and
+    is used as a URL host — without validation an attacker host receives the
+    client secret during code exchange and the resulting access token.
+    """
+    shop = (shop or "").strip().lower()
+    if not shop:
+        return None
+    if not shop.endswith(".myshopify.com"):
+        shop = f"{shop}.myshopify.com"
+    return shop if _SHOP_DOMAIN_RE.fullmatch(shop) else None
+
 
 def get_auth_header(access_token: str) -> Dict[str, str]:
     """Get authorization header for Shopify API requests."""
@@ -280,10 +299,12 @@ async def shopify_auth(uid: str, shop: Optional[str] = None):
     if not shop:
         # Return a page to enter shop domain
         raise HTTPException(status_code=400, detail="Shop domain is required. Use /auth/shopify?uid=...&shop=your-store.myshopify.com")
-    
-    # Ensure shop domain is properly formatted
-    if not shop.endswith('.myshopify.com'):
-        shop = f"{shop}.myshopify.com"
+
+    # shop becomes a URL host below — reject anything that is not a
+    # <store>.myshopify.com domain so the redirect stays on Shopify.
+    shop = _normalize_shop_domain(shop)
+    if shop is None:
+        raise HTTPException(status_code=400, detail="Invalid shop domain. Expected <store>.myshopify.com")
     
     # Build OAuth URL
     scopes = ",".join(SHOPIFY_SCOPES)
@@ -329,7 +350,17 @@ async def shopify_callback(
         })
     
     uid = state
-    
+
+    # shop is a client-controlled callback param used as the token-exchange
+    # host — an attacker host would receive client_id/client_secret/code.
+    shop = _normalize_shop_domain(shop)
+    if shop is None:
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Invalid shop domain"
+        })
+
     # Exchange code for access token
     token_url = f"https://{shop}/admin/oauth/access_token"
     
