@@ -39,7 +39,9 @@ enum AgentRuntimeRouting {
     switch rawValue {
     case AgentHarnessMode.piMono.rawValue, "pi-mono":
       return .piMono
-    case AgentHarnessMode.acp.rawValue:
+    case AgentHarnessMode.acp.rawValue, ChatProvider.BridgeMode.userClaude.rawValue:
+      // "claudeCode" is the persisted chatBridgeMode spelling for the Claude
+      // provider; the adapter-side spelling is "acp".
       return .acp
     case AgentHarnessMode.hermes.rawValue:
       return .hermes
