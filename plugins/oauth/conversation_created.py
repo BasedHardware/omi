@@ -1,3 +1,5 @@
+import secrets
+
 import requests
 import templates as templates
 from db import *
@@ -20,14 +22,18 @@ async def setup_notion_crm(request: Request, uid: str):
     """
     if not uid:
         raise HTTPException(status_code=400, detail='UID is required')
-    oauth_url = get_notion().get_oauth_url(uid)
+    state = secrets.token_urlsafe(16)
+    store_oauth_state(state, uid)
+    oauth_url = get_notion().get_oauth_url(state)
     return templates.TemplateResponse("setup_notion_crm.html", {"request": request, "uid": uid, "oauth_url": oauth_url})
 
 
 def response_setup_notion_crm_page(request: Request, uid: str, err: str):
     if not uid:
         raise HTTPException(status_code=400, detail='UID is required')
-    oauth_url = get_notion().get_oauth_url(uid)
+    state = secrets.token_urlsafe(16)
+    store_oauth_state(state, uid)
+    oauth_url = get_notion().get_oauth_url(state)
     return templates.TemplateResponse(
         "setup_notion_crm.html",
         {
@@ -45,7 +51,9 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
     Callback from Notion Oauth.
     """
 
-    uid = state
+    uid = pop_oauth_state(state)
+    if not uid:
+        raise HTTPException(status_code=400, detail='Invalid or expired OAuth state')
 
     # Get access token
     oauth_ok = get_notion().get_access_token(code)
@@ -89,7 +97,7 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
         return
 
     # Save
-    print({'uid': uid, 'api_key': access_token, 'database_id': database_id})
+    print({'uid': uid, 'database_id': database_id})
     store_notion_crm_api_key(uid, access_token)
     store_notion_database_id(uid, database_id)
     return templates.TemplateResponse("okpage.html", {"request": request, "uid": uid})

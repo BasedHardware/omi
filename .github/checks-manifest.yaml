@@ -14,6 +14,11 @@ checks:
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
+  - id: oauth-notion-state-tests
+    command: ["python3", "plugins/oauth/test_oauth_state.py"]
+    triggers: ["plugins/oauth/**", "plugins/db.py"]
+    lanes: ["local", "ci"]
+    reason: "the Notion OAuth callback trusted the state parameter as the uid, so a forged state bound attacker's credentials to a victim; the fix consumes a random single-use state token"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]

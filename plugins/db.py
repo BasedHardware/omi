@@ -47,6 +47,16 @@ def get_notion_database_id(uid: str) -> str:
     return val.decode('utf-8') if val else None
 
 
+def store_oauth_state(state: str, uid: str):
+    r.setex(f'oauth_state:{state}', 600, uid)
+
+
+def pop_oauth_state(state: str) -> str:
+    val = r.get(f'oauth_state:{state}')
+    r.delete(f'oauth_state:{state}')
+    return val.decode('utf-8') if val else None
+
+
 # **********************************************************
 # ************ ZAPIER UTILS ************
 # **********************************************************

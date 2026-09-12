@@ -96,9 +96,7 @@ class NotionClient:
         self.oauth_redirect_uri = oauth_redirect_uri
         self.auth_url = auth_url
 
-    def get_oauth_url(self, uid: str):
-        # Should use encryption on state (with some salt) to prevent attacks
-        state = uid
+    def get_oauth_url(self, state: str):
         return f"{self.auth_url}&state={state}"
 
     def get_database(self, database_id: str, access_token: str):
