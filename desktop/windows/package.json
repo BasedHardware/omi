@@ -55,6 +55,7 @@
     "voice:loop-check": "node scripts/run-voice-loop-check.mjs",
     "test:e2e:lifecycle": "node scripts/run-lifecycle-e2e.mjs",
     "test:e2e:rewind-semantic": "node scripts/run-rewind-semantic-e2e.mjs",
+    "test:e2e:rewind-chunks": "node scripts/run-rewind-chunks-e2e.mjs",
     "test:e2e:db-recovery": "node scripts/run-db-recovery-e2e.mjs",
     "test:e2e:failure-ux": "node scripts/run-failure-ux-e2e.mjs",
     "test:e2e:rewind-dayscope": "node scripts/run-rewind-dayscope-e2e.mjs",

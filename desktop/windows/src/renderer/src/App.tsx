@@ -12,6 +12,7 @@ import { DegradedModeNotice } from './components/ui/DegradedModeNotice'
 import { RewindCaptureNotice } from './components/ui/RewindCaptureNotice'
 import { ToastHost } from './components/ui/ToastHost'
 import { purgeAppMemoriesOnce } from './lib/appMemories'
+import { RewindChunkHost } from './components/rewind/RewindChunkHost'
 import { AppStateProvider } from './state/AppStateProvider'
 import { useAppState } from './state/appState'
 import { SourcePicker } from './components/SourcePicker'
@@ -206,6 +207,12 @@ function AppShell(): React.JSX.Element {
 
   return (
     <AppStateProvider>
+      {/* Answers the compactor's encode requests. Mounted here as well as in
+          the capture window because main sends an encode to whichever window is
+          live, and the capture window only exists while capture is running — a
+          request sent to a window with no host would never be answered, and the
+          pass would sit on it until it timed out. */}
+      <RewindChunkHost />
       <AppShellInner />
     </AppStateProvider>
   )
