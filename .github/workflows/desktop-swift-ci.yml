@@ -515,8 +515,20 @@ jobs:
       - name: Install Swift system dependencies
         run: brew install pkg-config webp
 
+      # Build the test targets with testability in THIS step when the
+      # regression below will run. `swift test -c release` needs
+      # `-enable-testing` for `@testable import`; a plain release build does
+      # not have it, and the flag difference invalidates the module graph, so
+      # the regression step used to recompile Omi_Computer and every
+      # dependency a second time — ~28 min on top of this step's ~31, which is
+      # how a 60-minute job ran out of minutes mid-compile on every
+      # notification-path PR. Reusing these products drops that step to
+      # seconds. Gated, so the job's other triggers do not pay to compile test
+      # targets nothing runs.
       - name: Release compile
         working-directory: desktop/macos
+        env:
+          OMI_SWIFT_RELEASE_BUILD_TESTS: ${{ needs.changes.outputs.should_notification_release_regression }}
         run: ./scripts/run-swift-ci.sh --release-compile
 
       # Runs here, not in the verify job: the regression needs release-mode
@@ -528,6 +540,8 @@ jobs:
       - name: Test UserNotifications callback regression in release mode
         if: ${{ needs.changes.outputs.should_notification_release_regression == 'true' }}
         working-directory: desktop/macos
+        env:
+          OMI_SWIFT_RELEASE_BUILD_TESTS: ${{ needs.changes.outputs.should_notification_release_regression }}
         run: ./scripts/run-swift-ci.sh --release-notification-regression
 
       - name: Save SwiftPM dependency cache

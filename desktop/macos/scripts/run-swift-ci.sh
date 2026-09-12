@@ -73,8 +73,30 @@ case "${1:-}" in
     # source change, so the measured compile time was 23-25 min with or
     # without a restored archive, while each 5.3 GB save evicted the small
     # tool caches from the repository's cache budget.
-    # The release-notification-regression mode below also reuses this build.
-    xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
+    # The regression mode below can only reuse this build when it carries
+    # testability: `swift test -c release` needs `-enable-testing` for
+    # `@testable import`, a plain release build does not have it, and that
+    # flag difference invalidates the whole module graph — so without this the
+    # regression step silently recompiles Omi_Computer and every dependency a
+    # second time, ~28 min on top of this step's ~31. Measured locally: with
+    # the flags, `swift test --skip-build` runs the suite in 6.9s.
+    #
+    # Only when the regression will actually run, because every other trigger
+    # for this job (main pushes, scheduled health, Package.swift PRs) would
+    # otherwise pay to compile test targets nothing executes.
+    #
+    # Bash 3.2 is the system bash on hosted runners and treats "${empty[@]}"
+    # as unbound under `set -u`, so the array is only expanded when non-empty.
+    release_build_args=()
+    if [ "${OMI_SWIFT_RELEASE_BUILD_TESTS:-}" = "true" ]; then
+      release_build_args=(--build-tests -Xswiftc -enable-testing)
+    fi
+    if [ "${#release_build_args[@]}" -gt 0 ]; then
+      xcrun swift build -c release "${release_build_args[@]}" \
+        --package-path Desktop --triple arm64-apple-macosx
+    else
+      xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
+    fi
     ;;
   --release-notification-regression)
     [ "$#" -eq 1 ] || usage
@@ -83,7 +105,16 @@ case "${1:-}" in
     # Keep this narrow enough for a PR boundary check while exercising the
     # release compiler mode used for signed candidates. This is the direct
     # UserNotifications private-callback-to-MainActor regression suite.
-    xcrun swift test -c release --package-path Desktop --filter UserNotificationCallbackBridgeTests/
+    #
+    # --skip-build when --release-compile already produced testable release
+    # products; otherwise (a local invocation of this mode on its own) build
+    # them here, which is the old behaviour.
+    if [ "${OMI_SWIFT_RELEASE_BUILD_TESTS:-}" = "true" ]; then
+      xcrun swift test -c release --skip-build \
+        --package-path Desktop --filter UserNotificationCallbackBridgeTests/
+    else
+      xcrun swift test -c release --package-path Desktop --filter UserNotificationCallbackBridgeTests/
+    fi
     ;;
   *)
     usage

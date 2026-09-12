@@ -38,6 +38,30 @@ EXPECTED_XCODE_VERSION = "16.4"
 EXPECTED_XCODE_BUILD = "16F6"
 EXPECTED_XCODE_APP = f"/Applications/Xcode_{EXPECTED_XCODE_VERSION}.app"
 JOBS = ["changes", "desktop-swift-verify", "desktop-swift", "desktop-swift-release-compile"]
+
+
+def _step_block(job_text: str, step_name: str) -> str | None:
+    """Return one `- name: <step_name>` step's own YAML, not the whole job.
+
+    A job-wide substring search is not a contract: the release job repeats
+    should_notification_release_regression in its job-level `if:` and in
+    RELEASE_REQUIRED, so a search over the job body cannot tell whether a step
+    still carries what the assertion claims.
+    """
+    lines = job_text.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() != f"- name: {step_name}":
+            continue
+        indent = len(line) - len(line.lstrip())
+        block = [line]
+        for candidate in lines[index + 1 :]:
+            stripped = candidate.strip()
+            candidate_indent = len(candidate) - len(candidate.lstrip())
+            if stripped.startswith("- name:") and candidate_indent <= indent:
+                break
+            block.append(candidate)
+        return "\n".join(block)
+    return None
 MACOS_JOBS = ["desktop-swift-verify", "desktop-swift-release-compile"]
 # Hosted macOS budgets are per-job: the consolidated verify lane needs a longer
 # cold-runner ceiling than the narrower release-compile job.
@@ -105,6 +129,37 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         # of scarce hosted-macOS time per notification-boundary change.
         self.assertIn("run-swift-ci.sh --release-notification-regression", release_job)
         self.assertNotIn("run-swift-ci.sh --release-notification-regression", verify_job)
+
+        # Both steps must read the SAME gate. The regression reuses the
+        # release build's products via --skip-build, which only exist if the
+        # build step carried --build-tests -Xswiftc -enable-testing. If the
+        # two ever disagree, nothing errors: the build silently omits the test
+        # targets and the regression silently recompiles the whole graph —
+        # ~28 min on top of ~31, which is exactly how this job ran out of its
+        # 60 minutes mid-compile on every notification-path PR.
+        gate = (
+            "OMI_SWIFT_RELEASE_BUILD_TESTS: ${{ "
+            "needs.changes.outputs.should_notification_release_regression }}"
+        )
+        # Scoped to each step rather than the job body: the same output also
+        # appears in the job-level `if:` and in RELEASE_REQUIRED, so a job-wide
+        # assertIn would keep passing after the step's own condition was
+        # removed or re-keyed.
+        build_step = _step_block(release_job, "Release compile")
+        regression_step = _step_block(
+            release_job, "Test UserNotifications callback regression in release mode"
+        )
+        self.assertIsNotNone(build_step, "the release build step was renamed")
+        self.assertIsNotNone(regression_step, "the regression step was renamed")
+        self.assertIn(gate, build_step, "the release build must carry the gate")
+        self.assertIn(gate, regression_step, "the regression step must carry the gate")
+        self.assertIn(
+            "if: ${{ needs.changes.outputs."
+            "should_notification_release_regression == 'true' }}",
+            regression_step,
+            "the regression step's own condition must key on the same output "
+            "the build step is gated by",
+        )
 
     def test_change_detection_happens_before_macos_allocation(self):
         """#9440: non-desktop changes must not claim a costly macOS runner."""
