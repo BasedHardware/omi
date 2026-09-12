@@ -495,6 +495,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deviceName => 'ชื่ออุปกรณ์';
 
   @override
+  String get deviceNameStoredOnPhone => 'บันทึกไว้ในโทรศัพท์เครื่องนี้เท่านั้น';
+
+  @override
   String get deviceId => 'ID อุปกรณ์';
 
   @override

@@ -156,6 +156,7 @@
     "appAccessDesc": "以下のアプリがあなたのデータにアクセスできます。アプリをタップして権限を管理してください。",
     "noAppsExternalAccess": "インストールされたアプリは外部からデータにアクセスしていません。",
     "deviceName": "デバイス名",
+    "deviceNameStoredOnPhone": "この電話にのみ保存されます。",
     "deviceId": "デバイスID",
     "firmware": "ファームウェア",
     "sdCardSync": "SDカード同期",

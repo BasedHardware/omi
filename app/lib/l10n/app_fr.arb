@@ -157,6 +157,7 @@
     "appAccessDesc": "Les applications suivantes peuvent accéder à vos données. Appuyez sur une application pour gérer ses autorisations.",
     "noAppsExternalAccess": "Aucune application installée n'a d'accès externe à vos données.",
     "deviceName": "Nom de l'appareil",
+    "deviceNameStoredOnPhone": "Enregistré uniquement sur ce téléphone.",
     "deviceId": "ID de l'appareil",
     "firmware": "Micrologiciel",
     "sdCardSync": "Synchronisation de la carte SD",

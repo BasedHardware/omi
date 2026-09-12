@@ -500,6 +500,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deviceName => 'Pangalan ng Device';
 
   @override
+  String get deviceNameStoredOnPhone => 'Naka-save lang sa teleponong ito.';
+
+  @override
   String get deviceId => 'Device ID';
 
   @override

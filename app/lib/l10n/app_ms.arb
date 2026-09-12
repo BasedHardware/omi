@@ -157,6 +157,7 @@
     "appAccessDesc": "Aplikasi berikut boleh mengakses data anda. Ketik pada aplikasi untuk mengurus keizinannya.",
     "noAppsExternalAccess": "Tiada aplikasi yang dipasang mempunyai akses luaran ke data anda.",
     "deviceName": "Nama Peranti",
+    "deviceNameStoredOnPhone": "Disimpan pada telefon ini sahaja.",
     "deviceId": "ID Peranti",
     "firmware": "Perisian Tegar",
     "sdCardSync": "Sinkronisasi Kad SD",

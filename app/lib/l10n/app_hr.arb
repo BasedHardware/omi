@@ -633,6 +633,7 @@
         "description": "Empty state for app access"
     },
     "deviceName": "Ime uređaja",
+    "deviceNameStoredOnPhone": "Spremljeno samo na ovom telefonu.",
     "@deviceName": {
         "description": "Device name label"
     },

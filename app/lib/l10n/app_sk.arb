@@ -157,6 +157,7 @@
     "appAccessDesc": "Nasledujúce aplikácie majú prístup k vašim údajom. Ťuknutím na aplikáciu spravujte jej oprávnenia.",
     "noAppsExternalAccess": "Žiadne nainštalované aplikácie nemajú externý prístup k vašim údajom.",
     "deviceName": "Názov zariadenia",
+    "deviceNameStoredOnPhone": "Uložené iba v tomto telefóne.",
     "deviceId": "ID zariadenia",
     "firmware": "Firmvér",
     "sdCardSync": "Synchronizácia SD karty",

@@ -157,6 +157,7 @@
     "appAccessDesc": "以下应用可以访问您的数据。点击应用以管理其权限。",
     "noAppsExternalAccess": "暂无已安装应用具有外部数据访问权限。",
     "deviceName": "设备名称",
+    "deviceNameStoredOnPhone": "仅保存在此手机上。",
     "deviceId": "设备ID",
     "firmware": "固件",
     "sdCardSync": "SD卡同步",

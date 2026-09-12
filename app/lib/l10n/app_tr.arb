@@ -157,6 +157,7 @@
     "appAccessDesc": "Aşağıdaki uygulamalar verilerinize erişebilir. İzinlerini yönetmek için bir uygulamaya dokunun.",
     "noAppsExternalAccess": "Yüklü hiçbir uygulama verilerinize harici erişime sahip değil.",
     "deviceName": "Cihaz Adı",
+    "deviceNameStoredOnPhone": "Yalnızca bu telefonda saklanır.",
     "deviceId": "Cihaz Kimliği",
     "firmware": "Ürün Yazılımı",
     "sdCardSync": "SD Kart Senkronizasyonu",

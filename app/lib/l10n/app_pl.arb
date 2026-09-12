@@ -157,6 +157,7 @@
     "appAccessDesc": "Następujące aplikacje mogą uzyskać dostęp do Twoich danych. Dotknij aplikacji, aby zarządzać jej uprawnieniami.",
     "noAppsExternalAccess": "Żadne zainstalowane aplikacje nie mają zewnętrznego dostępu do Twoich danych.",
     "deviceName": "Nazwa urządzenia",
+    "deviceNameStoredOnPhone": "Zapisano tylko na tym telefonie.",
     "deviceId": "ID urządzenia",
     "firmware": "Oprogramowanie sprzętowe",
     "sdCardSync": "Synchronizacja karty SD",

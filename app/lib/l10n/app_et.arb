@@ -157,6 +157,7 @@
     "appAccessDesc": "Järgmised rakendused pääsevad juurde teie andmetele. Puudutage rakendust selle õiguste haldamiseks.",
     "noAppsExternalAccess": "Ühelgi paigaldatud rakendusel pole välise juurdepääsu teie andmetele.",
     "deviceName": "Seadme nimi",
+    "deviceNameStoredOnPhone": "Salvestatud ainult selles telefonis.",
     "deviceId": "Seadme ID",
     "firmware": "Püsivara",
     "sdCardSync": "SD-kaardi sünkroonimine",

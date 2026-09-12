@@ -499,6 +499,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deviceName => 'ಸಾಧನ ಹೆಸರು';
 
   @override
+  String get deviceNameStoredOnPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ ಮಾತ್ರ ಉಳಿಸಲಾಗಿದೆ.';
+
+  @override
   String get deviceId => 'ಸಾಧನ ID';
 
   @override

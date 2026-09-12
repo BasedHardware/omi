@@ -157,6 +157,7 @@
     "appAccessDesc": "Le seguenti app possono accedere ai tuoi dati. Tocca un'app per gestire i suoi permessi.",
     "noAppsExternalAccess": "Nessuna app installata ha accesso esterno ai tuoi dati.",
     "deviceName": "Nome Dispositivo",
+    "deviceNameStoredOnPhone": "Salvato solo su questo telefono.",
     "deviceId": "ID dispositivo",
     "firmware": "Firmware",
     "sdCardSync": "Sincronizzazione scheda SD",

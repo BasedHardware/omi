@@ -633,6 +633,7 @@
         "description": "Empty state for app access"
     },
     "deviceName": "डिव्हाइस नाव",
+    "deviceNameStoredOnPhone": "फक्त या फोनवर जतन केले.",
     "@deviceName": {
         "description": "Device name label"
     },

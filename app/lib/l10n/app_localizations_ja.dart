@@ -488,6 +488,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceName => 'デバイス名';
 
   @override
+  String get deviceNameStoredOnPhone => 'この電話にのみ保存されます。';
+
+  @override
   String get deviceId => 'デバイスID';
 
   @override

@@ -488,6 +488,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceName => '设备名称';
 
   @override
+  String get deviceNameStoredOnPhone => '仅保存在此手机上。';
+
+  @override
   String get deviceId => '设备ID';
 
   @override

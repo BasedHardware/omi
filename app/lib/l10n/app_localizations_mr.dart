@@ -498,6 +498,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get deviceName => 'डिव्हाइस नाव';
 
   @override
+  String get deviceNameStoredOnPhone => 'फक्त या फोनवर जतन केले.';
+
+  @override
   String get deviceId => 'डिव्हाइस ID';
 
   @override

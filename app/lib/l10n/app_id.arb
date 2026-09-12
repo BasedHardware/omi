@@ -157,6 +157,7 @@
     "appAccessDesc": "Aplikasi berikut dapat mengakses data Anda. Ketuk aplikasi untuk mengelola izinnya.",
     "noAppsExternalAccess": "Tidak ada aplikasi terinstal yang memiliki akses eksternal ke data Anda.",
     "deviceName": "Nama Perangkat",
+    "deviceNameStoredOnPhone": "Hanya disimpan di ponsel ini.",
     "deviceId": "ID Perangkat",
     "firmware": "Firmware",
     "sdCardSync": "Sinkronisasi Kartu SD",

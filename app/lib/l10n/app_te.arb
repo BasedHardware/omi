@@ -633,6 +633,7 @@
         "description": "Empty state for app access"
     },
     "deviceName": "డివైస్ పేరు",
+    "deviceNameStoredOnPhone": "ఈ ఫోన్‌లో మాత్రమే సేవ్ చేయబడింది.",
     "@deviceName": {
         "description": "Device name label"
     },

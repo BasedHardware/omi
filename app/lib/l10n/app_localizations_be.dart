@@ -497,6 +497,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deviceName => 'Імя прылады';
 
   @override
+  String get deviceNameStoredOnPhone => 'Захоўваецца толькі на гэтым тэлефоне.';
+
+  @override
   String get deviceId => 'ID прылады';
 
   @override

@@ -500,6 +500,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get deviceName => 'சாதன பெயர்';
 
   @override
+  String get deviceNameStoredOnPhone => 'இந்த தொலைபேசியில் மட்டுமே சேமிக்கப்படுகிறது.';
+
+  @override
   String get deviceId => 'சாதன ID';
 
   @override

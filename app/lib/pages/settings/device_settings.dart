@@ -15,6 +15,7 @@ import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
+import 'package:omi/pages/settings/rename_device_widget.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
@@ -203,12 +204,16 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             ),
           ),
           if (chipValue != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(100)),
-              child: Text(
-                chipValue,
-                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(100)),
+                child: Text(
+                  chipValue,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                ),
               ),
             ),
             if (showChevronResolved) const SizedBox(width: 8),
@@ -239,8 +244,20 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     return KeyedSubtree(key: key, child: content);
   }
 
+  Future<void> _renameDevice(BtDevice device) async {
+    final renamed = await showDialog<bool>(
+      context: context,
+      builder: (_) => RenameDeviceWidget(deviceId: device.id, advertisedName: device.name),
+    );
+    if (renamed == true && mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.nameUpdatedSuccessfully)));
+    }
+  }
+
   Widget _buildDeviceInfoSection(BtDevice? device, DeviceProvider provider) {
-    final deviceName = device?.name ?? 'Omi DevKit';
+    final deviceName = device?.displayName ?? 'Omi DevKit';
+    final canRename = device != null && device.id.isNotEmpty;
     final deviceId = device?.id ?? '12AB34CD:56EF78GH';
     const firmwarePolicy = FirmwareUpdateBuildPolicy.current;
     final isOpenGlass = firmwarePolicy.isOpenGlassDevice(device);
@@ -258,11 +275,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       child: Column(
         children: [
           _buildProfileStyleItem(
+            key: const Key('device_name_row'),
             icon: FontAwesomeIcons.microchip,
             title: context.l10n.deviceName,
             chipValue: deviceName,
-            copyValue: deviceName,
-            showChevron: false,
+            onTap: canRename ? () => _renameDevice(device) : null,
+            showChevron: canRename,
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
@@ -802,6 +820,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
                 await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
                 SharedPreferencesUtil().deviceName = '';
+                await SharedPreferencesUtil().clearDeviceCustomName(deviceId);
 
                 if (deviceId.isNotEmpty) {
                   await ServiceManager.instance().device.forgetDevice(deviceId);
@@ -852,10 +871,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     () => Navigator.of(context).pop(),
                     () async {
                       Navigator.of(context).pop();
+                      final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
                       await SharedPreferencesUtil().btDeviceSet(
                         BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0),
                       );
                       SharedPreferencesUtil().deviceName = '';
+                      await SharedPreferencesUtil().clearDeviceCustomName(deviceId);
                       if (provider.connectedDevice != null) {
                         await _bleUnpairDevice(provider.connectedDevice!);
                       }

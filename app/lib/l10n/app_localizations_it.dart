@@ -500,6 +500,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get deviceName => 'Nome Dispositivo';
 
   @override
+  String get deviceNameStoredOnPhone => 'Salvato solo su questo telefono.';
+
+  @override
   String get deviceId => 'ID dispositivo';
 
   @override

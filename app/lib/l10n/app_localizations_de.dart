@@ -502,6 +502,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get deviceName => 'Gerätename';
 
   @override
+  String get deviceNameStoredOnPhone => 'Nur auf diesem Telefon gespeichert.';
+
+  @override
   String get deviceId => 'Geräte-ID';
 
   @override

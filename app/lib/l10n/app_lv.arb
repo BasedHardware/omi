@@ -157,6 +157,7 @@
     "appAccessDesc": "Šādas lietotnes var piekļūt jūsu datiem. Piespiediet uz lietotnes, lai pārvaldītu tās atļaujas.",
     "noAppsExternalAccess": "Nevienai instalētajai lietotnei nav ārējas piekļuves jūsu datiem.",
     "deviceName": "Ierīces nosaukums",
+    "deviceNameStoredOnPhone": "Saglabāts tikai šajā tālrunī.",
     "deviceId": "Ierīces ID",
     "firmware": "Programmaparatūra",
     "sdCardSync": "SD kartes sinhronizācija",

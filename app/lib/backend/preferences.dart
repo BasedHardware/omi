@@ -285,6 +285,40 @@ class SharedPreferencesUtil {
 
   String get deviceName => getString('deviceName');
 
+  set deviceCustomNames(Map<String, String> value) => saveString('deviceCustomNames', jsonEncode(value));
+
+  Map<String, String> get deviceCustomNames {
+    final encoded = getString('deviceCustomNames');
+    if (encoded.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+      return decoded.map((key, value) => MapEntry(key, value.toString()));
+    } catch (e) {
+      Logger.debug('Error decoding device custom names: $e');
+      return {};
+    }
+  }
+
+  String? getDeviceCustomName(String deviceId) {
+    if (deviceId.isEmpty) return null;
+    final name = deviceCustomNames[deviceId]?.trim() ?? '';
+    return name.isEmpty ? null : name;
+  }
+
+  Future<void> setDeviceCustomName(String deviceId, String name) async {
+    if (deviceId.isEmpty) return;
+    final names = deviceCustomNames;
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      names.remove(deviceId);
+    } else {
+      names[deviceId] = trimmed;
+    }
+    await saveString('deviceCustomNames', jsonEncode(names));
+  }
+
+  Future<void> clearDeviceCustomName(String deviceId) => setDeviceCustomName(deviceId, '');
+
   bool get deviceIsV2 => getBool('deviceIsV2');
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);

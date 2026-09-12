@@ -498,6 +498,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deviceName => 'Enhetsnamn';
 
   @override
+  String get deviceNameStoredOnPhone => 'Sparas endast på den här telefonen.';
+
+  @override
   String get deviceId => 'Enhets-ID';
 
   @override

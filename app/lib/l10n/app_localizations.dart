@@ -1131,6 +1131,12 @@ abstract class AppLocalizations {
   /// **'Device Name'**
   String get deviceName;
 
+  /// Note under the rename dialog title saying the custom name is kept on this phone
+  ///
+  /// In en, this message translates to:
+  /// **'Stored on this phone only.'**
+  String get deviceNameStoredOnPhone;
+
   /// Label for device ID field
   ///
   /// In en, this message translates to:

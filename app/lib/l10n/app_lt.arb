@@ -708,6 +708,7 @@
     "deviceMayWarmUp": "Įrenginys gali įkaisti ilgesnio naudojimo metu.",
     "deviceModelLabel": "Įrenginio modelis",
     "deviceName": "Įrenginio pavadinimas",
+    "deviceNameStoredOnPhone": "Išsaugota tik šiame telefone.",
     "deviceNotCompatible": "Jūsų įrenginys nesuderinamas su transkripcija įrenginyje",
     "deviceNotCompatibleTitle": "Įrenginys nesuderinamas",
     "deviceNotConnected": "Įrenginys neprijungtas",

@@ -495,6 +495,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get deviceName => 'डिवाइस का नाम';
 
   @override
+  String get deviceNameStoredOnPhone => 'केवल इस फ़ोन पर सहेजा गया।';
+
+  @override
   String get deviceId => 'डिवाइस आईडी';
 
   @override

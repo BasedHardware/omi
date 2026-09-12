@@ -157,6 +157,7 @@
     "appAccessDesc": "Các ứng dụng sau có thể truy cập dữ liệu của bạn. Nhấn vào ứng dụng để quản lý quyền của nó.",
     "noAppsExternalAccess": "Không có ứng dụng đã cài đặt nào có quyền truy cập bên ngoài vào dữ liệu của bạn.",
     "deviceName": "Tên thiết bị",
+    "deviceNameStoredOnPhone": "Chỉ được lưu trên điện thoại này.",
     "deviceId": "ID Thiết Bị",
     "firmware": "Phần Mềm",
     "sdCardSync": "Đồng bộ thẻ SD",

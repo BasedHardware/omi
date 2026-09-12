@@ -496,6 +496,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceName => 'Device Name';
 
   @override
+  String get deviceNameStoredOnPhone => 'Stored on this phone only.';
+
+  @override
   String get deviceId => 'Device ID';
 
   @override

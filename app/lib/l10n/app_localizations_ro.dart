@@ -500,6 +500,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deviceName => 'Nume dispozitiv';
 
   @override
+  String get deviceNameStoredOnPhone => 'Salvat doar pe acest telefon.';
+
+  @override
   String get deviceId => 'ID dispozitiv';
 
   @override
