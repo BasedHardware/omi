@@ -32,6 +32,80 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
 
 _LIST_COLUMNS = ["id", "title", "category", "started_at", "source"]
 
+#: SRT timestamps are ``HH:MM:SS,mmm`` and address a zero-based timeline, so a
+#: negative offset has no representation. Clamping keeps a segment that starts a
+#: few milliseconds before the conversation timeline from producing ``-1:-1:-1``.
+_SRT_MAX_MILLISECONDS = 99 * 3600 * 1000 + 59 * 60 * 1000 + 59 * 1000 + 999
+
+
+def _segment_start_seconds(segment: dict) -> Optional[float]:
+    """Return the segment start in seconds, or ``None`` when it has no usable one."""
+    for key in ("start", "start_seconds", "start_time"):
+        value = segment.get(key)
+        if isinstance(value, bool):  # bool is an int subclass; not a timestamp
+            continue
+        if isinstance(value, (int, float)):
+            return float(value)
+    for key in ("start_timestamp", "started_at", "start_time"):
+        value = segment.get(key)
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                continue
+    return None
+
+
+def _format_srt_timestamp(seconds: float) -> str:
+    """Format seconds as an SRT timestamp (``HH:MM:SS,mmm``).
+
+    SRT has no negative or sub-hour fields beyond two digits, so values are
+    clamped into the representable range instead of printing something a player
+    would reject.
+    """
+    milliseconds = int(round(seconds * 1000))
+    if milliseconds < 0:
+        milliseconds = 0
+    elif milliseconds > _SRT_MAX_MILLISECONDS:
+        milliseconds = _SRT_MAX_MILLISECONDS
+    hours, remainder = divmod(milliseconds, 3600 * 1000)
+    minutes, remainder = divmod(remainder, 60 * 1000)
+    secs, millis = divmod(remainder, 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+
+def _segments_to_srt(segments: list) -> str:
+    """Convert ``transcript_segments`` into SRT.
+
+    Segments without a usable start time are skipped rather than emitted with a
+    fabricated timestamp: a wrong cue time is worse than a missing cue because
+    it silently desynchronises the whole caption track. A segment with no end
+    falls back to its own start so the cue stays valid for the one frame.
+    """
+    blocks: list[str] = []
+    index = 0
+    for segment in segments or []:
+        if not isinstance(segment, dict):
+            continue
+        start = _segment_start_seconds(segment)
+        if start is None:
+            continue
+        end = _segment_start_seconds({"start": segment.get("end")})
+        if end is None or end < start:
+            end = start
+        text = segment.get("text")
+        if text is None:
+            continue
+        text = str(text).strip()
+        if not text:
+            continue
+        index += 1
+        blocks.append(
+            f"{index}\n{_format_srt_timestamp(start)} --> {_format_srt_timestamp(end)}\n{text}\n"
+        )
+    return "\n".join(blocks)
+
+
 
 @app.command("list", help="List conversations.")
 def list_conversations(
@@ -83,13 +157,47 @@ def get_conversation(
     typer_ctx: typer.Context,
     conversation_id: str = typer.Argument(..., help="Conversation ID."),
     include_transcript: bool = typer.Option(False, "--include-transcript"),
+    format: str = typer.Option("json", "--format", help="Output format: json or srt."),
+    output: Optional[Path] = typer.Option(None, "--output", help="Write the result to this file."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+
+    srt_format = format.lower()
+    if srt_format not in ("json", "srt"):
+        raise UsageError(
+            message=f"Unsupported --format: {format}",
+            detail="Supported formats are 'json' (default) and 'srt'.",
+        )
+    if srt_format == "srt" and not include_transcript:
+        raise UsageError(
+            message="--format srt requires --include-transcript",
+            detail="SRT is built from transcript segments, which the API only returns when "
+            "--include-transcript is set.",
+        )
+
     with ctx.make_client() as client:
         result = client.get(
             f"/v1/dev/user/conversations/{conversation_id}",
             params={"include_transcript": include_transcript},
         )
+
+    if srt_format == "srt":
+        subtitles = _segments_to_srt((result or {}).get("transcript_segments") or [])
+        if output is not None:
+            # newline="" keeps the CRLF line endings SRT consumers expect instead
+            # of letting Python translate them per platform.
+            output.write_text(subtitles, encoding="utf-8", newline="")
+            ctx.renderer.success(f"Wrote [bold]{output}[/bold]")
+            return
+        # Subtitles go to stdout unchanged: routing them through the renderer would
+        # reflow the very cue text a player reads.
+        typer.echo(subtitles, nl=False)
+        return
+
+    if output is not None:
+        output.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+        ctx.renderer.success(f"Wrote [bold]{output}[/bold]")
+        return
     ctx.renderer.emit(result, title="conversation")
 
 
