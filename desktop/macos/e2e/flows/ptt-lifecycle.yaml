@@ -20,6 +20,11 @@ covers:
   # https://github.com/BasedHardware/omi/issues/12732.
   - desktop/macos/Desktop/Sources/Chat/CompletionDeltaPolicy.swift
   - desktop/macos/Desktop/Sources/Chat/DesktopCoordinatorService.swift
+  # Area ownership, not step-level execution: the coordinator's default
+  # harnessModeProvider is AgentControlService.currentHarnessMode, so every
+  # coordinator control tool resolves the persisted provider preference here.
+  # Behavioral coverage of the mode table lives in AgentControlServiceTests.
+  - desktop/macos/Desktop/Sources/Chat/AgentControlService.swift
   - desktop/macos/Desktop/Sources/DefaultsKey.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/LegacyVoiceJournalImporter.swift
