@@ -14,13 +14,6 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function text(value: unknown, limit: number): string {
-  if (typeof value !== 'string' || value.length > limit) {
-    throw new FirmwareError();
-  }
-  return value;
-}
-
 function firmwareChangelog(value: unknown): string[] | undefined {
   if (value === undefined || value === null || typeof value === 'string') {
     return undefined;
@@ -33,7 +26,7 @@ function firmwareChangelog(value: unknown): string[] | undefined {
     if (typeof raw !== 'string') {
       continue;
     }
-    const copy = visibleDisplayText(text(raw, 10000));
+    const copy = visibleDisplayText(raw);
     if (copy !== '') {
       changelog.push(copy);
     }

@@ -115,6 +115,23 @@ test('does not omit GET firmware version when changelog exceeds 32', () => {
   });
 });
 
+test('keeps GET firmware version when a changelog item exceeds 10000', () => {
+  const longItem = 'C'.repeat(10001);
+  expect(
+    parseOmiLatestFirmware(
+      JSON.stringify({
+        version: '1.3.0',
+        changelog: ['Fixed BLE reconnect', longItem, 'Battery improvements'],
+      }),
+    ),
+  ).toEqual({
+    version: '1.3.0',
+    draft: false,
+    minVersion: null,
+    changelog: ['Fixed BLE reconnect', longItem, 'Battery improvements'],
+  });
+});
+
 test('fails closed for malformed GET latest firmware', () => {
   expect(() => parseOmiLatestFirmware(JSON.stringify([]))).toThrow();
   expect(() => parseOmiLatestFirmware(JSON.stringify({version: 1}))).toThrow();
