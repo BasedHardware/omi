@@ -231,6 +231,64 @@ jobs:
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --format='value(notificationChannels)' | grep -q .
 
+      - name: Provision prod Redis used_memory 90% alarm
+        if: github.event.inputs.environment == 'prod'
+        env:
+          ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
+        run: |
+          set -euo pipefail
+          test -n "$ALERT_CHANNELS"
+          metric='redis_memory_90'
+          display_name='Prod Redis used_memory ≥ 90%'
+          documentation='Prod Redis Cloud used_memory crossed 90% of the 12 GiB Essentials cap (INFO omits maxmemory). Writes fail closed under noeviction. Inspect notifications-job redis_memory_threshold logs. Same class as the unbounded users:{uid}:filters:* fill.'
+          log_filter='resource.type="cloud_run_job" resource.labels.job_name="notifications-job" "redis_memory_threshold threshold=90"'
+
+          if gcloud logging metrics describe "$metric" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+            gcloud logging metrics update "$metric" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --description="$display_name" \
+              --log-filter="$log_filter"
+          else
+            gcloud logging metrics create "$metric" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --description="$display_name" \
+              --log-filter="$log_filter"
+          fi
+
+          policy="$(
+            gcloud monitoring policies list \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --filter="displayName=\"${display_name}\"" \
+              --format='value(name)' \
+              --limit=1
+          )"
+          if [[ -z "$policy" ]]; then
+            policy="$(
+              gcloud monitoring policies create \
+                --project="${{ vars.GCP_PROJECT_ID }}" \
+                --display-name="$display_name" \
+                --condition-display-name="$display_name" \
+                --condition-filter="metric.type=\"logging.googleapis.com/user/${metric}\" AND resource.type=\"cloud_run_job\"" \
+                --duration=0s \
+                --if='> 0' \
+                --trigger-count=1 \
+                --combiner=OR \
+                --notification-channels="$ALERT_CHANNELS" \
+                --documentation="$documentation" \
+                --format='value(name)'
+            )"
+          else
+            gcloud monitoring policies update "$policy" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --enabled \
+              --set-notification-channels="$ALERT_CHANNELS" \
+              --documentation="$documentation"
+          fi
+          test -n "$policy"
+          gcloud monitoring policies describe "$policy" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format='value(notificationChannels)' | grep -q .
+
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'
         uses: ./.github/actions/deployment-summary
