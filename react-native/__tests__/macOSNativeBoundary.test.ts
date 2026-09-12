@@ -124,6 +124,10 @@ test('titlebar and drag monitor do not steal chrome clicks', () => {
 
 test('pairs the macOS backend origin and credentials in one validated policy', () => {
   const source = readNativeSource('OmiBackendModule.mm');
+  const policySource = readFileSync(
+    resolve(__dirname, '../../native-core/src/omi_backend_policy.cpp'),
+    'utf8',
+  );
 
   expect(source).toContain('OmiResolvedBackendPolicy');
   expect(source).not.toContain('OmiResolvedBaseURL');
@@ -143,7 +147,8 @@ test('pairs the macOS backend origin and credentials in one validated policy', (
   expect(source).toContain('OmiBackendRoute');
   expect(source).toContain('characterSetWithCharactersInString:@"?#"');
   expect(source).toContain('OmiRequestBaseURL');
-  expect(source).toContain('.workers.dev');
+  expect(source).toContain('OmiIsAllowedV5Host');
+  expect(policySource).toContain('.workers.dev');
   expect(source).toContain('environment[@"OMI_DEV_BACKEND"]');
   expect(source).toContain('http://127.0.0.1:8787');
   expect(source).toContain('NSURL URLWithString:@"http://127.0.0.1:4851"');
