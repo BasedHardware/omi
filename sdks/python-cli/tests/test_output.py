@@ -77,6 +77,47 @@ def test_pretty_mode_renders_no_results_for_empty_list(capsys) -> None:
     assert "no results" in captured.out
 
 
+@pytest.mark.parametrize(
+    "rows",
+    [
+        ["alpha", "beta"],
+        [17, 3.5],
+        [True, False],
+        [None],
+        ["alpha", 17, None],
+    ],
+)
+def test_pretty_mode_renders_scalar_and_mixed_arrays(capsys, rows) -> None:
+    """Pretty emit used to crash: str rows lacked .get, ints were not iterable."""
+    Renderer(no_color=True).emit(rows)
+    output = capsys.readouterr().out
+    for item in rows:
+        if item is None:
+            continue
+        if isinstance(item, bool):
+            assert ("✓" if item else "✗") in output
+        else:
+            assert str(item) in output
+
+
+def test_pretty_mode_renders_pydantic_rows(capsys) -> None:
+    class Fake:
+        def model_dump(self) -> dict:
+            return {"id": "row-1", "label": "ok"}
+
+    Renderer(no_color=True).emit([Fake()])
+    output = capsys.readouterr().out
+    assert "row-1" in output
+    assert "ok" in output
+
+
+def test_json_mode_preserves_scalar_array_shape(capsys) -> None:
+    Renderer(json_mode=True).emit(["alpha", 17])
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == ["alpha", 17]
+    assert captured.err == ""
+
+
 @pytest.mark.parametrize("first_row", [{}, {"id": "first"}])
 def test_pretty_table_includes_fields_from_later_rows(capsys, first_row) -> None:
     Renderer(no_color=True).emit([first_row, {"id": "second", "detail": "later-value"}])
