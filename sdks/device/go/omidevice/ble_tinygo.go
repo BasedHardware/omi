@@ -185,9 +185,15 @@ func readCodec(ctx context.Context, deviceID string) (CodecID, error) {
 	return CodecID(buf[0]), nil
 }
 
+type connectAdapter interface {
+	Scan(func(*bluetooth.Adapter, bluetooth.ScanResult)) error
+	StopScan() error
+	Connect(bluetooth.Address, bluetooth.ConnectionParams) (bluetooth.Device, error)
+}
+
 // connect finds deviceID via a short scan then Connects (matches tinygo examples;
 // CoreBluetooth identifiers are not always classic MAC strings).
-func connect(ctx context.Context, adapter *bluetooth.Adapter, deviceID string) (bluetooth.Device, error) {
+func connect(ctx context.Context, adapter connectAdapter, deviceID string) (bluetooth.Device, error) {
 	want := strings.ToLower(deviceID)
 	found := make(chan bluetooth.Address, 1)
 
@@ -196,14 +202,14 @@ func connect(ctx context.Context, adapter *bluetooth.Adapter, deviceID string) (
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- adapter.Scan(func(a *bluetooth.Adapter, res bluetooth.ScanResult) {
+		errCh <- adapter.Scan(func(_ *bluetooth.Adapter, res bluetooth.ScanResult) {
 			id := strings.ToLower(res.Address.String())
 			if id == want || strings.EqualFold(res.LocalName(), deviceID) {
 				select {
 				case found <- res.Address:
 				default:
 				}
-				_ = a.StopScan()
+				_ = adapter.StopScan()
 			}
 		})
 	}()
@@ -211,7 +217,6 @@ func connect(ctx context.Context, adapter *bluetooth.Adapter, deviceID string) (
 	var addr bluetooth.Address
 	select {
 	case addr = <-found:
-		// drain scan exit
 		select {
 		case <-errCh:
 		case <-time.After(2 * time.Second):
@@ -222,13 +227,18 @@ func connect(ctx context.Context, adapter *bluetooth.Adapter, deviceID string) (
 		case <-errCh:
 		case <-time.After(2 * time.Second):
 		}
-		// last resort: try Address.Set (works when ID is a parseable address)
 		addr.Set(deviceID)
 	case err := <-errCh:
 		if err != nil {
 			return bluetooth.Device{}, fmt.Errorf("omidevice: scan for connect: %w", err)
 		}
-		return bluetooth.Device{}, fmt.Errorf("omidevice: device %q not found", deviceID)
+		// Scan can return before this select runs even after the callback
+		// queued a match and called StopScan. Prefer the pending address.
+		select {
+		case addr = <-found:
+		default:
+			return bluetooth.Device{}, fmt.Errorf("omidevice: device %q not found", deviceID)
+		}
 	}
 
 	dev, err := adapter.Connect(addr, bluetooth.ConnectionParams{})
