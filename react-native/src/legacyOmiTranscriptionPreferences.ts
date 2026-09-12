@@ -1,8 +1,6 @@
 import type {OmiBackend} from './omiNativeTypes';
 import {visibleDisplayText} from './desktopReadClient';
 
-const MAX_VOCABULARY = 1000;
-
 class TranscriptionPreferencesError extends Error {
   constructor() {
     super('Omi transcription preferences are malformed');
@@ -17,7 +15,7 @@ function object(value: unknown): Record<string, unknown> {
 }
 
 function vocabulary(value: unknown): string[] {
-  if (!Array.isArray(value) || value.length > MAX_VOCABULARY) {
+  if (!Array.isArray(value)) {
     throw new TranscriptionPreferencesError();
   }
   const words: string[] = [];

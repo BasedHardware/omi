@@ -22,6 +22,21 @@ test('parses GET transcription preferences without Flutter false defaults', () =
   });
 });
 
+test('does not omit GET transcription preferences when vocabulary exceeds 1000', () => {
+  const vocabulary = Array.from({length: 1001}, (_, index) => `word-${index}`);
+  expect(
+    parseOmiTranscriptionPreferences(
+      JSON.stringify({
+        vocabulary,
+        single_language_mode: true,
+      }),
+    ),
+  ).toEqual({
+    singleLanguageMode: true,
+    vocabulary,
+  });
+});
+
 test('fails closed for malformed GET transcription preferences', () => {
   expect(() => parseOmiTranscriptionPreferences(JSON.stringify([]))).toThrow();
   expect(() =>
