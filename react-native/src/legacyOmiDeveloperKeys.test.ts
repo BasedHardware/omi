@@ -177,6 +177,34 @@ test('keeps GET developer keys when id or key_prefix exceeds 256', () => {
   ]);
 });
 
+test('keeps GET developer keys when key_prefix or a scope exceeds 10000', () => {
+  const keyPrefix = 'p'.repeat(10001);
+  const scope = 's'.repeat(10001);
+  expect(
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {id: 'key-prefix', name: 'Wide', key_prefix: keyPrefix},
+        {
+          id: 'key-scope',
+          name: 'Scoped',
+          key_prefix: 'omi_sk_cd',
+          scopes: [scope],
+        },
+        {id: 'key-neighbor', name: 'Cursor', key_prefix: 'omi_mcp_ef'},
+      ]),
+    ),
+  ).toEqual([
+    {id: 'key-prefix', name: 'Wide', keyPrefix: keyPrefix},
+    {
+      id: 'key-scope',
+      name: 'Scoped',
+      keyPrefix: 'omi_sk_cd',
+      scopes: [scope],
+    },
+    {id: 'key-neighbor', name: 'Cursor', keyPrefix: 'omi_mcp_ef'},
+  ]);
+});
+
 test('keeps GET developer keys when a name exceeds 10000', () => {
   const name = 'L'.repeat(10001);
   expect(

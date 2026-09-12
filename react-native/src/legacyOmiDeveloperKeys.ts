@@ -60,7 +60,7 @@ function optionalScopes(value: unknown): string[] | undefined {
   }
   const scopes: string[] = [];
   for (const raw of value) {
-    const scope = visibleDisplayText(text(raw, 10000));
+    const scope = visibleDisplayText(text(raw, 1_000_000));
     if (scope === '') {
       continue;
     }
@@ -87,7 +87,7 @@ export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
     if (name === '') {
       continue;
     }
-    const keyPrefix = visibleDisplayText(text(row.key_prefix, 10000));
+    const keyPrefix = visibleDisplayText(text(row.key_prefix, 1_000_000));
     const created = createdAtMs(row.created_at);
     const scopes = optionalScopes(row.scopes);
     keys.push({
