@@ -52,7 +52,7 @@ export function parseOmiTaskIntegrations(body: string): OmiTaskIntegration[] {
   const defaultApp =
     record.default_app === undefined || record.default_app === null
       ? ''
-      : visibleDisplayText(text(record.default_app, 256));
+      : visibleDisplayText(text(record.default_app, 10000));
   const items: OmiTaskIntegration[] = [];
   for (const rawKey of keys) {
     const key = visibleDisplayText(text(rawKey, 256));

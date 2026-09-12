@@ -109,6 +109,19 @@ test('keeps GET task integrations when more than 32 keys', () => {
   ).toEqual([{key: 'clickup', name: 'ClickUp', isDefault: false}]);
 });
 
+test('keeps GET task integrations when default_app exceeds 256', () => {
+  expect(
+    parseOmiTaskIntegrations(
+      JSON.stringify({
+        integrations: {
+          clickup: {connected: true},
+        },
+        default_app: 'x'.repeat(257),
+      }),
+    ),
+  ).toEqual([{key: 'clickup', name: 'ClickUp', isDefault: false}]);
+});
+
 test('fails closed for malformed GET task integrations', () => {
   expect(() => parseOmiTaskIntegrations(JSON.stringify([]))).toThrow();
   expect(() =>
