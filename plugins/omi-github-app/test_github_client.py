@@ -79,6 +79,71 @@ class GitHubClientTests(unittest.TestCase):
         ), patch.object(github_client, "print"):
             self.assertEqual(client.list_user_repos("token"), [])
 
+    def test_get_repo_labels_follows_next_page(self):
+        client = github_client.GitHubClient()
+        page1 = [{"name": "bug"}, {"name": "enhancement"}]
+        page2 = [{"name": "paid-bounty"}]
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            side_effect=[
+                FakeResponse(page1, links={"next": {"url": "page-2"}}),
+                FakeResponse(page2),
+            ],
+        ) as get:
+            names = client.get_repo_labels("token", "owner/app")
+
+        self.assertEqual(names, ["bug", "enhancement", "paid-bounty"])
+        self.assertEqual(get.call_count, 2)
+        self.assertEqual(
+            get.call_args_list[0].kwargs["params"], {"per_page": 100, "page": 1}
+        )
+        self.assertEqual(
+            get.call_args_list[1].kwargs["params"], {"per_page": 100, "page": 2}
+        )
+        self.assertIn("/repos/owner/app/labels", get.call_args_list[0].args[0])
+
+    def test_get_repo_labels_with_details_follows_next_page(self):
+        client = github_client.GitHubClient()
+        page1 = [{"name": "bug", "color": "d73a4a", "description": "a bug"}]
+        page2 = [{"name": "docs", "color": "0075ca"}]
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            side_effect=[
+                FakeResponse(page1, links={"next": {"url": "page-2"}}),
+                FakeResponse(page2),
+            ],
+        ):
+            details = client.get_repo_labels_with_details("token", "owner/app")
+
+        self.assertEqual(
+            details,
+            [
+                {"name": "bug", "color": "d73a4a", "description": "a bug"},
+                {"name": "docs", "color": "0075ca", "description": ""},
+            ],
+        )
+
+    def test_get_repo_labels_discards_partial_results_on_later_page_error(self):
+        client = github_client.GitHubClient()
+        pages = [
+            FakeResponse([{"name": "bug"}], links={"next": {"url": "page-2"}}),
+            FakeResponse([], status_code=500),
+        ]
+
+        with patch.object(github_client.requests, "get", side_effect=pages), patch.object(
+            github_client, "print"
+        ):
+            self.assertEqual(client.get_repo_labels("token", "owner/app"), [])
+
+        with patch.object(github_client.requests, "get", side_effect=pages), patch.object(
+            github_client, "print"
+        ):
+            self.assertEqual(client.get_repo_labels_with_details("token", "owner/app"), [])
+
 
 if __name__ == "__main__":
     unittest.main()

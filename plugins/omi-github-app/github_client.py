@@ -123,28 +123,46 @@ class GitHubClient:
             print(f"❌ Error listing repos: {e}")
             return []
     
+    def _fetch_all_repo_labels(self, access_token: str, repo_full_name: str) -> List[Dict]:
+        """Return every label JSON object, following GitHub `next` pages.
+
+        A non-200 on any page discards partial results, matching
+        :meth:`list_user_repos`.
+        """
+        labels: List[Dict] = []
+        page = 1
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/vnd.github.v3+json",
+        }
+
+        while True:
+            response = requests.get(
+                f"{self.api_base}/repos/{repo_full_name}/labels",
+                headers=headers,
+                params={"per_page": 100, "page": page},
+            )
+
+            if response.status_code != 200:
+                print(f"⚠️  Could not fetch labels: {response.status_code}")
+                return []
+
+            labels.extend(response.json())
+
+            if "next" not in response.links:
+                break
+
+            page += 1
+
+        return labels
+
     def get_repo_labels(self, access_token: str, repo_full_name: str) -> List[str]:
         """
         Fetch all labels from a repository.
         Returns list of label names.
         """
         try:
-            response = requests.get(
-                f"{self.api_base}/repos/{repo_full_name}/labels",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/vnd.github.v3+json"
-                },
-                params={"per_page": 100}
-            )
-            
-            if response.status_code == 200:
-                labels = response.json()
-                return [label["name"] for label in labels]
-            else:
-                print(f"⚠️  Could not fetch labels: {response.status_code}")
-                return []
-                
+            return [label["name"] for label in self._fetch_all_repo_labels(access_token, repo_full_name)]
         except Exception as e:
             print(f"⚠️  Error fetching labels: {e}")
             return []
@@ -352,29 +370,14 @@ class GitHubClient:
         Returns list of label dicts with name, color, description.
         """
         try:
-            response = requests.get(
-                f"{self.api_base}/repos/{repo_full_name}/labels",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/vnd.github.v3+json"
-                },
-                params={"per_page": 100}
-            )
-
-            if response.status_code == 200:
-                labels = response.json()
-                return [
-                    {
-                        "name": label["name"],
-                        "color": label["color"],
-                        "description": label.get("description", "")
-                    }
-                    for label in labels
-                ]
-            else:
-                print(f"⚠️  Could not fetch labels: {response.status_code}")
-                return []
-
+            return [
+                {
+                    "name": label["name"],
+                    "color": label["color"],
+                    "description": label.get("description", ""),
+                }
+                for label in self._fetch_all_repo_labels(access_token, repo_full_name)
+            ]
         except Exception as e:
             print(f"⚠️  Error fetching labels: {e}")
             return []
