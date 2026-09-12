@@ -118,53 +118,17 @@ export async function scanForDevices(timeoutMs = 5000): Promise<ScannedDevice[]>
 }
 
 /**
- * Connect to device, subscribe to Omi audio notifications.
- * Returns a handle that disconnects and unsubscribes.
+ * Subscribe to Omi audio on an already-acquired peripheral.
+ * Setup failures release listeners and disconnect the peripheral.
  */
-export async function connectAndListen(
+export async function listenOnConnectedPeripheral(
+  peripheral: any,
   deviceId: string,
   onPacket: (u8: Uint8Array) => void
 ): Promise<{ disconnect(): Promise<void> }> {
-  const noble = await loadNoble();
-  await ensurePoweredOn(noble);
-
-  let peripheral: any;
-  if (typeof noble.connectAsync === 'function') {
-    peripheral = await noble.connectAsync(deviceId);
-  } else {
-    throw new Error('noble.connectAsync unavailable');
-  }
-
-  // Some bindings return already-connected peripheral; ensure connected.
-  if (peripheral.state !== 'connected' && typeof peripheral.connectAsync === 'function') {
-    await peripheral.connectAsync();
-  }
-
-  const wantService = asUuid(OMI_SERVICE_UUID);
-  const wantChar = asUuid(AUDIO_DATA_UUID);
-
-  let characteristics: any[] = [];
-  if (typeof peripheral.discoverSomeServicesAndCharacteristicsAsync === 'function') {
-    const found = await peripheral.discoverSomeServicesAndCharacteristicsAsync(
-      [wantService],
-      [wantChar]
-    );
-    characteristics = found.characteristics ?? [];
-  } else {
-    const found = await peripheral.discoverAllServicesAndCharacteristicsAsync();
-    characteristics = found.characteristics ?? [];
-  }
-
-  const audioChar =
-    characteristics.find((c) => asUuid(String(c.uuid)) === wantChar) ??
-    characteristics.find((c) => asUuid(String(c.uuid)).includes(wantChar.slice(0, 8)));
-
-  if (!audioChar) {
-    await peripheral.disconnectAsync?.();
-    throw new Error(
-      `Audio characteristic ${AUDIO_DATA_UUID} not found on ${deviceId} (service ${OMI_SERVICE_UUID})`
-    );
-  }
+  let audioChar: any;
+  let subscriptionAttempted = false;
+  let cleanupPromise: Promise<void> | undefined;
 
   const onData = (data: ArrayBufferView | ArrayBuffer | number[]) => {
     const u8 =
@@ -177,27 +141,77 @@ export async function connectAndListen(
             : new Uint8Array(data);
     onPacket(u8);
   };
-  audioChar.on?.('data', onData);
-  await audioChar.subscribeAsync();
 
-  let closed = false;
-  return {
-    async disconnect() {
-      if (closed) return;
-      closed = true;
+  const disconnect = (): Promise<void> => {
+    cleanupPromise ??= (async () => {
       try {
-        audioChar.removeListener?.('data', onData);
-        await audioChar.unsubscribeAsync?.();
+        audioChar?.removeListener?.('data', onData);
+        if (subscriptionAttempted) await audioChar?.unsubscribeAsync?.();
       } catch {
-        /* ignore */
+        // Disconnection must still run if the subscription is already gone.
       }
       try {
         await peripheral.disconnectAsync?.();
       } catch {
-        /* ignore */
+        // Cleanup must not replace the error that caused setup to fail.
       }
-    },
+    })();
+    return cleanupPromise;
   };
+
+  try {
+    if (peripheral.state !== 'connected' && typeof peripheral.connectAsync === 'function') {
+      await peripheral.connectAsync();
+    }
+
+    const wantChar = asUuid(AUDIO_DATA_UUID);
+    let characteristics: any[] = [];
+    if (typeof peripheral.discoverSomeServicesAndCharacteristicsAsync === 'function') {
+      const found = await peripheral.discoverSomeServicesAndCharacteristicsAsync(
+        [asUuid(OMI_SERVICE_UUID)],
+        [wantChar]
+      );
+      characteristics = found.characteristics ?? [];
+    } else {
+      const found = await peripheral.discoverAllServicesAndCharacteristicsAsync();
+      characteristics = found.characteristics ?? [];
+    }
+
+    audioChar =
+      characteristics.find((c) => asUuid(String(c.uuid)) === wantChar) ??
+      characteristics.find((c) => asUuid(String(c.uuid)).includes(wantChar.slice(0, 8)));
+    if (!audioChar) {
+      throw new Error(
+        `Audio characteristic ${AUDIO_DATA_UUID} not found on ${deviceId} (service ${OMI_SERVICE_UUID})`
+      );
+    }
+
+    audioChar.on?.('data', onData);
+    subscriptionAttempted = true;
+    await audioChar.subscribeAsync();
+    return { disconnect };
+  } catch (error) {
+    await disconnect();
+    throw error;
+  }
+}
+
+/**
+ * Connect to device, subscribe to Omi audio notifications.
+ * Returns a handle that disconnects and unsubscribes.
+ */
+export async function connectAndListen(
+  deviceId: string,
+  onPacket: (u8: Uint8Array) => void
+): Promise<{ disconnect(): Promise<void> }> {
+  const noble = await loadNoble();
+  await ensurePoweredOn(noble);
+
+  if (typeof noble.connectAsync !== 'function') {
+    throw new Error('noble.connectAsync unavailable');
+  }
+  const peripheral = await noble.connectAsync(deviceId);
+  return listenOnConnectedPeripheral(peripheral, deviceId, onPacket);
 }
 
 /** Exposed for tests / fail-fast import check. */
