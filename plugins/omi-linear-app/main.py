@@ -151,8 +151,11 @@ def linear_graphql_request(
             return {"error": f"API error: {response.status_code}"}
         
         result = response.json()
-        if "errors" in result:
-            return {"error": result["errors"][0].get("message", "GraphQL error")}
+        errors = result.get("errors")
+        if errors:
+            if isinstance(errors, list) and errors and isinstance(errors[0], dict):
+                return {"error": errors[0].get("message", "GraphQL error")}
+            return {"error": "GraphQL error"}
         
         return result.get("data", {})
     except requests.RequestException as e:
