@@ -82,6 +82,21 @@ test("completed device rows whose providerResult cannot parse as Listen speech c
       ],
     }).records[0]?.record.structured,
   ).toEqual({ title: "hi", overview: "hi" });
+  expect(() =>
+    parseConversationReadSnapshot({
+      revision: 1,
+      records: [
+        row({
+          excerpt: "",
+          locked: false,
+          provider_result: {
+            durationSeconds: 1,
+            segments: [{ text: "\t", start: 0, end: 1 }],
+          },
+        }),
+      ],
+    }),
+  ).toThrow("conversation_snapshot_invalid");
 });
 
 test("keeps queued and failed recordings visible and never publishes an unfinished provider result", () => {

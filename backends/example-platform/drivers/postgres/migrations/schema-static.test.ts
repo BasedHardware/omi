@@ -1341,5 +1341,11 @@ describe("static PostgreSQL schema contract", () => {
     );
     expect(readableListenSql).not.toContain("jsonb_typeof(t.provider_result->'segments')='array'");
     expect(readableListenSql).toContain("REVOKE ALL ON FUNCTION omi_memory.listen_provider_result_readable(jsonb) FROM PUBLIC");
+    const trimEmptyListenSql = migrationSql.find((migration) => migration.version === 67)!.sql;
+    expect(trimEmptyListenSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.listen_provider_result_readable");
+    expect(trimEmptyListenSql).toContain("btrim(v_text,v_ws)=''");
+    expect(trimEmptyListenSql).not.toContain("OR btrim(v_text)='' OR");
+    expect(trimEmptyListenSql).toContain("v_chars>1000000 OR v_bytes>1000000");
+    expect(trimEmptyListenSql).toContain("REVOKE ALL ON FUNCTION omi_memory.listen_provider_result_readable(jsonb) FROM PUBLIC");
   });
 });
