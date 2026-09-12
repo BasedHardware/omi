@@ -1352,5 +1352,12 @@ describe("static PostgreSQL schema contract", () => {
     expect(utf16ListenSql).toContain("octet_length(convert_to(v_text,'UTF16BE'))>3000");
     expect(utf16ListenSql).not.toContain("OR length(v_text)>1500 OR");
     expect(utf16ListenSql).toContain("REVOKE ALL ON FUNCTION omi_memory.listen_provider_result_readable(jsonb) FROM PUBLIC");
+    const utf16CodepointListenSql = migrationSql.find((migration) => migration.version === 69)!.sql;
+    expect(utf16CodepointListenSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.listen_provider_result_readable");
+    expect(utf16CodepointListenSql).toContain("ascii(substr(v_text,v_j,1))>65535");
+    expect(utf16CodepointListenSql).toContain("THEN 2 ELSE 1 END");
+    expect(utf16CodepointListenSql).toContain("v_units>1500");
+    expect(utf16CodepointListenSql).not.toContain("convert_to");
+    expect(utf16CodepointListenSql).toContain("REVOKE ALL ON FUNCTION omi_memory.listen_provider_result_readable(jsonb) FROM PUBLIC");
   });
 });
