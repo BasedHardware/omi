@@ -14,6 +14,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def _redact(text: Optional[str], token: str) -> str:
+    """Remove the access token from git stderr before it reaches logs or tool responses."""
+    if not text:
+        return ""
+    return text.replace(token, "***") if token else text
+
+
 def run_agentic_claude_on_repo(
     repo_url: str,
     feature_description: str,
@@ -54,7 +61,7 @@ def run_agentic_claude_on_repo(
             if clone_result.returncode != 0:
                 return {
                     'success': False,
-                    'message': f'Failed to clone repo: {clone_result.stderr}'
+                    'message': f'Failed to clone repo: {_redact(clone_result.stderr, github_token)}'
                 }
 
             logger.info(f"Cloned successfully, creating branch {branch_name}")
@@ -279,7 +286,7 @@ Start by exploring the repository structure."""
             if push_result.returncode != 0:
                 return {
                     'success': False,
-                    'message': f'Failed to push: {push_result.stderr}'
+                    'message': f'Failed to push: {_redact(push_result.stderr, github_token)}'
                 }
 
             return {

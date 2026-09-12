@@ -23,6 +23,27 @@ def load():
     return module
 
 
+def load_agentic():
+    """Load claude_code_agentic with the anthropic import boundary stubbed."""
+    anthropic = types.ModuleType("anthropic")
+    anthropic.Anthropic = Mock
+    original = sys.modules.get("anthropic")
+    sys.modules["anthropic"] = anthropic
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "claude_code_agentic_under_test",
+            Path(__file__).with_name("claude_code_agentic.py"),
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    finally:
+        if original is None:
+            sys.modules.pop("anthropic", None)
+        else:
+            sys.modules["anthropic"] = original
+    return module
+
+
 class Completed:
     def __init__(self, returncode=0, stdout="", stderr=""):
         self.returncode = returncode
@@ -83,6 +104,36 @@ class TokenRedactionTests(unittest.TestCase):
         self.assertEqual(redact("no secret here", "tok"), "no secret here")
         self.assertEqual(redact("tok tok", "tok"), "*** ***")
         self.assertEqual(redact("anything", ""), "anything")
+
+
+class AgenticTokenRedactionTests(unittest.TestCase):
+    """Same leak exists in the agentic variant's clone/push error paths."""
+
+    def setUp(self):
+        self.module = load_agentic()
+
+    def test_agentic_clone_failure_redacts_token(self):
+        with patch.object(
+            self.module.subprocess, "run",
+            return_value=Completed(
+                returncode=128,
+                stderr="fatal: could not read 'https://ghp_SECRET123@github.com/o/r.git'",
+            ),
+        ):
+            result = self.module.run_agentic_claude_on_repo(
+                repo_url="https://github.com/o/r.git",
+                feature_description="add a button",
+                branch_name="b1",
+                github_token="ghp_SECRET123",
+                anthropic_key="sk-ant",
+            )
+        self.assertFalse(result["success"])
+        self.assertNotIn("ghp_SECRET123", result["message"])
+        self.assertIn("***", result["message"])
+
+    def test_agentic_redact_helper(self):
+        redact = self.module._redact
+        self.assertEqual(redact("fatal: https://tok@x", "tok"), "fatal: https://***@x")
 
 
 if __name__ == "__main__":
