@@ -22,3 +22,4 @@
 * [`quickstart.ur.md`](quickstart.ur.md) — omi-cli تیز آغاز گائیڈ اردو میں (Urdu Quickstart).
 * [`quickstart.ro.md`](quickstart.ro.md) — Ghid de Pornire Rapidă omi-cli în Română (Romanian Quickstart).
 * [`quickstart.sr.md`](quickstart.sr.md) — omi-cli Водич за брзи почетак на Српском (Serbian Quickstart).
+* [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นอย่างรวดเร็ว omi-cli ภาษาไทย (Thai Quickstart).
