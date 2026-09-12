@@ -1643,7 +1643,8 @@ class PushToTalkManager: ObservableObject {
             try await TranscriptionService.batchTranscribe(
               audioData: audioData,
               language: language,
-              contextKeywords: self.currentContextSnapshot?.keywords ?? []
+              contextKeywords: self.currentContextSnapshot?.keywords ?? [],
+              surface: self.batchBudgetSurface
             )
           }
           guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
@@ -1655,7 +1656,8 @@ class PushToTalkManager: ObservableObject {
             batchResult = try await TranscriptionService.batchTranscribe(
               audioData: audioData,
               language: "en",
-              contextKeywords: self.currentContextSnapshot?.keywords ?? []
+              contextKeywords: self.currentContextSnapshot?.keywords ?? [],
+              surface: self.batchBudgetSurface
             )
             guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
           }
@@ -2469,7 +2471,8 @@ class PushToTalkManager: ObservableObject {
         let batchResult = try await TranscriptionService.batchTranscribe(
           audioData: audio,
           language: language,
-          contextKeywords: self.currentContextSnapshot?.keywords ?? []
+          contextKeywords: self.currentContextSnapshot?.keywords ?? [],
+          surface: self.batchBudgetSurface
         )
         guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
         self.activeTracer?.end("batch_transcribe")
@@ -3454,14 +3457,29 @@ class PushToTalkManager: ObservableObject {
   /// pre-recorded model with the on-screen vocabulary, then the on-device
   /// model. Each switch is recorded, so a backend that keeps losing turns to
   /// the fallback is visible.
+  /// How a batch turn should be metered against the shared voice allowance.
+  ///
+  /// A turn that has already latched as typing is a dictation whatever route
+  /// ends up transcribing it — the warm-wait and omni fallbacks reuse their
+  /// transcript for the paste rather than transcribing twice, so they are the
+  /// dictation's only backend call. The latch moves one way and only from a
+  /// probe the user has already spoken into, so a turn that has not claimed yet
+  /// pays the full rate: this under-claims the discount, never over-claims it.
+  private var batchBudgetSurface: TranscriptionService.BudgetSurface {
+    voiceTypeSession.claimsTurn ? .voiceTyping : .ptt
+  }
+
   private func makeDictationTranscriber(
     keywords: [String], language: String, allowNetwork: Bool
   ) -> DictationTranscriber {
     DictationTranscriber(
       isOnline: allowNetwork && NetworkReachability.shared.isOnline,
       backend: { audio in
+        // Declared as typing so the backend meters this turn at the dictation
+        // rate: a paragraph spoken into a text field must not cost the same
+        // slice of the allowance as a paragraph asked of the assistant.
         try await TranscriptionService.batchTranscribe(
-          audioData: audio, language: language, contextKeywords: keywords
+          audioData: audio, language: language, contextKeywords: keywords, surface: .voiceTyping
         ).transcript
       },
       onDevice: { audio in
@@ -4130,7 +4148,8 @@ extension PushToTalkManager {
         let language = AssistantSettings.shared.effectiveTranscriptionLanguage
         let batchResult = try await TranscriptionService.batchTranscribe(
           audioData: audio, language: language,
-          contextKeywords: self.currentContextSnapshot?.keywords ?? [])
+          contextKeywords: self.currentContextSnapshot?.keywords ?? [],
+          surface: self.batchBudgetSurface)
         guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
         let provider = batchResult.provider ?? "unknown"
         let model = batchResult.model ?? "unknown"

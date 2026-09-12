@@ -590,6 +590,13 @@ class TestDeepgramPrerecordedFromBytesPCM:
         assert detected_lang == 'es'  # normalized from es-ES
 
 
+def _pcm_transcription(text, language, provider='parakeet', model='parakeet'):
+    """Build the ``transcribe_pcm_bytes`` return shape for a router-level stub."""
+    from utils.chat import PcmTranscription
+
+    return PcmTranscription(text, language, provider, model)
+
+
 # ---------------------------------------------------------------------------
 # transcribe_pcm_bytes: language selection and error propagation
 # ---------------------------------------------------------------------------
@@ -605,18 +612,18 @@ class TestTranscribePcmBytes:
 
     @patch('utils.chat.postprocess_words')
     @patch('utils.chat.prerecorded_from_bytes')
-    @patch('utils.chat.get_prerecorded_service')
-    def test_language_model_forwarded(self, mock_get_model, mock_dg, mock_postprocess):
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_language_model_forwarded(self, mock_chain, mock_dg, mock_postprocess):
         """stt_language and stt_model should be passed to deepgram_prerecorded_from_bytes."""
         from utils.chat import transcribe_pcm_bytes
 
-        mock_get_model.return_value = ('parakeet', 'es', 'parakeet')
+        mock_chain.return_value = (('parakeet', 'es', 'parakeet'),)
         mock_dg.return_value = [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': 'Hola'}]
         mock_seg = MagicMock()
         mock_seg.text = 'Hola'
         mock_postprocess.return_value = [mock_seg]
 
-        text, lang = transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='es')
+        text, lang, _provider, _model = transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='es')
 
         mock_dg.assert_called_once()
         call_kwargs = mock_dg.call_args[1]
@@ -626,13 +633,13 @@ class TestTranscribePcmBytes:
         assert text == 'Hola'
 
     @patch('utils.chat.prerecorded_from_bytes')
-    @patch('utils.chat.get_prerecorded_service')
-    def test_runtime_error_propagates(self, mock_get_model, mock_dg):
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_runtime_error_propagates(self, mock_chain, mock_dg):
         """Provider failures should become safe typed upstream failures."""
         from utils.chat import transcribe_pcm_bytes
         from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
 
-        mock_get_model.return_value = ('parakeet', 'en', 'parakeet')
+        mock_chain.return_value = (('parakeet', 'en', 'parakeet'),)
         mock_dg.side_effect = RuntimeError('Deepgram failed')
 
         with pytest.raises(TranscriptionFailure) as exc_info:
@@ -641,13 +648,13 @@ class TestTranscribePcmBytes:
         assert 'Deepgram failed' not in str(exc_info.value)
 
     @patch('utils.chat.prerecorded_from_bytes')
-    @patch('utils.chat.get_prerecorded_service')
-    def test_empty_words_after_audio_is_unexpected(self, mock_get_model, mock_dg):
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_empty_words_after_audio_is_unexpected(self, mock_chain, mock_dg):
         """Non-silent audio with an empty provider result is retryable failure."""
         from utils.chat import transcribe_pcm_bytes
         from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
 
-        mock_get_model.return_value = ('parakeet', 'en', 'parakeet')
+        mock_chain.return_value = (('parakeet', 'en', 'parakeet'),)
         mock_dg.return_value = []
 
         with pytest.raises(TranscriptionFailure) as exc_info:
@@ -657,24 +664,24 @@ class TestTranscribePcmBytes:
 
     @patch('utils.chat.linear16_pcm_is_silent', return_value=True)
     @patch('utils.chat.prerecorded_from_bytes')
-    @patch('utils.chat.get_prerecorded_service')
-    def test_linear16_vad_silence_is_expected_silence(self, mock_get_model, mock_dg, mock_vad):
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_linear16_vad_silence_is_expected_silence(self, mock_chain, mock_dg, mock_vad):
         """Only a successful local VAD silence decision gets the 200 empty path."""
         from utils.chat import transcribe_pcm_bytes
 
-        mock_get_model.return_value = ('parakeet', 'en', 'parakeet')
-        assert transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='en') == (None, 'en')
+        mock_chain.return_value = (('parakeet', 'en', 'parakeet'),)
+        assert transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='en') == (None, 'en', 'parakeet', 'parakeet')
         mock_dg.assert_not_called()
         mock_vad.assert_called_once_with(b'\x00' * 100, sample_rate=16000, channels=1)
 
     @patch('utils.chat.prerecorded_from_bytes', side_effect=RuntimeError('encoded provider rejected input'))
-    @patch('utils.chat.get_prerecorded_service')
-    def test_non_linear16_zero_bytes_are_not_claimed_as_silence(self, mock_get_model, mock_dg):
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_non_linear16_zero_bytes_are_not_claimed_as_silence(self, mock_chain, mock_dg):
         """Encoded bytes need provider validation; zero bytes are not PCM silence."""
         from utils.chat import transcribe_pcm_bytes
         from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
 
-        mock_get_model.return_value = ('parakeet', 'en', 'parakeet')
+        mock_chain.return_value = (('parakeet', 'en', 'parakeet'),)
         with pytest.raises(TranscriptionFailure) as exc_info:
             transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='en', encoding='opus')
 
@@ -682,13 +689,13 @@ class TestTranscribePcmBytes:
         mock_dg.assert_called_once()
 
     @patch('utils.chat.linear16_pcm_is_silent')
-    @patch('utils.chat.get_prerecorded_service')
-    def test_linear16_vad_decode_failure_is_invalid_input(self, mock_get_model, mock_vad):
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_linear16_vad_decode_failure_is_invalid_input(self, mock_chain, mock_vad):
         from utils.chat import transcribe_pcm_bytes
         from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
         from utils.stt.vad import VADAudioDecodeError
 
-        mock_get_model.return_value = ('parakeet', 'en', 'parakeet')
+        mock_chain.return_value = (('parakeet', 'en', 'parakeet'),)
         mock_vad.side_effect = VADAudioDecodeError('bad PCM')
 
         with pytest.raises(TranscriptionFailure) as exc_info:
@@ -698,19 +705,19 @@ class TestTranscribePcmBytes:
 
     @patch('utils.chat.postprocess_words')
     @patch('utils.chat.prerecorded_from_bytes')
-    @patch('utils.chat.get_prerecorded_service')
-    def test_multi_language_returns_detected_language(self, mock_get_model, mock_dg, mock_postprocess):
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_multi_language_returns_detected_language(self, mock_chain, mock_dg, mock_postprocess):
         """Multi-language mode should return the Deepgram-detected language, not hardcoded 'en'."""
         from utils.chat import transcribe_pcm_bytes
 
-        mock_get_model.return_value = ('parakeet', 'multi', 'parakeet')
+        mock_chain.return_value = (('parakeet', 'multi', 'parakeet'),)
         # return_language=True path returns (words, detected_lang)
         mock_dg.return_value = ([{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': 'Bonjour'}], 'fr')
         mock_seg = MagicMock()
         mock_seg.text = 'Bonjour'
         mock_postprocess.return_value = [mock_seg]
 
-        text, lang = transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='multi')
+        text, lang, _provider, _model = transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='multi')
 
         assert text == 'Bonjour'
         assert lang == 'fr'
@@ -720,18 +727,18 @@ class TestTranscribePcmBytes:
 
     @patch('utils.chat.postprocess_words')
     @patch('utils.chat.prerecorded_from_bytes')
-    @patch('utils.chat.get_prerecorded_service')
-    def test_chinese_language_uses_nova3(self, mock_get_model, mock_dg, mock_postprocess):
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_chinese_language_uses_nova3(self, mock_chain, mock_dg, mock_postprocess):
         """Chinese should use nova-3 model."""
         from utils.chat import transcribe_pcm_bytes
 
-        mock_get_model.return_value = ('parakeet', 'zh', 'parakeet')
+        mock_chain.return_value = (('parakeet', 'zh', 'parakeet'),)
         mock_dg.return_value = [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': '你好'}]
         mock_seg = MagicMock()
         mock_seg.text = '你好'
         mock_postprocess.return_value = [mock_seg]
 
-        text, lang = transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='zh')
+        text, lang, _provider, _model = transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='zh')
 
         call_kwargs = mock_dg.call_args[1]
         assert call_kwargs['model'] == 'parakeet'
@@ -739,13 +746,13 @@ class TestTranscribePcmBytes:
 
     @patch('utils.chat.postprocess_words')
     @patch('utils.chat.prerecorded_from_bytes')
-    @patch('utils.chat.get_prerecorded_service')
-    def test_whitespace_only_transcript_is_unexpected_empty(self, mock_get_model, mock_dg, mock_postprocess):
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_whitespace_only_transcript_is_unexpected_empty(self, mock_chain, mock_dg, mock_postprocess):
         """Whitespace-only provider output is not reclassified as silence."""
         from utils.chat import transcribe_pcm_bytes
         from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
 
-        mock_get_model.return_value = ('parakeet', 'en', 'parakeet')
+        mock_chain.return_value = (('parakeet', 'en', 'parakeet'),)
         mock_dg.return_value = [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': ' '}]
         mock_seg = MagicMock()
         mock_seg.text = '   '
@@ -756,19 +763,132 @@ class TestTranscribePcmBytes:
         assert exc_info.value.outcome == TranscriptionOutcome.EMPTY_UNEXPECTED
 
     @patch('utils.chat.prerecorded_from_bytes')
-    @patch('utils.chat.get_prerecorded_service')
-    def test_postprocess_empty_is_unexpected(self, mock_get_model, mock_dg):
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_postprocess_empty_is_unexpected(self, mock_chain, mock_dg):
         """An empty postprocessed result stays a retryable provider failure."""
         from utils.chat import transcribe_pcm_bytes
         from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
 
-        mock_get_model.return_value = ('parakeet', 'en', 'parakeet')
+        mock_chain.return_value = (('parakeet', 'en', 'parakeet'),)
         mock_dg.return_value = [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': 'hello'}]
         # postprocess_words is imported at module level; mock it
         with patch('utils.chat.postprocess_words', return_value=[]):
             with pytest.raises(TranscriptionFailure) as exc_info:
                 transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='en')
         assert exc_info.value.outcome == TranscriptionOutcome.EMPTY_UNEXPECTED
+
+    # -----------------------------------------------------------------
+    # Chain failover: cloud Parakeet, then Velma-2, then (in the client)
+    # the on-device model.
+    # -----------------------------------------------------------------
+
+    _CHAIN = (('parakeet', 'en', 'parakeet'), ('modulate', 'en', 'velma-2'))
+
+    @patch('utils.chat.postprocess_words')
+    @patch('utils.chat.prerecorded_from_bytes')
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_upstream_error_fails_over_to_the_next_provider(self, mock_chain, mock_stt, mock_postprocess):
+        """A provider that errors hands the audio on instead of ending the turn."""
+        from utils.chat import transcribe_pcm_bytes
+
+        mock_chain.return_value = self._CHAIN
+        mock_stt.side_effect = [
+            RuntimeError('parakeet unreachable'),
+            [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': 'Hello'}],
+        ]
+        mock_seg = MagicMock()
+        mock_seg.text = 'Hello'
+        mock_postprocess.return_value = [mock_seg]
+
+        result = transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='en')
+
+        assert result.text == 'Hello'
+        # The response must name the provider whose words these are.
+        assert result.provider == 'modulate'
+        assert result.model == 'velma-2'
+        assert [call[1]['service'] for call in mock_stt.call_args_list] == ['parakeet', 'modulate']
+
+    @patch('utils.chat.postprocess_words')
+    @patch('utils.chat.prerecorded_from_bytes')
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_empty_result_on_speech_fails_over(self, mock_chain, mock_stt, mock_postprocess):
+        """Speech-positive audio the first provider heard nothing in still gets a second ear."""
+        from utils.chat import transcribe_pcm_bytes
+
+        mock_chain.return_value = self._CHAIN
+        mock_stt.side_effect = [[], [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': 'Hello'}]]
+        mock_seg = MagicMock()
+        mock_seg.text = 'Hello'
+        mock_postprocess.return_value = [mock_seg]
+
+        result = transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='en')
+
+        assert (result.text, result.provider) == ('Hello', 'modulate')
+
+    @patch('utils.chat.prerecorded_from_bytes')
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_invalid_input_does_not_spend_a_second_provider(self, mock_chain, mock_stt):
+        """Audio no provider could transcribe ends the request on the first attempt."""
+        from utils.chat import transcribe_pcm_bytes
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
+
+        mock_chain.return_value = self._CHAIN
+        mock_stt.side_effect = ValueError('not decodable audio')
+
+        with pytest.raises(TranscriptionFailure) as exc_info:
+            transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='en')
+
+        assert exc_info.value.outcome == TranscriptionOutcome.INVALID_INPUT
+        assert mock_stt.call_count == 1
+
+    @patch('utils.chat.prerecorded_from_bytes')
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_the_last_providers_failure_is_the_one_raised(self, mock_chain, mock_stt):
+        """With the chain exhausted the client is told, and falls back on-device."""
+        from utils.chat import transcribe_pcm_bytes
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
+
+        mock_chain.return_value = self._CHAIN
+        mock_stt.side_effect = [RuntimeError('parakeet unreachable'), RuntimeError('velma unreachable')]
+
+        with pytest.raises(TranscriptionFailure) as exc_info:
+            transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='en')
+
+        assert exc_info.value.outcome == TranscriptionOutcome.UPSTREAM_ERROR
+        assert exc_info.value.provider == 'modulate'
+        assert mock_stt.call_count == 2
+
+    @patch('utils.chat.record_fallback')
+    @patch('utils.chat.postprocess_words')
+    @patch('utils.chat.prerecorded_from_bytes')
+    @patch('utils.chat.get_prerecorded_service_chain')
+    def test_a_failover_is_recorded(self, mock_chain, mock_stt, mock_postprocess, mock_record):
+        """The switch is observable; a silent failover hides a provider outage."""
+        from utils.chat import transcribe_pcm_bytes
+
+        mock_chain.return_value = self._CHAIN
+        mock_stt.side_effect = [
+            RuntimeError('parakeet unreachable'),
+            [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': 'Hello'}],
+        ]
+        mock_seg = MagicMock()
+        mock_seg.text = 'Hello'
+        mock_postprocess.return_value = [mock_seg]
+
+        transcribe_pcm_bytes(b'\x01' * 100, 'test-uid', language='en')
+
+        mock_record.assert_called_once()
+        recorded = mock_record.call_args[1]
+        assert recorded['from_mode'] == 'parakeet'
+        assert recorded['to_mode'] == 'modulate'
+        assert recorded['outcome'] == 'degraded'
+        # Bounded vocabulary: an unlisted component or reason is silently
+        # bucketed to 'other', which would make the switch unreadable.
+        from utils.observability.fallback import ALLOWED_COMPONENTS, ALLOWED_REASONS
+
+        assert recorded['component'] in ALLOWED_COMPONENTS
+        assert recorded['reason'] in ALLOWED_REASONS
+        assert recorded['reason'] == 'provider_5xx'
 
 
 # ---------------------------------------------------------------------------
@@ -977,7 +1097,7 @@ class TestVoiceMessageTranscribeEndpoint:
     @patch('utils.chat.transcribe_pcm_bytes')
     def test_octet_stream_returns_transcript(self, mock_transcribe):
         """application/octet-stream should dispatch to PCM path and return JSON."""
-        mock_transcribe.return_value = ('Hello world', 'en')
+        mock_transcribe.return_value = _pcm_transcription('Hello world', 'en')
         client, module, saved = _make_chat_client()
         try:
             resp = client.post(
@@ -1069,7 +1189,7 @@ class TestVoiceMessageTranscribeEndpoint:
     @patch('utils.chat.transcribe_pcm_bytes')
     def test_octet_stream_no_speech_empty_transcript(self, mock_transcribe):
         """No speech detected should return 200 with empty transcript (not 422)."""
-        mock_transcribe.return_value = (None, 'en')
+        mock_transcribe.return_value = _pcm_transcription(None, 'en')
         client, module, saved = _make_chat_client()
         try:
             resp = client.post(
@@ -1819,7 +1939,7 @@ class TestVoiceMessageTranscribeBoundary:
     @patch('utils.chat.transcribe_pcm_bytes')
     def test_octet_stream_accepts_boundary_sample_rate_8000(self, mock_transcribe):
         """sample_rate=8000 (lower bound) should be accepted."""
-        mock_transcribe.return_value = ('hello', 'en')
+        mock_transcribe.return_value = _pcm_transcription('hello', 'en')
         client, module, saved = _make_chat_client()
         try:
             resp = client.post(
@@ -1834,7 +1954,7 @@ class TestVoiceMessageTranscribeBoundary:
     @patch('utils.chat.transcribe_pcm_bytes')
     def test_octet_stream_accepts_boundary_sample_rate_48000(self, mock_transcribe):
         """sample_rate=48000 (upper bound) should be accepted."""
-        mock_transcribe.return_value = ('hello', 'en')
+        mock_transcribe.return_value = _pcm_transcription('hello', 'en')
         client, module, saved = _make_chat_client()
         try:
             resp = client.post(
@@ -1849,7 +1969,7 @@ class TestVoiceMessageTranscribeBoundary:
     @patch('utils.chat.transcribe_pcm_bytes')
     def test_octet_stream_accepts_channels_2(self, mock_transcribe):
         """channels=2 (upper bound) should be accepted."""
-        mock_transcribe.return_value = ('hello', 'en')
+        mock_transcribe.return_value = _pcm_transcription('hello', 'en')
         client, module, saved = _make_chat_client()
         try:
             resp = client.post(
@@ -1888,7 +2008,7 @@ class TestDurationBudgetEnforcement:
     @patch('utils.chat.transcribe_pcm_bytes')
     def test_octet_stream_budget_consumed_with_correct_duration(self, mock_transcribe):
         """Successful octet-stream request should consume budget with correct duration_ms."""
-        mock_transcribe.return_value = ('hello', 'en')
+        mock_transcribe.return_value = _pcm_transcription('hello', 'en')
         client, module, saved = _make_chat_client()
         try:
             with patch.object(module, 'try_consume_budget', return_value=(True, 1000, 7199000)) as mock_budget:
@@ -1903,6 +2023,43 @@ class TestDurationBudgetEnforcement:
                 call_args = mock_budget.call_args[0]
                 assert call_args[0] == 'test-uid'
                 assert call_args[1] == 1000  # 32000 / (16000*1*2) * 1000
+        finally:
+            _cleanup_chat_client(saved)
+
+    @patch('utils.chat.transcribe_pcm_bytes')
+    def test_voice_typing_is_charged_a_tenth_of_its_audio(self, mock_transcribe):
+        """The dictation surface spends the shared allowance ten times slower."""
+        mock_transcribe.return_value = _pcm_transcription('hello', 'en')
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'try_consume_budget', return_value=(True, 100, 7199900)) as mock_budget:
+                resp = client.post(
+                    '/v2/voice-message/transcribe?surface=voice_typing',
+                    # One second of 16 kHz mono audio, as above.
+                    content=b'\x00' * 32000,
+                    headers={'Content-Type': 'application/octet-stream'},
+                )
+                assert resp.status_code == 200
+                # The turn still transcribes the whole second; only the charge shrinks.
+                assert mock_transcribe.call_args[0][0] == b'\x00' * 32000
+                assert mock_budget.call_args[0][1] == 100
+        finally:
+            _cleanup_chat_client(saved)
+
+    @patch('utils.chat.transcribe_pcm_bytes')
+    def test_an_unknown_surface_pays_the_full_rate(self, mock_transcribe):
+        """A client cannot invent a cheaper surface; only the known one discounts."""
+        mock_transcribe.return_value = _pcm_transcription('hello', 'en')
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'try_consume_budget', return_value=(True, 1000, 7199000)) as mock_budget:
+                resp = client.post(
+                    '/v2/voice-message/transcribe?surface=free',
+                    content=b'\x00' * 32000,
+                    headers={'Content-Type': 'application/octet-stream'},
+                )
+                assert resp.status_code == 200
+                assert mock_budget.call_args[0][1] == 1000
         finally:
             _cleanup_chat_client(saved)
 
@@ -2024,7 +2181,7 @@ class TestNoPerSessionCap:
     @patch('utils.chat.transcribe_pcm_bytes')
     def test_octet_stream_over_120s_accepted(self, mock_transcribe):
         """Octet-stream with >120s audio should be accepted if budget allows."""
-        mock_transcribe.return_value = ('long message', 'en')
+        mock_transcribe.return_value = _pcm_transcription('long message', 'en')
         client, module, saved = _make_chat_client()
         try:
             # 300s at 16kHz mono = 9,600,000 bytes → well over 120s

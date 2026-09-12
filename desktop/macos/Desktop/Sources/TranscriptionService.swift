@@ -742,13 +742,27 @@ enum WebSocketConnectionAttempt {
 // MARK: - Batch (Pre-Recorded) Transcription (PTT only)
 
 extension TranscriptionService {
+  /// Which surface a batch turn came from.
+  ///
+  /// The backend meters the shared voice-message allowance by surface: a
+  /// dictation is charged a tenth of its audio, a spoken question the whole of
+  /// it. Typing runs in minutes-long stretches where a question runs in
+  /// seconds, so charging them alike would spend a user's day of allowance on
+  /// dictation alone. Declaring it wrong only mis-bills the allowance — it
+  /// grants no capability, and every abuse ceiling is enforced regardless.
+  enum BudgetSurface: String {
+    case ptt
+    case voiceTyping = "voice_typing"
+  }
+
   /// Transcribe a complete audio buffer using the Python backend `/v2/voice-message/transcribe`.
   /// Returns the transcript plus the provider/model selected by the backend.
   static func batchTranscribe(
     audioData: Data,
     language: String = "en",
     apiKey: String? = nil,
-    contextKeywords: [String] = []
+    contextKeywords: [String] = [],
+    surface: BudgetSurface = .ptt
   ) async throws -> BatchTranscriptionResult {
     // Always use Firebase auth + Python backend
     let authService = await MainActor.run { AuthService.shared }
@@ -764,6 +778,7 @@ extension TranscriptionService {
       URLQueryItem(name: "sample_rate", value: "16000"),
       URLQueryItem(name: "encoding", value: "linear16"),
       URLQueryItem(name: "channels", value: "1"),
+      URLQueryItem(name: "surface", value: surface.rawValue),
     ]
     if !sanitizedKeywords.isEmpty {
       queryItems.append(URLQueryItem(name: "keywords", value: sanitizedKeywords.joined(separator: ",")))
@@ -793,7 +808,8 @@ extension TranscriptionService {
     request.httpBody = audioData
 
     log(
-      "TranscriptionService: Batch transcribing \(audioData.count) bytes via Python backend, contextKeywords=\(sanitizedKeywords.count)"
+      "TranscriptionService: Batch transcribing \(audioData.count) bytes via Python backend, "
+        + "surface=\(surface.rawValue), contextKeywords=\(sanitizedKeywords.count)"
     )
 
     let (data, response) = try await URLSession.shared.data(for: request)

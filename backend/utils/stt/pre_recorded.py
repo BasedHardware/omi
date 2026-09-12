@@ -79,46 +79,80 @@ class PrerecordedSTTProvider(ABC):
     ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]: ...
 
 
-def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Optional[str], str]:
-    """Route pre-recorded STT based on STT_PRERECORDED_MODEL env var.
+# Velma's batch API accepts a language code only for the languages it claims;
+# everything else has to go through its own detection (the 'multi' selection at
+# the bottom of the chain).
+_MODULATE_PRERECORDED_LANGUAGES = frozenset({'en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'ja', 'ko', 'zh'})
 
-    Iterates comma-separated models (same pattern as STT_SERVICE_MODELS for streaming).
-    First model allowed by the central serving policy that supports the language
-    wins. Disabled-provider tokens are ignored, then policy-owned defaults provide
-    the serving fallback. A language no capability map claims falls through to Velma
-    rather than failing selection.
+
+def _prerecorded_candidates(models: Sequence[str], base_lang: str) -> List[Tuple[str, Optional[str], str]]:
+    """Every provider one model preference can serve this language with, in order."""
+    candidates: List[Tuple[str, Optional[str], str]] = []
+    seen: set[str] = set()
+
+    def admit(candidate: Tuple[str, Optional[str], str]) -> None:
+        if candidate[0] in seen:
+            return
+        seen.add(candidate[0])
+        candidates.append(candidate)
+
+    for m in models:
+        m = m.strip()
+        if m == 'modulate-velma-2' and provider_is_enabled(MODULATE_PROVIDER, STTServingSurface.PRERECORDED):
+            if base_lang in _MODULATE_PRERECORDED_LANGUAGES:
+                admit((PrerecordedSTTService.MODULATE, base_lang, 'velma-2'))
+            continue
+        if m == 'parakeet' and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.PRERECORDED):
+            if parakeet_supports_language(STTServingSurface.PRERECORDED, base_lang):
+                admit((PrerecordedSTTService.PARAKEET, base_lang, 'parakeet'))
+    return candidates
+
+
+def get_prerecorded_service_chain(language: Optional[str] = 'en') -> Tuple[Tuple[str, Optional[str], str], ...]:
+    """Order every pre-recorded provider that can serve one request's language.
+
+    Selection and failover read the same list so they cannot disagree. The head
+    is the provider a request starts on — what ``get_prerecorded_service``
+    returns and what every existing caller uses. The tail is what a caller able
+    to spend a second attempt hands the audio to when the head fails
+    recoverably (``transcribe_pcm_bytes``, the route behind voice typing):
+    the deployment already declares an order (``parakeet,modulate-velma-2``),
+    and honoring only its first entry turned a recoverable provider error into a
+    user-visible failure while a configured, capable provider sat unused.
+
+    Same routing rules as before: comma-separated ``STT_PRERECORDED_MODEL``
+    tokens (the pattern ``STT_SERVICE_MODELS`` uses for streaming), filtered by
+    the central serving policy and by language capability. Disabled-provider
+    tokens are ignored, then policy-owned defaults provide the serving fallback.
+    A language no capability map claims falls through to Velma rather than
+    failing selection.
     """
     base_lang = normalized_stt_language(language) or 'en'
 
-    def select(models: Sequence[str]) -> Optional[Tuple[str, Optional[str], str]]:
-        for m in models:
-            m = m.strip()
-            if m == 'modulate-velma-2' and provider_is_enabled(MODULATE_PROVIDER, STTServingSurface.PRERECORDED):
-                if base_lang in {'en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'ja', 'ko', 'zh'}:
-                    return PrerecordedSTTService.MODULATE, base_lang, 'velma-2'
-                continue
-            if m == 'parakeet' and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.PRERECORDED):
-                if parakeet_supports_language(STTServingSurface.PRERECORDED, base_lang):
-                    return PrerecordedSTTService.PARAKEET, base_lang, 'parakeet'
-        return None
-
-    selected = select(get_prerecorded_models())
-    if selected is not None:
-        return selected
-
     # A disabled/unknown preference must not become a provider call. Use the
     # deployment-validated, policy-owned defaults instead.
-    selected = select(default_models_for_surface(STTServingSurface.PRERECORDED))
-    if selected is not None:
-        return selected
+    for models in (get_prerecorded_models(), default_models_for_surface(STTServingSurface.PRERECORDED)):
+        chain = _prerecorded_candidates(models, base_lang)
+        if chain:
+            return tuple(chain)
 
     # Velma's batch API detects the language itself — we never send a code — so it can
     # serve languages the capability maps omit, and values that are not codes at all.
     if provider_is_enabled(MODULATE_PROVIDER, STTServingSurface.PRERECORDED):
-        return PrerecordedSTTService.MODULATE, 'multi', 'velma-2'
+        return ((PrerecordedSTTService.MODULATE, 'multi', 'velma-2'),)
 
     # Only reachable with every pre-recorded provider disabled, which no retry resolves.
     raise TranscriptionFailure(TranscriptionOutcome.CONFIG_ERROR, retryable=False)
+
+
+def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Optional[str], str]:
+    """Route pre-recorded STT based on STT_PRERECORDED_MODEL env var.
+
+    The provider a request starts on: the head of
+    ``get_prerecorded_service_chain``. A caller that can afford a second attempt
+    walks the whole chain instead of calling this.
+    """
+    return get_prerecorded_service_chain(language)[0]
 
 
 # Lazily initialized because constructing the SDK client at import makes every
@@ -1020,9 +1054,19 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
         )
 
 
-def get_prerecorded_provider(language: Optional[str] = 'en') -> PrerecordedSTTProvider:
-    """Construct exactly the language-aware provider selected for telemetry."""
-    service, _provider_language, model = get_prerecorded_service(language)
+def get_prerecorded_provider(
+    language: Optional[str] = 'en', *, service: Optional[str] = None
+) -> PrerecordedSTTProvider:
+    """Construct exactly the language-aware provider selected for telemetry.
+
+    ``service`` pins the provider to one the caller already took from
+    ``get_prerecorded_service_chain``, so a failover attempt reaches the provider
+    that attempt is for rather than re-selecting the chain head and retrying the
+    provider that just failed.
+    """
+    model: Optional[str] = None
+    if service is None:
+        service, _provider_language, model = get_prerecorded_service(language)
     if service == PrerecordedSTTService.MODULATE:
         return ModulatePrerecordedProvider()
     if service == PrerecordedSTTService.PARAKEET:
@@ -1069,9 +1113,13 @@ def prerecorded_from_bytes(
     model: str = "nova-3",
     return_language: bool = False,
     keywords: Optional[Sequence[str]] = None,
+    service: Optional[str] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
-    """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
-    provider = get_prerecorded_provider(language)
+    """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL.
+
+    ``service`` pins one already-selected provider for a failover attempt.
+    """
+    provider = get_prerecorded_provider(language, service=service)
     return provider.transcribe_bytes(
         audio_bytes,
         sample_rate=sample_rate,

@@ -42,6 +42,10 @@ ALLOWED_REASONS = frozenset(
         'byok',
         'malformed_doc',
         'capacity_full',
+        # A provider answered but returned no words for audio the VAD called
+        # speech-positive — distinct from a 5xx, and the reason the pre-recorded
+        # chain hands the same audio to the next provider.
+        'empty_result',
         'allocation_rejected',
         'private_tool_output_in_context',
         'not_authorized',

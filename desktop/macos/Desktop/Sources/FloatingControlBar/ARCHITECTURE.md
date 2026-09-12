@@ -61,9 +61,11 @@ The fuller recovery, insertion, and notch contract lives in
   in `.finalizing` (the bar shows it thinking) until delivery lands, exactly as
   it does for a batch-transcribed question, and every path ends the turn.
   1. **Transcribe** (`DictationTranscriber`): the backend's pre-recorded
-     recognizer (`/v2/voice-message/transcribe`, `velma-2` first) with the
-     on-screen keywords as vocabulary, bounded to 12 s; on failure, timeout,
-     or an empty result, the on-device model. With no network only the
+     recognizer (`/v2/voice-message/transcribe`) with the on-screen keywords as
+     vocabulary, bounded to 12 s; on failure, timeout, or an empty result, the
+     on-device model. The backend answers that one call from its own chain —
+     cloud Parakeet, then Velma-2 on a recoverable failure — so the on-device
+     model is reached only once both cloud providers have been tried. With no network only the
      on-device model runs, and a route that latched offline at key-down stays
      offline even if a path comes back mid-hold. A route that already
      produced a backend transcript (omni STT, batch STT after a warm-wait)
