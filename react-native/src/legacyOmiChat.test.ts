@@ -25,6 +25,26 @@ test('old newest-first history reverses and advances only its offset cursor', ()
   expect(() => parseOmiHistory('{}', 0)).toThrow();
 });
 
+test('old chat history keeps GET timestamps with hour-only offsets Dart DateTime.tryParse accepts', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        ...message('hour-offset'),
+        created_at: '2026-09-07T01:02:03+00',
+      },
+      message('neighbor'),
+    ]),
+    0,
+  );
+  expect(page.messages.map(row => row.id)).toEqual([
+    'neighbor',
+    'hour-offset',
+  ]);
+  expect(page.messages.find(row => row.id === 'hour-offset')?.createdAt).toBe(
+    Date.parse('2026-09-07T01:02:03.000Z'),
+  );
+});
+
 test('old custom done frame decodes Unicode and actual message identity without claiming generation success', () => {
   const terminal = Buffer.from(JSON.stringify(message('server-id'))).toString(
     'base64',

@@ -13,6 +13,12 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function timestampMs(value: unknown): number {
+  return typeof value === 'string'
+    ? Date.parse(value.replace(/([+-]\d{2})$/, '$1:00'))
+    : NaN;
+}
+
 function parseOmiChatFiles(
   files: unknown,
   filesId: unknown,
@@ -46,8 +52,7 @@ function parseOmiChatFiles(
   }
   return files.map(raw => {
     const row = object(raw);
-    const createdAt =
-      typeof row.created_at === 'string' ? Date.parse(row.created_at) : NaN;
+    const createdAt = timestampMs(row.created_at);
     if (
       typeof row.id !== 'string' ||
       typeof row.name !== 'string' ||
@@ -787,8 +792,7 @@ function parseOmiChatFallbackText(row: Record<string, unknown>): string {
 
 export function parseOmiMessage(value: unknown): ChatMessage {
   const row = object(value);
-  const createdAt =
-    typeof row.created_at === 'string' ? Date.parse(row.created_at) : NaN;
+  const createdAt = timestampMs(row.created_at);
   if (
     typeof row.id !== 'string' ||
     row.id.length === 0 ||
