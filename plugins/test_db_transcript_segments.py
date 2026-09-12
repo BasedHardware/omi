@@ -23,7 +23,7 @@ class _FakeRedisClient:
         value = self.store.get(key)
         return value.encode() if isinstance(value, str) else value
 
-    def set(self, key, value):
+    def set(self, key, value, ex=None):
         self.store[key] = value
 
     def expire(self, key, seconds):
