@@ -40,7 +40,7 @@ function createdAtMs(value: unknown): number | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
-  const raw = visibleDisplayText(text(value, 10000));
+  const raw = visibleDisplayText(text(value, 1_000_000));
   if (raw === '') {
     return undefined;
   }
