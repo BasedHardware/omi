@@ -112,6 +112,22 @@ test('names neighboring GET changelogs when one announcement change cannot proje
   ).toEqual([]);
 });
 
+test('keeps GET app changelogs when the announcement list exceeds 10', () => {
+  const rows = Array.from({length: 11}, (_, index) => ({
+    id: `ann-${index}`,
+    type: 'changelog',
+    app_version: '1.2.0',
+    content: {changes: [{title: `Change ${index}`, description: ''}]},
+  }));
+  expect(parseOmiAppChangelogs(JSON.stringify(rows))).toEqual(
+    Array.from({length: 5}, (_, index) => ({
+      key: `ann-${index}:0`,
+      title: "What's New in 1.2.0",
+      copy: `Change ${index}`,
+    })),
+  );
+});
+
 test('keeps GET app changelog changes when more than 32', () => {
   const changes = Array.from({length: 33}, (_, index) => ({
     title: `Change ${index}`,

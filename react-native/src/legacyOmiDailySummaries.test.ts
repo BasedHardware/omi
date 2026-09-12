@@ -179,6 +179,18 @@ test('keeps GET daily summaries when headline or overview exceeds 10000', () => 
   ]);
 });
 
+test('keeps GET daily summaries when the summaries array exceeds 10', () => {
+  const summaries = Array.from({length: 11}, (_, index) => ({
+    id: `sum-${index}`,
+    headline: `Headline ${index}`,
+  }));
+  expect(parseOmiDailySummaries(JSON.stringify({summaries}))).toEqual([
+    {id: 'sum-0', date: '', headline: 'Headline 0'},
+    {id: 'sum-1', date: '', headline: 'Headline 1'},
+    {id: 'sum-2', date: '', headline: 'Headline 2'},
+  ]);
+});
+
 test('fails closed for malformed GET daily summaries', () => {
   expect(() => parseOmiDailySummaries(JSON.stringify([]))).toThrow();
   expect(() =>

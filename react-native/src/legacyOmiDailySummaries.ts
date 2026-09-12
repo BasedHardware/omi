@@ -23,8 +23,8 @@ function text(value: unknown, limit: number): string {
   return value;
 }
 
-function array(value: unknown, limit: number): unknown[] {
-  if (!Array.isArray(value) || value.length > limit) {
+function array(value: unknown): unknown[] {
+  if (!Array.isArray(value)) {
     throw new DailySummaryError();
   }
   return value;
@@ -100,7 +100,7 @@ export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
   const summaries =
     row.summaries === undefined || row.summaries === null
       ? []
-      : array(row.summaries, 10);
+      : array(row.summaries);
   const items: OmiDailySummary[] = [];
   const seen = new Set<string>();
   for (const raw of summaries) {

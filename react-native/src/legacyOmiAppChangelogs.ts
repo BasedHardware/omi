@@ -2,7 +2,6 @@ import type {OmiBackend} from './omiNativeTypes';
 import {visibleDisplayText} from './desktopReadClient';
 
 const MAX_APP_CHANGELOGS = 5;
-const MAX_APP_CHANGELOG_PARSE = 10;
 
 class AppChangelogError extends Error {
   constructor() {
@@ -24,8 +23,8 @@ function text(value: unknown, limit: number): string {
   return value;
 }
 
-function array(value: unknown, limit: number): unknown[] {
-  if (!Array.isArray(value) || value.length > limit) {
+function array(value: unknown): unknown[] {
+  if (!Array.isArray(value)) {
     throw new AppChangelogError();
   }
   return value;
@@ -53,7 +52,7 @@ export function appChangelogRowCopy(
 }
 
 export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
-  const rows = array(JSON.parse(body), MAX_APP_CHANGELOG_PARSE);
+  const rows = array(JSON.parse(body));
   const items: OmiAppChangelogRow[] = [];
   const seen = new Set<string>();
   let named = 0;
