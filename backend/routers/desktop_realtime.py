@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Header, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, StrictInt, StrictStr
 
@@ -26,6 +26,12 @@ _OPENAI_CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/client_secrets"
 _GEMINI_AUTH_TOKENS_URL = "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
 _OPENAI_REALTIME_MODEL = "gpt-realtime-2"
 _GEMINI_LIVE_MODEL = "models/gemini-3.1-flash-live-preview"
+_GPT_LIVE_MODEL = "gpt-live-1"
+_ISSUED_MODELS = {
+    "openai": _OPENAI_REALTIME_MODEL,
+    "gemini": _GEMINI_LIVE_MODEL,
+    "gpt_live": _GPT_LIVE_MODEL,
+}
 _SESSION_START_WINDOW_MIN = 2
 _SESSION_MAX_MIN = 30
 
@@ -145,10 +151,30 @@ async def _persist_session(uid: str, token: str, provider: str, model: str, expi
 
 
 @router.post("/v2/realtime/session")
-async def mint_session(request: MintRequest, uid: str = Depends(get_current_user_uid)) -> JSONResponse:
+async def mint_session(
+    request: MintRequest,
+    uid: str = Depends(get_current_user_uid),
+    authorization: str | None = Header(default=None),
+) -> JSONResponse:
     # The hub only ever mints Omi's own provider token, so a user's BYOK key
     # (Anthropic, for desktop chat) must not exempt them from the cap here.
     await run_blocking(db_executor, enforce_desktop_chat_quota, uid, "desktop", byok_exempt=False)
+    if request.provider == "gpt_live":
+        # Managed GPT-Live sessions authenticate to /v1/omni/relay with the caller's
+        # Omi (Firebase) auth token; the relay injects OPENAI_API_KEY server-side.
+        # Mint only gates entitlement and confirms the platform key exists.
+        key = os.getenv("OPENAI_API_KEY", "").strip()
+        if not key:
+            return _error(503, "provider_not_configured", "GPT Live is not configured", "OpenAI", retryable=True)
+        if not authorization or not authorization.startswith("Bearer "):
+            return _error(401, "provider_auth_failed", "missing auth token", "gpt_live")
+        token = authorization.split(" ", 1)[1].strip()
+        if not token:
+            return _error(401, "provider_auth_failed", "missing auth token", "gpt_live")
+        now = datetime.now(timezone.utc)
+        expires_at = (now + timedelta(minutes=_SESSION_MAX_MIN)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        await _persist_session(uid, token, "gpt_live", _GPT_LIVE_MODEL, expires_at)
+        return JSONResponse({"provider": "gpt_live", "token": token, "expires_at": expires_at})
     if request.provider == "openai":
         key = os.getenv("OPENAI_API_KEY", "").strip()
         if not key:
@@ -194,7 +220,7 @@ async def mint_session(request: MintRequest, uid: str = Depends(get_current_user
             )
         await _persist_session(uid, token, "gemini", _GEMINI_LIVE_MODEL, expires_at)
         return JSONResponse({"provider": "gemini", "token": token, "expires_at": expires_at})
-    return _error(400, "bad_provider", 'provider must be "openai" or "gemini"')
+    return _error(400, "bad_provider", 'provider must be "gpt_live", "openai", or "gemini"')
 
 
 REALTIME_HUB_TURN_QUOTA_SOURCE = 'desktop_realtime_turn'
@@ -270,7 +296,7 @@ def _usage_cost(report: UsageReport) -> float:
         output_text_tokens=report.output_text_tokens,
         output_audio_tokens=report.output_audio_tokens,
     )
-    issued_model = _OPENAI_REALTIME_MODEL if report.provider == 'openai' else _GEMINI_LIVE_MODEL
+    issued_model = _ISSUED_MODELS.get(report.provider, _GPT_LIVE_MODEL)
     return client_reported_cost_usd(report.provider, issued_model, turn)
 
 

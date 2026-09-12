@@ -6,7 +6,8 @@ import {
   withByokHeadersIfActive,
   isByokActiveCached,
   hasTranscriptionByokCached,
-  llmByokValidatedCached
+  llmByokValidatedCached,
+  openAiByokKeyCached
 } from './byokKeys'
 import type { ByokKeys, ByokProvider } from '../../../shared/byok'
 
@@ -104,5 +105,21 @@ describe('validated capability cache', () => {
 
     await loadCache(FULL, ['gemini'])
     expect(llmByokValidatedCached()).toBe(true)
+  })
+})
+
+describe('openAiByokKeyCached', () => {
+  beforeEach(async () => {
+    await loadCache({})
+  })
+
+  it('returns the mirrored OpenAI key for the GPT-Live direct path', async () => {
+    await loadCache({ openai: 'sk-user-openai' })
+    expect(openAiByokKeyCached()).toBe('sk-user-openai')
+  })
+
+  it('returns undefined when no OpenAI key is configured', async () => {
+    await loadCache({ anthropic: 'sk-a' })
+    expect(openAiByokKeyCached()).toBeUndefined()
   })
 })

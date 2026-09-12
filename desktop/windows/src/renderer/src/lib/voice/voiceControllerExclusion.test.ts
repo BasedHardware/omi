@@ -15,6 +15,7 @@ vi.mock('./tokenMint', () => ({
 vi.mock('./usageReport', () => ({ reportRealtimeUsage: vi.fn() }))
 vi.mock('./openaiSession', () => ({ startOpenAiSession: vi.fn() }))
 vi.mock('./geminiSession', () => ({ startGeminiSession: vi.fn() }))
+vi.mock('./gptLiveSession', () => ({ startGptLiveSession: vi.fn() }))
 // A single small chunk so speakText takes the direct synth→play path.
 vi.mock('./ttsChunker', () => ({ chunkTts: (t: string) => (t.trim() ? [t] : []) }))
 const { synthesizeTts } = vi.hoisted(() => ({ synthesizeTts: vi.fn() }))

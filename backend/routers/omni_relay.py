@@ -33,7 +33,10 @@ from utils.llm.realtime_usage import (
     realtime_turn_metadata,
 )
 from utils.observability.fallback import record_fallback
-from utils.other.endpoints import _verify_ws_auth  # type: ignore[reportPrivateUsage]  # shared WS auth helper, intentionally reused cross-module
+from utils.other.endpoints import (  # type: ignore[reportPrivateUsage]  # shared WS auth helpers, intentionally reused cross-module
+    _verify_ws_auth,
+    get_current_user_uid_from_ws_message,
+)
 import database.llm_usage as llm_usage_db
 import database.user_usage as user_usage_db
 import database.users as users_db
@@ -56,7 +59,7 @@ logger = logging.getLogger(__name__)
 #   2) Provider API keys stay server-side instead of shipping in the client.
 #
 # Protocol is provider-native and opaque to the relay — the desktop speaks raw
-# OpenAI Realtime / Gemini Live JSON; we just forward bytes both ways.
+# OpenAI Realtime / GPT-Live / Gemini Live JSON; we just forward bytes both ways.
 
 # Leftover AI Studio Live websocket. Vertex Live is not wired here; this is
 # not the $1k/day Flash text bill. See backend/docs/vertex-pt-flash.md.
@@ -65,7 +68,24 @@ GEMINI_URL = (
     "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key={key}"
 )
 OPENAI_URL = "wss://api.openai.com/v1/realtime?model={model}"
+GPT_LIVE_URL = "wss://api.openai.com/v1/live/sessions"
 OPENAI_DEFAULT_MODEL = DEFAULT_REALTIME_MODELS["openai"]
+GPT_LIVE_DEFAULT_MODEL = DEFAULT_REALTIME_MODELS["gpt_live"]
+
+# Hard cap on a single managed relay socket. Mint (`/v2/realtime/session`) advertises
+# `expires_at` at 30 minutes; the Firebase bearer we receive is not re-validated
+# after the upgrade and the upstream rides the long-lived platform key, so without
+# a server-side deadline a connected socket would keep buying provider time past
+# the advertised lifetime and past any credential/entitlement change. Every
+# provider's mint uses the same 30-minute window, so this applies to all lanes.
+OMNI_RELAY_MAX_SESSION_SECONDS = 30 * 60
+
+
+def _credential_provider(provider: str) -> str:
+    """BYOK / paywall credential family for a relay provider id."""
+    return "openai" if provider in {"openai", "gpt_live"} else provider
+
+
 # Decision 8 (2026-08-29): a push-to-talk turn is one chat question on every
 # plan. The relay is the voice shell only — the desktop client sends the
 # transcript through desktop chat, and THAT request debits the question
@@ -219,6 +239,12 @@ def _upstream(provider: str, model: str | None) -> tuple[tuple[str, dict[str, st
         # URL-encode the client-supplied model so it can't inject extra query params.
         url = OPENAI_URL.format(model=quote(model or "gpt-realtime-2", safe=""))
         return (url, {"Authorization": f"Bearer {key}"}), None
+    if provider == "gpt_live":
+        key = get_byok_key("openai") or os.getenv("OPENAI_API_KEY")
+        if not key:
+            return None, "no OpenAI key (BYOK or platform)"
+        # GPT-Live has no model query param; the client sends model in session.start.
+        return (GPT_LIVE_URL, {"Authorization": f"Bearer {key}"}), None
     return None, f"unsupported provider: {provider}"
 
 
@@ -230,20 +256,60 @@ async def omni_relay(websocket: WebSocket):
         await websocket.close(code=1013, reason=str(exc)[:120])
         return
 
-    # Manual auth (read the header directly so we control logging and avoid any
-    # WS header-DI surprises). Token first, then BYOK validate, then the gate.
+    # Manual auth. Clients that can set headers (macOS) authenticate on the
+    # upgrade Authorization header. Browser clients cannot set that header, so
+    # they authenticate in the first WS message exactly like /v4/web/listen:
+    # {"type": "auth", "token": "<Firebase ID token>"}. The token is NEVER read
+    # from the query string — WebSocket request targets (including query strings)
+    # are recorded by the default uvicorn access logger and ingress tooling, so
+    # a token there leaks to anyone with log access.
     authz = websocket.headers.get("authorization")
     byok_present = [p for p, h in BYOK_HEADERS.items() if websocket.headers.get(h)]
     logger.info(
-        f"omni relay connect: auth_present={bool(authz)} byok={byok_present} "
+        f"omni relay connect: auth_header={bool(authz)} byok={byok_present} "
         f"provider={websocket.query_params.get('provider')}"
     )
-    try:
-        uid = await run_blocking(critical_executor, _verify_ws_auth, cast(str, authz))
-    except WebSocketException as e:
-        logger.warning(f"omni relay auth rejected: code={e.code} reason={e.reason}")
-        await websocket.close(code=e.code, reason=e.reason or "unauthorized")
-        return
+
+    accepted = False
+    uid: str
+    if authz:
+        try:
+            uid = await run_blocking(critical_executor, _verify_ws_auth, authz)
+        except WebSocketException as e:
+            logger.warning(f"omni relay auth rejected: code={e.code} reason={e.reason}")
+            await websocket.close(code=e.code, reason=e.reason or "unauthorized")
+            return
+    else:
+        # Accept before reading the first frame; the relay pumps were not started
+        # yet, so nothing is forwarded ahead of authentication.
+        await websocket.accept()
+        accepted = True
+        try:
+            first_message = await asyncio.wait_for(websocket.receive(), timeout=5.0)
+        except asyncio.TimeoutError:
+            await websocket.close(code=1008, reason="Auth timeout")
+            return
+        except WebSocketDisconnect:
+            return
+        try:
+            uid = await get_current_user_uid_from_ws_message(cast(dict, first_message), websocket=websocket)
+        except WebSocketException as e:
+            logger.warning(f"omni relay first-message auth rejected: code={e.code} reason={e.reason}")
+            try:
+                await websocket.send_json({"type": "auth_response", "success": False})
+            except Exception:
+                pass
+            await websocket.close(code=e.code, reason=e.reason or "unauthorized")
+            return
+        except Exception as e:
+            logger.warning(f"omni relay first-message auth rejected: {type(e).__name__}")
+            try:
+                await websocket.send_json({"type": "auth_response", "success": False})
+            except Exception:
+                pass
+            await websocket.close(code=1008, reason="Invalid authorization token")
+            return
+        await websocket.send_json({"type": "auth_response", "success": True})
 
     # BYOK: validate forwarded keys (same as /v4/listen). Keys then resolve via get_byok_key.
     byok = extract_byok_from_websocket(websocket)
@@ -254,23 +320,32 @@ async def omni_relay(websocket: WebSocket):
         return
     set_validated_byok_keys(validated_byok, uid)
 
-    provider = websocket.query_params.get("provider", "gemini")
-    if provider not in {"gemini", "openai"}:
+    # GPT-Live is the default managed live path; gemini remains available.
+    provider = websocket.query_params.get("provider", "gpt_live")
+    if provider not in {"gemini", "openai", "gpt_live"}:
         await websocket.close(code=1011, reason=f"unsupported provider: {provider}"[:120])
         return
 
     # Same desktop gate as /v4/listen: Operator/Architect + BYOK pass; un-entitled
-    # desktop users past their trial are paywalled.
-    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop", required_byok_provider=provider):
+    # desktop users past their trial are paywalled. GPT-Live shares the OpenAI BYOK family.
+    if await run_blocking(
+        db_executor, is_trial_paywalled, uid, "desktop", required_byok_provider=_credential_provider(provider)
+    ):
         logger.info(f"omni relay paywalled uid={uid}")
         await websocket.close(code=1008, reason="trial_expired")
         return
 
-    await _relay_entitled(websocket, uid, provider, validated_byok)
+    await _relay_entitled(websocket, uid, provider, validated_byok, accepted=accepted)
 
 
-async def _relay_entitled(websocket: WebSocket, uid: str, provider: str, validated_byok: dict[str, str]) -> None:
-    """The relay past auth and the paywall: quota admission, then the pumps."""
+async def _relay_entitled(
+    websocket: WebSocket, uid: str, provider: str, validated_byok: dict[str, str], *, accepted: bool
+) -> None:
+    """The relay past auth and the paywall: quota admission, then the pumps.
+
+    ``accepted`` is True when the socket was already accepted to read the
+    first-message auth frame; ``_relay_session`` must not accept it twice.
+    """
 
     # Monthly free-tier chat quota: realtime turns count as questions, so they
     # must also be blocked past the cap. Exempt only when THIS session will
@@ -284,7 +359,8 @@ async def _relay_entitled(websocket: WebSocket, uid: str, provider: str, validat
         logger.warning("omni relay BYOK classification unavailable uid=%s: %s", uid, type(exc).__name__)
         await websocket.close(code=1008, reason="quota_unavailable")
         return
-    byok_serves_session = bool(validated_byok.get(provider)) and byok_enrolled
+    cred = _credential_provider(provider)
+    byok_serves_session = bool(validated_byok.get(cred)) and byok_enrolled
     if byok_enrolled and not byok_serves_session:
         record_fallback(
             component='realtime_hub',
@@ -326,13 +402,13 @@ async def _relay_entitled(websocket: WebSocket, uid: str, provider: str, validat
                 logger.info(f"omni relay session limit uid={uid}")
                 await websocket.close(code=1008, reason="session_limit")
                 return
-            await _relay_session(websocket, uid, provider, validated_byok, capped=True)
+            await _relay_session(websocket, uid, provider, validated_byok, capped=True, accepted=accepted)
             return
-    await _relay_session(websocket, uid, provider, validated_byok, capped=False)
+    await _relay_session(websocket, uid, provider, validated_byok, capped=False, accepted=accepted)
 
 
 async def _relay_session(
-    websocket: WebSocket, uid: str, provider: str, validated_byok: dict[str, str], *, capped: bool
+    websocket: WebSocket, uid: str, provider: str, validated_byok: dict[str, str], *, capped: bool, accepted: bool
 ) -> None:
     """An admitted relay session: provider connection, the two pumps, accounting and quota enforcement.
 
@@ -359,10 +435,15 @@ async def _relay_session(
         # selects — a validated key for this provider — not by enrollment. An
         # unenrolled user with a valid key still pays the provider directly, and
         # the quota policy above is a separate question from the payer.
-        payer = "byok" if validated_byok.get(provider) else "omi"
-        observer = RealtimeRelayObserver(
-            provider, model=(model or OPENAI_DEFAULT_MODEL) if provider == "openai" else model
-        )
+        cred = _credential_provider(provider)
+        payer = "byok" if validated_byok.get(cred) else "omi"
+        if provider == "openai":
+            observer_model = model or OPENAI_DEFAULT_MODEL
+        elif provider == "gpt_live":
+            observer_model = model or GPT_LIVE_DEFAULT_MODEL
+        else:
+            observer_model = model
+        observer = RealtimeRelayObserver(provider, model=observer_model)
 
         class QuotaStop(Exception):
             """Raised inside the pump when the session may no longer be served on Omi's key."""
@@ -440,7 +521,10 @@ async def _relay_session(
                 logger.warning("omni relay accounting flush failed provider=%s", provider)
 
         quota_stop_reason: str | None = None
-        await websocket.accept()
+        # First-message-auth clients already accepted the socket to read the auth
+        # frame; only the header-auth path accepts here.
+        if not accepted:
+            await websocket.accept()
         try:
             async with websockets.connect(
                 url, extra_headers=headers or None, max_size=None, ping_interval=20, ping_timeout=20
@@ -490,7 +574,19 @@ async def _relay_session(
                 }
                 done: set[asyncio.Task[None]] = set()
                 try:
-                    done, _pending = await asyncio.wait(pumps, return_when=asyncio.FIRST_COMPLETED)
+                    done, _pending = await asyncio.wait(
+                        pumps,
+                        timeout=OMNI_RELAY_MAX_SESSION_SECONDS,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if not done:
+                        # The advertised 30-minute lifetime elapsed with no pump
+                        # finishing. Authentication is only checked at the
+                        # upgrade and the upstream rides the platform key, so
+                        # close the managed socket here rather than let it keep
+                        # buying provider time past `expires_at`.
+                        logger.info(f"omni relay session lifetime reached uid={uid} provider={provider}")
+                        quota_stop_reason = "session_expired"
                 finally:
                     # This handler owns the pumps: whichever way it leaves —
                     # a pump finished, or the handler itself was cancelled

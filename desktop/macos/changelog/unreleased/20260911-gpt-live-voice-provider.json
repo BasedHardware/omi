@@ -1,0 +1,3 @@
+{
+  "change": "Switched the default realtime voice model to OpenAI GPT-Live, with Gemini Live kept as an automatic fallback"
+}

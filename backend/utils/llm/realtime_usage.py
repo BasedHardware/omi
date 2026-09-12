@@ -1,9 +1,9 @@
 """Realtime-voice usage: response lifecycle on the provider-native wire, and modality pricing.
 
-Two provider protocols reach Omi's realtime surfaces — OpenAI Realtime and
-Gemini Live. Both are opaque to the relay that carries them, so the only way to
-attribute a session's spend is to recognise the provider's own lifecycle and
-usage events in the frames flowing back to the client.
+Three provider protocols reach Omi's realtime surfaces — OpenAI Realtime,
+GPT-Live, and Gemini Live. All are opaque to the relay that carries them, so the
+only way to attribute a session's spend is to recognise the provider's own
+lifecycle and usage events in the frames flowing back to the client.
 
 OpenAI
     ``response.created`` opens a response (several may be open at once —
@@ -49,8 +49,9 @@ from typing import Any
 from llm_gateway.gateway.accounting import CacheStatus, PricedUsage, ProviderResponseMetadata, ProviderUsage
 
 OPENAI_REALTIME_PROVIDER = 'openai'
+GPT_LIVE_PROVIDER = 'gpt_live'
 GEMINI_LIVE_PROVIDER = 'gemini'
-REALTIME_PROVIDERS = frozenset({OPENAI_REALTIME_PROVIDER, GEMINI_LIVE_PROVIDER})
+REALTIME_PROVIDERS = frozenset({OPENAI_REALTIME_PROVIDER, GPT_LIVE_PROVIDER, GEMINI_LIVE_PROVIDER})
 
 MICRO_USD_PER_USD = 1_000_000
 TOKENS_PER_MILLION = 1_000_000
@@ -107,6 +108,22 @@ _OPENAI_GPT_REALTIME_2 = RealtimeRates(
     output_text=24_000_000,
     output_audio=64_000_000,
 )
+# GPT-Live-1 bills $0.05/minute of session duration (developers.openai.com/api/docs/models/gpt-live-1).
+# Hub /client-reported paths still send modality token splits; until OpenAI publishes
+# Live modality rates, price those splits with the same card as gpt-realtime-2 so
+# telemetry stays non-zero and comparable. Duration billing remains authoritative
+# on the OpenAI invoice.
+_OPENAI_GPT_LIVE_1 = RealtimeRates(
+    rate_card_id='openai.gpt-live-1.modality.2026-09-11',
+    input_text=4_000_000,
+    cached_text=400_000,
+    input_audio=32_000_000,
+    cached_audio=400_000,
+    input_image=5_000_000,
+    cached_image=500_000,
+    output_text=24_000_000,
+    output_audio=64_000_000,
+)
 _GEMINI_31_FLASH_LIVE = RealtimeRates(
     rate_card_id='gemini.gemini-3.1-flash-live-preview.modality.2026-09-01',
     input_text=750_000,
@@ -131,18 +148,22 @@ _GEMINI_25_NATIVE_AUDIO = RealtimeRates(
 )
 REALTIME_RATE_CARDS: dict[tuple[str, str], RealtimeRates] = {
     (OPENAI_REALTIME_PROVIDER, 'gpt-realtime-2'): _OPENAI_GPT_REALTIME_2,
+    (GPT_LIVE_PROVIDER, 'gpt-live-1'): _OPENAI_GPT_LIVE_1,
     (GEMINI_LIVE_PROVIDER, 'gemini-3.1-flash-live-preview'): _GEMINI_31_FLASH_LIVE,
     (GEMINI_LIVE_PROVIDER, 'gemini-2.5-flash-native-audio-preview-12-2025'): _GEMINI_25_NATIVE_AUDIO,
 }
 # The model each realtime surface serves when the caller names none
-# (`routers/desktop_realtime.py` _OPENAI_REALTIME_MODEL / _GEMINI_LIVE_MODEL).
+# (`routers/desktop_realtime.py` issued models per provider).
 DEFAULT_REALTIME_MODELS: dict[str, str] = {
     OPENAI_REALTIME_PROVIDER: 'gpt-realtime-2',
+    GPT_LIVE_PROVIDER: 'gpt-live-1',
     GEMINI_LIVE_PROVIDER: 'gemini-3.1-flash-live-preview',
 }
 REALTIME_COST_BASIS = 'realtime_modality_rates_cached_subset_discounted'
 
 _OPENAI_PARSE_MARKERS = (b'response.done', b'response.created')
+_GPT_LIVE_PARSE_MARKERS = (b'session.closed', b'session.interrupted', b'session.started', b'response.event')
+_GPT_LIVE_ACTIVITY_MARKERS = (b'session.output_audio.delta', b'session.output_transcript.delta')
 _GEMINI_PARSE_MARKERS = (b'turnComplete', b'usageMetadata', b'interrupted')
 # Model activity is recognised by substring only: audio frames are the bulk of
 # a session and are never JSON-parsed. A tool call is activity too — it opens
@@ -358,11 +379,11 @@ def client_reported_cost_usd(provider: str, model: str | None, turn: RealtimeTur
 
     That path predates model-keyed tables and must keep producing a number for
     the ``llm_usage`` telemetry it feeds, so an unrecognised model prices on the
-    provider's default realtime model; an unknown provider prices as Gemini,
-    exactly as the endpoint always did.
+    provider's default realtime model; an unknown provider prices as GPT-Live,
+    the default managed live path.
     """
     if provider not in REALTIME_PROVIDERS:
-        provider = GEMINI_LIVE_PROVIDER
+        provider = GPT_LIVE_PROVIDER
     rates = realtime_rates_for(provider, model) or realtime_rates_for(provider, DEFAULT_REALTIME_MODELS[provider])
     assert rates is not None  # every provider has a default table
     return realtime_turn_cost_usd(turn, rates)
@@ -456,6 +477,15 @@ class RealtimeRelayObserver:
         self._gemini_in_flight = False
         self._gemini_interrupted = False
         self._gemini_completed: RealtimeTurnUsage | None = None
+        # GPT-Live: a response is in flight between an activity burst and the
+        # boundary that closes it (`response.event` done) or the session close.
+        # `_gpt_live_boundary_seen` records that a response was closed on its own
+        # boundary, so a warm session's final `session.closed` does not count an
+        # extra start. `session.closed` also carries the session-scoped usage.
+        self._gpt_live_started = False
+        self._gpt_live_interrupted = False
+        self._gpt_live_closed = False
+        self._gpt_live_boundary_seen = False
 
     # -- client → upstream ---------------------------------------------------------
 
@@ -488,6 +518,8 @@ class RealtimeRelayObserver:
                 return ()
             if self.provider == OPENAI_REALTIME_PROVIDER:
                 return self._observe_openai(raw)
+            if self.provider == GPT_LIVE_PROVIDER:
+                return self._observe_gpt_live(raw)
             return self._observe_gemini(raw)
         except Exception:
             return ()
@@ -512,6 +544,21 @@ class RealtimeRelayObserver:
                         )
                     )
                     for response_id in open_ids
+                )
+            if self.provider == GPT_LIVE_PROVIDER:
+                if self._gpt_live_closed or not self._gpt_live_started:
+                    return ()
+                self._gpt_live_started = False
+                return (
+                    self._emit(
+                        RealtimeTurnUsage(
+                            provider=GPT_LIVE_PROVIDER,
+                            outcome=OUTCOME_CANCELLED,
+                            error_class=(
+                                ERROR_INTERRUPTED if self._gpt_live_interrupted else ERROR_CLIENT_DISCONNECTED
+                            ),
+                        )
+                    ),
                 )
             emitted: list[RealtimeTurnUsage] = []
             held = self._take_completed()
@@ -605,6 +652,86 @@ class RealtimeRelayObserver:
     def _anonymous_key(self) -> str:
         self._openai_anonymous += 1
         return f'anonymous:{self._openai_anonymous}'
+
+    # -- GPT-Live ----------------------------------------------------------------
+
+    def _observe_gpt_live(self, raw: bytes) -> tuple[RealtimeTurnUsage, ...]:
+        has_activity = any(marker in raw for marker in _GPT_LIVE_ACTIVITY_MARKERS)
+        has_lifecycle = any(marker in raw for marker in _GPT_LIVE_PARSE_MARKERS)
+        if not has_activity and not has_lifecycle:
+            return ()
+        if has_activity and not self._gpt_live_started and not self._gpt_live_closed:
+            self._gpt_live_started = True
+            # New response start: an interruption belonged to the response that just
+            # ended, so it must not taint this one.
+            self._gpt_live_interrupted = False
+            self.starts += 1
+        if not has_lifecycle:
+            return ()
+        payload = _parse_json_object(raw)
+        if payload is None:
+            return ()
+        event_type = payload.get('type')
+        if event_type == 'session.started':
+            # Opening the session is a start: the provider has begun billable
+            # session work even if the client disconnects before any output. Count
+            # it for admission (the OpenAI `response.created` / Gemini first-activity
+            # equivalent); `session.closed`/flush then emit the cancelled row.
+            if not self._gpt_live_started and not self._gpt_live_closed:
+                self._gpt_live_started = True
+                self._gpt_live_interrupted = False
+                self.starts += 1
+            return ()
+        if event_type == 'session.interrupted':
+            self._gpt_live_interrupted = True
+            return ()
+        if event_type == 'response.event':
+            return self._observe_gpt_live_response(payload)
+        if event_type != 'session.closed':
+            return ()
+        if self._gpt_live_closed:
+            return ()
+        self._gpt_live_closed = True
+        # `session.closed` carries the session-scoped usage (GPT-Live bills by
+        # duration), so it always emits the closing row. It counts a start only
+        # when no response/activity was seen: a response already closed on its
+        # own `response.event` boundary was counted there.
+        if not self._gpt_live_started and not self._gpt_live_boundary_seen:
+            self.starts += 1
+        self._gpt_live_started = False
+        return (self._emit(self._gpt_live_turn(payload)),)
+
+    def _observe_gpt_live_response(self, payload: Mapping[str, Any]) -> tuple[RealtimeTurnUsage, ...]:
+        """A `response.event` envelope carries a delegated Responses lifecycle frame.
+
+        `response.done` / `response.completed` closes the voice response that was
+        in flight. Re-arming the start tracking here is what makes a warm session
+        count every reply: without it `starts` advanced only once per socket, so
+        every reply after the first bypassed quota and the per-session limit.
+        """
+        nested = _mapping(payload.get('event')) or payload
+        if nested.get('type') not in ('response.done', 'response.completed'):
+            return ()
+        if not self._gpt_live_started:
+            # A completion observed before any activity is still one response.
+            self.starts += 1
+        self._gpt_live_started = False
+        self._gpt_live_boundary_seen = True
+        return (self._emit(self._gpt_live_turn(nested)),)
+
+    def _gpt_live_turn(self, payload: Mapping[str, Any]) -> RealtimeTurnUsage:
+        interrupted = self._gpt_live_interrupted
+        self._gpt_live_interrupted = False
+        turn = RealtimeTurnUsage(
+            provider=GPT_LIVE_PROVIDER,
+            outcome=OUTCOME_CANCELLED if interrupted else OUTCOME_SUCCESS,
+            error_class=ERROR_INTERRUPTED if interrupted else ERROR_NONE,
+        )
+        usage = payload.get('usage')
+        if isinstance(usage, Mapping):
+            # Live usage mirrors OpenAI-style modality details when present.
+            turn = replace(turn, **_openai_counts(usage), usage_reported=True)
+        return turn
 
     # -- Gemini ------------------------------------------------------------------
 

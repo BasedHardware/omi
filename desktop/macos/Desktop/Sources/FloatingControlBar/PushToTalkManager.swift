@@ -3988,7 +3988,7 @@ extension PushToTalkManager {
     let env = ProcessInfo.processInfo.environment
     let raw: String?
     switch provider {
-    case .gptRealtime2: raw = env["OPENAI_API_KEY"]
+    case .gptRealtime2, .gptLive: raw = env["OPENAI_API_KEY"]
     case .geminiFlashLive, .auto: raw = env["GEMINI_API_KEY"] ?? env["GOOGLE_API_KEY"]
     }
     guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }

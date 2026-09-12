@@ -16,12 +16,16 @@ enum RealtimeOmniProvider: String, CaseIterable, Sendable {
   case auto
   case geminiFlashLive
   case gptRealtime2
+  // Raw value must match the backend Auto pick (`/v1/auto/model-pick` returns
+  // `gptLive1`), otherwise `init(rawValue:)` fails and Auto falls back.
+  case gptLive = "gptLive1"
 
   var displayName: String {
     switch self {
     case .auto: return "Auto"
     case .geminiFlashLive: return "Gemini 3.1 Flash Live"
     case .gptRealtime2: return "GPT Realtime 2"
+    case .gptLive: return "GPT-Live"
     }
   }
 
@@ -30,20 +34,22 @@ enum RealtimeOmniProvider: String, CaseIterable, Sendable {
     case .auto: return "Daily-picks the best model by quality & speed"
     case .geminiFlashLive: return "Google · native audio + vision, lowest cost"
     case .gptRealtime2: return "OpenAI · GA speech-to-speech"
+    case .gptLive: return "OpenAI · full-duplex speech-to-speech"
     }
   }
 
   /// Concrete model identifier sent to the provider. `.auto` resolves elsewhere.
   var modelID: String {
     switch self {
-    case .auto: return RealtimeOmniProvider.geminiFlashLive.modelID
+    case .auto: return RealtimeOmniProvider.gptLive.modelID
     case .geminiFlashLive: return "gemini-3.1-flash-live-preview"
     case .gptRealtime2: return "gpt-realtime-2"
+    case .gptLive: return "gpt-live-1"
     }
   }
 
   /// Concrete providers the resolver may choose from for `.auto`.
-  static var selectable: [RealtimeOmniProvider] { [.geminiFlashLive, .gptRealtime2] }
+  static var selectable: [RealtimeOmniProvider] { [.gptLive, .geminiFlashLive] }
 }
 
 // MARK: - Settings store (mirrors AssistantSettings persistence pattern)
@@ -59,10 +65,11 @@ final class RealtimeOmniSettings {
 
   private init() {
     UserDefaults.standard.register(defaults: [
-      // Default to Auto: AutoModelSelector picks the best provider (currently Gemini),
-      // and the hub fails over to the other realtime model (GPT Realtime), then the
-      // Claude cascade, if it can't connect. The user can pin a provider in
-      // Advanced → Voice Model. This default also drives the realtime hub provider.
+      // Default to Auto: AutoModelSelector picks the best provider (currently
+      // GPT-Live), and the hub fails over to the alternate realtime model
+      // (Gemini Live), then the Claude cascade, if it can't connect. The user can
+      // pin a provider in Advanced → Voice Model. This default also drives the
+      // realtime hub provider.
       providerKey: RealtimeOmniProvider.auto.rawValue,
       enabledKey: false,
     ])
@@ -89,10 +96,10 @@ final class RealtimeOmniSettings {
   }
 
   /// The concrete provider to actually use right now. Resolves `.auto` via the
-  /// cached daily benchmark pick (falling back to Gemini when no pick exists).
+  /// cached daily benchmark pick (falling back to GPT-Live when no pick exists).
   var effectiveProvider: RealtimeOmniProvider {
     guard selectedProvider == .auto else { return selectedProvider }
-    return AutoModelSelector.shared.currentPick ?? .geminiFlashLive
+    return AutoModelSelector.shared.currentPick ?? .gptLive
   }
 }
 

@@ -91,6 +91,8 @@ enum RealtimeHubProviderLogTag {
       return "gemini"
     case .openai:
       return "openai"
+    case .gptLive:
+      return "gpt_live"
     case nil:
       return "unbound"
     }
