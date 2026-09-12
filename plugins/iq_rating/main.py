@@ -61,6 +61,10 @@ DB_PATH = Path(os.getenv("IQ_RATING_DB_PATH", Path(__file__).parent / "iq_rating
 # background thread forever
 RATE_LIMIT_MAX_RETRIES = 3
 
+
+class RateLimitExhausted(RuntimeError):
+    """A paginated fetch stopped because consecutive HTTP 429 retries were spent."""
+
 # In-memory cache for quick access
 _cache = {}
 _cache_loading = set()
@@ -334,6 +338,7 @@ def fetch_all_memories(uid: str) -> List[dict]:
             response = requests.get(url, params=params, headers=headers, timeout=30)
             
             if response.status_code == 200:
+                rate_limit_retries = 0
                 data = response.json()
                 memories = data if isinstance(data, list) else data.get("memories", [])
                 
@@ -350,7 +355,7 @@ def fetch_all_memories(uid: str) -> List[dict]:
                 rate_limit_retries += 1
                 if rate_limit_retries > RATE_LIMIT_MAX_RETRIES:
                     logger.error("Rate limit retries exhausted while fetching memories")
-                    break
+                    raise RateLimitExhausted("memories")
                 logger.warning("Rate limited, waiting 2 seconds...")
                 time.sleep(2)
                 continue
@@ -360,6 +365,8 @@ def fetch_all_memories(uid: str) -> List[dict]:
         
         logger.info(f"Fetched {len(all_memories)} total memories")
         return all_memories
+    except RateLimitExhausted:
+        raise
     except Exception as e:
         logger.error(f"Error fetching memories: {e}")
         return []
@@ -384,6 +391,7 @@ def fetch_all_conversations(uid: str) -> List[dict]:
             response = requests.get(url, params=params, headers=headers, timeout=30)
             
             if response.status_code == 200:
+                rate_limit_retries = 0
                 data = response.json()
                 conversations = data if isinstance(data, list) else data.get("conversations", [])
                 
@@ -400,7 +408,7 @@ def fetch_all_conversations(uid: str) -> List[dict]:
                 rate_limit_retries += 1
                 if rate_limit_retries > RATE_LIMIT_MAX_RETRIES:
                     logger.error("Rate limit retries exhausted while fetching conversations")
-                    break
+                    raise RateLimitExhausted("conversations")
                 logger.warning("Rate limited, waiting 2 seconds...")
                 time.sleep(2)
                 continue
@@ -410,6 +418,8 @@ def fetch_all_conversations(uid: str) -> List[dict]:
         
         logger.info(f"Fetched {len(all_conversations)} total conversations")
         return all_conversations
+    except RateLimitExhausted:
+        raise
     except Exception as e:
         logger.error(f"Error fetching conversations: {e}")
         return []
@@ -1216,8 +1226,13 @@ def load_and_process_user_data(uid: str) -> List[dict]:
         else:
             # Fetch fresh data from API (only once!)
             logger.info("Fetching fresh data from OMI API...")
-            memories = fetch_all_memories(uid)
-            conversations = fetch_all_conversations(uid)
+            try:
+                memories = fetch_all_memories(uid)
+                conversations = fetch_all_conversations(uid)
+            except RateLimitExhausted:
+                logger.error("Incomplete API fetch; not persisting partial user data")
+                set_cached_people(uid, [])
+                return []
             
             # Store raw data permanently
             store_raw_data(uid, memories, conversations)
