@@ -122,6 +122,43 @@ test('does not omit neighboring GET developer keys when a scope exceeds 256', ()
   expect(keys.find(row => row.id === 'long-scope')?.scopes).toEqual([scope]);
 });
 
+test('keeps GET developer keys when created_at exceeds 100', () => {
+  const createdAt = `2026-04-01T12:00:00.${'0'.repeat(80)}Z`;
+  expect(createdAt.length).toBe(101);
+  expect(
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {
+          id: 'key-long',
+          name: 'Local',
+          key_prefix: 'omi_sk_ab',
+          created_at: createdAt,
+        },
+        {id: 'key-neighbor', name: 'Cursor', key_prefix: 'omi_mcp_cd'},
+      ]),
+    ),
+  ).toEqual([
+    {
+      id: 'key-long',
+      name: 'Local',
+      keyPrefix: 'omi_sk_ab',
+      createdAtMs: Date.parse('2026-04-01T12:00:00.000Z'),
+    },
+    {id: 'key-neighbor', name: 'Cursor', keyPrefix: 'omi_mcp_cd'},
+  ]);
+  expect(
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {id: 'key-null', name: 'Local', key_prefix: 'omi_sk_ab', created_at: null},
+        {id: 'key-kept', name: 'Cursor', key_prefix: 'omi_mcp_cd'},
+      ]),
+    ),
+  ).toEqual([
+    {id: 'key-null', name: 'Local', keyPrefix: 'omi_sk_ab'},
+    {id: 'key-kept', name: 'Cursor', keyPrefix: 'omi_mcp_cd'},
+  ]);
+});
+
 test('keeps GET developer keys when id or key_prefix exceeds 256', () => {
   const id = 'k'.repeat(257);
   const keyPrefix = 'p'.repeat(257);
