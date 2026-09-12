@@ -1,20 +1,48 @@
-const zapier = require('zapier-platform-core');
-
-// Use this to make test calls into your app:
-const App = require('../../index');
-const appTester = zapier.createAppTester(App);
-// read the `.env` file into the environment, if available
-zapier.tools.env.inject();
+const createMemory = require('../../creates/create_memory');
 
 describe('creates.create_memory', () => {
-  it('should run', async () => {
-    const bundle = { inputData: {} };
+  const body = createMemory.operation.perform.body;
 
-    const results = await appTester(
-      App.creates['create_memory'].operation.perform,
-      bundle
+  it('returns the backend create-memory contract instead of undefined', async () => {
+    const payload = await body(
+      {},
+      {
+        inputData: {
+          text: 'remember this',
+          source: 'other_text',
+          language: 'en',
+        },
+      }
     );
-    expect(results).toBeDefined();
-    // TODO: add more assertions
+
+    expect(payload).toEqual({
+      text: 'remember this',
+      source: 'other_text',
+      language: 'en',
+      started_at: undefined,
+      finished_at: undefined,
+      geolocation: undefined,
+    });
+  });
+
+  it('forwards optional timestamps and geolocation', async () => {
+    const geo = { latitude: 37.8, longitude: -122.4, address: 'SF' };
+    const payload = await body(
+      {},
+      {
+        inputData: {
+          text: 'walked downtown',
+          source: 'audio_transcript',
+          language: 'en',
+          started_at: '2026-09-12T10:00:00Z',
+          finished_at: '2026-09-12T10:05:00Z',
+          geolocation: geo,
+        },
+      }
+    );
+
+    expect(payload.started_at).toBe('2026-09-12T10:00:00Z');
+    expect(payload.finished_at).toBe('2026-09-12T10:05:00Z');
+    expect(payload.geolocation).toEqual(geo);
   });
 });

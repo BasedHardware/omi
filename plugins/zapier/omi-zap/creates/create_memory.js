@@ -1,9 +1,13 @@
 const body = async (z, bundle) => {
-  {
-    {
-      bundle.inputData.source;
-    }
-  }
+  const input = (bundle && bundle.inputData) || {};
+  return {
+    text: input.text,
+    source: input.source,
+    language: input.language,
+    started_at: input.started_at,
+    finished_at: input.finished_at,
+    geolocation: input.geolocation,
+  };
 };
 
 module.exports = {
