@@ -12,6 +12,7 @@ omi
 ├── config        show | set <k> <v> | path | profile {list, use <name>, delete <name>}
 ├── memory        list | get | create | update | delete
 ├── conversation  list | get | create | from-segments | update | delete
+├── folder        list
 ├── action-item   list | get | create | update | complete | delete
 └── goal          list | get | create | update | progress | history | delete
 ```
@@ -95,6 +96,12 @@ The `--text` flag accepts `-` to read from stdin:
 ```bash
 cat meeting_notes.md | omi conversation create --text - --text-source message
 ```
+
+## `omi folder`
+
+| Command             | Endpoint                     |
+| ------------------- | ---------------------------- |
+| `omi folder list`   | `GET /v1/dev/user/folders`   |
 
 ## `omi action-item`
 

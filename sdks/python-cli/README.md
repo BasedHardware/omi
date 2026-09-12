@@ -218,6 +218,8 @@ omi
 │   ├── from-segments <file.json> [--source ...]
 │   ├── update <id> [--title ...] [--discarded/--no-discarded]
 │   └── delete <id> [-y]
+├── folder
+│   └── list
 ├── action-item
 │   ├── list [--completed/--open] [--conversation-id ...] [...]
 │   ├── get <id>
