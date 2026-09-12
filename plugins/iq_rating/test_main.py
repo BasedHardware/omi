@@ -198,6 +198,20 @@ class RateLimitRetryTests(unittest.TestCase):
             self.assertEqual(main.load_and_process_user_data(uid), [])
         self.assertFalse(main.has_user_data(uid))
 
+    def test_load_and_process_does_not_persist_partial_pages(self):
+        uid = "partial-u"
+        calls = []
+
+        def first_page_then_429(*args, **kwargs):
+            calls.append(kwargs["params"]["offset"])
+            if kwargs["params"]["offset"] == 0 and calls.count(0) == 1:
+                return _Resp(200, [{"id": i} for i in range(100)])
+            return _Resp(429)
+
+        with mock.patch.object(main.requests, "get", first_page_then_429):
+            self.assertEqual(main.load_and_process_user_data(uid), [])
+        self.assertFalse(main.has_user_data(uid))
+
 
 if __name__ == "__main__":
     unittest.main()
