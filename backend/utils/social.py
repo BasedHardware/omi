@@ -4,6 +4,7 @@ import asyncio
 import os
 from datetime import datetime, timezone
 from typing import Dict, Any, Callable, List, Awaitable, cast
+from urllib.parse import quote
 
 from pydantic import BaseModel
 from ulid import ULID
@@ -86,7 +87,7 @@ async def async_with_retry(operation_name: str, func: Callable[[], Awaitable[Any
 
 async def get_twitter_profile(handle: str) -> TwitterProfile:
     """Fetch Twitter profile for a user and return structured data"""
-    url = f"https://{rapid_api_host}/screenname.php?screenname={handle}"
+    url = f"https://{rapid_api_host}/screenname.php?screenname={quote(handle, safe='')}"
 
     headers = cast(Dict[str, str], {"X-RapidAPI-Key": rapid_api_key, "X-RapidAPI-Host": rapid_api_host})
 
@@ -121,7 +122,7 @@ def create_memories_from_twitter_tweets(uid: str, persona_id: str, tweets: List[
 async def get_twitter_timeline(handle: str) -> TwitterTimeline:
     """Fetch Twitter timeline for a user and return structured data"""
     logger.info(f"Fetching Twitter timeline for {handle}...")
-    url = f"https://{rapid_api_host}/timeline.php?screenname={handle}"
+    url = f"https://{rapid_api_host}/timeline.php?screenname={quote(handle, safe='')}"
 
     headers = cast(Dict[str, str], {"X-RapidAPI-Key": rapid_api_key, "X-RapidAPI-Host": rapid_api_host})
 

@@ -47,6 +47,14 @@ def test_version_subcommand(cli_runner) -> None:
     assert __version__ in result.stdout
 
 
+def test_version_subcommand_json(config_path, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["--json", "version"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"version": __version__}
+    assert result.stderr == ""
+    assert not config_path.exists()
+
+
 def test_help_lists_all_top_level_commands(cli_runner) -> None:
     result = cli_runner.invoke(app, ["--help"])
     assert result.exit_code == 0

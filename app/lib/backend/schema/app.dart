@@ -659,8 +659,6 @@ class App {
     };
   }
 
-  static List<App> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => App.fromJson(e)).toList();
-
   List<NotificationScope> getNotificationScopesFromIds(List<NotificationScope> allScopes) {
     if (proactiveNotification == null) {
       return [];

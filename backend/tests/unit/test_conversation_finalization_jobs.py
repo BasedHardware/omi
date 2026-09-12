@@ -409,10 +409,10 @@ def test_duplicate_task_delivery_claims_only_once_until_lease_expires():
     first = _Transaction()
 
     claim = jobs._claim_finalization_job_txn(first, ref, 2, False, 1500, now)
-    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 1, 'created_at': None}
+    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 0, 'created_at': None}
     claim_update = first.updates[0][1]
     assert claim_update['status'] == 'leased'
-    assert claim_update['attempt_count'] == 1
+    assert 'attempt_count' not in claim_update
 
     ref.data = ref.data | claim_update
     duplicate = _Transaction()
@@ -462,9 +462,52 @@ def test_expired_worker_lease_can_be_safely_reclaimed():
     transaction = _Transaction()
 
     claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now)
-    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 2, 'created_at': None}
-    assert transaction.updates[0][1]['attempt_count'] == 2
+    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 1, 'created_at': None}
+    assert 'attempt_count' not in transaction.updates[0][1]
     assert transaction.updates[0][1]['lease_epoch'] == 1
+
+
+def test_session_handoff_reclaim_does_not_burn_the_processing_attempt_budget():
+    """Reconnects reclaim an expired lease; that is not a failed processing try."""
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 2,
+            'attempt_count': 0,
+            'lease_epoch': 3,
+            'lease_expires_at': now - timedelta(seconds=1),
+        },
+    )
+
+    for _ in range(5):
+        transaction = _Transaction()
+        claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now)
+        assert claim['status'] == 'claimed'
+        assert claim['attempt_count'] == 0
+        assert 'attempt_count' not in transaction.updates[0][1]
+        ref.data = ref.data | transaction.updates[0][1]
+        ref.data['lease_expires_at'] = now - timedelta(seconds=1)
+
+
+def test_retryable_processing_failure_increments_the_attempt_budget():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 2,
+            'lease_epoch': 4,
+            'attempt_count': 0,
+            'requires_byok': False,
+        },
+    )
+    transaction = _Transaction()
+
+    assert jobs._mark_finalization_retryable_txn(transaction, ref, 2, 4, 'processing_failed', now) is True
+    assert transaction.updates[0][1]['attempt_count'] == 1
+    assert transaction.updates[0][1]['last_failure_code'] == 'processing_failed'
 
 
 def test_finalization_completion_requires_durable_fanout_completion():
@@ -810,7 +853,7 @@ def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
 
     reclaim = _Transaction()
     new_claim = jobs._claim_finalization_job_txn(reclaim, ref, 3, False, 1500, now)
-    assert new_claim == {'status': 'claimed', 'lease_epoch': 5, 'attempt_count': 1, 'created_at': None}
+    assert new_claim == {'status': 'claimed', 'lease_epoch': 5, 'attempt_count': 0, 'created_at': None}
     ref.data = ref.data | reclaim.updates[0][1]
 
     stale_completion = _Transaction()

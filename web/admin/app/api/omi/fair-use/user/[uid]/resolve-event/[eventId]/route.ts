@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 import { getDb } from '@/lib/firebase/admin';
+import { isSafeDocumentId } from '@/lib/firestore-doc-id.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,9 @@ export async function POST(
   if (authResult instanceof NextResponse) return authResult;
 
   const { uid, eventId } = await params;
+  if (!isSafeDocumentId(uid) || !isSafeDocumentId(eventId)) {
+    return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
+  }
   const adminUid = authResult.uid;
 
   const { searchParams } = new URL(request.url);
