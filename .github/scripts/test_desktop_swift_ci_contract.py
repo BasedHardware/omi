@@ -106,6 +106,31 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("run-swift-ci.sh --release-notification-regression", release_job)
         self.assertNotIn("run-swift-ci.sh --release-notification-regression", verify_job)
 
+        # Both steps must read the SAME gate. The regression reuses the
+        # release build's products via --skip-build, which only exist if the
+        # build step carried --build-tests -Xswiftc -enable-testing. If the
+        # two ever disagree, nothing errors: the build silently omits the test
+        # targets and the regression silently recompiles the whole graph —
+        # ~28 min on top of ~31, which is exactly how this job ran out of its
+        # 60 minutes mid-compile on every notification-path PR.
+        gate = (
+            "OMI_SWIFT_RELEASE_BUILD_TESTS: ${{ "
+            "needs.changes.outputs.should_notification_release_regression }}"
+        )
+        self.assertEqual(
+            release_job.count(gate),
+            2,
+            "the release build and the regression step must both read "
+            "should_notification_release_regression, or --skip-build finds no "
+            "test bundle and the step rebuilds the world",
+        )
+        self.assertIn(
+            "needs.changes.outputs.should_notification_release_regression == 'true'",
+            release_job,
+            "the regression step's own condition must key on the same output "
+            "the build step is gated by",
+        )
+
     def test_change_detection_happens_before_macos_allocation(self):
         """#9440: non-desktop changes must not claim a costly macOS runner."""
         changes = self.jobs["changes"]
