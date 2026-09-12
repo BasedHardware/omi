@@ -248,7 +248,7 @@ async def root(uid: str = Query(None)):
     list_options = '<option value="">Select a list...</option>'
     for lst in lists:
         selected_attr = 'selected' if lst['id'] == selected_list else ''
-        display_name = ClickUpClient.list_identity(lst)
+        display_name = lst.get("identity") or ClickUpClient.list_identity(lst)
         list_options += f'<option value="{lst["id"]}" {selected_attr}>{display_name}</option>'
     
     return HTMLResponse(content=f"""

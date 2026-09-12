@@ -81,7 +81,10 @@ class TaskDetector:
         current_date_str = now.strftime("%A, %B %d, %Y at %I:%M %p")
         current_iso = now.strftime("%Y-%m-%d")
         
-        list_names = [ClickUpClient.list_identity(lst) for lst in available_lists]
+        list_names = [
+            lst.get("identity") or ClickUpClient.list_identity(lst)
+            for lst in available_lists
+        ]
         list_with_spaces = list_names
         
         # Create member mapping for AI
@@ -378,7 +381,10 @@ CRITICAL RULES:
         if not available_lists:
             return None
         
-        list_names = [ClickUpClient.list_identity(lst) for lst in available_lists]
+        list_names = [
+            lst.get("identity") or ClickUpClient.list_identity(lst)
+            for lst in available_lists
+        ]
         
         try:
             response = await client.chat.completions.create(

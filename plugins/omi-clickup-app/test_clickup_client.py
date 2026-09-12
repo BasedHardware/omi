@@ -120,11 +120,10 @@ class GetAllListsTests(unittest.TestCase):
             "/folder/fold-b/list": {"lists": [{"id": "list-2", "name": "Sprint"}]},
         }
         result, _ = self._run(fixtures)
-        by_ident = {
-            clickup_client.ClickUpClient.list_identity(lst): lst["id"] for lst in result
-        }
+        by_ident = {lst["identity"]: lst["id"] for lst in result}
         self.assertEqual(by_ident["Sprint (Projects)"], "list-1")
         self.assertEqual(by_ident["Sprint (Archive)"], "list-2")
+        self.assertEqual(len(by_ident), 2)
         self.assertEqual(
             clickup_client.ClickUpClient.resolve_list(result, "Sprint (Projects)")["id"],
             "list-1",
