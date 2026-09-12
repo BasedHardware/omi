@@ -308,6 +308,40 @@ test('keeps GET capture gaps when start_time or end_time exceeds 100', () => {
   ]);
 });
 
+test('keeps GET capture gaps when start_time or end_time uses hour-only offsets Dart DateTime.tryParse accepts', () => {
+  expect(
+    parseOmiCalendarCaptureGaps(
+      JSON.stringify([
+        {
+          event_id: 'event-hour-offset',
+          title: 'Standup',
+          start_time: '2026-09-07T15:00:00+00',
+          end_time: '2026-09-07T15:30:00+00',
+        },
+        {
+          event_id: 'event-neighbor',
+          title: 'Review',
+          start_time: '2026-09-07T18:00:00.000Z',
+          end_time: '2026-09-07T19:00:00.000Z',
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      eventId: 'event-hour-offset',
+      title: 'Standup',
+      startMs: Date.parse('2026-09-07T15:00:00.000Z'),
+      endMs: Date.parse('2026-09-07T15:30:00.000Z'),
+    },
+    {
+      eventId: 'event-neighbor',
+      title: 'Review',
+      startMs: Date.parse('2026-09-07T18:00:00.000Z'),
+      endMs: Date.parse('2026-09-07T19:00:00.000Z'),
+    },
+  ]);
+});
+
 test('keeps GET capture gaps when start_time or end_time exceeds 10000', () => {
   const startTime = `2026-09-07T15:00:00.${'0'.repeat(9980)}Z`;
   const endTime = `2026-09-07T16:30:00.${'0'.repeat(9980)}Z`;
