@@ -44,6 +44,19 @@ def _install_module_stubs():
     exceptions.Timeout = type("Timeout", (_RequestException,), {})
     exceptions.ConnectionError = type("ConnectionError", (_RequestException,), {})
     requests.exceptions = exceptions
+    class Response:
+        def __init__(self, *args, **kwargs):
+            self.status_code = 200
+            self.content = b""
+            self.text = ""
+
+        def json(self):
+            return {}
+
+        def raise_for_status(self):
+            pass
+
+    requests.Response = Response
     requests.post = lambda *a, **k: None
     requests.get = lambda *a, **k: None
     sys.modules["requests"] = requests
@@ -146,6 +159,9 @@ class _FakeRequest:
     async def body(self):
         return self._body
 
+    async def stream(self):
+        yield self._body
+
 
 def _feed(uid, chunk, sample_rate=16000):
     return asyncio.run(main.receive_audio(_FakeRequest(chunk), uid=uid, sample_rate=sample_rate))
@@ -157,10 +173,12 @@ class AudioBufferBoundsTests(unittest.TestCase):
         main.audio_sample_rates.clear()
         self._saved_bytes_cap = main.MAX_AUDIO_BUFFER_BYTES
         self._saved_uid_cap = main.MAX_AUDIO_BUFFERS
+        self._saved_total_cap = main.MAX_AUDIO_TOTAL_BYTES
 
     def tearDown(self):
         main.MAX_AUDIO_BUFFER_BYTES = self._saved_bytes_cap
         main.MAX_AUDIO_BUFFERS = self._saved_uid_cap
+        main.MAX_AUDIO_TOTAL_BYTES = self._saved_total_cap
         main.audio_buffers.clear()
         main.audio_sample_rates.clear()
 
@@ -192,14 +210,25 @@ class AudioBufferBoundsTests(unittest.TestCase):
         _feed("u1", b"bbbbbb")
         self.assertEqual(main.audio_buffers["u1"], b"aaaabbbb")
 
-    def test_unknown_uid_spray_bounded(self):
+    def test_unknown_uid_spray_evicts_oldest(self):
         main.MAX_AUDIO_BUFFERS = 2
         _feed("u1", b"x")
         _feed("u2", b"x")
-        result = _feed("u3", b"x")
-        self.assertEqual(result["status"], "error")
-        self.assertNotIn("u3", main.audio_buffers)
+        result = _feed("u3", b"z")
+        self.assertEqual(result["status"], "ok")
+        self.assertNotIn("u1", main.audio_buffers)
+        self.assertEqual(main.audio_buffers["u3"], b"z")
         self.assertEqual(len(main.audio_buffers), 2)
+
+    def test_process_wide_byte_budget_evicts_oldest(self):
+        main.MAX_AUDIO_BUFFER_BYTES = 8
+        main.MAX_AUDIO_TOTAL_BYTES = 8
+        _feed("u1", b"aaaa")
+        _feed("u2", b"bbbb")
+        result = _feed("u3", b"cccc")
+        self.assertEqual(result["status"], "ok")
+        self.assertNotIn("u1", main.audio_buffers)
+        self.assertLessEqual(sum(len(v) for v in main.audio_buffers.values()), 8)
 
     def test_existing_uid_still_accepted_at_uid_cap(self):
         main.MAX_AUDIO_BUFFERS = 2

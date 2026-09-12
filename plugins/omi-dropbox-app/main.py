@@ -9,7 +9,7 @@ import os
 import secrets
 import struct
 import wave
-from collections import defaultdict
+from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 from urllib.parse import urlencode
@@ -53,17 +53,71 @@ app = FastAPI(
 )
 
 # ============== Audio Buffer ==============
-# Store audio chunks by user ID
-audio_buffers: Dict[str, bytes] = defaultdict(bytes)
+# Store audio chunks by user ID. OrderedDict is LRU: oldest uid is evicted
+# when the key count or process-wide byte budget is spent.
+audio_buffers: OrderedDict[str, bytes] = OrderedDict()
 audio_sample_rates: Dict[str, int] = {}
 
 # Audio accumulates in process memory until the conversation webhook uploads
 # it, so the buffer must be bounded: a multi-hour conversation (or a spray of
-# unknown uids, which defaultdict materializes on any key) otherwise grows
-# without limit. ~100 MB holds ~52 minutes of 16 kHz PCM16; the tail beyond
-# the cap is dropped so the webhook still uploads the audio that fit.
+# unknown uids) otherwise grows without limit. ~100 MB holds ~52 minutes of
+# 16 kHz PCM16; the tail beyond the cap is dropped so the webhook still uploads
+# the audio that fit. A separate process-wide budget stops 512 × 100 MiB.
 MAX_AUDIO_BUFFER_BYTES = 100 * 1024 * 1024
 MAX_AUDIO_BUFFERS = 512
+MAX_AUDIO_TOTAL_BYTES = 256 * 1024 * 1024
+
+
+def _audio_total_bytes() -> int:
+    return sum(len(chunk) for chunk in audio_buffers.values())
+
+
+def _evict_oldest_audio() -> None:
+    if not audio_buffers:
+        return
+    old_uid, _ = audio_buffers.popitem(last=False)
+    audio_sample_rates.pop(old_uid, None)
+
+
+def _make_room_for(uid: str) -> int:
+    """Evict LRU uids until this write can proceed. Returns bytes this uid may append."""
+    if uid not in audio_buffers:
+        while audio_buffers and len(audio_buffers) >= MAX_AUDIO_BUFFERS:
+            _evict_oldest_audio()
+        while audio_buffers and _audio_total_bytes() >= MAX_AUDIO_TOTAL_BYTES:
+            _evict_oldest_audio()
+    else:
+        while _audio_total_bytes() >= MAX_AUDIO_TOTAL_BYTES and len(audio_buffers) > 1:
+            oldest = next(iter(audio_buffers))
+            if oldest == uid:
+                audio_buffers.move_to_end(uid)
+                continue
+            _evict_oldest_audio()
+    existing = len(audio_buffers.get(uid, b""))
+    per_uid = max(0, MAX_AUDIO_BUFFER_BYTES - existing)
+    global_space = max(0, MAX_AUDIO_TOTAL_BYTES - _audio_total_bytes())
+    return min(per_uid, global_space)
+
+
+async def _read_audio_limited(request: Request, max_bytes: int) -> bytes:
+    """Read at most max_bytes from the request. Do not materialize a larger body."""
+    if max_bytes <= 0:
+        return b""
+    stream = getattr(request, "stream", None)
+    if stream is None:
+        body = await request.body()
+        return body[:max_bytes]
+    chunks = []
+    taken = 0
+    async for chunk in request.stream():
+        if taken >= max_bytes:
+            break
+        piece = chunk[: max_bytes - taken]
+        chunks.append(piece)
+        taken += len(piece)
+        if len(chunk) > len(piece):
+            break
+    return b"".join(chunks)
 
 
 def create_wav_file(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
@@ -939,28 +993,18 @@ async def receive_audio(
     Accumulates audio until the conversation webhook is triggered.
     """
     try:
-        audio_bytes = await request.body()
+        space = _make_room_for(uid)
+        audio_bytes = await _read_audio_limited(request, space)
 
         if audio_bytes:
-            # Bound uid-key growth before defaultdict materializes a new entry
-            if uid not in audio_buffers and len(audio_buffers) >= MAX_AUDIO_BUFFERS:
-                print(f"[AUDIO] Buffer capacity reached, dropping audio for new uid={uid}")
-                return {"status": "error", "message": "audio buffer capacity reached"}
-
-            buffered = len(audio_buffers[uid])
-            space = MAX_AUDIO_BUFFER_BYTES - buffered
-            if space <= 0:
-                print(f"[AUDIO] Buffer full for uid={uid}, dropping {len(audio_bytes)} bytes")
-            else:
-                audio_buffers[uid] += audio_bytes[:space]
-                audio_sample_rates[uid] = sample_rate
-                if len(audio_bytes) > space:
-                    print(f"[AUDIO] Buffer for uid={uid} hit {MAX_AUDIO_BUFFER_BYTES} bytes; tail dropped")
-                else:
-                    print(
-                        f"[AUDIO] Received {len(audio_bytes)} bytes for uid={uid}, "
-                        f"total: {len(audio_buffers[uid])} bytes"
-                    )
+            existing = audio_buffers.get(uid, b"")
+            audio_buffers[uid] = existing + audio_bytes
+            audio_buffers.move_to_end(uid)
+            audio_sample_rates[uid] = sample_rate
+            print(
+                f"[AUDIO] Received {len(audio_bytes)} bytes for uid={uid}, "
+                f"total: {len(audio_buffers[uid])} bytes"
+            )
 
         return {"status": "ok"}
     except Exception as e:
