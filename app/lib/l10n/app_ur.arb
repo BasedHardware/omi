@@ -661,6 +661,7 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "دوگنا تھپتھپائیں",
+    "singleTap": "ایک بار تھپتھپائیں",
     "@doubleTap": {
         "description": "Double tap action label"
     },
@@ -753,6 +754,7 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "دوگنا تھپتھپانے کا عمل",
+    "singleTapAction": "ایک بار تھپتھپانے کا عمل",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

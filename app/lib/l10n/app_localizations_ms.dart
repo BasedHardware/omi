@@ -519,6 +519,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get doubleTap => 'Ketik Dua Kali';
 
   @override
+  String get singleTap => 'Ketik Sekali';
+
+  @override
   String get ledBrightness => 'Kecerahan LED';
 
   @override
@@ -589,6 +592,9 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Tindakan Ketik Dua Kali';
+
+  @override
+  String get singleTapAction => 'Tindakan Ketik Sekali';
 
   @override
   String get endAndProcess => 'Tamatkan & Proses Perbualan';

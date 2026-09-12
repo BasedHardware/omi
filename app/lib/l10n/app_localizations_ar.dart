@@ -514,6 +514,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get doubleTap => 'نقرة مزدوجة';
 
   @override
+  String get singleTap => 'نقرة مفردة';
+
+  @override
   String get ledBrightness => 'سطوع LED';
 
   @override
@@ -583,6 +586,9 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'إجراء النقر المزدوج';
+
+  @override
+  String get singleTapAction => 'إجراء النقر المفرد';
 
   @override
   String get endAndProcess => 'إنهاء ومعالجة المحادثة';

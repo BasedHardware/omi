@@ -520,6 +520,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get doubleTap => 'డబల్ నొక్కండి';
 
   @override
+  String get singleTap => 'సింగిల్ ట్యాప్';
+
+  @override
   String get ledBrightness => 'LED ప్రకాశం';
 
   @override
@@ -591,6 +594,9 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'డబల్ ట్యాప్ చర్య';
+
+  @override
+  String get singleTapAction => 'సింగిల్ ట్యాప్ చర్య';
 
   @override
   String get endAndProcess => 'సంభాషణను ముగించండి & ప్రక్రియ చేయండి';

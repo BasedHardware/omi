@@ -516,6 +516,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get doubleTap => 'แตะสองครั้ง';
 
   @override
+  String get singleTap => 'แตะครั้งเดียว';
+
+  @override
   String get ledBrightness => 'ความสว่าง LED';
 
   @override
@@ -586,6 +589,9 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'การดำเนินการแตะสองครั้ง';
+
+  @override
+  String get singleTapAction => 'การดำเนินการแตะครั้งเดียว';
 
   @override
   String get endAndProcess => 'จบและประมวลผลบทสนทนา';

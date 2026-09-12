@@ -661,6 +661,7 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "دو ضربه",
+    "singleTap": "تک ضربه",
     "@doubleTap": {
         "description": "Double tap action label"
     },
@@ -753,6 +754,7 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "عمل دو ضربه",
+    "singleTapAction": "عمل تک ضربه",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

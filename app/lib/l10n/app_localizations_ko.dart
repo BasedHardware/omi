@@ -509,6 +509,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get doubleTap => '더블 탭';
 
   @override
+  String get singleTap => '싱글 탭';
+
+  @override
   String get ledBrightness => 'LED 밝기';
 
   @override
@@ -576,6 +579,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get doubleTapAction => '더블 탭 동작';
+
+  @override
+  String get singleTapAction => '싱글 탭 동작';
 
   @override
   String get endAndProcess => '대화 종료 및 처리';

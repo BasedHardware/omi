@@ -661,6 +661,7 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "दुहेरी टॅप",
+    "singleTap": "एकेरी टॅप",
     "@doubleTap": {
         "description": "Double tap action label"
     },
@@ -753,6 +754,7 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "दुहेरी टॅप क्रिया",
+    "singleTapAction": "एकेरी टॅप क्रिया",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

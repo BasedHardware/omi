@@ -509,6 +509,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get doubleTap => 'ダブルタップ';
 
   @override
+  String get singleTap => 'シングルタップ';
+
+  @override
   String get ledBrightness => 'LED明るさ';
 
   @override
@@ -577,6 +580,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'ダブルタップアクション';
+
+  @override
+  String get singleTapAction => 'シングルタップアクション';
 
   @override
   String get endAndProcess => '終了して会話を処理';

@@ -520,6 +520,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get doubleTap => 'Двойное нажатие';
 
   @override
+  String get singleTap => 'Одиночное нажатие';
+
+  @override
   String get ledBrightness => 'Яркость LED';
 
   @override
@@ -590,6 +593,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Действие при двойном нажатии';
+
+  @override
+  String get singleTapAction => 'Действие при одиночном нажатии';
 
   @override
   String get endAndProcess => 'Завершить и обработать разговор';

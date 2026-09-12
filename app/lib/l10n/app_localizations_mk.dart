@@ -521,6 +521,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get doubleTap => 'Двојно допирање';
 
   @override
+  String get singleTap => 'Единечно допирање';
+
+  @override
   String get ledBrightness => 'Осветленост на LED';
 
   @override
@@ -591,6 +594,9 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Акција при двојно допирање';
+
+  @override
+  String get singleTapAction => 'Акција при единечно допирање';
 
   @override
   String get endAndProcess => 'Крај и обработи разговор';

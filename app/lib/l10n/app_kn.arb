@@ -661,6 +661,7 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "ಗುಣ ಟ್ಯಾಪ್",
+    "singleTap": "ಒಂದು ಟ್ಯಾಪ್",
     "@doubleTap": {
         "description": "Double tap action label"
     },
@@ -753,6 +754,7 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "ಗುಣ ಟ್ಯಾಪ್ ಕ್ರಿಯೆ",
+    "singleTapAction": "ಒಂದು ಟ್ಯಾಪ್ ಕ್ರಿಯೆ",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

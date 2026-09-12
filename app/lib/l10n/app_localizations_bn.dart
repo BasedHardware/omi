@@ -518,6 +518,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get doubleTap => 'দ্বিগুণ ট্যাপ';
 
   @override
+  String get singleTap => 'একক ট্যাপ';
+
+  @override
   String get ledBrightness => 'LED উজ্জ্বলতা';
 
   @override
@@ -588,6 +591,9 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'দ্বিগুণ ট্যাপ ক্রিয়া';
+
+  @override
+  String get singleTapAction => 'একক ট্যাপ ক্রিয়া';
 
   @override
   String get endAndProcess => 'কথোপকথন শেষ এবং প্রক্রিয়া করুন';
