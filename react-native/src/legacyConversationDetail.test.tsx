@@ -542,6 +542,68 @@ test('keeps GET transcript when speaker or stt_provider exceeds 256', async () =
   );
 });
 
+test('keeps GET conversation detail when speaker or stt_provider exceeds 10000', async () => {
+  const speaker = 'S'.repeat(10001);
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          speaker,
+        },
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      title: fixture.structured.title,
+      transcript: {
+        status: 'loaded',
+        segments: [
+          {
+            text: fixture.transcript_segments[0].text,
+            speaker,
+            isUser: true,
+            start: 0.25,
+            end: 4.5,
+          },
+        ],
+      },
+    },
+  );
+  const sttProvider = 'p'.repeat(10001);
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          stt_provider: sttProvider,
+        },
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      title: fixture.structured.title,
+      transcript: {
+        status: 'loaded',
+        segments: [
+          {
+            text: fixture.transcript_segments[0].text,
+            speaker: 'SPEAKER_00',
+            isUser: true,
+            start: 0.25,
+            end: 4.5,
+            sttProvider,
+          },
+        ],
+      },
+    },
+  );
+});
+
 test('keeps GET conversation detail when transcript text exceeds 100000', async () => {
   const text = 't'.repeat(100001);
   mockRequest.mockResolvedValue(

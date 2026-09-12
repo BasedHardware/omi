@@ -412,15 +412,13 @@ export async function loadLegacyConversationDetail(
                   segment.stt_provider === undefined ||
                   segment.stt_provider === null
                     ? undefined
-                    : transcriptSttProviderCopy(
-                        text(segment.stt_provider, 10000),
-                      );
+                    : transcriptSttProviderCopy(text(segment.stt_provider));
                 return {
                   text: text(segment.text),
                   speaker:
                     segment.speaker == null
                       ? 'SPEAKER_00'
-                      : text(segment.speaker, 10000),
+                      : text(segment.speaker),
                   isUser: boolean(segment.is_user),
                   start: finite(segment.start),
                   end: finite(segment.end),
