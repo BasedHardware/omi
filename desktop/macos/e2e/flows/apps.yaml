@@ -5,6 +5,7 @@ description: Apps/Integrations marketplace flow — browse apps, filter by categ
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Apps.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/AppSetupURL.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsCatalogKind.swift
   # S5b is the only place either of these is exercised where it can actually fail. `AppsPage`
@@ -74,6 +75,15 @@ steps:
     log.expect:
       contains:
         - "DISMISSABLE_SHEET: Background tapped, dismissing item"
+
+  - id: S5d
+    name: External integration setup hands off uid in the browser URL
+    # Exercises AppSetupURL.withUID through its real caller: openExternalApp /
+    # navigateToSetup both build the provider URL with it before
+    # NSWorkspace.shared.open.
+    do: "Click a connector row whose app uses external integration auth steps (e.g. Gmail) and choose Connect/Set up. A browser window must open to the provider's URL with `uid=` present as its own query parameter — the URL may already carry the provider's own query, so `uid` must be joined with `&`, never appended after a second `?` or dropped inside another parameter's value. Close the browser without completing setup."
+    expect:
+      interactive_count: { min: 3 }
 
   - id: S6
     name: Return to Home

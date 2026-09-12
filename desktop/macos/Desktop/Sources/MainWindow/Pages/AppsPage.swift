@@ -3087,7 +3087,7 @@ struct AppDetailSheet: View {
               ForEach(Array(integration.authSteps.enumerated()), id: \.offset) { index, step in
                 Button(action: {
                   if let uid = AuthState.shared.userId,
-                    let url = URL(string: "\(step.url)?uid=\(uid)")
+                    let url = AppSetupURL.withUID(step.url, uid: uid)
                   {
                     NSWorkspace.shared.open(url)
                   }
@@ -3312,7 +3312,7 @@ struct AppDetailSheet: View {
     if let homeUrl = integration?.appHomeUrl, !homeUrl.isEmpty, let url = URL(string: homeUrl) {
       NSWorkspace.shared.open(url)
     } else if let authSteps = integration?.authSteps, !authSteps.isEmpty,
-      let url = URL(string: "\(authSteps[0].url)?uid=\(uid)")
+      let url = AppSetupURL.withUID(authSteps[0].url, uid: uid)
     {
       NSWorkspace.shared.open(url)
     }
@@ -3337,8 +3337,7 @@ struct AppDetailSheet: View {
 
     // Open auth step or setup instructions URL in browser
     if let authSteps = integration?.authSteps, !authSteps.isEmpty {
-      let rawUrl = "\(authSteps[0].url)?uid=\(uid)"
-      if let url = URL(string: rawUrl) {
+      if let url = AppSetupURL.withUID(authSteps[0].url, uid: uid) {
         NSWorkspace.shared.open(url)
       }
     } else if let instructionsPath = integration?.setupInstructionsFilePath, !instructionsPath.isEmpty {
