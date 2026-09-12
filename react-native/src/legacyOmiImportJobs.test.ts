@@ -199,6 +199,25 @@ test('keeps GET import jobs when created_at exceeds 100', () => {
   ]);
 });
 
+test('keeps GET import jobs when created_at exceeds 10000', () => {
+  const createdAt = 'c'.repeat(10001);
+  expect(
+    parseOmiImportJobs(
+      JSON.stringify([
+        {job_id: 'job-long', status: 'completed', created_at: createdAt},
+        {
+          job_id: 'job-neighbor',
+          status: 'failed',
+          error: 'Zip could not be read.',
+        },
+      ]),
+    ),
+  ).toEqual([
+    {id: 'job-long', status: 'completed'},
+    {id: 'job-neighbor', status: 'failed', error: 'Zip could not be read.'},
+  ]);
+});
+
 test('keeps GET import jobs when error exceeds 10000', () => {
   const error = 'E'.repeat(10001);
   expect(
