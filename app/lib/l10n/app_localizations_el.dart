@@ -441,6 +441,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get autoSyncDescription => 'Αυτόματος συγχρονισμός των εκτός σύνδεσης εγγραφών όταν συνδέεται η συσκευή σας';
 
   @override
+  String get omiButtonActions => 'Ενέργειες κουμπιού Omi';
+
+  @override
   String get deviceSettings => 'Ρυθμίσεις Συσκευής';
 
   @override

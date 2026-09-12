@@ -437,6 +437,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get autoSyncDescription => 'Automatycznie synchronizuj nagrania offline po połączeniu urządzenia';
 
   @override
+  String get omiButtonActions => 'Akcje przycisku Omi';
+
+  @override
   String get deviceSettings => 'Ustawienia urządzenia';
 
   @override

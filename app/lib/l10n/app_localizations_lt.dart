@@ -439,6 +439,9 @@ class AppLocalizationsLt extends AppLocalizations {
       'Automatiškai sinchronizuoti neprisijungus įrašytus įrašus, kai prijungiamas įrenginys';
 
   @override
+  String get omiButtonActions => 'Omi mygtuko veiksmai';
+
+  @override
   String get deviceSettings => 'Įrenginio nustatymai';
 
   @override

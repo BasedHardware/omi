@@ -138,6 +138,7 @@
     "offlineSync": "Offline-synkronointi",
     "autoSync": "Automaattinen synkronointi",
     "autoSyncDescription": "Synkronoi offline-tallenteet automaattisesti, kun laitteesi yhdistetään",
+    "omiButtonActions": "Omi-painikkeen toiminnot",
     "deviceSettings": "Laitteen asetukset",
     "integrations": "Integraatiot",
     "feedbackBug": "Palaute / Virhe",
