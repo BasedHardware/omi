@@ -97,6 +97,7 @@ extension AppState {
         audioSource: effectiveSource,
         isAppleSilicon: Self.isAppleSilicon,
         debugForceCloud: debugForceCloud,
+        wakeWordNeedsRecognizableName: AssistantSettings.shared.wakeWordNeedsRecognizableName,
         preferLocalOnBasic: preferLocalOnBasic
       )
       let clientConversationId = UUID().uuidString.lowercased()
