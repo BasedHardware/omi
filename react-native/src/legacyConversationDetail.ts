@@ -406,7 +406,7 @@ export async function loadLegacyConversationDetail(
                 const personId =
                   segment.person_id === undefined || segment.person_id === null
                     ? undefined
-                    : visibleDisplayText(text(segment.person_id, 256));
+                    : visibleDisplayText(text(segment.person_id, 10000));
                 const translations = segmentTranslations(segment.translations);
                 const sttProvider =
                   segment.stt_provider === undefined ||
@@ -487,7 +487,7 @@ export async function loadLegacyConversationDetail(
   const folderId =
     value.folder_id === undefined || value.folder_id === null
       ? undefined
-      : visibleDisplayText(text(value.folder_id, 256));
+      : visibleDisplayText(text(value.folder_id, 10000));
   const folder =
     folderId === undefined || folderId === ''
       ? undefined

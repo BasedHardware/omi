@@ -510,6 +510,122 @@ test('keeps GET transcript when speaker or stt_provider exceeds 256', async () =
   );
 });
 
+test('keeps GET conversation detail when person_id or folder_id exceeds 256', async () => {
+  const folderId = 'f'.repeat(257);
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/folders') {
+      return {
+        id: 'folders',
+        status: 200,
+        body: JSON.stringify([{id: folderId, name: 'Work'}]),
+      };
+    }
+    return response({
+      ...fixture,
+      folder_id: folderId,
+    });
+  });
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      title: fixture.structured.title,
+      summary: fixture.structured.overview,
+      folderName: 'Work',
+    },
+  );
+  const personId = 'p'.repeat(257);
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/users/people?include_speech_samples=false') {
+      return {
+        id: 'people',
+        status: 200,
+        body: JSON.stringify([{id: personId, name: 'Alex Chen'}]),
+      };
+    }
+    return response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          person_id: personId,
+        },
+      ],
+    });
+  });
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      title: fixture.structured.title,
+      transcript: {
+        status: 'loaded',
+        segments: [
+          {
+            text: fixture.transcript_segments[0].text,
+            speaker: 'SPEAKER_00',
+            isUser: true,
+            start: 0.25,
+            end: 4.5,
+            personName: 'Alex Chen',
+          },
+        ],
+      },
+    },
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      folder_id: null,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          person_id: null,
+        },
+      ],
+    }),
+  );
+  const omitted = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(omitted).toMatchObject({
+    title: fixture.structured.title,
+    transcript: {
+      status: 'loaded',
+      segments: [
+        {
+          text: fixture.transcript_segments[0].text,
+          speaker: 'SPEAKER_00',
+          isUser: true,
+          start: 0.25,
+          end: 4.5,
+        },
+      ],
+    },
+  });
+  expect(omitted.folderName).toBeUndefined();
+  expect(
+    omitted.transcript.status === 'loaded' ? omitted.transcript.segments[0] : null,
+  ).not.toHaveProperty('personName');
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      folder_id: 1,
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          person_id: 1,
+        },
+      ],
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+});
+
 test('fails closed for malformed GET calendar_event', async () => {
   mockRequest.mockResolvedValue(
     response({
