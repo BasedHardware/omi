@@ -107,10 +107,9 @@ def _invalid_body_response(message: str) -> ChatToolResponse:
 
 def _nutrient(product: Dict[str, Any], key: str) -> Optional[Any]:
     nutriments = product.get("nutriments") or {}
-    per_100g_key = f"{key}_100g"
-    if per_100g_key in nutriments:
-        return nutriments[per_100g_key]
-    return nutriments.get(key)
+    # Unsuffixed values may be per serving, so they cannot establish a
+    # per-100g amount. Missing normalized values stay unknown; zeroes survive.
+    return nutriments.get(f"{key}_100g")
 
 
 def _summarize_product(product: Dict[str, Any]) -> Dict[str, Any]:
