@@ -78,19 +78,33 @@ export async function scanForDevices(timeoutMs = 5000): Promise<ScannedDevice[]>
 
   await noble.startScanningAsync([], false);
 
+  const record = (peripheral: any) => {
+    const id = String(peripheral.id || peripheral.address || '');
+    if (!id) return;
+    byId.set(id, {
+      id,
+      name: String(peripheral.advertisement?.localName || peripheral.advertisement?.name || ''),
+      rssi: Number(peripheral.rssi ?? 0) || 0,
+    });
+  };
+
   try {
+    const timeLeftMs = () => Math.max(0, deadline - Date.now());
     if (typeof noble.discoverAsync === 'function') {
-      for await (const peripheral of noble.discoverAsync()) {
-        const id = String(peripheral.id || peripheral.address || '');
-        if (id) {
-          byId.set(id, {
-            id,
-            name: String(peripheral.advertisement?.localName || peripheral.advertisement?.name || ''),
-            rssi: Number(peripheral.rssi ?? 0) || 0,
-          });
+      // Deadline is independent of the next advertisement. A quiet
+      // discoverAsync() iterator would otherwise hang forever.
+      const collect = (async () => {
+        for await (const peripheral of noble.discoverAsync()) {
+          record(peripheral);
+          if (Date.now() >= deadline) break;
         }
-        if (Date.now() >= deadline) break;
-      }
+      })();
+      await Promise.race([
+        collect,
+        new Promise<void>((resolve) => {
+          setTimeout(resolve, timeLeftMs());
+        }),
+      ]);
     } else {
       await new Promise<void>((resolve) => {
         const onDiscover = (peripheral: any) => {
