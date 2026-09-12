@@ -3,6 +3,7 @@ from enum import Enum
 import json
 from typing import List, Optional
 from datetime import datetime, timedelta
+from urllib.parse import quote
 import requests
 import logging
 from mcp.server import Server
@@ -192,7 +193,7 @@ def create_memory(api_key: str, content: str, category: MemoryCategory) -> dict:
 
 def delete_memory(api_key: str, memory_id: str) -> dict:
     response = requests.delete(
-        f"{base_url}memories/{memory_id}",
+        f"{base_url}memories/{quote(memory_id, safe='')}",
         headers={"Authorization": f"Bearer {api_key}"},
     )
     return _response_json(response)
@@ -200,7 +201,7 @@ def delete_memory(api_key: str, memory_id: str) -> dict:
 
 def edit_memory(api_key: str, memory_id: str, content: str) -> dict:
     response = requests.patch(
-        f"{base_url}memories/{memory_id}",
+        f"{base_url}memories/{quote(memory_id, safe='')}",
         headers={"Authorization": f"Bearer {api_key}"},
         params={"value": content},
     )
@@ -257,7 +258,7 @@ def get_conversations(
 
 def get_conversation_by_id(api_key: str, conversation_id: str) -> dict:
     response = requests.get(
-        f"{base_url}conversations/{conversation_id}",
+        f"{base_url}conversations/{quote(conversation_id, safe='')}",
         headers={"Authorization": f"Bearer {api_key}"},
     )
     return _response_json(response)
