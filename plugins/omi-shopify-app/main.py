@@ -45,6 +45,9 @@ SHOPIFY_REDIRECT_URI = os.getenv("SHOPIFY_REDIRECT_URI", "http://localhost:8080/
 # Shopify API version
 SHOPIFY_API_VERSION = "2024-01"
 
+# Upper bound on Shopify list pagination loops (250 records/page x 10 pages).
+MAX_SHOPIFY_PAGES = 10
+
 # Required Shopify scopes
 SHOPIFY_SCOPES = [
     "read_all_orders",
@@ -1044,15 +1047,29 @@ async def tool_create_order(request: Request):
         else:
             return ChatToolResponse(error="Please provide a customer name or email.")
         
-        # Fetch all products once for matching
+        # Fetch all products once for matching (paginated: Shopify caps at 250/page)
         print(f"📦 Fetching all products from store...")
-        all_products_result = shopify_api_request(uid, "GET", "/products.json", params={"limit": 250, "status": "active"})
-        print(f"📦 Products API response: {all_products_result}")
         all_products = []
-        if "error" in all_products_result:
-            print(f"❌ Products API error: {all_products_result['error']}")
+        products_page_count = 0
+        products_params = {"limit": 250, "status": "active"}
+        products_error = None
+        while True:
+            all_products_result = shopify_api_request(uid, "GET", "/products.json", params=products_params)
+            if "error" in all_products_result:
+                products_error = all_products_result["error"]
+                break
+            page_products = all_products_result.get("products", [])
+            all_products.extend(page_products)
+            products_page_count += 1
+            if len(page_products) < 250:
+                break
+            if products_page_count >= MAX_SHOPIFY_PAGES:
+                print(f"⚠️ Product catalog capped at {len(all_products)} items (page limit reached)")
+                break
+            products_params = {"limit": 250, "status": "active", "since_id": page_products[-1]["id"]}
+        if products_error is not None:
+            print(f"❌ Products API error: {products_error}")
         else:
-            all_products = all_products_result.get("products", [])
             print(f"📦 Found {len(all_products)} products in store")
             for p in all_products:
                 print(f"   - {p.get('title')}")
@@ -1346,14 +1363,26 @@ async def tool_create_order(request: Request):
             # Apply discount code to draft order if provided
             if discount_code:
                 print(f"🏷️ Looking up discount code: {discount_code}")
-                discount_result = shopify_api_request(
-                    uid, "GET", "/price_rules.json", 
-                    params={"limit": 250}
-                )
+                # Paginated: Shopify caps price rules at 250/page
+                price_rules = []
+                pr_params = {"limit": 250}
+                pr_pages = 0
+                while True:
+                    discount_result = shopify_api_request(uid, "GET", "/price_rules.json", params=pr_params)
+                    if "error" in discount_result:
+                        break
+                    page_rules = discount_result.get("price_rules", [])
+                    price_rules.extend(page_rules)
+                    pr_pages += 1
+                    if len(page_rules) < 250:
+                        break
+                    if pr_pages >= MAX_SHOPIFY_PAGES:
+                        print(f"⚠️ Price rules capped at {len(price_rules)} (page limit reached)")
+                        break
+                    pr_params = {"limit": 250, "since_id": page_rules[-1]["id"]}
                 
                 applied_discount = None
-                if "error" not in discount_result:
-                    price_rules = discount_result.get("price_rules", [])
+                if price_rules:
                     for rule in price_rules:
                         # Get discount codes for this rule
                         codes_result = shopify_api_request(
