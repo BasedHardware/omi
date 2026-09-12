@@ -14,3 +14,8 @@ def test_clean_unescapes_entities_and_strips_generic_tags():
 
 def test_clean_preserves_inequality_operators():
     assert clean("If a<b, then c>d.") == "If a<b, then c>d."
+
+
+def test_clean_strips_closing_tags_after_word_chars():
+    assert clean("text</p> tail") == "text tail"
+    assert clean("A &amp; B <b>bold</b>") == "A & B bold"
