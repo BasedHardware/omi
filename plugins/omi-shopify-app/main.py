@@ -44,6 +44,9 @@ SHOPIFY_REDIRECT_URI = os.getenv("SHOPIFY_REDIRECT_URI", "http://localhost:8080/
 
 # Shopify API version
 SHOPIFY_API_VERSION = "2024-01"
+SHOPIFY_PAGE_SIZE = 250
+# create_order catalog lookups; analytics keeps its own 4-page orders cap
+SHOPIFY_CREATE_ORDER_MAX_PAGES = 10
 
 # Required Shopify scopes
 SHOPIFY_SCOPES = [
@@ -126,6 +129,67 @@ def shopify_api_request(
         return response.json() if response.content else {"success": True}
     except requests.RequestException as e:
         return {"error": f"Request failed: {str(e)}"}
+
+
+def shopify_fetch_all_pages(
+    uid: str,
+    endpoint: str,
+    list_key: str,
+    params: Optional[Dict] = None,
+    max_pages: int = SHOPIFY_CREATE_ORDER_MAX_PAGES,
+    page_size: int = SHOPIFY_PAGE_SIZE,
+) -> Dict[str, Any]:
+    """Fetch every page of a Shopify list endpoint via since_id.
+
+    First-page errors are returned unchanged. Later-page errors stop
+    pagination and keep items already collected (same as the analytics
+    orders loop on main). Hits of max_pages are logged; the list is still
+    returned so callers do not change their response shape.
+    """
+    query = dict(params or {})
+    query["limit"] = page_size
+    items: List[Any] = []
+    page_count = 0
+    last_id = None
+    ended_on_short_page = False
+    while page_count < max_pages:
+        page_params = dict(query)
+        if last_id is not None:
+            page_params["since_id"] = last_id
+        result = shopify_api_request(uid, "GET", endpoint, params=page_params)
+        if "error" in result:
+            if page_count == 0:
+                return result
+            print(
+                f"⚠️ Stopping {endpoint} pagination after page {page_count}: {result['error']}"
+            )
+            break
+        page_items = result.get(list_key) or []
+        if not isinstance(page_items, list):
+            page_items = []
+        items.extend(page_items)
+        page_count += 1
+        if len(page_items) < page_size:
+            ended_on_short_page = True
+            break
+        last_id = page_items[-1].get("id") if page_items else None
+        if last_id is None:
+            ended_on_short_page = True
+            break
+    if page_count == max_pages and items and not ended_on_short_page:
+        print(
+            f"⚠️ {endpoint} pagination hit cap of {max_pages} pages; "
+            f"{len(items)} {list_key} loaded"
+        )
+    return {list_key: items}
+
+
+def get_user_shop(uid: str) -> Optional[str]:
+    """Return the connected shop domain, if any."""
+    tokens = get_shopify_tokens(uid)
+    if not tokens:
+        return None
+    return tokens.get("shop_domain")
 
 
 def verify_shopify_hmac(query_string: str, hmac_value: str) -> bool:
@@ -1046,9 +1110,14 @@ async def tool_create_order(request: Request):
         else:
             return ChatToolResponse(error="Please provide a customer name or email.")
         
-        # Fetch all products once for matching
+        # Fetch all products once for matching (Shopify caps each page at 250)
         print(f"📦 Fetching all products from store...")
-        all_products_result = shopify_api_request(uid, "GET", "/products.json", params={"limit": 250, "status": "active"})
+        all_products_result = shopify_fetch_all_pages(
+            uid,
+            "/products.json",
+            "products",
+            params={"status": "active"},
+        )
         print(f"📦 Products API response: {all_products_result}")
         all_products = []
         if "error" in all_products_result:
@@ -1348,9 +1417,10 @@ async def tool_create_order(request: Request):
             # Apply discount code to draft order if provided
             if discount_code:
                 print(f"🏷️ Looking up discount code: {discount_code}")
-                discount_result = shopify_api_request(
-                    uid, "GET", "/price_rules.json", 
-                    params={"limit": 250}
+                discount_result = shopify_fetch_all_pages(
+                    uid,
+                    "/price_rules.json",
+                    "price_rules",
                 )
                 
                 applied_discount = None
