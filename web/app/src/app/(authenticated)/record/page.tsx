@@ -2,10 +2,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, ArrowLeft } from 'lucide-react';
-import Link from '@tschk/moonshine-next/link';
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
-import { MainLayout } from '@/components/layout/MainLayout';
+import { Mic } from 'lucide-react';
 import { useRecordingContext } from '@/components/recording/RecordingContext';
 import { AudioModeSelector } from '@/components/recording/AudioModeSelector';
 import { RecordingControls } from '@/components/recording/RecordingControls';
@@ -14,12 +11,11 @@ import { cn } from '@/lib/utils';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 /**
- * Inner content component that uses recording context.
- * Must be rendered INSIDE MainLayout (which provides RecordingProvider).
- * Uses context directly instead of useRecording hook to avoid conflicting
- * with the RecordingController that manages the actual recording infrastructure.
+ * Rendered inside the shared authenticated shell, whose MainLayout provides
+ * RecordingProvider. Because the shell is one instance across routes, the
+ * recording context (and any in-flight recording) survives navigation.
  */
-function RecordPageContent() {
+function RecordPage() {
   const {
     state,
     audioMode,
@@ -62,18 +58,10 @@ function RecordPageContent() {
 
   return (
     <>
-      <div className="h-full flex flex-col bg-bg-primary">
+      <div className="flex h-full flex-col bg-bg-primary">
         {/* Header */}
-        <header className="flex-shrink-0 flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <Link
-              href="/conversations"
-              className="p-2 rounded-element text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <h1 className="text-sm font-medium text-text-tertiary">Record</h1>
-          </div>
+        <header className="flex flex-shrink-0 items-center justify-between px-6 py-4">
+          <h1 className="text-sm font-medium text-text-tertiary">Record</h1>
 
           {/* Audio mode indicator */}
           {isActive && (
@@ -84,19 +72,19 @@ function RecordPageContent() {
         </header>
 
         {isIdle ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6 pb-16 text-center">
+          <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 pb-16 text-center">
             <button
               type="button"
               onClick={handleStartClick}
               aria-label="Start recording"
               className={cn(
-                'group relative w-32 h-32 rounded-full flex items-center justify-center',
-                'transition-all duration-200 outline-none',
+                'group relative flex h-32 w-32 items-center justify-center rounded-full',
+                'outline-none transition-all duration-200',
                 'focus-visible:ring-2 focus-visible:ring-text-primary/60 focus-visible:ring-offset-4 focus-visible:ring-offset-bg-primary',
                 'bg-text-primary text-bg-primary hover:scale-105 active:scale-95',
               )}
             >
-              <Mic className="w-12 h-12" strokeWidth={1.5} />
+              <Mic className="h-12 w-12" strokeWidth={1.5} />
             </button>
 
             <div className="max-w-sm space-y-2">
@@ -108,9 +96,9 @@ function RecordPageContent() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col overflow-hidden px-6 pb-6 gap-4">
+          <div className="flex flex-1 flex-col gap-4 overflow-hidden px-6 pb-6">
             {/* Recording controls - horizontal compact layout */}
-            <div className="flex-shrink-0 flex flex-col items-center gap-3">
+            <div className="flex flex-shrink-0 flex-col items-center gap-3">
               <RecordingControls
                 state={state}
                 duration={duration}
@@ -129,12 +117,12 @@ function RecordPageContent() {
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
-                    className="px-4 py-2 rounded-control bg-error/10 border border-error/20"
+                    className="rounded-control border border-error/20 bg-error/10 px-4 py-2"
                   >
                     <p className="text-sm text-error">{error}</p>
                     <button
                       onClick={clearError}
-                      className="text-xs text-error/60 hover:text-error transition-colors"
+                      className="text-xs text-error/60 transition-colors hover:text-error"
                     >
                       Dismiss
                     </button>
@@ -144,8 +132,8 @@ function RecordPageContent() {
             </div>
 
             {/* Transcript (takes remaining space) */}
-            <div className="flex-1 flex flex-col overflow-hidden rounded-card bg-bg-secondary border border-stroke">
-              <div className="flex-shrink-0 px-5 py-3 border-b border-stroke flex items-baseline gap-2">
+            <div className="flex flex-1 flex-col overflow-hidden rounded-card border border-stroke bg-bg-secondary">
+              <div className="flex flex-shrink-0 items-baseline gap-2 border-b border-stroke px-5 py-3">
                 <h2 className="text-sm font-medium text-text-primary">Live Transcript</h2>
                 <p className="text-xs text-text-quaternary">
                   {segments.length} segment{segments.length !== 1 ? 's' : ''}
@@ -193,23 +181,6 @@ function RecordPageContent() {
   );
 }
 
-registerMoonshineRoute('/record', RecordPage, 'root');
+export default RecordPage;
 
-/**
- * Wrapper that provides MainLayout first, then renders content inside it.
- */
-function RecordContent() {
-  return (
-    <MainLayout hideHeader>
-      <RecordPageContent />
-    </MainLayout>
-  );
-}
-
-export default function RecordPage() {
-  return (
-    <ProtectedRoute>
-      <RecordContent />
-    </ProtectedRoute>
-  );
-}
+registerMoonshineRoute('/record', RecordPage, 'authenticated');

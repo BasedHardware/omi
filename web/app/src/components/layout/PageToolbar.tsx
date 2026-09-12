@@ -38,17 +38,28 @@ export function PageToolbar({
 }: PageToolbarProps) {
   return (
     <div
-      className={cn('flex-shrink-0 bg-bg-secondary border-b border-stroke', className)}
+      className={cn('flex-shrink-0 border-b border-stroke bg-bg-secondary', className)}
     >
-      <div className="flex items-center gap-3 px-4 py-3">
+      {/* Mobile stacks the row: controls scroll horizontally instead of
+          squeezing, and the search field gets its own full-width line. Desktop
+          keeps the single row. Without this, wide controls (folder tabs, view
+          toggles) plus the fixed-width search overflow a phone viewport. */}
+      <div className="flex flex-col gap-2.5 px-4 py-3 sm:flex-row sm:items-center sm:gap-3">
         {controls && (
-          <div className="flex items-center gap-3 min-w-0 flex-wrap">{controls}</div>
+          <div className="no-scrollbar flex min-w-0 items-center gap-3 overflow-x-auto">
+            {controls}
+          </div>
         )}
 
-        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+        <div
+          className={cn(
+            'flex min-w-0 items-center gap-2',
+            'w-full sm:ml-auto sm:w-auto sm:flex-shrink-0',
+          )}
+        >
           {search && (
-            <div className="relative w-52 lg:w-64">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-quaternary" />
+            <div className="relative w-full min-w-0 sm:w-52 lg:w-64">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-quaternary" />
               <Input
                 type="text"
                 value={search.value}
@@ -68,9 +79,9 @@ export function PageToolbar({
                     search.onSubmit?.('');
                   }}
                   aria-label="Clear search"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-element text-text-tertiary hover:bg-bg-quaternary hover:text-text-primary transition-colors"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-element p-1 text-text-tertiary transition-colors hover:bg-bg-quaternary hover:text-text-primary"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
