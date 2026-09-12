@@ -1,12 +1,25 @@
 from pathlib import Path
 import importlib.util
+import sys
+import types
 import unittest
 from unittest.mock import patch
+
+# github_client.py imports requests and dotenv at load time. The suite never
+# performs real I/O (requests.get is patched per test), so stub both modules
+# during the import — the same pattern as the sibling plugin suites — and this
+# file runs on a stdlib-only interpreter. The stubs stay bound inside the
+# loaded module, so patching github_client.requests still intercepts.
+_requests = types.ModuleType("requests")
+_requests.get = _requests.post = None
+_dotenv = types.ModuleType("dotenv")
+_dotenv.load_dotenv = lambda *args, **kwargs: None
 
 MODULE_PATH = Path(__file__).with_name("github_client.py")
 spec = importlib.util.spec_from_file_location("github_client", MODULE_PATH)
 github_client = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(github_client)
+with patch.dict(sys.modules, {"requests": _requests, "dotenv": _dotenv}):
+    spec.loader.exec_module(github_client)
 
 
 class FakeResponse:
