@@ -26,6 +26,7 @@ from db import (
     get_default_store,
     get_user_settings,
 )
+from shopify_paging import fetch_all_pages
 from models import (
     ChatToolResponse,
     ShopifyOrder,
@@ -1044,12 +1045,18 @@ async def tool_create_order(request: Request):
         else:
             return ChatToolResponse(error="Please provide a customer name or email.")
         
-        # Fetch all products once for matching
+        # Fetch all products once for matching (Shopify caps each page at 250)
         print(f"📦 Fetching all products from store...")
-        all_products_result = shopify_api_request(uid, "GET", "/products.json", params={"limit": 250, "status": "active"})
-        print(f"📦 Products API response: {all_products_result}")
+        all_products_result = fetch_all_pages(
+            shopify_api_request,
+            uid,
+            "/products.json",
+            "products",
+            params={"status": "active"},
+        )
+        print(f"📦 Products API response pages={all_products_result.get('page_count')} capped={all_products_result.get('capped')} error={all_products_result.get('error')}")
         all_products = []
-        if "error" in all_products_result:
+        if "error" in all_products_result and not all_products_result.get("products"):
             print(f"❌ Products API error: {all_products_result['error']}")
         else:
             all_products = all_products_result.get("products", [])
@@ -1346,14 +1353,18 @@ async def tool_create_order(request: Request):
             # Apply discount code to draft order if provided
             if discount_code:
                 print(f"🏷️ Looking up discount code: {discount_code}")
-                discount_result = shopify_api_request(
-                    uid, "GET", "/price_rules.json", 
-                    params={"limit": 250}
+                discount_result = fetch_all_pages(
+                    shopify_api_request,
+                    uid,
+                    "/price_rules.json",
+                    "price_rules",
                 )
                 
                 applied_discount = None
-                if "error" not in discount_result:
-                    price_rules = discount_result.get("price_rules", [])
+                price_rules = discount_result.get("price_rules") or []
+                if "error" in discount_result and not price_rules:
+                    print(f"⚠️ Could not fetch price rules: {discount_result['error']}")
+                if price_rules:
                     for rule in price_rules:
                         # Get discount codes for this rule
                         codes_result = shopify_api_request(
