@@ -924,6 +924,16 @@ checks:
     lanes: ["local", "ci"]
     reason: "#13181 failed content HTTP reads were indistinguishable from empty successful pages; production helper and handler regression"
 
+  - id: notification-dispatch-boundary
+    command: ["python3", ".github/scripts/check_notification_dispatch_boundary.py", "--base", "{base}"]
+    triggers: ["backend/**/*.py", ".github/scripts/check_notification_dispatch_boundary.py", ".github/scripts/notification_dispatch_boundary_baseline.json"]
+    lanes: ["local", "ci"]
+    reason: "#9518: notification policy converges only if new producers cannot bypass the typed dispatcher and call the FCM transport directly"
+  - id: notification-dispatch-boundary-tests
+    command: ["python3", ".github/scripts/test_check_notification_dispatch_boundary.py"]
+    triggers: [".github/scripts/check_notification_dispatch_boundary.py", ".github/scripts/test_check_notification_dispatch_boundary.py", ".github/scripts/notification_dispatch_boundary_baseline.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the staged notification-owner ratchet must resolve aliases, ignore its transport owner, and reject baseline-assisted growth"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
