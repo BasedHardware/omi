@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import math
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -31,6 +33,111 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
 
 
 _LIST_COLUMNS = ["id", "title", "category", "started_at", "source"]
+
+#: SRT timestamps are ``HH:MM:SS,mmm`` and address a zero-based timeline, so a
+#: negative offset has no representation. Clamping keeps a segment that starts a
+#: few milliseconds before the conversation timeline from producing ``-1:-1:-1``.
+_SRT_MAX_MILLISECONDS = 99 * 3600 * 1000 + 59 * 60 * 1000 + 59 * 1000 + 999
+
+#: A cue ends at the first blank line, so embedded blank lines inside one
+#: segment's text would split it into a malformed extra cue. Line endings are
+#: matched explicitly because a lone LF is itself a line break in SRT, and CRLF is
+#: the form written below.
+_SRT_BLANK_LINE = re.compile(r"(?:\r?\n)[ \t]*(?:\r?\n)+")
+
+
+def _segment_start_seconds(segment: dict) -> Optional[float]:
+    """Return the segment start in seconds, or ``None`` when it has no usable one."""
+    for key in ("start", "start_seconds", "start_time"):
+        value = segment.get(key)
+        if isinstance(value, bool):  # bool is an int subclass; not a timestamp
+            continue
+        if isinstance(value, (int, float)):
+            # JSON decoding can yield NaN/Infinity, which has no SRT timestamp and
+            # would raise on the later int() conversion instead of being skipped.
+            return float(value) if math.isfinite(value) else None
+    for key in ("start_timestamp", "started_at", "start_time"):
+        value = segment.get(key)
+        if isinstance(value, str):
+            try:
+                seconds = datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                continue
+            if math.isfinite(seconds):
+                return seconds
+    return None
+
+
+def _format_srt_timestamp(seconds: float) -> str:
+    """Format seconds as an SRT timestamp (``HH:MM:SS,mmm``).
+
+    SRT has no negative or sub-hour fields beyond two digits, so values are
+    clamped into the representable range instead of printing something a player
+    would reject.
+    """
+    if not math.isfinite(seconds):
+        seconds = 0.0
+    milliseconds = int(round(seconds * 1000))
+    if milliseconds < 0:
+        milliseconds = 0
+    elif milliseconds > _SRT_MAX_MILLISECONDS:
+        milliseconds = _SRT_MAX_MILLISECONDS
+    hours, remainder = divmod(milliseconds, 3600 * 1000)
+    minutes, remainder = divmod(remainder, 60 * 1000)
+    secs, millis = divmod(remainder, 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+
+def _cue_text(segment: dict) -> Optional[str]:
+    """Return the cue text, with blank lines folded and line endings normalised."""
+    text = segment.get("text")
+    if text is None:
+        return None
+    # Fold blank lines first (they terminate a cue), then make every remaining
+    # break CRLF so the cue's internal breaks match the separator written below.
+    folded = _SRT_BLANK_LINE.sub("\n", str(text))
+    normalised = re.sub(r"\r\n|\r|\n", "\r\n", folded).strip()
+    return normalised or None
+
+
+def _segments_to_srt(segments: list) -> str:
+    """Convert ``transcript_segments`` into SRT.
+
+    Segments without a usable start time are skipped rather than emitted with a
+    fabricated timestamp: a wrong cue time is worse than a missing cue because
+    it silently desynchronises the whole caption track. A segment with no end
+    falls back to its own start so the cue stays valid for the one frame.
+
+    Cues are ordered by start time. The endpoint does not promise a sorted
+    stored-list order, and SRT readers expect a monotonic timeline, so relying on
+    the response order would emit cues out of sequence.
+    """
+    prepared: list[tuple[float, float, str]] = []
+    for segment in segments or []:
+        if not isinstance(segment, dict):
+            continue
+        start = _segment_start_seconds(segment)
+        if start is None:
+            continue
+        end = _segment_start_seconds({"start": segment.get("end")})
+        if end is None or end < start:
+            end = start
+        text = _cue_text(segment)
+        if text is None:
+            continue
+        prepared.append((start, end, text))
+
+    # sort() is stable, so segments sharing a start time keep their input order.
+    prepared.sort(key=lambda cue: cue[0])
+
+    # SRT consumers expect CRLF, so both the in-cue line breaks and the blank
+    # separator line are explicit; without this, LF reaches the file unchanged.
+    blocks = [
+        f"{index}\r\n{_format_srt_timestamp(start)} --> {_format_srt_timestamp(end)}\r\n{text}\r\n"
+        for index, (start, end, text) in enumerate(prepared, start=1)
+    ]
+    return "\r\n".join(blocks)
+
 
 
 @app.command("list", help="List conversations.")
@@ -83,13 +190,57 @@ def get_conversation(
     typer_ctx: typer.Context,
     conversation_id: str = typer.Argument(..., help="Conversation ID."),
     include_transcript: bool = typer.Option(False, "--include-transcript"),
+    format: str = typer.Option("json", "--format", help="Output format: json or srt."),
+    output: Optional[Path] = typer.Option(None, "--output", help="Write the result to this file."),
+    force: bool = typer.Option(False, "--force", help="Overwrite --output if it already exists."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+
+    srt_format = format.lower()
+    if srt_format not in ("json", "srt"):
+        raise UsageError(
+            message=f"Unsupported --format: {format}",
+            detail="Supported formats are 'json' (default) and 'srt'.",
+        )
+    if srt_format == "srt" and not include_transcript:
+        raise UsageError(
+            message="--format srt requires --include-transcript",
+            detail="SRT is built from transcript segments, which the API only returns when "
+            "--include-transcript is set.",
+        )
+    if output is not None and output.exists() and not force:
+        # Re-running an export should not silently destroy an earlier transcript.
+        raise UsageError(
+            message=f"Refusing to overwrite existing file: {output}",
+            detail="Pass --force to overwrite it.",
+        )
+
     with ctx.make_client() as client:
         result = client.get(
             f"/v1/dev/user/conversations/{conversation_id}",
             params={"include_transcript": include_transcript},
         )
+
+    if srt_format == "srt":
+        subtitles = _segments_to_srt((result or {}).get("transcript_segments") or [])
+        if output is not None:
+            output.write_text(subtitles, encoding="utf-8", newline="")
+            ctx.renderer.success(f"Wrote [bold]{output}[/bold]")
+            return
+        if ctx.renderer.json_mode:
+            # --json promises machine-readable output on stdout. Raw subtitle text
+            # is not JSON, so it is returned as a field of the JSON envelope.
+            ctx.renderer.emit({"format": "srt", "srt": subtitles})
+            return
+        # Subtitles go to stdout unchanged: routing them through the renderer would
+        # reflow the very cue text a player reads.
+        typer.echo(subtitles, nl=False)
+        return
+
+    if output is not None:
+        output.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+        ctx.renderer.success(f"Wrote [bold]{output}[/bold]")
+        return
     ctx.renderer.emit(result, title="conversation")
 
 

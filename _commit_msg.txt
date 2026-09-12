@@ -1,0 +1,22 @@
+fix(python-cli): address SRT export review feedback
+
+Automated review flagged real gaps in the initial SRT export. Changes:
+
+- Honor the global --json contract: with --json the subtitles are emitted as a
+  {"format": "srt", "srt": ...} JSON object instead of raw text, so stdout stays
+  machine-readable for callers.
+- Skip non-finite segment starts. JSON decoding can yield NaN/Infinity, which
+  previously reached int(round(seconds * 1000)) and raised instead of being
+  treated as an unusable timestamp.
+- Order cues by start time. The endpoint does not promise a sorted list and SRT
+  readers expect a monotonic timeline.
+- Fold blank lines inside cue text. A blank line terminates a cue, so an
+  embedded one produced a malformed extra cue.
+- Write CRLF throughout. newline="" on write only disables translation; the
+  line breaks themselves have to be CRLF, including inside cue text.
+- Refuse to overwrite an existing --output target unless --force is passed.
+- Document --format/--output/--force in the CLI reference and README.
+
+Tests: sdks/python-cli suite 408 passed. New cases cover JSON mode, cue order,
+blank-line folding, non-finite starts, overwrite refusal, the --force path, and
+the JSON --output path.
