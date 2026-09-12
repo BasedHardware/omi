@@ -97,15 +97,89 @@ class StructuredStringSinkRegistryTests(unittest.TestCase):
                 CHECKER.validate_entry(original, source=source, root=REPOSITORY_ROOT)
 
     def test_bash_c_payload_exposes_registered_sink_violations(self) -> None:
-        entry = next(entry for entry in self.entries if entry["id"] == "llm-gateway-probe-split-argv")
         fixture_dir = REPOSITORY_ROOT / ".github/scripts/fixtures/structured_string_sinks"
-        passing = fixture_dir / "llm-gateway-probe-bash-c-wrap.pass.yml"
-        failing = fixture_dir / "llm-gateway-probe-bash-c-wrap.fail.yml"
-        self.assertEqual(CHECKER.check_entry_paths(entry, [passing], REPOSITORY_ROOT), [])
-        violations = CHECKER.check_entry_paths(entry, [failing], REPOSITORY_ROOT)
-        self.assertEqual(len(violations), 1)
-        self.assertEqual(violations[0].entry_id, entry["id"])
-        self.assertIn("12860", failing.read_text(encoding="utf-8"))
+        cases = (
+            (
+                "llm-gateway-probe-split-argv",
+                "llm-gateway-probe-bash-c-wrap.pass.yml",
+                "llm-gateway-probe-bash-c-wrap.fail.yml",
+            ),
+            (
+                "llm-gateway-probe-explicit-interpreter",
+                "llm-gateway-probe-bash-c-interpreter.pass.yml",
+                "llm-gateway-probe-bash-c-interpreter.fail.yml",
+            ),
+        )
+        for entry_id, passing_name, failing_name in cases:
+            entry = next(entry for entry in self.entries if entry["id"] == entry_id)
+            passing = fixture_dir / passing_name
+            failing = fixture_dir / failing_name
+            with self.subTest(entry=entry_id):
+                self.assertEqual(CHECKER.check_entry_paths(entry, [passing], REPOSITORY_ROOT), [])
+                violations = CHECKER.check_entry_paths(entry, [failing], REPOSITORY_ROOT)
+                self.assertEqual(len(violations), 1)
+                self.assertEqual(violations[0].entry_id, entry["id"])
+                self.assertIn("12860", failing.read_text(encoding="utf-8"))
+
+    def test_registered_command_in_data_position_is_not_an_invocation(self) -> None:
+        entry = next(entry for entry in self.entries if entry["id"] == "llm-gateway-probe-split-argv")
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Path(temporary) / "data-only.yml"
+            fixture.write_text(
+                "\n".join(
+                    [
+                        "name: probe path passed as data",
+                        "jobs:",
+                        "  probe:",
+                        "    runs-on: ubuntu-latest",
+                        "    steps:",
+                        "      - run: echo backend/scripts/probe-llm-gateway-from-cloud-run.sh",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(CHECKER.check_entry_paths(entry, [fixture], REPOSITORY_ROOT), [])
+
+    def test_adjacent_shell_operator_does_not_hide_registered_command(self) -> None:
+        entry = next(entry for entry in self.entries if entry["id"] == "llm-gateway-probe-explicit-interpreter")
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Path(temporary) / "adjacent-operator.yml"
+            fixture.write_text(
+                "\n".join(
+                    [
+                        "name: probe adjacent operator",
+                        "jobs:",
+                        "  probe:",
+                        "    runs-on: ubuntu-latest",
+                        "    steps:",
+                        "      - run: backend/scripts/probe-llm-gateway-from-cloud-run.sh&& echo ok",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            violations = CHECKER.check_entry_paths(entry, [fixture], REPOSITORY_ROOT)
+            self.assertEqual(len(violations), 1)
+            self.assertEqual(violations[0].entry_id, entry["id"])
+
+    def test_bash_c_expansion_does_not_duplicate_violations(self) -> None:
+        entry = next(entry for entry in self.entries if entry["id"] == "llm-gateway-probe-explicit-interpreter")
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Path(temporary) / "exact-payload.yml"
+            fixture.write_text(
+                "\n".join(
+                    [
+                        "name: probe exact bash-c payload",
+                        "jobs:",
+                        "  probe:",
+                        "    runs-on: ubuntu-latest",
+                        "    steps:",
+                        "      - run: bash -c probe-llm-gateway-from-cloud-run.sh",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            violations = CHECKER.check_entry_paths(entry, [fixture], REPOSITORY_ROOT)
+            self.assertEqual(len(violations), 1)
 
 
 if __name__ == "__main__":

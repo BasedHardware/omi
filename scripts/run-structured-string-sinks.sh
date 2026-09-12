@@ -10,7 +10,7 @@ source "$ROOT_DIR/scripts/dev-harness/_resolve_python.sh"
 
 if ! BACKEND_PYTHON="$(dev_harness_canonical_python)" \
   || ! "$BACKEND_PYTHON" -c "import yaml" >/dev/null 2>&1; then
-  "$ROOT_DIR/backend/scripts/sync-python-deps.sh"
+  VENV_PATH=.venv "$ROOT_DIR/backend/scripts/sync-python-deps.sh"
   if ! BACKEND_PYTHON="$(dev_harness_canonical_python)"; then
     echo "FAIL: dependency sync did not create the canonical backend/.venv interpreter." >&2
     exit 1

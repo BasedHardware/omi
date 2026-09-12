@@ -261,31 +261,62 @@ def _check_action_delimited_map(entry: dict[str, Any], path: Path, document: obj
 
 
 SHELL_INTERPRETERS = frozenset({"bash", "sh", "zsh"})
+SHELL_SEGMENT_BOUNDARIES = frozenset({"|", "||", "&&", ";", "&"})
 _SHELL_C_RECURSION_CAP = 3
+_SHELL_OPERATOR_SPLIT_RE = re.compile(r"(\&\&|\|\||[|;&])")
 
 
 def _command_basename(token: str) -> str:
-    return token.rstrip(";,|").rsplit("/", 1)[-1]
+    for part in _SHELL_OPERATOR_SPLIT_RE.split(token):
+        if part and part not in SHELL_SEGMENT_BOUNDARIES:
+            return part.rstrip(";,|&").rsplit("/", 1)[-1]
+    return token.rstrip(";,|&").rsplit("/", 1)[-1]
+
+
+def _token_is_command_position(tokens: list[str], index: int) -> bool:
+    if index == 0:
+        return True
+    previous = tokens[index - 1]
+    if previous in SHELL_SEGMENT_BOUNDARIES or previous == "-c":
+        return True
+    if _command_basename(previous) in SHELL_INTERPRETERS:
+        return True
+    return any(previous.endswith(operator) for operator in SHELL_SEGMENT_BOUNDARIES)
+
+
+def _command_fragments_at_position(token: str, *, at_command_position: bool) -> Iterator[str]:
+    is_command = at_command_position
+    for part in _SHELL_OPERATOR_SPLIT_RE.split(token):
+        if not part:
+            continue
+        if part in SHELL_SEGMENT_BOUNDARIES:
+            is_command = True
+            continue
+        if is_command:
+            yield part
+        is_command = False
 
 
 def _expand_shell_c_payloads(tokens: list[str], *, depth: int = 0) -> Iterator[list[str]]:
-    yield tokens
     if depth >= _SHELL_C_RECURSION_CAP:
+        yield tokens
         return
-    if not tokens or _command_basename(tokens[0]) not in SHELL_INTERPRETERS:
-        return
-    for index, token in enumerate(tokens[1:], start=1):
-        if token != "-c" or index + 1 >= len(tokens):
-            continue
-        payload = tokens[index + 1]
-        try:
-            inner_tokens = shlex.split(payload, posix=True)
-        except ValueError:
-            if ".sh" in payload:
-                yield ["__UNPARSEABLE__", payload]
+    if tokens and _command_basename(tokens[0]) in SHELL_INTERPRETERS:
+        for index, token in enumerate(tokens[1:], start=1):
+            if token != "-c" or index + 1 >= len(tokens):
+                continue
+            payload = tokens[index + 1]
+            try:
+                inner_tokens = shlex.split(payload, posix=True)
+            except ValueError:
+                if ".sh" in payload:
+                    yield ["__UNPARSEABLE__", payload]
+                else:
+                    yield tokens
+                return
+            yield from _expand_shell_c_payloads(inner_tokens, depth=depth + 1)
             return
-        yield from _expand_shell_c_payloads(inner_tokens, depth=depth + 1)
-        return
+    yield tokens
 
 
 def _yield_logical_tokens(pending: str) -> Iterator[list[str]]:
@@ -327,9 +358,19 @@ def _registered_invocations(document: object, command: str) -> Iterator[tuple[li
             if tokens and tokens[0] == "__UNPARSEABLE__" and command in tokens[1]:
                 yield tokens, 0
                 continue
+            seen: set[tuple[tuple[str, ...], int]] = set()
             for index, token in enumerate(tokens):
-                if _command_basename(token) == command:
+                if not _token_is_command_position(tokens, index):
+                    continue
+                for fragment in _command_fragments_at_position(token, at_command_position=True):
+                    if _command_basename(fragment) != command:
+                        continue
+                    key = (tuple(tokens), index)
+                    if key in seen:
+                        break
+                    seen.add(key)
                     yield tokens, index
+                    break
 
 
 def _check_script_split_argv(entry: dict[str, Any], path: Path, document: object, root: Path) -> list[Violation]:
