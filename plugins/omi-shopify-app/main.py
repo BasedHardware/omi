@@ -527,7 +527,7 @@ async def tool_get_analytics(request: Request):
             params["since_id"] = last_order_id
             orders_result = shopify_api_request(uid, "GET", "/orders.json", params=params)
             if "error" in orders_result:
-                break
+                return ChatToolResponse(error="Failed to get complete analytics. Please try again.")
             all_orders.extend(orders_result.get("orders", []))
             page_count += 1
         
