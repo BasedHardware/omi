@@ -124,18 +124,18 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
         projectable = false;
         break;
       }
-      const title = visibleDisplayText(text(change.title, 10000));
+      const title = visibleDisplayText(text(change.title, 1_000_000));
       if (title === '') {
         continue;
       }
       const description =
         change.description === undefined || change.description === null
           ? ''
-          : visibleDisplayText(text(change.description, 10000));
+          : visibleDisplayText(text(change.description, 1_000_000));
       const icon =
         change.icon === undefined || change.icon === null
           ? ''
-          : visibleDisplayText(text(change.icon, 10000));
+          : visibleDisplayText(text(change.icon, 1_000_000));
       pending.push({
         key: `${id}:${changeIndex}`,
         title: heading,

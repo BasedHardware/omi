@@ -183,6 +183,43 @@ test('keeps GET app changelog icon longer than 32', () => {
   ]);
 });
 
+test('keeps GET app changelog title, description, or icon longer than 10000', () => {
+  const title = 'T'.repeat(10001);
+  const description = 'D'.repeat(10001);
+  const icon = 'I'.repeat(10001);
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-long-copy',
+          type: 'changelog',
+          app_version: '1.6.0',
+          content: {
+            changes: [{title, description, icon}],
+          },
+        },
+        {
+          id: 'ann-good',
+          type: 'changelog',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-long-copy:0',
+      title: "What's New in 1.6.0",
+      copy: `${icon} · ${title} · ${description}`,
+    },
+    {
+      key: 'ann-good:0',
+      title: "What's New in 1.2.0",
+      copy: 'Offline replay',
+    },
+  ]);
+});
+
 test('keeps GET app changelog app_version longer than 64', () => {
   const app_version = 'x'.repeat(65);
   expect(
