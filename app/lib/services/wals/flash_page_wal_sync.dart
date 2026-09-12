@@ -43,6 +43,12 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   FlashPageWalSyncImpl(this.listener);
 
+  @visibleForTesting
+  set testWals(List<Wal> wals) => _wals = wals;
+
+  @visibleForTesting
+  set testDevice(BtDevice? device) => _device = device;
+
   @override
   void setLocalSync(LocalWalSync localSync) {
     _localSync = localSync;
@@ -123,9 +129,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   @override
   Future deleteWal(Wal wal) async {
+    if (wal.storage != WalStorage.flashPage || !_wals.any((w) => w.id == wal.id)) return;
     _wals.removeWhere((w) => w.id == wal.id);
 
-    if (_device != null && wal.status == WalStatus.synced) {
+    if (_device != null && wal.device == _device!.id && wal.status == WalStatus.synced) {
       await _acknowledgeProcessedData(_device!.id, wal.storageTotalBytes);
     }
 

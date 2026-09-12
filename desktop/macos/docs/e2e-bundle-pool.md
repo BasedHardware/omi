@@ -171,6 +171,14 @@ next launch replaces it.
 them, so those sequences run under one pool lock: two lanes acquiring at the
 same moment are serialized, and each ends up holding a distinct slot.
 
+`release --slot N` still resolves the caller's worktree before releasing. A
+live slot held by another worktree is refused even when the caller names the
+slot directly. `--worktree PATH` supplies the caller identity for a harness
+invoked outside that checkout. Defunct leases remain releasable so a vanished
+lane can be cleaned up. Ownership is compared on the canonical worktree path,
+so a lease acquired through a relative path or a symlink is released by the
+owner's default resolution without repeating `--worktree`.
+
 A holder that comes back after the backstop simply refreshes its own lease; the
 backstop reclaims slots from lanes that vanished, it does not lock a live lane
 out of its own slot.

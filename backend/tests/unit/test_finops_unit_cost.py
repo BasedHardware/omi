@@ -5,16 +5,71 @@ They are deliberately hermetic: no GCP, no Firestore, no network.
 """
 
 import importlib.util
+import json
 import pathlib
 
 import pytest
 
-_SPEC = importlib.util.spec_from_file_location(
-    "finops_assemble",
-    pathlib.Path(__file__).resolve().parents[2] / "scripts" / "finops" / "assemble_unit_cost.py",
-)
+_FINOPS = pathlib.Path(__file__).resolve().parents[2] / "scripts" / "finops"
+_SPEC = importlib.util.spec_from_file_location("finops_assemble", _FINOPS / "assemble_unit_cost.py")
 alloc = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(alloc)
+_AUTH_SPEC = importlib.util.spec_from_file_location("finops_gcpauth", _FINOPS / "gcpauth.py")
+gcpauth = importlib.util.module_from_spec(_AUTH_SPEC)
+_AUTH_SPEC.loader.exec_module(gcpauth)
+
+
+def test_writer_is_finops_sa_not_human_or_readonly_bot():
+    assert gcpauth.WRITER_ACCOUNT == "finops-writer@based-hardware.iam.gserviceaccount.com"
+    assert gcpauth.READONLY_ACCOUNT == "read-only-bot-account@based-hardware.iam.gserviceaccount.com"
+    assert "david@" not in gcpauth.WRITER_ACCOUNT
+    assert gcpauth.WRITER_ACCOUNT != gcpauth.READONLY_ACCOUNT
+
+
+def _write_key(tmp_path, email):
+    p = tmp_path / "writer-key.json"
+    p.write_text(json.dumps({"type": "service_account", "client_email": email}))
+    return str(p)
+
+
+def test_writer_key_email_verifies_the_key_itself(tmp_path, monkeypatch):
+    """ADC presents the key file, so client_email is the authoritative identity check."""
+    monkeypatch.setattr(gcpauth, "WRITER_KEY", _write_key(tmp_path, gcpauth.WRITER_ACCOUNT))
+    assert gcpauth.writer_key_email() == gcpauth.WRITER_ACCOUNT
+
+
+def test_writer_key_email_refuses_a_key_for_another_identity(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        gcpauth, "WRITER_KEY", _write_key(tmp_path, "someone-else@based-hardware.iam.gserviceaccount.com")
+    )
+    with pytest.raises(SystemExit, match="someone-else"):
+        gcpauth.writer_key_email()
+
+
+def test_writer_gcloud_activates_the_key_when_config_account_is_unset(monkeypatch):
+    """A fresh WRITER_GCLOUD has no account; GOOGLE_APPLICATION_CREDENTIALS does not
+    authenticate the gcloud CLI, so the key must be activated before the account check."""
+    calls = []
+
+    def fake_sh(cmd, timeout=180):
+        calls.append(cmd)
+        if "get-value" in cmd:
+            return gcpauth.WRITER_ACCOUNT if any("activate-service-account" in c for c in calls) else ""
+        assert "activate-service-account" in cmd and gcpauth.WRITER_KEY in cmd
+        return ""
+
+    monkeypatch.setattr(gcpauth, "_sh", fake_sh)
+    gcpauth.activate_writer_gcloud()
+    assert any("activate-service-account" in c for c in calls)
+
+
+def test_writer_gcloud_refuses_when_activation_does_not_pin_the_writer(monkeypatch):
+    def fake_sh(cmd, timeout=180):
+        return "owner@scalingforever.com"
+
+    monkeypatch.setattr(gcpauth, "_sh", fake_sh)
+    with pytest.raises(SystemExit, match="owner@scalingforever.com"):
+        gcpauth.activate_writer_gcloud()
 
 
 # ---------------------------------------------------------------- fnum / is_one_time

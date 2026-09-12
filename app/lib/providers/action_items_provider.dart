@@ -21,6 +21,8 @@ typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
   String? conversationId,
   DateTime? startDate,
   DateTime? endDate,
+  DateTime? dueStartDate,
+  DateTime? dueEndDate,
 });
 
 typedef DeleteActionItemRequest = Future<bool> Function(String id);
@@ -38,6 +40,9 @@ class ActionItemsProvider extends ChangeNotifier {
   final DeleteActionItemRequest _deleteActionItemRequest;
   Future<void>? _initialLoad;
   bool _initialLoadCompleted = false;
+  Future<void>? _homeTodayLoad;
+  bool _homeDayLoaded = false;
+  List<ActionItemWithMetadata> _homeDayItems = [];
 
   List<ActionItemWithMetadata> _actionItems = [];
 
@@ -88,6 +93,36 @@ class ActionItemsProvider extends ChangeNotifier {
   DateTime? get startDate => _startDate;
   DateTime? get endDate => _endDate;
   bool get hasActiveFilter => _startDate != null || _endDate != null;
+
+  /// Home preview: due-window rows plus any first-page matches, so an empty
+  /// due-window response cannot hide a task already on the global first page.
+  List<ActionItemWithMetadata> todayPreviewTasks({DateTime? now, int limit = 3}) {
+    final clock = now ?? DateTime.now();
+    final byId = <String, ActionItemWithMetadata>{};
+    for (final item in filterTodayTasks(_actionItems, now: clock)) {
+      byId[item.id] = item;
+    }
+    if (_homeDayLoaded) {
+      for (final item in filterTodayTasks(_homeDayItems, now: clock)) {
+        byId[item.id] = item;
+      }
+    }
+    return byId.values.take(limit).toList();
+  }
+
+  static List<ActionItemWithMetadata> filterTodayTasks(
+    List<ActionItemWithMetadata> items, {
+    required DateTime now,
+  }) {
+    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+    return items.where((item) {
+      if (item.completed) return false;
+      if (item.dueAt == null) return false;
+      if (item.dueAt!.isBefore(sevenDaysAgo)) return false;
+      return item.dueAt!.isBefore(startOfTomorrow);
+    }).toList();
+  }
 
   // Selection getters
   bool get isSelectionMode => _isSelectionMode;
@@ -174,6 +209,43 @@ class ActionItemsProvider extends ChangeNotifier {
       _initialLoad = null;
     });
     return _initialLoad!;
+  }
+
+  /// Home asks only for incomplete tasks due in the visible window, instead of
+  /// paging the whole task history. Does not replace `_actionItems`.
+  Future<void> ensureHomeTodayTasksLoaded({DateTime? now}) {
+    final existing = _homeTodayLoad;
+    if (existing != null) return existing;
+    if (_homeDayLoaded) return Future.value();
+
+    final load = _fetchHomeTodayTasks(now: now ?? DateTime.now()).whenComplete(() {
+      _homeTodayLoad = null;
+    });
+    _homeTodayLoad = load;
+    return load;
+  }
+
+  Future<void> _fetchHomeTodayTasks({required DateTime now}) async {
+    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+    try {
+      final response = await _getActionItems(
+        limit: 100,
+        offset: 0,
+        completed: false,
+        dueStartDate: sevenDaysAgo,
+        dueEndDate: startOfTomorrow.subtract(const Duration(microseconds: 1)),
+      );
+      if (response != null) {
+        _homeDayItems = _pendingDeletionIds.isEmpty
+            ? List.of(response.actionItems)
+            : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+        _homeDayLoaded = true;
+      }
+    } catch (e) {
+      Logger.debug('Error fetching home today tasks: $e');
+    }
+    notifyListeners();
   }
 
   /// One-time migration: convert SharedPreferences taskCategoryOrder to sort_order on items
@@ -662,13 +734,18 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   ActionItemWithMetadata? _findAndUpdateItemState(String itemId, bool newState) {
+    ActionItemWithMetadata? updated;
     final mainIndex = _actionItems.indexWhere((item) => item.id == itemId);
     if (mainIndex != -1) {
       _actionItems[mainIndex] = _actionItems[mainIndex].copyWith(completed: newState);
-      return _actionItems[mainIndex];
+      updated = _actionItems[mainIndex];
     }
-
-    return null;
+    final homeIndex = _homeDayItems.indexWhere((item) => item.id == itemId);
+    if (homeIndex != -1) {
+      _homeDayItems[homeIndex] = _homeDayItems[homeIndex].copyWith(completed: newState);
+      updated ??= _homeDayItems[homeIndex];
+    }
+    return updated;
   }
 
   ActionItemWithMetadata? _findAndUpdateItemDescription(String itemId, String newDescription) {
@@ -805,6 +882,9 @@ class ActionItemsProvider extends ChangeNotifier {
 
   void clearUserData() {
     _actionItems = [];
+    _homeDayItems = [];
+    _homeDayLoaded = false;
+    _homeTodayLoad = null;
     _selectedItems = {};
     _pendingSortUpdates.clear();
     _pendingIndentUpdates.clear();

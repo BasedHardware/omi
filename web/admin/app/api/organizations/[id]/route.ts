@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase/admin';
 import { verifyAdmin } from '@/lib/auth';
+import { isSafeDocumentId } from '@/lib/firestore-doc-id.mjs';
 import { getStripe } from '@/lib/stripe';
 import { updateUserSubscriptionDetails } from '@/lib/utils/user-subscription';
 export const dynamic = 'force-dynamic';
@@ -41,6 +42,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     const body = await request.json();
     const { is_active, max_seats, organisation_name, website, employees, stripe_payment_id } = body;
     const organizationId = params.id;
+    if (!isSafeDocumentId(organizationId)) {
+      return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
+    }
 
     // Exclude employees from updates - employees should not be editable through this endpoint
     if (employees !== undefined) {
