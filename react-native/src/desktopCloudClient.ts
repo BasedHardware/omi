@@ -224,6 +224,7 @@ export function parseCloudApp(value: unknown, label: string): CloudApp {
   }
   if (
     record.connected_accounts !== undefined &&
+    record.connected_accounts !== null &&
     (!Array.isArray(record.connected_accounts) ||
       !record.connected_accounts.every(item => typeof item === 'string'))
   ) {

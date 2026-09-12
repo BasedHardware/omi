@@ -3266,6 +3266,44 @@ test('keeps empty catalogue names instead of failing the Apps page', () => {
   ).toThrow('App 0 is malformed');
 });
 
+test('names JSON-null GET connected_accounts as omitted instead of hiding neighbors', () => {
+  expect(
+    parseCloudApps(
+      [
+        {id: 'catalog-null-accounts', connected_accounts: null},
+        {
+          id: 'catalog-named',
+          name: 'Owned app',
+          connected_accounts: ['calendar'],
+        },
+      ],
+      'Apps response',
+    ),
+  ).toEqual([
+    expect.objectContaining({
+      id: 'catalog-null-accounts',
+      connectedAccounts: [],
+    }),
+    expect.objectContaining({
+      id: 'catalog-named',
+      name: 'Owned app',
+      connectedAccounts: ['calendar'],
+    }),
+  ]);
+  expect(parseCloudApp({id: 'catalog-app-1'}, 'App 0')).toEqual(
+    expect.objectContaining({id: 'catalog-app-1', connectedAccounts: []}),
+  );
+  expect(() =>
+    parseCloudApp(
+      {id: 'catalog-app-1', connected_accounts: {calendar: true}},
+      'App 0',
+    ),
+  ).toThrow('App 0 connected_accounts are malformed');
+  expect(() =>
+    parseCloudApp({id: 'catalog-app-1', connected_accounts: [1]}, 'App 0'),
+  ).toThrow('App 0 connected_accounts are malformed');
+});
+
 test('names GET subscription quota integer strings instead of omitting Plan usage', () => {
   expect(
     parseCloudSubscription(
