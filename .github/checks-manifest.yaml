@@ -924,6 +924,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "#13181 failed content HTTP reads were indistinguishable from empty successful pages; production helper and handler regression"
 
+  - id: twitter-chat-tools-input-tests
+    command: ["python3", "plugins/omi-twitter-chat-tools-app/test_main.py"]
+    triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "out-of-range or non-integer max_results was sent to Twitter unclamped below the documented minimum, and tweet_id/username reached request paths unencoded"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

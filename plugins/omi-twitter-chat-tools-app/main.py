@@ -11,7 +11,7 @@ import hashlib
 import base64
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 import requests
 from dotenv import load_dotenv
@@ -173,6 +173,16 @@ def twitter_api_request(uid: str, method: str, endpoint: str, params: dict = Non
     except Exception as e:
         log(f"Twitter API request error: {e}")
         return {"error": str(e)}
+
+
+def _parse_max_results(body: dict, default: int = 10, minimum: int = 5, maximum: int = 100) -> Optional[int]:
+    """Parse max_results from a tool request body and clamp it to the
+    Twitter API's documented bounds for the calling endpoint."""
+    try:
+        value = int(body.get("max_results", default))
+    except (TypeError, ValueError):
+        return None
+    return max(minimum, min(value, maximum))
 
 
 def format_tweet(tweet: dict, includes: dict = None) -> str:
@@ -511,10 +521,12 @@ async def tool_get_timeline(request: Request):
         log(f"=== GET_TIMELINE ===")
 
         uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 100)
+        max_results = _parse_max_results(body)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
+        if max_results is None:
+            return ChatToolResponse(error="max_results must be an integer")
 
         access_token = get_valid_access_token(uid)
         if not access_token:
@@ -563,10 +575,12 @@ async def tool_get_my_tweets(request: Request):
         log(f"=== GET_MY_TWEETS ===")
 
         uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 100)
+        max_results = _parse_max_results(body)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
+        if max_results is None:
+            return ChatToolResponse(error="max_results must be an integer")
 
         access_token = get_valid_access_token(uid)
         if not access_token:
@@ -627,10 +641,12 @@ async def tool_get_mentions(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        max_results = min(body.get("max_results", 10), 100)
+        max_results = _parse_max_results(body)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
+        if max_results is None:
+            return ChatToolResponse(error="max_results must be an integer")
 
         access_token = get_valid_access_token(uid)
         if not access_token:
@@ -678,10 +694,12 @@ async def tool_search_tweets(request: Request):
         body = await request.json()
         uid = body.get("uid")
         query = body.get("query")
-        max_results = min(body.get("max_results", 10), 100)
+        max_results = _parse_max_results(body, minimum=10)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
+        if max_results is None:
+            return ChatToolResponse(error="max_results must be an integer")
 
         if not query:
             return ChatToolResponse(error="Search query is required")
@@ -780,7 +798,7 @@ async def tool_unlike_tweet(request: Request):
         if not twitter_user_id:
             return ChatToolResponse(error="Could not get your Twitter user ID.")
 
-        result = twitter_api_request(uid, "DELETE", f"/users/{twitter_user_id}/likes/{tweet_id}")
+        result = twitter_api_request(uid, "DELETE", f"/users/{twitter_user_id}/likes/{quote(str(tweet_id), safe='')}")
 
         if result and "error" in result:
             return ChatToolResponse(error=f"Failed to unlike tweet: {result.get('error', 'Unknown error')}")
@@ -846,7 +864,7 @@ async def tool_delete_tweet(request: Request):
         if not access_token:
             return ChatToolResponse(error="Please connect your Twitter account first in the app settings.")
 
-        result = twitter_api_request(uid, "DELETE", f"/tweets/{tweet_id}")
+        result = twitter_api_request(uid, "DELETE", f"/tweets/{quote(str(tweet_id), safe='')}")
 
         if result and "error" in result:
             return ChatToolResponse(error=f"Failed to delete tweet: {result.get('error', 'Unknown error')}")
@@ -875,7 +893,7 @@ async def tool_get_user_profile(request: Request):
 
         if username:
             # Look up by username
-            result = twitter_api_request(uid, "GET", f"/users/by/username/{username}", params={
+            result = twitter_api_request(uid, "GET", f"/users/by/username/{quote(str(username), safe='')}", params={
                 "user.fields": "description,public_metrics,created_at,profile_image_url,verified"
             })
         else:
