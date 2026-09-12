@@ -94,28 +94,44 @@ class DeepgramTranscriber implements StreamingTranscriber {
 }
 
 class ParakeetTranscriber implements StreamingTranscriber {
-  ParakeetTranscriber({required String apiUrl, required this.onTranscript, this.sampleRate = 16000}) {
-    final uri = Uri.parse(parakeetWsUrl(apiUrl, sampleRate: sampleRate));
-    _channel = WebSocketChannel.connect(uri);
-    _sub = _channel.stream.listen((event) {
-      if (event is! String) return;
-      try {
-        final data = jsonDecode(event) as Map<String, dynamic>;
-        if (data['type'] == 'ready') {
-          _ready = true;
-          return;
-        }
-        final text = _extract(data);
-        if (text != null && text.isNotEmpty) onTranscript(text);
-      } catch (_) {}
-    });
+  ParakeetTranscriber({
+    required String apiUrl,
+    required this.onTranscript,
+    this.sampleRate = 16000,
+    this.drainTimeout = const Duration(seconds: 5),
+    WebSocketChannel? channel,
+  }) {
+    _channel = channel ??
+        WebSocketChannel.connect(Uri.parse(parakeetWsUrl(apiUrl, sampleRate: sampleRate)));
+    _sub = _channel.stream.listen(
+      (event) {
+        if (event is! String) return;
+        try {
+          final data = jsonDecode(event) as Map<String, dynamic>;
+          if (data['type'] == 'ready') {
+            _ready = true;
+            return;
+          }
+          final text = _extract(data);
+          if (text != null && text.isNotEmpty) onTranscript(text);
+        } catch (_) {}
+      },
+      onDone: _markDrained,
+      onError: (_) => _markDrained(),
+    );
   }
 
   final TranscriptHandler onTranscript;
   final int sampleRate;
+  final Duration drainTimeout;
   late final WebSocketChannel _channel;
   StreamSubscription? _sub;
   bool _ready = false;
+  final Completer<void> _drained = Completer<void>();
+
+  void _markDrained() {
+    if (!_drained.isCompleted) _drained.complete();
+  }
 
   static String? _extract(Map<String, dynamic> data) {
     final t = data['text'] ?? data['transcript'];
@@ -130,11 +146,20 @@ class ParakeetTranscriber implements StreamingTranscriber {
 
   @override
   Future<void> stop() async {
+    var sentFinalize = false;
     try {
       _channel.sink.add('finalize');
+      sentFinalize = true;
     } catch (_) {}
+    if (sentFinalize) {
+      try {
+        await _drained.future.timeout(drainTimeout);
+      } catch (_) {}
+    }
     await _sub?.cancel();
-    await _channel.sink.close();
+    try {
+      await _channel.sink.close();
+    } catch (_) {}
   }
 }
 

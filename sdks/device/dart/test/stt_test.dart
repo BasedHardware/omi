@@ -128,6 +128,67 @@ void main() {
     expect(channel.events, ['send', 'close']);
     expect(channel.closed, isTrue);
   });
+
+  test('Parakeet stop sends finalize before closing the socket', () async {
+    final channel = RecordingWebSocketChannel();
+    final transcriber = ParakeetTranscriber(
+      apiUrl: 'https://parakeet.example',
+      onTranscript: (_) {},
+      channel: channel,
+    );
+
+    await transcriber.stop();
+
+    expect(channel.events, ['send', 'close']);
+    expect(channel.sent, ['finalize']);
+    expect(channel.closed, isTrue);
+  });
+
+  test('Parakeet stop still closes when finalize send fails', () async {
+    final channel = RecordingWebSocketChannel(sendError: StateError('synthetic send failure'));
+    final transcriber = ParakeetTranscriber(
+      apiUrl: 'https://parakeet.example',
+      onTranscript: (_) {},
+      channel: channel,
+    );
+
+    await transcriber.stop();
+
+    expect(channel.events, ['send', 'close']);
+    expect(channel.closed, isTrue);
+  });
+
+  test('Parakeet stop drains a trailing transcript after finalize', () async {
+    final channel = RecordingWebSocketChannel(
+      trailingAfterCloseStream: jsonEncode({'text': 'final para'}),
+    );
+    final transcripts = <String>[];
+    final transcriber = ParakeetTranscriber(
+      apiUrl: 'https://parakeet.example',
+      onTranscript: transcripts.add,
+      channel: channel,
+    );
+
+    await transcriber.stop();
+
+    expect(transcripts, ['final para']);
+    expect(channel.events, ['send', 'close']);
+  });
+
+  test('Parakeet stop still closes if the provider never drains', () async {
+    final channel = RecordingWebSocketChannel(completeStreamOnCloseStream: false);
+    final transcriber = ParakeetTranscriber(
+      apiUrl: 'https://parakeet.example',
+      onTranscript: (_) {},
+      channel: channel,
+      drainTimeout: const Duration(milliseconds: 50),
+    );
+
+    await transcriber.stop();
+
+    expect(channel.events, ['send', 'close']);
+    expect(channel.closed, isTrue);
+  });
 }
 
 class RecordingWebSocketChannel extends StreamChannelMixin implements WebSocketChannel {
@@ -186,7 +247,8 @@ class _RecordingSink implements WebSocketSink {
     if (error != null) {
       throw error;
     }
-    if (event == jsonEncode({'type': 'CloseStream'}) && _parent.completeStreamOnCloseStream) {
+    if ((event == jsonEncode({'type': 'CloseStream'}) || event == 'finalize') &&
+        _parent.completeStreamOnCloseStream) {
       scheduleMicrotask(() {
         final trailing = _parent.trailingAfterCloseStream;
         if (trailing != null) {
