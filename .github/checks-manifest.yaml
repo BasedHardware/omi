@@ -924,6 +924,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "#13181 failed content HTTP reads were indistinguishable from empty successful pages; production helper and handler regression"
 
+  - id: clickup-client-tests
+    command: ["python3", "plugins/omi-clickup-app/test_clickup_client.py"]
+    triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13130 get_all_lists only queried the folderless-lists endpoint; lists inside folders must be enumerated per folder"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

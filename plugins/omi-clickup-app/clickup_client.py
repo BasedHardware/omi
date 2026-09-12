@@ -171,22 +171,94 @@ class ClickUpClient:
             print(f"❌ Error getting lists: {e}", flush=True)
             return []
     
+    def get_folders(self, access_token: str, space_id: str) -> List[Dict]:
+        """Get all folders in a space."""
+        try:
+            headers = {"Authorization": access_token}
+            response = requests.get(
+                f"{self.base_url}/space/{space_id}/folder",
+                headers=headers,
+                params={"archived": "false"}
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                folders = data.get("folders", [])
+
+                folder_list = []
+                for folder in folders:
+                    folder_list.append({
+                        "id": folder.get("id"),
+                        "name": folder.get("name")
+                    })
+
+                return folder_list
+            else:
+                print(f"❌ Error getting folders: {response.status_code}", flush=True)
+                return []
+
+        except Exception as e:
+            print(f"❌ Error getting folders: {e}", flush=True)
+            return []
+
+    def get_folder_lists(self, access_token: str, folder_id: str) -> List[Dict]:
+        """Get all lists inside a folder."""
+        try:
+            headers = {"Authorization": access_token}
+            response = requests.get(
+                f"{self.base_url}/folder/{folder_id}/list",
+                headers=headers,
+                params={"archived": "false"}
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                lists = data.get("lists", [])
+
+                list_data = []
+                for lst in lists:
+                    list_data.append({
+                        "id": lst.get("id"),
+                        "name": lst.get("name"),
+                        "folder_id": folder_id
+                    })
+
+                return list_data
+            else:
+                print(f"❌ Error getting folder lists: {response.status_code}", flush=True)
+                return []
+
+        except Exception as e:
+            print(f"❌ Error getting folder lists: {e}", flush=True)
+            return []
+
     def get_all_lists(self, access_token: str, team_id: str) -> List[Dict]:
-        """Get all lists across all spaces in a workspace."""
+        """Get all lists across all spaces in a workspace, including lists inside folders."""
         all_lists = []
-        
+
         # Get all spaces
         spaces = self.get_spaces(access_token, team_id)
-        
+
         # Get lists for each space
         for space in spaces:
             lists = self.get_lists(access_token, space["id"])
             for lst in lists:
                 lst["space_name"] = space["name"]
                 all_lists.append(lst)
-        
+
+            # The space list endpoint returns only folderless lists; lists
+            # inside folders must be fetched per folder.
+            folders = self.get_folders(access_token, space["id"])
+            for folder in folders:
+                folder_lists = self.get_folder_lists(access_token, folder["id"])
+                for lst in folder_lists:
+                    lst["space_id"] = space["id"]
+                    lst["space_name"] = space["name"]
+                    lst["folder_name"] = folder["name"]
+                    all_lists.append(lst)
+
         return all_lists
-    
+
     def get_workspace_members(self, access_token: str, team_id: str) -> List[Dict]:
         """Get all members in a workspace."""
         try:
