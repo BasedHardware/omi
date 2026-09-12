@@ -58,7 +58,6 @@ spec = importlib.util.spec_from_file_location(
 shopify = importlib.util.module_from_spec(spec)
 with patch.dict(sys.modules, stubs):
     spec.loader.exec_module(shopify)
-shopify.get_user_shop = lambda uid: "example.myshopify.com"
 
 
 def product_page(start, count, title_prefix="Filler"):
@@ -125,7 +124,9 @@ class FetchAllPagesTests(unittest.TestCase):
 class CreateOrderCatalogTests(unittest.TestCase):
     def invoke(self, api_side_effect, body):
         request = Mock(json=AsyncMock(return_value=body))
-        with patch.object(shopify, "get_shopify_tokens", return_value={"connected": True}), \
+        with patch.object(shopify, "get_shopify_tokens", return_value={
+            "connected": True, "shop_domain": "example.myshopify.com",
+        }), \
              patch.object(shopify, "shopify_api_request", side_effect=api_side_effect) as api:
             result = asyncio.run(shopify.tool_create_order(request))
         return result, api
@@ -172,6 +173,7 @@ class CreateOrderCatalogTests(unittest.TestCase):
         self.assertIsNone(result.error)
         self.assertIn("Order Created Successfully", result.result)
         self.assertIn("Hidden Widget", result.result)
+        self.assertIn("https://example.myshopify.com/admin/orders/9", result.result)
         product_gets = [
             call for call in api_mock.call_args_list
             if call[0][2] == "/products.json"

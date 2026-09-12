@@ -181,6 +181,14 @@ def shopify_fetch_all_pages(
     return {list_key: items}
 
 
+def get_user_shop(uid: str) -> Optional[str]:
+    """Return the connected shop domain, if any."""
+    tokens = get_shopify_tokens(uid)
+    if not tokens:
+        return None
+    return tokens.get("shop_domain")
+
+
 def verify_shopify_hmac(query_string: str, hmac_value: str) -> bool:
     """Verify the HMAC signature from Shopify."""
     # Parse query string and remove hmac parameter
