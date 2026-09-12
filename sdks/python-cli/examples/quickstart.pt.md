@@ -147,10 +147,10 @@ omi --json memory list | jq '.[] | {id, content, category}'
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
 
 # Listar os action items em aberto
-omi --json action-item list --open | jq '.[] | {id, title, due_at}'
+omi --json action-item list --open | jq '.[] | {id, description, due_at}'
 
 # Listar os objetivos
-omi --json goal list | jq '.[] | {id, title, progress: .progress_percent}'
+omi --json goal list | jq '.[] | {id, title, current: .current_value, target: .target_value}'
 ```
 
 ---
@@ -188,7 +188,7 @@ omi auth login
 | `command not found: omi` | O PATH não contém o diretório bin do pipx | Execute `pipx ensurepath` e reinicie o terminal |
 | `401 Unauthorized` | Chave de API inválida ou expirada | Gere uma nova chave em app.omi.me e atualize |
 | `connection refused` | Sem acesso de rede ao servidor Omi | Verifique a ligação à Internet e as definições de proxy |
-| `permission denied` nos ficheiros de configuração | O diretório de configuração não é gravável | Verifique as permissões de `~/.config/omi` |
+| `permission denied` nos ficheiros de configuração | O diretório de configuração não é gravável | Verifique as permissões de `~/.omi/config.toml` |
 
 ---
 
