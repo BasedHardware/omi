@@ -21,8 +21,8 @@ function text(value: unknown, limit: number): string {
   return value;
 }
 
-function array(value: unknown, limit: number): unknown[] {
-  if (!Array.isArray(value) || value.length > limit) {
+function array(value: unknown): unknown[] {
+  if (!Array.isArray(value)) {
     throw new CaptureGapError();
   }
   return value;
@@ -124,7 +124,7 @@ export function calendarCaptureGapSpan(
 export function parseOmiCalendarCaptureGaps(
   body: string,
 ): OmiCalendarCaptureGap[] {
-  const rows = array(JSON.parse(body), 1000);
+  const rows = array(JSON.parse(body));
   const items: OmiCalendarCaptureGap[] = [];
   const seen = new Set<string>();
   for (const raw of rows) {

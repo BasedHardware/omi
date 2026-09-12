@@ -358,6 +358,24 @@ test('keeps GET capture gaps when start_time or end_time exceeds 10000', () => {
   ]);
 });
 
+test('does not omit neighboring GET capture gaps when the catalogue exceeds 1000', () => {
+  const rows = Array.from({length: 1001}, (_, index) => ({
+    event_id: `event-${index}`,
+    title: `Event ${index}`,
+    start_time: '2026-09-07T15:00:00.000Z',
+    end_time: '2026-09-07T15:30:00.000Z',
+  }));
+  const gaps = parseOmiCalendarCaptureGaps(JSON.stringify(rows));
+  expect(gaps[0]).toEqual({
+    eventId: 'event-0',
+    title: 'Event 0',
+    startMs: Date.parse('2026-09-07T15:00:00.000Z'),
+    endMs: Date.parse('2026-09-07T15:30:00.000Z'),
+  });
+  expect(gaps[1000]?.eventId).toBe('event-1000');
+  expect(gaps).toHaveLength(1001);
+});
+
 test('fails closed for malformed GET capture gaps', () => {
   expect(() =>
     parseOmiCalendarCaptureGaps(JSON.stringify({event_id: 'event-1'})),
