@@ -59,7 +59,8 @@ class GraphClient:
                 if attempt == MAX_RETRIES - 1:
                     raise GraphError(resp.status_code, resp.text)
                 retry_after = int(resp.headers.get("Retry-After", "2"))
-                backoff = min(retry_after, 2 ** attempt + 1)
+                # Honour the server cooldown; do not shorten a long Retry-After.
+                backoff = max(retry_after, min(2 ** attempt + 1, 30))
                 log.warning("Graph %s on %s — backing off %ss", resp.status_code, path, backoff)
                 await asyncio.sleep(backoff)
                 continue
@@ -119,7 +120,8 @@ class GraphClient:
                 if attempt == MAX_RETRIES - 1:
                     raise GraphError(resp.status_code, resp.text)
                 retry_after = int(resp.headers.get("Retry-After", "2"))
-                backoff = min(retry_after, 2 ** attempt + 1)
+                # Honour the server cooldown; do not shorten a long Retry-After.
+                backoff = max(retry_after, min(2 ** attempt + 1, 30))
                 log.warning("Graph %s on %s — backing off %ss", resp.status_code, path, backoff)
                 await asyncio.sleep(backoff)
                 continue
