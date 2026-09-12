@@ -99,12 +99,15 @@ export async function scanForDevices(timeoutMs = 5000): Promise<ScannedDevice[]>
           if (Date.now() >= deadline) break;
         }
       })();
-      await Promise.race([
-        collect,
-        new Promise<void>((resolve) => {
-          setTimeout(resolve, timeLeftMs());
-        }),
-      ]);
+      let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+      const deadlineElapsed = new Promise<void>((resolve) => {
+        deadlineTimer = setTimeout(resolve, timeLeftMs());
+      });
+      try {
+        await Promise.race([collect, deadlineElapsed]);
+      } finally {
+        if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+      }
     } else {
       await new Promise<void>((resolve) => {
         const onDiscover = (peripheral: any) => {

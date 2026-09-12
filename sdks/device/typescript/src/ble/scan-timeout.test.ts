@@ -58,3 +58,19 @@ test('keeps advertisements found before the adapter goes quiet', async () => {
   assert.deepEqual(devices, [{ id: 'cv1', name: 'Omi', rssi: -70 }]);
   assert.equal(mock.stops, 1);
 });
+
+test('returns as soon as discovery ends without waiting for the unused deadline', async () => {
+  mock.resetAdapter();
+  mock.setDiscoverImpl(async function* () {
+    yield { id: 'only', advertisement: { localName: 'Omi' }, rssi: -40 };
+  });
+  const started = Date.now();
+  const devices = await withDeadline(
+    scanForDevices(5000),
+    1000,
+    'scan waited on an unused 5s deadline'
+  );
+  assert.ok(Date.now() - started < 1000);
+  assert.deepEqual(devices, [{ id: 'only', name: 'Omi', rssi: -40 }]);
+  assert.equal(mock.stops, 1);
+});
