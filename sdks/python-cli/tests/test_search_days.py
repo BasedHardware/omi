@@ -33,8 +33,19 @@ def test_exact_search_sql_honors_days_window(config_path, cli_runner, days, app_
     assert result.exit_code == 0, result.output
     sql = json.loads(route.calls[1].request.content)["arguments"]["query"]
     assert f"timestamp >= datetime('now', '-{days} days')" in sql
+    assert ") AND timestamp >=" in sql
     if app_filter:
-        assert "AND (" in sql or ") AND" in sql
+        assert "ESCAPE '!') AND (" in sql
+        assert "appName LIKE '%needle%'" in sql
+        assert "windowTitle LIKE '%needle%'" in sql
+        assert "ocrText LIKE '%needle%'" in sql
     else:
-        assert sql.count("(") >= 1
+        assert "WHERE (" in sql
+        assert " OR ".join(
+            [
+                "appName LIKE '%needle%' ESCAPE '!'",
+                "windowTitle LIKE '%needle%' ESCAPE '!'",
+                "ocrText LIKE '%needle%' ESCAPE '!'",
+            ]
+        ) in sql
     assert json.loads(result.stdout)["suggested_screenshot_ids"] == ["42"]
