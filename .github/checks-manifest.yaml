@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: shipbob-request-error-tests
+    command: ["python3", "plugins/omi-shipbob-app/test_request_errors.py"]
+    triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13183: shared helper must not turn empty HTTP errors into created WROs or empty read results; preserve upstream cancellation guards"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
