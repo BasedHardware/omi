@@ -34,6 +34,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ToolActivityTimelineLayout.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
+  # S0 observes actual common-runloop sources after explicit cancel and owner release.
   - desktop/macos/Desktop/Sources/MainWindow/Components/OwnedRunLoopTimer.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
   # The grounded follow-up chip, S6-S10. The stub gained one delimiter-carrying
@@ -101,6 +102,16 @@ preconditions:
   - automation_bridge_ready
 
 steps:
+  - id: S0
+    name: Verify chat timer sources are invalidated on cancel and owner release
+    bridge.action:
+      name: chat_timer_lifetime_probe
+    expect:
+      result.detail.scheduled: "true"
+      result.detail.cancelledValid: "false"
+      result.detail.releasedValid: "false"
+    halt_on_failure: true
+
   - id: S1
     name: Reset main chat for flow isolation
     bridge.action:

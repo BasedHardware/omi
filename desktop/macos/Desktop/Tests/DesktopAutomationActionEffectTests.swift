@@ -22,6 +22,22 @@ final class DesktopAutomationActionEffectTests: XCTestCase {
       descriptor.effects.map(\.description) + ["Custom detail supplements the mandatory descriptions"])
   }
 
+  func testReferralActionDeclaresTheRequestStartedByItsSheet() throws {
+    let registry = DesktopAutomationActionRegistry()
+    registry.registerBuiltins()
+    let descriptor = try XCTUnwrap(registry.descriptors().first { $0.name == "rating_prompt_refer" })
+    XCTAssertTrue(descriptor.effects.contains(.networkOrModel))
+  }
+
+  func testTimerLifetimeFlowProbeObservesRealTimerInvalidation() async throws {
+    let registry = DesktopAutomationActionRegistry()
+    registry.registerBuiltins()
+    let result = try await registry.perform("chat_timer_lifetime_probe", params: [:])
+    XCTAssertEqual(result?["scheduled"], "true")
+    XCTAssertEqual(result?["cancelledValid"], "false")
+    XCTAssertEqual(result?["releasedValid"], "false")
+  }
+
   func testReadOnlyDispatchRejectsEveryDeclaredEffectBeforeCallingHandler() async throws {
     let registry = DesktopAutomationActionRegistry()
     var mutations = 0
@@ -69,6 +85,7 @@ final class DesktopAutomationActionEffectTests: XCTestCase {
       "permissions_snapshot", "coordinator_awareness_snapshot", "coordinator_inspect_run",
       "coordinator_action_queue", "coordinator_open_loops", "agent_lifecycle_convergence_snapshot",
       "recent_screen_frames_snapshot", "kernel_turn_tail", "integration_nudge_evaluate", "rating_prompt_state",
+      "chat_timer_lifetime_probe",
     ] {
       do {
         // No params: a wrongly admitted handler would run or fail parameter validation.

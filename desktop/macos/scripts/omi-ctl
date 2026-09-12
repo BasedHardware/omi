@@ -178,7 +178,8 @@ Usage:
   omi-ctl wait-ready [tries]             Block until a live signed-in owner-ready main state (0.5s/try)
   omi-ctl screens                        List valid screen targets
   omi-ctl actions                        List semantic actions the app exposes
-  omi-ctl action <name> [key=value ...]  Run a semantic action (cursor-free, in-process)
+  omi-ctl action <name> [--read-only] [key=value ...]
+                                         Run a semantic action; --read-only rejects actions with declared effects
 
 Examples:
   omi-ctl navigate rewind
@@ -187,6 +188,7 @@ Examples:
   omi-ctl navigate settings rewind       # Settings page, Rewind sub-section
   omi-ctl wait-ready && omi-ctl navigate memories
   omi-ctl actions                        # discover available actions
+  omi-ctl action permissions_snapshot --read-only
   omi-ctl action refresh_all_data
   omi-ctl action toggle_transcription enabled=false
 

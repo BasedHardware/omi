@@ -21,6 +21,31 @@ extension DesktopAutomationActionRegistry {
 
   func registerActivationActions() {
     register(
+      name: "chat_timer_lifetime_probe",
+      effects: [.localState],
+      summary: "Verify common-runloop timer cancellation and invalidation when its owner is released",
+      category: "chat",
+      surfaces: ["main_chat"]
+    ) { _ in
+      let cancelled = OwnedRunLoopTimer.schedule(interval: 60) {}
+      var released: OwnedRunLoopTimer? = OwnedRunLoopTimer.schedule(interval: 60) {}
+      let releasedTimer = released?.timer
+      let scheduled = cancelled.timer.isValid && releasedTimer?.isValid == true
+      // Keep even a failing probe from leaving a source attached to the run loop.
+      defer {
+        cancelled.timer.invalidate()
+        releasedTimer?.invalidate()
+      }
+      cancelled.cancel()
+      released = nil
+      return [
+        "scheduled": String(scheduled),
+        "cancelledValid": String(cancelled.timer.isValid),
+        "releasedValid": String(releasedTimer?.isValid ?? true),
+      ]
+    }
+
+    register(
       name: "daily_summary_snapshot",
       effects: [],
       summary: "Shape-only state of the shared daily-summary store (has summary, date, stat presence; no text)",

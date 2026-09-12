@@ -86,7 +86,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "rating_prompt_refer",
-      effects: [.localState],
+      effects: [.localState, .networkOrModel],
       summary: "Trigger the thank-you bar's refer-a-friend proposal (same path as the button)"
     ) { _ in
       await MainActor.run {
