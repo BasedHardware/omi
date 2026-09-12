@@ -67,8 +67,10 @@ final class MemoryHubSidebarRoutingTests: XCTestCase {
   }
 
   /// `bridge.navigate conversations` used to select only the memories *route*,
-  /// so the hub stayed on its remembered view (default Memories). The name must
-  /// resolve the same hub page the menu and keyboard already do.
+  /// so the hub stayed on its remembered view (default Memories). Automation
+  /// resolves the hub through `destination(forAutomationTarget:)` inside
+  /// `navigateToLegacyDestination(_:automationTarget:)` — the same helper this
+  /// test calls — before selecting the chat-first route.
   func testAutomationNameConversationsSelectsConversationsHubNotRememberedMemories() {
     XCTAssertEqual(
       MemoryHubDestination.destination(forAutomationTarget: "conversations"),
