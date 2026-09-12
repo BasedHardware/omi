@@ -563,6 +563,15 @@ export class PiMonoAdapter implements HarnessAdapter {
       return;
     }
 
+    // The Swift host already guards this before start (AgentRuntimeProcess
+    // refuses to launch omi-local without a configured model id), but the
+    // adapter must not silently substitute a cloud model id ("omi-sonnet")
+    // for a misconfigured local launch — that would request a model the
+    // user's own server was never asked to serve.
+    if (this.provider === "omi-local" && !this.config.model) {
+      throw new Error('pi-mono adapter requires config.model for provider "omi-local"');
+    }
+
     const args = [
       "--mode",
       "rpc",
@@ -626,7 +635,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     // marker independent from the optional chat-first capability flags so a
     // legacy typed-chat session does not accidentally look like a background
     // or voice run to the stdio projection.
-    if (this.currentToolProjection.surfaceKind === "main_chat" || this.currentToolProjection.surfaceKind === "floating_chat") {
+    if (this.currentToolProjection.surfaceKind !== undefined) {
       env.OMI_SURFACE_KIND = this.currentToolProjection.surfaceKind;
       if (
         this.currentToolProjection.chatFirstUi
@@ -803,13 +812,14 @@ export class PiMonoAdapter implements HarnessAdapter {
     jitKnowledgeToolsEnabled?: boolean;
     jitProactivity?: boolean;
   }): Promise<void> {
+    const isChatFirstSurface = projection.surfaceKind === "main_chat" || projection.surfaceKind === "floating_chat";
     const normalized: {
       surfaceKind?: string;
       chatFirstUi: boolean;
       controlGeneration: number | null;
       jitKnowledgeToolsEnabled: boolean;
       jitProactivity: boolean;
-    } = projection.surfaceKind === "main_chat" || projection.surfaceKind === "floating_chat"
+    } = isChatFirstSurface
       ? {
           surfaceKind: projection.surfaceKind,
           chatFirstUi: projection.chatFirstUi
@@ -824,6 +834,12 @@ export class PiMonoAdapter implements HarnessAdapter {
           jitProactivity: projection.jitProactivity === true,
         }
       : {
+          // Not a chat-first surface, but "realtime_voice" must still reach
+          // env.OMI_SURFACE_KIND below so the tool-manifest's realtimeVoiceOnly
+          // gate (e.g. the screenshot tool) can recognize a realtime voice run.
+          // Without this, that surfaceKind silently comes through as
+          // undefined and realtime PTT could never invoke screenshot.
+          surfaceKind: projection.surfaceKind === "realtime_voice" ? "realtime_voice" : undefined,
           chatFirstUi: false,
           controlGeneration: null,
           jitKnowledgeToolsEnabled: projection.jitKnowledgeToolsEnabled === true,
@@ -1733,8 +1749,15 @@ export class PiMonoAdapter implements HarnessAdapter {
       const detail = typeof inputTokens === "number"
         ? ` (${inputTokens.toLocaleString("en-US")} input tokens)`
         : "";
+      // This check runs for every provider (a length-stop with no text is a
+      // real failure either way), but "raise the model's context length in
+      // your local server" is only actionable advice under omi-local; a
+      // cloud provider hitting this has no local server to reconfigure.
+      const remediation = this.provider === "omi-local"
+        ? "Start a new chat, or raise the model's context length in your local server."
+        : "Start a new chat.";
       const lengthMessage =
-        `The model returned no text: its output budget ran out before the first token because the conversation${detail} is near or past the context window Omi assumes for it. Start a new chat, or raise the model's context length in your local server.`;
+        `The model returned no text: its output budget ran out before the first token because the conversation${detail} is near or past the context window Omi assumes for it. ${remediation}`;
       this.pendingRequests.delete(generation);
       this.activePromptGeneration = 0;
       pending.reject(new Error(lengthMessage));
@@ -1865,12 +1888,19 @@ export function toolProjectionFromMetadata(metadata: Record<string, unknown> | u
   jitProactivity: boolean;
 } {
   const generation = Number(metadata?.chatFirstControlGeneration);
-  const typedSurface = metadata?.surfaceKind === "main_chat"
+  // "main_chat"/"floating_chat" additionally carry chat-first UI state
+  // (chatFirstUi/controlGeneration); "realtime_voice" carries no chat-first
+  // UI concept but its surfaceKind must still reach the tool-manifest
+  // projection so omi-tool-manifest.ts's realtimeVoiceOnly gate (e.g. the
+  // screenshot tool) can recognize a realtime voice run instead of silently
+  // hiding those tools whenever surfaceKind falls through as undefined.
+  const chatFirstSurface = metadata?.surfaceKind === "main_chat"
     ? "main_chat"
     : metadata?.surfaceKind === "floating_chat"
       ? "floating_chat"
       : undefined;
-  const enabled = typedSurface !== undefined
+  const typedSurface = chatFirstSurface ?? (metadata?.surfaceKind === "realtime_voice" ? "realtime_voice" : undefined);
+  const enabled = chatFirstSurface !== undefined
     && metadata?.chatFirstUi === true
     && Number.isSafeInteger(generation)
     && generation >= 0;
