@@ -17,6 +17,9 @@ from .constants import (
     PACKET_HEADER_BYTES,
     PCM_SAMPLE_RATE_HZ,
 )
+# Bind the function on the package so `from omi import transcribe` is not the
+# same-named submodule (which is not callable).
+from .transcribe import transcribe
 
 __all__ = [
     "constants",
@@ -52,8 +55,4 @@ def __getattr__(name: str):
         from .decoder import OmiOpusDecoder
 
         return OmiOpusDecoder
-    if name == "transcribe":
-        from .transcribe import transcribe
-
-        return transcribe
     raise AttributeError(name)
