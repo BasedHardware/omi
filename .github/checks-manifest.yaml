@@ -946,6 +946,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
 
+  - id: notion-oauth-state-encoding-tests
+    command: ["python3", "plugins/oauth/test_oauth_state.py"]
+    triggers: ["plugins/oauth/**"]
+    lanes: ["local", "ci"]
+    reason: "the Notion OAuth state carried a raw uid — & or # in the uid split the parameter or truncated the URL, and a query-less auth_url got a bare &"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
