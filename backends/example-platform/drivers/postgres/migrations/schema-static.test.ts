@@ -1332,5 +1332,14 @@ describe("static PostgreSQL schema contract", () => {
       "string_agg(left(btrim(segment.text_content,v_ws),240),' ' ORDER BY segment.ordinal),v_ws)",
     );
     expect(skipEmptyListenSql).toContain("chr(133)");
+    const readableListenSql = migrationSql.find((migration) => migration.version === 66)!.sql;
+    expect(readableListenSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.listen_provider_result_readable");
+    expect(readableListenSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.read_listen_conversation_page");
+    expect(readableListenSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.read_listen_conversation_union_page");
+    expect(readableListenSql).toContain(
+      "WHEN t.state='completed' AND omi_memory.listen_provider_result_readable(t.provider_result) THEN",
+    );
+    expect(readableListenSql).not.toContain("jsonb_typeof(t.provider_result->'segments')='array'");
+    expect(readableListenSql).toContain("REVOKE ALL ON FUNCTION omi_memory.listen_provider_result_readable(jsonb) FROM PUBLIC");
   });
 });

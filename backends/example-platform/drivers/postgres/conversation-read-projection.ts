@@ -2,6 +2,7 @@ import type {
   ConversationRecord,
   OrderedConversationRecord,
 } from "../../apps/service/stores/conversations-store";
+import { parsePrerecordedTranscription } from "../../apps/service/listen/prerecorded-transcription";
 
 export interface ConversationReadSnapshot {
   readonly revision: number;
@@ -60,6 +61,17 @@ export function parseConversationReadSnapshot(
         (row.state === "completed" && typeof row.excerpt !== "string")
       )
         throw new TypeError("conversation_snapshot_invalid");
+      if (
+        row.device &&
+        row.state === "completed" &&
+        Object.prototype.hasOwnProperty.call(row, "provider_result")
+      ) {
+        try {
+          parsePrerecordedTranscription(row.provider_result);
+        } catch {
+          throw new TypeError("conversation_snapshot_invalid");
+        }
+      }
       ids.add(row.session_id);
       const sequence = integer(row.sequence);
       if (sequence <= previousSequence)

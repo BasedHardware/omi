@@ -51,6 +51,39 @@ test("projects durable recording IDs and distinguishes transcript completion fro
   ).toBe("conversation-one");
 });
 
+test("completed device rows whose providerResult cannot parse as Listen speech cannot be listed as success", () => {
+  expect(() =>
+    parseConversationReadSnapshot({
+      revision: 1,
+      records: [
+        row({
+          excerpt: "hi",
+          locked: false,
+          provider_result: {
+            durationSeconds: 1,
+            segments: [{ text: "hi" }],
+          },
+        }),
+      ],
+    }),
+  ).toThrow("conversation_snapshot_invalid");
+  expect(
+    parseConversationReadSnapshot({
+      revision: 1,
+      records: [
+        row({
+          excerpt: "hi",
+          locked: false,
+          provider_result: {
+            durationSeconds: 1,
+            segments: [{ text: "hi", start: 0, end: 1 }],
+          },
+        }),
+      ],
+    }).records[0]?.record.structured,
+  ).toEqual({ title: "hi", overview: "hi" });
+});
+
 test("keeps queued and failed recordings visible and never publishes an unfinished provider result", () => {
   for (const state of ["queued", "running", "failed"]) {
     const record = parseConversationReadSnapshot({
