@@ -54,6 +54,8 @@ describe("device transcription client projection", () => {
       ["invalid"],
       [{ start: 0, end: 0.1, text: 1 }],
       [null],
+      [{ start: 0, end: 0.1 }],
+      [{ start: 0, end: 0.1, text: null }],
     ]) {
       expect(
         projectDeviceTranscription({

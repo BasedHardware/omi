@@ -254,6 +254,22 @@ function visibleTranscriptText(value: string): string {
   return value.replace(/^[\s\u0085]+|[\s\u0085]+$/gu, "");
 }
 
+function hasWellFormedStringWindow(segments: unknown[]): boolean {
+  for (const segment of segments) {
+    if (
+      segment === null ||
+      typeof segment !== "object" ||
+      Array.isArray(segment)
+    ) {
+      continue;
+    }
+    if (typeof (segment as { text?: unknown }).text === "string") {
+      return true;
+    }
+  }
+  return false;
+}
+
 function joinWellFormedSegmentTexts(
   segments: unknown[],
   skipEmptyAfterTrim = false
@@ -368,8 +384,9 @@ export function projectDeviceTranscription(
   const segments = parseStoredTranscriptSegments(row.segments);
   if (segments === null) return null;
   if (
-    joinWellFormedSegmentTexts(segments, false) === null &&
-    joinWellFormedSegmentTexts(segments, true) === null
+    (joinWellFormedSegmentTexts(segments, false) === null &&
+      joinWellFormedSegmentTexts(segments, true) === null) ||
+    (segments.length > 0 && !hasWellFormedStringWindow(segments))
   ) {
     return null;
   }
