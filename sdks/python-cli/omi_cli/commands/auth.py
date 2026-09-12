@@ -205,11 +205,12 @@ def whoami(typer_ctx: typer.Context) -> None:
     # identifies the user implicitly (the count belongs to *this* user).
     with ctx.make_client() as client:
         memories = client.get("/v1/dev/user/memories", params={"limit": 1})
+    verified = ctx.cloud_profile()
     payload = {
         "profile": ctx.profile_name,
-        "credential": ctx.get_profile().masked_credential(),
-        "auth_method": ctx.get_profile().auth_method,
-        "api_base": ctx.get_profile().api_base,
+        "credential": verified.masked_credential(),
+        "auth_method": verified.auth_method,
+        "api_base": verified.api_base,
         "owns_memories": isinstance(memories, list),
     }
     ctx.renderer.emit(payload, title="omi whoami")

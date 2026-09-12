@@ -82,18 +82,21 @@ class AppContext:
             profile.api_base = env_base
         return profile
 
-    def make_client(self) -> OmiClient:
+    def cloud_profile(self) -> cfg.Profile:
+        """Saved profile plus a non-empty ``OMI_API_KEY`` override for cloud calls."""
         profile = self.get_profile()
         env_key = os.environ.get(cfg.ENV_API_KEY)
         if env_key:
-            # Per-command override for cloud API only. Do not mutate the
-            # in-memory saved profile (auth status / local Desktop keep it).
+            # Do not mutate the in-memory saved profile (auth status / local Desktop keep it).
             profile = replace(
                 profile,
                 auth_method="api_key",
                 api_key=validate_api_key_format(env_key),
             )
-        return OmiClient(profile, verbose=self.verbose)
+        return profile
+
+    def make_client(self) -> OmiClient:
+        return OmiClient(self.cloud_profile(), verbose=self.verbose)
 
     def make_local_client(self) -> LocalOmiClient:
         profile = self.get_profile()

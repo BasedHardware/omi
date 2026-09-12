@@ -137,6 +137,10 @@ def test_env_key_overrides_saved_key_without_persisting(
     assert result.exit_code == 0, result.output
     assert route.calls.last.request.headers["Authorization"] == f"Bearer {env_key}"
     assert config_path.read_bytes() == original_config
+    if operation == "whoami":
+        payload = json.loads(result.stdout)
+        assert payload["credential"] == f"{env_key[:6]}…{env_key[-4:]}"
+        assert payload["credential"] != authed_profile.masked_credential()
 
 
 def test_invalid_env_key_does_not_fall_back_to_saved_account(
