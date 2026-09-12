@@ -357,6 +357,107 @@ test("granted named chat sessions parse beside chat:chat-main", async () => {
   )).resolves.toEqual([session("chat:chat-main"), session("chat:session-alpha")]);
 });
 
+test("chat conversation sessions with ids longer than 128 characters fail closed instead of listing neighbors", async () => {
+  const session = (id: string) => ({
+    id,
+    title: "hello",
+    overview: "answer",
+    createdAt: 1000,
+    updatedAt: 2000,
+    startedAt: 1000,
+    finishedAt: null,
+    source: "chat",
+    status: "in_progress",
+    discarded: false,
+    starred: false,
+    visibility: "private",
+    isLocked: false,
+    folderId: null,
+    revision: null,
+  });
+  const connection: CheckedOutPostgresConnection = {
+    connectionIdentity: {},
+    async execute() {
+      return { rowCount: 0 };
+    },
+    async query(statement) {
+      const rows = statement.name === "authority.lock_and_revalidate"
+        ? [authorityRow()]
+        : statement.name === "chat.read_conversation_sessions"
+          ? [{
+            sessions: [
+              session("chat:chat-main"),
+              session(`chat:${"s".repeat(129)}`),
+            ],
+          }]
+          : statement.name === "chat.final_clock"
+            ? [{ now: 100 }]
+            : [];
+      return rows as never;
+    },
+  };
+  const pool: PostgresTransactionPool = {
+    async withTransaction(_options, operation) {
+      return operation(connection);
+    },
+  };
+  await expect(withAuthorizedChatRead(
+    pool,
+    context(),
+    new AbortController().signal,
+    (storage) => storage.listConversationSessions(),
+  )).rejects.toMatchObject({ code: "persistence_failed" });
+});
+
+test("granted chat sessions accept 128-character and space-padded named ids", async () => {
+  const session = (id: string) => ({
+    id,
+    title: "hello",
+    overview: "answer",
+    createdAt: 1000,
+    updatedAt: 2000,
+    startedAt: 1000,
+    finishedAt: null,
+    source: "chat",
+    status: "in_progress",
+    discarded: false,
+    starred: false,
+    visibility: "private",
+    isLocked: false,
+    folderId: null,
+    revision: null,
+  });
+  const bounded = session(`chat:${"s".repeat(128)}`);
+  const padded = session("chat: session-alpha ");
+  const connection: CheckedOutPostgresConnection = {
+    connectionIdentity: {},
+    async execute() {
+      return { rowCount: 0 };
+    },
+    async query(statement) {
+      const rows = statement.name === "authority.lock_and_revalidate"
+        ? [authorityRow()]
+        : statement.name === "chat.read_conversation_sessions"
+          ? [{ sessions: [bounded, padded] }]
+          : statement.name === "chat.final_clock"
+            ? [{ now: 100 }]
+            : [];
+      return rows as never;
+    },
+  };
+  const pool: PostgresTransactionPool = {
+    async withTransaction(_options, operation) {
+      return operation(connection);
+    },
+  };
+  await expect(withAuthorizedChatRead(
+    pool,
+    context(),
+    new AbortController().signal,
+    (storage) => storage.listConversationSessions(),
+  )).resolves.toEqual([bounded, padded]);
+});
+
 test("granted chat sessions accept SQL character-bounded titles including emoji", async () => {
   const session = (id: string, title: string, overview: string) => ({
     id,

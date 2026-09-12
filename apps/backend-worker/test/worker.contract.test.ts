@@ -1445,6 +1445,83 @@ describe("worker request contract", () => {
     });
   });
 
+  test("conversations GET does not omit a neighboring row when a chat session id exceeds 128 characters", async () => {
+    await insertChatMessage({
+      id: "readable-session-bound",
+      accountId: "test-account",
+      text: "readable session",
+      createdAt: 1_000,
+      position: 1,
+      chatSessionId: "readable-session-bound",
+    });
+    await insertChatMessage({
+      id: "oversized-session",
+      accountId: "test-account",
+      text: "oversized session",
+      createdAt: 2_000,
+      position: 2,
+      chatSessionId: "s".repeat(129),
+    });
+
+    const envelope = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(envelope.status).toBe(500);
+    expect(envelope.headers.get("retry-after")).toBeNull();
+    expect((await envelope.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+
+    const offset = await fetchWorker("/v1/conversations?limit=50&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    expect(offset.status).toBe(500);
+    expect(offset.headers.get("retry-after")).toBeNull();
+    expect((await offset.json()) as unknown).toEqual({
+      error: "internal_server_error",
+    });
+  });
+
+  test("conversations GET lists a 128-character chat session beside a space-padded named session", async () => {
+    const bounded = "s".repeat(128);
+    await insertChatMessage({
+      id: "bounded-session",
+      accountId: "test-account",
+      text: "bounded session",
+      createdAt: 1_000,
+      position: 1,
+      chatSessionId: bounded,
+    });
+    await insertChatMessage({
+      id: "padded-session",
+      accountId: "test-account",
+      text: "padded session",
+      createdAt: 2_000,
+      position: 2,
+      chatSessionId: " session-alpha ",
+    });
+
+    const envelope = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(envelope.status).toBe(200);
+    const page = (await envelope.json()) as {
+      items: Array<{ id: string }>;
+    };
+    expect(page.items.map((item) => item.id)).toEqual([
+      "chat: session-alpha ",
+      `chat:${bounded}`,
+    ]);
+
+    const offset = await fetchWorker("/v1/conversations?limit=50&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    expect(offset.status).toBe(200);
+    expect(
+      ((await offset.json()) as Array<{ id: string }>).map((item) => item.id)
+    ).toEqual(["chat: session-alpha ", `chat:${bounded}`]);
+  });
+
   test("conversations GET does not omit a neighboring row when a chat payload createdAt fails detach", async () => {
     await insertChatMessage({
       id: "readable-payload-created",

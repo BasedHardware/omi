@@ -306,8 +306,16 @@ export function toLegacyConversation(
 function projectConversation(row: StoredConversation): ConversationProjection {
   assertProjectableChatTimestamp(row.createdAt);
   assertProjectableChatTimestamp(row.updatedAt);
+  const sessionId = decodeSessionId(row.id);
+  if (
+    !sessionId.startsWith("chat:") ||
+    sessionId.length <= "chat:".length ||
+    sessionId.slice("chat:".length).length > 128
+  ) {
+    throw new UnprojectableConversationRecordError();
+  }
   return {
-    id: decodeSessionId(row.id),
+    id: sessionId,
     title: boundedDisplayText(row.title),
     overview: boundedDisplayText(row.overview),
     createdAt: row.createdAt,
