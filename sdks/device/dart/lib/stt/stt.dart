@@ -34,6 +34,7 @@ class DeepgramTranscriber implements StreamingTranscriber {
     required this.apiKey,
     required this.onTranscript,
     this.sampleRate = 16000,
+    this.drainTimeout = const Duration(seconds: 5),
     WebSocketChannel? channel,
   }) {
     _channel = channel ??
@@ -41,22 +42,32 @@ class DeepgramTranscriber implements StreamingTranscriber {
           Uri.parse(deepgramWsUrl(sampleRate: sampleRate)),
           headers: {'Authorization': 'Token $apiKey'},
         );
-    _sub = _channel.stream.listen((event) {
-      if (event is! String) return;
-      try {
-        final data = jsonDecode(event) as Map<String, dynamic>;
-        final alts = (data['channel'] as Map?)?['alternatives'] as List?;
-        final t = (alts?.isNotEmpty == true) ? (alts!.first as Map)['transcript'] : null;
-        if (t is String && t.isNotEmpty) onTranscript(t);
-      } catch (_) {}
-    });
+    _sub = _channel.stream.listen(
+      (event) {
+        if (event is! String) return;
+        try {
+          final data = jsonDecode(event) as Map<String, dynamic>;
+          final alts = (data['channel'] as Map?)?['alternatives'] as List?;
+          final t = (alts?.isNotEmpty == true) ? (alts!.first as Map)['transcript'] : null;
+          if (t is String && t.isNotEmpty) onTranscript(t);
+        } catch (_) {}
+      },
+      onDone: _markDrained,
+      onError: (_) => _markDrained(),
+    );
   }
 
   final String apiKey;
   final TranscriptHandler onTranscript;
   final int sampleRate;
+  final Duration drainTimeout;
   late final WebSocketChannel _channel;
   StreamSubscription? _sub;
+  final Completer<void> _drained = Completer<void>();
+
+  void _markDrained() {
+    if (!_drained.isCompleted) _drained.complete();
+  }
 
   @override
   void appendPcm(Uint8List chunk) {
@@ -65,9 +76,16 @@ class DeepgramTranscriber implements StreamingTranscriber {
 
   @override
   Future<void> stop() async {
+    var sentClose = false;
     try {
       _channel.sink.add(jsonEncode({'type': 'CloseStream'}));
+      sentClose = true;
     } catch (_) {}
+    if (sentClose) {
+      try {
+        await _drained.future.timeout(drainTimeout);
+      } catch (_) {}
+    }
     await _sub?.cancel();
     try {
       await _channel.sink.close();

@@ -90,18 +90,68 @@ void main() {
 
     expect(transcripts, ['hello dart']);
   });
+
+  test('Deepgram stop drains a trailing transcript after CloseStream', () async {
+    final channel = RecordingWebSocketChannel(
+      trailingAfterCloseStream: jsonEncode({
+        'channel': {
+          'alternatives': [
+            {'transcript': 'final dart'},
+          ],
+        },
+      }),
+    );
+    final transcripts = <String>[];
+    final transcriber = DeepgramTranscriber(
+      apiKey: 'fake-key',
+      onTranscript: transcripts.add,
+      channel: channel,
+    );
+
+    await transcriber.stop();
+
+    expect(transcripts, ['final dart']);
+    expect(channel.events, ['send', 'close']);
+  });
+
+  test('Deepgram stop still closes if the provider never drains', () async {
+    final channel = RecordingWebSocketChannel(completeStreamOnCloseStream: false);
+    final transcriber = DeepgramTranscriber(
+      apiKey: 'fake-key',
+      onTranscript: (_) {},
+      channel: channel,
+      drainTimeout: const Duration(milliseconds: 50),
+    );
+
+    await transcriber.stop();
+
+    expect(channel.events, ['send', 'close']);
+    expect(channel.closed, isTrue);
+  });
 }
 
 class RecordingWebSocketChannel extends StreamChannelMixin implements WebSocketChannel {
-  RecordingWebSocketChannel({this.sendError});
+  RecordingWebSocketChannel({
+    this.sendError,
+    this.trailingAfterCloseStream,
+    this.completeStreamOnCloseStream = true,
+  });
 
   final Object? sendError;
+  final Object? trailingAfterCloseStream;
+  final bool completeStreamOnCloseStream;
   final sent = <Object?>[];
   final events = <String>[];
   bool closed = false;
   final _incoming = StreamController<Object?>.broadcast();
 
   void addIncoming(Object? event) => _incoming.add(event);
+
+  void closeIncoming() {
+    if (!_incoming.isClosed) {
+      _incoming.close();
+    }
+  }
 
   @override
   late final WebSocketSink sink = _RecordingSink(this);
@@ -135,6 +185,15 @@ class _RecordingSink implements WebSocketSink {
     final error = _parent.sendError;
     if (error != null) {
       throw error;
+    }
+    if (event == jsonEncode({'type': 'CloseStream'}) && _parent.completeStreamOnCloseStream) {
+      scheduleMicrotask(() {
+        final trailing = _parent.trailingAfterCloseStream;
+        if (trailing != null) {
+          _parent.addIncoming(trailing);
+        }
+        _parent.closeIncoming();
+      });
     }
   }
 

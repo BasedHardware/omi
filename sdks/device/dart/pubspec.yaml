@@ -16,3 +16,4 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  stream_channel: ^2.1.4
