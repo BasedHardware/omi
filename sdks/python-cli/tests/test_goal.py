@@ -207,3 +207,30 @@ def test_goal_update_rejects_set_and_clear_unit(authed_profile, respx_mock, monk
     assert "--unit" in error["detail"]
     assert "--clear-unit" in error["detail"]
     assert not respx_mock.calls
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf", "1e309"])
+def test_goal_create_rejects_non_finite_target(config_path, cli_runner, value: str) -> None:
+    result = cli_runner.invoke(app, ["--json", "goal", "create", "x", "--target", value])
+    assert result.exit_code != 0
+    combined = (result.stderr + result.stdout).lower()
+    assert "finite" in combined
+
+
+@pytest.mark.parametrize("flag", ["--current", "--min", "--max"])
+def test_goal_create_rejects_non_finite_metric_flags(config_path, cli_runner, flag: str) -> None:
+    result = cli_runner.invoke(app, ["--json", "goal", "create", "x", "--target", "1", flag, "nan"])
+    assert result.exit_code != 0
+    assert "finite" in (result.stderr + result.stdout).lower()
+
+
+def test_goal_update_rejects_non_finite_current(config_path, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["--json", "goal", "update", "g1", "--current", "inf"])
+    assert result.exit_code != 0
+    assert "finite" in (result.stderr + result.stdout).lower()
+
+
+def test_goal_progress_rejects_nan(config_path, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["--json", "goal", "progress", "g1", "nan"])
+    assert result.exit_code != 0
+    assert "finite" in (result.stderr + result.stdout).lower()

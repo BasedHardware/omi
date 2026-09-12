@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Optional
 
 import typer
@@ -22,6 +23,18 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
     if obj is None:  # pragma: no cover
         raise RuntimeError("AppContext not initialized")
     return obj  # type: ignore[no-any-return]
+
+
+def _require_finite(label: str, value: Optional[float]) -> Optional[float]:
+    """Reject NaN/Inf before any HTTP client is opened."""
+    if value is None:
+        return None
+    if not math.isfinite(value):
+        raise UsageError(
+            message=f"{label} must be a finite number",
+            detail="NaN, Infinity, and out-of-range exponents are rejected before a request is sent.",
+        )
+    return value
 
 
 _LIST_COLUMNS = ["id", "title", "goal_type", "current_value", "target_value", "unit", "is_active"]
@@ -89,6 +102,10 @@ def create_goal(
     ),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    target_value = _require_finite("--target", target_value)
+    current_value = _require_finite("--current", current_value)
+    min_value = _require_finite("--min", min_value)
+    max_value = _require_finite("--max", max_value)
     has_metrics = any(value is not None for value in (target_value, goal_type, current_value, min_value, max_value))
     if unit is not None and not has_metrics:
         # The backend only persists ``unit`` on metric-backed goals; sending it on a
@@ -136,6 +153,10 @@ def update_goal(
     ctx = _ctx(typer_ctx)
     if clear_unit and unit is not None:
         raise UsageError(message="Conflicting options", detail="--unit and --clear-unit are mutually exclusive.")
+    target_value = _require_finite("--target", target_value)
+    current_value = _require_finite("--current", current_value)
+    min_value = _require_finite("--min", min_value)
+    max_value = _require_finite("--max", max_value)
     body: dict[str, object] = {}
     if title is not None:
         body["title"] = title
@@ -169,6 +190,7 @@ def update_progress(
     current_value: float = typer.Argument(..., help="New progress value."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    current_value = _require_finite("current_value", current_value)
     with ctx.make_client() as client:
         # The progress endpoint takes current_value as a query param.
         result = client.patch(f"/v1/dev/user/goals/{goal_id}/progress", params={"current_value": current_value})
