@@ -1,0 +1,37 @@
+name: Go Device SDK
+
+on:
+  pull_request:
+    paths:
+      - "sdks/device/go/**"
+      - ".github/workflows/sdk-go.yml"
+  push:
+    branches: [main]
+    paths:
+      - "sdks/device/go/**"
+      - ".github/workflows/sdk-go.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/device/go
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: sdks/device/go/go.mod
+          cache-dependency-path: sdks/device/go/go.sum
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+      - run: go vet ./...
+      - run: go test -race ./...
