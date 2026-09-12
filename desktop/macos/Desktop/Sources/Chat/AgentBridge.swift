@@ -1526,6 +1526,7 @@ actor AgentBridge {
     surface: AgentSurfaceReference,
     mode: String? = nil,
     imageData: Data? = nil,
+    imageIsScreenCapture: Bool = false,
     attachments: [AgentQueryAttachment] = [],
     producingTurnId: String? = nil,
     expectedContext: AgentContextFreshness? = nil,
@@ -1560,6 +1561,7 @@ actor AgentBridge {
       surface: surface,
       mode: mode,
       imageData: imageData,
+      imageIsScreenCapture: imageIsScreenCapture,
       attachments: attachments,
       producingTurnId: producingTurnId,
       expectedContext: expectedContext,
@@ -1582,6 +1584,7 @@ actor AgentBridge {
     surface: AgentSurfaceReference,
     mode: String? = nil,
     imageData: Data? = nil,
+    imageIsScreenCapture: Bool = false,
     attachments: [AgentQueryAttachment] = [],
     producingTurnId: String? = nil,
     expectedContext: AgentContextFreshness? = nil,
@@ -1705,6 +1708,7 @@ actor AgentBridge {
         surface: surface,
         mode: mode,
         imageData: imageData,
+        imageIsScreenCapture: imageIsScreenCapture,
         attachments: attachments,
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
@@ -1751,6 +1755,7 @@ actor AgentBridge {
         surface: surface,
         mode: mode,
         imageData: imageData,
+        imageIsScreenCapture: imageIsScreenCapture,
         attachments: attachments,
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
@@ -2155,7 +2160,7 @@ enum BridgeError: LocalizedError {
     case .agentRuntimeFailure(let failure):
       return failure.displayMessage
     case .localConfigMissing:
-      return "Set up your local model's address in Settings first."
+      return "Set up your local model's endpoint and model in Settings first."
     case .agentError(let msg):
       return Self.userFacingAgentErrorMessage(msg)
     case .quotaExceeded(let plan, let unit, let used, let limit, _):
