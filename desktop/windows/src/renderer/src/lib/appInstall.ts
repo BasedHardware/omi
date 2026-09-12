@@ -22,6 +22,28 @@ export function worksExternally(app: { capabilities?: Array<string> | null }): b
   return (app.capabilities ?? []).includes('external_integration')
 }
 
+// Append `uid` to a developer-authored setup URL without corrupting an
+// existing query: `?uid=` glued onto a URL that already has a query string
+// produces `?a=1?uid=...` (the uid never reaches the developer's endpoint),
+// and a raw uid containing `&`/`#` injects or truncates params. Preserve the
+// existing query bytes verbatim (re-encoding breaks provider-signed URLs),
+// drop any pre-existing uid param so it can't be duplicated, then append the
+// encoded value. Mirrors macOS's AppSetupURL.withUID.
+export function urlWithUidParam(rawUrl: string, uid: string): string {
+  const hashIndex = rawUrl.indexOf('#')
+  const fragment = hashIndex >= 0 ? rawUrl.slice(hashIndex) : ''
+  const head = hashIndex >= 0 ? rawUrl.slice(0, hashIndex) : rawUrl
+  const qIndex = head.indexOf('?')
+  const encoded = `uid=${encodeURIComponent(uid)}`
+  if (qIndex < 0) return `${head}?${encoded}${fragment}`
+  const base = head.slice(0, qIndex)
+  const kept = head
+    .slice(qIndex + 1)
+    .split('&')
+    .filter((kv) => kv !== '' && kv.split('=', 1)[0] !== 'uid')
+  return `${base}?${[...kept, encoded].join('&')}${fragment}`
+}
+
 // The URL to open in the browser so the user can complete setup. macOS opens
 // `{authSteps[0].url}?uid={uid}` when an auth step exists, else the raw
 // `setupInstructionsFilePath` (with NO uid appended). Null when neither is set.
@@ -30,7 +52,7 @@ export function setupUrl(
   uid: string
 ): string | null {
   const stepUrl = integration?.auth_steps?.[0]?.url
-  if (stepUrl) return `${stepUrl}?uid=${uid}`
+  if (stepUrl) return urlWithUidParam(stepUrl, uid)
   const instructions = integration?.setup_instructions_file_path
   return instructions ? instructions : null
 }
