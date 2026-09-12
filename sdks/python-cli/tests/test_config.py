@@ -282,6 +282,36 @@ def test_save_retries_when_unique_temp_name_collides(config_path: Path, monkeypa
     assert reloaded.api_key == "omi_dev_retry"
 
 
+def test_save_cleans_up_temp_file_when_replace_fails(config_path: Path, monkeypatch) -> None:
+    """A failed os.replace() (e.g. the destination is locked on Windows) must
+    not leave the fully serialized, credential-bearing temp file on disk."""
+    config = cfg.load()
+    profile = config.get_profile()
+    profile.auth_method = "api_key"
+    profile.api_key = "omi_dev_secret"
+    config.set_profile(profile)
+
+    written_tmp_path: list[Path] = []
+    original_replace = cfg.os.replace
+
+    def failing_replace(src, dst):
+        written_tmp_path.append(Path(src))
+        raise PermissionError("destination is locked")
+
+    monkeypatch.setattr(cfg.os, "replace", failing_replace)
+
+    with pytest.raises(PermissionError, match="destination is locked"):
+        cfg.save(config)
+
+    assert written_tmp_path
+    assert not written_tmp_path[0].exists()
+    assert not config_path.exists()
+
+    monkeypatch.setattr(cfg.os, "replace", original_replace)
+    cfg.save(config)
+    assert cfg.load().get_profile().api_key == "omi_dev_secret"
+
+
 def test_save_concurrent_writers_retry_on_unique_name_collision(config_path: Path) -> None:
     """Real interleaving: a nested save() inside the first writer's dump
     claims a temp path; the outer writer's own path cannot collide with it
@@ -429,9 +459,7 @@ def test_no_profiles_section(config_path: Path) -> None:
         ("[active_profile]\nname = 'work'\n", "dict"),
     ],
 )
-def test_active_profile_non_string_records_load_error(
-    config_path: Path, invalid_toml: str, expected_type: str
-) -> None:
+def test_active_profile_non_string_records_load_error(config_path: Path, invalid_toml: str, expected_type: str) -> None:
     """active_profile must be a string; non-string values should set load_error instead of crashing."""
     config_path.write_text(invalid_toml, encoding="utf-8")
     config = cfg.load()
@@ -444,7 +472,9 @@ def test_active_profile_non_string_records_load_error(
 
 def test_active_profile_non_string_refuses_save_overwrite(config_path: Path) -> None:
     """A config with invalid active_profile type must not be overwritten by save()."""
-    config_path.write_text('active_profile = ["work"]\n[profiles.work]\napi_base = "https://api.omi.me"\n', encoding="utf-8")
+    config_path.write_text(
+        'active_profile = ["work"]\n[profiles.work]\napi_base = "https://api.omi.me"\n', encoding="utf-8"
+    )
     config = cfg.load()
     assert config.was_load_error
 
