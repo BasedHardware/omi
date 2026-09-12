@@ -3,7 +3,6 @@ import {visibleDisplayText} from './desktopReadClient';
 
 const MAX_APP_CHANGELOGS = 5;
 const MAX_APP_CHANGELOG_PARSE = 10;
-const MAX_APP_CHANGELOG_CHANGES = 32;
 
 class AppChangelogError extends Error {
   constructor() {
@@ -83,8 +82,7 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
     if (
       content.changes !== undefined &&
       content.changes !== null &&
-      (!Array.isArray(content.changes) ||
-        content.changes.length > MAX_APP_CHANGELOG_CHANGES)
+      !Array.isArray(content.changes)
     ) {
       continue;
     }
@@ -137,7 +135,7 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
       const icon =
         change.icon === undefined || change.icon === null
           ? ''
-          : visibleDisplayText(text(change.icon, 32));
+          : visibleDisplayText(text(change.icon, 10000));
       pending.push({
         key: `${id}:${changeIndex}`,
         title: heading,

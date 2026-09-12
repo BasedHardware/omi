@@ -112,6 +112,77 @@ test('names neighboring GET changelogs when one announcement change cannot proje
   ).toEqual([]);
 });
 
+test('keeps GET app changelog changes when more than 32', () => {
+  const changes = Array.from({length: 33}, (_, index) => ({
+    title: `Change ${index}`,
+    description: '',
+  }));
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-long',
+          type: 'changelog',
+          app_version: '1.4.0',
+          content: {changes},
+        },
+        {
+          id: 'ann-good',
+          type: 'changelog',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+      ]),
+    ),
+  ).toEqual([
+    ...changes.map((change, index) => ({
+      key: `ann-long:${index}`,
+      title: "What's New in 1.4.0",
+      copy: change.title,
+    })),
+    {
+      key: 'ann-good:0',
+      title: "What's New in 1.2.0",
+      copy: 'Offline replay',
+    },
+  ]);
+});
+
+test('keeps GET app changelog icon longer than 32', () => {
+  const icon = 'x'.repeat(33);
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-icon',
+          type: 'changelog',
+          app_version: '1.5.0',
+          content: {
+            changes: [{title: 'Faster sync', description: '', icon}],
+          },
+        },
+        {
+          id: 'ann-good',
+          type: 'changelog',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-icon:0',
+      title: "What's New in 1.5.0",
+      copy: `${icon} · Faster sync`,
+    },
+    {
+      key: 'ann-good:0',
+      title: "What's New in 1.2.0",
+      copy: 'Offline replay',
+    },
+  ]);
+});
+
 test('loadOmiAppChangelogs names GET rows and omits failures', async () => {
   const request = jest.fn(async () => ({
     id: 'changelogs',
