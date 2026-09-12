@@ -313,3 +313,94 @@ test("completed SQL-null providerResult is nested non-retryable without inventin
     error: { code: "service_unavailable", retryable: false, action: "none" },
   });
 });
+
+test("completed unreadable providerResult is nested non-retryable without inventing speech", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const sessionId = "ad99598c-36a8-4e12-a428-63d0a3e06170";
+  const pool: PostgresTransactionPool = {
+    withTransaction: async (_options, callback) => callback({
+      connectionIdentity: {},
+      query: async (statement: SqlStatement) => {
+        if (statement.name === "firebase_authorization.lookup_current") {
+          return admittedPool(now).withTransaction(
+            { isolationLevel: "serializable", accessMode: "read write" },
+            connection => connection.query(statement),
+          );
+        }
+        if (statement.name === "application_control.load_current") {
+          return admittedPool(now).withTransaction(
+            { isolationLevel: "serializable", accessMode: "read write" },
+            connection => connection.query(statement),
+          );
+        }
+        if (statement.name === "authority.set_local") return [];
+        if (statement.name === "authority.lock_and_revalidate") {
+          return [{
+            account_id: "account:alice",
+            principal_id: "principal:alice",
+            application_id: APPLICATION,
+            credential_id: "credential:capture:one",
+            credential_generation: 4,
+            capability: "listen.capture.write",
+            grant_id: "grant:listen:capture:write",
+            grant_version: 9,
+            account_epoch: 12,
+            control_conflict_reason: null,
+            control_conflict_at_revision: null,
+            destination_activation_epoch: 12,
+            destination_activation_revision: 17,
+            lifecycle_state: "active",
+            deletion_epoch: null,
+            account_generation: "new",
+            credential_lifecycle: "active",
+            grant_lifecycle: "active",
+            grant_enabled: true,
+            authentication_strength: "firebase-id-token",
+            credential_expires_at_epoch_seconds: now + 3600,
+            control_revision: 17,
+            control_content_hash: "1".repeat(64),
+            credential_content_hash: "2".repeat(64),
+            grant_content_hash: "3".repeat(64),
+            db_now_epoch_seconds: Math.floor(Date.now() / 1000),
+          }];
+        }
+        if (statement.name === "listen.transcription.read") {
+          return [{
+            result: {
+              sessionId,
+              state: "completed",
+              providerResult: { durationSeconds: 1, segments: "nope" },
+              discardedLeadingPackets: 0,
+              errorCode: null,
+              updatedAt: 123,
+              startedAt: "2026-09-07T00:00:00Z",
+              codec: 21,
+              chunkCount: 1,
+              byteCount: 3,
+            },
+          }];
+        }
+        if (statement.name === "listen.transcription.final_clock") {
+          return [{ now: Math.floor(Date.now() / 1000) }];
+        }
+        throw new Error(`unexpected ${statement.name}`);
+      },
+      execute: async () => {
+        throw new Error("completed unreadable transcript GET must not mutate capture rows");
+      },
+    }),
+  };
+  const runtime = createPostgresFirebaseDeviceSessionRuntime(
+    authorizationOptions(pool, async () => claims(now)),
+  );
+  const response = await runtime.fetch(
+    captureRequest(`/v1/device-sessions/${sessionId}/transcript`, "GET", {
+      authorization: "Bearer header.payload.signature",
+    }),
+  );
+  expect(response.status).toBe(503);
+  expect(response.headers.get("retry-after")).toBeNull();
+  expect(await response.json()).toEqual({
+    error: { code: "service_unavailable", retryable: false, action: "none" },
+  });
+});

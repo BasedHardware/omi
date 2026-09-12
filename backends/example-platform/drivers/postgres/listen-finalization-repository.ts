@@ -558,8 +558,13 @@ export function createPostgresDeviceTranscriptionRepository(options: PostgresLis
       || !["queued", "running", "completed", "failed"].includes(String(row.state))
       || typeof row.startedAt !== "string" || !Number.isFinite(Date.parse(row.startedAt))
       || (row.errorCode !== null && typeof row.errorCode !== "string")) return fail("persistence_failed");
+    let providerResult: DeviceTranscriptionRecord["providerResult"] = null;
+    if (row.providerResult !== null) {
+      try { providerResult = parsePrerecordedTranscription(row.providerResult); }
+      catch { if (row.state !== "completed") return fail("persistence_failed"); }
+    }
     return Object.freeze({ sessionId: row.sessionId, state: row.state as DeviceTranscriptionRecord["state"],
-      providerResult: row.providerResult === null ? null : parsePrerecordedTranscription(row.providerResult),
+      providerResult,
       discardedLeadingPackets: integer(row.discardedLeadingPackets), errorCode: row.errorCode as string | null,
       updatedAt: integer(row.updatedAt), startedAt: new Date(row.startedAt).toISOString(), codec: integer(row.codec),
       chunkCount: integer(row.chunkCount), byteCount: integer(row.byteCount),
