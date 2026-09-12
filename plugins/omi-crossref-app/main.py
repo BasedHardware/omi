@@ -1,5 +1,6 @@
 import html
 import re
+from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import quote
 
@@ -38,6 +39,49 @@ def clean(text: Any) -> str:
     value = _CLOSE_TAG.sub("", value)
     value = _OPEN_TAG.sub("", value)
     return value.strip()
+
+
+class AbstractTextParser(HTMLParser):
+    """Read JATS/HTML character data without interpreting escaped literal tags."""
+
+    BLOCKS = {"p", "title", "sec", "div", "br", "break", "li"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        # HTMLParser accepts punctuation in tag names (e.g. b, in a<b,).
+        # XML/JATS attributes also require values, unlike HTML boolean attrs.
+        # Retain comparison tokens such as <b and c> as literal text.
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.:-]*", tag) or any(value is None for _, value in attrs):
+            self.parts.append(self.get_starttag_text())
+            return
+        if tag.rsplit(":", 1)[-1] in self.BLOCKS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag.rsplit(":", 1)[-1] in self.BLOCKS:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+    def unknown_decl(self, data):
+        # CDATA is literal XML text; neither tags nor entities are interpreted.
+        if data.startswith("CDATA["):
+            self.parts.append(data[len("CDATA["):])
+
+
+def clean_abstract(text: Any) -> str:
+    if text is None:
+        return ""
+    parser = AbstractTextParser()
+    # Parse before decoding entities: &lt;sample&gt; is text, not a tag.
+    parser.feed(str(text))
+    parser.close()
+    lines = (" ".join(line.split()) for line in "".join(parser.parts).splitlines())
+    return "\n".join(line for line in lines if line)
 
 
 def extract_year(item: dict[str, Any]) -> str:
@@ -209,7 +253,7 @@ async def get_crossref_work(payload: GetWorkInput):
     publisher = clean(item.get("publisher"))
     doi_out = clean(item.get("DOI"))
     url = clean(item.get("URL"))
-    abstract = clean(item.get("abstract"))
+    abstract = clean_abstract(item.get("abstract"))
     year = extract_year(item)
 
     parts = [

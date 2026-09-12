@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: crossref-abstract-tests
+    command: ["python3", "plugins/omi-crossref-app/test_main.py"]
+    triggers: ["plugins/omi-crossref-app/**"]
+    lanes: ["local", "ci"]
+    reason: "Issue #13242: execute the production DOI handler against JATS and escaped-text fixtures"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
