@@ -267,502 +267,97 @@ struct TopNavigationDestinationBadges: Equatable {
 
 // MARK: - The row
 
-/// The bar's left half: the tab bar, one segment per destination.
-///
-/// On macOS 26 it is the Liquid Glass segmented control the way iOS draws it: the segments on the bar's
-/// own glass, and a glass lens under the selected word that **lifts and follows the pointer while you
-/// press and drag**,
-/// then settles on the nearest segment when you let go (`TopNavigationGlassSegments`). The system's own
-/// `NSSegmentedControl` on the Mac gets the material but not that interaction — it flips between
-/// segments — so the lens is drawn here with `glassEffect` as a plain background layer under the
-/// segment words (not inside a `GlassEffectContainer`, which composites its glass above every non-glass
-/// sibling and washed the selected word out). Below 26 it is the system segmented `Picker`, which is
-/// exactly what a macOS `TabView` draws for its tabs.
-///
-/// Neither renderer is a hand-drawn pill: hover, shine, Reduce Transparency, Increase Contrast and
-/// accessibility text size all come from the material or the control, not from this file.
-///
-/// **Glyph and word on macOS 26, word only below.** The glass segments keep the SF Symbol beside each
-/// title the way the pills did; the system segmented control cannot show both (it does not honour
-/// `titleAndIcon`), so the fallback carries the word, which is the half that names the destination.
+/// The bar's left half: the mark, then one pill per destination.
 ///
 /// It takes plain values rather than the app's view models, which is what lets the layout test host
-/// the *real* row — real labels, real counts — and prove it fits the narrowest window. It is
-/// `Equatable` on what it draws — the selection and the counts — so the shell can hand it to
-/// `.equatable()` and a store tick that moves neither stops before this body.
-struct TopNavigationDestinationRow: View, Equatable {
+/// the *real* row — real labels, real icons, real badges — and prove it fits the narrowest window.
+struct TopNavigationDestinationRow: View {
   let selectedIndex: Int
   let badges: TopNavigationDestinationBadges
   let onSelect: (Int) -> Void
 
   var body: some View {
-    // `compiler(>=6.2)` is the Xcode 26 toolchain: the one whose SDK declares `glassEffect`. An
-    // `@available(macOS 26.0, *)` guard only gates the call at run time; the symbol still has to exist
-    // in the SDK the package is compiled against, and CI's pinned Xcode 16.4 (macOS 15.5 SDK) does not
-    // have it. Built there, the row is the system segmented control on every macOS.
-    #if compiler(>=6.2)
-      if #available(macOS 26.0, *) {
-        TopNavigationGlassSegments(selectedIndex: selectedIndex, badges: badges, onSelect: onSelect)
-      } else {
-        segmentedFallback
-      }
-    #else
-      segmentedFallback
-    #endif
-  }
-
-  /// The pre-Liquid-Glass tab bar: the system segmented control.
-  private var segmentedFallback: some View {
-    Picker("Navigate", selection: selection) {
+    HStack(spacing: TopNavigationPillMetrics.itemSpacing) {
       ForEach(TopNavigationRoutes.primaryItems) { item in
-        Text(TopNavigationSegmentSelection.title(for: item, badges: badges))
-          .tag(Optional(item.index))
-          .help(item.tooltip)
-          .accessibilityLabel(TopNavigationSegmentSelection.accessibilityLabel(for: item, badges: badges))
-          .accessibilityIdentifier("top-navigation-\(item.index)")
-      }
-    }
-    .pickerStyle(.segmented)
-    .labelsHidden()
-    .controlSize(.large)
-    // Neutral, not the accent: untinted, the control fills the selected segment with whatever
-    // accent colour the machine is set to. `controlColor` keeps the knob plain in both appearances,
-    // which is INV-UI-1's neutral accent and the way the system's own tab bars read.
-    .tint(TopNavigationSegmentMetrics.selectionTint)
-    .fixedSize()
-    .accessibilityIdentifier("top-navigation-row")
-  }
-
-  /// The segmented control reads the selected tag and writes the pressed one; the shell keeps owning
-  /// the index. Reading through `TopNavigationSegmentSelection` keeps the Brain rule (any hub page
-  /// lights the `Memories` tab) and the "no tab" rule (Settings selects nothing) in one testable place.
-  private var selection: Binding<Int?> {
-    Binding(
-      get: { TopNavigationSegmentSelection.selectedTag(forSelectedIndex: selectedIndex) },
-      set: { tag in
-        TopNavigationSegmentSelection.press(tag: tag, selectedIndex: selectedIndex, onSelect: onSelect)
-      }
-    )
-  }
-}
-
-/// Equality is what the row *draws*: the selection and the counts. `onSelect` is the shell's
-/// `navigate` — the same behaviour for the life of the bar — so a re-render differing only in a
-/// fresh copy of the closure is not a change, and `.equatable()` may skip the body a store tick
-/// would otherwise have run.
-extension TopNavigationDestinationRow {
-  nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
-    lhs.selectedIndex == rhs.selectedIndex && lhs.badges == rhs.badges
-  }
-}
-
-#if compiler(>=6.2)
-  /// The Liquid Glass segmented control with the iOS interaction.
-  ///
-  /// Every segment is the same width (`EqualWidthSegments`), as on iOS, so the lens is one shape that
-  /// only ever moves. The lens is the only glass here: the bar under it is already `inkGlassPanel`, and a
-  /// track with its own material on top of that read as a white pill on the bar rather than as part of
-  /// it. The lens is untinted too: no accent fill (INV-UI-1), the selected word simply goes to full ink.
-  ///
-  /// Pointer down anywhere on the track lifts the lens and puts it under the pointer; dragging carries
-  /// it; release snaps it to the nearest segment and navigates there. A plain click is the same gesture
-  /// with no travel. The shell still owns the selection — the lens follows `selectedIndex` when it is not
-  /// being dragged, so a navigation from anywhere else (⌘1, a deep link) slides it too.
-  @available(macOS 26.0, *)
-  private struct TopNavigationGlassSegments: View {
-    let selectedIndex: Int
-    let badges: TopNavigationDestinationBadges
-    let onSelect: (Int) -> Void
-
-    @State private var segmentWidth: CGFloat = 0
-    /// The pointer's x in track space while a press is in flight, nil otherwise.
-    @State private var dragX: CGFloat?
-
-    private var items: [TopNavigationItem] { TopNavigationRoutes.primaryItems }
-
-    private var selectedPosition: Int? {
-      guard let tag = TopNavigationSegmentSelection.selectedTag(forSelectedIndex: selectedIndex) else {
-        return nil
-      }
-      return items.firstIndex { $0.index == tag }
-    }
-
-    /// Where the lens sits: under the pointer while dragging, else on the selected segment.
-    private var lensCenterX: CGFloat? {
-      let geometry = TopNavigationGlassSegmentGeometry(
-        segmentWidth: segmentWidth, count: items.count, inset: TopNavigationGlassSegmentMetrics.trackInset)
-      if let dragX { return geometry.lensCenterX(forPointerX: dragX) }
-      guard let selectedPosition else { return nil }
-      return geometry.lensCenterX(forPosition: selectedPosition)
-    }
-
-    // The body is a chain of small named pieces rather than one expression: the release compiler
-    // could not type-check the single closure-heavy expression in reasonable time (CI's Release
-    // Compile lane), so the lens, the pointer overlay and the animations each get their own property.
-    var body: some View {
-      animated(pointerCaptured(track))
-        .fixedSize()
-    }
-
-    /// The segments on the bar's own glass, with the lens as a background layer under the words.
-    ///
-    /// One glass shape, so no `GlassEffectContainer`: the container composites its glass above every
-    /// non-glass sibling, which put the lens *over* the words and washed the selected one out. As a
-    /// plain background layer the lens stays under the labels. No glass of the track's own either: the
-    /// bar it sits on is already the glass (`inkGlassPanel`), and a second capsule of material on top
-    /// of it read as a white pill. Only the lens is glass.
-    private var track: some View {
-      segments
-        .padding(TopNavigationGlassSegmentMetrics.trackInset)
-        .background(alignment: .topLeading) { lens }
-        .contentShape(Capsule())
-    }
-
-    private var segments: some View {
-      EqualWidthSegments {
-        ForEach(Array(items.enumerated()), id: \.element.id) { position, item in
-          segment(item, isSelected: position == selectedPosition)
+        Button {
+          onSelect(item.index)
+        } label: {
+          TopNavigationPill(
+            icon: item.icon,
+            title: item.title,
+            badgeCount: badges.count(forNavItemIndex: item.index),
+            isSelected: isSelected(item)
+          )
         }
-      }
-    }
-
-    /// The clear glass capsule under the selected segment, or under the pointer while pressed.
-    @ViewBuilder
-    private var lens: some View {
-      if let lensCenterX {
-        Capsule()
-          .fill(.clear)
-          // `.clear`, not `.regular`: regular glass on the light bar read as a white pill. Clear glass
-          // keeps the lens's refraction and shine but lets the bar's own colour through.
-          .glassEffect(.clear.interactive(), in: .capsule)
-          .frame(width: lensWidth, height: TopNavigationGlassSegmentMetrics.height)
-          // Lifted while held, the way the iOS lens rises off the track under a finger.
-          .scaleEffect(lensScale)
-          .position(x: lensCenterX, y: lensCenterY)
-      }
-    }
-
-    private var lensWidth: CGFloat { max(0, segmentWidth) }
-
-    private var lensScale: CGFloat { dragX == nil ? 1 : TopNavigationGlassSegmentMetrics.liftScale }
-
-    private var lensCenterY: CGFloat {
-      TopNavigationGlassSegmentMetrics.trackInset + TopNavigationGlassSegmentMetrics.height / 2
-    }
-
-    /// The press is owned by AppKit, not by a SwiftUI `DragGesture`: the bar around this control is a
-    /// `WindowDragGesture` handle that recognises *simultaneously*, so a SwiftUI drag here moved the
-    /// lens and the whole window together. An `NSView` that claims the mouse-down keeps the window
-    /// still, exactly the way the Rewind scrubber keeps its own drags.
-    private func pointerCaptured<Content: View>(_ content: Content) -> some View {
-      content.overlay {
-        TopNavigationPointerCapture(
-          onWidthChange: trackWidthChanged,
-          onChanged: { dragX = $0 },
-          onEnded: pointerReleased
-        )
-      }
-    }
-
-    /// The lens slides under the motion gate: with Reduce Motion on it simply appears under the new
-    /// segment, exactly as the system's own controls behave.
-    private func animated<Content: View>(_ content: Content) -> some View {
-      content
-        .animation(OmiMotion.gated(.snappy(duration: 0.26)), value: selectedPosition)
-        .animation(OmiMotion.gated(.snappy(duration: 0.18)), value: dragX == nil)
-    }
-
-    private func trackWidthChanged(_ width: CGFloat) {
-      segmentWidth = TopNavigationGlassSegmentGeometry.segmentWidth(
-        forTrackWidth: width, count: items.count, inset: TopNavigationGlassSegmentMetrics.trackInset)
-    }
-
-    /// Geometry from the overlay's own width, not from state: the release must land on the right
-    /// segment even before any SwiftUI update has published the measured width.
-    private func pointerReleased(atX x: CGFloat, trackWidth width: CGFloat) {
-      let inset = TopNavigationGlassSegmentMetrics.trackInset
-      let geometry = TopNavigationGlassSegmentGeometry(
-        segmentWidth: TopNavigationGlassSegmentGeometry.segmentWidth(
-          forTrackWidth: width, count: items.count, inset: inset),
-        count: items.count, inset: inset)
-      let position = geometry.position(forPointerX: x)
-      dragX = nil
-      guard items.indices.contains(position) else { return }
-      TopNavigationSegmentSelection.press(
-        tag: items[position].index, selectedIndex: selectedIndex, onSelect: onSelect)
-    }
-
-    private func segment(_ item: TopNavigationItem, isSelected: Bool) -> some View {
-      TopNavigationGlassSegmentLabel(item: item, badges: badges, isSelected: isSelected)
-        .frame(maxWidth: .infinity)
+        .buttonStyle(.plain)
         .help(item.tooltip)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(TopNavigationSegmentSelection.accessibilityLabel(for: item, badges: badges))
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-        .accessibilityAction {
-          TopNavigationSegmentSelection.press(
-            tag: item.index, selectedIndex: selectedIndex, onSelect: onSelect)
-        }
+        .accessibilityLabel(item.tooltip)
         .accessibilityIdentifier("top-navigation-\(item.index)")
-    }
-  }
-
-  /// One segment's content: the glyph, the word, and the count in its reserved slot.
-  ///
-  /// Its own type so the layout test can measure a segment on its own: `EqualWidthSegments` makes
-  /// the row exactly `count × widest segment`, and that is what proves every destination is still
-  /// drawn. What a segment measures is the word and the slot, never what is *in* either — selection
-  /// only changes the ink, and the count renders inside the slot a hidden template reserves — so a
-  /// badge tick can no longer re-measure and re-lay-out the bar the way it used to
-  /// (`testSegmentMeasurementIsIndependentOfBadgeCounts`).
-  @available(macOS 26.0, *)
-  struct TopNavigationGlassSegmentLabel: View {
-    let item: TopNavigationItem
-    let badges: TopNavigationDestinationBadges
-    let isSelected: Bool
-
-    var body: some View {
-      Label(item.title, systemImage: item.icon)
-        .labelStyle(.titleAndIcon)
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-        .lineLimit(1)
-        .fixedSize()
-        .foregroundStyle(isSelected ? Ink.primary : Ink.secondary)
-        .padding(.horizontal, TopNavigationGlassSegmentMetrics.horizontalPadding)
-        .frame(height: TopNavigationGlassSegmentMetrics.height)
-        .overlay(alignment: .topTrailing) { countBadge }
-    }
-
-    private var count: Int { badges.count(forNavItemIndex: item.index) }
-
-    /// The count as a corner-badge overlay. It takes no part in layout, so every segment measures —
-    /// and its title centers — identically at every count, and the lens stays under the words it
-    /// marks. This is the row's own `TopNavigationBadge` visual, on the one surface whose cells are
-    /// equal-width and must not re-measure when a count changes.
-    @ViewBuilder
-    private var countBadge: some View {
-      if count > 0 {
-        Text(verbatim: TopNavigationSegmentSelection.countText(for: count))
-          .scaledFont(size: OmiType.micro, weight: .bold)
-          .foregroundColor(Ink.primary)
-          .monospacedDigit()
-          .lineLimit(1)
-          .fixedSize()
-          .padding(.horizontal, 5)
-          .padding(.vertical, 1)
-          .background(Capsule(style: .continuous).fill(Ink.rowFillHover))
-          .allowsHitTesting(false)
-          .offset(
-            x: TopNavigationGlassSegmentMetrics.countBadgeOverhang,
-            y: -TopNavigationGlassSegmentMetrics.countBadgeLift)
       }
     }
   }
 
-  /// A transparent AppKit view that owns the pointer while it is down over the control.
-  ///
-  /// Reports the pointer's x in the control's own coordinates, which is the track space the lens is
-  /// positioned in because the overlay covers the control exactly. Hover is untouched — the glass
-  /// lens's shine comes from SwiftUI tracking areas, which this view does not intercept.
-  @available(macOS 26.0, *)
-  private struct TopNavigationPointerCapture: NSViewRepresentable {
-    /// The overlay covers the control exactly, so its width *is* the track width. Reported from
-    /// `layout()`, which is the one place that is always right, rather than measured a second time
-    /// through a `GeometryReader` that publishes a frame later.
-    let onWidthChange: (CGFloat) -> Void
-    let onChanged: (CGFloat) -> Void
-    /// The release: pointer x and the track width at that instant.
-    let onEnded: (CGFloat, CGFloat) -> Void
-
-    func makeNSView(context: Context) -> PointerCaptureView {
-      let view = PointerCaptureView()
-      apply(to: view)
-      return view
+  private func isSelected(_ item: TopNavigationItem) -> Bool {
+    if item.index == SidebarNavItem.conversations.rawValue {
+      return ShellDestination.isHubPage(selectedIndex: selectedIndex)
     }
-
-    func updateNSView(_ view: PointerCaptureView, context: Context) {
-      apply(to: view)
-    }
-
-    private func apply(to view: PointerCaptureView) {
-      view.onWidthChange = onWidthChange
-      view.onChanged = onChanged
-      view.onEnded = onEnded
-    }
-
-    @MainActor
-    final class PointerCaptureView: NSView {
-      var onWidthChange: ((CGFloat) -> Void)?
-      var onChanged: ((CGFloat) -> Void)?
-      var onEnded: ((CGFloat, CGFloat) -> Void)?
-      private var reportedWidth: CGFloat = -1
-
-      /// The control keeps its own drags; the bar around it is the window handle.
-      override var mouseDownCanMoveWindow: Bool { false }
-      override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-      override func layout() {
-        super.layout()
-        guard bounds.width != reportedWidth else { return }
-        reportedWidth = bounds.width
-        onWidthChange?(bounds.width)
-      }
-
-      override func mouseDown(with event: NSEvent) {
-        onChanged?(convert(event.locationInWindow, from: nil).x)
-      }
-
-      override func mouseDragged(with event: NSEvent) {
-        onChanged?(convert(event.locationInWindow, from: nil).x)
-      }
-
-      override func mouseUp(with event: NSEvent) {
-        onEnded?(convert(event.locationInWindow, from: nil).x, bounds.width)
-      }
-    }
-  }
-#endif
-
-/// Where the lens is allowed to be, in track coordinates. Pure so the drag can be tested without a
-/// pointer: the lens centre is clamped to the first and last segment centres, and a release picks the
-/// segment whose span contains the pointer.
-struct TopNavigationGlassSegmentGeometry: Equatable {
-  let segmentWidth: CGFloat
-  let count: Int
-  let inset: CGFloat
-
-  /// Equal segments: the track minus its inset on both sides, shared evenly.
-  static func segmentWidth(forTrackWidth width: CGFloat, count: Int, inset: CGFloat) -> CGFloat {
-    guard count > 0 else { return 0 }
-    return max(0, width - inset * 2) / CGFloat(count)
-  }
-
-  func lensCenterX(forPosition position: Int) -> CGFloat {
-    inset + segmentWidth * (CGFloat(position) + 0.5)
-  }
-
-  func lensCenterX(forPointerX x: CGFloat) -> CGFloat {
-    guard count > 0, segmentWidth > 0 else { return inset }
-    return min(max(x, lensCenterX(forPosition: 0)), lensCenterX(forPosition: count - 1))
-  }
-
-  func position(forPointerX x: CGFloat) -> Int {
-    guard count > 0, segmentWidth > 0 else { return 0 }
-    let raw = Int(((x - inset) / segmentWidth).rounded(.down))
-    return min(max(raw, 0), count - 1)
+    return selectedIndex == item.index
   }
 }
 
-/// Every segment as wide as the widest, in a row. Intrinsic width is `count × widest`, which is what
-/// keeps the row `fixedSize` and lets the narrowest-window test measure it. What a segment measures
-/// is its word and the reserved count slot — never the live count — so a badge tick cannot change
-/// this width and restart the bar's width animation.
-private struct EqualWidthSegments: Layout {
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-    let widest = sizes.map(\.width).max() ?? 0
-    let tallest = sizes.map(\.height).max() ?? 0
-    return CGSize(width: widest * CGFloat(subviews.count), height: tallest)
-  }
-
-  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-    guard !subviews.isEmpty else { return }
-    let width = bounds.width / CGFloat(subviews.count)
-    for (position, subview) in subviews.enumerated() {
-      subview.place(
-        at: CGPoint(x: bounds.minX + width * CGFloat(position), y: bounds.minY),
-        anchor: .topLeading,
-        proposal: ProposedViewSize(width: width, height: bounds.height))
-    }
-  }
-}
-
-enum TopNavigationGlassSegmentMetrics {
-  /// The air between the track's glass edge and the lens.
-  static let trackInset: CGFloat = 3
-  static let horizontalPadding: CGFloat = 14
-  /// How far the count badge overhangs the segment's trailing padding, and how far it lifts off
-  /// the label's cap height. It is an overlay: these move pixels, never measurements.
-  static let countBadgeOverhang: CGFloat = 7
-  static let countBadgeLift: CGFloat = 2
-  static let height: CGFloat = 28
-  /// How much the lens grows while held.
-  static let liftScale: CGFloat = 1.08
-}
-
-/// The two rules that turn the shell's index into what the native tab bar shows.
-enum TopNavigationSegmentSelection {
-  /// The tab the control should show as selected for a shell index, or `nil` for a page that has no
-  /// tab (Settings, Permissions) — a tab bar with no selection is the honest state there, where a
-  /// fabricated selection would claim you are on a page you are not.
-  static func selectedTag(
-    forSelectedIndex selectedIndex: Int,
-    items: [TopNavigationItem] = TopNavigationRoutes.primaryItems
-  ) -> Int? {
-    if ShellDestination.isHubPage(selectedIndex: selectedIndex) {
-      return SidebarNavItem.conversations.rawValue
-    }
-    return items.contains { $0.index == selectedIndex } ? selectedIndex : nil
-  }
-
-  /// What a press on the control does: navigate to the pressed tab, unless it is already the one
-  /// showing. The control re-writes its selection on a re-press, and forwarding that would restart
-  /// the page you are on. A `nil` write never navigates — the control has nowhere to go.
-  static func press(tag: Int?, selectedIndex: Int, onSelect: (Int) -> Void) {
-    guard let tag, tag != selectedTag(forSelectedIndex: selectedIndex) else { return }
-    onSelect(tag)
-  }
-
-  /// The new-item count the pills used to wear as a badge is part of the title: `Tasks +7`. A
-  /// zero count adds nothing.
-  ///
-  /// This is the **fallback's** title: the system segmented control's only channel for a count is
-  /// its title string, so there a count does move the control's own width — which is why the
-  /// narrowest-window test measures with counts at their widest, and a smaller count can only
-  /// shrink that control back into a lane it already fit. The glass path renders the count in the
-  /// slot `TopNavigationGlassSegmentLabel` reserves and measures segments without it.
-  static func title(for item: TopNavigationItem, badges: TopNavigationDestinationBadges) -> String {
-    let count = badges.count(forNavItemIndex: item.index)
-    return count > 0 ? "\(item.title) \(countText(for: count))" : item.title
-  }
-
-  /// The count as it renders in a segment: `+N`, capped at two digits — `99+` — so a long absence
-  /// cannot widen the slot every segment reserves for it. VoiceOver keeps hearing the exact count
-  /// (`accessibilityLabel(for:badges:)`).
-  static func countText(for count: Int) -> String {
-    count > 99 ? widestCountText : "+\(count)"
-  }
-
-  /// The widest string the count slot must hold: the cap itself, reserved invisibly in every
-  /// segment, so the row's measurement sees this and never the live count.
-  static let widestCountText = "99+"
-
-  /// What VoiceOver reads for a segment: the tooltip sentence, then the count a sighted user sees in
-  /// the title (`…, 7 new`). The tooltip alone dropped the count; the title alone drops the sentence.
-  static func accessibilityLabel(for item: TopNavigationItem, badges: TopNavigationDestinationBadges)
-    -> String
-  {
-    let count = badges.count(forNavItemIndex: item.index)
-    return count > 0 ? "\(item.tooltip), \(count) new" : item.tooltip
-  }
-}
-
-enum TopNavigationSegmentMetrics {
-  /// The least a native segment can be and still be a target: the HIG's minimum control width. The
-  /// real segments are wider — each carries a word — so this is a strict lower bound the layout test
-  /// uses to notice a segment that stopped being rendered.
-  static let minimumSegmentWidth: CGFloat = 44
-
-  /// The selected segment's fill: the system control colour, so the knob is neutral glass in light
-  /// and dark rather than the user's accent.
-  static let selectionTint = Color(nsColor: .controlColor)
-}
-
-/// Metrics the referral pill still shares with the bar. The bar's own destinations are native
-/// segments now (`TopNavigationDestinationRow`) and no longer read these.
 enum TopNavigationPillMetrics {
   static let itemSpacing: CGFloat = 4
   static let horizontalPadding: CGFloat = 12
   static let height: CGFloat = 30
   static let iconWidth: CGFloat = 18
+}
+
+/// One destination. **It hugs its own label** rather than taking a width from a table keyed by rail
+/// index: five pills whose widths were guessed one at a time is how a row that fitted in a mockup
+/// stops fitting once a badge appears on two of them.
+struct TopNavigationPill: View {
+  let icon: String
+  let title: String
+  let badgeCount: Int
+  let isSelected: Bool
+  @State private var isHovering = false
+
+  var body: some View {
+    HStack(spacing: 6) {
+      Image(systemName: icon)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .frame(width: TopNavigationPillMetrics.iconWidth)
+      Text(title)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .lineLimit(1)
+        .fixedSize()
+      if badgeCount > 0 {
+        TopNavigationBadge(count: badgeCount)
+      }
+    }
+    .foregroundStyle(GlassShell.controlLabel(isProminent: isSelected || isHovering))
+    .padding(.horizontal, TopNavigationPillMetrics.horizontalPadding)
+    .frame(height: TopNavigationPillMetrics.height)
+    .background(GlassPillBackground(isSelected: isSelected, isHovering: isHovering))
+    .contentShape(Capsule())
+    .onHover { isHovering = $0 }
+    .fixedSize()
+  }
+}
+
+/// How many of this destination's rows arrived since Omi last lost the front.
+private struct TopNavigationBadge: View {
+  let count: Int
+
+  var body: some View {
+    Text("+\(count)")
+      .scaledFont(size: OmiType.micro, weight: .bold)
+      .foregroundColor(Ink.primary)
+      .monospacedDigit()
+      .lineLimit(1)
+      .fixedSize()
+      .padding(.horizontal, 5)
+      .padding(.vertical, 1)
+      .background(Capsule(style: .continuous).fill(Ink.rowFillHover))
+  }
 }
