@@ -150,6 +150,25 @@ test('does not omit a neighboring import job when stored counts are integer stri
   ]);
 });
 
+test('keeps GET import jobs when a job_id exceeds 256', () => {
+  const id = 'j'.repeat(257);
+  expect(
+    parseOmiImportJobs(
+      JSON.stringify([
+        {job_id: id, status: 'completed'},
+        {
+          job_id: 'job-neighbor',
+          status: 'failed',
+          error: 'Zip could not be read.',
+        },
+      ]),
+    ),
+  ).toEqual([
+    {id, status: 'completed'},
+    {id: 'job-neighbor', status: 'failed', error: 'Zip could not be read.'},
+  ]);
+});
+
 test('fails closed for malformed GET import jobs', () => {
   expect(() => parseOmiImportJobs(JSON.stringify({}))).toThrow();
   expect(() =>
