@@ -1,3 +1,4 @@
+import ast
 import os
 from typing import List
 
@@ -92,13 +93,19 @@ def get_multion_user_id(uid: str) -> str:
 
 def get_upsert_segment_to_transcript_plugin(
     plugin_id: str, session_id: str, new_segments: list[TranscriptSegment]
-) -> List[dict]:
+) -> List[TranscriptSegment]:
     key = f'plugin:{plugin_id}:session:{session_id}:transcript_segments'
     segments = r.get(key)
     if not segments:
         segments = []
     else:
-        segments = eval(segments)
+        try:
+            segments = ast.literal_eval(segments.decode('utf-8'))
+        except (ValueError, SyntaxError):
+            segments = []
+        if not isinstance(segments, list):
+            segments = []
+        segments = [segment for segment in segments if isinstance(segment, dict)]
 
     segments.extend([segment.dict() for segment in new_segments])
 
@@ -106,9 +113,7 @@ def get_upsert_segment_to_transcript_plugin(
     if len(segments) > 1000:
         segments = segments[-1000:]
 
-    r.set(key, str(segments))
-
     # expire 5m
-    r.expire(key, 60 * 5)
+    r.set(key, str(segments), ex=60 * 5)
 
     return [TranscriptSegment(**segment) for segment in segments]
