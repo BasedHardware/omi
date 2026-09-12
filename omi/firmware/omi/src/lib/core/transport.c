@@ -971,6 +971,7 @@ static int ensure_local_ble_identity(void)
 //
 
 #define NET_BUFFER_HEADER_SIZE 3
+#define ATT_NOTIFICATION_HEADER_SIZE 3 // ATT opcode (1 byte) and attribute handle (2 bytes)
 #define RING_BUFFER_HEADER_SIZE 2
 static uint8_t tx_queue[NETWORK_RING_BUF_SIZE * (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)];
 static uint8_t tx_buffer[CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE];
@@ -1072,7 +1073,8 @@ static bool push_to_gatt(struct bt_conn *conn)
     const int max_retries = 3;
 
     while (offset < tx_buffer_size) {
-        uint32_t packet_size = MIN(current_mtu - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
+        uint32_t packet_size =
+            MIN(current_mtu - ATT_NOTIFICATION_HEADER_SIZE - NET_BUFFER_HEADER_SIZE, tx_buffer_size - offset);
 
         // Block until a throttle slot is available. This preserves every audio
         // packet while still guaranteeing AUDIO_TX_RESERVED_SLOTS remain free
