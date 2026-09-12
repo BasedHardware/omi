@@ -201,7 +201,7 @@ export function parseOmiImportJobs(body: string): OmiImportJob[] {
     const error =
       row.error === undefined || row.error === null
         ? ''
-        : visibleDisplayText(text(row.error, 10000));
+        : visibleDisplayText(text(row.error, 1_000_000));
     items.push({
       id,
       status,
