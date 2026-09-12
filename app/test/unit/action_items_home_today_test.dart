@@ -90,4 +90,30 @@ void main() {
 
     provider.dispose();
   });
+
+  test('empty due-window result does not hide a first-page today task', () async {
+    final firstPageDue = _item(id: 'first-page-due', completed: false, dueAt: now);
+    final provider = ActionItemsProvider(
+      getActionItems: ({
+        limit = 50,
+        offset = 0,
+        completed,
+        conversationId,
+        startDate,
+        endDate,
+        dueStartDate,
+        dueEndDate,
+      }) async {
+        if (dueStartDate != null || dueEndDate != null) {
+          return const ActionItemsResponse(actionItems: [], hasMore: false);
+        }
+        return ActionItemsResponse(actionItems: [firstPageDue], hasMore: false);
+      },
+    );
+
+    await provider.ensureLoaded();
+    await provider.ensureHomeTodayTasksLoaded(now: now);
+    expect(provider.todayPreviewTasks(now: now).map((i) => i.id), ['first-page-due']);
+    provider.dispose();
+  });
 }

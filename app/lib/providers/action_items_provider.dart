@@ -94,12 +94,20 @@ class ActionItemsProvider extends ChangeNotifier {
   DateTime? get endDate => _endDate;
   bool get hasActiveFilter => _startDate != null || _endDate != null;
 
-  /// Home preview source: due-window fetch when it has completed, else the
-  /// first global page (legacy). Tasks-page pagination is left unchanged.
+  /// Home preview: due-window rows plus any first-page matches, so an empty
+  /// due-window response cannot hide a task already on the global first page.
   List<ActionItemWithMetadata> todayPreviewTasks({DateTime? now, int limit = 3}) {
     final clock = now ?? DateTime.now();
-    final source = _homeDayLoaded ? _homeDayItems : _actionItems;
-    return filterTodayTasks(source, now: clock).take(limit).toList();
+    final byId = <String, ActionItemWithMetadata>{};
+    for (final item in filterTodayTasks(_actionItems, now: clock)) {
+      byId[item.id] = item;
+    }
+    if (_homeDayLoaded) {
+      for (final item in filterTodayTasks(_homeDayItems, now: clock)) {
+        byId[item.id] = item;
+      }
+    }
+    return byId.values.take(limit).toList();
   }
 
   static List<ActionItemWithMetadata> filterTodayTasks(
