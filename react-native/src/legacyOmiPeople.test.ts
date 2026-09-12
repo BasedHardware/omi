@@ -12,6 +12,18 @@ test('parses GET people names and omits empty names', () => {
   expect(names.has('person-empty')).toBe(false);
 });
 
+test('keeps GET people names when a person id exceeds 256', () => {
+  const id = 'p'.repeat(257);
+  const names = parseOmiPeopleNames(
+    JSON.stringify([
+      {id, name: 'Alex Chen'},
+      {id: 'person-neighbor', name: 'Jordan Lee'},
+    ]),
+  );
+  expect(names.get(id)).toBe('Alex Chen');
+  expect(names.get('person-neighbor')).toBe('Jordan Lee');
+});
+
 test('fails closed for malformed GET people', () => {
   expect(() =>
     parseOmiPeopleNames(JSON.stringify({id: 'person-alex'})),
