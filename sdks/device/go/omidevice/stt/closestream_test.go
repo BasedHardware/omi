@@ -142,9 +142,44 @@ func TestDeepgramStopTimesOutAndClosesTransport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stream.(*wsTranscriber).shutdownTimeout = 0
+	stream.(*wsTranscriber).shutdownTimeout = 50 * time.Millisecond
 	if err := stream.Stop(); err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("got %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeepgramStopFromTranscriptHandlerDoesNotDeadlock(t *testing.T) {
+	release := make(chan struct{})
+	dialer, done := pipeDialer(t, func(conn *websocket.Conn) error {
+		<-release
+		if err := conn.WriteJSON(map[string]any{
+			"channel": map[string]any{"alternatives": []any{map[string]string{"transcript": "from handler"}}},
+		}); err != nil {
+			return err
+		}
+		_, _, _ = conn.ReadMessage()
+		return nil
+	})
+	stopped := make(chan error, 1)
+	var stream StreamingTranscriber
+	var err error
+	stream, err = newDeepgram(dialer, "synthetic", 16000, func(string) {
+		stopped <- stream.Stop()
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	select {
+	case err := <-stopped:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop from transcript handler deadlocked")
 	}
 	if err := <-done; err != nil {
 		t.Fatal(err)

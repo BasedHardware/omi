@@ -94,6 +94,7 @@ type wsTranscriber struct {
 	readDone        <-chan error
 	shutdownTimeout time.Duration
 	writeTimeout    time.Duration
+	inCallback      atomic.Bool
 }
 
 func (t *wsTranscriber) AppendPCM(pcm []byte) error {
@@ -133,8 +134,9 @@ func (t *wsTranscriber) Stop() error {
 		if t.readDone == nil {
 			return
 		}
-		if t.shutdownTimeout <= 0 {
-			t.stopErr = fmt.Errorf("timed out waiting for final transcription")
+		// A transcript handler that calls Stop cannot wait for the reader:
+		// this goroutine *is* the reader until onTranscript returns.
+		if t.inCallback.Load() {
 			return
 		}
 		timer := time.NewTimer(t.shutdownTimeout)
@@ -181,13 +183,13 @@ func newDeepgram(dialer *websocket.Dialer, apiKey string, sampleRate int, onTran
 		writeTimeout:    5 * time.Second,
 	}
 	t.ready.Store(true)
-	go func() { done <- readDeepgram(conn, onTranscript) }()
+	go func() { done <- t.readDeepgram(onTranscript) }()
 	return t, nil
 }
 
-func readDeepgram(conn *websocket.Conn, onTranscript Handler) error {
+func (t *wsTranscriber) readDeepgram(onTranscript Handler) error {
 	for {
-		_, data, err := conn.ReadMessage()
+		_, data, err := t.conn.ReadMessage()
 		if err != nil {
 			return err
 		}
@@ -202,9 +204,14 @@ func readDeepgram(conn *websocket.Conn, onTranscript Handler) error {
 		}
 		alt, _ := alts[0].(map[string]any)
 		text, _ := alt["transcript"].(string)
-		if text != "" && onTranscript != nil {
-			onTranscript(text)
+		if text == "" || onTranscript == nil {
+			continue
 		}
+		func() {
+			t.inCallback.Store(true)
+			defer t.inCallback.Store(false)
+			onTranscript(text)
+		}()
 	}
 }
 
