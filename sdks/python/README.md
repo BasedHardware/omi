@@ -87,6 +87,31 @@ A pip-installable Python SDK for connecting to Omi wearable devices over Bluetoo
   </Step>
 </Steps>
 
+### Local Whisper language selection
+
+Install the optional local engine with `pip install 'omi-sdk[whisper]'`.
+Whisper defaults to the English-only `tiny.en` model and `language="en"`.
+For another language, select a multilingual model (without the `.en` suffix)
+and pass its language code through the transcription wrapper:
+
+```python
+from omi.transcribe import transcribe
+
+await transcribe(
+    audio_queue,
+    "",  # The shared wrapper requires this argument; Whisper does not use it.
+    on_transcript=print,
+    engine="whisper",
+    model_name="tiny",
+    language="de",
+)
+```
+
+Pass `language=None` with a multilingual model to let Whisper detect the language
+for each audio batch. The local engine batches approximately five seconds of
+16 kHz mono PCM before transcription. When supplying a custom `runner=`, the
+runner still receives only PCM bytes and controls its own language selection.
+
 
 ## Development
 
