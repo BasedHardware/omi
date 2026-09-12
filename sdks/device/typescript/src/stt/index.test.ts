@@ -85,7 +85,7 @@ describe('createDeepgramTranscriber', () => {
     expect(openedUrl).not.toInclude('token=');
   });
 
-  test('sends CloseStream before closing the socket', () => {
+  test('sends CloseStream before closing the socket', async () => {
     const sent: unknown[] = [];
     const events: Array<'send' | 'close'> = [];
     let closeCount = 0;
@@ -93,6 +93,7 @@ describe('createDeepgramTranscriber', () => {
       binaryType: string = 'blob';
       readyState = 1;
       onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: Event) => void) | null = null;
       constructor(_url: string) {}
       send(data: unknown) {
         events.push('send');
@@ -108,12 +109,79 @@ describe('createDeepgramTranscriber', () => {
     const transcriber = createDeepgramTranscriber({
       onTranscript: () => {},
       createWebSocket: (url: string) => new FakeWebSocket(url) as any,
+      drainTimeoutMs: 50,
     });
     transcriber.stop();
+    expect(events).toEqual(['send']);
+    await new Promise((resolve) => setTimeout(resolve, 70));
 
     expect(events).toEqual(['send', 'close']);
     expect(sent).toEqual([JSON.stringify({ type: 'CloseStream' })]);
     expect(closeCount).toBe(1);
+  });
+
+  test('closes after CloseStream when the provider closes the socket', async () => {
+    const events: Array<'send' | 'close'> = [];
+    class FakeWebSocket {
+      binaryType: string = 'blob';
+      readyState = 1;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: Event) => void) | null = null;
+      constructor(_url: string) {}
+      send(data: unknown) {
+        events.push('send');
+        queueMicrotask(() => {
+          this.readyState = 3;
+          this.onclose?.({} as Event);
+        });
+      }
+      close() {
+        events.push('close');
+        this.readyState = 3;
+      }
+    }
+
+    const transcriber = createDeepgramTranscriber({
+      onTranscript: () => {},
+      createWebSocket: (url: string) => new FakeWebSocket(url) as any,
+      drainTimeoutMs: 5000,
+    });
+    transcriber.stop();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(events).toEqual(['send', 'close']);
+  });
+
+  test('drains a trailing transcript after CloseStream', async () => {
+    const transcripts: string[] = [];
+    class FakeWebSocket {
+      binaryType: string = 'blob';
+      readyState = 1;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: Event) => void) | null = null;
+      constructor(_url: string) {}
+      send(_data: unknown) {}
+      close() {
+        this.readyState = 3;
+      }
+    }
+
+    const socket = new FakeWebSocket('');
+    const transcriber = createDeepgramTranscriber({
+      onTranscript: (text) => transcripts.push(text),
+      createWebSocket: () => socket as any,
+      drainTimeoutMs: 50,
+    });
+    transcriber.stop();
+    socket.onmessage?.({
+      data: JSON.stringify({
+        channel: { alternatives: [{ transcript: 'late ts' }] },
+      }),
+    } as MessageEvent);
+    await new Promise((resolve) => setTimeout(resolve, 70));
+
+    expect(transcripts).toEqual(['late ts']);
   });
 
   test('closes the socket when CloseStream send fails', () => {
