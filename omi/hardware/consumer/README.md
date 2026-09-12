@@ -7,12 +7,12 @@ Licensed under MIT (see [LICENSE](LICENSE)).
 ## What's Inside
 
 ### Electrical (`electrical/`)
-- **Mainboard** (nRF5340 + nRF7002): Altium source, Gerber files, schematics (v1.2)
-- **Charger Board**: Altium source, Gerber files, schematic (v1.0)
-- **FPC (Flexible PCB)**: Altium source, Gerber files, schematic (v1.0)
+- **Mainboard** (nRF5340 + nRF7002): KiCad 9 source (in `altium/` zips — legacy folder name), Gerber files, schematics (v1.2)
+- **Charger Board**: KiCad 9 source (in `altium/` zip), Gerber files, schematic (v1.0)
+- **FPC (Flexible PCB)**: KiCad 9 source (in `altium/` zip), Gerber files, schematic (v1.0)
 
 ### Bill of Materials (`bom/`)
-- 88 components with manufacturer part numbers (MPN)
+- 88 unique BOM lines (63 unique MPNs, 154 total placements across 3 boards)
 - Available in CSV and XLSX formats
 
 ### Mechanical (`mechanical/`)
@@ -38,8 +38,8 @@ Licensed under MIT (see [LICENSE](LICENSE)).
 | Component | Specification |
 |-----------|---------------|
 | Processor | nRF5340 dual-core Bluetooth LE SoC |
-| Wi-Fi | nRF7002 Wi-Fi 6 chip |
-| Audio | 2x TDK T5838 top-port PDM microphones |
+| Wi-Fi | nRF7002 Wi-Fi 6 companion IC (2.4 GHz active in current RF path) |
+| Audio | 2x TDK T5838 bottom-port PDM microphones |
 | Storage | CSNP4GCR01 4Gbit NAND Flash |
 | IMU | LSM6DS3TR-C 6-axis accelerometer/gyroscope |
 | Battery | 3.7V 150mAh LiPo (custom, D16xH6.1mm) |
@@ -50,12 +50,84 @@ Licensed under MIT (see [LICENSE](LICENSE)).
 
 The firmware is open source and lives at [`omi/firmware/`](../../firmware/). Built on Zephyr RTOS with nRF Connect SDK.
 
-## Getting Started
+## Build Your Own
 
-1. **Build one**: Use the Gerber files to order PCBs, the BOM to source components, and the STEP files to manufacture the enclosure.
-2. **Modify the design**: Open Altium source files to customize the electronics, or edit STEP files to redesign the enclosure.
-3. **Flash firmware**: Follow the [firmware guide](https://docs.omi.me/doc/developer/firmware/Compile_firmware).
-4. **Documentation**: Visit [docs.omi.me](https://docs.omi.me/doc/hardware/consumer) for detailed guides.
+**Start here → [BUILD-GUIDE.md](BUILD-GUIDE.md)** — pick the right build path for your experience.
+
+| Path | Who It's For | Time | Difficulty |
+|------|-------------|------|------------|
+| **[Kit Build](BUILD-GUIDE.md#path-1-kit-build-recommended)** (recommended) | Anyone with basic soldering | 1 evening | ⭐⭐ |
+| **[DIY from Scratch](BUILD-GUIDE.md#path-2-diy-from-scratch)** | Hardware engineers | 5–6 weeks | ⭐⭐⭐⭐ |
+| **[Design Fork](BUILD-GUIDE.md#path-3-design-fork)** | Engineers modifying the design | 8+ weeks | ⭐⭐⭐⭐⭐ |
+
+### Quick Links
+
+- **Kit assembly guide:** [KIT-ASSEMBLY-GUIDE.md](KIT-ASSEMBLY-GUIDE.md)
+- **SWD flashing:** [SWD-FLASHING-GUIDE.md](electrical/SWD-FLASHING-GUIDE.md)
+- **Build readiness:** [BUILD-READINESS.md](BUILD-READINESS.md)
+- **Firmware source:** [omi/firmware/](../../firmware/)
+- **Online docs:** [docs.omi.me](https://docs.omi.me/doc/hardware/consumer)
+
+### Engineering Reference (for DIY / Design Fork)
+
+| Doc | What It Covers |
+|-----|---------------|
+| [LCSC-SOURCING.md](bom/LCSC-SOURCING.md) | Part availability, JLCPCB ordering, cost breakdown |
+| [COMPONENT-PLACEMENT.md](bom/COMPONENT-PLACEMENT.md) | Pick-and-place format, rotation, WLCSP pin-1 |
+| [STENCIL-REFLOW-NOTES.md](electrical/STENCIL-REFLOW-NOTES.md) | Stencil specs, paste, reflow, X-ray |
+| [IMPEDANCE-STACKUP.md](electrical/IMPEDANCE-STACKUP.md) | 4-layer stackup, impedance, HDI |
+| [FPC-FAB-NOTES.md](electrical/FPC-FAB-NOTES.md) | FPC fabrication, bend radius, quality |
+| [RF-ANTENNA-NOTES.md](electrical/RF-ANTENNA-NOTES.md) | RF architecture, switch control, enclosure strategy |
+| [BATTERY-SPEC.md](bom/BATTERY-SPEC.md) | Battery selection, safety, shipping |
+| [SWD-FLASHING-GUIDE.md](electrical/SWD-FLASHING-GUIDE.md) | Debug probe wiring, test points, firmware flashing |
+| [ALTERNATE-PARTS.md](bom/ALTERNATE-PARTS.md) | Substitute parts (approved / candidate / rejected) |
+
+## Directory Structure
+
+```
+consumer/
+├── README.md                  ← you are here
+├── BUILD-GUIDE.md             ← start here: pick your build path
+├── KIT-ASSEMBLY-GUIDE.md            ← step-by-step for Kit buyers
+├── BUILD-READINESS.md   ← readiness overview & feasibility
+├── LICENSE
+│
+├── electrical/                ← PCB design files & engineering docs
+│   ├── mainboard/             ← nRF5340+nRF7002 (v1.2)
+│   │   ├── altium/*.zip       ← KiCad 9 source (legacy folder name)
+│   │   ├── gerbers/*.zip      ← production gerbers
+│   │   └── schematic.pdf
+│   ├── charger-board/         ← charging dock PCB (v1.0)
+│   ├── fpc-board/             ← flex PCB (v1.0)
+│   ├── SWD-FLASHING-GUIDE.md    ← firmware flashing guide
+│   ├── STENCIL-REFLOW-NOTES.md
+│   ├── IMPEDANCE-STACKUP.md
+│   ├── RF-ANTENNA-NOTES.md
+│   └── FPC-FAB-NOTES.md
+│
+├── bom/                       ← bills of materials & sourcing
+│   ├── README.md              ← BOM format & column definitions
+│   ├── mainboard-bom.csv      ← 56 rows, 144 placements
+│   ├── charger-bom.csv        ← 6 rows, 8 placements
+│   ├── fpc-bom.csv
+│   ├── mechanical-bom.csv
+│   ├── *-cpl.csv              ← pick-and-place files
+│   ├── LCSC-SOURCING.md
+│   ├── COMPONENT-PLACEMENT.md
+│   ├── BATTERY-SPEC.md
+│   └── ALTERNATE-PARTS.md
+│
+├── mechanical/                ← enclosure & internal parts (STEP)
+│   ├── assemblies/            ← full device + charger assembly
+│   ├── parts/cnc/             ← case-a, case-b, touch pins
+│   ├── parts/injection-molding/  ← wrapper (PC+ABS)
+│   ├── parts/silicone/        ← internal pad
+│   ├── parts/sla/             ← frame, LED guide, charger cases
+│   └── drawings/              ← 2D manufacturing drawings
+│
+├── assembly/photos/           ← exploded view & component photos
+└── packaging/                 ← box, foam inserts, package drawings
+```
 
 ## File Checksums (SHA-256)
 

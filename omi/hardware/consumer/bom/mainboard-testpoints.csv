@@ -1,0 +1,23 @@
+Designator,Val,Package,Mid X,Mid Y,Rotation,Layer,Board
+TP1,Test Point,TP-1X0.9MM,137.8600mm,109.8834mm,0.0,bottom,mainboard
+TP1,Test Point,TP-80X40MIL,202.4004mm,101.0321mm,0.0,bottom,charger
+TP2,Test Point,TP-1X0.9MM,135.4673mm,110.0866mm,90.0,bottom,mainboard
+TP2,Test Point,TP-80X40MIL,202.3933mm,105.0280mm,0.0,bottom,charger
+TP3,Test Point,TP-1X0.9MM,136.1633mm,111.8291mm,90.0,bottom,mainboard
+TP3,Test Point,TP-80X40MIL,202.4024mm,101.0260mm,0.0,top,charger
+TP4,Test Point,TP-1X0.9MM,149.1366mm,116.1867mm,0.0,bottom,mainboard
+TP4,Test Point,TP-80X40MIL,202.3913mm,105.0260mm,0.0,top,charger
+TP5,Test Point,TP-1X0.9MM,147.4887mm,116.9121mm,0.0,bottom,mainboard
+TP6,Test Point,TP-1.5X0.9MM,147.8955mm,98.7946mm,-20.0,top,mainboard
+TP7,Test Point,TP-1.5X0.9MM,146.5712mm,98.3954mm,-20.0,top,mainboard
+TP8,Test Point,TP-1X0.9MM,154.0276mm,110.1171mm,0.0,bottom,mainboard
+TP9,Test Point,TP-1X0.9MM,144.3167mm,98.2716mm,0.0,bottom,mainboard
+TP10,Test Point,TP-1X0.9MM,151.7315mm,114.2858mm,90.0,bottom,mainboard
+TP11,Test Point,TP-1X0.9MM,137.1051mm,113.2972mm,90.0,bottom,mainboard
+TP12,Test Point,TP-1.6X0.8MM,137.1580mm,113.1164mm,125.0,top,mainboard
+TP13,Test Point,TP-1.6X0.8MM,139.2215mm,115.1768mm,145.0,top,mainboard
+TP14,Test Point,TP-1X0.9MM,139.0437mm,115.3536mm,0.0,bottom,mainboard
+TP15,Test Point,TP-1X0.9MM,139.8422mm,99.3587mm,0.0,bottom,mainboard
+TP16,Test Point,TP-D2_5c1_3mm,152.7884mm,102.9462mm,0.0,top,mainboard
+TP17,Test Point,TP-D2_5c1_3mm,136.7668mm,102.9462mm,0.0,top,mainboard
+TP18,Test Point,TP-1X0.9MM,153.0431mm,112.3950mm,-90.0,bottom,mainboard
