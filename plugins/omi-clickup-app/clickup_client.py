@@ -280,6 +280,7 @@ class ClickUpClient:
             lists = self.get_lists(access_token, space["id"])
             for lst in lists:
                 lst["space_name"] = space["name"]
+                lst["identity"] = ClickUpClient.list_identity(lst)
                 all_lists.append(lst)
 
             # The space list endpoint returns only folderless lists; lists
@@ -291,6 +292,7 @@ class ClickUpClient:
                     lst["space_id"] = space["id"]
                     lst["space_name"] = space["name"]
                     lst["folder_name"] = folder["name"]
+                    lst["identity"] = ClickUpClient.list_identity(lst)
                     all_lists.append(lst)
 
         return all_lists

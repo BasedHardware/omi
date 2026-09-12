@@ -68,6 +68,7 @@ class GetAllListsTests(unittest.TestCase):
         self.assertEqual(entry["space_name"], "Ops")
         self.assertEqual(entry["folder_id"], "fold-1")
         self.assertEqual(entry["folder_name"], "Projects")
+        self.assertEqual(entry["identity"], "Sprint (Projects)")
         self.assertTrue(any("/folder/fold-1/list" in url for url in calls))
 
     def test_folderless_and_foldered_lists_coexist(self):
