@@ -162,6 +162,23 @@ The SDK requires the Opus audio codec library:
 
 ---
 
+## Deepgram language selection
+
+The Deepgram engine defaults to `en-US`. Set `language` to a language supported
+by your chosen Deepgram model when transcribing other languages:
+
+```python
+from omi.stt import create_transcriber
+
+transcriber = create_transcriber("deepgram", api_key=DEEPGRAM_API_KEY, language="es")
+await transcriber.run(audio_queue, on_transcript=handle_transcript)
+```
+
+The `omi.transcribe.transcribe` function also forwards `language="es"` through
+its engine options. This selects a transcription language; it does not translate
+audio or enable automatic language detection. See Deepgram's
+[model and language support](https://developers.deepgram.com/docs/models-languages-overview).
+
 ## Development
 
 ### Local Development Setup
