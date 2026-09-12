@@ -29,7 +29,7 @@ function array(value: unknown, limit: number): unknown[] {
 }
 
 function timestampMs(value: unknown): number {
-  const parsed = Date.parse(text(value, 100));
+  const parsed = Date.parse(text(value, 10000));
   if (!Number.isFinite(parsed) || parsed <= 0) {
     throw new CaptureGapError();
   }

@@ -187,6 +187,56 @@ test('names empty GET capture-gap status as omitted instead of hiding neighbors'
   ]);
 });
 
+test('keeps GET capture gaps when start_time or end_time exceeds 100', () => {
+  const startTime = `2026-09-07T15:00:00.${'0'.repeat(80)}Z`;
+  const endTime = `2026-09-07T16:30:00.${'0'.repeat(80)}Z`;
+  expect(startTime.length).toBe(101);
+  expect(endTime.length).toBe(101);
+  expect(
+    parseOmiCalendarCaptureGaps(
+      JSON.stringify([
+        {
+          event_id: 'event-long-start',
+          title: 'Standup',
+          start_time: startTime,
+          end_time: '2026-09-07T15:30:00.000Z',
+        },
+        {
+          event_id: 'event-long-end',
+          title: 'Retro',
+          start_time: '2026-09-07T16:00:00.000Z',
+          end_time: endTime,
+        },
+        {
+          event_id: 'event-neighbor',
+          title: 'Review',
+          start_time: '2026-09-07T18:00:00.000Z',
+          end_time: '2026-09-07T19:00:00.000Z',
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      eventId: 'event-long-start',
+      title: 'Standup',
+      startMs: Date.parse('2026-09-07T15:00:00.000Z'),
+      endMs: Date.parse('2026-09-07T15:30:00.000Z'),
+    },
+    {
+      eventId: 'event-long-end',
+      title: 'Retro',
+      startMs: Date.parse('2026-09-07T16:00:00.000Z'),
+      endMs: Date.parse('2026-09-07T16:30:00.000Z'),
+    },
+    {
+      eventId: 'event-neighbor',
+      title: 'Review',
+      startMs: Date.parse('2026-09-07T18:00:00.000Z'),
+      endMs: Date.parse('2026-09-07T19:00:00.000Z'),
+    },
+  ]);
+});
+
 test('fails closed for malformed GET capture gaps', () => {
   expect(() =>
     parseOmiCalendarCaptureGaps(JSON.stringify({event_id: 'event-1'})),
