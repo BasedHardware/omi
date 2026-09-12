@@ -175,3 +175,66 @@ describe('ConversationDetail — error copy (PR-D)', () => {
     expect(queryByText('Couldn’t load this conversation.')).toBeNull()
   })
 })
+
+describe('ConversationDetail — speaker analytics eligibility', () => {
+  it.each([
+    [{ status: 'completed' }, true],
+    [{ status: null }, true],
+    [{ status: undefined }, true],
+    [{ status: 'completed', deferred: true }, true],
+    [{ status: 'completed', is_locked: true }, false],
+    [{ status: 'processing' }, false],
+    [{ status: 'in_progress' }, false],
+    [{ status: 'merging' }, false],
+    [{ status: 'failed' }, false]
+  ])('honors the completed/legacy and locked contract for %j', async (fields, available) => {
+    getMock.mockResolvedValue({ data: { ...CONVERSATION, ...fields } })
+    const view = render(
+      <MemoryRouter>
+        <ConversationDetail conversationId="conv1" />
+      </MemoryRouter>
+    )
+    await view.findByRole('heading', { name: 'Planning sync' })
+    expect(!!view.queryByRole('button', { name: 'Speaker analytics' })).toBe(available)
+    // Merely opening a conversation must not fetch optional metrics.
+    expect(getMock.mock.calls.some(([url]) => url.endsWith('/analytics'))).toBe(false)
+  })
+
+  it('keeps pending and local-only conversations off the analytics API', async () => {
+    const view = render(
+      <MemoryRouter>
+        <ConversationDetail conversationId="pending-conv1" />
+      </MemoryRouter>
+    )
+    expect(getMock).not.toHaveBeenCalled()
+    expect(view.queryByRole('button', { name: 'Speaker analytics' })).toBeNull()
+
+    const previousOmi = window.omi
+    Object.defineProperty(window, 'omi', {
+      configurable: true,
+      value: {
+        getLocalConversation: vi
+          .fn()
+          .mockResolvedValue({
+            title: 'Local recording',
+            kind: 'recording',
+            startedAt: 0,
+            endedAt: 1000,
+            transcript: 'Hello'
+          })
+      }
+    })
+    try {
+      view.rerender(
+        <MemoryRouter>
+          <ConversationDetail conversationId="local-conv1" />
+        </MemoryRouter>
+      )
+      await view.findByRole('heading', { name: 'Local recording' })
+      expect(view.queryByRole('button', { name: 'Speaker analytics' })).toBeNull()
+      expect(getMock).not.toHaveBeenCalled()
+    } finally {
+      Object.defineProperty(window, 'omi', { configurable: true, value: previousOmi })
+    }
+  })
+})
