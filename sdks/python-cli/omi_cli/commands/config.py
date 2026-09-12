@@ -161,13 +161,15 @@ def profile_rename(
 ) -> None:
     ctx = _ctx(typer_ctx)
     config = ctx.load_config()
+    dest = new.strip()
     try:
         config.rename_profile(old, new)
     except KeyError as exc:
         raise UsageError(message=str(exc)) from exc
     except ValueError as exc:
         raise UsageError(message=str(exc)) from exc
-    cfg.save(config)
+    if old != dest:
+        cfg.save(config)
     if ctx.renderer.json_mode:
         ctx.renderer.emit(
             {

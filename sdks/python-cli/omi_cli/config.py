@@ -173,10 +173,10 @@ class Config:
         dest = new.strip()
         if not dest:
             raise ValueError("new profile name cannot be blank")
-        if old == dest:
-            return
         if old not in self.profiles:
             raise KeyError(f"No such profile: '{old}'")
+        if old == dest:
+            return
         if dest in self.profiles:
             raise ValueError(f"profile '{dest}' already exists")
         profile = self.profiles.pop(old)

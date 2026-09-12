@@ -497,6 +497,9 @@ def test_rename_profile_dataclass_contract(tmp_path: Path) -> None:
     with pytest.raises(KeyError, match="No such profile: 'missing'"):
         config.rename_profile("missing", "target")
 
+    with pytest.raises(KeyError, match="No such profile: 'ghost'"):
+        config.rename_profile("ghost", "ghost")
+
     with pytest.raises(ValueError, match="cannot be blank"):
         config.rename_profile("work-new", "   ")
 
@@ -542,8 +545,14 @@ def test_config_profile_rename_cli_command(config_path: Path, cli_runner) -> Non
     assert res_missing.exit_code != 0
     assert "No such profile" in res_missing.stderr
 
+    before_noop = config_path.read_bytes()
     res_self = cli_runner.invoke(app, ["config", "profile", "rename", "final-profile", "final-profile"])
     assert res_self.exit_code == 0
+    assert config_path.read_bytes() == before_noop
+
+    res_missing_same = cli_runner.invoke(app, ["config", "profile", "rename", "ghost", "ghost"])
+    assert res_missing_same.exit_code != 0
+    assert "No such profile" in res_missing_same.stderr
 
     config_with_two = cfg.load()
     p2 = config_with_two.get_profile("other-profile")
