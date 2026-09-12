@@ -1209,23 +1209,19 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
   }
 
-  /// Mirrors `ContextProactivityEngine.liveDeliveryGateInput()`: the same
-  /// paywall-exemption wiring, split out of `contextDirectorMayPresent` so it
-  /// is directly testable without an owner-authorization snapshot. The raw
-  /// BYOK-only `isPaywalledEffective` flag does not know about the Local
-  /// provider and would silently drop a director notification the local
-  /// model itself produced. `static` (no instance state involved) so a test
-  /// can call it without touching `NotificationService.shared`, whose lazy
-  /// init registers with the real `UNUserNotificationCenter` and crashes
-  /// outside an app bundle.
+  /// Read-through to `ContextDeliveryGateInput.contextDirectorGate()`, the
+  /// single builder `ContextProactivityEngine.liveDeliveryGateInput()` also
+  /// calls, so the paywall-exemption wiring (the raw BYOK-only
+  /// `isPaywalledEffective` flag does not know about the Local provider and
+  /// would silently drop a director notification the local model itself
+  /// produced) cannot drift between the two copies. Split out of
+  /// `contextDirectorMayPresent` so it is directly testable without an
+  /// owner-authorization snapshot. `static` (no instance state involved) so a
+  /// test can call it without touching `NotificationService.shared`, whose
+  /// lazy init registers with the real `UNUserNotificationCenter` and
+  /// crashes outside an app bundle.
   static func contextDirectorGateInput() -> ContextDeliveryGateInput {
-    let level = Self.currentFrequencyLevel()
-    return ContextDeliveryGateInput(
-      masterEnabled: Self.areNotificationsEnabled(),
-      frequencyLevel: level,
-      paywalled: !AppState.isScreenCaptureExemptFromPaywall,
-      cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: level)
-    )
+    .contextDirectorGate()
   }
 
   private func contextDirectorMayPresent(

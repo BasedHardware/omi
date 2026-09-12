@@ -26,6 +26,32 @@ struct ContextDeliveryGateInput: Equatable, Sendable {
       dailyLimit ?? ContextDeliveryBudget.dailyLimit(frequencyLevel: frequencyLevel))
     self.lastGlobalPresentationAt = lastGlobalPresentationAt
   }
+
+  /// Shared construction for every call site that reads the context
+  /// director's free-tier gate (master toggle, frequency level, paywall
+  /// exemption, cooldown): `NotificationService.contextDirectorGateInput()`
+  /// and `ContextProactivityEngine.liveDeliveryGateInput()` used to
+  /// hand-duplicate this same formula (in particular the
+  /// `!isScreenCaptureExemptFromPaywall` paywall exemption), which could
+  /// silently diverge if either copy changed alone. Only `dailyLimit` and
+  /// `lastGlobalPresentationAt` are caller-specific (a live delivery attempt
+  /// needs both; a pre-flight eligibility check needs neither), so those stay
+  /// parameters while everything else is computed once, here.
+  @MainActor
+  static func contextDirectorGate(
+    dailyLimit: Int? = nil,
+    lastGlobalPresentationAt: Date? = nil
+  ) -> ContextDeliveryGateInput {
+    let level = NotificationService.currentFrequencyLevel()
+    return ContextDeliveryGateInput(
+      masterEnabled: NotificationService.areNotificationsEnabled(),
+      frequencyLevel: level,
+      paywalled: !AppState.isScreenCaptureExemptFromPaywall,
+      cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: level),
+      dailyLimit: dailyLimit,
+      lastGlobalPresentationAt: lastGlobalPresentationAt
+    )
+  }
 }
 
 enum ContextDeliveryGateReason: String, Equatable, Sendable {

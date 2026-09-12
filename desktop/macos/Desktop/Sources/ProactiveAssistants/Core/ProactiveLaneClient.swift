@@ -209,6 +209,16 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
     }
   }
 
+  /// True for a classification that reflects the user's own choice (Local
+  /// active, cloud-assisted features off) rather than a bug or a transient
+  /// error. A terminal sink that records this the same way it records a real
+  /// failure would log a "failed extraction" for every eligible context
+  /// transition while the user is simply opted out — see the pre-model
+  /// paywall gate's own "suppressed" terminal state for the same distinction.
+  var isDeliberateSuppression: Bool {
+    failure == "local_provider_cloud_off"
+  }
+
   static func classify(_ error: Error) -> ProactiveLaneFailureClassification {
     if let laneError = error as? ProactiveLaneClientError {
       switch laneError {
