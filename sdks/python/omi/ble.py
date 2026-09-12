@@ -22,6 +22,46 @@ class Device:
 
 PacketHandler = Callable[[bytes], None]
 AsyncPacketHandler = Callable[[bytes], Union[None, Awaitable[None]]]
+DisconnectCallback = Callable[[BleakClient], None]
+
+
+def _client_with_disconnect(address: str, on_disconnect: DisconnectCallback) -> BleakClient:
+    """Prefer BleakClient(disconnected_callback=...); fall back to set_disconnected_callback."""
+    try:
+        return BleakClient(address, disconnected_callback=on_disconnect)
+    except TypeError:
+        client = BleakClient(address)
+        setter = getattr(client, "set_disconnected_callback", None)
+        if setter is not None:
+            setter(on_disconnect)
+        return client
+
+
+async def _wait_while_connected(disconnected: asyncio.Event, idle_seconds: float) -> None:
+    """Wait until Bleak reports disconnect. Idle sleep is only a wake/cancel hook, not the signal."""
+    while not disconnected.is_set():
+        disconnect_task = asyncio.create_task(disconnected.wait())
+        sleep_task = asyncio.create_task(asyncio.sleep(idle_seconds))
+        try:
+            done, _pending = await asyncio.wait(
+                {disconnect_task, sleep_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+        except asyncio.CancelledError:
+            disconnect_task.cancel()
+            sleep_task.cancel()
+            await asyncio.gather(disconnect_task, sleep_task, return_exceptions=True)
+            raise
+        for task in (disconnect_task, sleep_task):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(disconnect_task, sleep_task, return_exceptions=True)
+        if sleep_task in done:
+            if sleep_task.cancelled():
+                raise asyncio.CancelledError()
+            exc = sleep_task.exception()
+            if exc is not None:
+                raise exc
 
 
 async def scan(timeout: float = 5.0) -> List[Device]:
@@ -41,7 +81,7 @@ async def listen(
     char_uuid: str = AUDIO_DATA_UUID,
     service_uuid: Optional[str] = None,
 ) -> None:
-    """Connect and notify on audio characteristic until cancelled."""
+    """Connect and notify on audio characteristic until cancelled or the device disconnects."""
 
     async def _handler(_sender, data: bytearray) -> None:
         raw = bytes(data)
@@ -49,7 +89,12 @@ async def listen(
         if inspect.isawaitable(result):
             await result
 
-    async with BleakClient(device_id) as client:
+    disconnected = asyncio.Event()
+
+    def _on_disconnect(_client: BleakClient) -> None:
+        disconnected.set()
+
+    async with _client_with_disconnect(device_id, _on_disconnect) as client:
         services = getattr(client, "services", None)
         if services is not None and service_uuid:
             service = services.get_service(service_uuid)
@@ -61,8 +106,8 @@ async def listen(
             await client.start_notify(characteristic, _handler)
         else:
             await client.start_notify(char_uuid, _handler)
-        while True:
-            await asyncio.sleep(3600)
+        await _wait_while_connected(disconnected, 3600)
+        raise ConnectionError(f"Device {device_id} disconnected")
 
 
 async def listen_payload(
