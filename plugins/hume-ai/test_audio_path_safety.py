@@ -157,7 +157,8 @@ def test_traversal_uid_stays_inside_audio_dir():
 
 def test_absolute_and_separator_uids_are_sanitized():
     module = _load_main()
-    for uid in ["/abs/path", "..", "a/b\\c", "..%2f.."]:
+    # %2f is URL-decoded to / by the framework before the handler sees uid
+    for uid in ["/abs/path", "..", "a/b\\c", "../../"]:
         with tempfile.TemporaryDirectory() as tmp:
             resp = _post_audio(module, tmp, uid)
             filename = resp.content["filename"]
