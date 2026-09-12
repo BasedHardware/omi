@@ -3,12 +3,13 @@
 > Talk to Omi from your terminal. Designed for humans **and** agents.
 
 `omi-cli` is the command-line interface to the [Omi](https://omi.me) developer
-API. It exposes scoped, agent-friendly verbs for the four primary nouns Omi
+API. It exposes scoped, agent-friendly verbs for the five primary nouns Omi
 maintains about you:
 
 * **memories** — facts and learnings the system knows about you
 * **conversations** — captured & processed audio/text exchanges
 * **action items** — tasks and follow-ups
+* **daily summaries** — stored daily recaps
 * **goals** — tracked progress metrics
 
 It's intentionally small, scriptable, and JSON-first — everything you need to
@@ -225,6 +226,9 @@ omi
 │   ├── update <id> [--description ...] [--completed/--open] [--due-at ...]
 │   ├── complete <id>
 │   └── delete <id> [-y]
+├── daily-summary
+│   ├── list [--limit N] [--offset N] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
+│   └── get <id>
 ├── local
 │   ├── configure --url URL --token TOKEN
 │   ├── status

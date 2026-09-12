@@ -31,6 +31,7 @@ from omi_cli.commands import action_item as action_item_cmd
 from omi_cli.commands import auth as auth_cmd
 from omi_cli.commands import config as config_cmd
 from omi_cli.commands import conversation as conversation_cmd
+from omi_cli.commands import daily_summary as daily_summary_cmd
 from omi_cli.commands import goal as goal_cmd
 from omi_cli.commands import local as local_cmd
 from omi_cli.commands import memory as memory_cmd
@@ -195,6 +196,7 @@ app.add_typer(config_cmd.app, name="config", help="View and modify CLI configura
 app.add_typer(memory_cmd.app, name="memory", help="Memories — facts and learnings about the user.")
 app.add_typer(conversation_cmd.app, name="conversation", help="Conversations — captured & processed audio + text.")
 app.add_typer(action_item_cmd.app, name="action-item", help="Action items — tasks and follow-ups.")
+app.add_typer(daily_summary_cmd.app, name="daily-summary", help="Daily summaries — stored daily recaps.")
 app.add_typer(goal_cmd.app, name="goal", help="Goals — tracked progress metrics.")
 app.add_typer(local_cmd.app, name="local", help="Local Omi Desktop API tools.")
 
