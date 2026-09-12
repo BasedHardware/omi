@@ -52,6 +52,10 @@ export type ChatContentBlock =
       type: 'agentSpawn'
       id: string
       pillId?: string
+      /** The resolved coding-agent adapter id ('acp' | 'openclaw' | 'hermes' |
+       *  'codex' | 'pi-mono'), for the card's brand mark. Absent when the run
+       *  predates this field or its producing surface stamped no provenance. */
+      provider?: string
       sessionId: string
       runId: string
       title: string
@@ -62,6 +66,7 @@ export type ChatContentBlock =
       type: 'agentCompletion'
       id: string
       pillId?: string
+      provider?: string
       sessionId?: string
       runId?: string
       title: string

@@ -71,6 +71,7 @@ function stampFor(conversationId: string): AgentCardStamp {
     producingChatId: 'default',
     producingSurfaceKind: 'main_chat',
     pillId: 'pill-1',
+    provider: 'openclaw',
     title: 'Build X',
     objective: 'Build feature X end to end'
   }
@@ -110,6 +111,48 @@ describe('agent thread cards — the exactly-two boundary', () => {
     if (cards[1].block.type === 'agentCompletion') {
       expect(cards[1].block).toMatchObject({ runId: 'run_1', status: 'succeeded', output: 'done' })
     }
+  })
+
+  // The spawn call's resolved adapter id rides the stamp so the terminal
+  // subscriber (which only ever sees runId/status) can still agree with the
+  // launch card on which provider ran — read back from the SAME stamp object,
+  // not re-derived, so a run whose default adapter changed mid-flight can't
+  // produce two disagreeing cards.
+  it('carries the spawn adapter id through to both the spawn and completion cards', () => {
+    const store = newStore()
+    const conversationId = newConversation(store)
+    const stamp = stampFor(conversationId) // provider: 'openclaw'
+
+    materializeAgentSpawnCard(store, { runId: 'run_1', sessionId: 'sess_1', stamp, nowMs: 1000 })
+    materializeAgentCompletionCard(store, {
+      run: {
+        runId: 'run_1',
+        sessionId: 'sess_1',
+        status: 'succeeded',
+        finalText: '',
+        errorMessage: null
+      },
+      stamp,
+      nowMs: 1001
+    })
+
+    const cards = listAgentThreadCards(store, conversationId)
+    expect(cards[0].block).toMatchObject({ provider: 'openclaw' })
+    expect(cards[1].block).toMatchObject({ provider: 'openclaw' })
+  })
+
+  // A producing surface stamped before this field existed (or a spawn that
+  // recorded no adapter) must not crash card materialization — the card just
+  // omits `provider`, and the renderer falls back to its generic icon.
+  it('omits `provider` from the card when the stamp carries none', () => {
+    const store = newStore()
+    const conversationId = newConversation(store)
+    const stamp: AgentCardStamp = { ...stampFor(conversationId), provider: null }
+
+    materializeAgentSpawnCard(store, { runId: 'run_1', sessionId: 'sess_1', stamp, nowMs: 1000 })
+
+    const cards = listAgentThreadCards(store, conversationId)
+    expect(cards[0].block).not.toHaveProperty('provider')
   })
 
   it('is idempotent: a repeat spawn and a retried terminal never add a second card', () => {
