@@ -186,6 +186,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
   static func registerAutomationAction() {
     DesktopAutomationActionRegistry.shared.register(
       name: "hub_test_turn",
+      effects: [.networkOrModel],
       summary: "Drive the realtime hub with a PCM16/16k file; returns the normalized turn. "
         + "auth=byok (default, uses BYOK key) | ephemeral (mints a server token, Phase 2)",
       params: ["pcm", "provider", "timeout", "auth"]

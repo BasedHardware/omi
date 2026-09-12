@@ -21,11 +21,36 @@ extension DesktopAutomationActionRegistry {
 
   func registerActivationActions() {
     register(
+      name: "chat_timer_lifetime_probe",
+      effects: [.localState],
+      summary: "Verify common-runloop timer cancellation and invalidation when its owner is released",
+      category: "chat",
+      surfaces: ["main_chat"]
+    ) { _ in
+      let cancelled = OwnedRunLoopTimer.schedule(interval: 60) {}
+      var released: OwnedRunLoopTimer? = OwnedRunLoopTimer.schedule(interval: 60) {}
+      let releasedTimer = released?.timer
+      let scheduled = cancelled.timer.isValid && releasedTimer?.isValid == true
+      // Keep even a failing probe from leaving a source attached to the run loop.
+      defer {
+        cancelled.timer.invalidate()
+        releasedTimer?.invalidate()
+      }
+      cancelled.cancel()
+      released = nil
+      return [
+        "scheduled": String(scheduled),
+        "cancelledValid": String(cancelled.timer.isValid),
+        "releasedValid": String(releasedTimer?.isValid ?? true),
+      ]
+    }
+
+    register(
       name: "daily_summary_snapshot",
+      effects: [],
       summary: "Shape-only state of the shared daily-summary store (has summary, date, stat presence; no text)",
       category: "chat",
-      surfaces: ["main_chat"],
-      safety: "read_only"
+      surfaces: ["main_chat"]
     ) { _ in
       guard AppBuild.isNonProduction else {
         return ["error": "daily_summary_snapshot is disabled on production bundles"]
@@ -61,6 +86,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "open_daily_recap_page",
+      effects: [.localState, .networkOrModel],
       summary:
         "Open the dedicated daily-recap page for a summary id through the typed recap route "
         + "(same `ChatFirstShellNavigation.openDailyRecap` the recap rows call)",
@@ -86,6 +112,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "open_chat_prefilled",
+      effects: [.localState],
       summary: "Open the main chat with `query` prefilled and focused, NOT sent (the first-real-app card path)",
       params: ["query"],
       category: "chat",
@@ -109,11 +136,11 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "recent_screen_frames_snapshot",
+      effects: [.localState],
       summary: "Rows the composer's recent-screen-frames menu will offer (loader output, metadata only)",
       params: ["limit"],
       category: "chat",
-      surfaces: ["main_chat"],
-      safety: "read_only"
+      surfaces: ["main_chat"]
     ) { params in
       guard AppBuild.isNonProduction else {
         return ["error": "recent_screen_frames_snapshot is disabled on production bundles"]
@@ -135,6 +162,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "open_chat_prefilled_with_screen_frame",
+      effects: [.localState, .localArtifact],
       summary:
         "Drive the first-real-app card's handoff end to end: capture (or load) the screen referent, "
         + "stage it, and open the chat with the prompt prefilled and the frame attached (not sent)",
@@ -192,11 +220,11 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "chat_composer_snapshot",
+      effects: [],
       summary: "Main composer state: draft, staged attachments, placeholder, and query-shell mode",
       params: [],
       category: "chat",
-      surfaces: ["main_chat"],
-      safety: "read_only"
+      surfaces: ["main_chat"]
     ) { _ in
       guard AppBuild.isNonProduction else {
         return ["error": "chat_composer_snapshot is disabled on production bundles"]
@@ -212,6 +240,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "paste_clipboard_into_chat",
+      effects: [.localState, .localArtifact],
       summary:
         "Run the composer's ⌘V path with a screenshot fixture on the clipboard: pasteboard "
         + "classifier, staging, and provider staging (non-prod paste harness; replaces the clipboard)",
@@ -272,6 +301,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "tap_chat_follow_up_chip",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
       summary:
         "Tap the follow-up chip under the last main-chat answer (same send as the chip) and report "
         + "the `question_asked` origin it produced",
@@ -330,6 +360,7 @@ extension DesktopAutomationActionRegistry {
   private func registerMemoryReviewActions() {
     register(
       name: "seed_memory_review_fixture",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary:
         "Create `count` real memories and a local-only daily summary that learned them, then "
         + "refresh the shared store so the review card mounts (offline dev stack only)",
@@ -393,11 +424,11 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "memory_review_snapshot",
+      effects: [],
       summary: "Rows the mounted 'Things I learned today' section bound, and the first two verdicts",
       params: [],
       category: "chat",
-      surfaces: ["main_chat"],
-      safety: "read_only"
+      surfaces: ["main_chat"]
     ) { _ in
       guard AppBuild.isNonProduction else {
         return ["error": "memory_review_snapshot is disabled on production bundles"]
@@ -419,6 +450,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "memory_review_vote",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary:
         "Vote on one mounted review row through the store the ✓ / ✗ buttons call, then report the "
         + "row once the mutation settles",

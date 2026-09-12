@@ -48,6 +48,45 @@ private final class StubPresentationCoordinator: DesktopAutomationPresentationCo
 
 @MainActor
 final class DesktopAutomationBridgeRouteTests: XCTestCase {
+  func testReadOnlyActionRequestRejectsWriterBeforeItsHandler() async throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    let name = "__read_only_route_probe__"
+    var writes = 0
+    registry.register(name: name, effects: [.remoteWrite], summary: "Injected remote writer") { _ in
+      writes += 1
+      return nil
+    }
+    defer { registry.unregister(name) }
+    let body = try JSONSerialization.data(withJSONObject: ["name": name, "readOnly": true])
+    let response = await DesktopAutomationBridge.shared.response(
+      for: authorizedRequest(method: "POST", path: "/action", body: body))
+    let envelope = try JSONDecoder().decode(AutomationErrorEnvelope.self, from: response.body)
+    XCTAssertEqual(response.statusCode, 400)
+    XCTAssertFalse(envelope.ok)
+    XCTAssertEqual(envelope.error, "action_requires_effects: \(name)")
+    XCTAssertEqual(writes, 0)
+  }
+
+  func testMalformedReadOnlyPolicyCannotFallBackToOrdinaryExecution() async throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    let name = "__malformed_policy_probe__"
+    var writes = 0
+    registry.register(name: name, effects: [.remoteWrite], summary: "Injected remote writer") { _ in
+      writes += 1
+      return nil
+    }
+    defer { registry.unregister(name) }
+    for policy in ["true", 1, NSNull()] as [Any] {
+      let body = try JSONSerialization.data(withJSONObject: ["name": name, "readOnly": policy])
+      let response = await DesktopAutomationBridge.shared.response(
+        for: authorizedRequest(method: "POST", path: "/action", body: body))
+      let envelope = try JSONDecoder().decode(AutomationErrorEnvelope.self, from: response.body)
+      XCTAssertEqual(response.statusCode, 400)
+      XCTAssertEqual(envelope.error, "invalid_action_request")
+    }
+    XCTAssertEqual(writes, 0)
+  }
+
   func testOpenAskOmiIsRegisteredOnTheMainChatSurface() throws {
     DesktopAutomationActionRegistry.shared.registerBuiltins()
     let descriptor = try XCTUnwrap(

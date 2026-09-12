@@ -8,6 +8,7 @@ extension DesktopAutomationActionRegistry {
   func registerGlassTransparencyActions() {
     register(
       name: "glass_transparency_snapshot",
+      effects: [],
       summary: "Return the glass transparency (0 solid … 1 bare material), its default, and the effective ground alpha"
     ) { _ in
       await MainActor.run { Self.glassTransparencySnapshot() }
@@ -15,6 +16,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "set_glass_transparency",
+      effects: [.localState],
       summary: "Set the glass transparency through the slider's own published value (0…1)",
       params: ["value"]
     ) { params in
@@ -33,6 +35,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "reset_glass_transparency",
+      effects: [.localState],
       summary: "Return the glass transparency to the shipped default, as the card's Reset button does"
     ) { _ in
       await MainActor.run {

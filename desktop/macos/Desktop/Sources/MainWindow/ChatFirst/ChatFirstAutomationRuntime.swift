@@ -52,10 +52,10 @@ final class ChatFirstAutomationRuntime: ObservableObject {
 
     registry.register(
       name: "chat_first_runtime_snapshot",
+      effects: [],
       summary: "Read shape-only state from the live Chat-first pages",
       category: "read",
       surfaces: ["main_chat", "goals", "tasks", "conversations"],
-      safety: "read_only",
       sideEffects: []
     ) { [weak self] _ in
       guard let self else { return nil }
@@ -64,11 +64,11 @@ final class ChatFirstAutomationRuntime: ObservableObject {
 
     registry.register(
       name: "chat_first_request_prompt_materialization",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Run the normal foreground materialization path from mounted main Chat",
       params: ["timeoutMs"],
       category: "coordinator",
       surfaces: ["main_chat"],
-      safety: "chat_turn",
       sideEffects: ["requests server-owned prompt materialization"]
     ) { [weak self] params in
       guard let self, let requestPromptMaterialization = self.requestPromptMaterialization else {
@@ -89,10 +89,10 @@ final class ChatFirstAutomationRuntime: ObservableObject {
 
     registry.register(
       name: "chat_first_render_fixture_task_card",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Invoke the real authorized Chat-first block executor from mounted main Chat",
       category: "chat",
       surfaces: ["main_chat"],
-      safety: "chat_turn",
       sideEffects: ["creates one local fixture journal turn", "validates and appends one fixture task card"]
     ) { [weak self] _ in
       guard let self, self.requestPromptMaterialization != nil else {
@@ -103,10 +103,10 @@ final class ChatFirstAutomationRuntime: ObservableObject {
 
     registry.register(
       name: "chat_first_set_focus",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Set focus through the currently visible Chat-first Goals page",
       category: "coordinator",
       surfaces: ["goals"],
-      safety: "server_mutation",
       sideEffects: ["updates canonical goal focus"]
     ) { [weak self] _ in
       guard let self, let setFocus = self.setFocus else {
@@ -117,10 +117,10 @@ final class ChatFirstAutomationRuntime: ObservableObject {
 
     registry.register(
       name: "chat_first_open_related_tasks",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Open related Tasks through the currently visible focused Goal",
       category: "coordinator",
       surfaces: ["goals", "tasks"],
-      safety: "local_ui_state",
       sideEffects: ["changes Chat-first route"]
     ) { [weak self] _ in
       guard let self, let openRelatedTasks = self.openRelatedTasks else {
@@ -134,10 +134,10 @@ final class ChatFirstAutomationRuntime: ObservableObject {
 
     registry.register(
       name: "chat_first_toggle_task",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Toggle one visible Chat-first task through the shared Tasks store",
       category: "coordinator",
       surfaces: ["tasks", "main_chat"],
-      safety: "server_mutation",
       sideEffects: ["updates task completion"]
     ) { [weak self] _ in
       guard let self, let toggleTask = self.toggleTask else {
@@ -148,10 +148,10 @@ final class ChatFirstAutomationRuntime: ObservableObject {
 
     registry.register(
       name: "chat_first_open_capture",
+      effects: [.localState, .networkOrModel],
       summary: "Select an Omi-device capture through the visible archive page",
       category: "coordinator",
       surfaces: ["conversations"],
-      safety: "read_only",
       sideEffects: ["selects a local capture detail"]
     ) { [weak self] _ in
       guard let self, let openCapture = self.openCapture else {
@@ -162,10 +162,10 @@ final class ChatFirstAutomationRuntime: ObservableObject {
 
     registry.register(
       name: "chat_first_discuss_capture",
+      effects: [.localState],
       summary: "Stage the selected capture as a reference in the main-Chat composer",
       category: "chat",
       surfaces: ["conversations", "main_chat"],
-      safety: "local_ui_state",
       sideEffects: ["navigates to main Chat", "stages one removable composer reference"]
     ) { [weak self] _ in
       guard let self, let discussCapture = self.discussCapture else {
@@ -184,11 +184,11 @@ final class ChatFirstAutomationRuntime: ObservableObject {
 
     registry.register(
       name: "chat_first_select_question_option",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
       summary: "Select a bounded actionable question option through the mounted main-Chat journal",
       params: ["selection"],
       category: "chat",
       surfaces: ["main_chat"],
-      safety: "chat_turn",
       sideEffects: ["creates one prepared main-Chat turn"]
     ) { [weak self] params in
       guard let self, let selectQuestionOption = self.selectQuestionOption else {

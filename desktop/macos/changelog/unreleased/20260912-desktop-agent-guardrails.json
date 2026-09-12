@@ -1,0 +1,3 @@
+{
+  "change": "Improved chat scrolling reliability and added read-only automation that blocks actions which can change app or account data."
+}

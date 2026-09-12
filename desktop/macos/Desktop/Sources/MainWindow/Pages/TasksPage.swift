@@ -2827,6 +2827,7 @@ class TasksViewModel: ObservableObject {
 
     registry.register(
       name: "create_task",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Create a task through the genuine store path; waits for the backend id (see 'synced') and returns it",
       params: ["description", "priority"]
     ) { [weak self] params in
@@ -2851,6 +2852,7 @@ class TasksViewModel: ObservableObject {
 
     registry.register(
       name: "open_task_details",
+      effects: [.localState],
       summary: "Open a task's detail panel by id — the same panel a row click opens. Omit the id to close it.",
       params: ["id"]
     ) { [weak self] params in
@@ -2866,6 +2868,7 @@ class TasksViewModel: ObservableObject {
 
     registry.register(
       name: "seed_tasks",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary:
         "Create N tasks for reorder/stress testing; waits for backend ids so they are reorder-persistable; returns synced count + ids",
       params: ["count", "prefix"]
@@ -2896,6 +2899,7 @@ class TasksViewModel: ObservableObject {
 
     registry.register(
       name: "toggle_task",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Toggle a task's completed state by id (mirrors the checkbox); returns the actual post-toggle state",
       params: ["id", "description"]
     ) { [weak self] params in
@@ -2927,6 +2931,7 @@ class TasksViewModel: ObservableObject {
 
     registry.register(
       name: "delete_task",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Delete a task by id (mirrors swipe / menu delete)",
       params: ["id", "description"]
     ) { [weak self] params in
@@ -2955,6 +2960,7 @@ class TasksViewModel: ObservableObject {
 
     registry.register(
       name: "reorder_task",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary:
         "Move a task to a new index within a category (today|tomorrow|later|nodeadline) via the real drag path and return the resulting order. Resolve by id or description. Flushes the sortOrder sync to SQLite + backend by default; pass flush=false to leave the production 500ms debounce running so a harness can prove coalescing (TASK-05).",
       params: ["id", "description", "index", "category", "flush"]
@@ -3008,6 +3014,7 @@ class TasksViewModel: ObservableObject {
 
     registry.register(
       name: "dump_tasks",
+      effects: [.localState],
       summary:
         "Snapshot tasks from SQLite (id, description, completed, sortOrder, category) sorted by sortOrder — proves reorder/CRUD persistence. Returns every task; filter client-side on the per-row category field. Pass `marker` to get a boolean `marker_absent` field for post-delete verification.",
       params: ["includeCompleted", "limit", "marker"]
@@ -3050,6 +3057,7 @@ class TasksViewModel: ObservableObject {
 
     registry.register(
       name: "inject_requery_during_drag",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary:
         "TASK-06: inject a server-push recompute while a drag is active and report whether the SQLite requery was suppressed (order not clobbered). Non-prod only.",
       params: []

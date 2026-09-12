@@ -781,6 +781,11 @@ checks:
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check_desktop_test_quality.py", "desktop/macos/scripts/swift-test-suites.sh"]
     lanes: ["local", "ci"]
     reason: "desktop Swift production or test structure changed"
+  - id: desktop-test-quality-fixtures
+    command: ["python3", "desktop/macos/scripts/tests/test_check_desktop_test_quality.py"]
+    triggers: ["desktop/macos/scripts/check_desktop_test_quality.py", "desktop/macos/scripts/tests/test_check_desktop_test_quality.py", "desktop/macos/scripts/tests/fixtures/desktop_test_quality/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "fixture and CLI regressions prove desktop quality ratchets reject new shared defaults mutations and malformed exceptions"
   - id: desktop-chat-selection-boundary
     command: ["python3", ".github/scripts/check_chat_selection_boundary.py"]
     triggers: ["desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift", "desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift", "desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift", ".github/scripts/check_chat_selection_boundary.py", ".github/failure-classes/FC-selection-overlay-layout-loop.json", ".github/checks-manifest.yaml"]

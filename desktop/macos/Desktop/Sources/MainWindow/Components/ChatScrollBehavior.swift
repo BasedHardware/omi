@@ -167,11 +167,20 @@ final class ChatFollowGlide {
   /// several steps before the next follow retargets.
   private static let stepInterval: TimeInterval = 1.0 / 60.0
 
-  private var timer: Timer?
+  private var timer: OwnedRunLoopTimer?
   private var isGliding = false
+  private let now: () -> Date
+  private let schedule: OwnedRunLoopTimer.Scheduler
+
+  init(
+    now: @escaping () -> Date = Date.init, schedule: @escaping OwnedRunLoopTimer.Scheduler = OwnedRunLoopTimer.schedule
+  ) {
+    self.now = now
+    self.schedule = schedule
+  }
 
   #if DEBUG
-    var debugRunLoopTimer: Timer? { timer }
+    var debugRunLoopTimer: Timer? { timer?.timer }
   #endif
 
   /// True while a glide is moving the viewport. Reader input checks this the
@@ -187,49 +196,34 @@ final class ChatFollowGlide {
     let start = clipView.bounds.origin
     guard abs(start.y - target.y) > 0.5 else { return false }
     isGliding = true
-    let began = Date()
-    let step = Timer(timeInterval: Self.stepInterval, repeats: true) {
-      [weak self, weak clipView] _ in
-      MainActor.assumeIsolated {
-        guard let self, let clipView, self.isGliding else {
-          self?.cancel()
-          return
-        }
-        let progress = Date().timeIntervalSince(began) / duration
-        guard progress < 1 else {
-          self.moveTo(target, in: clipView)
-          self.cancel()
-          return
-        }
-        // Ease-out cubic: fast while the reader's eye is on the arriving
-        // text, settling as it reaches the live edge.
-        let eased = 1 - pow(1 - progress, 3)
-        var origin = start
-        origin.y = start.y + (target.y - start.y) * eased
-        self.moveTo(origin, in: clipView)
+    let began = now()
+    timer = schedule(Self.stepInterval) { [weak self, weak clipView] in
+      guard let self, let clipView, self.isGliding else {
+        self?.cancel()
+        return
       }
+      let progress = self.now().timeIntervalSince(began) / duration
+      guard progress < 1 else {
+        self.moveTo(target, in: clipView)
+        self.cancel()
+        return
+      }
+      // Ease-out cubic: fast while the reader's eye is on the arriving
+      // text, settling as it reaches the live edge.
+      let eased = 1 - pow(1 - progress, 3)
+      var origin = start
+      origin.y = start.y + (target.y - start.y) * eased
+      self.moveTo(origin, in: clipView)
     }
-    timer = step
-    RunLoop.main.add(step, forMode: .common)
     return true
   }
 
   /// Reader input and teardown call this; an in-flight glide must never fight
   /// the viewport's owner.
   func cancel() {
-    timer?.invalidate()
+    timer?.cancel()
     timer = nil
     isGliding = false
-  }
-
-  deinit {
-    // The run loop retains the timer independently of this object. Without an
-    // invalidate here, SwiftUI dropping a transcript (or a test releasing the
-    // glide) leaves a 60 Hz `.common` source on `RunLoop.main` that ends later
-    // `run(mode:before:)` drains before queued main-async work can run.
-    if Thread.isMainThread {
-      MainActor.assumeIsolated { cancel() }
-    }
   }
 
   private func moveTo(_ origin: NSPoint, in clipView: NSClipView) {
@@ -264,12 +258,17 @@ final class ChatLiveEdgePinner {
   /// 60 Hz, matching the display cadence the glide's clock was built for.
   private static let tickInterval: TimeInterval = 1.0 / 60.0
 
-  private var timer: Timer?
+  private var timer: OwnedRunLoopTimer?
   private(set) var isPinning = false
   private var track: (() -> Void)?
+  private let schedule: OwnedRunLoopTimer.Scheduler
+
+  init(schedule: @escaping OwnedRunLoopTimer.Scheduler = OwnedRunLoopTimer.schedule) {
+    self.schedule = schedule
+  }
 
   #if DEBUG
-    var debugRunLoopTimer: Timer? { timer }
+    var debugRunLoopTimer: Timer? { timer?.timer }
   #endif
 
   var isActive: Bool { isPinning }
@@ -281,31 +280,19 @@ final class ChatLiveEdgePinner {
     self.track = track
     guard !isPinning else { return }
     isPinning = true
-    let tick = Timer(timeInterval: Self.tickInterval, repeats: true) { [weak self] _ in
-      MainActor.assumeIsolated {
-        guard let self, self.isPinning else { return }
-        self.track?()
-      }
+    timer = schedule(Self.tickInterval) { [weak self] in
+      guard let self, self.isPinning else { return }
+      self.track?()
     }
-    timer = tick
-    RunLoop.main.add(tick, forMode: .common)
   }
 
   /// Reader input, stream end, and teardown call this; a pinner must never
   /// fight the viewport's owner.
   func cancel() {
-    timer?.invalidate()
+    timer?.cancel()
     timer = nil
     isPinning = false
     track = nil
-  }
-
-  deinit {
-    // Same run-loop ownership as `ChatFollowGlide`: `RunLoop.main.add(_:forMode: .common)`
-    // keeps the tick alive after this object is gone unless we invalidate it.
-    if Thread.isMainThread {
-      MainActor.assumeIsolated { cancel() }
-    }
   }
 }
 

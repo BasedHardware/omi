@@ -233,11 +233,11 @@ extension DesktopAutomationActionRegistry {
   func registerRewindArtifactRecoveryGauntlet() {
     register(
       name: "rewind_artifact_recovery_gauntlet",
+      effects: [.localState, .localArtifact],
       summary:
         "Write safe synthetic Rewind frames through encoder, SQLite, and video readback; prove privacy exclusion and database reopen. Non-prod only.",
       category: "test",
       surfaces: ["rewind"],
-      safety: "local_artifact",
       sideEffects: [
         "writes and removes a synthetic local video artifact", "closes and reopens the local Rewind database",
       ],

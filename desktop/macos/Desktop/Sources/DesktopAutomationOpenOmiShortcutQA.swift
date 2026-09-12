@@ -7,6 +7,7 @@ extension DesktopAutomationActionRegistry {
     #if DEBUG
       register(
         name: "proactive_assistant_proxy_routes",
+        effects: [],
         summary: "Resolve the Gemini and embedding proxy routes through their production clients. DEBUG non-prod only."
       ) { _ in
         guard AppBuild.isNonProduction else {
@@ -21,6 +22,7 @@ extension DesktopAutomationActionRegistry {
 
       register(
         name: "knowledge_ledger_foundation_contracts",
+        effects: [],
         summary: "Exercise the pure knowledge-ledger prompt and trigger projections. DEBUG non-prod only."
       ) { _ in
         guard AppBuild.isNonProduction else {
@@ -159,6 +161,7 @@ extension DesktopAutomationActionRegistry {
 
       register(
         name: "set_open_omi_shortcut",
+        effects: [.localState],
         summary: "Select an Open Omi shortcut preset through the production settings mutation. DEBUG non-prod only.",
         params: ["preset"]
       ) { params in
@@ -197,6 +200,7 @@ extension DesktopAutomationActionRegistry {
 
       register(
         name: "trigger_open_omi_shortcut",
+        effects: [.localState],
         summary: "Trigger the registered Open Omi shortcut action. DEBUG non-prod only."
       ) { _ in
         guard AppBuild.isNonProduction else {
