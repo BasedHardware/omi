@@ -206,6 +206,30 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             f"left for its bisect fallback",
         )
 
+        # The job timeout is not the binding constraint — the step's own
+        # regression budget is, and it is far tighter. A wedged batch spends
+        # the whole ceiling before the bisect that clears it, so the step
+        # pays healthy-run + ceiling + bisect. At a 1500s ceiling that was
+        # ~2400s against an 1800s guard, and three runs failed exactly there
+        # (34609469561, 34641438446, 34655499561) with zero failing suites.
+        measured_healthy_step_seconds = 900  # 780s and 873s on green runs
+        bisect_allowance_seconds = 200  # two halves, measured 48-57s each
+        pr_step_budget_seconds = 1800
+        self.assertIn(
+            "'pr' && '1800'",
+            self.jobs["desktop-swift-verify"],
+            "the PR lane's step budget moved; re-derive the ceiling bound "
+            "below against the new number",
+        )
+        self.assertLessEqual(
+            measured_healthy_step_seconds + ceiling + bisect_allowance_seconds,
+            pr_step_budget_seconds,
+            f"ceiling {ceiling}s does not fit the PR lane's "
+            f"{pr_step_budget_seconds}s step budget: one wedged batch on top "
+            f"of a healthy ~{measured_healthy_step_seconds}s run would fail "
+            f"the step with nothing wrong in the suite",
+        )
+
     def test_no_closed_pull_request_runs_exist(self):
         """No closure run can publish a skipped check onto the merge SHA."""
         workflow = _workflow_text()
