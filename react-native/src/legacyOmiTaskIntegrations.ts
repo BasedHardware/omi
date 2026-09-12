@@ -1,8 +1,6 @@
 import type {OmiBackend} from './omiNativeTypes';
 import {visibleDisplayText} from './desktopReadClient';
 
-const MAX_TASK_INTEGRATIONS = 32;
-
 const TASK_INTEGRATION_NAMES: Record<string, string> = {
   apple_reminders: 'Apple Reminders',
   asana: 'Asana',
@@ -51,9 +49,6 @@ export function parseOmiTaskIntegrations(body: string): OmiTaskIntegration[] {
   const record = object(JSON.parse(body));
   const integrations = object(record.integrations);
   const keys = Object.keys(integrations);
-  if (keys.length > MAX_TASK_INTEGRATIONS) {
-    throw new TaskIntegrationError();
-  }
   const defaultApp =
     record.default_app === undefined || record.default_app === null
       ? ''

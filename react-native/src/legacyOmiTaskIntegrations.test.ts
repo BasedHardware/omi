@@ -90,6 +90,25 @@ test('omits a GET task integration whose details cannot project without hiding n
   ).toEqual([{key: 'clickup', name: 'ClickUp', isDefault: false}]);
 });
 
+test('keeps GET task integrations when more than 32 keys', () => {
+  const extras = Object.fromEntries(
+    Array.from({length: 32}, (_, index) => [
+      `extra-${index}`,
+      {connected: false},
+    ]),
+  );
+  expect(
+    parseOmiTaskIntegrations(
+      JSON.stringify({
+        integrations: {
+          ...extras,
+          clickup: {connected: true},
+        },
+      }),
+    ),
+  ).toEqual([{key: 'clickup', name: 'ClickUp', isDefault: false}]);
+});
+
 test('fails closed for malformed GET task integrations', () => {
   expect(() => parseOmiTaskIntegrations(JSON.stringify([]))).toThrow();
   expect(() =>
