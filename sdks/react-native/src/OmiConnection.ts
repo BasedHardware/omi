@@ -1,5 +1,7 @@
-import { BleManager, Device, Subscription } from 'react-native-ble-plx';
-import { DeviceConnectionState, OmiDevice, BleAudioCodec } from './types';
+import { BleManager } from 'react-native-ble-plx';
+import type { Device, Subscription } from 'react-native-ble-plx';
+import { DeviceConnectionState, BleAudioCodec } from './types';
+import type { OmiDevice } from './types';
 import { Platform } from 'react-native';
 
 // Service and characteristic UUIDs
@@ -253,6 +255,9 @@ export class OmiConnection {
           break;
         case 20:
           codec = BleAudioCodec.OPUS;
+          break;
+        case 21:
+          codec = BleAudioCodec.OPUS_FS320;
           break;
         default:
           console.warn(`Unknown codec id: ${codecId}`);

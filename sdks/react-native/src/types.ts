@@ -6,6 +6,8 @@ export enum BleAudioCodec {
   PCM16 = 'pcm16',
   PCM8 = 'pcm8',
   OPUS = 'opus',
+  /** Omi CV1: 320-sample Opus frames (20 ms at 16 kHz). Wire codec id 21. */
+  OPUS_FS320 = 'opus_fs320',
   UNKNOWN = 'unknown',
 }
 

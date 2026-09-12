@@ -17,6 +17,8 @@ export function mapCodecToName(codec: BleAudioCodec): string {
       return 'PCM 8-bit';
     case BleAudioCodec.OPUS:
       return 'Opus';
+    case BleAudioCodec.OPUS_FS320:
+      return 'Opus FS320 (20 ms)';
     default:
       return 'Unknown';
   }
