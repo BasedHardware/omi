@@ -608,12 +608,8 @@ import XCTest
       XCTAssertEqual(deleteBackendCalls, [false])
     }
 
-    func testTemporaryAutomationOwnerKeepsFaultResetOnKernelBoundary() async {
-      let suiteName = "KernelTurnRecordedProjectionTests.\(UUID().uuidString)"
-      guard let defaults = UserDefaults(suiteName: suiteName) else {
-        return XCTFail("failed to create isolated defaults")
-      }
-      defer { defaults.removePersistentDomain(forName: suiteName) }
+    func testTemporaryAutomationOwnerKeepsFaultResetOnKernelBoundary() async throws {
+      let defaults = try makeIsolatedDefaults()
 
       let provider = ChatProvider()
       let surface = provider.mainChatSurfaceReference()
@@ -876,19 +872,14 @@ import XCTest
     /// standard domain is shared with every other suite process on the runner (cfprefsd
     /// routes it past `CFFIXED_USER_HOME`), and a concurrent suite that has `auth_userId`
     /// set there turns this into a no-op transition that leaves the revocation in place.
-    func testAnOwnerTransitionDissolvesAnOutstandingRevocation() async {
+    func testAnOwnerTransitionDissolvesAnOutstandingRevocation() async throws {
+      let defaults = try makeIsolatedDefaults()
       var observedInsideBody: Bool?
 
       await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
         XCTAssertTrue(
           RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
           "precondition: the revocation is outstanding on entry")
-
-        let suiteName = "KernelTurnRecordedProjectionTests.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-          return XCTFail("failed to create isolated defaults")
-        }
-        defer { defaults.removePersistentDomain(forName: suiteName) }
 
         await RuntimeOwnerIdentity.withAutomationOwnerIfMissing(
           "revocation-dissolve-owner",
