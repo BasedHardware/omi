@@ -1,11 +1,30 @@
 """Regression tests for cancel_wro error classification (#13183)."""
 
-from unittest.mock import patch
+import sys
+import types
+from unittest.mock import MagicMock, patch
 
-from fastapi.testclient import TestClient
+# Shipbob main imports models -> omi_plugin_sdk. Stub the SDK for hermetic tests.
+if "omi_plugin_sdk" not in sys.modules:
+    sdk = types.ModuleType("omi_plugin_sdk")
+    sdk_models = types.ModuleType("omi_plugin_sdk.models")
 
-from main import app
+    class _Dummy:
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
 
+    sdk_models.Conversation = _Dummy
+    sdk_models.EndpointResponse = _Dummy
+    sdk_models.Structured = _Dummy
+    sdk_models.TranscriptSegment = _Dummy
+    sdk.models = sdk_models
+    sys.modules["omi_plugin_sdk"] = sdk
+    sys.modules["omi_plugin_sdk.models"] = sdk_models
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from main import app  # noqa: E402
 
 client = TestClient(app)
 
@@ -33,7 +52,7 @@ def test_cancel_empty_body_500_is_error(mock_post, _refresh, _headers):
     assert resp.status_code == 200
     body = resp.json()
     assert body.get("error")
-    assert "123" not in str(body.get("result") or "")
+    assert "cancelled" not in str(body.get("result") or "").lower()
 
 
 @patch("main.get_shipbob_headers", return_value=_headers_ok())
