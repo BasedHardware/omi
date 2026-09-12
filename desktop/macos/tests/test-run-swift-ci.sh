@@ -33,6 +33,15 @@ set -euo pipefail
 printf '%s|%s\n' "$DEVELOPER_DIR" "$*" >> "$FAKE_XCRUN_LOG"
 if [ "${1:-}" = "swift" ] && [ "${2:-}" = "--version" ]; then
   echo "Swift version fake"
+elif [ "${2:-}" = build ]; then
+  [ "${FAKE_BUILD_FAILURE:-0}" = 0 ] || exit 19
+  if [[ " $* " == *" --build-tests "* ]]; then
+    printf '%s\n' "$*" > "$FAKE_RELEASE_BUILD"
+  fi
+elif [ "${2:-}" = test ]; then
+  [ -f "$FAKE_RELEASE_BUILD" ] || exit 20
+  expected="swift test -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -enable-testing --skip-build --filter UserNotificationCallbackBridgeTests/"
+  [ "$*" = "$expected" ] || exit 21
 fi
 SH
 chmod +x "$TMPDIR/bin/xcrun"
@@ -47,6 +56,7 @@ chmod +x "$TMPDIR/macos/scripts/swift-test-suites.sh"
 export PATH="$TMPDIR/bin:$PATH"
 export OMI_SWIFT_CI_XCODE_APP="$TMPDIR/Xcode_16.4.app"
 export FAKE_XCRUN_LOG="$TMPDIR/xcrun.log"
+export FAKE_RELEASE_BUILD="$TMPDIR/release-build"
 export FAKE_SUITE_LOG="$TMPDIR/suite.log"
 export GITHUB_ENV="$TMPDIR/github-env"
 
@@ -63,6 +73,29 @@ fi
 "$TMPDIR/macos/scripts/run-swift-ci.sh" --release-compile
 if ! grep -q -- 'swift build -c release --package-path Desktop --triple arm64-apple-macosx' "$FAKE_XCRUN_LOG"; then
   fail "release compile did not use the CI release command"
+fi
+
+# Running the regression without compiled tests must fail, never build implicitly.
+if "$TMPDIR/macos/scripts/run-swift-ci.sh" --release-notification-regression; then
+  fail "release regression accepted a missing test build"
+fi
+: > "$FAKE_XCRUN_LOG"
+"$TMPDIR/macos/scripts/run-swift-ci.sh" --release-test-compile
+"$TMPDIR/macos/scripts/run-swift-ci.sh" --release-notification-regression
+if [ "$(grep -c 'swift build ' "$FAKE_XCRUN_LOG")" -ne 1 ]; then
+  fail "release test compile and regression must invoke exactly one build"
+fi
+if ! grep -qx 'swift build -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -enable-testing --build-tests' "$FAKE_RELEASE_BUILD"; then
+  fail "release app and test targets must build together with the same destination"
+fi
+if ! grep -q -- 'swift test -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -enable-testing --skip-build --filter UserNotificationCallbackBridgeTests/' "$FAKE_XCRUN_LOG"; then
+  fail "release notification regression did not reuse the compiled tests"
+fi
+if FAKE_BUILD_FAILURE=1 "$TMPDIR/macos/scripts/run-swift-ci.sh" --release-test-compile; then
+  fail "runner hid a release test compilation failure"
+fi
+if "$TMPDIR/macos/scripts/run-swift-ci.sh" --release-test-compile --unexpected; then
+  fail "runner accepted unrecognized release compile options"
 fi
 
 if FAKE_XCODE_VERSION=16.5 "$TMPDIR/macos/scripts/run-swift-ci.sh" --select-toolchain >"$TMPDIR/wrong-version.out" 2>&1; then
