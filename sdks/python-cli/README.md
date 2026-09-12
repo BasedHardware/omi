@@ -241,7 +241,7 @@ omi
 └── goal
     ├── list [--limit N] [--include-inactive]
     ├── get <id>
-    ├── create <title> --target N [--type ...] [--current N] [--unit ...]
+    ├── create <title> [--target N] [--desired-outcome ...] [--why-it-matters ...] [--success-criterion ...] [--horizon-at ...]
     ├── update <id> [--unit ... | --clear-unit] [...]
     ├── progress <id> <value>
     ├── history <id> [--days N]
