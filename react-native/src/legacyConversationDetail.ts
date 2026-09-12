@@ -275,7 +275,7 @@ function conversationPhotos(value: unknown):
             text(photo.base64, 20_000_000),
             photo.content_type === undefined || photo.content_type === null
               ? undefined
-              : text(photo.content_type, 10000),
+              : text(photo.content_type),
           );
     return {
       ...(caption === undefined ? {} : {caption}),

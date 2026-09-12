@@ -902,6 +902,49 @@ test('keeps GET conversation photos when content_type exceeds 256', async () => 
   );
 });
 
+test('keeps GET conversation photos when content_type exceeds 10000', async () => {
+  const png =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const contentType = `image/${'a'.repeat(9995)}`;
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: [
+        {
+          description: 'Whiteboard notes',
+          base64: png,
+          content_type: contentType,
+        },
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      title: fixture.structured.title,
+      photoCount: 1,
+      photoCaptions: ['Whiteboard notes'],
+      photoRows: [
+        {
+          caption: 'Whiteboard notes',
+          imageUri: `data:${contentType};base64,${png}`,
+        },
+      ],
+      transcript: {
+        status: 'loaded',
+        segments: [
+          {
+            text: fixture.transcript_segments[0].text,
+            speaker: 'SPEAKER_00',
+            isUser: true,
+            start: 0.25,
+            end: 4.5,
+          },
+        ],
+      },
+    },
+  );
+});
+
 test('names GET discarded photos and photos still analyzing', async () => {
   mockRequest.mockResolvedValue(
     response({
