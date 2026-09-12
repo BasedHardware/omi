@@ -8,6 +8,7 @@ extension DesktopAutomationActionRegistry {
   func registerRatingPromptActions() {
     register(
       name: "rating_prompt_state",
+      effects: [],
       summary: "Return the rating prompt's persisted trigger state and visibility"
     ) { _ in
       await MainActor.run {
@@ -31,6 +32,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "rating_prompt_submit",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Submit a 1-5 star rating through the same path as the star buttons",
       params: ["rating"]
     ) { params in
@@ -51,6 +53,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "rating_prompt_submit_comment",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Send the pending low-score comment through the same path as the Send button (empty comment = Skip)",
       params: ["comment"]
     ) { params in
@@ -67,6 +70,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "rating_prompt_record_question",
+      effects: [.localState],
       summary:
         "Count one asked question through RatingPromptManager.recordQuestionAsked — the exact call the chatMessageSent analytics funnel makes"
     ) { _ in
@@ -82,6 +86,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "rating_prompt_refer",
+      effects: [.localState],
       summary: "Trigger the thank-you bar's refer-a-friend proposal (same path as the button)"
     ) { _ in
       await MainActor.run {
@@ -95,6 +100,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "rating_prompt_seed",
+      effects: [.localState, .networkOrModel],
       summary: "Run the history seed now (same call as app launch)"
     ) { _ in
       await RatingPromptManager.shared.seedFromHistoryIfNeeded()
@@ -106,6 +112,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "rating_prompt_reset",
+      effects: [.localState],
       summary: "Reset persisted rating-prompt state so the trigger can be exercised again"
     ) { _ in
       await MainActor.run {

@@ -1004,6 +1004,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   func registerPTTLanguageTestAction() {
     DesktopAutomationActionRegistry.shared.register(
       name: "ptt_test_turn",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
       summary: "Drive a real PTT hub turn from a PCM16/16k mono file through the controller "
         + "with the production pre-overlay screen capture; returns safe lifecycle and screen-protocol diagnostics.",
       params: ["pcm", "timeout", "force_transcript", "text_only"]
@@ -1386,6 +1387,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   func registerRapidPTTBurstTestAction() {
     DesktopAutomationActionRegistry.shared.register(
       name: "ptt_test_burst",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
       summary: "Drive three back-to-back PCM PTT turns and return final diagnostics.",
       params: ["pcm1", "pcm2", "pcm3", "timeout"]
     ) { [weak self] params in

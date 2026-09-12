@@ -97,7 +97,7 @@ print(path)
   actions)
     curl_bridge "$BASE/actions"; echo ;;
   action)
-    name="${1:?usage: omi-ctl action <name> [key=value ...]}"; shift || true
+    name="${1:?usage: omi-ctl action <name> [--read-only] [key=value ...]}"; shift || true
     body="$(python3 - "$name" "$@" <<'PY'
 import json
 import sys
@@ -105,6 +105,9 @@ import sys
 body = {"name": sys.argv[1]}
 params = {}
 for argument in sys.argv[2:]:
+    if argument == "--read-only":
+        body["readOnly"] = True
+        continue
     key, separator, value = argument.partition("=")
     if not separator or not key:
         raise SystemExit("omi-ctl: action parameters must be nonempty key=value pairs")

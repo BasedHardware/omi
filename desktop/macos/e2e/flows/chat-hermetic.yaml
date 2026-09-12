@@ -4,6 +4,8 @@ tier: 2
 description: Hermetic chat in Home tab — send/receive with Rust OMI_LLM_STUB=1 (v0.12.119+ redesign — chat is embedded in Home, not a separate tab)
 app: non-prod
 covers:
+  # The harness records /capabilities before dispatching these chat actions.
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationActionEffect.swift
   - desktop/macos/Desktop/Sources/Chat/ChatTurnFailureNotice.swift
   - desktop/macos/Desktop/Sources/Chat/ChatAttachmentOnlySend.swift
   - desktop/macos/Desktop/Sources/Theme/OmiTextEditor.swift
@@ -32,6 +34,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ToolActivityTimelineLayout.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/OwnedRunLoopTimer.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
   # The grounded follow-up chip, S6-S10. The stub gained one delimiter-carrying
   # reply so a tail is reachable hermetically at all; S8 asserts the split by

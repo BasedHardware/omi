@@ -2,16 +2,17 @@ import Foundation
 import XCTest
 
 /// Owns only its unique domain; cleanup cannot remove another fixture's keys.
-final class IsolatedTestDefaults {
+final class IsolatedTestDefaults: Sendable {
   let suiteName = "omi.tests.\(UUID().uuidString)"
-  let defaults: UserDefaults
 
-  init() throws {
-    defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+  /// Return an independently owned handle. Retaining that handle in a teardown
+  /// closure would bind it to XCTest's actor and prevent async API injection.
+  func makeDefaults() throws -> sending UserDefaults {
+    try XCTUnwrap(UserDefaults(suiteName: suiteName))
   }
 
   func cleanUp() {
-    defaults.removePersistentDomain(forName: suiteName)
+    UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
   }
 
   deinit {
@@ -20,11 +21,11 @@ final class IsolatedTestDefaults {
 }
 
 extension XCTestCase {
-  /// Teardown retains the domain owner even if the subject retains the defaults.
+  /// Teardown retains the domain identity, never the subject's defaults handle.
   @MainActor
-  func makeIsolatedDefaults() throws -> UserDefaults {
-    let fixture = try IsolatedTestDefaults()
+  func makeIsolatedDefaults() throws -> sending UserDefaults {
+    let fixture = IsolatedTestDefaults()
     addTeardownBlock { fixture.cleanUp() }
-    return fixture.defaults
+    return try fixture.makeDefaults()
   }
 }
