@@ -94,6 +94,12 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+JITKnowledgeToolsGate.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
+  # This flow runs the default piMono stub only and never switches to the
+  # Local provider, but every piMono run still executes these two files:
+  # AgentRuntimeProcess.swift reads AIProvider.currentProviderMode at spawn,
+  # and ChatProvider.swift/AgentRuntimeProcess.swift call
+  # AgentRuntimeRouting.harnessMode/adapterId. A flow that actually drives
+  # the Local provider branch would be a stronger claim; none exists yet.
   - desktop/macos/Desktop/Sources/Providers/AIProvider.swift
   - desktop/macos/Desktop/Sources/Providers/AgentRuntimeRouting.swift
 preconditions:

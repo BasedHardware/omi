@@ -153,8 +153,14 @@ final class PiMonoWiringTests: XCTestCase {
   func testConnectorSynthesisGate() {
     let bridgeModeKey = AIProvider.selectedProviderRawValueKey
     let cloudAssistModeKey = AIProvider.cloudAssistModeKey
+    // AIProvider.localCloudAssistMode falls back to (and migrates from) this
+    // legacy key when cloudAssistModeKey is unset, so a stale "cloud" value
+    // left here by an earlier run/session would flake the "Off" assertion
+    // below. Save/restore it alongside the other two keys.
+    let legacyKey = AIProvider.connectorSynthesisModeKey
     let previousBridgeMode = UserDefaults.standard.string(forKey: bridgeModeKey)
     let previousCloudAssistMode = UserDefaults.standard.string(forKey: cloudAssistModeKey)
+    let previousLegacyMode = UserDefaults.standard.string(forKey: legacyKey)
     defer {
       if let previousBridgeMode {
         UserDefaults.standard.set(previousBridgeMode, forKey: bridgeModeKey)
@@ -166,11 +172,17 @@ final class PiMonoWiringTests: XCTestCase {
       } else {
         UserDefaults.standard.removeObject(forKey: cloudAssistModeKey)
       }
+      if let previousLegacyMode {
+        UserDefaults.standard.set(previousLegacyMode, forKey: legacyKey)
+      } else {
+        UserDefaults.standard.removeObject(forKey: legacyKey)
+      }
     }
 
     // Local + Off (the default, including an unset key): skip.
     UserDefaults.standard.set(ChatProvider.BridgeMode.local.rawValue, forKey: bridgeModeKey)
     UserDefaults.standard.removeObject(forKey: cloudAssistModeKey)
+    UserDefaults.standard.removeObject(forKey: legacyKey)
     XCTAssertEqual(AIProvider.localCloudAssistMode, .off)
     XCTAssertTrue(AIProvider.shouldSkipConnectorSynthesis())
 
