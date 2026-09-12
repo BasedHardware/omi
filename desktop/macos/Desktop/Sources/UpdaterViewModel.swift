@@ -939,14 +939,12 @@ final class UpdaterViewModel: ObservableObject {
 
   private init() {
     // Preview builds must not use the shared update feed. Do not start Sparkle for those
-    // artifacts. xctest is excluded the same way, see `isRunningUnderXCTest` above — but
-    // only here: the manual/background entry points below (checkForUpdates,
-    // checkForUpdatesInBackground, applyManagedUpdatePolicy) guard on
-    // `AppBuild.allowsSparkleUpdates` alone, which is true under xctest (no
-    // `com.omi.` bundle id in a test host). That is safe in practice only
-    // because Sparkle's own updater no-ops (logs and returns) when asked to
-    // check while it was never started here — not because those call sites
-    // repeat this xctest check themselves.
+    // artifacts. xctest is excluded the same way, see `isRunningUnderXCTest` above — and
+    // `checkForUpdates()`/`checkForUpdatesInBackground()` repeat the same check
+    // themselves (not just `AppBuild.allowsSparkleUpdates`, which alone is true
+    // under xctest — no `com.omi.` bundle id in a test host): relying on Sparkle's
+    // own updater no-op'ing when asked to check while never started here was the
+    // bug this class shipped with (see the automated-review finding this fixed).
     updaterController = SPUStandardUpdaterController(
       startingUpdater: AppBuild.allowsSparkleUpdates && !Self.isRunningUnderXCTest,
       updaterDelegate: updaterDelegate,
@@ -1001,16 +999,38 @@ final class UpdaterViewModel: ObservableObject {
     canCheckForUpdates && !updateSessionInProgress
   }
 
+  /// Shared guard for `checkForUpdates()`/`checkForUpdatesInBackground()`. A
+  /// pure predicate so the xctest-suppression logic is directly unit-testable
+  /// without relying on Sparkle's own no-op behavior under `startingUpdater:
+  /// false` as a proxy signal (that no-op happens regardless of this guard,
+  /// so it cannot tell a reverted guard apart from a working one).
+  nonisolated static func shouldPerformUpdateCheck(
+    allowsSparkleUpdates: Bool,
+    isRunningUnderXCTest: Bool
+  ) -> Bool {
+    allowsSparkleUpdates && !isRunningUnderXCTest
+  }
+
   /// Manually check for updates
   func checkForUpdates() {
-    guard AppBuild.allowsSparkleUpdates else { return }
+    guard
+      Self.shouldPerformUpdateCheck(
+        allowsSparkleUpdates: AppBuild.allowsSparkleUpdates,
+        isRunningUnderXCTest: Self.isRunningUnderXCTest)
+    else { return }
     userInitiatedCheckInProgress = true
     updaterController.checkForUpdates(nil)
   }
 
   /// Background update check (no UI). Used after channel changes.
+  /// `checkForUpdatesImmediatelyAfterLaunchIfNeeded()` and the `updateChannel`
+  /// didSet both funnel through here, so this one guard covers all three.
   func checkForUpdatesInBackground() {
-    guard AppBuild.allowsSparkleUpdates else { return }
+    guard
+      Self.shouldPerformUpdateCheck(
+        allowsSparkleUpdates: AppBuild.allowsSparkleUpdates,
+        isRunningUnderXCTest: Self.isRunningUnderXCTest)
+    else { return }
     // Background polls must not inherit a stale user-initiated "Checking…" chip.
     userInitiatedCheckInProgress = false
     updaterController.updater.checkForUpdatesInBackground()
