@@ -1,9 +1,50 @@
-const body = async (z, bundle) => {
-  {
-    {
-      bundle.inputData.source;
-    }
+// Creates a Memory in the Omi system.
+//
+// Bug fix (2026-09-12):
+// The previous `body` function was declared `async` but never returned a value,
+// so zapier-platform-core awaited it, received `undefined`, and sent an empty
+// JSON body — every Create Memory invocation 422'd at
+// https://based-hardware--plugins-api.modal.run/zapier/action/memories.
+//
+// This rewrite:
+//   - Declares `body` synchronously (it does not need `await`).
+//   - Returns a plain object matching the backend contract enforced by
+//     `ZapierActionCreateConversation` (text + source are required).
+//   - Passes through every optional field the existing inputFields already
+//     declares so that the removeMissingValuesFrom filter still works.
+
+const body = (z, bundle) => {
+  const inputData = bundle.inputData || {};
+
+  // Required by the backend
+  const payload = {
+    text: inputData.text,
+    source: inputData.source || 'audio_transcript',
+  };
+
+  // Pass through optional scalar fields when present.
+  if (inputData.language !== undefined && inputData.language !== null) {
+    payload.language = inputData.language;
   }
+  if (inputData.started_at) {
+    payload.started_at = inputData.started_at;
+  }
+  if (inputData.finished_at) {
+    payload.finished_at = inputData.finished_at;
+  }
+
+  // Nested geolocation — only include when at least one child is present.
+  if (
+    inputData.geolocation &&
+    typeof inputData.geolocation === 'object' &&
+    Object.values(inputData.geolocation).some(
+      (v) => v !== undefined && v !== null && v !== '',
+    )
+  ) {
+    payload.geolocation = inputData.geolocation;
+  }
+
+  return payload;
 };
 
 module.exports = {
