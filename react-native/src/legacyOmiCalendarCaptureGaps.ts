@@ -139,7 +139,7 @@ export function parseOmiCalendarCaptureGaps(
     seen.add(eventId);
     optionalText(row.status);
     optionalText(row.coverage);
-    const title = visibleDisplayText(text(row.title, 10000));
+    const title = visibleDisplayText(text(row.title, 1_000_000));
     if (title === '') {
       continue;
     }
