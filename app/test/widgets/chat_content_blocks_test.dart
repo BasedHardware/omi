@@ -19,17 +19,19 @@ import 'package:omi/providers/message_provider.dart';
 /// Records the single task-mutation path instead of hitting the network.
 class _RecordingActionItemsProvider extends ActionItemsProvider {
   _RecordingActionItemsProvider(this._items)
-      : super(
-          getActionItems: ({
-            int limit = 100,
-            int offset = 0,
-            bool? completed,
-            String? conversationId,
-            DateTime? startDate,
-            DateTime? endDate,
-          }) async =>
-              const wire.GeneratedActionItemsResponse(actionItems: []),
-        );
+    : super(
+        getActionItems:
+            ({
+              int limit = 100,
+              int offset = 0,
+              bool? completed,
+              String? conversationId,
+              DateTime? startDate,
+              DateTime? endDate,
+              DateTime? dueStartDate,
+              DateTime? dueEndDate,
+            }) async => const wire.GeneratedActionItemsResponse(actionItems: []),
+      );
 
   final List<ActionItemWithMetadata> _items;
   final List<(String, bool)> updates = [];
@@ -82,11 +84,7 @@ class _StubGoalsProvider extends GoalsProvider {
 
 void main() {
   ActionItemWithMetadata task({required String id, bool completed = false}) {
-    return wire.GeneratedActionItemResponse(
-      id: id,
-      description: 'Send the launch email',
-      completed: completed,
-    );
+    return wire.GeneratedActionItemResponse(id: id, description: 'Send the launch email', completed: completed);
   }
 
   ServerMessage messageWithBlocks({String? selectedOptionId}) {
@@ -105,12 +103,7 @@ void main() {
         {'type': 'text', 'id': 'block-text', 'text': 'Here is what I found.'},
         {'type': 'taskCard', 'id': 'block-task', 'taskId': 'task-1'},
         {'type': 'goalLink', 'id': 'block-goal', 'goalId': 'goal-1', 'summary': 'Ship the release'},
-        {
-          'type': 'captureLink',
-          'id': 'block-capture',
-          'conversationId': 'conversation-1',
-          'summary': 'Monday standup',
-        },
+        {'type': 'captureLink', 'id': 'block-capture', 'conversationId': 'conversation-1', 'summary': 'Monday standup'},
         {
           'type': 'conversationLink',
           'id': 'block-conversation',
@@ -137,11 +130,7 @@ void main() {
     );
   }
 
-  Future<
-      (
-        _RecordingActionItemsProvider,
-        _RecordingMessageProvider,
-      )> pumpBlocks(
+  Future<(_RecordingActionItemsProvider, _RecordingMessageProvider)> pumpBlocks(
     WidgetTester tester, {
     required ServerMessage message,
     List<ActionItemWithMetadata> tasks = const [],
@@ -256,10 +245,7 @@ void main() {
   });
 
   testWidgets('an answered question keeps only the chosen option, disabled', (tester) async {
-    final (_, messages) = await pumpBlocks(
-      tester,
-      message: messageWithBlocks(selectedOptionId: 'ship'),
-    );
+    final (_, messages) = await pumpBlocks(tester, message: messageWithBlocks(selectedOptionId: 'ship'));
 
     expect(find.byKey(const Key('chat-block-questionCard-block-question-option-later')), findsNothing);
     final chosen = find.byKey(const Key('chat-block-questionCard-block-question-option-ship'));
@@ -281,7 +267,11 @@ void main() {
       ],
     });
 
-    await pumpBlocks(tester, message: message, tasks: [task(id: 'task-1')]);
+    await pumpBlocks(
+      tester,
+      message: message,
+      tasks: [task(id: 'task-1')],
+    );
 
     expect(find.byKey(const Key('chat-block-taskCard-block-task')), findsOneWidget);
     expect(find.textContaining('Goal - Ship the release'), findsNothing);
