@@ -99,6 +99,7 @@ _RESOLVER_DEFINITION_FILE = 'utils/llm/model_config.py'
 # clients._so_gemini: iterates the active profile.
 # judge.py: model_feature defaults to the pinned screen_frame_judge key.
 # managed_compute.py: pass-through of authorize_managed_compute's feature into get_provider.
+# agentic.py: model_feature is chat_graph for CHAT_PROVIDER=openai, else chat_agent.
 KNOWN_DYNAMIC_FEATURE_SITES = frozenset(
     {
         ('utils/llm/persona.py', 'get_llm', 'feature'),
@@ -109,6 +110,8 @@ KNOWN_DYNAMIC_FEATURE_SITES = frozenset(
         ('utils/llm/clients.py', '_get_model_config', 'f'),
         ('utils/screen_frames/judge.py', 'get_llm', 'model_feature'),
         ('utils/managed_compute.py', 'get_provider', 'feature'),
+        ('utils/retrieval/agentic.py', 'get_llm', 'model_feature'),
+        ('utils/retrieval/agentic.py', 'get_model', 'model_feature'),
     }
 )
 _FEATURE_SCAN_SKIP_DIRS = {'.venv', 'venv', '.openapi-venv', '__pycache__', 'tests'}
