@@ -187,6 +187,42 @@ test('keeps GET capture gaps when status or coverage exceeds 256', () => {
   ]);
 });
 
+test('keeps GET capture gaps when status or coverage exceeds 10000', () => {
+  expect(
+    parseOmiCalendarCaptureGaps(
+      JSON.stringify([
+        {
+          event_id: 'event-long-status',
+          title: 'Standup',
+          start_time: '2026-09-07T15:00:00.000Z',
+          end_time: '2026-09-07T15:30:00.000Z',
+          status: 'x'.repeat(10001),
+          coverage: 'y'.repeat(10001),
+        },
+        {
+          event_id: 'event-neighbor',
+          title: 'Retro',
+          start_time: '2026-09-07T16:00:00.000Z',
+          end_time: '2026-09-07T17:00:00.000Z',
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      eventId: 'event-long-status',
+      title: 'Standup',
+      startMs: Date.parse('2026-09-07T15:00:00.000Z'),
+      endMs: Date.parse('2026-09-07T15:30:00.000Z'),
+    },
+    {
+      eventId: 'event-neighbor',
+      title: 'Retro',
+      startMs: Date.parse('2026-09-07T16:00:00.000Z'),
+      endMs: Date.parse('2026-09-07T17:00:00.000Z'),
+    },
+  ]);
+});
+
 test('names empty GET capture-gap status as omitted instead of hiding neighbors', () => {
   const rows = parseOmiCalendarCaptureGaps(
     JSON.stringify([

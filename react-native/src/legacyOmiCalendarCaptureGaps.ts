@@ -40,7 +40,7 @@ function optionalText(value: unknown): void {
   if (value === undefined) {
     return;
   }
-  text(value, 10000);
+  text(value, 1_000_000);
 }
 
 export type OmiCalendarCaptureGap = {
