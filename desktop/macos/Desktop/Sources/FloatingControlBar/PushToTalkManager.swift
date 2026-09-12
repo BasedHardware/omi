@@ -566,8 +566,27 @@ class PushToTalkManager: ObservableObject {
 
   // MARK: - Shortcut Handling
 
+  /// Whether a keyboard event may drive push-to-talk at all.
+  ///
+  /// `isRecordingAShortcut` is the half added for the rebinding defect: a recorder owns the keyboard
+  /// while it is listening, and without this, rebinding push-to-talk onto the chord it is *already*
+  /// bound to starts a voice turn instead of recording the chord. That is the same failure
+  /// `ShortcutCaptureSession` fixes for Ask Omi, at the one layer that is an in-process monitor and
+  /// so can be gated rather than unregistered.
+  ///
+  /// A function rather than two `guard`s inline because the monitors it protects cannot be driven
+  /// from a hermetic test without real audio, and an ungated admission rule is exactly the kind that
+  /// gets a third condition bolted on at one call site.
+  nonisolated static func acceptsShortcutEvents(isRecordingAShortcut: Bool, pttEnabled: Bool) -> Bool {
+    !isRecordingAShortcut && pttEnabled
+  }
+
   private func handleShortcutEvent(_ event: NSEvent) {
-    guard ShortcutSettings.shared.pttEnabled else { return }
+    guard
+      Self.acceptsShortcutEvents(
+        isRecordingAShortcut: ShortcutCaptureSession.isCapturing,
+        pttEnabled: ShortcutSettings.shared.pttEnabled)
+    else { return }
     let shortcut = ShortcutSettings.shared.pttShortcut
 
     switch event.type {
