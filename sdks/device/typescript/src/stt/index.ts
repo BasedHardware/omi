@@ -55,7 +55,12 @@ export function createDeepgramTranscriber(opts: {
       if (ws.readyState === 1) ws.send(chunk as any);
     },
     stop() {
-      try { ws.close(); } catch { /* ignore */ }
+      try {
+        if (ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: 'CloseStream' }));
+        }
+        ws.close();
+      } catch { /* ignore */ }
     },
   };
 }

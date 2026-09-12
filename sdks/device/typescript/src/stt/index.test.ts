@@ -84,6 +84,33 @@ describe('createDeepgramTranscriber', () => {
 
     expect(openedUrl).not.toInclude('token=');
   });
+
+  test('sends CloseStream before closing the socket', () => {
+    const sent: unknown[] = [];
+    let closeCount = 0;
+    class FakeWebSocket {
+      binaryType: string = 'blob';
+      readyState = 1;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      constructor(_url: string) {}
+      send(data: unknown) {
+        sent.push(data);
+      }
+      close() {
+        closeCount += 1;
+        this.readyState = 3;
+      }
+    }
+
+    const transcriber = createDeepgramTranscriber({
+      onTranscript: () => {},
+      createWebSocket: (url: string) => new FakeWebSocket(url) as any,
+    });
+    transcriber.stop();
+
+    expect(sent).toEqual([JSON.stringify({ type: 'CloseStream' })]);
+    expect(closeCount).toBe(1);
+  });
 });
 
 describe('createWhisperTranscriber', () => {
