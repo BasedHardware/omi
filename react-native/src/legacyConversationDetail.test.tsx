@@ -448,6 +448,68 @@ test('names GET transcript stt_provider without inventing Flutter Omi for unknow
   });
 });
 
+test('keeps GET transcript when speaker or stt_provider exceeds 256', async () => {
+  const speaker = 'S'.repeat(257);
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          speaker,
+        },
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      title: fixture.structured.title,
+      transcript: {
+        status: 'loaded',
+        segments: [
+          {
+            text: fixture.transcript_segments[0].text,
+            speaker,
+            isUser: true,
+            start: 0.25,
+            end: 4.5,
+          },
+        ],
+      },
+    },
+  );
+  const sttProvider = 'p'.repeat(257);
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          stt_provider: sttProvider,
+        },
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      title: fixture.structured.title,
+      transcript: {
+        status: 'loaded',
+        segments: [
+          {
+            text: fixture.transcript_segments[0].text,
+            speaker: 'SPEAKER_00',
+            isUser: true,
+            start: 0.25,
+            end: 4.5,
+            sttProvider,
+          },
+        ],
+      },
+    },
+  );
+});
+
 test('fails closed for malformed GET calendar_event', async () => {
   mockRequest.mockResolvedValue(
     response({
@@ -532,6 +594,49 @@ test('keeps GET conversation photos when more than 1000', async () => {
       title: fixture.structured.title,
       photoCount: 1001,
       photoCaptions: photos.map(row => row.description),
+    },
+  );
+});
+
+test('keeps GET conversation photos when content_type exceeds 256', async () => {
+  const png =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const contentType = `image/${'a'.repeat(251)}`;
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: [
+        {
+          description: 'Whiteboard notes',
+          base64: png,
+          content_type: contentType,
+        },
+      ],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      title: fixture.structured.title,
+      photoCount: 1,
+      photoCaptions: ['Whiteboard notes'],
+      photoRows: [
+        {
+          caption: 'Whiteboard notes',
+          imageUri: `data:${contentType};base64,${png}`,
+        },
+      ],
+      transcript: {
+        status: 'loaded',
+        segments: [
+          {
+            text: fixture.transcript_segments[0].text,
+            speaker: 'SPEAKER_00',
+            isUser: true,
+            start: 0.25,
+            end: 4.5,
+          },
+        ],
+      },
     },
   );
 });

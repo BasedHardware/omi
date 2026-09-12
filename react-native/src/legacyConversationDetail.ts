@@ -275,7 +275,7 @@ function conversationPhotos(value: unknown):
             text(photo.base64, 20_000_000),
             photo.content_type === undefined || photo.content_type === null
               ? undefined
-              : text(photo.content_type, 256),
+              : text(photo.content_type, 10000),
           );
     return {
       ...(caption === undefined ? {} : {caption}),
@@ -413,14 +413,14 @@ export async function loadLegacyConversationDetail(
                   segment.stt_provider === null
                     ? undefined
                     : transcriptSttProviderCopy(
-                        text(segment.stt_provider, 256),
+                        text(segment.stt_provider, 10000),
                       );
                 return {
                   text: text(segment.text, 100000),
                   speaker:
                     segment.speaker == null
                       ? 'SPEAKER_00'
-                      : text(segment.speaker, 256),
+                      : text(segment.speaker, 10000),
                   isUser: boolean(segment.is_user),
                   start: finite(segment.start),
                   end: finite(segment.end),
