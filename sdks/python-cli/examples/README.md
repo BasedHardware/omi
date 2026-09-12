@@ -10,3 +10,4 @@
 * [`quickstart.tr.md`](quickstart.tr.md) — Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart).
 * [`quickstart.ms.md`](quickstart.ms.md) — Panduan Permulaan Cepat omi-cli dalam Bahasa Melayu (Malay Quickstart).
 * [`quickstart.it.md`](quickstart.it.md) — Guida Rapida omi-cli in Italiano (Italian Quickstart).
+* [`quickstart.ko.md`](quickstart.ko.md) — omi-cli 빠른 시작 가이드 (Korean Quickstart).
