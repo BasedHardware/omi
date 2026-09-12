@@ -75,9 +75,25 @@ class _R:
         pass
 
 
+_PREV_DB = os.environ.get("IQ_RATING_DB_PATH")
 _TMPDIR = tempfile.TemporaryDirectory(prefix="iq-rating-test-")
-atexit.register(_TMPDIR.cleanup)
 os.environ["IQ_RATING_DB_PATH"] = os.path.join(_TMPDIR.name, "test.db")
+_cleaned_tmp = False
+
+
+def _restore_env_and_tmpdir() -> None:
+    global _cleaned_tmp
+    if _cleaned_tmp:
+        return
+    _cleaned_tmp = True
+    _TMPDIR.cleanup()
+    if _PREV_DB is None:
+        os.environ.pop("IQ_RATING_DB_PATH", None)
+    else:
+        os.environ["IQ_RATING_DB_PATH"] = _PREV_DB
+
+
+atexit.register(_restore_env_and_tmpdir)
 
 _stubs = {
     "requests": _module("requests", get=lambda *a, **k: _Resp(500), post=lambda *a, **k: _Resp(500)),
@@ -100,6 +116,10 @@ with patch.dict(sys.modules, _stubs):
 
 
 class RateLimitRetryTests(unittest.TestCase):
+    @classmethod
+    def tearDownClass(cls):
+        _restore_env_and_tmpdir()
+
     def setUp(self):
         self._sleep = mock.patch.object(main.time, "sleep", lambda s: None)
         self._sleep.start()
