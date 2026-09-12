@@ -35,6 +35,7 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
         'database.notifications',
         get_users_for_daily_summary=no_db_work,
         get_users_token_in_timezones=no_db_work,
+        get_users_id_in_timezones=no_db_work,
     )
     notification_message = type(
         'NotificationMessage',
@@ -56,6 +57,7 @@ def _loaded_other_notifications() -> Iterator[tuple[ModuleType, ModuleType]]:
             # Declines before the LLM call hand the day back instead of sitting on the 2h key.
             release_daily_summary_lock=lambda *_args: None,
             try_acquire_notifications_job_run_lock=lambda *_args, **_kwargs: True,
+            try_acquire_daily_wear_lock=lambda *_args, **_kwargs: True,
             release_notifications_job_run_lock=lambda *_args, **_kwargs: None,
         ),
         'models.notification_message': _module(
@@ -154,21 +156,21 @@ def test_timezone_token_read_runs_off_loop_and_returns_tokens() -> None:
             loop = asyncio.get_running_loop()
             calls: list[list[str]] = []
 
-            def blocking_read(timezones: list[str]) -> list[str]:
+            def blocking_read(timezones: list[str]) -> list[Any]:
                 calls.append(timezones)
                 loop.call_soon_threadsafe(entered.set)
                 assert release.wait(timeout=2)
-                return ['token-a', 'token-b']
+                return [('u1', ['token-a', 'token-b'], 'Asia/Kolkata')]
 
             notifications._get_timezones_at_time = lambda _target: ['Asia/Kolkata']
-            notification_db.get_users_token_in_timezones = blocking_read
+            notification_db.get_users_id_in_timezones = blocking_read
 
             result = await _assert_loop_responsive_while_worker_waits(
-                notifications._get_users_in_timezone('08:00'),
+                notifications._get_wear_recipients('08:00'),
                 entered,
                 release,
             )
-            assert result == ['token-a', 'token-b']
+            assert result == [('u1', ['token-a', 'token-b'], 'Asia/Kolkata')]
             assert calls == [['Asia/Kolkata']]
 
         asyncio.run(exercise())

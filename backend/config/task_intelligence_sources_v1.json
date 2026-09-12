@@ -66,8 +66,7 @@
         "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift",
         "desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift",
         "desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift",
-        "desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCoordinator.swift",
-        "backend/routers/desktop_core.py"
+        "desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCoordinator.swift"
       ],
       "test_adapter": "direct_command_contract",
       "writer_anchors": [
@@ -84,11 +83,6 @@
         {
           "path": "desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCoordinator.swift",
           "symbol": "client.updateActionItem",
-          "discover": true
-        },
-        {
-          "path": "backend/routers/desktop_core.py",
-          "symbol": "action_items_db.create_action_item",
           "discover": true
         }
       ]

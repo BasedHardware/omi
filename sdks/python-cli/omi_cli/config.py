@@ -200,8 +200,36 @@ def load(path: Optional[Path] = None) -> Config:
             )
 
     active = data.get("active_profile", DEFAULT_PROFILE_NAME)
+    if not isinstance(active, str):
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"'active_profile' must be a string, got {type(active).__name__}",
+        )
+
     profiles_data = data.get("profiles", {})
-    profiles = {name: Profile.from_toml_dict(name, raw) for name, raw in profiles_data.items()}
+
+    # Validate that profiles is a table (dict), not a string or other scalar.
+    if not isinstance(profiles_data, dict):
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"'profiles' must be a table, got {type(profiles_data).__name__}",
+        )
+
+    # Validate each profile value is a table before constructing Profile objects.
+    profiles = {}
+    for name, raw in profiles_data.items():
+        if not isinstance(raw, dict):
+            return Config(
+                path=p,
+                active_profile=DEFAULT_PROFILE_NAME,
+                profiles={},
+                load_error=f"profile '{name}' must be a table, got {type(raw).__name__}",
+            )
+        profiles[name] = Profile.from_toml_dict(name, raw)
 
     extra = {key: value for key, value in data.items() if key not in {"active_profile", "profiles"}}
     return Config(path=p, active_profile=active, profiles=profiles, extra=extra)
@@ -221,8 +249,7 @@ def save(config: Config) -> None:
     """
     if config.load_error is not None:
         raise PermissionError(
-            f"refusing to overwrite {config.path}: {config.load_error}. "
-            "Fix or remove the config file and try again."
+            f"refusing to overwrite {config.path}: {config.load_error}. " "Fix or remove the config file and try again."
         )
     config.path.parent.mkdir(parents=True, exist_ok=True)
     # Tighten parent dir perms too — credentials live underneath. Best-effort:
@@ -258,8 +285,12 @@ def save(config: Config) -> None:
         try:
             with os.fdopen(fd, "wb") as fh:
                 tomli_w.dump(payload, fh)
+            # Atomic rename. The destination inherits the temp's 0o600 mode.
+            os.replace(tmp_path, config.path)
         except Exception:
-            # Best-effort cleanup if the dump itself failed mid-write.
+            # Best-effort cleanup of our own temp file, whether the dump or
+            # the replace failed. A failed replace (e.g. destination locked
+            # on Windows) must not leave a credential-bearing temp behind.
             try:
                 os.unlink(tmp_path)
             except FileNotFoundError:
@@ -267,9 +298,6 @@ def save(config: Config) -> None:
             raise
     finally:
         os.umask(old_umask)
-
-    # Atomic rename. The destination inherits the temp's 0o600 mode.
-    os.replace(tmp_path, config.path)
 
 
 def resolve_profile_name(cli_flag: Optional[str], config: Config) -> str:

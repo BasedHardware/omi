@@ -72,6 +72,7 @@ KEYS = [
     "shortcut_solidBackground",
     "shortcut_pttSoundsEnabled",
     "shortcut_pttMuteSystemAudio",
+    "shortcut_silentTypeEnabled",
     "shortcut_selectedModel",
     "shortcut_pttTranscriptionMode",
     "shortcut_draggableBarEnabled",
@@ -81,6 +82,7 @@ KEYS = [
 
     # Common desktop settings that make throwaway bundles feel like Omi Dev.
     "fontScale",
+    "glassTransparency",
     "multiChatEnabled",
     "conversationsCompactView",
     "chatBridgeMode",
