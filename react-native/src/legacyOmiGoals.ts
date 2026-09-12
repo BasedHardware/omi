@@ -1,8 +1,6 @@
 import type {OmiBackend} from './omiNativeTypes';
 import {visibleDisplayText} from './desktopReadClient';
 
-const MAX_GOALS = 4;
-
 class GoalError extends Error {
   constructor() {
     super('Omi goals are malformed');
@@ -62,9 +60,6 @@ export function parseOmiGoals(body: string): OmiGoal[] {
   const items: OmiGoal[] = [];
   const seen = new Set<string>();
   for (const raw of parsed) {
-    if (items.length === MAX_GOALS) {
-      break;
-    }
     if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
       continue;
     }

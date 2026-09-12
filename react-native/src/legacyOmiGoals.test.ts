@@ -31,7 +31,7 @@ test('parses GET goals titles and omits empty titles', () => {
   ]);
 });
 
-test('caps parsed GET goals at four after empty titles', () => {
+test('does not omit a neighboring titled goal when GET lists more than four', () => {
   const rows = parseOmiGoals(
     JSON.stringify([
       {id: 'g1', title: 'One', current_value: 1, target_value: 1},
@@ -42,7 +42,7 @@ test('caps parsed GET goals at four after empty titles', () => {
       {id: 'g5', title: 'Five', current_value: 5, target_value: 5},
     ]),
   );
-  expect(rows.map(row => row.id)).toEqual(['g1', 'g2', 'g3', 'g4']);
+  expect(rows.map(row => row.id)).toEqual(['g1', 'g2', 'g3', 'g4', 'g5']);
 });
 
 test('does not omit a neighboring titled goal when stored metrics cannot project', () => {
