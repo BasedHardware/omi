@@ -8,6 +8,7 @@ import os
 from typing import Optional, Dict, Any, List
 
 import requests
+from urllib.parse import quote
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Query, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
@@ -566,7 +567,7 @@ async def connect_api_key(
     if not user_info:
         # Return to setup page with error
         return RedirectResponse(
-            url=f"/?uid={uid}&error=Invalid+API+key.+Please+check+and+try+again.",
+            url=f"/?uid={quote(uid, safe='')}&error=Invalid+API+key.+Please+check+and+try+again.",
             status_code=303
         )
     
@@ -579,7 +580,7 @@ async def connect_api_key(
         workspace_id=user_info.get("workspace_id"),
     )
     
-    return RedirectResponse(url=f"/?uid={uid}", status_code=303)
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}", status_code=303)
 
 
 @app.get("/setup/hive", tags=["setup"])
@@ -600,7 +601,7 @@ async def set_default_project(uid: str, project_id: str, project_name: str):
 async def disconnect_hive(uid: str):
     """Disconnect Hive account."""
     delete_hive_credentials(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
 
 # ============================================
