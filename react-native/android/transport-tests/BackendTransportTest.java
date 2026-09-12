@@ -59,6 +59,14 @@ public final class BackendTransportTest {
     String partition = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     assert (partition + "/" + session + ".journal").equals(
       OmiBackendTransport.recordingJournalRelpath(partition, session));
+    String ownerKey = "capture-owner-v1:" + "a".repeat(64);
+    assert OmiBackendTransport.recordingOwnerKeyValid(ownerKey);
+    assert !OmiBackendTransport.recordingOwnerKeyValid("capture-owner-v1:zz");
+    String receipt = "capture1." + "a".repeat(64) + "." + "b".repeat(64);
+    assert OmiBackendTransport.recordingReceiptValid(receipt);
+    assert !OmiBackendTransport.recordingReceiptValid("capture1.abc");
+    assert OmiBackendTransport.recordingUuidValid(session);
+    assert !OmiBackendTransport.recordingUuidValid("11111111-2222-3333-8444-555555555555");
     AtomicInteger redirects = new AtomicInteger();
     HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     server.createContext("/target", exchange -> {

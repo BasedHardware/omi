@@ -29,7 +29,6 @@ internal class OmiRecordingJournals(
   private var disposed = false
   private val entries = mutableMapOf<String, Entry>()
   private val root = File(context.noBackupFilesDir, "recording-journals")
-  private val uuid = Regex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
   private fun digest(value: String) = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it.toInt() and 255) }
   private fun partition(owner: OmiRecordingOwner) = digest("omi-recording-partition-v1\u0000${owner.origin}\u0000${owner.ownerKey}\u0000${owner.login}")
   private fun sync(directory: File) {
@@ -47,13 +46,13 @@ internal class OmiRecordingJournals(
   }
   private fun budget(extra: Long, creating: Boolean = false) {
     val files = if (root.exists()) root.walkTopDown().filter { it.isFile }.toList() else emptyList()
-    check(files.sumOf { it.length() } + extra <= 134_217_728L && (!creating || files.size < 64)) { "Recording journal storage is full" }
+    check(OmiBackendTransport.recordingBudgetOk(files.sumOf { it.length() }, extra, creating, files.size)) { "Recording journal storage is full" }
   }
   private fun valid(owner: OmiRecordingOwner) {
     check(!disposed) { "Recording journals are disposed" }
     check(owner.login == currentLogin()) { "Recording journal login changed" }
-    require(Regex("capture-owner-v1:[0-9a-f]{64}").matches(owner.ownerKey)
-      && Regex("capture1\\.[0-9a-f]{64}\\.[0-9a-f]{64}").matches(owner.receipt))
+    require(OmiBackendTransport.recordingOwnerKeyValid(owner.ownerKey)
+      && OmiBackendTransport.recordingReceiptValid(owner.receipt))
   }
   private fun open(owner: OmiRecordingOwner, id: String): OmiRecordingLog {
     val rel = OmiBackendTransport.recordingJournalRelpath(partition(owner), id)
@@ -83,7 +82,7 @@ internal class OmiRecordingJournals(
     val deviceId = value.getString("deviceId").orEmpty()
     val name = if (value.hasKey("deviceName")) value.getString("deviceName") else null
     val codec = value.getDouble("codec")
-    require(deviceId.isNotBlank() && deviceId.length <= 256 && (name == null || name.length <= 256) && codec in 0.0..255.0 && codec % 1 == 0.0)
+    require(OmiRecordingPolicy.deviceValid(deviceId, name, codec))
     val capturedAt = if (value.hasKey("capturedAtMs")) {
       require(value.getType("capturedAtMs") == ReadableType.Number)
       OmiRecordingPolicy.capturedAt(value.getDouble("capturedAtMs"))
@@ -109,7 +108,7 @@ internal class OmiRecordingJournals(
     val result = Arguments.createArray()
     for (file in files.sortedBy { it.name }) {
       val id = file.name.removeSuffix(".journal")
-      require(uuid.matches(id))
+      require(OmiBackendTransport.recordingUuidValid(id))
       val log = open(owner, id)
       try {
         val records = log.readAll()
@@ -122,7 +121,7 @@ internal class OmiRecordingJournals(
           require(record.isNotEmpty() && (record[0].toInt() == 0 || record[0].toInt() == 2))
           if (record[0].toInt() == 2) {
             val session = String(record, 1, record.size - 1, Charsets.UTF_8)
-            require(uuid.matches(session) && (entry.sessionId == null || entry.sessionId == session))
+            require(OmiBackendTransport.recordingUuidValid(session) && (entry.sessionId == null || entry.sessionId == session))
             entry.sessionId = session
           }
         }
@@ -164,7 +163,7 @@ internal class OmiRecordingJournals(
     if (request.getString("path") != "/v1/device-sessions" || response.getInt("status") !in 200..299) return
     val session = JSONObject(response.getString("body").orEmpty()).getJSONObject("session")
     val id = session.getString("id")
-    require(uuid.matches(id) && session.getString("deviceId") == entry.input.getString("deviceId")
+    require(OmiBackendTransport.recordingUuidValid(id) && session.getString("deviceId") == entry.input.getString("deviceId")
       && session.getInt("codec") == entry.input.getInt("codec")
       && OmiRecordingPolicy.capturedAtMatches(entry.input.opt("capturedAtMs"), session.opt("capturedAtMs")) && (entry.sessionId == null || entry.sessionId == id))
     if (entry.sessionId == null) {

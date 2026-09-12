@@ -1,19 +1,22 @@
 #import <Foundation/Foundation.h>
 #import <math.h>
 
+#include "omi_backend_recording.h"
+
 static BOOL OmiRecordingCapturedAtValid(id value) {
   if (value == nil) return YES;
   if (![value isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID()) return NO;
-  double number = [value doubleValue];
-  return isfinite(number) && number >= 0 && number <= 8640000000000000.0 && number == floor(number);
+  return omi_backend_recording_captured_at_valid([value doubleValue]) == 1;
 }
 static BOOL OmiRecordingCapturedAtMatches(id expected, id actual) {
-  return OmiRecordingCapturedAtValid(expected) && OmiRecordingCapturedAtValid(actual)
-    && (expected == nil ? actual == nil : [expected isEqual:actual]);
+  if (!OmiRecordingCapturedAtValid(expected) || !OmiRecordingCapturedAtValid(actual)) return NO;
+  return omi_backend_recording_captured_at_equal(
+    expected != nil ? 1 : 0, expected != nil ? [expected doubleValue] : 0.0,
+    actual != nil ? 1 : 0, actual != nil ? [actual doubleValue] : 0.0) == 1;
 }
 
 static BOOL OmiRecordingRetryableOwnershipStatus(NSInteger status) {
-  return status == 408 || status == 429 || (status >= 500 && status <= 599);
+  return omi_backend_recording_retryable_status((int32_t)status) == 1;
 }
 
 static BOOL OmiRecordingOffline(NSError *error) {
@@ -31,14 +34,24 @@ static BOOL OmiRecordingOffline(NSError *error) {
   }
 }
 static BOOL OmiRecordingSameContext(NSString *expectedLogin, NSString *currentLogin, NSString *expectedOrigin, NSString *currentOrigin) {
-  return expectedLogin.length > 0 && [expectedLogin isEqual:currentLogin] && expectedOrigin.length > 0 && [expectedOrigin isEqual:currentOrigin];
+  return omi_backend_recording_same_context(
+    [expectedLogin isKindOfClass:NSString.class] ? expectedLogin.UTF8String : nullptr,
+    [currentLogin isKindOfClass:NSString.class] ? currentLogin.UTF8String : nullptr,
+    [expectedOrigin isKindOfClass:NSString.class] ? expectedOrigin.UTF8String : nullptr,
+    [currentOrigin isKindOfClass:NSString.class] ? currentOrigin.UTF8String : nullptr) == 1;
 }
 
 static BOOL OmiRememberedIdentity(id identifier, id name) {
-  return [identifier isKindOfClass:NSString.class] && [identifier length] > 0 && [identifier length] <= 128 && [name isKindOfClass:NSString.class] && [name length] > 0 && [name length] <= 256;
+  return omi_backend_recording_remembered_identity(
+    [identifier isKindOfClass:NSString.class] ? (const char *)[identifier UTF8String] : nullptr,
+    [name isKindOfClass:NSString.class] ? (const char *)[name UTF8String] : nullptr) == 1;
 }
 static BOOL OmiRememberedCurrent(NSUInteger ticket, NSUInteger generation, NSString *expectedLogin, NSString *currentLogin, BOOL ready) {
-  return ticket == generation && ready && expectedLogin.length > 0 && [expectedLogin isEqual:currentLogin];
+  return omi_backend_recording_remembered_current(
+    (uint64_t)ticket, (uint64_t)generation,
+    [expectedLogin isKindOfClass:NSString.class] ? expectedLogin.UTF8String : nullptr,
+    [currentLogin isKindOfClass:NSString.class] ? currentLogin.UTF8String : nullptr,
+    ready ? 1 : 0) == 1;
 }
 
 static NSDictionary *OmiRememberedRefreshSession(NSDictionary *refreshed, NSDictionary *current) {

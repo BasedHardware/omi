@@ -40,6 +40,17 @@ public final class RecordingPolicyTest {
     assert !OmiRecordingPolicy.sameContext("login-a", "login-b", "origin-a", "origin-a");
     assert !OmiRecordingPolicy.sameContext("login-a", "login-a", "origin-a", "origin-b");
     assert !OmiRecordingPolicy.sameContext("login-a", null, "origin-a", "origin-a");
+    assert OmiRecordingPolicy.deviceValid("omi-test", null, 21d);
+    assert OmiRecordingPolicy.deviceValid("omi-test", "Desk", 21d);
+    assert !OmiRecordingPolicy.deviceValid("", null, 21d);
+    assert !OmiRecordingPolicy.deviceValid("omi-test", null, 0.5d);
+    assert !OmiRecordingPolicy.deviceValid("omi-test", null, 256d);
+    assert !OmiRecordingPolicy.deviceValid("x".repeat(257), null, 21d);
+    assert !OmiRecordingPolicy.deviceValid("omi-test", "x".repeat(257), 21d);
+    assert OmiRecordingPolicy.budgetOk(0, 0, true, 0);
+    assert !OmiRecordingPolicy.budgetOk(134217728L, 1, false, 0);
+    assert !OmiRecordingPolicy.budgetOk(0, 0, true, 64);
+    assert OmiRecordingPolicy.budgetOk(0, 0, false, 64);
     System.out.println("Android recording offline fallback policy tests passed");
   }
 }

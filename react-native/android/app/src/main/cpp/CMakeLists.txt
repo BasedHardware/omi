@@ -9,6 +9,7 @@ add_library(omi_native SHARED
   ../../../../../../native-core/src/omi_native_boundary.cpp
   ../../../../../../native-core/src/omi_backend_policy.cpp
   ../../../../../../native-core/src/omi_backend_http.cpp
+  ../../../../../../native-core/src/omi_backend_recording.cpp
 )
 
 target_include_directories(omi_native PRIVATE
