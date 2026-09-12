@@ -521,6 +521,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get doubleTap => 'Double Tap';
 
   @override
+  String get deviceButtonActions => 'Mga Aksyon ng Button ng Device';
+
+  @override
+  String get deviceButtonActionsDescription =>
+      'Payagang kontrolin ng pagpindot sa button ang pag-record at mga voice command';
+
+  @override
   String get ledBrightness => 'LED Brightness';
 
   @override

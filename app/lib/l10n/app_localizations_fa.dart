@@ -519,6 +519,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get doubleTap => 'دو ضربه';
 
   @override
+  String get deviceButtonActions => 'عملکردهای دکمه دستگاه';
+
+  @override
+  String get deviceButtonActionsDescription => 'اجازه دهید فشار دادن دکمه، ضبط و فرمان‌های صوتی را کنترل کند';
+
+  @override
   String get ledBrightness => 'روشنایی LED';
 
   @override

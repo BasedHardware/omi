@@ -164,6 +164,8 @@
     "modelNumber": "Número de model",
     "manufacturer": "Fabricant",
     "doubleTap": "Doble toc",
+    "deviceButtonActions": "Accions del botó del dispositiu",
+    "deviceButtonActionsDescription": "Permet que les pulsacions del botó controlin l'enregistrament i les ordres de veu",
     "ledBrightness": "Brillantor LED",
     "micGain": "Guany del micròfon",
     "disconnect": "Desconnectar",

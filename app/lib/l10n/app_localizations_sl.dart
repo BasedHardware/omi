@@ -518,6 +518,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get doubleTap => 'Dvojni dotik';
 
   @override
+  String get deviceButtonActions => 'Dejanja gumba naprave';
+
+  @override
+  String get deviceButtonActionsDescription => 'Dovoli, da pritiski gumba upravljajo snemanje in glasovne ukaze';
+
+  @override
   String get ledBrightness => 'Svetlost LED';
 
   @override

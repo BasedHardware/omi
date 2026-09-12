@@ -79,6 +79,25 @@ void main() {
     expect(find.text('Pause/Resume Recording'), findsNothing);
   });
 
+  testWidgets('device button actions can be disabled and persist', (tester) async {
+    final provider = _StubDeviceProvider();
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_app(provider));
+    await tester.pump();
+
+    final toggle = find.byKey(const Key('device_button_enabled_switch'));
+    expect(toggle, findsOneWidget);
+    expect(SharedPreferencesUtil().deviceButtonEnabled, isTrue);
+
+    await tester.tap(find.descendant(of: toggle, matching: find.byType(Switch)));
+    await tester.pump();
+
+    expect(SharedPreferencesUtil().deviceButtonEnabled, isFalse);
+    await SharedPreferencesUtil.reload();
+    expect(SharedPreferencesUtil().deviceButtonEnabled, isFalse);
+  });
+
   testWidgets('Find triggers one guarded request for a connected Omi', (tester) async {
     final findCompleter = Completer<bool>();
     final provider = _StubDeviceProvider(

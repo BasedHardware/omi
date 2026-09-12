@@ -518,6 +518,12 @@ class AppLocalizationsSr extends AppLocalizations {
   String get doubleTap => 'Дупло додирни';
 
   @override
+  String get deviceButtonActions => 'Радње дугмета уређаја';
+
+  @override
+  String get deviceButtonActionsDescription => 'Дозволи да притисци на дугме управљају снимањем и гласовним командама';
+
+  @override
   String get ledBrightness => 'Сјајност LED';
 
   @override

@@ -518,6 +518,13 @@ class AppLocalizationsPl extends AppLocalizations {
   String get doubleTap => 'Podwójne dotknięcie';
 
   @override
+  String get deviceButtonActions => 'Funkcje przycisku urządzenia';
+
+  @override
+  String get deviceButtonActionsDescription =>
+      'Zezwól, aby naciśnięcia przycisku sterowały nagrywaniem i poleceniami głosowymi';
+
+  @override
   String get ledBrightness => 'Jasność LED';
 
   @override

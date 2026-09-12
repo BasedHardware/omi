@@ -522,6 +522,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String get doubleTap => 'Double appui';
 
   @override
+  String get deviceButtonActions => 'Actions du bouton de l’appareil';
+
+  @override
+  String get deviceButtonActionsDescription =>
+      'Autoriser le bouton à contrôler l’enregistrement et les commandes vocales';
+
+  @override
   String get ledBrightness => 'Luminosité LED';
 
   @override

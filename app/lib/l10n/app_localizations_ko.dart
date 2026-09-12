@@ -509,6 +509,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get doubleTap => '더블 탭';
 
   @override
+  String get deviceButtonActions => '기기 버튼 동작';
+
+  @override
+  String get deviceButtonActionsDescription => '버튼을 눌러 녹음과 음성 명령을 제어하도록 허용합니다';
+
+  @override
   String get ledBrightness => 'LED 밝기';
 
   @override

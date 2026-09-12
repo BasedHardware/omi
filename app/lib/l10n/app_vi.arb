@@ -164,6 +164,8 @@
     "modelNumber": "Số Mô Hình",
     "manufacturer": "Nhà Sản Xuất",
     "doubleTap": "Nhấn đúp",
+    "deviceButtonActions": "Thao tác nút thiết bị",
+    "deviceButtonActionsDescription": "Cho phép thao tác nút điều khiển ghi âm và lệnh thoại",
     "ledBrightness": "Độ sáng đèn LED",
     "micGain": "Độ tăng micro",
     "disconnect": "Ngắt kết nối",

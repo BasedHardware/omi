@@ -164,6 +164,8 @@
     "modelNumber": "Mallinumero",
     "manufacturer": "Valmistaja",
     "doubleTap": "Kaksoisnapautus",
+    "deviceButtonActions": "Laitteen painiketoiminnot",
+    "deviceButtonActionsDescription": "Salli painikkeen painallusten ohjata tallennusta ja äänikomentoja",
     "ledBrightness": "LED-kirkkaus",
     "micGain": "Mikrofonin vahvistus",
     "disconnect": "Katkaise yhteys",

@@ -519,6 +519,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get doubleTap => 'Ketik Dua Kali';
 
   @override
+  String get deviceButtonActions => 'Tindakan Butang Peranti';
+
+  @override
+  String get deviceButtonActionsDescription => 'Benarkan tekanan butang mengawal rakaman dan arahan suara';
+
+  @override
   String get ledBrightness => 'Kecerahan LED';
 
   @override

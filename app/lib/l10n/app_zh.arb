@@ -164,6 +164,8 @@
     "modelNumber": "型号",
     "manufacturer": "制造商",
     "doubleTap": "双击",
+    "deviceButtonActions": "设备按钮操作",
+    "deviceButtonActionsDescription": "允许通过按键控制录音和语音命令",
     "ledBrightness": "LED 亮度",
     "micGain": "麦克风增益",
     "disconnect": "断开连接",

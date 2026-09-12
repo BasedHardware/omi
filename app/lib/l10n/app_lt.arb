@@ -738,6 +738,8 @@
     "dontAskAgain": "Daugiau neklausti",
     "dontShowAgain": "Daugiau nerodyti",
     "doubleTap": "Dvigubas bakstelėjimas",
+    "deviceButtonActions": "Įrenginio mygtuko veiksmai",
+    "deviceButtonActionsDescription": "Leisti mygtuko paspaudimais valdyti įrašymą ir balso komandas",
     "doubleTapAction": "Dvigubo bakstelėjimo veiksmas",
     "download": "Atsisiųsti",
     "downloadErrorWithMessage": "Atsisiuntimo klaida: {error}",

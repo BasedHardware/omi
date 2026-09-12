@@ -521,6 +521,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get doubleTap => 'Dupla érintés';
 
   @override
+  String get deviceButtonActions => 'Eszközgomb műveletei';
+
+  @override
+  String get deviceButtonActionsDescription => 'A gombnyomások vezérelhetik a felvételt és a hangparancsokat';
+
+  @override
   String get ledBrightness => 'LED fényerő';
 
   @override

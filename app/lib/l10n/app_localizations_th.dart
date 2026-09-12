@@ -516,6 +516,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get doubleTap => 'แตะสองครั้ง';
 
   @override
+  String get deviceButtonActions => 'การทำงานของปุ่มอุปกรณ์';
+
+  @override
+  String get deviceButtonActionsDescription => 'อนุญาตให้การกดปุ่มควบคุมการบันทึกและคำสั่งเสียง';
+
+  @override
   String get ledBrightness => 'ความสว่าง LED';
 
   @override

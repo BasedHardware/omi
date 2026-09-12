@@ -164,6 +164,8 @@
     "modelNumber": "मॉडल संख्या",
     "manufacturer": "निर्माता",
     "doubleTap": "डबल टैप",
+    "deviceButtonActions": "डिवाइस बटन की क्रियाएँ",
+    "deviceButtonActionsDescription": "बटन दबाकर रिकॉर्डिंग और वॉइस कमांड नियंत्रित करने दें",
     "ledBrightness": "LED चमक",
     "micGain": "माइक गेन",
     "disconnect": "डिस्कनेक्ट करें",

@@ -164,6 +164,8 @@
     "modelNumber": "Modelnummer",
     "manufacturer": "Producent",
     "doubleTap": "Dobbelttryk",
+    "deviceButtonActions": "Handlinger for enhedsknap",
+    "deviceButtonActionsDescription": "Tillad, at knaptryk styrer optagelse og stemmekommandoer",
     "ledBrightness": "LED-lysstyrke",
     "micGain": "Mikrofonforstærkning",
     "disconnect": "Afbryd",
