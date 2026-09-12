@@ -87,6 +87,7 @@ describe('createDeepgramTranscriber', () => {
 
   test('sends CloseStream before closing the socket', () => {
     const sent: unknown[] = [];
+    const events: Array<'send' | 'close'> = [];
     let closeCount = 0;
     class FakeWebSocket {
       binaryType: string = 'blob';
@@ -94,9 +95,11 @@ describe('createDeepgramTranscriber', () => {
       onmessage: ((event: MessageEvent) => void) | null = null;
       constructor(_url: string) {}
       send(data: unknown) {
+        events.push('send');
         sent.push(data);
       }
       close() {
+        events.push('close');
         closeCount += 1;
         this.readyState = 3;
       }
@@ -108,7 +111,67 @@ describe('createDeepgramTranscriber', () => {
     });
     transcriber.stop();
 
+    expect(events).toEqual(['send', 'close']);
     expect(sent).toEqual([JSON.stringify({ type: 'CloseStream' })]);
+    expect(closeCount).toBe(1);
+  });
+
+  test('closes the socket when CloseStream send fails', () => {
+    const events: Array<'send' | 'close'> = [];
+    let closeCount = 0;
+    class FakeWebSocket {
+      binaryType: string = 'blob';
+      readyState = 1;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      constructor(_url: string) {}
+      send(_data: unknown) {
+        events.push('send');
+        throw new Error('synthetic send failure');
+      }
+      close() {
+        events.push('close');
+        closeCount += 1;
+        this.readyState = 3;
+      }
+    }
+
+    const transcriber = createDeepgramTranscriber({
+      onTranscript: () => {},
+      createWebSocket: (url: string) => new FakeWebSocket(url) as any,
+    });
+    transcriber.stop();
+
+    expect(events).toEqual(['send', 'close']);
+    expect(closeCount).toBe(1);
+  });
+
+  test('does not send CloseStream when the socket is already closed', () => {
+    const sent: unknown[] = [];
+    const events: Array<'send' | 'close'> = [];
+    let closeCount = 0;
+    class FakeWebSocket {
+      binaryType: string = 'blob';
+      readyState = 3;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      constructor(_url: string) {}
+      send(data: unknown) {
+        events.push('send');
+        sent.push(data);
+      }
+      close() {
+        events.push('close');
+        closeCount += 1;
+      }
+    }
+
+    const transcriber = createDeepgramTranscriber({
+      onTranscript: () => {},
+      createWebSocket: (url: string) => new FakeWebSocket(url) as any,
+    });
+    transcriber.stop();
+
+    expect(events).toEqual(['close']);
+    expect(sent).toEqual([]);
     expect(closeCount).toBe(1);
   });
 });
