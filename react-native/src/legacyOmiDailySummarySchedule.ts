@@ -27,7 +27,7 @@ function requiredHour(value: unknown): number {
       : typeof value === 'number' && Number.isSafeInteger(value)
       ? value
       : null;
-  if (hour === null || hour < 0 || hour > 23) {
+  if (hour === null) {
     throw new DailySummaryScheduleError();
   }
   return hour;

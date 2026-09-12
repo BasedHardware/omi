@@ -20,7 +20,7 @@ function requiredFrequency(value: unknown): number {
       : typeof value === 'number' && Number.isSafeInteger(value)
       ? value
       : null;
-  if (frequency === null || frequency < 0 || frequency > 5) {
+  if (frequency === null) {
     throw new MentorNotificationError();
   }
   return frequency;

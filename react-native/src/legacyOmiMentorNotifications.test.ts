@@ -19,18 +19,21 @@ test('does not omit mentor notification settings when stored frequency is an int
   ).toEqual({frequency: 3});
 });
 
+test('does not omit GET mentor notification settings when frequency is outside 0-5', () => {
+  expect(
+    parseOmiMentorNotificationSettings(JSON.stringify({frequency: 6})),
+  ).toEqual({frequency: 6});
+  expect(
+    parseOmiMentorNotificationSettings(JSON.stringify({frequency: -1})),
+  ).toEqual({frequency: -1});
+});
+
 test('fails closed for malformed GET mentor notification settings', () => {
   expect(() =>
     parseOmiMentorNotificationSettings(JSON.stringify([])),
   ).toThrow();
   expect(() =>
     parseOmiMentorNotificationSettings(JSON.stringify({})),
-  ).toThrow();
-  expect(() =>
-    parseOmiMentorNotificationSettings(JSON.stringify({frequency: 6})),
-  ).toThrow();
-  expect(() =>
-    parseOmiMentorNotificationSettings(JSON.stringify({frequency: -1})),
   ).toThrow();
   expect(() =>
     parseOmiMentorNotificationSettings(JSON.stringify({frequency: 1.5})),

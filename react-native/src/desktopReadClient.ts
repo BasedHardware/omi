@@ -985,18 +985,13 @@ const mentorNotificationFrequencyLabels = [
 export function mentorNotificationFrequencyCopy(
   frequency: number | null | undefined,
 ): {title: string; copy: string}[] {
-  if (
-    typeof frequency !== 'number' ||
-    !Number.isInteger(frequency) ||
-    frequency < 0 ||
-    frequency > 5
-  ) {
+  if (typeof frequency !== 'number' || !Number.isInteger(frequency)) {
     return [];
   }
   return [
     {
       title: 'Notification frequency',
-      copy: mentorNotificationFrequencyLabels[frequency],
+      copy: mentorNotificationFrequencyLabels[frequency] ?? 'Balanced',
     },
   ];
 }

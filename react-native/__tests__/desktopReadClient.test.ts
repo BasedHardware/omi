@@ -1137,9 +1137,19 @@ test('daily summary schedule copy names GET hour without Flutter 10:00 PM defaul
   expect(dailySummaryHourCopy(12)).toBe('12:00 PM');
   expect(dailySummaryHourCopy(22)).toBe('10:00 PM');
   expect(dailySummaryHourCopy(23)).toBe('11:00 PM');
+  expect(dailySummaryHourCopy(24)).toBe('12:00 PM');
+  expect(dailySummaryHourCopy(-1)).toBe('-1:00 AM');
   expect(dailySummaryScheduleCopy({enabled: true, hour: 22})).toEqual([
     {title: 'Daily summaries', copy: 'Enabled'},
     {title: 'Delivery time', copy: '10:00 PM'},
+  ]);
+  expect(dailySummaryScheduleCopy({enabled: true, hour: 24})).toEqual([
+    {title: 'Daily summaries', copy: 'Enabled'},
+    {title: 'Delivery time', copy: '12:00 PM'},
+  ]);
+  expect(dailySummaryScheduleCopy({enabled: true, hour: -1})).toEqual([
+    {title: 'Daily summaries', copy: 'Enabled'},
+    {title: 'Delivery time', copy: '-1:00 AM'},
   ]);
   expect(dailySummaryScheduleCopy({enabled: false, hour: 0})).toEqual([
     {title: 'Daily summaries', copy: 'Off'},
@@ -1168,9 +1178,16 @@ test('mentor notification copy names GET frequency without Balanced default', ()
   expect(mentorNotificationFrequencyCopy(5)).toEqual([
     {title: 'Notification frequency', copy: 'Maximum'},
   ]);
-  expect(mentorNotificationFrequencyCopy(6)).toEqual([]);
-  expect(mentorNotificationFrequencyCopy(-1)).toEqual([]);
   expect(mentorNotificationFrequencyCopy(null)).toEqual([]);
+});
+
+test('names GET mentor notification frequency outside 0-5 as Balanced', () => {
+  expect(mentorNotificationFrequencyCopy(6)).toEqual([
+    {title: 'Notification frequency', copy: 'Balanced'},
+  ]);
+  expect(mentorNotificationFrequencyCopy(-1)).toEqual([
+    {title: 'Notification frequency', copy: 'Balanced'},
+  ]);
 });
 
 test('transcription preference copy names GET vocabulary without Flutter false defaults', () => {

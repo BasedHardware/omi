@@ -19,6 +19,15 @@ test('does not omit daily summary settings when stored hour is an integer string
   ).toEqual({enabled: true, hour: 22});
 });
 
+test('does not omit GET daily summary settings when hour is outside 0-23', () => {
+  expect(
+    parseOmiDailySummarySchedule(JSON.stringify({enabled: true, hour: 24})),
+  ).toEqual({enabled: true, hour: 24});
+  expect(
+    parseOmiDailySummarySchedule(JSON.stringify({enabled: true, hour: -1})),
+  ).toEqual({enabled: true, hour: -1});
+});
+
 test('fails closed for malformed GET daily summary settings', () => {
   expect(() => parseOmiDailySummarySchedule(JSON.stringify([]))).toThrow();
   expect(() =>
@@ -26,12 +35,6 @@ test('fails closed for malformed GET daily summary settings', () => {
   ).toThrow();
   expect(() =>
     parseOmiDailySummarySchedule(JSON.stringify({hour: 22})),
-  ).toThrow();
-  expect(() =>
-    parseOmiDailySummarySchedule(JSON.stringify({enabled: true, hour: 24})),
-  ).toThrow();
-  expect(() =>
-    parseOmiDailySummarySchedule(JSON.stringify({enabled: true, hour: -1})),
   ).toThrow();
   expect(() =>
     parseOmiDailySummarySchedule(JSON.stringify({enabled: true, hour: 22.5})),
