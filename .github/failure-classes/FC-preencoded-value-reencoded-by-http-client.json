@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-preencoded-value-reencoded-by-http-client",
+  "violated_contract": "A value handed to an HTTP client's params/data argument must be raw and unencoded, because the client's own transport layer form-encodes it before it goes on the wire. plugins/omi-arxiv-app/main.py built search_query by calling urllib.parse.quote_plus on each field and joining fields with a literal \"+AND+\", then passed that already-encoded string to httpx.AsyncClient.get(..., params=...). httpx encoded it a second time, turning the \"+\" characters that meant \"space\" or \"AND\" into a literal \"%2B\", which arXiv does not treat as a separator. Single-token queries had no \"+\" to corrupt, so the bug shipped unnoticed until a multi-word query, an author name with a space, or a multi-field AND search silently returned zero results.",
+  "canonical_prevention": "Never call quote/quote_plus/urlencode on a value that is also going into a client library's params/data/json argument — pick exactly one layer to own encoding, and it should be the transport layer, not the call site. When a test is needed to prove single encoding, assert on the actual wire form (e.g. via urlencode or by capturing the client's constructed request/URL) rather than on the pre-encoded string alone, since the pre-encoded string looks correct in isolation and only the double-encoded wire form reveals the defect.",
+  "canonical_prevention_artifact": [
+    "plugins/omi-arxiv-app/test_main.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "plugins/omi-arxiv-app/main.py"
+  ],
+  "status": "open"
+}
