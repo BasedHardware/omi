@@ -9983,4 +9983,7 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Tal till text är inte tillgängligt just nu. Kontrollera internetanslutningen och enhetens inställningar för taligenkänning och försök igen.';
+
+  @override
+  String get processingTakingLonger => 'Fortfarande igång — det tar längre tid än vanligt.';
 }

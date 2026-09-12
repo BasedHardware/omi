@@ -132,6 +132,34 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertFalse(body.contains("ConnectorImportOperations.memoryLogOutcome"))
   }
 
+  @MainActor
+  func testMutatingActionsExposeAccurateDiscoveryMetadata() throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let descriptors = registry.descriptors()
+
+    let importProbe = try XCTUnwrap(
+      descriptors.first { $0.name == "memory_log_import_probe" })
+    XCTAssertEqual(importProbe.category, "write")
+    XCTAssertEqual(importProbe.surfaces, ["import_connectors"])
+    XCTAssertEqual(importProbe.safety, "remote_write")
+    XCTAssertEqual(
+      importProbe.sideEffects,
+      ["may call model/backend services", "may save imported memory data"])
+
+    let clearState = try XCTUnwrap(
+      descriptors.first { $0.name == "clear_owner_surface_state" })
+    XCTAssertEqual(clearState.category, "write")
+    XCTAssertEqual(clearState.surfaces, ["main_chat"])
+    XCTAssertEqual(clearState.safety, "remote_write")
+    XCTAssertEqual(
+      clearState.sideEffects,
+      [
+        "clears the local non-production main-chat projection",
+        "may delete the active owner's main-chat journal turns from the backend",
+      ])
+  }
+
   func testFloatingIdleWaitRequiresObservedSubmission() throws {
     let source = try bridgeSource()
     let askBody = try actionBody(named: "ask", in: source)

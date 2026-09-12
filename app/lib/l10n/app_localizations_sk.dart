@@ -9971,4 +9971,7 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Prevod reči na text momentálne nie je dostupný. Skontrolujte internetové pripojenie a nastavenia rozpoznávania reči v zariadení a skúste to znova.';
+
+  @override
+  String get processingTakingLonger => 'Stále prebieha — trvá to dlhšie ako zvyčajne.';
 }

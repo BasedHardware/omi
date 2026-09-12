@@ -181,7 +181,7 @@ struct ConversationsPage: View {
           QuerySearchBar(
             text: $searchQuery,
             accessibilityID: "conversations-search-field",
-            placeholder: "Search conversations…",
+            placeholder: "Search conversations",
             searchSurface: .conversations
           )
           .onChange(of: searchQuery) { _, newValue in

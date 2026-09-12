@@ -249,12 +249,15 @@ describe('Windows JIT runtime authority', () => {
     expect(runtime.isAuthoritativeEnabled()).toBe(false)
   })
 
-  it('suppresses a complete empty watchlist instead of ambient fallback', async () => {
+  it('routes a complete empty watchlist to the ambient fallback like any planned miss', async () => {
+    // Parity register item 5: macOS hands an empty complete watchlist to the
+    // bounded ambient lane. Windows used to suppress `empty_watchlist`, which
+    // left every account without a standing trigger silent.
     const empty = snapshot()
     empty.rows = []
     const { runtime } = makeRuntime('enabled', empty)
     const admission = await runtime.admit({ appName: 'Code' }, '2026-08-24')
-    expect(admission).toEqual({ kind: 'suppressed', reason: 'empty_watchlist' })
+    expect(admission).toEqual({ kind: 'suppressed', reason: 'no_eligible_planned_trigger' })
     expect(runtime.shouldSuppressLegacyInsight()).toBe(true)
   })
 

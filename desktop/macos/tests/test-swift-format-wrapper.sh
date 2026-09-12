@@ -155,8 +155,21 @@ HOLDER_PID=$!
 mkdir -p "$HELD_LOCK"
 echo "$HOLDER_PID" > "$HELD_LOCK/owner"
 
+# The Linux CI lanes that run this manifest have no xcrun, and bootstrap's
+# assert_xcode fires before lock acquisition — killing the flow before the
+# behavior under test. Stub xcrun (and, for the reclaim fixture below, git)
+# so every platform exercises the real lock-owner logic. Each stub fails
+# loudly if the hermetic flow ever reaches a real toolchain or network call.
+mkdir -p "$LOCK_TEST_CACHE/bin"
+cat > "$LOCK_TEST_CACHE/bin/xcrun" <<'SH'
+#!/usr/bin/env bash
+echo "lock-test fixture: xcrun must not run in the hermetic lock flow" >&2
+exit 75
+SH
+chmod +x "$LOCK_TEST_CACHE/bin/xcrun"
+
 set +e
-CONTENDED="$(SWIFT_FORMAT_CACHE_DIR="$LOCK_TEST_CACHE" SWIFT_FORMAT_LOCK_TIMEOUT=2 "$WRAPPER" bootstrap 2>&1)"
+CONTENDED="$(PATH="$LOCK_TEST_CACHE/bin:$PATH" SWIFT_FORMAT_CACHE_DIR="$LOCK_TEST_CACHE" SWIFT_FORMAT_LOCK_TIMEOUT=2 "$WRAPPER" bootstrap 2>&1)"
 CONTENDED_STATUS=$?
 set -e
 if [ "$CONTENDED_STATUS" -ne 0 ]; then

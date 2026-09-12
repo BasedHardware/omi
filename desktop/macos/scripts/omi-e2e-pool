@@ -53,6 +53,9 @@
 #                               all outside the per-worktree ranges dev-instance.sh derives)
 #   OMI_E2E_POOL_REQUIRED       comma list `check` insists on
 #                               (default microphone,screen_recording,accessibility)
+#   OMI_E2E_POOL_MANAGER_NAME   overrides the launchctl managername probe that
+#                               decides the headless auth default (Aqua = GUI;
+#                               anything else cannot read the login keychain)
 #
 set -euo pipefail
 
@@ -300,6 +303,19 @@ random_token() {
   fi
 }
 
+# The launchd session type: `Aqua` is a GUI login and can read the login
+# keychain (so run.sh can clone the Omi Dev session into a shared slot);
+# `Background`/`System`/ssh — or a host without launchd — cannot, and a shared
+# slot launched from there seeds an empty dump. OMI_E2E_POOL_MANAGER_NAME
+# overrides the probe for tests and for explicitly pinning a session type.
+pool_manager_name() {
+  if [ -n "${OMI_E2E_POOL_MANAGER_NAME:-}" ]; then
+    printf '%s' "$OMI_E2E_POOL_MANAGER_NAME"
+  else
+    launchctl managername 2>/dev/null || true
+  fi
+}
+
 # The slot this worktree already holds, if any. Matched on the path alone: a
 # lease naming the asking worktree is that worktree's, however old — the
 # heartbeat backstop exists to reclaim slots from lanes that vanished, not to
@@ -356,7 +372,20 @@ cmd_acquire() {
     ''|shared|isolated) ;;
     *) die "--auth must be shared or isolated (got '$ARG_AUTH')" ;;
   esac
-
+  # Headless fail-closed default: a non-Aqua session (Background, System, ssh)
+  # cannot dump the Omi Dev keychain session, so a shared slot would seed an
+  # empty dump and "launch cold". Acquires from such a session default to
+  # isolated — the slot keeps whatever session it already has and nothing
+  # tries to clone one. An explicit --auth always wins.
+  local auth="${ARG_AUTH:-}"
+  if [ -z "$auth" ] && [ "$(pool_manager_name)" != "Aqua" ]; then
+    auth=isolated
+    {
+      say "omi-e2e-pool: no --auth given and this is a '$(pool_manager_name)' session, not Aqua —"
+      say "  defaulting the slot to isolated auth (it keeps its own signed-in session;"
+      say "  the Omi Dev session cannot be cloned from here)."
+    } >&2
+  fi
   # Everything from the first lease read to the last lease write runs under
   # the pool lock: without it, two lanes acquiring at the same moment can both
   # observe the same slot free and overwrite each other's lease.
@@ -370,7 +399,7 @@ cmd_acquire() {
     fi
     read_lease "$held"
     [ -n "$ARG_PID" ] && L_PID="$ARG_PID"
-    [ -n "$ARG_AUTH" ] && slot_config_set "$held" auth "$ARG_AUTH"
+    [ -n "$auth" ] && slot_config_set "$held" auth "$auth"
     L_TOUCHED="$(now)"
     write_lease "$held"
     write_env_file "$held" "$wt"
@@ -404,7 +433,7 @@ cmd_acquire() {
       say "omi-e2e-pool: WARNING slot $n is pinned to \"$(slot_identity "$n")\"; ignoring OMI_E2E_POOL_SIGN_IDENTITY." >&2
       say "  Changing a slot's identity resets every TCC grant it has. Delete $(slot_dir "$n")/identity to re-pin deliberately." >&2
     fi
-    [ -n "$ARG_AUTH" ] && slot_config_set "$n" auth "$ARG_AUTH"
+    [ -n "$auth" ] && slot_config_set "$n" auth "$auth"
     L_HOLDER="$holder"; L_WORKTREE="$wt"; L_PID="${ARG_PID:-}"
     L_TOKEN="$(random_token)"; L_ACQUIRED="$(now)"; L_TOUCHED="$L_ACQUIRED"
     write_lease "$n"
@@ -474,11 +503,34 @@ cmd_run() {
   slot="$(cmd_acquire "${acquire_args[@]}")" || exit 1
   read_lease "$slot"
   eval "$(env_lines "$slot")"
+  if [ "$(basename "${REST[0]}")" = "run.sh" ] && run_sh_wants_fast_only_default "${REST[@]}"; then
+    say "omi-e2e-pool: no lane chosen for run.sh — injecting --fast-only (the pool default)." >&2
+    say "  run.sh performs the full rebuild itself when the fast bundle is not reusable." >&2
+    REST+=(--fast-only)
+  fi
   exec "${REST[@]}"
 }
 
+# Launch policy for pool slots: the fast lane is the default. A full rebuild
+# of a leased slot wipes nothing but spends the slot's launch on a cold seed
+# attempt that cannot succeed headless; run.sh allows a full rebuild only when
+# its fingerprint check says one is required. A bare ./run.sh wrapped by `run`
+# therefore gets --fast-only injected; a caller that already chose a lane
+# (--fast-only/--full, or a full-forcing env var) is passed through untouched.
+run_sh_wants_fast_only_default() {
+  local cmd
+  for cmd in "$@"; do
+    case "$cmd" in
+      --fast-only|--full) return 1 ;;
+    esac
+  done
+  [ "${OMI_FORCE_FULL_BUNDLE:-0}" != "1" ] && [ "${OMI_FORCE_REWIND_SEED:-0}" != "1" ]
+}
+
 # run.sh calls this with the derived app slug before it touches /Applications.
-# Non-pool names pass straight through, so the guard costs nothing elsewhere.
+# On success a pool slot prints its slot number on stdout (run.sh captures it
+# to enforce pool launch policy); non-pool names pass straight through, so the
+# guard costs nothing elsewhere.
 cmd_verify() {
   parse_common "$@"
   local slug="${REST[0]:-}"; [ -n "$slug" ] || die "usage: omi-e2e-pool verify <app-slug>"
@@ -495,10 +547,10 @@ cmd_verify() {
     return 1
   fi
   if [ -n "${OMI_E2E_POOL_TOKEN:-}" ] && [ "$OMI_E2E_POOL_TOKEN" = "$L_TOKEN" ]; then
-    touch_lease "$slot"; return 0
+    touch_lease "$slot"; printf '%s\n' "$slot"; return 0
   fi
   if [ "$L_WORKTREE" = "$wt" ]; then
-    touch_lease "$slot"; return 0
+    touch_lease "$slot"; printf '%s\n' "$slot"; return 0
   fi
   {
     say "omi-e2e-pool: REFUSING to build '$slug' — slot $slot is held by '$L_HOLDER'"
@@ -649,12 +701,22 @@ for key, value in sorted(rows.items()):
         print(f"  {key:18} {value}")
 signed_in = state.get("isSignedIn")
 if signed_in is not None:
-    print(f"  {'signed_in':18} {'true' if signed_in else 'false'}{'' if signed_in else '   <- sign in once, or seed auth'}")
+    print(f"  {'signed_in':18} {'true' if signed_in else 'false'}{'' if signed_in else '   <- REQUIRED'}")
 if missing:
     print(f"\nomi-e2e-pool: {name} is missing {len(missing)} required grant(s). A human must grant them once:", file=sys.stderr)
     for key, value in missing:
         print(f"  - {key} ({value})", file=sys.stderr)
     print(f"  run: omi-e2e-pool setup --slot {name.rsplit('-', 1)[-1]}", file=sys.stderr)
+    sys.exit(2)
+if signed_in is False:
+    # Same failure class as a missing TCC grant: a signed-out slot is not a
+    # usable lane, and the fix is a one-time human sign-in — never a keychain
+    # reset, which would wipe the session the slot is supposed to keep.
+    print(f"\nomi-e2e-pool: {name} is signed out. Failing closed — a flow would time out 30s", file=sys.stderr)
+    print("  later inside a route that reads like a product bug. A human signs in once", file=sys.stderr)
+    print(f"  inside the slot (run: omi-e2e-pool setup --slot {name.rsplit('-', 1)[-1]}); the session", file=sys.stderr)
+    print("  then persists across rebuilds. Do NOT reset the slot's Keychain: that wipes the", file=sys.stderr)
+    print("  persisted session instead of fixing anything.", file=sys.stderr)
     sys.exit(2)
 print(f"\nomi-e2e-pool: {name} has every required grant ({', '.join(required)})")
 PY
@@ -678,8 +740,9 @@ EOF
     local name; name="$(slot_name "$n")"
     cat <<EOF
 Slot $n — $name  (bundle id $(slot_bundle_id "$n"), identity "$(slot_identity "$n")", auth=$(slot_auth "$n"))
-  1. Build and launch it once from any checkout:
-       cd desktop/macos && ./scripts/omi-e2e-pool run --slot $n -- ./run.sh --yolo --no-wait
+  1. Build and launch it once from any checkout (the first build must be full;
+     every later launch takes the --fast-only default):
+       cd desktop/macos && ./scripts/omi-e2e-pool run --slot $n -- ./run.sh --yolo --full --no-wait
   2. Open its Permissions page and grant each row when macOS asks:
        OMI_AUTOMATION_PORT=$(automation_port "$n") ./scripts/omi-ctl navigate settings permissions --show
      Microphone · Screen Recording · Accessibility · System Audio · Notifications · Automation

@@ -10032,4 +10032,7 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Претворањето говор во текст моментално не е достапно. Проверете ги интернет-врската и поставките за препознавање говор на уредот, па обидете се повторно.';
+
+  @override
+  String get processingTakingLonger => 'Сè уште се обработува — ова трае подолго од вообичаеното.';
 }

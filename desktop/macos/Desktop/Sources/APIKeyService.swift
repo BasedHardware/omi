@@ -284,9 +284,28 @@ final class APIKeyService: ObservableObject {
       ?? [:]
   }
 
-  /// Voice/realtime may use a leftover OpenAI/Gemini key only when that provider is selected.
-  nonisolated static func selectedRealtimeBYOKKey(for provider: BYOKProvider) -> String? {
-    guard selectedBYOKLLMProvider == provider else { return nil }
+  /// The realtime key for `provider`, or nil when using it would spend a key the user
+  /// never chose.
+  ///
+  /// "Chose" has two forms, and the guard originally recognised only one. Selecting a
+  /// provider under Developer Keys is a choice. So is selecting its model under
+  /// Advanced → Voice Model: the realtime hub speaks through OpenAI Realtime or Gemini
+  /// Live and nothing else, so picking one of those *is* picking that provider for
+  /// voice. Requiring the Developer Keys selection to agree meant a user whose text
+  /// provider is OpenRouter — the default — could hold a valid Gemini key, pick Gemini
+  /// Live, and still be refused their own key, because OpenRouter has no realtime API
+  /// and can never be the hub's provider. The turn then fell through to the managed
+  /// lane and failed on Omi billing while a paid-for key sat unused.
+  ///
+  /// `chosenForVoice` is what separates that from the case the guard exists for: a key
+  /// left behind by a provider the user has since moved off, which the failover path
+  /// must still not spend. Callers resolving the provider from the Voice Model pass
+  /// true; the failover leaves it false.
+  nonisolated static func selectedRealtimeBYOKKey(
+    for provider: BYOKProvider,
+    chosenForVoice: Bool = false
+  ) -> String? {
+    guard chosenForVoice || selectedBYOKLLMProvider == provider else { return nil }
     return byokKey(provider)
   }
 
