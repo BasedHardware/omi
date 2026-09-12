@@ -225,8 +225,17 @@ struct AIProvider: Identifiable {
   /// launching the harness process and `AgentBridge`/`ChatRunAccountingPolicy`
   /// consult for quota/billing gating: there is no per-session override.
   static var currentProviderMode: String {
-    let raw = UserDefaults.standard.string(forKey: selectedProviderRawValueKey) ?? AIProvider.piMono.bridgeModeRawValue
-    return raw == AIProvider.local.bridgeModeRawValue ? "omi-local" : "omi"
+    providerMode(
+      forBridgeModeRawValue: UserDefaults.standard.string(forKey: selectedProviderRawValueKey)
+        ?? AIProvider.piMono.bridgeModeRawValue)
+  }
+
+  /// Same "omi"/"omi-local" mapping as `currentProviderMode`, but for a
+  /// caller that already has a bridge-mode raw value in hand (e.g. one it is
+  /// actually running, or about to apply) instead of one that wants the live
+  /// Settings preference re-read from UserDefaults.
+  static func providerMode(forBridgeModeRawValue raw: String) -> String {
+    raw == AIProvider.local.bridgeModeRawValue ? "omi-local" : "omi"
   }
 
   /// Resolves the persisted `chatBridgeMode` UserDefaults value into a

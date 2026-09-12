@@ -82,12 +82,18 @@ struct ChatRunAccountingPolicy: Equatable {
   let usesOmiAccountQuota: Bool
   let recordsPersonalProviderUsage: Bool
 
-  init(pinnedAdapterID: String) {
+  /// `providerMode` must be what the bridge is actually running (e.g.
+  /// `ChatProvider.activeProviderMode`), not a fresh re-read of the Settings
+  /// preference: a provider switch is persisted immediately but only takes
+  /// effect in the running process after a restart, so re-deriving from
+  /// UserDefaults here could bill/meter a turn under a provider the
+  /// subprocess was never actually switched to.
+  init(pinnedAdapterID: String, providerMode: String) {
     // piMono is shared by the Omi-billed "omi" provider and the free
     // "omi-local" provider (see AIProvider); only "omi" ever touches the
     // Omi account's quota or spend accounting.
     usesOmiAccountQuota =
-      pinnedAdapterID == AgentAdapterId.piMono.rawValue && AIProvider.currentProviderMode == "omi"
+      pinnedAdapterID == AgentAdapterId.piMono.rawValue && providerMode == "omi"
     recordsPersonalProviderUsage = pinnedAdapterID == AgentAdapterId.acp.rawValue
   }
 }
@@ -1284,6 +1290,7 @@ class ChatProvider: ObservableObject {
     if let agentClient { return agentClient }
     let harness = resolvedHarnessMode()
     activeBridgeHarness = harness
+    activeProviderMode = AIProvider.providerMode(forBridgeModeRawValue: bridgeMode)
     let session = AgentClient.makeSession(harnessMode: harness)
     agentClient = session
     return session
@@ -1326,6 +1333,25 @@ class ChatProvider: ObservableObject {
   /// @AppStorage("chatBridgeMode") can be updated by other views sharing the same key,
   /// so comparing against it in switchBridgeMode() would always match → no-op.
   private var activeBridgeHarness: String = "piMono"
+  /// Same idea as `activeBridgeHarness`, one layer down: piMono and Local
+  /// share that harness, differing only in which pi provider ("omi" /
+  /// "omi-local") it is actually configured with. Tracks what the bridge is
+  /// actually running, not the @AppStorage preference, for the same reason
+  /// and by the same rule: only `resolvedAgentClient()` (cold start) and
+  /// `switchBridgeMode()` (after a switch actually takes effect) may write
+  /// this. `ChatRunAccountingPolicy` reads it instead of re-deriving from
+  /// UserDefaults, so billing/quota tracks what is actually running even
+  /// when a provider switch is persisted but hasn't been applied yet.
+  private var activeProviderMode: String = AIProvider.currentProviderMode
+  #if DEBUG
+    /// Test-only peek at the bridge's actual running state (harness + pi
+    /// provider), as opposed to the persisted `bridgeMode` preference. Lets a
+    /// test prove `switchBridgeMode` actually applied a change instead of
+    /// silently no-opping it.
+    var testingActiveBridgeState: (harness: String, providerMode: String) {
+      (activeBridgeHarness, activeProviderMode)
+    }
+  #endif
   /// Orders rapid preference changes without treating them as runtime lifecycle.
   /// The kernel applies each preference only when creating future sessions.
   private var profilePreferenceChangeGeneration: UInt64 = 0
@@ -2321,19 +2347,26 @@ class ChatProvider: ObservableObject {
   func switchBridgeMode(to mode: BridgeMode) async {
     let resolvedMode: BridgeMode = (mode == .omiAI) ? .piMono : mode
     let newHarness = Self.harnessMode(for: resolvedMode)
+    let newProviderMode = AIProvider.providerMode(forBridgeModeRawValue: resolvedMode.rawValue)
     let previousHarness = activeBridgeHarness
-    let previousBridgeMode = bridgeMode
+    let previousProviderMode = activeProviderMode
     // piMono and local share the same Node harness ("piMono") but configure
     // different pi providers via environment variables baked in at process
     // spawn time (see AgentRuntimeProcess.performStartProcess); compare on
-    // the bridge-mode identity too, or switching piMono <-> local computes
+    // the provider-mode identity too, or switching piMono <-> local computes
     // the same harness and silently no-ops, leaving the previous provider's
-    // subprocess (and its env vars) running.
-    guard newHarness != previousHarness || resolvedMode.rawValue != previousBridgeMode else { return }
+    // subprocess (and its env vars) running. Comparing against `bridgeMode`
+    // itself (rather than `activeProviderMode`) would not catch this: it is
+    // @AppStorage-backed by the same "chatBridgeMode" key the Settings picker
+    // writes, so by the time this async function reads it, it may already
+    // reflect `resolvedMode` — the exact dead-guard bug `activeBridgeHarness`
+    // exists to avoid one layer up.
+    guard newHarness != previousHarness || newProviderMode != previousProviderMode else { return }
     log("ChatProvider: Updating future-session profile from \(previousHarness) to \(resolvedMode.rawValue)")
     profilePreferenceChangeGeneration &+= 1
     let preferenceChange = profilePreferenceChangeGeneration
     activeBridgeHarness = newHarness
+    activeProviderMode = newProviderMode
     bridgeMode = resolvedMode.rawValue
     AnalyticsManager.shared.chatBridgeModeChanged(from: previousHarness, to: resolvedMode.rawValue)
 
@@ -4713,7 +4746,8 @@ class ChatProvider: ObservableObject {
       return nil
     }
     let accountingPolicy = ChatRunAccountingPolicy(
-      pinnedAdapterID: pinnedSession.profile.adapterId
+      pinnedAdapterID: pinnedSession.profile.adapterId,
+      providerMode: activeProviderMode
     )
     telemetryAttempt.bindSessionAdapter(pinnedSession.profile.adapterId)
     telemetryAttempt.bindBridgeModePreference(bridgeMode)

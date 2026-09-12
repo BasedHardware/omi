@@ -625,17 +625,25 @@ actor AgentBridge {
 
   let harnessMode: String
 
-  /// Which pi provider the "piMono" harness should be configured with: "omi"
-  /// (routed through the Rust backend, requires Firebase auth) or "omi-local"
-  /// (talks directly to a user-configured OpenAI-compatible endpoint, no
-  /// auth, no Rust backend, no cost logging). Meaningless for "acp".
+  /// Which pi provider the "piMono" harness is (or is about to be) configured
+  /// with: "omi" (routed through the Rust backend, requires Firebase auth) or
+  /// "omi-local" (talks directly to a user-configured OpenAI-compatible
+  /// endpoint, no auth, no Rust backend, no cost logging). Meaningless for
+  /// "acp".
   ///
-  /// Read-through to the app-global provider selection in Settings, not a
-  /// stored per-bridge field: there is no per-session override. The shared
-  /// `AgentRuntimeProcess` reads the same global config when it launches the
-  /// harness process, so this and the actually-running process always agree.
+  /// Before the shared `AgentRuntimeProcess` has ever launched, this predicts
+  /// from the app-global Settings preference (what it is about to be spawned
+  /// with). Once it has launched, it reflects what the process was ACTUALLY
+  /// spawned with (`runtime.launchedProviderMode`) rather than a fresh
+  /// preference re-read: a provider switch is persisted immediately but only
+  /// takes effect in the running process after a restart, and re-reading the
+  /// live preference here would disagree with the already-running process
+  /// until that restart completes. `async` because `launchedProviderMode`
+  /// lives on the `runtime` actor, a different actor from this one.
   var providerMode: String {
-    AIProvider.currentProviderMode
+    get async {
+      await runtime.launchedProviderMode ?? AIProvider.currentProviderMode
+    }
   }
 
   let clientId = UUID().uuidString
@@ -675,7 +683,10 @@ actor AgentBridge {
   /// "omi-local" provider shares that harness but talks to a user-configured
   /// endpoint and must never be blocked on, or fetch, a Firebase token.
   private var requiresManagedPiMonoCredentials: Bool {
-    isPiMonoHarness && providerMode == "omi"
+    get async {
+      if !isPiMonoHarness { return false }
+      return await providerMode == "omi"
+    }
   }
 
   private func captureAuthorization(
@@ -840,7 +851,7 @@ actor AgentBridge {
       isNonProduction: AppBuild.isNonProduction,
       hermeticFaultModelToken: hermeticFaultModelToken)
     let requiresPiMonoCredentials = AgentRuntimeCredentialPolicy.shouldRequirePiMonoCredentials(
-      preferredAdapterIsPiMono: requiresManagedPiMonoCredentials,
+      preferredAdapterIsPiMono: await requiresManagedPiMonoCredentials,
       requestedCredentials: requiresCredentials,
       isNonProduction: AppBuild.isNonProduction,
       hermeticFaultModelToken: hermeticFaultModelToken)
@@ -965,7 +976,7 @@ actor AgentBridge {
       isNonProduction: AppBuild.isNonProduction,
       hermeticFaultModelToken: hermeticFaultModelToken)
     let requiresPiMonoCredentials = AgentRuntimeCredentialPolicy.shouldRequirePiMonoCredentials(
-      preferredAdapterIsPiMono: requiresManagedPiMonoCredentials,
+      preferredAdapterIsPiMono: await requiresManagedPiMonoCredentials,
       requestedCredentials: true,
       isNonProduction: AppBuild.isNonProduction,
       hermeticFaultModelToken: hermeticFaultModelToken)
@@ -1644,7 +1655,9 @@ actor AgentBridge {
     // gate on providerMode too, or a local session would still hit Omi's
     // quota check and the Firebase-token retry path below despite never
     // authenticating to Omi in the first place.
-    let usesManagedCloud = session.profile.credentialScope == .managedCloud && providerMode == "omi"
+    let resolvedProviderMode = await providerMode
+    let usesManagedCloud =
+      session.profile.credentialScope == .managedCloud && resolvedProviderMode == "omi"
     if usesManagedCloud {
       // Refresh before the cached verdict is applied, not after it: a blocking
       // snapshot must never be the reason it is itself never re-fetched. When

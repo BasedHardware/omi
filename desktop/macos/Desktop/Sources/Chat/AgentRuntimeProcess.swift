@@ -473,6 +473,16 @@ actor AgentRuntimeProcess {
   private var stderrPipe: Pipe?
   private var stdoutBuffer = AgentRuntimeOrderedStdoutBuffer()
   private var processGeneration: UInt64 = 0
+  /// The pi provider ("omi"/"omi-local") the currently-running piMono
+  /// process was actually spawned with, set once per launch in
+  /// `performStartProcess`. `nil` before the first launch — nothing has run
+  /// yet, so there is no "actual" state to report. A provider switch after
+  /// launch needs an explicit restart to take effect (see
+  /// `ChatProvider.switchBridgeMode`); until that restart completes, this is
+  /// what billing/credential gating must trust (see `AgentBridge.providerMode`)
+  /// — re-deriving from the live Settings preference would disagree with
+  /// what the already-running subprocess was actually configured with.
+  private(set) var launchedProviderMode: String?
   private var runtimeOwnerAuthorityEpoch: UInt64 = 0
   private var synchronizedRuntimeOwnerID: String?
   private var synchronizedRuntimeCredentialOwnerID: String?
@@ -2606,6 +2616,7 @@ actor AgentRuntimeProcess {
     // OpenAI-compatible endpoint, chosen app-wide in Settings, see
     // AIProvider.currentProviderMode). Meaningless for every other harness.
     let providerMode = preferredAdapterId == .piMono ? AIProvider.currentProviderMode : "omi"
+    launchedProviderMode = providerMode
     let isLocalProvider = preferredAdapterId == .piMono && providerMode == "omi-local"
     if isLocalProvider {
       // Local provider: chat prompts and completions go directly to a

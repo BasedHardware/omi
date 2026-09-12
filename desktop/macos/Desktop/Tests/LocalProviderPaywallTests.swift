@@ -245,7 +245,10 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
 
   func testChatAccountingSkipsOmiQuotaForLocalProvider() {
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
-    let policy = ChatRunAccountingPolicy(pinnedAdapterID: AgentAdapterId.piMono.rawValue)
+    let policy = ChatRunAccountingPolicy(
+      pinnedAdapterID: AgentAdapterId.piMono.rawValue,
+      providerMode: AIProvider.currentProviderMode
+    )
     XCTAssertFalse(
       policy.usesOmiAccountQuota,
       "Local shares piMono's harness but must never touch Omi's account quota/accounting")
@@ -255,7 +258,10 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   /// touching quota/accounting exactly as before.
   func testChatAccountingUsesOmiQuotaForOmiProvider() {
     UserDefaults.standard.set("piMono", forKey: bridgeModeKey)
-    let policy = ChatRunAccountingPolicy(pinnedAdapterID: AgentAdapterId.piMono.rawValue)
+    let policy = ChatRunAccountingPolicy(
+      pinnedAdapterID: AgentAdapterId.piMono.rawValue,
+      providerMode: AIProvider.currentProviderMode
+    )
     XCTAssertTrue(policy.usesOmiAccountQuota)
   }
 

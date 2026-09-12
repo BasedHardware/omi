@@ -143,6 +143,61 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(AIProvider.currentProviderMode, "omi-local")
   }
 
+  func testProviderModeForBridgeModeRawValueMatchesCurrentProviderMode() {
+    // `providerMode(forBridgeModeRawValue:)` is the same mapping
+    // `currentProviderMode` uses, but for a caller that already has a raw
+    // value in hand (e.g. one it actually applied) instead of one that wants
+    // a fresh UserDefaults read. ChatProvider.activeProviderMode depends on
+    // both agreeing.
+    XCTAssertEqual(
+      AIProvider.providerMode(forBridgeModeRawValue: ChatProvider.BridgeMode.piMono.rawValue), "omi")
+    XCTAssertEqual(
+      AIProvider.providerMode(forBridgeModeRawValue: ChatProvider.BridgeMode.local.rawValue), "omi-local")
+  }
+
+  /// Regression: `switchBridgeMode` must actually apply a piMono <-> local
+  /// switch even when the "chatBridgeMode" UserDefaults key already reflects
+  /// the destination value before the call starts — exactly what happens in
+  /// production when the Settings picker's own `@AppStorage("chatBridgeMode")`
+  /// binding (a separate property from `ChatProvider.bridgeMode`, sharing the
+  /// same key) writes the new value synchronously, before its `.onChange`
+  /// handler's Task gets around to calling `switchBridgeMode` (see
+  /// SettingsContentView+FloatingBarAndChat.swift). A guard that re-reads
+  /// `bridgeMode` to detect "did this actually change" always sees the new
+  /// value already in place in that ordering and silently no-ops — this is
+  /// exactly why `activeProviderMode` exists instead.
+  @MainActor
+  func testSwitchBridgeModeAppliesPiMonoLocalSwitchEvenWhenThePreferenceKeyAlreadyReflectsIt() async {
+    let defaults = UserDefaults.standard
+    let key = "chatBridgeMode"
+    let previous = defaults.string(forKey: key)
+    defer {
+      if let previous {
+        defaults.set(previous, forKey: key)
+      } else {
+        defaults.removeObject(forKey: key)
+      }
+    }
+
+    defaults.set(ChatProvider.BridgeMode.piMono.rawValue, forKey: key)
+    let provider = ChatProvider()
+    XCTAssertEqual(provider.testingActiveBridgeState.providerMode, "omi")
+
+    // Simulate the picker's own binding already having written the
+    // destination value before switchBridgeMode is called.
+    defaults.set(ChatProvider.BridgeMode.local.rawValue, forKey: key)
+    await provider.switchBridgeMode(to: .local)
+    XCTAssertEqual(
+      provider.testingActiveBridgeState.providerMode, "omi-local",
+      "switching to Local must apply even though the preference key already said 'local'")
+
+    defaults.set(ChatProvider.BridgeMode.piMono.rawValue, forKey: key)
+    await provider.switchBridgeMode(to: .piMono)
+    XCTAssertEqual(
+      provider.testingActiveBridgeState.providerMode, "omi",
+      "switching back to Omi must apply too, not just the first flip")
+  }
+
   // MARK: - Cloud-assisted features gate
   // Regression coverage for the unified Local-provider "Cloud-assisted
   // features" setting as it applies to connector synthesis (Apple
