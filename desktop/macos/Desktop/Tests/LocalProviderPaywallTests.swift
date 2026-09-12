@@ -264,9 +264,11 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   /// This gate (`FloatingBarUsageLimiter`) is independent of the trial-expired
   /// flag `desktop_isPaywalled`; it is left unset here, matching the actual
   /// bug: a user well within their trial can still exhaust the monthly
-  /// question quota. PTT is exempt on `isLocalProviderActive` alone: the
-  /// quota it enforces meters chat *questions*, and the completion a PTT turn
-  /// feeds always runs against the user's own server under Local.
+  /// question quota. PTT is exempt on `isLocalProviderActive` alone: unlike
+  /// typed chat, a PTT turn does not run its completion against the user's
+  /// own server (it runs end to end through Omi's cloud realtime hub
+  /// regardless of provider), so this only suppresses the client-side
+  /// free-tier popup — the server still enforces its own quota independently.
   func testPushToTalkExemptForLocalProvider() throws {
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
     FloatingBarUsageLimiter.shared.applyQuota(try exhaustedFreeQuota())
@@ -603,9 +605,11 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
       "trial_expired must not be silently exempted just because Local is active")
   }
 
-  /// "chat" and "ptt" are exempt on `isLocalProviderActive` alone, since the
-  /// completion they feed always runs against the user's own server under
-  /// Local.
+  /// "chat" is exempt on `isLocalProviderActive` alone, since its completion
+  /// always runs against the user's own server under Local. "ptt" is exempt
+  /// too, but for a different reason: see `testPushToTalkExemptForLocalProvider`
+  /// above — it's a client-side popup suppression, not a completion-routing
+  /// parity with typed chat.
   func testTriggerUsageLimitPopupSuppressedForChatWhenLocalActive() {
     UserDefaults.standard.set(true, forKey: paywallKey)
     UserDefaults.standard.set("local", forKey: bridgeModeKey)

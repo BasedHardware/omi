@@ -99,9 +99,16 @@ extension PushToTalkManager {
   /// active at all. The quota this gate enforces meters chat *questions*, not
   /// audio capture: a PTT turn's transcription is a separate axis (gated
   /// instead by `isTranscriptionExemptFromPaywall`/`blockIfPaywalled` at
-  /// transcription start), and the chat completion it feeds always runs
-  /// against the user's own server under Local, so PTT is exempt the same
-  /// way a Local-provider chat turn is.
+  /// transcription start).
+  ///
+  /// Unlike typed chat, a PTT turn does NOT run its completion against the
+  /// user's own Local server: whenever online it runs end to end (audio in,
+  /// transcript, and the reply) inside Omi's cloud realtime hub
+  /// (`RealtimeHubController`), regardless of which AI provider is selected.
+  /// This is purely a client-side suppression of the free-tier popup for
+  /// Local users, who would otherwise see an "upgrade to Omi AI" message that
+  /// makes no sense once they've opted into Local; the server still enforces
+  /// its own realtime quota independently of this client-side check.
   var isPushToTalkUsageLimitBlocked: Bool {
     guard !APIKeyService.isByokActive, !AIProvider.isLocalProviderActive else { return false }
     return FloatingBarUsageLimiter.shared.isLimitReached
