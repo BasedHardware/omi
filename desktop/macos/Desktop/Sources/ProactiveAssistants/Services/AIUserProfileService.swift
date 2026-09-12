@@ -232,6 +232,16 @@ actor AIUserProfileService {
 
     log("AIUserProfileService: Starting profile generation")
 
+    // Checked before fetching anything: under Local with Cloud-assisted
+    // features off, this always ends in connectorSynthesisDisabled since no
+    // profile is ever persisted on this path (shouldGenerate() stays true),
+    // so the five backend fetches below would otherwise repeat daily for
+    // nothing.
+    guard !AIProvider.shouldSkipConnectorSynthesis() else {
+      log("Skipping profile synthesis: Local provider, Connector synthesis is Off")
+      throw ProfileError.connectorSynthesisDisabled
+    }
+
     // 1. Fetch all data sources in parallel
     let (memories, tasks, goals, conversations, messages) = await fetchDataSources()
 
@@ -243,10 +253,6 @@ actor AIUserProfileService {
 
     guard dataSourcesUsed > 0 else {
       throw ProfileError.insufficientData
-    }
-    guard !AIProvider.shouldSkipConnectorSynthesis() else {
-      log("Skipping profile synthesis: Local provider, Connector synthesis is Off")
-      throw ProfileError.connectorSynthesisDisabled
     }
 
     // 3. Synthesize through the backend SSOT. The prompts, the model and the

@@ -584,6 +584,13 @@ actor GeminiClient {
       "GeminiClient: transient error, retrying in \(delaySec)s (attempt \(attempt + 2)/3): \(error.localizedDescription)"
     )
     try await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
+    // enforceManagedProactivity() only gates the first attempt; a retry is a
+    // new send, and the user may have flipped Cloud-assisted features off
+    // during this sleep. Recheck so an opt-out mid-retry takes effect
+    // immediately instead of letting an already-scheduled retry still go out.
+    if AIProvider.isLocalProviderFailingClosed {
+      throw GeminiClientError.localProviderCloudOff
+    }
   }
 
   /// Client UX gate. Server 402 `plan_gated` remains the invariant.

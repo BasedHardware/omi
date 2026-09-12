@@ -189,16 +189,24 @@ extension SettingsContentView {
           .textFieldStyle(.roundedBorder)
           .focused($isLocalBaseURLFieldFocused)
           .onSubmit {
-            fetchLocalModelOptions(onComplete: restartLocalBridgesIfActive)
+            // Return always commits, even if the value is unchanged: it is
+            // also the user's explicit retry after a failed restart ("Could
+            // not apply local model change. Try again."), which must not be
+            // deduped away.
+            commitLocalBaseURL()
           }
           // Enter (onSubmit) commits the field, but a user who just clicks
           // away without pressing Enter would otherwise keep the old bridge
           // talking to the old server indefinitely, the exact stale-process
           // bug restartLocalBridgesIfActive was added to fix for the model
-          // fields (see 5f3abca24a), just missed here for Base URL.
+          // fields (see 5f3abca24a), just missed here for Base URL. Only
+          // commit on an actual edit though: Return already committed (so a
+          // click-away right after would otherwise restart a second time for
+          // one edit), and focusing then leaving the field untouched should
+          // do nothing at all.
           .onChange(of: isLocalBaseURLFieldFocused) { wasFocused, isFocused in
-            if wasFocused && !isFocused {
-              fetchLocalModelOptions(onComplete: restartLocalBridgesIfActive)
+            if wasFocused && !isFocused && localLLMBaseURL != lastCommittedLocalBaseURL {
+              commitLocalBaseURL()
             }
           }
       }
@@ -315,8 +323,19 @@ extension SettingsContentView {
         .foregroundColor(Ink.secondary)
     }
     .task {
+      // The bridge already runs on the persisted value at appear; this is
+      // the baseline commitLocalBaseURL()'s dedup check compares against.
+      lastCommittedLocalBaseURL = localLLMBaseURL
       fetchLocalModelOptions()
     }
+  }
+
+  /// Commits the Base URL field: records it as the last-committed value (so
+  /// the focus-loss handler above can dedup a no-op blur) and fetches the
+  /// model list, restarting the local bridge once that settles.
+  func commitLocalBaseURL() {
+    lastCommittedLocalBaseURL = localLLMBaseURL
+    fetchLocalModelOptions(onComplete: restartLocalBridgesIfActive)
   }
 
   /// Fetches the model list from the configured local endpoint and populates
@@ -330,11 +349,23 @@ extension SettingsContentView {
   ///   happens after the model list (and possibly the auto-selected model
   ///   id) has settled, not racing ahead of it.
   ///
+  /// A commit (`onComplete != nil`) always starts a new fetch, superseding
+  /// any fetch already in flight: dropping it would silently drop its
+  /// restart too, leaving the bridge on a stale endpoint. A plain refresh
+  /// (`onComplete == nil`, the Model field's refresh button or this view's
+  /// own `.task`) is redundant while one is already in flight and is the
+  /// only case the guard below still short-circuits. `localModelsFetchGeneration`
+  /// is bumped on every call and captured per-call, so a superseded fetch's
+  /// completion (results, auto-select, and restart) is discarded once a
+  /// newer commit has started.
+  ///
   /// The actual request goes through `localModelsFetcher` (defaults to
   /// `AIProvider.fetchLocalModels`) rather than calling it directly, so tests
   /// can substitute a stub instead of exercising real networking.
   func fetchLocalModelOptions(onComplete: (() -> Void)? = nil) {
-    guard !isFetchingLocalModels else { return }
+    if isFetchingLocalModels && onComplete == nil { return }
+    localModelsFetchGeneration += 1
+    let generation = localModelsFetchGeneration
     isFetchingLocalModels = true
     localModelsFetchFailed = false
     let baseURL = localLLMBaseURL
@@ -348,6 +379,10 @@ extension SettingsContentView {
           models.insert(currentModelId, at: 0)
         }
         await MainActor.run {
+          // Superseded by a newer commit: these results, the auto-select,
+          // and the restart all belong to a Base URL the user has since
+          // replaced.
+          guard generation == self.localModelsFetchGeneration else { return }
           self.localModelOptions = models
           self.isFetchingLocalModels = false
           // No model configured yet: there's no hardcoded default to fall
@@ -359,7 +394,11 @@ extension SettingsContentView {
           // empty doesn't fire a second, redundant restart request (the
           // second one used to be rejected as BridgeError.restarting and
           // surface a false "Could not apply local model change" error).
-          if currentModelId.isEmpty, let firstModel = models.first {
+          // Re-checks self.localLLMModelID here (not the pre-fetch
+          // `currentModelId` snapshot) so a model id the user typed in while
+          // this fetch was in flight is never clobbered by the server's
+          // first listed model.
+          if self.localLLMModelID.isEmpty, let firstModel = models.first {
             self.localLLMModelID = firstModel
           } else {
             onComplete?()
@@ -367,6 +406,7 @@ extension SettingsContentView {
         }
       } catch {
         await MainActor.run {
+          guard generation == self.localModelsFetchGeneration else { return }
           self.localModelOptions = []
           self.isFetchingLocalModels = false
           self.localModelsFetchFailed = true
@@ -420,7 +460,7 @@ extension SettingsContentView {
             }
           }
 
-          if chatBridgeMode == "local" {
+          if chatBridgeMode == AIProvider.local.bridgeModeRawValue {
             localProviderFields
           }
 

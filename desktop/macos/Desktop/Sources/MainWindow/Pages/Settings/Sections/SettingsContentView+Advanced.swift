@@ -237,7 +237,7 @@ extension SettingsContentView {
             }
           }
 
-          if chatBridgeMode == "local" {
+          if chatBridgeMode == AIProvider.local.bridgeModeRawValue {
             localProviderFields
           }
 

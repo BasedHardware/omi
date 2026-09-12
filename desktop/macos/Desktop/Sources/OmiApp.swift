@@ -957,22 +957,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     let menu = NSMenu()
 
     // Quick toggles for screen capture and audio recording.
-    // When paywalled (trial expired / usage limit hit) both render OFF — the
-    // features can't run, and tapping a toggle surfaces the upgrade popup.
-    // Screen capture has its own, narrower exemption beyond BYOK: it is also
-    // off the hook while the Local provider is active, since screenshot
-    // interpretation routes to the user's own server instead of Omi's Gemini
-    // proxy (see AppState.isScreenCaptureExemptFromPaywall). Audio recording
-    // has no Local-specific exemption: transcription always goes through
-    // Omi's Deepgram proxy regardless of the active chat provider.
-    let screenCapturePaywalled = !AppState.isScreenCaptureExemptFromPaywall
+    // When paywalled (trial expired / usage limit hit), *starting* either is
+    // blocked and tapping the toggle surfaces the upgrade popup — but the
+    // switch itself must display whether monitoring is actually running
+    // (SystemCaptureControls.isScreenCaptureOn), not a paywall-gated guess:
+    // the paywall never blocks stopping, so a display gated on it could show
+    // OFF for a still-running monitor and get the toggle stuck (the next
+    // click would request enabled:true, which is blocked, instead of the
+    // enabled:false that would have stopped it). Audio recording has no
+    // Local-specific exemption: transcription always goes through Omi's
+    // Deepgram proxy regardless of the active chat provider.
     let transcriptionPaywalled = !AppState.isTranscriptionExemptFromPaywall
     let screenCaptureItem = NSMenuItem()
     let screenCaptureView = makeToggleItemView(
       title: "Screen Capture",
       iconName: "rectangle.dashed.badge.record",
-      isOn: !screenCapturePaywalled && AssistantSettings.shared.screenAnalysisEnabled
-        && ProactiveAssistantsPlugin.shared.isMonitoring,
+      isOn: SystemCaptureControls.isScreenCaptureOn,
       action: #selector(screenCaptureToggled(_:))
     )
     screenCaptureItem.view = screenCaptureView
@@ -1318,12 +1318,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
   func menuWillOpen(_ menu: NSMenu) {
     log("AppDelegate: [MENUBAR] Menu opened by user")
     AnalyticsManager.shared.menuBarOpened()
-    // Refresh toggle states to match current runtime state. When paywalled,
-    // force both OFF — the features can't run until the user upgrades.
-    let screenCapturePaywalled = !AppState.isScreenCaptureExemptFromPaywall
+    // Refresh toggle states to match current runtime state. Audio recording
+    // (a persisted preference, not a running process) still forces OFF while
+    // paywalled since there's nothing else it could be showing. Screen
+    // capture shows whether monitoring is actually running instead (see the
+    // isOn comment above where this menu is built) so the switch never gets
+    // stuck unable to turn a still-running monitor off.
     let transcriptionPaywalled = !AppState.isTranscriptionExemptFromPaywall
-    screenCaptureSwitch?.state =
-      (!screenCapturePaywalled && ProactiveAssistantsPlugin.shared.isMonitoring) ? .on : .off
+    screenCaptureSwitch?.state = SystemCaptureControls.isScreenCaptureOn ? .on : .off
     audioRecordingSwitch?.state =
       (!transcriptionPaywalled && AssistantSettings.shared.audioRecordingMode != .off) ? .on : .off
   }

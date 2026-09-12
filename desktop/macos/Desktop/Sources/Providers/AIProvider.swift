@@ -331,6 +331,9 @@ struct AIProvider: Identifiable {
       throw URLError(.badServerResponse)
     }
     let decoded = try JSONDecoder().decode(LocalModelsResponse.self, from: data)
-    return decoded.data.map(\.id).sorted()
+    // Preserve the server's own order (not alphabetical): callers auto-select
+    // `.first` when no model is configured yet, and the server's declared
+    // order is the only signal for which model it considers primary/default.
+    return decoded.data.map(\.id)
   }
 }

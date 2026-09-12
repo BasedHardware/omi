@@ -3061,6 +3061,24 @@ test("resolveLocalContextWindow: falls back to /models max_model_len when the LM
   assert.deepEqual(result, { contextWindow: 131072, source: "openai-models max_model_len" });
 });
 
+test("resolveLocalContextWindow: strips a trailing slash before the /models probe too", async () => {
+  // Regression: probeOpenAiModelsContextWindow appended "/models" straight
+  // onto baseUrl with no normalization, so a trailing-slash baseUrl (unlike
+  // the LM Studio probe just above, which already strips "/v1/") produced
+  // "/v1//models" and silently fell through to the 32,000 default instead of
+  // reading the server's declared context window.
+  const { fetch: fakeFetch, calls } = recordingFetch((url) => {
+    if (url.endsWith("/api/v0/models")) return { ok: false, json: async () => ({}) };
+    if (url.endsWith("/models")) {
+      return { ok: true, json: async () => ({ data: [{ id: "vllm-model", max_model_len: 131072 }] }) };
+    }
+    return "throw";
+  });
+  const result = await resolveLocalContextWindow("http://127.0.0.1:8000/v1/", "vllm-model", fakeFetch);
+  assert.deepEqual(result, { contextWindow: 131072, source: "openai-models max_model_len" });
+  assert.equal(calls[calls.length - 1], "http://127.0.0.1:8000/v1/models");
+});
+
 test("resolveLocalContextWindow: falls back to the default when both endpoints fail", async () => {
   const { fetch: fakeFetch } = recordingFetch(() => "throw");
   const result = await resolveLocalContextWindow("http://127.0.0.1:1234/v1", "qwen3.8-27b-mlx", fakeFetch);

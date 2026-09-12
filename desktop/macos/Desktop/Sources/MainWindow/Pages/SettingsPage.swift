@@ -370,10 +370,21 @@ struct SettingsContentView: View {
   @AppStorage(AIProvider.localModelIDKey) var localLLMModelID: String = AIProvider.defaultLocalModelID
   @AppStorage(AIProvider.cloudAssistModeKey) var localCloudAssistMode: String =
     AIProvider.CloudAssistMode.off.rawValue
-  @AppStorage(AIProvider.contextBudgetPercentKey) var localContextBudgetPercent: Int = 100
+  @AppStorage(AIProvider.contextBudgetPercentKey) var localContextBudgetPercent: Int =
+    AIProvider.ContextBudgetPercent.full.rawValue
   @State var localModelOptions: [String] = []
   @State var isFetchingLocalModels = false
   @State var localModelsFetchFailed = false
+  // Base URL value the local bridge was last restarted against. The focus-loss
+  // commit compares against it so Return-then-click-away, or focusing the
+  // field and leaving it untouched, do not refetch and restart for nothing.
+  // Not private: read/written from the localProviderFields computed view in
+  // SettingsContentView+FloatingBarAndChat.swift.
+  @State var lastCommittedLocalBaseURL = ""
+  // Bumped on every fetchLocalModelOptions call; a completion whose
+  // generation no longer matches was superseded by a newer commit and must
+  // not apply its results, auto-select, or restart. See fetchLocalModelOptions.
+  @State var localModelsFetchGeneration = 0
   // Seam for tests: `fetchLocalModelOptions` (SettingsContentView+FloatingBarAndChat.swift)
   // calls this instead of `AIProvider.fetchLocalModels` directly, so tests can substitute a
   // deterministic stub instead of racing real networking against a URLProtocol stub on

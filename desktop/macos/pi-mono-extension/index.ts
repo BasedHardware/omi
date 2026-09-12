@@ -1871,7 +1871,10 @@ async function probeOpenAiModelsContextWindow(
   modelId: string,
   fetchImpl: typeof fetch,
 ): Promise<LocalContextWindowResult | undefined> {
-  const body = await fetchJsonWithTimeout(`${baseUrl}/models`, fetchImpl);
+  // Matches the settings model-fetch path (AIProvider.fetchLocalModels):
+  // a trailing slash on baseUrl would otherwise produce "/v1//models".
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+  const body = await fetchJsonWithTimeout(`${normalizedBaseUrl}/models`, fetchImpl);
   const entries = (body as { data?: unknown[] } | undefined)?.data;
   if (!Array.isArray(entries)) return undefined;
   const entry = entries.find((e) => (e as { id?: unknown })?.id === modelId) as
