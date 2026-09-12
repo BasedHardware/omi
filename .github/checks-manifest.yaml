@@ -452,6 +452,11 @@ checks:
     triggers: ["web/frontend/**", "scripts/run-web-frontend-tests.sh", "config/public-build-contract.json", ".github/actions/deploy-public-build/action.yml", ".github/workflows/gcp_frontend.yml", ".github/checks-manifest.yaml", "app/android/app/src/main/AndroidManifest.xml"]
     lanes: ["local", "ci"]
     reason: "web/frontend's node --test suite had no lane, so its guards never ran in CI and a deleted frontend test had to be re-homed into a backend pytest to keep running"
+  - id: web-admin-tests
+    command: ["bash", "scripts/run-web-admin-tests.sh"]
+    triggers: ["web/admin/lib/**", "web/admin/app/api/**", "scripts/run-web-admin-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "web/admin hermetic guards (e.g. Firestore doc-id rejection) had no CI lane; pure node --test files need no npm install"
   - id: web-llm-gateway-only-tests
     command: ["python3", ".github/scripts/test_check_web_llm_gateway_only.py"]
     triggers: [".github/scripts/check_web_llm_gateway_only.py", ".github/scripts/test_check_web_llm_gateway_only.py", ".github/checks-manifest.yaml"]
