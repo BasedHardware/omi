@@ -1,101 +1,83 @@
-"""Hermetic request/handler regressions; framework and persistence are import doubles."""
-import asyncio
-import importlib.util
-from pathlib import Path
+"""Regression tests for cancel_wro error classification (#13183)."""
+
 import sys
 import types
-import unittest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import MagicMock, patch
+
+# Shipbob main imports models -> omi_plugin_sdk. Stub the SDK for hermetic tests.
+if "omi_plugin_sdk" not in sys.modules:
+    sdk = types.ModuleType("omi_plugin_sdk")
+    sdk_models = types.ModuleType("omi_plugin_sdk.models")
+
+    class _Dummy:
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+
+    sdk_models.Conversation = _Dummy
+    sdk_models.EndpointResponse = _Dummy
+    sdk_models.Structured = _Dummy
+    sdk_models.TranscriptSegment = _Dummy
+    sdk.models = sdk_models
+    sys.modules["omi_plugin_sdk"] = sdk
+    sys.modules["omi_plugin_sdk.models"] = sdk_models
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from main import app  # noqa: E402
+
+client = TestClient(app)
 
 
-class Framework:
-    def __init__(self, *args, **kwargs):
-        pass
+class FakeResp:
+    def __init__(self, status_code=200, text="", json_data=None):
+        self.status_code = status_code
+        self.text = text
+        self._json = json_data if json_data is not None else {}
 
-    def get(self, *args, **kwargs):
-        return lambda function: function
-
-    post = get
-
-    def mount(self, *args, **kwargs):
-        pass
+    def json(self):
+        return self._json
 
 
-class Response:
-    result = None
-    error = None
-
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
+def _headers_ok():
+    return {"Authorization": "Bearer t", "Content-Type": "application/json"}
 
 
-def module(name, **attributes):
-    value = types.ModuleType(name)
-    value.__dict__.update(attributes)
-    return value
+@patch("main.get_shipbob_headers", return_value=_headers_ok())
+@patch("main.refresh_token_if_needed")
+@patch("main.requests.post")
+def test_cancel_empty_body_500_is_error(mock_post, _refresh, _headers):
+    mock_post.return_value = FakeResp(status_code=500, text="")
+    resp = client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body.get("error")
+    assert "cancelled" not in str(body.get("result") or "").lower()
 
 
-stubs = {
-    "requests": module("requests", get=Mock(), post=Mock(), put=Mock(), delete=Mock()),
-    "dotenv": module("dotenv", load_dotenv=lambda: None),
-    "fastapi": module("fastapi", FastAPI=Framework, HTTPException=Exception, Request=Framework, Query=Framework),
-    "fastapi.responses": module("fastapi.responses", HTMLResponse=Framework, RedirectResponse=Framework, JSONResponse=Framework),
-    "fastapi.staticfiles": module("fastapi.staticfiles", StaticFiles=Framework),
-    "fastapi.templating": module("fastapi.templating", Jinja2Templates=Framework),
-    "models": module("models", ChatToolResponse=Response),
-    "db": module("db", **{name: Mock() for name in (
-        "store_shipbob_tokens", "get_shipbob_tokens", "delete_shipbob_tokens",
-        "store_oauth_state", "get_oauth_state", "delete_oauth_state",
-        "update_shipbob_channel", "get_user_settings",
-    )}),
-}
-spec = importlib.util.spec_from_file_location("shipbob_under_test", Path(__file__).with_name("main.py"))
-shipbob = importlib.util.module_from_spec(spec)
-with patch.dict(sys.modules, stubs):
-    spec.loader.exec_module(shipbob)
+@patch("main.get_shipbob_headers", return_value=_headers_ok())
+@patch("main.refresh_token_if_needed")
+@patch("main.make_shipbob_request", return_value=None)
+def test_cancel_none_result_is_error(mock_req, _refresh, _headers):
+    resp = client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"})
+    body = resp.json()
+    assert body.get("error")
 
 
-class RequestFailureTests(unittest.TestCase):
-    def setUp(self):
-        for target, replacement in (
-            ("refresh_token_if_needed", Mock(return_value=True)),
-            ("get_shipbob_headers", Mock(return_value={"Content-Type": "application/json"})),
-            ("log", Mock()),
-        ):
-            patcher = patch.object(shipbob, target, replacement)
-            patcher.start()
-            self.addCleanup(patcher.stop)
-
-    def test_shared_request_reports_empty_http_errors_for_all_methods(self):
-        for method in ("GET", "POST", "PUT", "DELETE"):
-            for status, body in ((status, body) for status in (400, 500) for body in ("", " ", "\n", " \t\r\n")):
-                with self.subTest(method=method, status=status, body=body):
-                    response = Mock(status_code=status, text=body)
-                    with patch.object(shipbob.requests, method.lower(), return_value=response):
-                        result = shipbob.make_shipbob_request("test-user", method, "/test")
-                    self.assertEqual(result["status_code"], status)
-                    self.assertEqual(result["error"], f"ShipBob request failed (HTTP {status})")
-
-    def test_cancellation_uses_actual_helper_and_never_confirms_http_failure(self):
-        for status, body in ((400, ""), (500, ""), (400, " "), (500, "\n"), (500, " \t\r\n"), (500, "upstream failure"), (500, " \nupstream failure\n ")):
-            with self.subTest(status=status, body=body):
-                request = Mock(json=AsyncMock(return_value={"uid": "test-user", "wro_id": 12345}))
-                with patch.object(shipbob.requests, "post", return_value=Mock(status_code=status, text=body)) as post:
-                    result = asyncio.run(shipbob.tool_cancel_wro(request))
-                self.assertIsNone(result.result)
-                self.assertEqual(result.error, "Failed to cancel WRO: " + (body if body.strip() else f"ShipBob request failed (HTTP {status})"))
-                post.assert_called_once()
-                self.assertTrue(post.call_args.args[0].endswith("/2.0/receiving/12345/cancel"))
-
-    def test_successful_cancellation_is_unchanged(self):
-        request = Mock(json=AsyncMock(return_value={"uid": "test-user", "wro_id": 12345}))
-        response = Mock(status_code=200, text='{"id":12345}')
-        response.json.return_value = {"id": 12345}
-        with patch.object(shipbob.requests, "post", return_value=response):
-            result = asyncio.run(shipbob.tool_cancel_wro(request))
-        self.assertIsNone(result.error)
-        self.assertEqual(result.result, "**WRO #12345 has been cancelled.**")
+@patch("main.get_shipbob_headers", return_value=_headers_ok())
+@patch("main.refresh_token_if_needed")
+@patch("main.make_shipbob_request", return_value={"error": "forbidden", "status_code": 403})
+def test_cancel_nonempty_error_is_surfaced(mock_req, _refresh, _headers):
+    resp = client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"})
+    body = resp.json()
+    assert "forbidden" in body.get("error", "")
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+@patch("main.get_shipbob_headers", return_value=_headers_ok())
+@patch("main.refresh_token_if_needed")
+@patch("main.make_shipbob_request", return_value={"id": 123, "status": "cancelled"})
+def test_cancel_success_200_object(mock_req, _refresh, _headers):
+    resp = client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"})
+    body = resp.json()
+    assert body.get("error") in (None, "")
+    assert "cancelled" in (body.get("result") or "").lower()

@@ -17,10 +17,10 @@ loop here would buy nothing.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 import json
 import re
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Iterator, Mapping, Optional
 
 import httpx
@@ -34,14 +34,14 @@ from tenacity import (
 
 from omi_cli import __version__
 from omi_cli.config import Profile
-from omi_cli.errors import CliError, RateLimitError, ServerError, from_status
+from omi_cli.errors import CliError, RateLimitError, ServerError, TransportError, from_status
 
 USER_AGENT = f"omi-cli/{__version__} (+https://github.com/BasedHardware/omi)"
 DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 MAX_RETRY_ATTEMPTS = 4
-# Cap on how long we'll honor a server-supplied Retry-After hint. Without this,
-# a misconfigured upstream could pin the CLI for hours; agents will get a
-# RateLimitError they can act on much sooner.
+# Maximum server-supplied Retry-After the CLI will wait before retrying. When
+# the hint exceeds this, automatic retries stop and the caller gets the mapped
+# CliError immediately instead of sleeping a truncated delay and retrying early.
 MAX_RETRY_AFTER_SECONDS = 60.0
 
 # Backend rate-limit policies surfaced to users on 429 (see
@@ -148,17 +148,19 @@ class OmiClient:
                     response = self._http.request(method, path, params=cleaned_params, json=json_body)
                     self._maybe_log(method, path, response)
                     if response.status_code >= 500:
-                        raise _RetryableHttp(
-                            response,
-                            retry_after=_parse_retry_after(response.headers.get("Retry-After")),
-                        )
+                        retry_after = _parse_retry_after(response.headers.get("Retry-After"))
+                        if _retry_after_exceeds_automatic_wait(retry_after):
+                            if method in {"POST", "PATCH"}:
+                                raise _unknown_write_outcome(method, response=response)
+                            raise self._error_from_response(response)
+                        raise _RetryableHttp(response, retry_after=retry_after)
                     if response.status_code == 429:
+                        retry_after = _parse_retry_after(response.headers.get("Retry-After"))
+                        if _retry_after_exceeds_automatic_wait(retry_after):
+                            raise self._error_from_response(response)
                         # Surface the structured RateLimitError so callers can show
                         # a useful message; tenacity treats this as retryable.
-                        raise _RetryableHttp(
-                            response,
-                            retry_after=_parse_retry_after(response.headers.get("Retry-After")),
-                        )
+                        raise _RetryableHttp(response, retry_after=retry_after)
                     return self._handle_response(response)
         except _RetryableHttp as exc:
             if method in {"POST", "PATCH"} and exc.response.status_code >= 500:
@@ -171,11 +173,11 @@ class OmiClient:
             ):
                 raise _unknown_write_outcome(method) from exc
             if method in {"POST", "PATCH"}:
-                raise ServerError(
+                raise TransportError(
                     message="Connection failed",
                     detail=f"{type(exc).__name__} after {MAX_RETRY_ATTEMPTS} attempts. Check your connection and retry.",
                 ) from exc
-            raise ServerError(
+            raise TransportError(
                 message="Connection failed",
                 detail="Unable to reach the Omi API. Check your network connection or try again shortly.",
             ) from exc
@@ -184,9 +186,9 @@ class OmiClient:
         raise RuntimeError("unreachable")
 
     def _handle_response(self, response: httpx.Response) -> Any:
-        if response.status_code == 204 or not response.content:
-            return None
         if 200 <= response.status_code < 300:
+            if response.status_code == 204 or not response.content:
+                return None
             return _safe_parse_json(response)
         raise self._error_from_response(response)
 
@@ -292,19 +294,24 @@ def _unknown_write_outcome(method: str, *, response: Optional[httpx.Response] = 
 _jittered_backoff = wait_exponential_jitter(initial=0.5, max=8.0)
 
 
+def _retry_after_exceeds_automatic_wait(retry_after: Optional[float]) -> bool:
+    """Return True when the server cooldown exceeds what the CLI will wait."""
+    return retry_after is not None and retry_after > MAX_RETRY_AFTER_SECONDS
+
+
 def _retry_wait(retry_state: RetryCallState) -> float:
     """Wait strategy: server-supplied Retry-After when available, jitter otherwise.
 
-    A 429 or 5xx that includes numeric ``Retry-After`` ends up here as a ``_RetryableHttp``
-    with ``retry_after`` populated. We honor it but cap to
-    :data:`MAX_RETRY_AFTER_SECONDS` so a pathological upstream can't pin the
-    CLI for an unbounded time. Without a positive numeric hint, and for
-    transport errors, we fall back to exponential jitter.
+    A 429 or 5xx with ``Retry-After`` at or below
+    :data:`MAX_RETRY_AFTER_SECONDS` ends up here as a ``_RetryableHttp`` with
+    ``retry_after`` populated and is honored verbatim. Longer hints abort
+    automatic retries in ``_request`` before this runs. Without a positive hint,
+    and for transport errors, we fall back to exponential jitter.
     """
     outcome = retry_state.outcome
     exc = outcome.exception() if outcome is not None and outcome.failed else None
     if isinstance(exc, _RetryableHttp) and exc.retry_after is not None and exc.retry_after > 0:
-        return min(exc.retry_after, MAX_RETRY_AFTER_SECONDS)
+        return exc.retry_after
     return float(_jittered_backoff(retry_state))
 
 

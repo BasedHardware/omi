@@ -111,7 +111,7 @@ steps:
       target: dashboard
       activateApp: false
     wait:
-      state.selectedTabIndex: 0
+      state.chatFirstRoute: chat
 
   - id: S3
     name: Send marker chat query
