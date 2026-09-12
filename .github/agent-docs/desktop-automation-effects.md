@@ -11,6 +11,8 @@ found an import probe and a state-clearing action mislabeled as read-only.
 - `.networkOrModel`: invokes the agent runtime, network services, or a model, including API reads.
 - `.remoteWrite`: may modify remote user data, directly or through queued work.
 
+Include cold initialization and work queued by mounted views: `dump_tasks` can
+initialize/migrate SQLite, and opening Tasks can retry queued uploads/deletions.
 Declare the union for parameter-dependent actions. Dynamic chat/tool dispatch
 may reach all four effects. Incidental logging/analytics is outside this
 product-effect contract. Existing handler authorization stays in force.
