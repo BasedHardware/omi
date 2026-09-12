@@ -76,7 +76,7 @@ export function parseOmiGoals(body: string): OmiGoal[] {
     if (typeof row.title !== 'string') {
       continue;
     }
-    const title = visibleDisplayText(text(row.title, 10000));
+    const title = visibleDisplayText(text(row.title, 1_000_000));
     if (title === '') {
       continue;
     }
