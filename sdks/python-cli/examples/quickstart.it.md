@@ -1,32 +1,32 @@
-# Guida Rapida omi-cli (Bahasa Itali)
+# Guida Rapida omi-cli (Italiano)
 
-> Panduan praktikal untuk berinteraksi dengan Omi dari terminal. Sesuai untuk manusia dan ejen AI.
+> Guida pratica per interagire con Omi dal terminale. Adatta sia per persone che per agenti AI.
 
-`omi-cli` ialah antara muka baris perintah rasmi untuk berinteraksi dengan API pembangun [Omi](https://omi.me). Ia mengendalikan empat sumber teras Omi — **memori, perbualan, item tindakan, dan matlamat** — secara cekap dan boleh di-skrip.
+`omi-cli` è l'interfaccia a riga di comando ufficiale per interagire con le API sviluppatore di [Omi](https://omi.me). Gestisce in modo efficiente e scriptabile le quattro risorse principali di Omi — **memorie, conversazioni, action item e obiettivi**.
 
 * **PyPI:** [pypi.org/project/omi-cli](https://pypi.org/project/omi-cli/)
-* **Dokumentasi rasmi:** [docs.omi.me/doc/developer/cli/introduction](https://docs.omi.me/doc/developer/cli/introduction)
-* **Sumber kod:** [github.com/BasedHardware/omi/tree/main/sdks/python-cli](https://github.com/BasedHardware/omi/tree/main/sdks/python-cli)
+* **Documentazione ufficiale:** [docs.omi.me/doc/developer/cli/introduction](https://docs.omi.me/doc/developer/cli/introduction)
+* **Codice sorgente:** [github.com/BasedHardware/omi/tree/main/sdks/python-cli](https://github.com/BasedHardware/omi/tree/main/sdks/python-cli)
 
 ---
 
-## 1. Pemasangan
+## 1. Installazione
 
-Cara pemasangan yang disyorkan ialah menggunakan `pipx` supaya kebergantungan diasingkan dengan baik.
+Il metodo consigliato è usare `pipx` per isolare le dipendenze.
 
 ```bash
-# Disyorkan: pasang menggunakan pipx
+# Consigliato: installa con pipx
 pipx install omi-cli
 
-# Atau gunakan pip
+# In alternativa: usa pip
 pip install omi-cli
 ```
 
-> **Penting: Perbezaan nama pakej dan nama perintah**
-> * Nama pakej Python yang dipasang ialah **`omi-cli`** (pakej `omi` yang berdiri sendiri adalah pakej lain yang tidak berkaitan).
-> * Nama perintah yang dijalankan di terminal selepas pemasangan ialah **`omi`**.
+> **Importante: differenza tra nome del pacchetto e nome del comando**
+> * Il pacchetto Python installato si chiama **`omi-cli`** (il pacchetto `omi` standalone è un altro pacchetto non correlato).
+> * Il comando eseguibile nel terminale dopo l'installazione è **`omi`**.
 
-Selepas pemasangan, sahkan versi dan bantuan.
+Dopo l'installazione, verifica la versione e l'aiuto.
 
 ```bash
 omi --version
@@ -35,166 +35,166 @@ omi --help
 
 ---
 
-## 2. Pengesahan (Authentication)
+## 2. Autenticazione
 
-`omi-cli` menyokong dua cara pengesahan.
+`omi-cli` supporta due modalità di autenticazione.
 
-| Kaedah | Tujuan | Contoh perintah |
+| Modalità | Uso consigliato | Comando di esempio |
 | :--- | :--- | :--- |
-| **Kunci API pembangun (`omi_dev_*`)** | CI/CD, skrip automatik, ejen AI | `omi auth login --api-key ...` atau pembolehubah persekitaran |
-| **OAuth pelayar (Google/Apple)** | PC / komputer riba pembangun | `omi auth login --browser` |
+| **Chiave API sviluppatore (`omi_dev_*`)** | CI/CD, script automatici, agenti AI | `omi auth login --api-key ...` o variabile d'ambiente |
+| **OAuth nel browser (Google/Apple)** | PC / laptop dello sviluppatore | `omi auth login --browser` |
 
-### Log masuk interaktif
-Tanpa pilihan, anda akan ditanya untuk memilih antara log masuk pelayar atau输入 kunci API.
+### Login interattivo
+Senza opzioni, ti verrà chiesto di scegliere tra login nel browser o inserimento della chiave API.
 
 ```bash
 omi auth login
-# 1) Browser — log masuk dengan akaun Google atau Apple (untuk manusia)
-# 2) API key — tampal kunci pembangun daripada app.omi.me (untuk ejen/CI)
+# 1) Browser — accedi con il tuo account Google o Apple (per persone)
+# 2) API key — incolla la chiave sviluppatore da app.omi.me (per agenti/CI)
 ```
 
-### Log masuk terus melalui pelayar
+### Login diretto via browser
 ```bash
 omi auth login --browser
 ```
 
-### Menggunakan kunci API
-Dapatkan kunci pembangun daripada **Developer → API Keys** di [app.omi.me](https://app.omi.me), kemudian tetapkannya.
+### Uso della chiave API
+Ottieni la chiave sviluppatore da **Developer → API Keys** su [app.omi.me](https://app.omi.me), poi impostala.
 
 ```bash
-# Tetap melalui perintah
+# Imposta tramite comando
 omi auth login --api-key omi_dev_...
 
-# Atau tetap melalui pembolehubah persekitaran (sesuai untuk CI/CD atau kontena)
+# Oppure tramite variabile d'ambiente (ideale per CI/CD o container)
 export OMI_API_KEY=omi_dev_...
 ```
 
-### Sahkan status pengesahan
-* `omi auth status`: paparkan profil pengesahan tempatan, token bertopeng, dan tarikh tamat (berfungsi di luar talian).
-* `omi auth whoami`: hantar permintaan pengesahan sebenar ke pelayan Omi (memerlukan sambungan rangkaian).
+### Verifica dello stato di autenticazione
+* `omi auth status`: mostra il profilo locale, il token mascherato e la data di scadenza (funziona offline).
+* `omi auth whoami`: invia una richiesta reale al server Omi (richiede connessione di rete).
 
 ```bash
 omi auth status
 omi auth whoami
 ```
 
-Untuk log keluar, jalankan:
+Per disconnettersi:
 ```bash
 omi auth logout
 ```
 
 ---
 
-## 3. Penggunaan Asas
+## 3. Utilizzo Base
 
-Anda boleh menyenaraikan dan mengendalikan empat sumber teras Omi.
+Puoi elencare e gestire le quattro risorse principali di Omi.
 
-### Memori (Memories)
-Urus fakta dan pengetahuan yang dipelajari oleh sistem.
+### Memorie (Memories)
+Gestisce i fatti e le conoscenze apprese dal sistema.
 
 ```bash
-# Senarai semua memori
+# Elenca tutte le memorie
 omi memory list
 
-# Cipta memori baharu
-omi memory create "Pengguna lebih suka mod gelap" --category lifestyle
+# Crea una nuova memoria
+omi memory create "L'utente preferisce la modalità scura" --category lifestyle
 
-# Papar butiran memori tertentu
+# Visualizza i dettagli di una memoria specifica
 omi memory get <MEMORY_ID>
 ```
 
-### Perbualan (Conversations)
-Sejarah audio atau teks perbualan yang diambil daripada peranti boleh dipakai atau aplikasi.
+### Conversazioni (Conversations)
+Cronologia audio o testo delle conversazioni acquisite dal dispositivo indossabile o dall'app.
 
 ```bash
-# Dapatkan 5 perbualan terkini
+# Recupera le ultime 5 conversazioni
 omi conversation list --limit 5
 
-# Papar butiran perbualan dan transkrip
+# Visualizza i dettagli della conversazione e la trascrizione
 omi conversation get <CONVERSATION_ID> --include-transcript
 ```
 
-### Item Tindakan (Action Items)
-Tugas atau item susulan yang diekstrak secara automatik daripada perbualan.
+### Action Item
+Attività o elementi di follow-up estratti automaticamente dalle conversazioni.
 
 ```bash
-# Senarai item tindakan yang belum selesai sahaja
+# Elenca solo gli action item ancora aperti
 omi action-item list --open
 
-# Tandakan item tindakan sebagai selesai
+# Segna un action item come completato
 omi action-item complete <ACTION_ITEM_ID>
 ```
 
-### Matlamat (Goals)
-Urus matlamat yang dijejaki kemajuannya.
+### Obiettivi (Goals)
+Gestisce gli obiettivi di cui viene tracciato l'avanzamento.
 
 ```bash
-# Senarai semua matlamat
+# Elenca tutti gli obiettivi
 omi goal list
 ```
 
 ---
 
-## 4. Pemprosesan Skrip dan Output JSON (`--json`)
+## 4. Elaborazione Script e Output JSON (`--json`)
 
-`omi-cli` menyokong output JSON secara natif. Apabila digandingkan dengan `jq` atau skrip Python, **pilihan global** `--json` mesti diletakkan sebelum sub-perintah.
+`omi-cli` supporta nativamente l'output JSON. Quando lo combini con `jq` o script Python, l'**opzione globale** `--json` deve essere posizionata prima del sottocomando.
 
 ```bash
-# Dapatkan senarai memori dalam JSON dan ekstrak ID serta kandungannya
+# Ottieni l'elenco delle memorie in JSON ed estrai ID e contenuto
 omi --json memory list | jq '.[] | {id, content, category}'
 
-# Dapatkan tajuk 5 perbualan terkini
+# Ottieni i titoli delle ultime 5 conversazioni
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
 
-# Senarai item tindakan yang belum selesai
+# Elenca gli action item aperti
 omi --json action-item list --open | jq '.[] | {id, title, due_at}'
 
-# Senarai matlamat
+# Elenca gli obiettivi
 omi --json goal list | jq '.[] | {id, title, progress: .progress_percent}'
 ```
 
 ---
 
-## 5. Diagnostik Sesi
+## 5. Diagnostica della Sessione
 
-Gunakan kedua-dua perintah ini secara berpasangan untuk menyelesaikan masalah dengan cepat.
+Usa questi comandi in coppia per risolvere rapidamente i problemi.
 
 ```bash
-# 1) Periksa konfigurasi tempatan dahulu
+# 1) Controlla prima la configurazione locale
 omi auth status
 
-# 2) Sahkan dengan pelayan Omi
+# 2) Verifica con il server Omi
 omi auth whoami
 
-# 3) Jika perlu, mulakan semula log masuk
+# 3) Se necessario, riavvia il login
 omi auth login
 ```
 
 ---
 
-## 6. Amalan Terbaik
+## 6. Migliori Pratiche
 
-* **Gunakan `--json` dalam skrip:** Elakkan parsing teks bebas; sentiasa andalkan output JSON berstruktur.
-* **Pisahkan persekitaran dengan `pipx`:** Ini mengelakkan konflik kebergantungan dengan pakej Python lain.
-* **Jangan kongsi kunci API:** Kunci `omi_dev_*` membuka akses akaun penuh — simpan dalam pengurus rahsia atau pembolehubah persekitaran.
-* **Log keluar dari peranti yang dipinjamkan:** Gunakan `omi auth logout` selepas sesi pada mesin bersama.
+* **Usa `--json` negli script:** Evita il parsing di testo libero; affidati sempre all'output JSON strutturato.
+* **Isola gli ambienti con `pipx`:** Evita conflitti di dipendenze con altri pacchetti Python.
+* **Non condividere le chiavi API:** Le chiavi `omi_dev_*` concedono accesso completo all'account — conservale in un gestore di segreti o in variabili d'ambiente.
+* **Disconnettiti dai dispositivi condivisi:** Usa `omi auth logout` dopo le sessioni su macchine condivise.
 
 ---
 
-## 7. Penyelesaian Masalah
+## 7. Risoluzione dei Problemi
 
-| Simptom | Kemungkinan punca | Penyelesaian |
+| Sintomo | Causa probabile | Soluzione |
 | :--- | :--- | :--- |
-| `command not found: omi` | PATH tidak mengandungi direktori bin pipx | Jalankan `pipx ensurepath` dan mulakan semula terminal |
-| `401 Unauthorized` | Kunci API tidak sah atau tamat tempoh | Jana kunci baharu di app.omi.me dan kemas kini |
-| `connection refused` | Tiada akses rangkaian ke pelayan Omi | Sahkan sambungan internet dan tetapan proksi |
-| `permission denied` pada fail konfigurasi | Direktori konfigurasi tidak boleh ditulis | Periksa kebenaran `~/.config/omi` |
+| `command not found: omi` | Il PATH non contiene la directory bin di pipx | Esegui `pipx ensurepath` e riavvia il terminale |
+| `401 Unauthorized` | Chiave API non valida o scaduta | Genera una nuova chiave su app.omi.me e aggiorna |
+| `connection refused` | Nessun accesso di rete al server Omi | Verifica la connessione internet e le impostazioni proxy |
+| `permission denied` sui file di configurazione | La directory di configurazione non è scrivibile | Controlla i permessi di `~/.config/omi` |
 
 ---
 
-## 8. Pautan Pantas
+## 8. Link Rapidi
 
-* Repositori sumber: [github.com/BasedHardware/omi](https://github.com/BasedHardware/omi)
-* Dokumentasi lengkap: [docs.omi.me](https://docs.omi.me)
-* Isu dan sokongan: [github.com/BasedHardware/omi/issues](https://github.com/BasedHardware/omi/issues)
-* Komuniti Discord: Jemputan tersedia melalui halaman utama Omi
+* Repository sorgente: [github.com/BasedHardware/omi](https://github.com/BasedHardware/omi)
+* Documentazione completa: [docs.omi.me](https://docs.omi.me)
+* Issues e supporto: [github.com/BasedHardware/omi/issues](https://github.com/BasedHardware/omi/issues)
+* Community Discord: invito disponibile tramite la home page di Omi
