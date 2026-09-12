@@ -77,6 +77,59 @@ def test_pretty_mode_renders_no_results_for_empty_list(capsys) -> None:
     assert "no results" in captured.out
 
 
+@pytest.mark.parametrize(
+    ("rows", "expected"),
+    [
+        (["alpha", "beta"], ["alpha", "beta"]),
+        ([17, 3.5], ["17", "3.5"]),
+        ([True, False], []),  # booleans stringify to checkmarks
+        ([None], []),
+        (["alpha", 17, {"id": "m1"}], ["alpha", "17", "m1"]),
+        (["[draft] literal [/bold] :warning:"], ["[draft] literal [/bold] :warning:"]),
+    ],
+)
+def test_pretty_mode_renders_scalar_and_mixed_lists(capsys, rows, expected) -> None:
+    Renderer(json_mode=False, no_color=True).emit(rows)
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    for fragment in expected:
+        assert fragment in captured.out
+
+
+def test_pretty_mode_renders_boolean_and_null_list_without_crashing(capsys) -> None:
+    Renderer(no_color=True).emit([True, False, None])
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert "✓" in captured.out
+    assert "✗" in captured.out
+
+
+def test_pretty_mode_renders_pydantic_rows_via_coalesce(capsys) -> None:
+    class Fake:
+        def model_dump(self) -> dict:
+            return {"id": "m9", "content": "from-model"}
+
+    Renderer(no_color=True).emit([Fake()])
+    output = capsys.readouterr().out
+    assert "m9" in output
+    assert "from-model" in output
+
+
+def test_json_mode_preserves_scalar_array_shape(capsys) -> None:
+    Renderer(json_mode=True).emit(["alpha", 17, None])
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == ["alpha", 17, None]
+    assert captured.err == ""
+
+
+def test_coalesce_rows_wraps_scalars_under_value() -> None:
+    assert coalesce_rows(["alpha", 17, None]) == [
+        {"value": "alpha"},
+        {"value": 17},
+        {"value": None},
+    ]
+
+
 @pytest.mark.parametrize("first_row", [{}, {"id": "first"}])
 def test_pretty_table_includes_fields_from_later_rows(capsys, first_row) -> None:
     Renderer(no_color=True).emit([first_row, {"id": "second", "detail": "later-value"}])
