@@ -66,6 +66,15 @@ test('parseOmiWebhookUrl omits malformed bodies', () => {
   );
 });
 
+test('keeps GET webhook url longer than 2048', () => {
+  const url = `https://example.test/${'a'.repeat(2048)}`;
+  expect(url.length).toBeGreaterThan(2048);
+  expect(parseOmiWebhookUrl(JSON.stringify({url}), 'memory_created')).toEqual({
+    url,
+    intervalSeconds: null,
+  });
+});
+
 test('loadOmiWebhookUrls names GET rows and omits failures', async () => {
   expect(
     await loadOmiWebhookUrls(

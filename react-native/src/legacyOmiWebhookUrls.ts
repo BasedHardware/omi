@@ -40,7 +40,7 @@ export function parseOmiWebhookUrl(
   type: OmiWebhookUrlType,
 ): OmiWebhookUrl | null {
   const row = object(JSON.parse(body));
-  const raw = visibleDisplayText(text(row.url, 2048));
+  const raw = visibleDisplayText(text(row.url, 1_000_000));
   if (raw === '') {
     return null;
   }
