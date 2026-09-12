@@ -111,3 +111,12 @@ export function buildRewindFtsMatch(query: string): string | null {
   if (expanded.length === 0) return null
   return expanded.join(' ')
 }
+
+export function buildRewindFtsSearchSql(columns: string, scoped: boolean): string {
+  return `SELECT ${columns} FROM rewind_frames
+           JOIN rewind_frames_fts ON rewind_frames.id = rewind_frames_fts.rowid
+          WHERE rewind_frames_fts MATCH ?
+          ${scoped ? 'AND rewind_frames.ts BETWEEN ? AND ?' : ''}
+          ORDER BY bm25(rewind_frames_fts) ASC, rewind_frames.ts DESC
+          LIMIT ?`
+}
