@@ -18,8 +18,8 @@ function text(value: unknown, limit: number): string {
   }
   return value;
 }
-function array(value: unknown, limit: number): unknown[] {
-  if (!Array.isArray(value) || value.length > limit) {
+function array(value: unknown): unknown[] {
+  if (!Array.isArray(value)) {
     throw new FoldersError();
   }
   return value;
@@ -47,7 +47,7 @@ export function omiFolderFill(color: string, alpha: number): string {
 }
 
 export function parseOmiFolders(body: string): OmiFolder[] {
-  const rows = array(JSON.parse(body), 1000);
+  const rows = array(JSON.parse(body));
   const folders: OmiFolder[] = [];
   const names = new Map<string, string>();
   for (const raw of rows) {

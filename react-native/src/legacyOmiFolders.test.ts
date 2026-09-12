@@ -71,6 +71,17 @@ test('keeps GET folders when a folder id exceeds 256', () => {
   ]);
 });
 
+test('does not omit neighboring GET folders when the catalogue exceeds 1000', () => {
+  const rows = Array.from({length: 1001}, (_, index) => ({
+    id: `folder-${index}`,
+    name: `Folder ${index}`,
+  }));
+  const folders = parseOmiFolders(JSON.stringify(rows));
+  expect(folders[0]).toEqual({id: 'folder-0', name: 'Folder 0'});
+  expect(folders[1000]).toEqual({id: 'folder-1000', name: 'Folder 1000'});
+  expect(folders).toHaveLength(1001);
+});
+
 test('fails closed for malformed GET folders', () => {
   expect(() =>
     parseOmiFolderNames(JSON.stringify({id: 'folder-work'})),
