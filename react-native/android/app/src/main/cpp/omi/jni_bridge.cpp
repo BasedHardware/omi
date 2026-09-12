@@ -3,6 +3,7 @@
 
 #include "omi_backend_http.h"
 #include "omi_backend_policy.h"
+#include "omi_backend_recording.h"
 #include "omi_native_boundary.h"
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -126,4 +127,105 @@ Java_com_rnruntime_OmiBackendTransport_nativeRecordingJournalRelpath(JNIEnv* env
   env->ReleaseStringUTFChars(captureId, captureUtf);
   if (written < 0) return nullptr;
   return env->NewStringUTF(buffer);
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeRecordingCapturedAtValid(JNIEnv*, jclass, jdouble value) {
+  return omi_backend_recording_captured_at_valid(value) == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeRecordingCapturedAtEqual(JNIEnv*, jclass, jboolean expectedPresent, jdouble expected, jboolean actualPresent, jdouble actual) {
+  return omi_backend_recording_captured_at_equal(expectedPresent == JNI_TRUE ? 1 : 0, expected,
+                                                  actualPresent == JNI_TRUE ? 1 : 0, actual) == 1
+             ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeRecordingRetryableStatus(JNIEnv*, jclass, jint status) {
+  return omi_backend_recording_retryable_status(status) == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeRecordingSameContext(JNIEnv* env, jclass, jstring expectedLogin, jstring currentLogin, jstring expectedOrigin, jstring currentOrigin) {
+  const char* expectedLoginUtf = expectedLogin == nullptr ? nullptr : env->GetStringUTFChars(expectedLogin, nullptr);
+  const char* currentLoginUtf = currentLogin == nullptr ? nullptr : env->GetStringUTFChars(currentLogin, nullptr);
+  const char* expectedOriginUtf = expectedOrigin == nullptr ? nullptr : env->GetStringUTFChars(expectedOrigin, nullptr);
+  const char* currentOriginUtf = currentOrigin == nullptr ? nullptr : env->GetStringUTFChars(currentOrigin, nullptr);
+  const int32_t result = omi_backend_recording_same_context(expectedLoginUtf, currentLoginUtf, expectedOriginUtf, currentOriginUtf);
+  if (expectedLogin != nullptr && expectedLoginUtf != nullptr) env->ReleaseStringUTFChars(expectedLogin, expectedLoginUtf);
+  if (currentLogin != nullptr && currentLoginUtf != nullptr) env->ReleaseStringUTFChars(currentLogin, currentLoginUtf);
+  if (expectedOrigin != nullptr && expectedOriginUtf != nullptr) env->ReleaseStringUTFChars(expectedOrigin, expectedOriginUtf);
+  if (currentOrigin != nullptr && currentOriginUtf != nullptr) env->ReleaseStringUTFChars(currentOrigin, currentOriginUtf);
+  return result == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeRecordingRememberedIdentity(JNIEnv* env, jclass, jstring identifier, jstring name) {
+  const char* identifierUtf = identifier == nullptr ? nullptr : env->GetStringUTFChars(identifier, nullptr);
+  const char* nameUtf = name == nullptr ? nullptr : env->GetStringUTFChars(name, nullptr);
+  const int32_t result = omi_backend_recording_remembered_identity(identifierUtf, nameUtf);
+  if (identifier != nullptr && identifierUtf != nullptr) env->ReleaseStringUTFChars(identifier, identifierUtf);
+  if (name != nullptr && nameUtf != nullptr) env->ReleaseStringUTFChars(name, nameUtf);
+  return result == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeRecordingRememberedCurrent(JNIEnv* env, jclass, jlong ticket, jlong generation, jstring expectedLogin, jstring currentLogin, jboolean ready) {
+  const char* expectedLoginUtf = expectedLogin == nullptr ? nullptr : env->GetStringUTFChars(expectedLogin, nullptr);
+  const char* currentLoginUtf = currentLogin == nullptr ? nullptr : env->GetStringUTFChars(currentLogin, nullptr);
+  const int32_t result = omi_backend_recording_remembered_current(
+      static_cast<uint64_t>(ticket), static_cast<uint64_t>(generation), expectedLoginUtf,
+      currentLoginUtf, ready == JNI_TRUE ? 1 : 0);
+  if (expectedLogin != nullptr && expectedLoginUtf != nullptr) env->ReleaseStringUTFChars(expectedLogin, expectedLoginUtf);
+  if (currentLogin != nullptr && currentLoginUtf != nullptr) env->ReleaseStringUTFChars(currentLogin, currentLoginUtf);
+  return result == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeRecordingDeviceValid(JNIEnv* env, jclass, jstring deviceId, jstring deviceName, jdouble codec) {
+  const char* deviceIdUtf = deviceId == nullptr ? nullptr : env->GetStringUTFChars(deviceId, nullptr);
+  const char* deviceNameUtf = deviceName == nullptr ? nullptr : env->GetStringUTFChars(deviceName, nullptr);
+  const int32_t result = omi_backend_recording_device_valid(
+      deviceIdUtf, deviceName == nullptr ? 0 : 1, deviceNameUtf, codec);
+  if (deviceId != nullptr && deviceIdUtf != nullptr) env->ReleaseStringUTFChars(deviceId, deviceIdUtf);
+  if (deviceName != nullptr && deviceNameUtf != nullptr) env->ReleaseStringUTFChars(deviceName, deviceNameUtf);
+  return result == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeRecordingBudgetOk(JNIEnv*, jclass, jlong totalBytes, jlong extraBytes, jboolean creating, jint fileCount) {
+  return omi_backend_recording_budget_ok(static_cast<uint64_t>(totalBytes), static_cast<uint64_t>(extraBytes),
+                                         creating == JNI_TRUE ? 1 : 0, static_cast<uint32_t>(fileCount)) == 1
+             ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeRecordingOwnerKeyValid(JNIEnv* env, jclass, jstring ownerKey) {
+  if (ownerKey == nullptr) return JNI_FALSE;
+  const char* utf = env->GetStringUTFChars(ownerKey, nullptr);
+  if (utf == nullptr) return JNI_FALSE;
+  const int32_t result = omi_backend_recording_owner_key_valid(utf);
+  env->ReleaseStringUTFChars(ownerKey, utf);
+  return result == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeRecordingReceiptValid(JNIEnv* env, jclass, jstring receipt) {
+  if (receipt == nullptr) return JNI_FALSE;
+  const char* utf = env->GetStringUTFChars(receipt, nullptr);
+  if (utf == nullptr) return JNI_FALSE;
+  const int32_t result = omi_backend_recording_receipt_valid(utf);
+  env->ReleaseStringUTFChars(receipt, utf);
+  return result == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_rnruntime_OmiBackendTransport_nativeRecordingUuidValid(JNIEnv* env, jclass, jstring value) {
+  if (value == nullptr) return JNI_FALSE;
+  const char* utf = env->GetStringUTFChars(value, nullptr);
+  if (utf == nullptr) return JNI_FALSE;
+  const int32_t result = omi_backend_recording_uuid_valid(utf);
+  env->ReleaseStringUTFChars(value, utf);
+  return result == 1 ? JNI_TRUE : JNI_FALSE;
 }

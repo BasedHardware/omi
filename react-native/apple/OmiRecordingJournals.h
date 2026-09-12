@@ -59,7 +59,7 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
     if ([attributes[NSFileType] isEqual:NSFileTypeRegular]) { size += [attributes[NSFileSize] unsignedIntegerValue]; count++; }
     if ([attributes[NSFileType] isEqual:NSFileTypeSymbolicLink]) return OmiRecordingError(error);
   }
-  if (size + extra > 134217728 || (creating && count >= 64)) return OmiRecordingError(error);
+  if (omi_backend_recording_budget_ok((uint64_t)size, (uint64_t)extra, creating ? 1 : 0, (uint32_t)count) != 1) return OmiRecordingError(error);
   return YES;
 }
 - (SecKeyRef)copyKey:(NSError **)error CF_RETURNS_RETAINED {
@@ -131,9 +131,10 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
   NSString *device = input[@"deviceId"];
   id name = input[@"deviceName"] ?: NSNull.null;
   NSNumber *codec = input[@"codec"];
-  if (![device isKindOfClass:NSString.class] || device.length == 0 || device.length > 256
-      || (name != NSNull.null && (![name isKindOfClass:NSString.class] || [name length] > 256))
-      || ![codec isKindOfClass:NSNumber.class] || codec.doubleValue < 0 || codec.doubleValue > 255 || codec.doubleValue != codec.integerValue) { OmiRecordingError(error); return nil; }
+  if (![device isKindOfClass:NSString.class] || ![codec isKindOfClass:NSNumber.class]
+      || (name != NSNull.null && ![name isKindOfClass:NSString.class])
+      || omi_backend_recording_device_valid(device.UTF8String, name != NSNull.null ? 1 : 0,
+             name != NSNull.null ? [(NSString *)name UTF8String] : nullptr, codec.doubleValue) != 1) { OmiRecordingError(error); return nil; }
   if (!OmiRecordingCapturedAtValid(input[@"capturedAtMs"])) { OmiRecordingError(error); return nil; }
   NSString *identifier = NSUUID.UUID.UUIDString.lowercaseString;
   NSMutableDictionary *metadata = [@{ @"deviceId":device, @"deviceName":name, @"codec":codec } mutableCopy];
