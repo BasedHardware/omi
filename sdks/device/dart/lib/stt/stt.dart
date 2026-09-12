@@ -69,7 +69,9 @@ class DeepgramTranscriber implements StreamingTranscriber {
       _channel.sink.add(jsonEncode({'type': 'CloseStream'}));
     } catch (_) {}
     await _sub?.cancel();
-    await _channel.sink.close();
+    try {
+      await _channel.sink.close();
+    } catch (_) {}
   }
 }
 

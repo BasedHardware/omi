@@ -49,7 +49,22 @@ void main() {
 
     await transcriber.stop();
 
+    expect(channel.events, ['send', 'close']);
     expect(channel.sent, [jsonEncode({'type': 'CloseStream'})]);
+    expect(channel.closed, isTrue);
+  });
+
+  test('Deepgram stop still closes when CloseStream send fails', () async {
+    final channel = RecordingWebSocketChannel(sendError: StateError('synthetic send failure'));
+    final transcriber = DeepgramTranscriber(
+      apiKey: 'fake-key',
+      onTranscript: (_) {},
+      channel: channel,
+    );
+
+    await transcriber.stop();
+
+    expect(channel.events, ['send', 'close']);
     expect(channel.closed, isTrue);
   });
 
@@ -78,18 +93,18 @@ void main() {
 }
 
 class RecordingWebSocketChannel extends StreamChannelMixin implements WebSocketChannel {
-  RecordingWebSocketChannel() {
-    sink = _RecordingSink(this);
-  }
+  RecordingWebSocketChannel({this.sendError});
 
+  final Object? sendError;
   final sent = <Object?>[];
+  final events = <String>[];
   bool closed = false;
   final _incoming = StreamController<Object?>.broadcast();
 
   void addIncoming(Object? event) => _incoming.add(event);
 
   @override
-  late final WebSocketSink sink;
+  late final WebSocketSink sink = _RecordingSink(this);
 
   @override
   Stream get stream => _incoming.stream;
@@ -114,7 +129,14 @@ class _RecordingSink implements WebSocketSink {
   final _done = Completer<void>();
 
   @override
-  void add(Object? event) => _parent.sent.add(event);
+  void add(Object? event) {
+    _parent.events.add('send');
+    _parent.sent.add(event);
+    final error = _parent.sendError;
+    if (error != null) {
+      throw error;
+    }
+  }
 
   @override
   void addError(Object error, [StackTrace? stackTrace]) {}
@@ -128,6 +150,7 @@ class _RecordingSink implements WebSocketSink {
 
   @override
   Future close([int? closeCode, String? closeReason]) async {
+    _parent.events.add('close');
     _parent.closed = true;
     _parent.closeCode = closeCode;
     _parent.closeReason = closeReason;
