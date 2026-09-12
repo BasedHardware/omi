@@ -50,6 +50,32 @@ def test_local_configure_persists_profile_config(config_path: Path, cli_runner) 
     assert profile.local_token == FAKE_LOCAL_TOKEN
 
 
+def test_local_configure_escapes_markup_like_profile_name(config_path: Path, cli_runner) -> None:
+    """Rich markup in a profile name must be escaped in the configure message.
+
+    `omi local configure` prints the profile name inside a Rich-markup
+    message; a profile named 'bad[/bold]' would otherwise crash the render
+    after the config had already been saved.
+    """
+    tricky = "bad[/bold]"
+    result = cli_runner.invoke(
+        app,
+        [
+            "--profile",
+            tricky,
+            "local",
+            "configure",
+            "--url",
+            FAKE_LOCAL_URL,
+            "--token",
+            FAKE_LOCAL_TOKEN,
+        ],
+    )
+    assert result.exit_code == 0, repr(result.exception)
+    assert "bad[/bold]" in result.output
+    assert cfg.load().get_profile(tricky).local_api_url == FAKE_LOCAL_URL
+
+
 def test_local_status_without_config_is_json(config_path: Path, cli_runner) -> None:
     result = cli_runner.invoke(app, ["--json", "local", "status"])
 
@@ -329,6 +355,38 @@ def test_sql_json_structures_single_column_table_text(config_path: Path, cli_run
         "rows": [{"screenshots": "12"}],
         "row_count": 1,
     }
+
+
+def test_sql_json_falls_back_to_raw_text_when_cells_contain_pipes_or_newlines(config_path: Path, cli_runner) -> None:
+    _configure_local_profile(config_path)
+    # Cell with pipe delimiter in single column output
+    sql_text_pipe = "value\n-----\na|b\n\n1 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(sql_text_pipe)))
+        result = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT 'a|b' AS value"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"text": sql_text_pipe}
+
+    # Multiline cell resulting in row count mismatch
+    sql_text_newline = "value\n-----\na\nb\n\n1 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(sql_text_newline)))
+        result_nl = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT 'a' || char(10) || 'b' AS value"])
+
+    assert result_nl.exit_code == 0, result_nl.output
+    assert json.loads(result_nl.stdout) == {"text": sql_text_newline}
+
+    # Multiline cell containing an empty continuation line
+    sql_text_empty_cont = "value\n-----\na\n\nb\n\n2 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(sql_text_empty_cont)))
+        result_empty_cont = cli_runner.invoke(
+            app, ["--json", "local", "sql", "SELECT 'a' || char(10) || char(10) || 'b' AS value"]
+        )
+
+    assert result_empty_cont.exit_code == 0, result_empty_cont.output
+    assert json.loads(result_empty_cont.stdout) == {"text": sql_text_empty_cont}
 
 
 def test_task_commands_route_to_local_tools(config_path: Path, cli_runner) -> None:

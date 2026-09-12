@@ -72,6 +72,7 @@ KEYS = [
     "shortcut_solidBackground",
     "shortcut_pttSoundsEnabled",
     "shortcut_pttMuteSystemAudio",
+    "shortcut_silentTypeEnabled",
     "shortcut_selectedModel",
     "shortcut_pttTranscriptionMode",
     "shortcut_draggableBarEnabled",
