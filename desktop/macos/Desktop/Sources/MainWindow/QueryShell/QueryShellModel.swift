@@ -327,6 +327,16 @@ struct QueryShellSendLedger: Equatable, Sendable {
     let question: String
     /// Whether this emission advances the rating-prompt question counter.
     let countsAsQuestion: Bool
+    /// Whether a refused send hands this question back to the composer. True
+    /// for what the reader typed — the send emptied the bar, so a refusal that
+    /// kept it empty would lose the question. False for `Redo`, which re-asks a
+    /// question that was never in the bar: writing it there would overwrite
+    /// whatever they are typing now with an old one.
+    var returnsToComposerIfRefused: Bool = true
+    /// The continuity key this send must use, or nil for a fresh one. `Redo`
+    /// sets it, because the key is what names the answer being replaced and so
+    /// what lets the transcript draw the new answer in its place.
+    var continuityKey: String? = nil
   }
 
   private(set) var lastAskedQuestion = ""
@@ -347,11 +357,12 @@ struct QueryShellSendLedger: Equatable, Sendable {
   }
 
   /// Called from ChatProvider's `onAccepted` — the send is really in flight,
-  /// so NOW the question becomes what 'Try again' re-sends.
+  /// so NOW the question becomes what 'Try again' re-sends. Every accepted
+  /// plan records it, not only a counting one: a retry re-records the same
+  /// string, and a `Redo` of an older answer is genuinely the question now in
+  /// flight, so a failure of *it* is what 'Try again' must re-send.
   mutating func recordAccepted(_ plan: Plan) {
-    if plan.countsAsQuestion {
-      lastAskedQuestion = plan.question
-    }
+    lastAskedQuestion = plan.question
   }
 
   /// `Try again` on a failed turn: the same logical question, so it keeps the
@@ -359,6 +370,22 @@ struct QueryShellSendLedger: Equatable, Sendable {
   func planRetry() -> Plan? {
     guard !lastAskedQuestion.isEmpty else { return nil }
     return Plan(question: lastAskedQuestion, countsAsQuestion: false)
+  }
+
+  /// `Redo` under an answer: ask that same question again. It is the same
+  /// logical question, so it never re-counts toward the rating prompt, and it
+  /// came from the transcript rather than the bar, so a refusal leaves the
+  /// composer exactly as the reader left it.
+  func planRedo(_ question: String, replacingAnswerID: String) -> Plan? {
+    let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+    let answerID = replacingAnswerID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, !answerID.isEmpty else { return nil }
+    return Plan(
+      question: trimmed,
+      countsAsQuestion: false,
+      returnsToComposerIfRefused: false,
+      continuityKey: ChatContinuityInvariants.redoContinuityKey(supersedingMessageID: answerID)
+    )
   }
 }
 
