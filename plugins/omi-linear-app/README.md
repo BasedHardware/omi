@@ -183,6 +183,23 @@ PORT=8080
 REDIS_URL=  # Optional: for production use
 ```
 
+### Hermetic issue-lookup regression tests
+
+From the repository root:
+
+```bash
+python3 -B plugins/omi-linear-app/test_issue_lookup.py
+```
+
+Get-issue, update-status, and add-comment resolve shorthand identifiers through
+Linear's exact `issue(id:)` query; keyword search keeps its ranked search behavior.
+The stdlib-only suite imports the production module with framework, storage, and
+HTTP seams, then executes the real handlers against a simulated GraphQL contract.
+It covers exact targets, missing/inaccessible issues, no unintended mutations,
+authentication/validation, mutation errors, and unchanged keyword search. It does
+not test live Linear ranking, OAuth, HTTP transport, or FastAPI/Pydantic behavior.
+The suite runs in both local and CI preflight manifest lanes.
+
 ### Local Testing with ngrok
 
 ```bash
