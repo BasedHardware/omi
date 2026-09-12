@@ -101,6 +101,15 @@ function array(value: unknown, limit: number): unknown[] {
   }
   return value;
 }
+function optionalObjectRows(value: unknown): unknown[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new DetailError('invalid');
+  }
+  return value;
+}
 function optionalArray(value: unknown, limit: number): unknown[] {
   if (value === undefined || value === null) {
     return [];
@@ -127,13 +136,9 @@ function firstAppSummary(
   plugins: unknown,
   overview: string,
 ): {content: string; appId?: string} | undefined {
-  const appRows = apps === undefined || apps === null ? [] : array(apps, 1000);
+  const appRows = optionalObjectRows(apps);
   const rows =
-    appRows.length > 0
-      ? appRows
-      : plugins === undefined || plugins === null
-      ? []
-      : array(plugins, 1000);
+    appRows.length > 0 ? appRows : optionalObjectRows(plugins);
   for (const raw of rows) {
     const row = object(raw);
     const content = visibleDisplayText(text(row.content, 100000));

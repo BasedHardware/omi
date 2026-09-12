@@ -963,6 +963,26 @@ test('keeps first GET apps_results content and falls back to plugins_results', a
   ).toBeUndefined();
 });
 
+test('keeps GET conversation apps_results when more than 1000', async () => {
+  const apps_results = Array.from({length: 1001}, (_, index) => ({
+    content: index === 1000 ? 'App wrote this recap' : ' \t',
+  }));
+  mockRequest.mockResolvedValue(response({...fixture, apps_results}));
+  const loaded = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(loaded.title).toBe(fixture.structured.title);
+  expect(loaded.appSummary).toBe('App wrote this recap');
+});
+
+test('keeps GET conversation plugins_results when more than 1000', async () => {
+  const plugins_results = Array.from({length: 1001}, (_, index) => ({
+    content: index === 1000 ? 'Legacy plugin recap' : ' \t',
+  }));
+  mockRequest.mockResolvedValue(response({...fixture, plugins_results}));
+  const loaded = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(loaded.title).toBe(fixture.structured.title);
+  expect(loaded.appSummary).toBe('Legacy plugin recap');
+});
+
 test('names GET apps_results app when catalog resolves and omits Unknown App', async () => {
   mockRequest.mockImplementation(async (request: {path?: string}) => {
     if (request.path === '/v1/apps/notes') {
