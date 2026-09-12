@@ -106,16 +106,25 @@ class ParakeetTranscriber:
                 asyncio.create_task(send_audio()),
                 asyncio.create_task(receive()),
             )
+            caller_stopped = False
             try:
                 done, _ = await asyncio.wait(
                     tasks, return_when=asyncio.FIRST_COMPLETED
                 )
                 for task in done:
                     task.result()
+            except asyncio.CancelledError:
+                caller_stopped = True
+                raise
             finally:
                 for task in tasks:
                     task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
+                if caller_stopped:
+                    try:
+                        await ws.send("finalize")
+                    except Exception:
+                        pass
 
 
 def _extract_text(data: object) -> str:

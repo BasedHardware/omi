@@ -21,13 +21,13 @@ class FakeWebSocket:
         self.messages = list(messages or [])
         self.send_error = send_error
         self.receive_error = receive_error
-        self.sent_chunks: list[bytes] = []
+        self.sent_chunks: list[bytes | str] = []
         self.closed = False
 
     async def recv(self) -> str:
         return self.ready_message
 
-    async def send(self, chunk: bytes) -> None:
+    async def send(self, chunk: bytes | str) -> None:
         if self.send_error:
             raise self.send_error
         self.sent_chunks.append(chunk)
@@ -166,6 +166,23 @@ def test_parakeet_caller_cancellation():
             with pytest.raises(asyncio.CancelledError):
                 await task
 
+        assert fake_ws.closed is True
+        assert fake_ws.sent_chunks[-1] == "finalize"
+
+    asyncio.run(_test())
+
+
+def test_parakeet_server_eof_does_not_send_finalize():
+    """Server close is not client Stop — do not send finalize."""
+    async def _test():
+        fake_ws = FakeWebSocket(messages=[json.dumps({"text": "initial transcript"})])
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+
+        with patch("websockets.connect", return_value=fake_ws):
+            transcriber = ParakeetTranscriber("https://test.parakeet.example")
+            await asyncio.wait_for(transcriber.run(queue), timeout=1.0)
+
+        assert "finalize" not in fake_ws.sent_chunks
         assert fake_ws.closed is True
 
     asyncio.run(_test())
