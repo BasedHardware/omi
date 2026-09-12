@@ -5107,6 +5107,15 @@ class ChatProvider: ObservableObject {
       // If the caller didn't provide explicit imageData (e.g. screen-capture
       // assistant), fall back to the first image attached by the user.
       var effectiveImageData = imageData
+      // True only when effectiveImageData ends up being an actual capture of
+      // the user's current screen (this parameter's own callers always pass
+      // a live screenshot; see FloatingControlBarWindow.swift) or the
+      // explicit-screen-request evidence below. The attachment and stale
+      // notification-screenshot fallbacks are deliberately NOT screen
+      // captures, so this stays false for them. Threaded through to the
+      // omi-local prompt marker (jsonl-transport.ts) so it describes the
+      // image accurately instead of assuming every image is the live screen.
+      var imageIsScreenCapture = imageData != nil
       if effectiveImageData == nil {
         effectiveImageData = attachmentsForMessage.first(where: { $0.isImage })?.data
       }
@@ -5162,6 +5171,7 @@ class ChatProvider: ObservableObject {
               turnOwner: turnOwner
             )
             effectiveImageData = evidence.imageData
+            imageIsScreenCapture = true
             screenContextPayload = evidence.payload
           } else {
             let rawScreenContextPayloadBox = await ScreenContextWorkContextBuilder.payloadBox(
@@ -5495,6 +5505,7 @@ class ChatProvider: ObservableObject {
           surface: resolvedSurface,
           mode: chatMode.rawValue,
           imageData: effectiveImageData,
+          imageIsScreenCapture: imageIsScreenCapture,
           attachments: Self.queryAttachments(attachmentsForMessage),
           producingTurnId: aiMessageId,
           expectedContext: kernelContext.snapshot.freshness,

@@ -1556,6 +1556,7 @@ actor AgentRuntimeProcess {
     prompt: String,
     mode: String?,
     imageData: Data?,
+    imageIsScreenCapture: Bool = false,
     attachments: [AgentQueryAttachment],
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
@@ -1574,7 +1575,15 @@ actor AgentRuntimeProcess {
     message["surfaceKind"] = surfaceKind
     message["prompt"] = prompt
     if let mode { message["mode"] = mode }
-    if let imageData { message["imageBase64"] = imageData.base64EncodedString() }
+    if let imageData {
+      message["imageBase64"] = imageData.base64EncodedString()
+      // Only ever true for an actual current-screen capture (see callers);
+      // omitted (never sent as false) so its absence and "false" are the same
+      // thing on the wire. The omi-local prompt marker (jsonl-transport.ts)
+      // reads this to say what the attached image actually is instead of
+      // assuming every image under Local is the current screen.
+      if imageIsScreenCapture { message["imageIsScreenCapture"] = true }
+    }
     if !attachments.isEmpty { message["attachments"] = attachments.map(\.dictionary) }
     if let producingTurnId, !producingTurnId.isEmpty { message["producingTurnId"] = producingTurnId }
     if let reasoningEffort, !reasoningEffort.isEmpty { message["reasoningEffort"] = reasoningEffort }
@@ -2366,6 +2375,7 @@ actor AgentRuntimeProcess {
     surface: AgentSurfaceReference,
     mode: String?,
     imageData: Data?,
+    imageIsScreenCapture: Bool = false,
     attachments: [AgentQueryAttachment],
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
@@ -2419,6 +2429,7 @@ actor AgentRuntimeProcess {
         prompt: prompt,
         mode: mode,
         imageData: imageData,
+        imageIsScreenCapture: imageIsScreenCapture,
         attachments: attachments,
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,

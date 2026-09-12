@@ -1241,6 +1241,8 @@ describe("JsonlTransport kernel-owned query contract", () => {
 
 const SCREEN_MARKER =
   "[A screenshot of the user's current screen is attached to this message as an image. Look at the attached image and answer from it directly. Do not call screenshot or capture_screen for this request; the attached image is the current screen.]";
+const ATTACHED_IMAGE_MARKER =
+  "[An image is attached to this message. Look at the attached image and answer from it directly.]";
 
 // promptBlocks() is private. These tests call it directly to exercise this unit in isolation;
 // see the "end-to-end through the kernel" describe block below for coverage through the public
@@ -1262,10 +1264,13 @@ describe("JsonlTransport promptBlocks screen marker", () => {
     else process.env.OMI_PROVIDER = originalProvider;
   });
 
-  it("local provider, image present: blocks are [image, text] and text ends with the marker paragraph", () => {
+  it("local provider, image present and flagged as a screen capture: blocks are [image, text] and text ends with the screen marker paragraph", () => {
     process.env.OMI_PROVIDER = "omi-local";
     const { store, session, transport } = fixture();
-    const blocks = promptBlocksFor(transport, query(session.sessionId, { imageBase64: "AAAA", prompt: "what is on my screen" }));
+    const blocks = promptBlocksFor(
+      transport,
+      query(session.sessionId, { imageBase64: "AAAA", imageIsScreenCapture: true, prompt: "what is on my screen" }),
+    );
 
     expect(blocks.map((block) => block.type)).toEqual(["image", "text"]);
     const text = blocks.filter((block) => block.type === "text").map((block) => block.text).join("");
@@ -1273,12 +1278,33 @@ describe("JsonlTransport promptBlocks screen marker", () => {
     store.close();
   });
 
-  it("cloud provider ('omi' or unset), image present: text is exactly the original prompt", () => {
+  it("local provider, image present but NOT flagged as a screen capture (a user attachment): text ends with the neutral image marker instead", () => {
+    // Regression: this marker used to be unconditional on OMI_PROVIDER alone,
+    // so a user-attached photo (not a screen capture) was also told to the
+    // model as "the current screen" — a false statement that could also
+    // suppress a legitimate screen capture for an unrelated question.
+    process.env.OMI_PROVIDER = "omi-local";
+    const { store, session, transport } = fixture();
+    const blocks = promptBlocksFor(
+      transport,
+      query(session.sessionId, { imageBase64: "AAAA", prompt: "what does this photo show" }),
+    );
+
+    expect(blocks.map((block) => block.type)).toEqual(["image", "text"]);
+    const text = blocks.filter((block) => block.type === "text").map((block) => block.text).join("");
+    expect(text).toBe(`what does this photo show\n\n${ATTACHED_IMAGE_MARKER}`);
+    store.close();
+  });
+
+  it("cloud provider ('omi' or unset), image present: text is exactly the original prompt regardless of imageIsScreenCapture", () => {
     for (const provider of ["omi", undefined] as const) {
       if (provider === undefined) delete process.env.OMI_PROVIDER;
       else process.env.OMI_PROVIDER = provider;
       const { store, session, transport } = fixture();
-      const blocks = promptBlocksFor(transport, query(session.sessionId, { imageBase64: "AAAA", prompt: "what is on my screen" }));
+      const blocks = promptBlocksFor(
+        transport,
+        query(session.sessionId, { imageBase64: "AAAA", imageIsScreenCapture: true, prompt: "what is on my screen" }),
+      );
 
       expect(blocks.map((block) => block.type)).toEqual(["image", "text"]);
       const text = blocks.filter((block) => block.type === "text").map((block) => block.text).join("");
@@ -1321,7 +1347,9 @@ describe("JsonlTransport promptBlocks screen marker: end-to-end through the kern
   it("local provider, image: the adapter receives [image, text] and the text carries the User Message header, the prompt, and the marker", async () => {
     process.env.OMI_PROVIDER = "omi-local";
     const { store, adapter, session, transport } = fixture();
-    await transport.handleQuery(query(session.sessionId, { imageBase64: "AAAA", prompt: "what is on my screen" }));
+    await transport.handleQuery(
+      query(session.sessionId, { imageBase64: "AAAA", imageIsScreenCapture: true, prompt: "what is on my screen" }),
+    );
 
     const sentBlocks = adapter.executed.at(-1)!.prompt;
     expect(sentBlocks.map((block) => block.type)).toEqual(["image", "text"]);
