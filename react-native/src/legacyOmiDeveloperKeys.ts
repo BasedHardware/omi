@@ -21,8 +21,8 @@ function text(value: unknown, limit: number): string {
   return value;
 }
 
-function array(value: unknown, limit: number): unknown[] {
-  if (!Array.isArray(value) || value.length > limit) {
+function array(value: unknown): unknown[] {
+  if (!Array.isArray(value)) {
     throw new DeveloperKeyError();
   }
   return value;
@@ -70,7 +70,7 @@ function optionalScopes(value: unknown): string[] | undefined {
 }
 
 export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
-  const rows = array(JSON.parse(body), 1000);
+  const rows = array(JSON.parse(body));
   const keys: OmiDeveloperKey[] = [];
   const seen = new Set<string>();
   for (const raw of rows) {

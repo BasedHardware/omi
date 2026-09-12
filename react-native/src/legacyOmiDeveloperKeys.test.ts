@@ -231,6 +231,26 @@ test('keeps GET developer keys when key_prefix or a scope exceeds 10000', () => 
   ]);
 });
 
+test('does not omit neighboring GET developer keys when the catalogue exceeds 1000', () => {
+  const rows = Array.from({length: 1001}, (_, index) => ({
+    id: `key-${index}`,
+    name: `Key ${index}`,
+    key_prefix: `omi_sk_${index}`,
+  }));
+  const keys = parseOmiDeveloperKeys(JSON.stringify(rows));
+  expect(keys[0]).toEqual({
+    id: 'key-0',
+    name: 'Key 0',
+    keyPrefix: 'omi_sk_0',
+  });
+  expect(keys[1000]).toEqual({
+    id: 'key-1000',
+    name: 'Key 1000',
+    keyPrefix: 'omi_sk_1000',
+  });
+  expect(keys).toHaveLength(1001);
+});
+
 test('keeps GET developer keys when a name exceeds 10000', () => {
   const name = 'L'.repeat(10001);
   expect(
