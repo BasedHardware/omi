@@ -123,6 +123,10 @@ def test_uid_cannot_break_out_of_href():
         assert '" onmouseover=' not in html, f"{plugin_dir}: attribute injection survived"
         assert "%22" in html, f"{plugin_dir}: uid not percent-encoded in page"
         assert "/auth" in html, f"{plugin_dir}: auth link missing"
+        # "&" must also be encoded — otherwise &admin=1 becomes a real
+        # second query parameter handed to the auth flow.
+        assert "%26" in html, f"{plugin_dir}: ampersand left raw in uid"
+        assert "&admin=1" not in html, f"{plugin_dir}: query param injection survived"
 
 
 def test_normal_uid_still_links():
@@ -228,14 +232,37 @@ def test_github_uid_js_escapes_script_close():
     assert "\\u003c" in html, "uid_js not unicode-escaped"
 
 
-def test_slack_dev_page_encodes_uid_in_fetch_urls():
-    """The dev test page builds fetch() URLs from a DOM uid — every one
-    must go through encodeURIComponent, never a raw ${uid} interpolation."""
-    module = _load_plugin("omi-slack-app")
-    html = asyncio.run(module.test_interface(uid="user_123", dev="true"))
-    assert isinstance(html, str)
-    assert "${encodeURIComponent(uid)}" in html, "encoded uid interpolation missing"
-    assert "${uid}" not in html, "raw uid interpolation survived in fetch URL"
+# plugin dir -> disconnect handler that redirects to /?uid=<uid>.
+DISCONNECTS = {
+    "omi-whoop-app": "disconnect",
+    "omi-twitter-chat-tools-app": "disconnect",
+    "omi-notion-app": "disconnect",
+}
+
+
+def test_disconnect_redirect_encodes_uid():
+    for plugin_dir, fn_name in DISCONNECTS.items():
+        module = _load_plugin(plugin_dir)
+        resp = asyncio.run(getattr(module, fn_name)(uid=HOSTILE_UID))
+        url = resp.url
+        assert isinstance(url, str), f"{plugin_dir}: disconnect did not redirect"
+        assert '" onmouseover=' not in url, f"{plugin_dir}: raw uid in redirect"
+        assert "&admin=1" not in url, f"{plugin_dir}: query injection in redirect"
+        assert "%22" in url and "%26" in url, f"{plugin_dir}: uid not encoded in redirect"
+
+
+def test_dev_pages_encode_uid_in_fetch_urls():
+    """The dev test pages build fetch() URLs from a DOM uid — every one
+    must go through encodeURIComponent, never a raw ${uid} interpolation.
+    The value="{uid_h}" attribute must also be HTML-escaped."""
+    for plugin_dir in ("omi-clickup-app", "omi-slack-app"):
+        module = _load_plugin(plugin_dir)
+        html = asyncio.run(module.test_interface(uid=HOSTILE_UID, dev="true"))
+        assert isinstance(html, str), f"{plugin_dir}: dev page is not HTML"
+        assert "${encodeURIComponent(uid)}" in html, f"{plugin_dir}: encoded interpolation missing"
+        assert "${uid}" not in html, f"{plugin_dir}: raw uid interpolation survived"
+        assert "&quot;" in html, f"{plugin_dir}: value attribute not HTML-escaped"
+        assert '" onmouseover=' not in html, f"{plugin_dir}: attribute injection survived"
 
 
 if __name__ == "__main__":
@@ -245,7 +272,8 @@ if __name__ == "__main__":
         test_callback_encodes_uid_after_state_lookup,
         test_callback_rejects_unknown_state,
         test_github_uid_js_escapes_script_close,
-        test_slack_dev_page_encodes_uid_in_fetch_urls,
+        test_disconnect_redirect_encodes_uid,
+        test_dev_pages_encode_uid_in_fetch_urls,
     ]
     for t in tests:
         t()
