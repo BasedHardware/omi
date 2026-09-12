@@ -20,3 +20,5 @@
 * [`quickstart.ru.md`](quickstart.ru.md) — Краткое руководство omi-cli на Русском (Russian Quickstart).
 * [`quickstart.hi.md`](quickstart.hi.md) — omi-cli त्वरित प्रारंभ गाइड हिन्दी में (Hindi Quickstart).
 * [`quickstart.ur.md`](quickstart.ur.md) — omi-cli تیز آغاز گائیڈ اردو میں (Urdu Quickstart).
+* [`quickstart.ro.md`](quickstart.ro.md) — Ghid de Pornire Rapidă omi-cli în Română (Romanian Quickstart).
+* [`quickstart.sr.md`](quickstart.sr.md) — omi-cli Водич за брзи почетак на Српском (Serbian Quickstart).
