@@ -13,3 +13,5 @@
 * [`quickstart.ko.md`](quickstart.ko.md) — omi-cli 빠른 시작 가이드 (Korean Quickstart).
 * [`quickstart.pt.md`](quickstart.pt.md) — Guia de Início Rápido omi-cli em Português (Portuguese Quickstart).
 * [`quickstart.de.md`](quickstart.de.md) — omi-cli Schnellstartanleitung auf Deutsch (German Quickstart).
+* [`quickstart.pl.md`](quickstart.pl.md) — Przewodnik Szybkiego Startu omi-cli po Polsku (Polish Quickstart).
+* [`quickstart.nl.md`](quickstart.nl.md) — Snelstartgids omi-cli in het Nederlands (Dutch Quickstart).
