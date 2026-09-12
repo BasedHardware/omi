@@ -113,12 +113,26 @@ class FetchAllPagesTests(unittest.TestCase):
 
     def test_page_cap_stops_after_max_full_pages(self):
         full = [product_page(1 + i * 250, 250) for i in range(12)]
-        with patch.object(shopify, "shopify_api_request", side_effect=full) as api:
+        with patch.object(shopify, "shopify_api_request", side_effect=full) as api, \
+             patch("builtins.print") as printed:
             result = shopify.shopify_fetch_all_pages(
                 "u", "/products.json", "products", max_pages=10
             )
         self.assertEqual(len(result["products"]), 2500)
         self.assertEqual(api.call_count, 10)
+        self.assertTrue(any("hit cap of 10 pages" in str(c) for c in printed.call_args_list))
+
+    def test_empty_terminating_page_does_not_warn_at_exact_catalog_cap(self):
+        # 9 full pages (2250) + empty page 10: nothing truncated.
+        pages = [product_page(1 + i * 250, 250) for i in range(9)] + [{"products": []}]
+        with patch.object(shopify, "shopify_api_request", side_effect=pages) as api, \
+             patch("builtins.print") as printed:
+            result = shopify.shopify_fetch_all_pages(
+                "u", "/products.json", "products", max_pages=10
+            )
+        self.assertEqual(len(result["products"]), 2250)
+        self.assertEqual(api.call_count, 10)
+        self.assertFalse(any("hit cap" in str(c) for c in printed.call_args_list))
 
 
 class CreateOrderCatalogTests(unittest.TestCase):
@@ -198,6 +212,74 @@ class CreateOrderCatalogTests(unittest.TestCase):
         })
         self.assertIsNone(result.error)
         self.assertIn("not found", result.result.lower())
+
+    def test_create_order_matches_discount_past_first_price_rule_page(self):
+        widget = {
+            "id": 1,
+            "title": "Visible Widget",
+            "variants": [{"id": 777, "price": "12.00"}],
+        }
+        hidden_rule = {"id": 251, "value_type": "percentage", "value": "-15.0"}
+
+        def api(uid, method, endpoint, params=None, json_data=None):
+            if endpoint == "/customers/42.json":
+                return {"customer": {
+                    "id": 42, "email": "buyer@example.com",
+                    "first_name": "Ada", "last_name": "Buyer",
+                }}
+            if endpoint == "/products.json":
+                return {"products": [widget]}
+            if method == "POST" and endpoint == "/draft_orders.json":
+                return {"draft_order": {"id": 88}}
+            if endpoint == "/price_rules.json":
+                since = (params or {}).get("since_id")
+                if since is None:
+                    return rule_page(1, 250)
+                return {"price_rules": [hidden_rule]}
+            if endpoint == "/price_rules/251/discount_codes.json":
+                return {"discount_codes": [{"code": "SAVE15"}]}
+            if method == "PUT" and endpoint == "/draft_orders/88.json":
+                applied = (json_data or {}).get("draft_order", {}).get("applied_discount")
+                self.assertEqual(applied["title"], "SAVE15")
+                self.assertEqual(applied["value"], "15.0")
+                return {"draft_order": {"id": 88, "applied_discount": applied}}
+            if method == "PUT" and endpoint == "/draft_orders/88/complete.json":
+                return {"draft_order": {"order": {
+                    "id": 9,
+                    "name": "#1009",
+                    "order_number": 1009,
+                    "total_price": "10.20",
+                    "total_discounts": "1.80",
+                    "currency": "USD",
+                    "discount_codes": [{"code": "SAVE15", "amount": "1.80"}],
+                    "line_items": [{
+                        "quantity": 1,
+                        "title": "Visible Widget",
+                        "price": "12.00",
+                        "variant_id": 777,
+                    }],
+                }}}
+            if method == "DELETE" and endpoint == "/draft_orders/88.json":
+                return {}
+            if endpoint.startswith("/price_rules/") and endpoint.endswith("/discount_codes.json"):
+                return {"discount_codes": []}
+            return {"error": f"unexpected {method} {endpoint}"}
+
+        with patch("time.sleep"):
+            result, api_mock = self.invoke(api, {
+                "uid": "test-user",
+                "customer_id": 42,
+                "line_items": [{"title": "Visible Widget", "quantity": 1}],
+                "discount_code": "SAVE15",
+            })
+        self.assertIsNone(result.error)
+        self.assertIn("Order Created Successfully", result.result)
+        self.assertIn("SAVE15", result.result)
+        rule_gets = [
+            call for call in api_mock.call_args_list
+            if call[0][2] == "/price_rules.json"
+        ]
+        self.assertGreaterEqual(len(rule_gets), 2)
 
 
 if __name__ == "__main__":

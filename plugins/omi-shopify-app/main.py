@@ -151,6 +151,7 @@ def shopify_fetch_all_pages(
     items: List[Any] = []
     page_count = 0
     last_id = None
+    ended_on_short_page = False
     while page_count < max_pages:
         page_params = dict(query)
         if last_id is not None:
@@ -169,11 +170,13 @@ def shopify_fetch_all_pages(
         items.extend(page_items)
         page_count += 1
         if len(page_items) < page_size:
+            ended_on_short_page = True
             break
         last_id = page_items[-1].get("id") if page_items else None
         if last_id is None:
+            ended_on_short_page = True
             break
-    if page_count == max_pages and items and len(items) % page_size == 0:
+    if page_count == max_pages and items and not ended_on_short_page:
         print(
             f"⚠️ {endpoint} pagination hit cap of {max_pages} pages; "
             f"{len(items)} {list_key} loaded"
