@@ -98,6 +98,29 @@ test('does not omit a neighboring daily summary when stored headline or stats ca
   ]);
 });
 
+test('keeps GET daily summaries when date or day_emoji is longer than 32', () => {
+  const date = 'x'.repeat(33);
+  const dayEmoji = 'x'.repeat(33);
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {id: 'sum-kept', headline: 'Met with the team'},
+          {
+            id: 'sum-long',
+            headline: 'Shipped the recap',
+            date,
+            day_emoji: dayEmoji,
+          },
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id: 'sum-kept', date: '', headline: 'Met with the team'},
+    {id: 'sum-long', date, headline: 'Shipped the recap', dayEmoji},
+  ]);
+});
+
 test('fails closed for malformed GET daily summaries', () => {
   expect(() => parseOmiDailySummaries(JSON.stringify([]))).toThrow();
   expect(() =>
