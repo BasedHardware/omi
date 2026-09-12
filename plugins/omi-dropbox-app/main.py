@@ -57,6 +57,14 @@ app = FastAPI(
 audio_buffers: Dict[str, bytes] = defaultdict(bytes)
 audio_sample_rates: Dict[str, int] = {}
 
+# Audio accumulates in process memory until the conversation webhook uploads
+# it, so the buffer must be bounded: a multi-hour conversation (or a spray of
+# unknown uids, which defaultdict materializes on any key) otherwise grows
+# without limit. ~100 MB holds ~52 minutes of 16 kHz PCM16; the tail beyond
+# the cap is dropped so the webhook still uploads the audio that fit.
+MAX_AUDIO_BUFFER_BYTES = 100 * 1024 * 1024
+MAX_AUDIO_BUFFERS = 512
+
 
 def create_wav_file(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
     """Convert raw PCM16 audio to WAV format."""
@@ -934,9 +942,25 @@ async def receive_audio(
         audio_bytes = await request.body()
 
         if audio_bytes:
-            audio_buffers[uid] += audio_bytes
-            audio_sample_rates[uid] = sample_rate
-            print(f"[AUDIO] Received {len(audio_bytes)} bytes for uid={uid}, total: {len(audio_buffers[uid])} bytes")
+            # Bound uid-key growth before defaultdict materializes a new entry
+            if uid not in audio_buffers and len(audio_buffers) >= MAX_AUDIO_BUFFERS:
+                print(f"[AUDIO] Buffer capacity reached, dropping audio for new uid={uid}")
+                return {"status": "error", "message": "audio buffer capacity reached"}
+
+            buffered = len(audio_buffers[uid])
+            space = MAX_AUDIO_BUFFER_BYTES - buffered
+            if space <= 0:
+                print(f"[AUDIO] Buffer full for uid={uid}, dropping {len(audio_bytes)} bytes")
+            else:
+                audio_buffers[uid] += audio_bytes[:space]
+                audio_sample_rates[uid] = sample_rate
+                if len(audio_bytes) > space:
+                    print(f"[AUDIO] Buffer for uid={uid} hit {MAX_AUDIO_BUFFER_BYTES} bytes; tail dropped")
+                else:
+                    print(
+                        f"[AUDIO] Received {len(audio_bytes)} bytes for uid={uid}, "
+                        f"total: {len(audio_buffers[uid])} bytes"
+                    )
 
         return {"status": "ok"}
     except Exception as e:

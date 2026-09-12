@@ -14,6 +14,11 @@ checks:
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
+  - id: dropbox-audio-buffer-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_audio_buffer.py"]
+    triggers: ["plugins/omi-dropbox-app/**"]
+    lanes: ["local", "ci"]
+    reason: "the /audio endpoint accumulated request bodies into an unbounded defaultdict(bytes); a long conversation or unknown-uid spray grew process memory without limit"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
