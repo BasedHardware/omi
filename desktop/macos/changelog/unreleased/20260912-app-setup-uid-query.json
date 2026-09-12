@@ -1,0 +1,3 @@
+{
+  "change": "Fixed external app setup so sign-in links and completion checks keep working when the provider's URL already carries its own query parameters"
+}
