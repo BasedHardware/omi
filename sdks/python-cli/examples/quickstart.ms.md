@@ -147,10 +147,10 @@ omi --json memory list | jq '.[] | {id, content, category}'
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
 
 # Senarai item tindakan yang belum selesai
-omi --json action-item list --open | jq '.[] | {id, title, due_at}'
+omi --json action-item list --open | jq '.[] | {id, description, due_at}'
 
 # Senarai matlamat
-omi --json goal list | jq '.[] | {id, title, progress: .progress_percent}'
+omi --json goal list | jq '.[] | {id, title, current: .current_value, target: .target_value}'
 ```
 
 ---
@@ -188,7 +188,7 @@ omi auth login
 | `command not found: omi` | PATH tidak mengandungi direktori bin pipx | Jalankan `pipx ensurepath` dan mulakan semula terminal |
 | `401 Unauthorized` | Kunci API tidak sah atau tamat tempoh | Jana kunci baharu di app.omi.me dan kemas kini |
 | `connection refused` | Tiada akses rangkaian ke pelayan Omi | Sahkan sambungan internet dan tetapan proksi |
-| `permission denied` pada fail konfigurasi | Direktori konfigurasi tidak boleh ditulis | Periksa kebenaran `~/.config/omi` |
+| `permission denied` pada fail konfigurasi | Direktori konfigurasi tidak boleh ditulis | Periksa kebenaran `~/.omi/config.toml` |
 
 ---
 
