@@ -181,6 +181,15 @@ class HeyOmiQuestionExtractionTests(unittest.TestCase):
         self.clock.now += 11
         self._post("s1", ["some later words"])
         self.assertEqual(self.openai_calls, ["what is the weather?"])
+        self.assertEqual(self.notifications, [("u1", "test answer")])
+
+    def test_leading_omi_does_not_pollute_trigger_question(self):
+        # A stray 'omi' earlier in the segment must not anchor extraction:
+        # the question lives after the trigger phrase itself.
+        self._post("s1", ["omi hey omi, what time is it"])
+        self.assertEqual(
+            self._buffer("s1")["collected_question"], ["what time is it"]
+        )
 
 
 if __name__ == "__main__":

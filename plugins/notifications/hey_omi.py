@@ -50,8 +50,8 @@ def question_after_trigger(text: str) -> str:
     segment, or '' when nothing follows it. Splitting on 'omi,' dropped the
     question whenever the speaker skipped the comma ('hey omi what time
     is it')."""
-    match = re.search(r'\bomi\b', text)
-    return text[match.end():].strip(' ,') if match else ''
+    match = re.search(r'hey[ ,]+omi\b', text) or re.search(r'\bomi\b', text)
+    return text[match.end():].strip(' \t\n\r,') if match else ''
 
 
 # Replace the message buffer with a class to better manage state
