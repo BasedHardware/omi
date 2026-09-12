@@ -177,6 +177,21 @@ test('keeps GET developer keys when id or key_prefix exceeds 256', () => {
   ]);
 });
 
+test('keeps GET developer keys when a name exceeds 10000', () => {
+  const name = 'L'.repeat(10001);
+  expect(
+    parseOmiDeveloperKeys(
+      JSON.stringify([
+        {id: 'key-long', name, key_prefix: 'omi_sk_ab'},
+        {id: 'key-neighbor', name: 'Cursor', key_prefix: 'omi_mcp_cd'},
+      ]),
+    ),
+  ).toEqual([
+    {id: 'key-long', name, keyPrefix: 'omi_sk_ab'},
+    {id: 'key-neighbor', name: 'Cursor', keyPrefix: 'omi_mcp_cd'},
+  ]);
+});
+
 test('loadOmiDevApiKeys and loadOmiMcpApiKeys name resolved GET keys and omit failures', async () => {
   const request = jest.fn(async (input: {path: string}) => {
     if (input.path === '/v1/dev/keys') {

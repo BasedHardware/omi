@@ -83,7 +83,7 @@ export function parseOmiDeveloperKeys(body: string): OmiDeveloperKey[] {
       throw new DeveloperKeyError();
     }
     seen.add(id);
-    const name = visibleDisplayText(text(row.name, 10000));
+    const name = visibleDisplayText(text(row.name, 1_000_000));
     if (name === '') {
       continue;
     }
