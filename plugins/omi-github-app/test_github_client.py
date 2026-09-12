@@ -79,6 +79,54 @@ class GitHubClientTests(unittest.TestCase):
         ), patch.object(github_client, "print"):
             self.assertEqual(client.list_user_repos("token"), [])
 
+    def test_get_repo_labels_follows_next_page(self):
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            side_effect=[
+                FakeResponse([{"name": "bug"}, {"name": "docs"}], links={"next": {"url": "page-2"}}),
+                FakeResponse([{"name": "wontfix"}]),
+            ],
+        ) as get:
+            labels = client.get_repo_labels("token", "owner/repo")
+
+        self.assertEqual(labels, ["bug", "docs", "wontfix"])
+        self.assertEqual(get.call_count, 2)
+
+    def test_get_repo_labels_with_details_follows_next_page(self):
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            side_effect=[
+                FakeResponse(
+                    [{"name": "bug", "color": "d73a4a", "description": "Something broke"}],
+                    links={"next": {"url": "page-2"}},
+                ),
+                FakeResponse([{"name": "wontfix", "color": "ffffff", "description": None}]),
+            ],
+        ) as get:
+            labels = client.get_repo_labels_with_details("token", "owner/repo")
+
+        self.assertEqual([label["name"] for label in labels], ["bug", "wontfix"])
+        self.assertEqual(get.call_count, 2)
+
+    def test_get_repo_labels_discards_partial_results_on_later_page_error(self):
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "get",
+            side_effect=[
+                FakeResponse([{"name": "bug"}], links={"next": {"url": "page-2"}}),
+                FakeResponse([], status_code=500),
+            ],
+        ), patch.object(github_client, "print"):
+            self.assertEqual(client.get_repo_labels("token", "owner/repo"), [])
+
 
 if __name__ == "__main__":
     unittest.main()

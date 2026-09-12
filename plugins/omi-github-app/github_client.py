@@ -129,22 +129,32 @@ class GitHubClient:
         Returns list of label names.
         """
         try:
-            response = requests.get(
-                f"{self.api_base}/repos/{repo_full_name}/labels",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/vnd.github.v3+json"
-                },
-                params={"per_page": 100}
-            )
-            
-            if response.status_code == 200:
-                labels = response.json()
-                return [label["name"] for label in labels]
-            else:
-                print(f"⚠️  Could not fetch labels: {response.status_code}")
-                return []
-                
+            labels = []
+            page = 1
+
+            while True:
+                response = requests.get(
+                    f"{self.api_base}/repos/{repo_full_name}/labels",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Accept": "application/vnd.github.v3+json"
+                    },
+                    params={"per_page": 100, "page": page}
+                )
+
+                if response.status_code != 200:
+                    print(f"⚠️  Could not fetch labels: {response.status_code}")
+                    return []
+
+                labels.extend(label["name"] for label in response.json())
+
+                if "next" not in response.links:
+                    break
+
+                page += 1
+
+            return labels
+
         except Exception as e:
             print(f"⚠️  Error fetching labels: {e}")
             return []
@@ -352,28 +362,38 @@ class GitHubClient:
         Returns list of label dicts with name, color, description.
         """
         try:
-            response = requests.get(
-                f"{self.api_base}/repos/{repo_full_name}/labels",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/vnd.github.v3+json"
-                },
-                params={"per_page": 100}
-            )
+            labels = []
+            page = 1
 
-            if response.status_code == 200:
-                labels = response.json()
-                return [
+            while True:
+                response = requests.get(
+                    f"{self.api_base}/repos/{repo_full_name}/labels",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Accept": "application/vnd.github.v3+json"
+                    },
+                    params={"per_page": 100, "page": page}
+                )
+
+                if response.status_code != 200:
+                    print(f"⚠️  Could not fetch labels: {response.status_code}")
+                    return []
+
+                labels.extend(
                     {
                         "name": label["name"],
                         "color": label["color"],
                         "description": label.get("description", "")
                     }
-                    for label in labels
-                ]
-            else:
-                print(f"⚠️  Could not fetch labels: {response.status_code}")
-                return []
+                    for label in response.json()
+                )
+
+                if "next" not in response.links:
+                    break
+
+                page += 1
+
+            return labels
 
         except Exception as e:
             print(f"⚠️  Error fetching labels: {e}")
