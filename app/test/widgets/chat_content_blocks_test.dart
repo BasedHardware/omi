@@ -19,19 +19,19 @@ import 'package:omi/providers/message_provider.dart';
 /// Records the single task-mutation path instead of hitting the network.
 class _RecordingActionItemsProvider extends ActionItemsProvider {
   _RecordingActionItemsProvider(this._items)
-    : super(
-        getActionItems:
-            ({
-              int limit = 100,
-              int offset = 0,
-              bool? completed,
-              String? conversationId,
-              DateTime? startDate,
-              DateTime? endDate,
-              DateTime? dueStartDate,
-              DateTime? dueEndDate,
-            }) async => const wire.GeneratedActionItemsResponse(actionItems: []),
-      );
+      : super(
+          getActionItems: ({
+            int limit = 100,
+            int offset = 0,
+            bool? completed,
+            String? conversationId,
+            DateTime? startDate,
+            DateTime? endDate,
+            DateTime? dueStartDate,
+            DateTime? dueEndDate,
+          }) async =>
+              const wire.GeneratedActionItemsResponse(actionItems: []),
+        );
 
   final List<ActionItemWithMetadata> _items;
   final List<(String, bool)> updates = [];
