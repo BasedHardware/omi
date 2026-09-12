@@ -1527,6 +1527,32 @@ test('does not fail conversation detail when stored sections or action items can
   expect(omitted.actionItems).toEqual([]);
 });
 
+test('keeps GET conversation detail when a section heading, action item, or photo caption exceeds 10000', async () => {
+  const heading = 'h'.repeat(10001);
+  const description = 'd'.repeat(10001);
+  const caption = 'p'.repeat(10001);
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        sections: [{heading, body_markdown: 'Full notes'}],
+        action_items: [{description, completed: false}],
+      },
+      photos: [{description: caption}],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      title: fixture.structured.title,
+      sections: [{heading, bodyMarkdown: 'Full notes'}],
+      actionItems: [{description, completed: false}],
+      photoCount: 1,
+      photoCaptions: [caption],
+    },
+  );
+});
+
 test('keeps GET conversation sections when more than 1000', async () => {
   const sections = Array.from({length: 1001}, (_, index) => ({
     heading: `Note ${index}`,

@@ -154,7 +154,7 @@ function locationAddress(value: unknown): string | undefined {
   if (geo.address === undefined || geo.address === null) {
     return undefined;
   }
-  const address = visibleDisplayText(text(geo.address, 10000));
+  const address = visibleDisplayText(text(geo.address));
   return address === '' ? undefined : address;
 }
 function externalText(value: unknown): string | undefined {
@@ -188,7 +188,7 @@ function calendarEvent(
   }
   const event = object(value);
   text(event.event_id, 10000);
-  const title = visibleDisplayText(text(event.title, 10000));
+  const title = visibleDisplayText(text(event.title));
   const startCopy = calendarEventTimeCopy(event.start_time);
   const endCopy = calendarEventTimeCopy(event.end_time);
   if (
@@ -201,7 +201,7 @@ function calendarEvent(
   const attendees = (
     Array.isArray(event.attendees) ? event.attendees : []
   ).flatMap(raw => {
-    const name = visibleDisplayText(text(raw, 10000));
+    const name = visibleDisplayText(text(raw));
     return name === '' ? [] : [name];
   });
   if (
@@ -266,7 +266,7 @@ function conversationPhotos(value: unknown):
         ? conversationPhotoChrome({discarded})
         : conversationPhotoChrome({
             discarded,
-            description: text(photo.description, 10000),
+            description: text(photo.description),
           });
     const imageUri =
       photo.base64 === undefined || photo.base64 === null
@@ -353,7 +353,7 @@ export async function loadLegacyConversationDetail(
       continue;
     }
     sections.push({
-      heading: text(section.heading, 10000),
+      heading: text(section.heading),
       bodyMarkdown: text(section.body_markdown),
     });
   }
@@ -365,7 +365,7 @@ export async function loadLegacyConversationDetail(
       if (raw === '') {
         continue;
       }
-      actionItems.push({description: text(raw, 10000), completed: false});
+      actionItems.push({description: text(raw), completed: false});
       continue;
     }
     if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -387,7 +387,7 @@ export async function loadLegacyConversationDetail(
       continue;
     }
     actionItems.push({
-      description: text(item.description, 10000),
+      description: text(item.description),
       completed: item.completed === undefined ? false : item.completed,
     });
   }
