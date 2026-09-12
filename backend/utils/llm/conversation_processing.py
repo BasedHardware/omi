@@ -35,7 +35,10 @@ from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
 from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_MINIMUM_TOKENS,
     EXPLICIT_CACHE_OPTIONS,
+    GPT56_EXPLICIT_CACHE_ENABLED_ENV,  # noqa: F401  — compatibility re-export; test_conversation_structure_timezone reads it via this module
+    explicit_cache_switch_enabled,
     has_cacheable_prefix,
+    marked_prefix_request,
 )
 from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, shared_conversation_cache_supported
 
@@ -54,10 +57,10 @@ CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ST
 CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE = 'conversation_action_items.extract.shadow'
 CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED'
 CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE'
-GPT56_EXPLICIT_CACHE_ENABLED_ENV = 'OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED'
 GPT56_EXPLICIT_CACHE_OPTIONS = EXPLICIT_CACHE_OPTIONS
 TRANSCRIPT_STRUCTURE_CACHE_KEY = 'omi-transcript-structure-v1'
 ACTION_ITEMS_CACHE_KEY = 'omi-extract-actions-v1'
+APP_RESULT_CACHE_NAMESPACE = 'omi-app-result-v1'
 GPT56_CACHE_MINIMUM_TOKENS = EXPLICIT_CACHE_MINIMUM_TOKENS
 
 
@@ -167,7 +170,9 @@ def _env_flag_enabled(name: str, *, default: bool = False) -> bool:
 
 
 def _gpt56_explicit_cache_enabled() -> bool:
-    return should_route_features_through_gateway() and _env_flag_enabled(GPT56_EXPLICIT_CACHE_ENABLED_ENV, default=True)
+    # The route half stays local so this module's gateway seam remains patchable;
+    # the kill-switch half is owned once, in prompt_cache, for every caller.
+    return should_route_features_through_gateway() and explicit_cache_switch_enabled()
 
 
 def _env_sample_rate(name: str, *, default: float = 0.0) -> float:
@@ -1589,7 +1594,10 @@ def get_app_result(
 
     full_context = "\n\n".join(context_parts)
 
-    prompt = f'''
+    # Split, not rewritten: the framing is stable for an app+language and repeats on
+    # every conversation that app summarizes. The two halves concatenate to exactly
+    # the string this prompt was (test_app_result_wire_text_is_byte_identical_...).
+    app_framing = f'''
     You are an AI with the following characteristics:
     Name: {app.name},
     Description: {app.description},
@@ -1598,8 +1606,10 @@ def get_app_result(
     Language: The conversation language is {language_code}. Use the same language {language_code} for your response.
 
     Conversation:
-    {full_context}
     '''
+    app_conversation_block = f'''{full_context}
+    '''
+    prompt = f'{app_framing}{app_conversation_block}'
 
     # Both branches run a user-authored prompt over a whole conversation while the user waits, so
     # they need the foreground deadline get_llm gives the conv_app_result feature (see model_config);
@@ -1625,14 +1635,23 @@ Respond in {language_code}.'''
 
     gateway_mode_enabled = should_route_features_through_gateway()
     explicit_cache_enabled = _gpt56_explicit_cache_enabled()
-    # App-specific instructions vary at the start of the prompt. Explicit mode
-    # without a breakpoint keeps this route out of GPT-5.6's billable cache.
-    # The None/legacy split keys on gateway mode (like get_transcript_structure)
-    # so gateway-on requests never fall back to a legacy implicit routing key.
-    cache_key = None if gateway_mode_enabled else 'omi-app-result'
-    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
+    # Above the provider's floor the leading framing is a readable prefix: one write,
+    # then a read on every later conversation this app summarizes inside the TTL.
+    # Below it, marked_prefix_request declines and the request keeps its previous
+    # shape — explicit mode, no breakpoint, no routing key — which is how a unique
+    # prompt opts out of billable writes. BYOK is excluded: a BYOK key can route
+    # this feature off GPT-5.6, where a typed cache field is not a valid content part.
+    marked_key, marked_messages = (
+        marked_prefix_request(APP_RESULT_CACHE_NAMESPACE, app_framing, app_conversation_block)
+        if explicit_cache_enabled and not has_byok_keys()
+        else (None, None)
+    )
+    # The None/legacy split keys on gateway mode (like get_transcript_structure) so
+    # gateway-on requests never fall back to a legacy implicit routing key.
+    cache_key = marked_key or (None if gateway_mode_enabled else 'omi-app-result')
+    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled and not has_byok_keys() else None
     app_result_llm = get_llm('conv_app_result', cache_key=cache_key, prompt_cache_options=cache_options)
-    response = app_result_llm.invoke(prompt)
+    response = app_result_llm.invoke(marked_messages or prompt)
     content = strip_speaker_placeholders(_content_str(response).replace('```json', '').replace('```', ''))
     return content
 

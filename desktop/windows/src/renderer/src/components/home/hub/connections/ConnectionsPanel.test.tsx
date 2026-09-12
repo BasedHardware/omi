@@ -116,7 +116,7 @@ describe('ConnectionsPanel tray (top level)', () => {
     // The Claude / Claude Code destination detail (with the Claude Code
     // config-write connector row) is shown, with a Back affordance.
     await waitFor(() => expect(screen.getByTestId('connections-back')).toBeTruthy())
-    expect(screen.getByTestId('connector-claude-claude-code')).toBeTruthy()
+    expect(screen.getByTestId('connector-claude-code')).toBeTruthy()
   })
 
   it('drills OpenClaw into its export connector detail (no dead "coming soon")', async () => {

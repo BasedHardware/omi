@@ -46,6 +46,13 @@ MANUAL_TIER = "manual"
 FAULT_TIER = "fault"
 ALLOWED_TIERS = {0, 1, 2, 3, MANUAL_TIER, FAULT_TIER}
 
+# Chat-first shell snapshots pin selectedTabIndex to nil
+# (DesktopHomeView.reportAutomationState). Waiting on it hangs forever.
+# Use state.chatFirstRoute (stableName) instead. This is a static tripwire.
+RETIRED_STATE_FIELDS = {
+    "selectedTabIndex": "always nil on the chat-first shell; wait on state.chatFirstRoute",
+}
+
 
 def fail(message: str) -> None:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -123,6 +130,30 @@ def is_typed_flow(flow: dict, steps: list) -> bool:
     return any(any(key in step for key in TYPED_STEP_KEYS) for step in steps if isinstance(step, dict))
 
 
+def retired_state_field_errors(path: Path, step: dict) -> list[str]:
+    errors: list[str] = []
+    step_id = step.get("id", "?")
+    for field in ("wait", "state.expect"):
+        payload = step.get(field)
+        if not isinstance(payload, dict):
+            continue
+        mappings = [payload]
+        nested = payload.get("equals")
+        if field == "state.expect" and isinstance(nested, dict):
+            mappings.append(nested)
+        for mapping in mappings:
+            for key in mapping:
+                if key == "equals":
+                    continue
+                leaf = str(key).rsplit(".", 1)[-1]
+                reason = RETIRED_STATE_FIELDS.get(leaf)
+                if reason:
+                    errors.append(
+                        f"{path.name}: step {step_id} {field} uses retired {key}; {reason}"
+                    )
+    return errors
+
+
 def lint_flow(path: Path, actions: set[str]) -> list[str]:
     errors: list[str] = []
     flow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -151,6 +182,11 @@ def lint_flow(path: Path, actions: set[str]) -> list[str]:
     if not isinstance(steps, list):
         errors.append(f"{path.name}: steps must be a list")
         return errors
+
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        errors.extend(retired_state_field_errors(path, step))
 
     if not is_typed_flow(flow, steps):
         return errors

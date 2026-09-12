@@ -36,7 +36,7 @@ steps:
       target: conversations
       activateApp: false
     wait:
-      state.selectedTabIndex: 1
+      state.chatFirstRoute: memories
 
   - id: S2
     name: Create hermetic capture conversation

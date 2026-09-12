@@ -7,7 +7,7 @@ and chat tools for managing calendar events.
 import os
 import sys
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from urllib.parse import urlencode
 
@@ -212,6 +212,11 @@ def parse_datetime(dt_str: str) -> tuple[datetime, bool]:
             # If no year in format, use current year
             if "%Y" not in fmt:
                 parsed = parsed.replace(year=today.year)
+            # Normalize any explicit offset to UTC wall time before callers
+            # attach timeZone: UTC.
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone(timezone.utc)
+                parsed = parsed.replace(tzinfo=None)
             # If no time in format, it's an all-day event
             is_all_day = "%H" not in fmt and "%I" not in fmt
             return parsed, is_all_day
@@ -221,8 +226,12 @@ def parse_datetime(dt_str: str) -> tuple[datetime, bool]:
     # Default: try to parse as ISO format
     try:
         parsed = datetime.fromisoformat(dt_str.replace("z", "+00:00"))
-        return parsed, False
-    except:
+        if parsed.tzinfo is not None:
+            # Convert the instant to UTC wall time before dropping tzinfo so
+            # callers that attach timeZone: UTC do not shift the event.
+            parsed = parsed.astimezone(timezone.utc)
+        return parsed.replace(tzinfo=None), False
+    except Exception:
         pass
 
     raise ValueError(f"Could not parse datetime: {dt_str}")
