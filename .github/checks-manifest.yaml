@@ -946,6 +946,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
 
+  - id: plugin-uid-query-encoding-extra-tests
+    command: ["python3", "plugins/test_uid_reflection_extra.py"]
+    triggers: ["plugins/omi-linear-app/**", "plugins/omi-hive-app/**", "plugins/import/manual-import/**", "plugins/test_uid_reflection_extra.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the client-controlled uid/user_id was interpolated raw into linear's setup oauth_url + template hrefs, hive's redirect Location headers, and manual-import's API query; & or # in the value corrupted the query string (verified param injection)"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
