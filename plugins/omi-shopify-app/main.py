@@ -80,7 +80,7 @@ templates = Jinja2Templates(directory=templates_dir)
 # Helper Functions
 # ============================================
 
-_SHOP_DOMAIN_RE = re.compile(r"[a-z0-9][a-z0-9-]*\.myshopify\.com")
+_SHOP_DOMAIN_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.myshopify\.com")
 
 
 def _normalize_shop_domain(shop: Optional[str]) -> Optional[str]:

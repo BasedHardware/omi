@@ -72,6 +72,7 @@ def _install_stubs():
         "dotenv": dotenv,
         "db": db,
         "models": models,
+        "requests": _stub("requests"),
     }
     return stubs
 
@@ -146,6 +147,16 @@ def test_auth_flow_normalizes_bare_store_name():
     assert resp.url.startswith("https://mystore.myshopify.com/admin/oauth/authorize?"), resp.url
 
 
+def test_auth_flow_rejects_malformed_dns_label():
+    module = _load_main()
+    for shop in ["foo-.myshopify.com", "-foo.myshopify.com", "a" * 64 + ".myshopify.com"]:
+        try:
+            asyncio.run(module.shopify_auth(uid="u1", shop=shop))
+            raise AssertionError(f"shop={shop!r} was not rejected")
+        except _HTTPException as e:
+            assert e.status_code == 400
+
+
 if __name__ == "__main__":
     tests = [
         test_callback_rejects_attacker_host_before_token_exchange,
@@ -153,6 +164,7 @@ if __name__ == "__main__":
         test_callback_accepts_real_shop_domain,
         test_auth_flow_rejects_non_shopify_host,
         test_auth_flow_normalizes_bare_store_name,
+        test_auth_flow_rejects_malformed_dns_label,
     ]
     for t in tests:
         t()
