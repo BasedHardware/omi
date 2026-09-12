@@ -1510,6 +1510,45 @@ def _existing_identical_add_row(
     return item
 
 
+_DUPLICATE_ADD_SNAPSHOT_RETRY_DELAYS: tuple[float, ...] = (0.05, 0.15, 0.3)
+
+
+def _resolve_duplicate_add_row(
+    uid: str,
+    *,
+    result: ApplyResult,
+    memory_id: str,
+    data: Dict[str, Any],
+    db_client: Any,
+) -> Optional[MemoryItem]:
+    """Resolve an add collision, retrying briefly while the row is not readable yet.
+
+    The apply transaction observed the colliding row inside its own snapshot, but
+    a concurrent identical submission can return ``invalid_patch`` while the
+    winning write is still landing for a plain read — the exact residue behind
+    the 2026-09-11 ``canonical write failed`` family on chat/extraction writes.
+    Re-read briefly before failing so an identical resubmission resolves to the
+    existing row instead of surfacing a 500. Definitive conflicts — a row that
+    is not active, user-rejected, or carrying different content — return None on
+    every re-read and stay fail-closed.
+    """
+    # Only the duplicate-add collision shape can ever be resolved by a re-read;
+    # any other failure (admission, inactive-source, payload mismatch,
+    # exhausted-head-retry) pays nothing here and fails immediately.
+    if result.status != ApplyStatus.invalid_patch or result.reason != _DUPLICATE_ADD_ROW_REASON:
+        return None
+    duplicate = _existing_identical_add_row(uid, result=result, memory_id=memory_id, data=data, db_client=db_client)
+    if duplicate is not None:
+        return duplicate
+    for delay in _DUPLICATE_ADD_SNAPSHOT_RETRY_DELAYS:
+        time.sleep(delay)
+        snapshot = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
+        if not getattr(snapshot, "exists", False):
+            continue
+        return _existing_identical_add_row(uid, result=result, memory_id=memory_id, data=data, db_client=db_client)
+    return None
+
+
 def write_canonical_extraction_memory(
     uid: str,
     data: Dict[str, Any],
@@ -1565,7 +1604,7 @@ def write_canonical_extraction_memory(
             break
     assert result is not None
     if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
-        duplicate_row = _existing_identical_add_row(
+        duplicate_row = _resolve_duplicate_add_row(
             uid,
             result=result,
             memory_id=memory_id,
