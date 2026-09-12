@@ -45,6 +45,8 @@ def path_segment(value: str) -> str:
     calendar ids contain `#`/`@` — raw `#` truncates the URL and `/` or `..`
     would let the id rewrite the request path.
     """
+    if value in (".", ".."):
+        raise ValueError("invalid calendar or event id")
     return quote(value, safe="")
 
 

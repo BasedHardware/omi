@@ -47,6 +47,7 @@ def _load_main():
         "dotenv": _stub("dotenv", load_dotenv=lambda *a, **k: None),
         "db": _stub("db"),
         "models": _stub("models", ChatToolResponse=dict),
+        "requests": _stub("requests"),
     }
     with mock.patch.dict(sys.modules, stubs):
         spec = importlib.util.spec_from_file_location("gcal_main_under_test", MAIN_PATH)
@@ -120,6 +121,45 @@ def test_event_id_cannot_rewrite_path():
         assert path.count("/events/") == 1
 
 
+def test_create_event_encodes_calendar_id():
+    module = _load_main()
+    calls = _run_tool(
+        module, "tool_create_event",
+        {
+            "uid": "u1",
+            "calendar_id": "en.usa#holiday@group.v.calendar.google.com",
+            "title": "standup",
+            "start": "2026-09-20T10:00:00Z",
+        },
+    )
+    post = [c for c in calls if c[0] == "POST"]
+    assert post, f"handler made no POST call: {calls}"
+    url = post[0][1]
+    assert "#" not in url, f"# truncated the request path: {url}"
+    assert "en.usa%23holiday%40group.v.calendar.google.com" in url
+
+
+def test_update_event_encodes_event_id():
+    module = _load_main()
+    calls = _run_tool(
+        module, "tool_update_event",
+        {"uid": "u1", "calendar_id": "primary", "event_id": "x/../../acl/owner", "title": "t"},
+    )
+    assert calls, "handler made no API call"
+    for _, url, _ in calls:
+        path = url.split("?")[0]
+        assert "/../" not in path and not path.endswith("/.."), f"path rewritten: {url}"
+
+
+def test_dotdot_id_fails_closed():
+    module = _load_main()
+    calls = _run_tool(
+        module, "tool_delete_event",
+        {"uid": "u1", "calendar_id": "primary", "event_id": ".."},
+    )
+    assert not calls, f"dot-segment id reached the API: {calls}"
+
+
 def test_plain_ids_pass_through_unchanged():
     module = _load_main()
     calls = _run_tool(
@@ -134,6 +174,9 @@ if __name__ == "__main__":
     tests = [
         test_calendar_id_with_hash_is_encoded_not_truncating,
         test_event_id_cannot_rewrite_path,
+        test_create_event_encodes_calendar_id,
+        test_update_event_encodes_event_id,
+        test_dotdot_id_fails_closed,
         test_plain_ids_pass_through_unchanged,
     ]
     for t in tests:
