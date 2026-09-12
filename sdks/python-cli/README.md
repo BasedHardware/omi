@@ -267,6 +267,7 @@ looking up an older or missing item may require several API requests.
 --api-base URL         Override the API base URL.
 --verbose, -v          Log HTTP traffic to stderr.
 --no-color             Disable colored output (also honors $NO_COLOR).
+--timeout SECONDS      Per-operation HTTP timeout (default 30).
 --version              Print the version.
 --help                 Show contextual help.
 ```
