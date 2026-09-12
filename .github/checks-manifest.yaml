@@ -14,6 +14,11 @@ checks:
     triggers: ["plugins/omi-usgs-earthquake-app/**"]
     lanes: ["local", "ci"]
     reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
+  - id: linear-graphql-errors-tests
+    command: ["python3", "plugins/omi-linear-app/test_graphql_errors.py"]
+    triggers: ["plugins/omi-linear-app/**"]
+    lanes: ["local", "ci"]
+    reason: "linear_graphql_request indexed result['errors'][0] on key presence alone, so an empty/null/non-list errors payload crashed the error path instead of returning a clean error"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
