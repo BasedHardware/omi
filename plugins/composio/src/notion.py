@@ -159,6 +159,7 @@ async def extract_all_pages(access_token: str, uid: str):
                     all_blocks = []
                     has_more = True
                     next_cursor = None
+                    seen_cursors = set()
 
                     while has_more:
                         # Prepare URL and params for pagination
@@ -181,6 +182,17 @@ async def extract_all_pages(access_token: str, uid: str):
                         # Check if there are more blocks
                         has_more = blocks_data.get("has_more", False)
                         next_cursor = blocks_data.get("next_cursor")
+
+                        # has_more without a fresh cursor cannot advance to
+                        # the next page; requesting again would re-fetch the
+                        # same page forever inside this async handler.
+                        if has_more and (not next_cursor or next_cursor in seen_cursors):
+                            logger.error(
+                                f"Pagination stalled for page {page_id}: has_more without a fresh cursor"
+                            )
+                            has_more = False
+                        elif next_cursor:
+                            seen_cursors.add(next_cursor)
 
                         if has_more:
                             logger.info(
