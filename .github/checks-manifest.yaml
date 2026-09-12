@@ -946,6 +946,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
 
+  - id: plugin-uid-reflection-encoding-tests
+    command: ["python3", "plugins/test_uid_reflection.py"]
+    triggers: ["plugins/omi-whoop-app/**", "plugins/omi-twitter-chat-tools-app/**", "plugins/omi-github-app/**", "plugins/omi-notion-app/**", "plugins/omi-clickup-app/**", "plugins/omi-slack-app/**", "plugins/test_uid_reflection.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the client-controlled uid query param was reflected raw into HTML href attributes and fetch() URLs on six plugin setup pages; a quote broke the attribute (HTML injection) and &, #, or .. corrupted the query"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
