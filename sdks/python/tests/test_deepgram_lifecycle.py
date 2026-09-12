@@ -22,7 +22,7 @@ class FakeWebSocket:
         self.sent_chunks: list[bytes] = []
         self.closed = False
 
-    async def send(self, chunk: bytes) -> None:
+    async def send(self, chunk: bytes | str) -> None:
         if self.send_error:
             raise self.send_error
         self.sent_chunks.append(chunk)
@@ -223,6 +223,40 @@ def test_deepgram_caller_cancellation():
             with pytest.raises(asyncio.CancelledError):
                 await task
 
+        assert json.dumps({"type": "CloseStream"}) in fake_ws.sent_chunks
+        assert fake_ws.sent_chunks[-1] == json.dumps({"type": "CloseStream"})
         assert fake_ws.closed is True
+
+    asyncio.run(_test())
+
+
+def test_deepgram_reconnect_after_eof_does_not_send_closestream():
+    """Server EOF is a reconnect, not a client Stop — do not send CloseStream."""
+    async def _test():
+        connections = 0
+        reconnected = asyncio.Event()
+        first_ws: FakeWebSocket | None = None
+
+        def make_fake_ws(*args, **kwargs):
+            nonlocal connections, first_ws
+            connections += 1
+            if connections == 1:
+                first_ws = FakeWebSocket()
+                return first_ws
+            reconnected.set()
+            return FakeWebSocket()
+
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        with patch("websockets.connect", side_effect=make_fake_ws), \
+             patch("asyncio.sleep", return_value=None):
+            transcriber = DeepgramTranscriber("fake-key")
+            task = asyncio.create_task(transcriber.run(queue))
+            await asyncio.wait_for(reconnected.wait(), timeout=1.0)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+        assert first_ws is not None
+        assert json.dumps({"type": "CloseStream"}) not in first_ws.sent_chunks
 
     asyncio.run(_test())
