@@ -82,6 +82,8 @@ void main() {
     await provider.ensureHomeTodayTasksLoaded(now: now);
     final preview = provider.todayPreviewTasks(now: now);
     expect(preview.map((i) => i.id), ['hidden-due']);
+    expect(provider.actionItems.map((i) => i.id).toList(), filler.map((i) => i.id).toList());
+    expect(provider.actionItems.any((i) => i.id == 'hidden-due'), isFalse);
     expect(dueCalls, isNotEmpty);
     expect(dueCalls.first['completed'], false);
     expect(dueCalls.first['limit'], 100);
