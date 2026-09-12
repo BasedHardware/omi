@@ -55,7 +55,40 @@ test('parses GET app changelogs without inventing a missing icon', () => {
 
 test('fails closed for malformed GET app changelogs', () => {
   expect(() => parseOmiAppChangelogs(JSON.stringify({}))).toThrow();
-  expect(() =>
+});
+
+test('names neighboring GET changelogs when one announcement change cannot project', () => {
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'ann-bad-title',
+          type: 'changelog',
+          app_version: '1.0.0',
+          content: {changes: [{title: 1, description: 'nope'}]},
+        },
+        {
+          id: 'ann-good',
+          type: 'changelog',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+        {
+          id: 'ann-bad-changes',
+          type: 'changelog',
+          app_version: '1.3.0',
+          content: {changes: 'fast'},
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: 'ann-good:0',
+      title: "What's New in 1.2.0",
+      copy: 'Offline replay',
+    },
+  ]);
+  expect(
     parseOmiAppChangelogs(
       JSON.stringify([
         {
@@ -65,8 +98,8 @@ test('fails closed for malformed GET app changelogs', () => {
         },
       ]),
     ),
-  ).toThrow();
-  expect(() =>
+  ).toEqual([]);
+  expect(
     parseOmiAppChangelogs(
       JSON.stringify([
         {
@@ -76,7 +109,7 @@ test('fails closed for malformed GET app changelogs', () => {
         },
       ]),
     ),
-  ).toThrow();
+  ).toEqual([]);
 });
 
 test('loadOmiAppChangelogs names GET rows and omits failures', async () => {

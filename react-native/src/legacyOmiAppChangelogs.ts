@@ -80,15 +80,52 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
         ? ''
         : visibleDisplayText(text(row.app_version, 64));
     const content = object(row.content);
+    if (
+      content.changes !== undefined &&
+      content.changes !== null &&
+      (!Array.isArray(content.changes) ||
+        content.changes.length > MAX_APP_CHANGELOG_CHANGES)
+    ) {
+      continue;
+    }
     const changes =
       content.changes === undefined || content.changes === null
         ? []
-        : array(content.changes, MAX_APP_CHANGELOG_CHANGES);
+        : (content.changes as unknown[]);
     const heading = appChangelogHeading(version);
-    const before = items.length;
+    const pending: OmiAppChangelogRow[] = [];
     let changeIndex = 0;
+    let projectable = true;
     for (const rawChange of changes) {
-      const change = object(rawChange);
+      if (
+        rawChange === null ||
+        typeof rawChange !== 'object' ||
+        Array.isArray(rawChange)
+      ) {
+        projectable = false;
+        break;
+      }
+      const change = rawChange as Record<string, unknown>;
+      if (typeof change.title !== 'string') {
+        projectable = false;
+        break;
+      }
+      if (
+        change.description !== undefined &&
+        change.description !== null &&
+        typeof change.description !== 'string'
+      ) {
+        projectable = false;
+        break;
+      }
+      if (
+        change.icon !== undefined &&
+        change.icon !== null &&
+        typeof change.icon !== 'string'
+      ) {
+        projectable = false;
+        break;
+      }
       const title = visibleDisplayText(text(change.title, 10000));
       if (title === '') {
         continue;
@@ -101,14 +138,18 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
         change.icon === undefined || change.icon === null
           ? ''
           : visibleDisplayText(text(change.icon, 32));
-      items.push({
+      pending.push({
         key: `${id}:${changeIndex}`,
         title: heading,
         copy: appChangelogRowCopy(title, description, icon),
       });
       changeIndex += 1;
     }
-    if (items.length > before) {
+    if (!projectable) {
+      continue;
+    }
+    items.push(...pending);
+    if (pending.length > 0) {
       named += 1;
     }
   }
