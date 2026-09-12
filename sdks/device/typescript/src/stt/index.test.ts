@@ -226,12 +226,55 @@ describe('createParakeetTranscriber', () => {
       drainTimeoutMs: 50,
     });
     transcriber.stop();
+    expect(socketHolder.socket?.readyState).toBe(1);
     socketHolder.socket?.onmessage?.({
       data: JSON.stringify({ text: 'late para' }),
     } as MessageEvent);
     await new Promise((resolve) => setTimeout(resolve, 70));
 
     expect(transcripts).toEqual(['late para']);
+  });
+
+  test('rejects PCM and a second finalize while the socket is draining', () => {
+    const sent: unknown[] = [];
+    class FakeWebSocket {
+      binaryType: string = 'blob';
+      readyState = 1;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: Event) => void) | null = null;
+      constructor(_url: string) {}
+      send(data: unknown) {
+        sent.push(data);
+      }
+      close() {
+        this.readyState = 3;
+      }
+    }
+
+    const socketHolder: { socket?: FakeWebSocket } = {};
+    class CapturingSocket extends FakeWebSocket {
+      constructor(url: string) {
+        super(url);
+        socketHolder.socket = this;
+      }
+    }
+
+    const transcriber = createParakeetTranscriber({
+      apiUrl: 'https://parakeet.example',
+      onTranscript: () => {},
+      WebSocketImpl: CapturingSocket as any,
+      drainTimeoutMs: 5000,
+    });
+    socketHolder.socket?.onmessage?.({
+      data: JSON.stringify({ type: 'ready' }),
+    } as MessageEvent);
+    transcriber.appendPcm(new Uint8Array([1, 2]));
+    transcriber.stop();
+    transcriber.appendPcm(new Uint8Array([3, 4]));
+    transcriber.stop();
+
+    expect(sent).toEqual([new Uint8Array([1, 2]), 'finalize']);
+    expect(socketHolder.socket?.readyState).toBe(1);
   });
 
   test('closes the socket when finalize send fails', () => {

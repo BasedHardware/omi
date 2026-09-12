@@ -73,6 +73,10 @@ export function createParakeetTranscriber(opts: {
   const ws = new WS(url);
   ws.binaryType = 'arraybuffer';
   let ready = false;
+  let stopped = false;
+  let sentFinalize = false;
+  let finished = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   ws.onmessage = (event: MessageEvent) => {
     if (typeof event.data !== 'string') return;
     try {
@@ -87,12 +91,23 @@ export function createParakeetTranscriber(opts: {
       if (text) opts.onTranscript(text);
     } catch { /* ignore */ }
   };
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    if (timer !== undefined) clearTimeout(timer);
+    try {
+      ws.close();
+    } catch { /* ignore */ }
+  };
   return {
     appendPcm(chunk) {
-      if (ready && ws.readyState === WS.OPEN) ws.send(chunk as any);
+      if (stopped) return;
+      if (ready && ws.readyState === 1) ws.send(chunk as any);
     },
     stop() {
-      let sentFinalize = false;
+      if (stopped) return;
+      stopped = true;
+      ready = false;
       try {
         if (ws.readyState === 1) {
           ws.send('finalize');
@@ -101,17 +116,6 @@ export function createParakeetTranscriber(opts: {
       } catch {
         // finalize is best-effort; still tear down the socket.
       }
-
-      let finished = false;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const finish = () => {
-        if (finished) return;
-        finished = true;
-        if (timer !== undefined) clearTimeout(timer);
-        try {
-          ws.close();
-        } catch { /* ignore */ }
-      };
 
       if (!sentFinalize) {
         finish();
