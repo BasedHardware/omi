@@ -77,6 +77,11 @@ class CrossrefAbstractTests(unittest.TestCase):
         abstract = "<p>" + "<i>a</i>" * 1300 + "</p>"
         self.assertEqual(self.result(abstract).split("Abstract: ", 1)[1], "a" * 1200)
 
+    def test_upstream_raw_inequality_control(self):
+        for abstract in ("If a<b, then c>d.", "If a<b and c>d."):
+            with self.subTest(abstract=abstract):
+                self.assertEqual(self.result(abstract).split("Abstract: ", 1)[1], abstract)
+
     def test_provider_error(self):
         with patch.object(app, "crossref_get", AsyncMock(side_effect=RuntimeError("offline"))):
             result = asyncio.run(app.get_crossref_work(SimpleNamespace(doi="10.7554/eLife.45374")))

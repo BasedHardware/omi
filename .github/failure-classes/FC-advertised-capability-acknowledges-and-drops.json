@@ -1,0 +1,15 @@
+{
+    "schema_version": 1,
+    "id": "FC-advertised-capability-acknowledges-and-drops",
+    "violated_contract": "A platform capability that is probed as available and then answers the operation with success may still have done nothing, so a delivery path must confirm the effect on the target rather than trust either answer. Voice typing chose an addressed Accessibility write over Cmd-V wherever AXIsAttributeSettable(kAXSelectedTextAttribute) reported the focused field writable, because only a synchronously verified write can offer Undo last dictation. Measured against a real Chrome textarea, Chromium reports that attribute as settable, answers the write with kAXErrorSuccess, and silently drops it — while setting the selected *range* on the same element takes effect and the native omnibox in the same process accepts both, so the element is reachable and its value is not stale. Every browser- and Electron-backed editor, which is most of where people dictate, therefore took a path that could never land, and its verification failure was classified as a possibly-partial mutation, which must not be retried with a paste. The words were lost and the bar said 'Insertion unconfirmed — check the editor', with a working Cmd-V fallback one branch away and never taken.",
+    "canonical_prevention": "Treat a capability probe and an operation's return code as claims to be checked, not as the outcome. The branch that dispatches the privileged operation reads the target back — over a bounded settling window, because an editor applies a write or a keystroke on its own run loop and the first read is too early even for a paste that lands in 37ms — and only a read-back that shows the intended effect counts as success. Then distinguish the two ways it can fail, because they license different recoveries: a target still holding exactly its captured value, caret and revision after an *acknowledged* operation is proof that no part of it landed, which is the one state where retrying through a different mechanism cannot double-apply; a target that changed into anything else, or an operation whose reply was an error or a timeout, may be half-applied and must never be retried. Record the fallback as a capability mismatch rather than a policy choice, so an API that lies about what it supports is countable per app rather than surfacing as an unexplained user report.",
+    "canonical_prevention_artifact": [
+        "desktop/macos/Desktop/Tests/VoiceTypeTargetSafetyTests.swift"
+    ],
+    "evidence_prs": [],
+    "scope_hints": [
+        "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/TextInsertionSink.swift",
+        "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeSession.swift"
+    ],
+    "status": "open"
+}

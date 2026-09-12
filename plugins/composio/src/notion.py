@@ -531,34 +531,42 @@ def contains_personal_info(text):
     ]
 
     text_lower = text.lower()
-    return any(keyword in text_lower for keyword in personal_keywords)
+    # Keywords are stored mixed-case; compare lowercased so "I like" still matches.
+    return any(keyword.lower() in text_lower for keyword in personal_keywords)
 
 
 def format_as_memory(text):
     """Format text as a memory about the user"""
     text_lower = text.lower()
 
-    # Replace first-person pronouns with "User"
+    def _sub(pattern: str, repl: str) -> str:
+        import re
+
+        return re.sub(pattern, repl, text, count=1, flags=re.IGNORECASE)
+
+    # Replace first-person pronouns with "User" (case-insensitive).
     if "i am" in text_lower or "i'm" in text_lower:
-        return text.replace("I am", "User is").replace("I'm", "User is")
+        return _sub(r"\bi am\b", "User is") if "i am" in text_lower else _sub(r"\bi'm\b", "User is")
     elif "i like" in text_lower:
-        return text.replace("I like", "User likes")
+        return _sub(r"\bi like\b", "User likes")
     elif "i love" in text_lower:
-        return text.replace("I love", "User loves")
+        return _sub(r"\bi love\b", "User loves")
     elif "i enjoy" in text_lower:
-        return text.replace("I enjoy", "User enjoys")
+        return _sub(r"\bi enjoy\b", "User enjoys")
     elif "i prefer" in text_lower:
-        return text.replace("I prefer", "User prefers")
+        return _sub(r"\bi prefer\b", "User prefers")
     elif "i don't like" in text_lower or "i do not like" in text_lower:
-        return text.replace("I don't like", "User doesn't like").replace("I do not like", "User does not like")
+        if "i don't like" in text_lower:
+            return _sub(r"\bi don't like\b", "User doesn't like")
+        return _sub(r"\bi do not like\b", "User does not like")
     elif "i hate" in text_lower:
-        return text.replace("I hate", "User hates")
+        return _sub(r"\bi hate\b", "User hates")
     elif "my favorite" in text_lower:
-        return text.replace("My favorite", "User's favorite")
+        return _sub(r"\bmy favorite\b", "User's favorite")
     elif "i have" in text_lower:
-        return text.replace("I have", "User has")
+        return _sub(r"\bi have\b", "User has")
     elif "my friend" in text_lower:
-        return text.replace("My friend", "User's friend")
+        return _sub(r"\bmy friend\b", "User's friend")
     else:
         # If no specific pattern is matched, prepend with "User:"
         return f"User note: {text}"

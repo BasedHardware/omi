@@ -16,7 +16,7 @@ steps:
       target: memories
       activateApp: false
     wait:
-      state.selectedTabIndex: 3
+      state.chatFirstRoute: memories
 
   - id: S2
     name: Create hermetic test memory while the initial projection may still be loading

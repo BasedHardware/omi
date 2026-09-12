@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ app_id: 
     const incomingForm = await req.formData();
 
     // Validate required fields
-    const appId = (incomingForm.get('app_id') as string) || params.app_id;
+    const appId = ((incomingForm.get('app_id') as string) || params.app_id) ?? '';
     const uid = (incomingForm.get('uid') as string) || '';
     if (!appId) {
       return NextResponse.json({ error: 'app_id is required' }, { status: 400 });
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ app_id: 
     const authHeaderValue = `${OMI_API_SECRET_KEY_BASE}${uid}`;
 
     // FastAPI endpoint path: PATCH /v1/apps/{app_id}
-    const url = `${OMI_API_BASE_URL}/v1/apps/${appId}`;
+    const url = `${OMI_API_BASE_URL}/v1/apps/${encodeURIComponent(appId)}`;
 
     const res = await fetch(url, {
       method: 'PATCH',

@@ -1445,3 +1445,24 @@ def test_flag_on_enrichment_omits_processing_state_while_merge_clearing_the_mark
     last = payloads[-1]
     assert 'processing_state' not in last, 'nothing to say ⇒ the key stays absent, even flag-on'
     assert last[pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is None, 'the upgrade marker clear still lands'
+
+
+# The lazy desktop store is the denominator of the observed ever-opened rate.
+# Drive the real _store_deferred_conversation (not a stub) through the legacy
+# flag-off deferral branch and assert the bounded lifecycle events.
+@pytest.mark.parametrize('persisted, expected_event', [(True, 'stored'), (False, 'fenced')])
+def test_legacy_deferral_records_lazy_store_lifecycle(monkeypatch, pc, persisted: bool, expected_event: str) -> None:
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    recorded: list[str] = []
+    monkeypatch.setattr(pc, 'record_lazy_desktop_deferral', lambda *, event: recorded.append(event))
+    monkeypatch.setattr(pc.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=persisted))
+    monkeypatch.setattr(pc.lifecycle_service, 'persist_processed_conversation', MagicMock(return_value=persisted))
+
+    result = pc.process_conversation('basic-uid', 'en', _desktop_create())
+
+    assert result.deferred is True
+    assert result.status == ConversationStatus.processing
+    assert recorded == [expected_event]
+    spies['get_structured'].assert_not_called()
+    spies['extract_memories'].assert_not_called()

@@ -1,6 +1,7 @@
 import getSharedChat from '@/src/actions/chat/get-shared-chat';
 import envConfig from '@/src/constants/envConfig';
 import { getOmiPlatformDeepLink } from '@/src/lib/conversation-share-platform-link.mjs';
+import { sharedApiUrl } from '@/src/lib/shared-api-url.mjs';
 import { Metadata, ResolvingMetadata } from 'next';
 import { headers } from 'next/headers';
 import Image from 'next/image';
@@ -24,7 +25,7 @@ export async function generateMetadata(
 
   try {
     const response = await fetch(
-      `${envConfig.API_URL}/v2/messages/shared/${params.token}`,
+      sharedApiUrl(envConfig.API_URL, 'v2', 'messages', 'shared', params.token),
       { next: { revalidate: 60 } },
     );
     if (response.ok) {
@@ -52,7 +53,10 @@ export async function generateMetadata(
       ...prevData.openGraph,
       title,
       type: 'website',
-      url: new URL(`/chat/${params.token}`, prevData.metadataBase).toString(),
+      url: new URL(
+        `/chat/${encodeURIComponent(params.token)}`,
+        prevData.metadataBase,
+      ).toString(),
       description,
     },
     other: {
