@@ -108,7 +108,10 @@ class GraphPathTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls._patch.stop()
-        sys.path.remove(str(PLUGIN_DIR))
+        try:
+            sys.path.remove(str(PLUGIN_DIR))
+        except ValueError:
+            pass
 
     def run_async(self, coro):
         return asyncio.run(coro)
