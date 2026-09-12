@@ -287,7 +287,7 @@ jobs:
           # 1500s cleared the job ceiling and still failed the step: a
           # wedged batch spends the full cap before the bisect that clears
           # it, and 1500s on top of a healthy ~870s step is 2400s against
-          # an 1800s guard. Three runs failed exactly that way — 34609469561
+          # an 1800s guard. Three runs failed exactly that way — 34609469609
           # (2414s), 34641438446 (2505s), 34655499561 (2511s) — each with
           # zero failing suites and one `exit=143` batch at the cap, whose
           # halves then passed in under 60s apiece.
@@ -304,8 +304,10 @@ jobs:
           # case is not rescued by any value here; it needs the wedge itself
           # fixed. All three observed failures were ordinary runs.
           #
-          # The local default stays 25 and every invocation logs its wall
-          # seconds, so a regression is visible in the run log.
+          # Local runs are unaffected by either number: the script's own
+          # defaults are a batch of 25 with the ceiling disabled (0), so this
+          # cap exists only for CI's batch of 100. Every invocation logs its
+          # wall seconds, so a regression stays visible in the run log.
           OMI_SWIFT_TEST_SUITE_BATCH_SIZE: "100"
           OMI_SWIFT_TEST_BATCH_CEILING_SECONDS: "600"
           # PRs defer ratcheted slow suites (swift-test-slow-suites.json) to
