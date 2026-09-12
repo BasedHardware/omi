@@ -9,7 +9,7 @@ import sys
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 import requests
 from dotenv import load_dotenv
@@ -36,6 +36,18 @@ def log(msg: str):
     """Print and flush immediately for Railway logging."""
     print(msg)
     sys.stdout.flush()
+
+
+def path_segment(value: str) -> str:
+    """Percent-encode one URL path segment.
+
+    Calendar/event ids come from the tool request body and legitimate Google
+    calendar ids contain `#`/`@` — raw `#` truncates the URL and `/` or `..`
+    would let the id rewrite the request path.
+    """
+    if value in (".", ".."):
+        raise ValueError("invalid calendar or event id")
+    return quote(value, safe="")
 
 
 # Google OAuth2 Configuration
@@ -504,7 +516,7 @@ async def tool_list_events(request: Request):
         time_min = now.isoformat() + "Z"
         time_max = (now + timedelta(days=days)).isoformat() + "Z"
 
-        result = calendar_api_request(uid, "GET", f"/calendars/{calendar_id}/events", params={
+        result = calendar_api_request(uid, "GET", f"/calendars/{path_segment(calendar_id)}/events", params={
             "timeMin": time_min,
             "timeMax": time_max,
             "maxResults": max_results,
@@ -619,7 +631,7 @@ async def tool_create_event(request: Request):
 
         log(f"Creating event: {event_data}")
 
-        result = calendar_api_request(uid, "POST", f"/calendars/{calendar_id}/events", json_data=event_data)
+        result = calendar_api_request(uid, "POST", f"/calendars/{path_segment(calendar_id)}/events", json_data=event_data)
 
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to create event: {result.get('error', 'Unknown error')}")
@@ -671,7 +683,7 @@ async def tool_get_event(request: Request):
         # Use provided calendar_id or fall back to user's default
         calendar_id = body.get("calendar_id") or get_default_calendar(uid)
 
-        result = calendar_api_request(uid, "GET", f"/calendars/{calendar_id}/events/{event_id}")
+        result = calendar_api_request(uid, "GET", f"/calendars/{path_segment(calendar_id)}/events/{path_segment(event_id)}")
 
         if not result or "error" in result:
             return ChatToolResponse(error=f"Event not found: {result.get('error', 'Unknown error')}")
@@ -746,7 +758,7 @@ async def tool_update_event(request: Request):
         calendar_id = body.get("calendar_id") or get_default_calendar(uid)
 
         # Get existing event first
-        existing = calendar_api_request(uid, "GET", f"/calendars/{calendar_id}/events/{event_id}")
+        existing = calendar_api_request(uid, "GET", f"/calendars/{path_segment(calendar_id)}/events/{path_segment(event_id)}")
         if not existing or "error" in existing:
             return ChatToolResponse(error=f"Event not found: {existing.get('error', 'Unknown error')}")
 
@@ -791,7 +803,7 @@ async def tool_update_event(request: Request):
         if not update_data:
             return ChatToolResponse(error="No updates provided. Specify title, start, end, description, or location.")
 
-        result = calendar_api_request(uid, "PATCH", f"/calendars/{calendar_id}/events/{event_id}", json_data=update_data)
+        result = calendar_api_request(uid, "PATCH", f"/calendars/{path_segment(calendar_id)}/events/{path_segment(event_id)}", json_data=update_data)
 
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to update event: {result.get('error', 'Unknown error')}")
@@ -827,10 +839,10 @@ async def tool_delete_event(request: Request):
         calendar_id = body.get("calendar_id") or get_default_calendar(uid)
 
         # Get event title first for confirmation message
-        existing = calendar_api_request(uid, "GET", f"/calendars/{calendar_id}/events/{event_id}")
+        existing = calendar_api_request(uid, "GET", f"/calendars/{path_segment(calendar_id)}/events/{path_segment(event_id)}")
         event_title = existing.get("summary", "Event") if existing and "error" not in existing else "Event"
 
-        result = calendar_api_request(uid, "DELETE", f"/calendars/{calendar_id}/events/{event_id}")
+        result = calendar_api_request(uid, "DELETE", f"/calendars/{path_segment(calendar_id)}/events/{path_segment(event_id)}")
 
         if result and "error" in result:
             return ChatToolResponse(error=f"Failed to delete event: {result.get('error', 'Unknown error')}")

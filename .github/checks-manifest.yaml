@@ -946,6 +946,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
 
+  - id: gcal-path-segment-encoding-tests
+    command: ["python3", "plugins/omi-google-calendar-app/test_path_encoding.py"]
+    triggers: ["plugins/omi-google-calendar-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "tool-body calendar/event ids were interpolated raw into Calendar API paths; '#' in real calendar ids truncated the URL and '/'/'..' let an id rewrite the request path"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
