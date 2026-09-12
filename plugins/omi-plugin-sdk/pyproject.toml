@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omi-plugin-sdk"
-version = "0.1.0"
-description = "Shared Omi plugin webhook models and small integration primitives."
+version = "0.2.0"
+description = "Shared Omi plugin webhook models and HMAC auth primitives."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["pydantic>=2.0.0"]

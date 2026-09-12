@@ -109,17 +109,15 @@ def verify_token(token: str) -> str:
     """
     # ADMIN_KEY impersonation: token format is "<ADMIN_KEY><uid>" (kept as-is —
     # this exact concatenation is depended on by this repo's own integration
-    # tests, the listen/sync test stacks, and the production
-    # memory-continuity-gauntlet smoke test, so changing the format would
-    # break first-party tooling, not just close a hole). What actually
-    # changes: the prefix compare is constant-time instead of `startswith`
-    # (closes a timing side-channel on ADMIN_KEY itself), every successful
-    # use is logged so impersonation is auditable instead of silent, and
-    # ADMIN_KEY_AUTH_ENABLED lets an operator who doesn't need this feature
-    # turn it off entirely — default stays "true" so existing deployments
-    # and CI that already rely on it keep working unchanged.
+    # tests, the listen/sync test stacks, and the memory-continuity-gauntlet
+    # smoke test, so changing the format would break first-party tooling).
+    # Prefix compare is constant-time; successful use is logged for audit.
+    # ADMIN_KEY_AUTH_ENABLED defaults OFF (fail-closed). Set it to 'true'
+    # intentionally for local/dev/CI/break-glass that need Bearer
+    # <ADMIN_KEY><uid> impersonation. Admin router `secret-key: ADMIN_KEY`
+    # auth is a separate path and is not gated by this flag.
     admin_key = os.getenv('ADMIN_KEY')
-    if admin_key and os.getenv('ADMIN_KEY_AUTH_ENABLED', 'true').lower() == 'true':
+    if admin_key and os.getenv('ADMIN_KEY_AUTH_ENABLED', 'false').lower() == 'true':
         if len(admin_key) < 16:
             logger.warning('ADMIN_KEY is under 16 chars — trivially guessable if this deployment is internet-facing')
         candidate = token[: len(admin_key)].encode()

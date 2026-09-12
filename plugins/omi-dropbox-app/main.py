@@ -16,7 +16,8 @@ from urllib.parse import urlencode
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, Query, Request
+from omi_plugin_sdk.auth import PluginAuthError, get_webhook_secret, resolve_authenticated_uid
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from db import (
@@ -27,6 +28,8 @@ from db import (
     store_oauth_state,
     get_oauth_state,
     delete_oauth_state,
+    store_oauth_state_by_token,
+    pop_oauth_uid_for_state,
     get_user_settings,
     store_user_settings,
 )
@@ -319,7 +322,25 @@ def get_home_page_html(
 # ============== Endpoints ==============
 
 
+
+def _require_uid(request: Request, *, query_uid: str | None = None, body_uid: str | None = None, body: bytes = b"") -> str:
+    try:
+        return resolve_authenticated_uid(
+            secret=get_webhook_secret(),
+            header_map=request.headers,
+            query_uid=query_uid,
+            body_uid=body_uid,
+            body=body,
+        )
+    except PluginAuthError as e:
+        raise HTTPException(
+            status_code=getattr(e, "status_code", 401),
+            detail="authenticated uid required (uid query/body alone is not auth)",
+        ) from e
+
+
 @app.get("/", response_class=HTMLResponse)
+# TODO(security): setup URL uid must be signed by Omi backend (product)
 async def home(uid: str = Query(None)):
     """Home page - shows connection status and settings."""
     if not uid:
@@ -362,18 +383,22 @@ async def check_setup(uid: str = Query(...)):
 
 
 @app.get("/auth/dropbox")
+# TODO(security): OAuth start uid from unsigned query — product must sign setup identity
 async def auth_dropbox(uid: str = Query(...)):
-    """Start Dropbox OAuth flow."""
-    # Generate state for CSRF protection
-    state = f"{uid}:{secrets.token_urlsafe(32)}"
+    """Start Dropbox OAuth flow.
+
+    Uses an opaque random state token mapped server-side to uid (not uid-in-state).
+    """
+    state = secrets.token_urlsafe(32)
+    store_oauth_state_by_token(state, uid)
+    # Keep legacy uid→state store for any transitional readers
     store_oauth_state(uid, state)
 
-    # Build authorization URL
     params = {
         "client_id": DROPBOX_APP_KEY,
         "redirect_uri": DROPBOX_REDIRECT_URI,
         "response_type": "code",
-        "token_access_type": "offline",  # Get refresh token
+        "token_access_type": "offline",
         "state": state,
     }
 
@@ -408,19 +433,18 @@ async def auth_callback(
     if not code or not state:
         return HTMLResponse("Missing code or state", status_code=400)
 
-    # Extract uid from state
-    try:
-        uid = state.split(":")[0]
-    except Exception:
-        return HTMLResponse("Invalid state format", status_code=400)
-
-    # Verify state for CSRF protection
-    stored_state = get_oauth_state(uid)
-    if stored_state != state:
-        return HTMLResponse("State mismatch - possible CSRF attack", status_code=400)
-
-    # Clean up state
-    delete_oauth_state(uid)
+    # Resolve uid from opaque state token (preferred). Fall back to legacy uid:nonce.
+    uid = pop_oauth_uid_for_state(state)
+    if not uid:
+        try:
+            legacy_uid = state.split(":")[0]
+        except Exception:
+            return HTMLResponse("Invalid state format", status_code=400)
+        stored_state = get_oauth_state(legacy_uid)
+        if stored_state != state:
+            return HTMLResponse("State mismatch - possible CSRF attack", status_code=400)
+        uid = legacy_uid
+        delete_oauth_state(uid)
 
     # Exchange code for tokens
     try:
@@ -479,8 +503,9 @@ async def auth_callback(
 
 
 @app.get("/disconnect")
-async def disconnect(uid: str = Query(...)):
-    """Disconnect Dropbox account."""
+async def disconnect(request: Request, uid: str = Query(None)):
+    """Disconnect Dropbox account. Requires HMAC auth — bare ?uid= is rejected."""
+    uid = _require_uid(request, query_uid=uid, body=b"")
     delete_dropbox_tokens(uid)
     return RedirectResponse(url=f"/?uid={uid}")
 
@@ -489,9 +514,15 @@ async def disconnect(uid: str = Query(...)):
 
 
 @app.post("/settings")
-async def update_settings(request: Request, uid: str = Query(...)):
-    """Update user settings."""
-    form_data = await request.form()
+async def update_settings(request: Request, uid: str = Query(None)):
+    """Update user settings. Requires HMAC auth — bare ?uid= is rejected."""
+    # Read raw body for signature verification before form parse is unavailable;
+    # form posts from the setup HTML cannot mint HMAC — product must sign setup.
+    raw_body = await request.body()
+    uid = _require_uid(request, query_uid=uid, body=raw_body)
+    # Re-parse form from raw body
+    from urllib.parse import parse_qs
+    form_data = {k: (v[0] if v else "") for k, v in parse_qs(raw_body.decode("utf-8"), keep_blank_values=True).items()}
 
     settings = {
         "folder_name": form_data.get("folder_name", "Omi Conversations"),
@@ -509,13 +540,16 @@ async def update_settings(request: Request, uid: str = Query(...)):
 
 @app.post("/conversation", response_model=EndpointResponse)
 async def on_conversation_created(
-    conversation: Conversation,
-    uid: str = Query(...),
+    request: Request,
+    uid: str = Query(None),
 ):
     """
     Webhook called by Omi when a conversation is created.
-    Saves summary and transcript to Dropbox.
+    Saves summary and transcript to Dropbox. Requires HMAC auth.
     """
+    raw_body = await request.body()
+    uid = _require_uid(request, query_uid=uid, body=raw_body)
+    conversation = Conversation.model_validate_json(raw_body)
     print(f"[WEBHOOK] Received conversation for uid={uid}")
     print(f"[WEBHOOK] Title: {conversation.structured.title}")
     print(f"[WEBHOOK] Overview: {conversation.structured.overview[:100]}...")

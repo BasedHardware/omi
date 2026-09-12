@@ -134,13 +134,15 @@ def test_admin_key_path_enabled_when_flag_is_true(monkeypatch):
     assert verify_token(ADMIN_KEY + 'target-uid') == 'target-uid'
 
 
-def test_admin_key_path_defaults_to_enabled_when_flag_is_unset(monkeypatch):
-    """Backward compatibility: existing deployments/CI that set ADMIN_KEY but
-    have never heard of ADMIN_KEY_AUTH_ENABLED must keep working."""
+def test_admin_key_path_defaults_to_disabled_when_flag_is_unset(monkeypatch):
+    """Fail-closed: ADMIN_KEY set but ADMIN_KEY_AUTH_ENABLED unset must NOT
+    impersonate. Operators enable the path intentionally."""
     _clear_admin_env(monkeypatch)
+    _clear_local_dev_env(monkeypatch)
     monkeypatch.setenv('ADMIN_KEY', ADMIN_KEY)
 
-    assert verify_token(ADMIN_KEY + 'another-uid') == 'another-uid'
+    with pytest.raises(InvalidIdTokenError):
+        verify_token(ADMIN_KEY + 'another-uid')
 
 
 def test_non_matching_token_falls_through_to_firebase_even_when_enabled(monkeypatch):

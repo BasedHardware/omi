@@ -197,6 +197,45 @@ def delete_oauth_state(uid: str):
             _save_json(OAUTH_STATE_FILE, states)
 
 
+
+
+def store_oauth_state_by_token(state: str, uid: str):
+    """Store opaque OAuth state → uid mapping (preferred over uid→state)."""
+    r = _get_redis()
+    if r:
+        key = f"{OAUTH_STATE_PREFIX}token:{state}"
+        r.set(key, uid)
+        r.expire(key, 60 * 10)
+    else:
+        states = _load_json(OAUTH_STATE_FILE)
+        states[f"token:{state}"] = {
+            "uid": uid,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        _save_json(OAUTH_STATE_FILE, states)
+
+
+def pop_oauth_uid_for_state(state: str) -> Optional[str]:
+    """Look up and delete uid for an opaque OAuth state token."""
+    r = _get_redis()
+    if r:
+        key = f"{OAUTH_STATE_PREFIX}token:{state}"
+        uid = r.get(key)
+        if uid is not None:
+            r.delete(key)
+            return uid
+        return None
+    states = _load_json(OAUTH_STATE_FILE)
+    key = f"token:{state}"
+    state_data = states.get(key)
+    if not state_data:
+        return None
+    uid = state_data.get("uid")
+    del states[key]
+    _save_json(OAUTH_STATE_FILE, states)
+    return uid
+
+
 # ============== User Settings Management ==============
 
 def get_user_settings(uid: str) -> Dict[str, Any]:

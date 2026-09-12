@@ -5,6 +5,7 @@ This app provides GitHub integration through OAuth2 authentication
 and chat tools for creating and managing GitHub issues.
 """
 import sys
+import json
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import os
@@ -15,6 +16,11 @@ from simple_storage import SimpleUserStorage
 from github_client import GitHubClient
 from issue_detector import ai_select_labels
 from models import ChatToolResponse
+from omi_plugin_sdk.auth import (
+    PluginAuthError,
+    get_webhook_secret,
+    resolve_authenticated_uid,
+)
 from agent_providers import (
     run_agent_provider,
     PROVIDERS,
@@ -43,6 +49,24 @@ app = FastAPI(
 
 # Store OAuth states temporarily (in production, use Redis or similar)
 oauth_states = {}
+
+
+def _require_uid(request: Request, *, query_uid: str | None = None, body_uid: str | None = None, body: bytes = b"") -> str:
+    """Reject bare uid — require HMAC headers (OMI_PLUGIN_WEBHOOK_SECRET)."""
+    try:
+        return resolve_authenticated_uid(
+            secret=get_webhook_secret(),
+            header_map=request.headers,
+            query_uid=query_uid,
+            body_uid=body_uid,
+            body=body,
+        )
+    except PluginAuthError as e:
+        raise HTTPException(
+            status_code=getattr(e, "status_code", 401),
+            detail="authenticated uid required (uid query/body alone is not auth)",
+        ) from e
+
 
 
 # ============================================
@@ -256,11 +280,12 @@ async def tool_create_issue(request: Request):
     Chat tool for Omi - creates an issue in the specified or default repository.
     """
     try:
-        body = await request.json()
+        raw_body = await request.body()
+        body = json.loads(raw_body.decode("utf-8") or "{}")
         log(f"=== CREATE_ISSUE START ===")
         log(f"Request: {body}")
 
-        uid = body.get("uid")
+        uid = _require_uid(request, body_uid=body.get("uid"), body=raw_body)
         title = body.get("title")
         issue_body = body.get("body", "")
         labels = body.get("labels", [])
@@ -343,8 +368,9 @@ async def tool_list_repos(request: Request):
     List user's GitHub repositories.
     """
     try:
-        body = await request.json()
-        uid = body.get("uid")
+        raw_body = await request.body()
+        body = json.loads(raw_body.decode("utf-8") or "{}")
+        uid = _require_uid(request, body_uid=body.get("uid"), body=raw_body)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -387,8 +413,9 @@ async def tool_list_issues(request: Request):
     List issues in a GitHub repository.
     """
     try:
-        body = await request.json()
-        uid = body.get("uid")
+        raw_body = await request.body()
+        body = json.loads(raw_body.decode("utf-8") or "{}")
+        uid = _require_uid(request, body_uid=body.get("uid"), body=raw_body)
         repo = body.get("repo")
         state = body.get("state", "open")
         limit = min(body.get("limit", 10), 50)
@@ -434,8 +461,9 @@ async def tool_get_issue(request: Request):
     Get details of a specific GitHub issue.
     """
     try:
-        body = await request.json()
-        uid = body.get("uid")
+        raw_body = await request.body()
+        body = json.loads(raw_body.decode("utf-8") or "{}")
+        uid = _require_uid(request, body_uid=body.get("uid"), body=raw_body)
         issue_number = body.get("issue_number")
         repo = body.get("repo")
 
@@ -500,8 +528,9 @@ async def tool_list_labels(request: Request):
     List available labels in a repository.
     """
     try:
-        body = await request.json()
-        uid = body.get("uid")
+        raw_body = await request.body()
+        body = json.loads(raw_body.decode("utf-8") or "{}")
+        uid = _require_uid(request, body_uid=body.get("uid"), body=raw_body)
         repo = body.get("repo")
 
         if not uid:
@@ -543,8 +572,9 @@ async def tool_add_comment(request: Request):
     Add a comment to a GitHub issue.
     """
     try:
-        body = await request.json()
-        uid = body.get("uid")
+        raw_body = await request.body()
+        body = json.loads(raw_body.decode("utf-8") or "{}")
+        uid = _require_uid(request, body_uid=body.get("uid"), body=raw_body)
         issue_number = body.get("issue_number")
         comment_body = body.get("body")
         repo = body.get("repo")
@@ -593,6 +623,7 @@ async def tool_add_comment(request: Request):
 # ============================================
 
 @app.get("/")
+# TODO(security): setup URL uid must be signed by Omi backend (product)
 async def root(uid: str = Query(None)):
     """Root endpoint - Homepage with repo selection (mobile-first UI)."""
     if not uid:
@@ -960,11 +991,17 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        await fetch('/save-agent-key?uid={uid}&provider=' + encodeURIComponent(provider) + '&key=' + encodeURIComponent(apiKey), {{
-                            method: 'POST'
+                        const resp = await fetch('/save-agent-key', {{
+                            method: 'POST',
+                            headers: {{ 'Content-Type': 'application/json' }},
+                            body: JSON.stringify({{ uid: '{uid}', provider, key: apiKey }})
                         }});
-
-                        alert('API key saved successfully!');
+                        const result = await resp.json().catch(() => ({{}}));
+                        if (resp.ok && result.success) {{
+                            alert('API key saved successfully!');
+                        }} else {{
+                            alert('Save failed (' + resp.status + '): ' + (result.detail || result.error || 'auth required — setup UI cannot mint plugin HMAC'));
+                        }}
                     }} catch (error) {{
                         alert('Error: ' + error.message);
                     }}
@@ -1051,6 +1088,7 @@ async def root(uid: str = Query(None)):
 
 
 @app.get("/auth")
+# TODO(security): OAuth start uid from unsigned query — product must sign setup identity
 async def auth_start(uid: str = Query(..., description="User ID from OMI")):
     """Start OAuth flow for GitHub authentication."""
     redirect_uri = os.getenv("OAUTH_REDIRECT_URL", "http://localhost:8000/auth/callback")
@@ -1215,6 +1253,7 @@ async def auth_callback(
 
 
 @app.get("/setup-completed")
+# TODO(security): verify X-Omi-* when secret configured
 async def check_setup(uid: str = Query(..., description="User ID from OMI")):
     """Check if user has completed setup (authenticated with GitHub)."""
     is_authenticated = SimpleUserStorage.is_authenticated(uid)
@@ -1226,33 +1265,48 @@ async def check_setup(uid: str = Query(..., description="User ID from OMI")):
 
 
 @app.post("/update-repo")
-async def update_repo(
-    uid: str = Query(...),
-    repo: str = Query(...)
-):
-    """Update user's selected repository."""
+async def update_repo(request: Request):
+    """Update user's selected repository. Requires HMAC auth."""
     try:
+        raw_body = await request.body()
+        data = json.loads(raw_body.decode("utf-8") or "{}") if raw_body else {}
+        uid = _require_uid(
+            request,
+            query_uid=request.query_params.get("uid"),
+            body_uid=data.get("uid"),
+            body=raw_body,
+        )
+        repo = data.get("repo") or request.query_params.get("repo")
+        if not repo:
+            return {"success": False, "error": "repo required"}
         success = SimpleUserStorage.update_repo_selection(uid, repo)
         if success:
             return {"success": True, "message": f"Repository updated to {repo}"}
-        else:
-            return {"success": False, "error": "User not found"}
+        return {"success": False, "error": "User not found"}
+    except HTTPException:
+        raise
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
+
 @app.post("/refresh-repos")
-async def refresh_repos(uid: str = Query(...)):
-    """Refresh user's repository list from GitHub."""
+async def refresh_repos(request: Request):
+    """Refresh user's repository list from GitHub. Requires HMAC auth."""
     try:
+        raw_body = await request.body()
+        data = json.loads(raw_body.decode("utf-8") or "{}") if raw_body else {}
+        uid = _require_uid(
+            request,
+            query_uid=request.query_params.get("uid"),
+            body_uid=data.get("uid"),
+            body=raw_body,
+        )
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
             return {"success": False, "error": "User not authenticated"}
 
-        # Fetch fresh repo list
         repos = github_client.list_user_repos(user["access_token"])
-
-        # Update storage
         SimpleUserStorage.save_user(
             uid=uid,
             access_token=user["access_token"],
@@ -1260,19 +1314,27 @@ async def refresh_repos(uid: str = Query(...)):
             selected_repo=user.get("selected_repo"),
             available_repos=repos
         )
-
         return {"success": True, "repos_count": len(repos)}
+    except HTTPException:
+        raise
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
+
 @app.post("/check-repo-access")
-async def check_repo_access(
-    uid: str = Query(...),
-    repo: str = Query(None)
-):
-    """Check authenticated user's permissions for a repository."""
+async def check_repo_access(request: Request):
+    """Check authenticated user's permissions for a repository. Requires HMAC auth."""
     try:
+        raw_body = await request.body()
+        data = json.loads(raw_body.decode("utf-8") or "{}") if raw_body else {}
+        uid = _require_uid(
+            request,
+            query_uid=request.query_params.get("uid"),
+            body_uid=data.get("uid"),
+            body=raw_body,
+        )
+        repo = data.get("repo") or request.query_params.get("repo")
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
             return {"success": False, "error": "User not authenticated"}
@@ -1305,18 +1367,26 @@ async def check_repo_access(
             "permissions": permissions,
             "message": f"{level} access"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
+
 @app.post("/save-agent-provider")
-async def save_agent_provider(
-    uid: str = Query(...),
-    provider: str = Query(...)
-):
-    """Save user's agent provider selection."""
+async def save_agent_provider(request: Request):
+    """Save user's agent provider selection. Requires HMAC auth."""
     try:
-        provider = provider.lower().strip()
+        raw_body = await request.body()
+        data = json.loads(raw_body.decode("utf-8") or "{}") if raw_body else {}
+        uid = _require_uid(
+            request,
+            query_uid=request.query_params.get("uid"),
+            body_uid=data.get("uid"),
+            body=raw_body,
+        )
+        provider = str(data.get("provider") or request.query_params.get("provider") or "").lower().strip()
         if provider not in PROVIDERS:
             return {"success": False, "error": "Unsupported provider"}
 
@@ -1328,19 +1398,32 @@ async def save_agent_provider(
         if success:
             return {"success": True, "message": "Agent provider saved"}
         return {"success": False, "error": "Failed to save"}
+    except HTTPException:
+        raise
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
+
 @app.post("/save-agent-key")
-async def save_agent_key(
-    uid: str = Query(...),
-    provider: str = Query(...),
-    key: str = Query(...)
-):
-    """Save user's API key for an agent provider."""
+async def save_agent_key(request: Request):
+    """Save user's API key for an agent provider.
+
+    Requires HMAC auth. Key/provider must be in JSON body — never query string.
+    """
     try:
-        provider = provider.lower().strip()
+        raw_body = await request.body()
+        data = json.loads(raw_body.decode("utf-8") or "{}")
+        uid = _require_uid(
+            request,
+            query_uid=request.query_params.get("uid"),
+            body_uid=data.get("uid"),
+            body=raw_body,
+        )
+        provider = str(data.get("provider") or "").lower().strip()
+        key = str(data.get("key") or "").strip()
+        if not provider or not key:
+            return {"success": False, "error": "provider and key required in JSON body"}
         if provider not in PROVIDERS:
             return {"success": False, "error": "Unsupported provider"}
 
@@ -1352,35 +1435,47 @@ async def save_agent_key(
         if success:
             return {"success": True, "message": "Agent API key saved"}
         return {"success": False, "error": "Failed to save"}
+    except HTTPException:
+        raise
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
+
 @app.post("/delete-agent-key")
-async def delete_agent_key(
-    uid: str = Query(...),
-    provider: str = Query(...)
-):
-    """Delete user's API key for an agent provider."""
+async def delete_agent_key(request: Request):
+    """Delete user's API key for an agent provider. Requires HMAC auth."""
     try:
-        provider = provider.lower().strip()
-        if provider not in PROVIDERS:
+        raw_body = await request.body()
+        data = json.loads(raw_body.decode("utf-8") or "{}") if raw_body else {}
+        uid = _require_uid(
+            request,
+            query_uid=request.query_params.get("uid"),
+            body_uid=data.get("uid"),
+            body=raw_body,
+        )
+        provider = str(data.get("provider") or request.query_params.get("provider") or "").lower().strip()
+        if not provider or provider not in PROVIDERS:
             return {"success": False, "error": "Unsupported provider"}
 
         success = SimpleUserStorage.delete_agent_api_key(uid, provider)
         if success:
             return {"success": True, "message": "Agent API key deleted"}
         return {"success": False, "error": "Key not found"}
+    except HTTPException:
+        raise
     except Exception as e:
         return {"success": False, "error": str(e)}
+
 
 
 @app.post("/test-agent")
 async def test_agent(request: Request):
     """Send a direct test command to the selected agent provider."""
     try:
-        body = await request.json()
-        uid = body.get("uid")
+        raw_body = await request.body()
+        body = json.loads(raw_body.decode("utf-8") or "{}")
+        uid = _require_uid(request, body_uid=body.get("uid"), body=raw_body)
         prompt = body.get("prompt")
         repo = body.get("repo")
         provider_override = body.get("provider")
@@ -1489,8 +1584,9 @@ async def tool_code_feature(request: Request):
     AI-powered coding tool - implement features using Claude.
     """
     try:
-        body = await request.json()
-        uid = body.get("uid")
+        raw_body = await request.body()
+        body = json.loads(raw_body.decode("utf-8") or "{}")
+        uid = _require_uid(request, body_uid=body.get("uid"), body=raw_body)
         feature = body.get("feature")
         repo = body.get("repo")  # Optional: owner/repo format
         merge = body.get("merge", False)  # Optional: merge PR after creation
