@@ -80,6 +80,23 @@ jobs:
           python3 -m pip install -q pyyaml
           python3 backend/scripts/validate-backend-runtime-env.py --env "${{ vars.ENV }}"
 
+      - name: Validate Firebase probe signer configuration before publishing
+        env:
+          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" ]]; then
+            echo "Development Pusher semantic probe requires FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT." >&2
+            exit 1
+          fi
+          case "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" in
+            *@based-hardware.iam.gserviceaccount.com) ;;
+            *)
+              echo "FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT must belong to the based-hardware Firebase project." >&2
+              exit 1
+              ;;
+          esac
+
       - name: Verify live finalization alert route before publishing
         env:
           # Dest ops Grafana (monitor.omiapi.com). Do not use GRAFANA_TOKEN; that
@@ -185,29 +202,28 @@ jobs:
 
       - name: Probe deployed development Pusher finalization semantics
         env:
-          FIREBASE_SIGNER_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+          # Development Pusher runs in based-hardware-dev but the backend it
+          # exercises authenticates against the production Firebase project.
+          # Sign through IAM as an explicitly named based-hardware principal;
+          # do not pass the dev deploy credential or materialize a key here.
+          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
           umask 077
           python3 -m pip install -q websockets==12.0
           token_file="$(mktemp "$RUNNER_TEMP/omi-pusher-probe-token.XXXXXX")"
-          signer_file="$(mktemp "$RUNNER_TEMP/omi-pusher-probe-signer.XXXXXX")"
-          cleanup() {
-            rm -f "$token_file" "$signer_file"
-            unset FIREBASE_SIGNER_CREDENTIALS
-          }
+          cleanup() { rm -f "$token_file"; }
           trap cleanup EXIT
-          if [[ -z "$FIREBASE_SIGNER_CREDENTIALS" ]]; then
-            echo "Development Pusher semantic probe requires the existing GCP_CREDENTIALS Firebase signer." >&2
+          if [[ -z "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" ]]; then
+            echo "Development Pusher semantic probe requires FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:" >&2
+            echo "a based-hardware signer this lane's deploy identity may impersonate." >&2
             exit 1
           fi
-          printf '%s' "$FIREBASE_SIGNER_CREDENTIALS" > "$signer_file"
           python3 backend/scripts/firebase_release_probe_token.py \
             --secret-project "${{ vars.GCP_PROJECT_ID }}" \
             --firebase-project based-hardware \
-            --signer-credentials-file "$signer_file" \
+            --signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" \
             --token-output "$token_file"
-          rm -f "$signer_file"
           python3 backend/scripts/pusher_semantic_probe.py \
             --api-url https://api.omiapi.com \
             --bearer-token-file "$token_file" \
@@ -216,6 +232,17 @@ jobs:
             --namespace "${{ vars.ENV }}-omi-backend" \
             --run-id "$GITHUB_RUN_ID" \
             --output pusher-dev-semantic-probe.json
+
+      - name: Upload development Pusher probe diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pusher-dev-probe-diagnostics
+          path: |
+            pusher-dev-deployment-receipt.json
+            pusher-dev-semantic-probe.json
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Record development Pusher qualification evidence
         run: |
