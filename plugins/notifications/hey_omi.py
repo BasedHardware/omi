@@ -205,6 +205,18 @@ async def webhook(request: WebhookRequest):
         text = segment['text'].lower().strip()
         logger.info(f"Processing text segment: '{text}'")
 
+        # Expire a stale trigger that collected no question within the window so a
+        # new "hey omi" can be detected again
+        if (
+            buffer_data['trigger_detected']
+            and not buffer_data['collected_question']
+            and current_time - buffer_data['trigger_time'] > QUESTION_AGGREGATION_TIME * 1.5
+        ):
+            logger.info(f"Trigger expired without a question in session {session_id}")
+            buffer_data['trigger_detected'] = False
+            buffer_data['trigger_time'] = 0
+            buffer_data['partial_trigger'] = False
+
         # Check for complete trigger phrases first
         if (
             any(trigger in text for trigger in [t.lower() for t in TRIGGER_PHRASES])
