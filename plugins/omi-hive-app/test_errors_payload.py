@@ -123,8 +123,7 @@ class ErrorsPayloadTests(unittest.TestCase):
             {"uid": "u1", "task_name": "t", "project_id": "p1"},
             {"errors": []},
         )
-        self.assertIsNotNone(result.error)
-        self.assertNotIn("list index", result.error)
+        self.assertEqual(result.error, "Failed to create task: Unknown error")
 
     def test_create_task_non_list_errors(self):
         result = self.run_tool(
@@ -132,7 +131,7 @@ class ErrorsPayloadTests(unittest.TestCase):
             {"uid": "u1", "task_name": "t", "project_id": "p1"},
             {"errors": {"message": "boom"}},
         )
-        self.assertIsNotNone(result.error)
+        self.assertEqual(result.error, "Failed to create task: Unknown error")
 
     def test_create_task_populated_errors_surfaces_message(self):
         result = self.run_tool(
@@ -157,8 +156,7 @@ class ErrorsPayloadTests(unittest.TestCase):
             {"uid": "u1", "task_name": "t", "task_id": "a1", "status": "completed"},
             {"errors": []},
         )
-        self.assertIsNotNone(result.error)
-        self.assertNotIn("list index", result.error)
+        self.assertEqual(result.error, "Failed to update task: Unknown error")
 
     def test_update_task_populated_errors_surfaces_message(self):
         result = self.run_tool(
