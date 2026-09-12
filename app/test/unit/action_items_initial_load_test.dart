@@ -14,7 +14,7 @@ void main() {
     final firstResponse = Completer<ActionItemsResponse>();
     var requests = 0;
     final provider = ActionItemsProvider(
-      getActionItems: ({limit = 50, offset = 0, completed, conversationId, startDate, endDate}) {
+      getActionItems: ({limit = 50, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) {
         requests++;
         return firstResponse.future;
       },
@@ -38,7 +38,7 @@ void main() {
     final firstResponse = Completer<ActionItemsResponse?>();
     var requests = 0;
     final provider = ActionItemsProvider(
-      getActionItems: ({limit = 50, offset = 0, completed, conversationId, startDate, endDate}) {
+      getActionItems: ({limit = 50, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) {
         requests++;
         return requests == 1
             ? firstResponse.future
