@@ -24,7 +24,10 @@ def load_json_input(value: str | bytes) -> Any:
     JSON strings are unchanged, and bytes retain json.loads' encoding detection.
     Invalid input raises ValueError (including JSONDecodeError and UnicodeError).
     """
-    parsed = json.loads(value, parse_constant=_reject_constant, parse_float=_finite_float)
+    try:
+        parsed = json.loads(value, parse_constant=_reject_constant, parse_float=_finite_float)
+    except RecursionError as exc:
+        raise ValueError("JSON input is nested too deeply") from exc
     pending = [parsed]
     while pending:
         item = pending.pop()
