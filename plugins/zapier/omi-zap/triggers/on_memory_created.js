@@ -13,6 +13,7 @@ module.exports = {
         Accept: 'application/json',
       },
       method: 'DELETE',
+      params: { uid: '{{bundle.authData.uid}}' },
       removeMissingValuesFrom: { body: false, params: false },
       url: 'https://based-hardware--plugins-api.modal.run/zapier/trigger/subscribe',
     },
