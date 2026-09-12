@@ -48,7 +48,7 @@ import {
   updateSegmentText,
   reprocessConversation,
 } from '@/lib/api';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
 import type {
   Conversation,
   AppResponse,
@@ -714,7 +714,7 @@ export function ConversationDetailPanel({
           await updateSegmentText(convId, task.segmentId, task.text);
           if (convIdRef.current === convId) {
             setTranscriptEdited(true);
-            MixpanelManager.track('Transcript Segment Edited', {
+            PostHogManager.track('Transcript Segment Edited', {
               conversation_id: convId,
               segment_id: task.segmentId,
             });
@@ -788,7 +788,7 @@ export function ConversationDetailPanel({
       if (convIdRef.current === convId) {
         onConversationUpdate?.(updated);
         setTranscriptEdited(false);
-        MixpanelManager.track('Conversation Reprocessed After Edit', {
+        PostHogManager.track('Conversation Reprocessed After Edit', {
           conversation_id: convId,
         });
       }

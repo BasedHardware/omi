@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/dialog';
 import { Message } from '@/types/chat';
 import { PreorderBanner } from '@/components/shared/PreorderBanner';
-import { Mixpanel } from '@/lib/mixpanel';
+import { PostHog } from '@/lib/posthog';
 
 function ChatContent() {
   const chatRequestHeaders = async () => {
@@ -61,11 +61,8 @@ function ChatContent() {
   };
 
   useEffect(() => {
-    // Identify the user first
-    Mixpanel.identify();
-
-    // Then track the page view
-    Mixpanel.track('Page View', {
+    // Track the page view
+    PostHog.track('Page View', {
       page: 'Chat',
       url: window.location.pathname,
       timestamp: new Date().toISOString(),
@@ -97,12 +94,25 @@ function ChatContent() {
   const [userMessageCount, setUserMessageCount] = useState(0);
   const [showDevicePopup, setShowDevicePopup] = useState(false);
   const [authReady, setAuthReady] = useState(false);
+  const [authUid, setAuthUid] = useState<string | null>(null);
 
   // Wait for Firebase to restore the persisted session before selecting the
   // auth tier. auth.currentUser is null until onAuthStateChanged fires the
   // first time, so a returning user's initial message would otherwise use the
   // unauthenticated lane permanently.
-  useEffect(() => onAuthStateChanged(auth, () => setAuthReady(true)), []);
+  useEffect(
+    () =>
+      onAuthStateChanged(auth, (user) => {
+        setAuthUid(user?.uid ?? null);
+        setAuthReady(true);
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    // Identify once the Firebase uid is available.
+    if (authUid) PostHog.identify(authUid);
+  }, [authUid]);
 
   // Fetch bot data on component mount
   useEffect(() => {
@@ -293,7 +303,7 @@ function ChatContent() {
           setMessages((prev) => [...prev, newMessage]);
 
           // Track initial message
-          Mixpanel.track('Initial Message Received', {
+          PostHog.track('Initial Message Received', {
             bot_name: botName,
             bot_id: botId,
             message_length: accumulatedText.length,
@@ -318,7 +328,7 @@ function ChatContent() {
     const newUserMessageCount = userMessageCount + 1;
 
     // Track message sent
-    Mixpanel.track('Message Sent', {
+    PostHog.track('Message Sent', {
       bot_name: botName,
       bot_id: botId,
       message_count: newUserMessageCount,
@@ -421,7 +431,7 @@ function ChatContent() {
         ]);
 
         // Track message received
-        Mixpanel.track('Message Received', {
+        PostHog.track('Message Received', {
           bot_name: botName,
           bot_id: botId,
           message_length: accumulatedText.length,
@@ -433,7 +443,7 @@ function ChatContent() {
       console.error('Error:', error);
 
       // Track error
-      Mixpanel.track('Message Error', {
+      PostHog.track('Message Error', {
         bot_name: botName,
         bot_id: botId,
         error: error.toString(),

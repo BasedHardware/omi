@@ -46,7 +46,7 @@
     "liquid-gooey": "^0.2.1",
     "lodash": "^4.17.21",
     "lucide-react": "^0.438.0",
-    "mixpanel-browser": "^2.73.0",
+    "posthog-js": "^1.155.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-force-graph-3d": "^1.29.0",
