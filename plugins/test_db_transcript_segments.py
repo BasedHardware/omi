@@ -52,8 +52,21 @@ def load_db_module():
 
 class TranscriptSegmentEvalTest(unittest.TestCase):
     def setUp(self):
+        # Snapshot so the fakes installed by load_db_module() don't leak into
+        # other test files sharing this pytest process.
+        self._orig_modules = {name: sys.modules.get(name) for name in ('models', 'redis', 'db')}
+        self._orig_path = list(sys.path)
+        self.addCleanup(self._restore_modules)
         self.db = load_db_module()
         self.db.r = FakeRedis()
+
+    def _restore_modules(self):
+        sys.path[:] = self._orig_path
+        for name, module in self._orig_modules.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
 
     def test_round_trip_through_literal_eval(self):
         seg = FakeTranscriptSegment(text='hello', speaker='SPEAKER_0', is_user=False, start=0.0, end=1.0)
