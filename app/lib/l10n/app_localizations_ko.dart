@@ -578,6 +578,30 @@ class AppLocalizationsKo extends AppLocalizations {
   String get doubleTapAction => '더블 탭 동작';
 
   @override
+  String get singleTap => '한 번 탭';
+
+  @override
+  String get tripleTap => '세 번 탭';
+
+  @override
+  String get longPress => '길게 누르기';
+
+  @override
+  String get singleTapAction => '한 번 탭 동작';
+
+  @override
+  String get tripleTapAction => '세 번 탭 동작';
+
+  @override
+  String get powerOnOff => '전원 켜기 / 끄기';
+
+  @override
+  String get doNothing => '아무 것도 하지 않음';
+
+  @override
+  String get longPressFixedSubtitle => '3초간 길게 누르면 Omi의 전원이 켜지거나 꺼집니다. 이 동작은 변경할 수 없습니다.';
+
+  @override
   String get endAndProcess => '대화 종료 및 처리';
 
   @override

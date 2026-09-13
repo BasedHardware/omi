@@ -753,6 +753,14 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "عمل دو ضربه",
+    "singleTap": "یک ضربه",
+    "tripleTap": "سه ضربه",
+    "longPress": "فشار طولانی",
+    "singleTapAction": "عمل یک ضربه",
+    "tripleTapAction": "عمل سه ضربه",
+    "powerOnOff": "روشن / خاموش کردن",
+    "doNothing": "هیچ کاری نکن",
+    "longPressFixedSubtitle": "برای روشن یا خاموش کردن Omi، ۳ ثانیه نگه دارید. این قابل تغییر نیست.",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

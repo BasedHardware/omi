@@ -753,6 +753,14 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "డబల్ ట్యాప్ చర్య",
+    "singleTap": "ఒక్క నొక్కు",
+    "tripleTap": "మూడు నొక్కులు",
+    "longPress": "దీర్ఘంగా నొక్కడం",
+    "singleTapAction": "ఒక్క నొక్కు చర్య",
+    "tripleTapAction": "మూడు నొక్కుల చర్య",
+    "powerOnOff": "ఆన్ / ఆఫ్ చేయండి",
+    "doNothing": "ఏమీ చేయవద్దు",
+    "longPressFixedSubtitle": "మీ Omi ని ఆన్ లేదా ఆఫ్ చేయడానికి 3 సెకన్లు నొక్కి ఉంచండి. దీన్ని మార్చలేరు.",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

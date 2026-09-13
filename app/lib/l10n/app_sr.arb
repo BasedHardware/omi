@@ -753,6 +753,14 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "Акција дуплог додира",
+    "singleTap": "Један додир",
+    "tripleTap": "Троструки додир",
+    "longPress": "Дуги притисак",
+    "singleTapAction": "Акција једног додира",
+    "tripleTapAction": "Акција троструког додира",
+    "powerOnOff": "Укључи / Искључи",
+    "doNothing": "Не ради ништа",
+    "longPressFixedSubtitle": "Држите 3 секунде да укључите или искључите Omi. Ово се не може променити.",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

@@ -590,6 +590,30 @@ class AppLocalizationsBn extends AppLocalizations {
   String get doubleTapAction => 'দ্বিগুণ ট্যাপ ক্রিয়া';
 
   @override
+  String get singleTap => 'একক ট্যাপ';
+
+  @override
+  String get tripleTap => 'তিনবার ট্যাপ';
+
+  @override
+  String get longPress => 'দীর্ঘ চাপ';
+
+  @override
+  String get singleTapAction => 'একক ট্যাপ ক্রিয়া';
+
+  @override
+  String get tripleTapAction => 'তিনবার ট্যাপ ক্রিয়া';
+
+  @override
+  String get powerOnOff => 'চালু / বন্ধ';
+
+  @override
+  String get doNothing => 'কিছু করবেন না';
+
+  @override
+  String get longPressFixedSubtitle => 'আপনার Omi চালু বা বন্ধ করতে 3 সেকেন্ড ধরে রাখুন। এটি পরিবর্তন করা যাবে না।';
+
+  @override
   String get endAndProcess => 'কথোপকথন শেষ এবং প্রক্রিয়া করুন';
 
   @override

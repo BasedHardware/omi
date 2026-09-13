@@ -591,6 +591,30 @@ class AppLocalizationsId extends AppLocalizations {
   String get doubleTapAction => 'Aksi Ketuk Ganda';
 
   @override
+  String get singleTap => 'Ketuk Sekali';
+
+  @override
+  String get tripleTap => 'Ketuk Tiga Kali';
+
+  @override
+  String get longPress => 'Tekan Lama';
+
+  @override
+  String get singleTapAction => 'Aksi Ketuk Sekali';
+
+  @override
+  String get tripleTapAction => 'Aksi Ketuk Tiga Kali';
+
+  @override
+  String get powerOnOff => 'Nyalakan / Matikan';
+
+  @override
+  String get doNothing => 'Jangan lakukan apa pun';
+
+  @override
+  String get longPressFixedSubtitle => 'Tahan 3 detik untuk menyalakan atau mematikan Omi. Ini tidak dapat diubah.';
+
+  @override
   String get endAndProcess => 'Akhiri & Proses Percakapan';
 
   @override

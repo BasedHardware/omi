@@ -591,6 +591,31 @@ class AppLocalizationsUr extends AppLocalizations {
   String get doubleTapAction => 'دوگنا تھپتھپانے کا عمل';
 
   @override
+  String get singleTap => 'ایک بار تھپتھپائیں';
+
+  @override
+  String get tripleTap => 'تین بار تھپتھپائیں';
+
+  @override
+  String get longPress => 'دیر تک دبائیں';
+
+  @override
+  String get singleTapAction => 'ایک بار تھپتھپانے کا عمل';
+
+  @override
+  String get tripleTapAction => 'تین بار تھپتھپانے کا عمل';
+
+  @override
+  String get powerOnOff => 'آن / بند کریں';
+
+  @override
+  String get doNothing => 'کچھ نہ کریں';
+
+  @override
+  String get longPressFixedSubtitle =>
+      'اپنے Omi کو آن یا بند کرنے کے لیے 3 سیکنڈ دبائے رکھیں۔ اسے تبدیل نہیں کیا جا سکتا۔';
+
+  @override
   String get endAndProcess => 'بات چیت ختم اور پروسیس کریں';
 
   @override

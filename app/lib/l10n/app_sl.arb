@@ -753,6 +753,14 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "Dejanje dvojnega dotika",
+    "singleTap": "Enojni dotik",
+    "tripleTap": "Trojni dotik",
+    "longPress": "Dolg pritisk",
+    "singleTapAction": "Dejanje enojnega dotika",
+    "tripleTapAction": "Dejanje trojnega dotika",
+    "powerOnOff": "Vklop / Izklop",
+    "doNothing": "Ne naredi ničesar",
+    "longPressFixedSubtitle": "Držite 3 sekunde, da vklopite ali izklopite Omi. Tega ni mogoče spremeniti.",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

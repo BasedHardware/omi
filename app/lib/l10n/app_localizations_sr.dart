@@ -590,6 +590,30 @@ class AppLocalizationsSr extends AppLocalizations {
   String get doubleTapAction => 'Акција дуплог додира';
 
   @override
+  String get singleTap => 'Један додир';
+
+  @override
+  String get tripleTap => 'Троструки додир';
+
+  @override
+  String get longPress => 'Дуги притисак';
+
+  @override
+  String get singleTapAction => 'Акција једног додира';
+
+  @override
+  String get tripleTapAction => 'Акција троструког додира';
+
+  @override
+  String get powerOnOff => 'Укључи / Искључи';
+
+  @override
+  String get doNothing => 'Не ради ништа';
+
+  @override
+  String get longPressFixedSubtitle => 'Држите 3 секунде да укључите или искључите Omi. Ово се не може променити.';
+
+  @override
   String get endAndProcess => 'Заврши и обради разговор';
 
   @override

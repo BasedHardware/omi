@@ -753,6 +753,14 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "Double Tap Action",
+    "singleTap": "Single Tap",
+    "tripleTap": "Triple Tap",
+    "longPress": "Long Press",
+    "singleTapAction": "Single Tap Action",
+    "tripleTapAction": "Triple Tap Action",
+    "powerOnOff": "Buksan / Patayin",
+    "doNothing": "Walang gawin",
+    "longPressFixedSubtitle": "Pindutin nang 3 segundo para buksan o patayin ang iyong Omi. Hindi ito mababago.",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

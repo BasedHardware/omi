@@ -753,6 +753,14 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "दुहेरी टॅप क्रिया",
+    "singleTap": "एकदा टॅप",
+    "tripleTap": "तिहेरी टॅप",
+    "longPress": "दीर्घ दाब",
+    "singleTapAction": "एकदा टॅप क्रिया",
+    "tripleTapAction": "तिहेरी टॅप क्रिया",
+    "powerOnOff": "चालू / बंद करा",
+    "doNothing": "काही करू नका",
+    "longPressFixedSubtitle": "तुमचा Omi चालू किंवा बंद करण्यासाठी 3 सेकंद दाबून ठेवा. हे बदलता येत नाही.",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

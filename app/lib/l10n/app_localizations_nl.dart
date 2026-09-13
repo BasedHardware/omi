@@ -593,6 +593,31 @@ class AppLocalizationsNl extends AppLocalizations {
   String get doubleTapAction => 'Dubbel tikken actie';
 
   @override
+  String get singleTap => 'Eén keer tikken';
+
+  @override
+  String get tripleTap => 'Drie keer tikken';
+
+  @override
+  String get longPress => 'Lang indrukken';
+
+  @override
+  String get singleTapAction => 'Eén keer tikken actie';
+
+  @override
+  String get tripleTapAction => 'Drie keer tikken actie';
+
+  @override
+  String get powerOnOff => 'Aanzetten / Uitzetten';
+
+  @override
+  String get doNothing => 'Niets doen';
+
+  @override
+  String get longPressFixedSubtitle =>
+      'Houd 3 seconden ingedrukt om je Omi aan of uit te zetten. Dit kan niet worden gewijzigd.';
+
+  @override
   String get endAndProcess => 'Gesprek beëindigen en verwerken';
 
   @override

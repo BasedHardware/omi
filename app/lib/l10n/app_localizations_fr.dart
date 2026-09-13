@@ -595,6 +595,31 @@ class AppLocalizationsFr extends AppLocalizations {
   String get doubleTapAction => 'Action double appui';
 
   @override
+  String get singleTap => 'Appui simple';
+
+  @override
+  String get tripleTap => 'Triple appui';
+
+  @override
+  String get longPress => 'Appui long';
+
+  @override
+  String get singleTapAction => 'Action appui simple';
+
+  @override
+  String get tripleTapAction => 'Action triple appui';
+
+  @override
+  String get powerOnOff => 'Allumer / Éteindre';
+
+  @override
+  String get doNothing => 'Ne rien faire';
+
+  @override
+  String get longPressFixedSubtitle =>
+      'Maintenez 3 secondes pour allumer ou éteindre votre Omi. Ceci ne peut pas être modifié.';
+
+  @override
   String get endAndProcess => 'Terminer et traiter la conversation';
 
   @override

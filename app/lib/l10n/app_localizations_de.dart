@@ -596,6 +596,31 @@ class AppLocalizationsDe extends AppLocalizations {
   String get doubleTapAction => 'Doppeltippen-Aktion';
 
   @override
+  String get singleTap => 'Einmal tippen';
+
+  @override
+  String get tripleTap => 'Dreifach tippen';
+
+  @override
+  String get longPress => 'Lang drücken';
+
+  @override
+  String get singleTapAction => 'Einmal-tippen-Aktion';
+
+  @override
+  String get tripleTapAction => 'Dreifach-tippen-Aktion';
+
+  @override
+  String get powerOnOff => 'Ein- / Ausschalten';
+
+  @override
+  String get doNothing => 'Nichts tun';
+
+  @override
+  String get longPressFixedSubtitle =>
+      '3 Sekunden halten, um dein Omi ein- oder auszuschalten. Das lässt sich nicht ändern.';
+
+  @override
   String get endAndProcess => 'Beenden & Verarbeiten';
 
   @override

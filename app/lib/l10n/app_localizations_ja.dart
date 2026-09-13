@@ -579,6 +579,30 @@ class AppLocalizationsJa extends AppLocalizations {
   String get doubleTapAction => 'ダブルタップアクション';
 
   @override
+  String get singleTap => 'シングルタップ';
+
+  @override
+  String get tripleTap => 'トリプルタップ';
+
+  @override
+  String get longPress => '長押し';
+
+  @override
+  String get singleTapAction => 'シングルタップアクション';
+
+  @override
+  String get tripleTapAction => 'トリプルタップアクション';
+
+  @override
+  String get powerOnOff => '電源オン / オフ';
+
+  @override
+  String get doNothing => '何もしない';
+
+  @override
+  String get longPressFixedSubtitle => '3秒間長押しするとOmiの電源をオン/オフできます。この動作は変更できません。';
+
+  @override
   String get endAndProcess => '終了して会話を処理';
 
   @override

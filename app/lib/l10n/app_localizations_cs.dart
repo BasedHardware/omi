@@ -591,6 +591,30 @@ class AppLocalizationsCs extends AppLocalizations {
   String get doubleTapAction => 'Akce dvojitého klepnutí';
 
   @override
+  String get singleTap => 'Jedno klepnutí';
+
+  @override
+  String get tripleTap => 'Trojité klepnutí';
+
+  @override
+  String get longPress => 'Dlouhé stisknutí';
+
+  @override
+  String get singleTapAction => 'Akce jednoho klepnutí';
+
+  @override
+  String get tripleTapAction => 'Akce trojitého klepnutí';
+
+  @override
+  String get powerOnOff => 'Zapnutí / Vypnutí';
+
+  @override
+  String get doNothing => 'Nedělat nic';
+
+  @override
+  String get longPressFixedSubtitle => 'Podržte 3 sekundy pro zapnutí nebo vypnutí Omi. Toto nelze změnit.';
+
+  @override
   String get endAndProcess => 'Ukončit a zpracovat konverzaci';
 
   @override

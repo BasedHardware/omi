@@ -591,6 +591,31 @@ class AppLocalizationsMs extends AppLocalizations {
   String get doubleTapAction => 'Tindakan Ketik Dua Kali';
 
   @override
+  String get singleTap => 'Ketik Sekali';
+
+  @override
+  String get tripleTap => 'Ketik Tiga Kali';
+
+  @override
+  String get longPress => 'Tekan Lama';
+
+  @override
+  String get singleTapAction => 'Tindakan Ketik Sekali';
+
+  @override
+  String get tripleTapAction => 'Tindakan Ketik Tiga Kali';
+
+  @override
+  String get powerOnOff => 'Hidupkan / Matikan';
+
+  @override
+  String get doNothing => 'Jangan buat apa-apa';
+
+  @override
+  String get longPressFixedSubtitle =>
+      'Tahan 3 saat untuk menghidupkan atau mematikan Omi anda. Ini tidak boleh diubah.';
+
+  @override
   String get endAndProcess => 'Tamatkan & Proses Perbualan';
 
   @override

@@ -753,6 +753,14 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "இரட்டை தட்டு நடவடிக்கை",
+    "singleTap": "ஒற்றை தட்டு",
+    "tripleTap": "மூன்று தட்டு",
+    "longPress": "நீண்ட அழுத்தம்",
+    "singleTapAction": "ஒற்றை தட்டு நடவடிக்கை",
+    "tripleTapAction": "மூன்று தட்டு நடவடிக்கை",
+    "powerOnOff": "இயக்கு / அணை",
+    "doNothing": "எதுவும் செய்ய வேண்டாம்",
+    "longPressFixedSubtitle": "உங்கள் Omi-ஐ இயக்க அல்லது அணைக்க 3 வினாடிகள் அழுத்திப் பிடிக்கவும். இதை மாற்ற முடியாது.",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

@@ -592,6 +592,30 @@ class AppLocalizationsVi extends AppLocalizations {
   String get doubleTapAction => 'Hành động nhấn đúp';
 
   @override
+  String get singleTap => 'Nhấn một lần';
+
+  @override
+  String get tripleTap => 'Nhấn ba lần';
+
+  @override
+  String get longPress => 'Nhấn giữ';
+
+  @override
+  String get singleTapAction => 'Hành động nhấn một lần';
+
+  @override
+  String get tripleTapAction => 'Hành động nhấn ba lần';
+
+  @override
+  String get powerOnOff => 'Bật / Tắt thiết bị';
+
+  @override
+  String get doNothing => 'Không làm gì';
+
+  @override
+  String get longPressFixedSubtitle => 'Nhấn giữ 3 giây để bật hoặc tắt Omi. Không thể thay đổi thao tác này.';
+
+  @override
   String get endAndProcess => 'Kết thúc & Xử lý cuộc trò chuyện';
 
   @override

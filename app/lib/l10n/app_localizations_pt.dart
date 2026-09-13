@@ -589,6 +589,31 @@ class AppLocalizationsPt extends AppLocalizations {
   String get doubleTapAction => 'Ação de toque duplo';
 
   @override
+  String get singleTap => 'Toque único';
+
+  @override
+  String get tripleTap => 'Toque triplo';
+
+  @override
+  String get longPress => 'Pressão longa';
+
+  @override
+  String get singleTapAction => 'Ação de toque único';
+
+  @override
+  String get tripleTapAction => 'Ação de toque triplo';
+
+  @override
+  String get powerOnOff => 'Ligar / Desligar';
+
+  @override
+  String get doNothing => 'Não fazer nada';
+
+  @override
+  String get longPressFixedSubtitle =>
+      'Segure por 3 segundos para ligar ou desligar o seu Omi. Isto não pode ser alterado.';
+
+  @override
   String get endAndProcess => 'Terminar e processar';
 
   @override

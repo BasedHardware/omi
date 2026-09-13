@@ -592,6 +592,30 @@ class AppLocalizationsTr extends AppLocalizations {
   String get doubleTapAction => 'Çift Dokunma İşlemi';
 
   @override
+  String get singleTap => 'Tek Dokunma';
+
+  @override
+  String get tripleTap => 'Üç Kez Dokunma';
+
+  @override
+  String get longPress => 'Uzun Basma';
+
+  @override
+  String get singleTapAction => 'Tek Dokunma İşlemi';
+
+  @override
+  String get tripleTapAction => 'Üç Kez Dokunma İşlemi';
+
+  @override
+  String get powerOnOff => 'Aç / Kapat';
+
+  @override
+  String get doNothing => 'Hiçbir şey yapma';
+
+  @override
+  String get longPressFixedSubtitle => 'Omi\'yi açmak veya kapatmak için 3 saniye basılı tutun. Bu değiştirilemez.';
+
+  @override
   String get endAndProcess => 'Konuşmayı Sonlandır ve İşle';
 
   @override

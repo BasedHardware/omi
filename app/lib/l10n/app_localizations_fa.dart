@@ -592,6 +592,30 @@ class AppLocalizationsFa extends AppLocalizations {
   String get doubleTapAction => 'عمل دو ضربه';
 
   @override
+  String get singleTap => 'یک ضربه';
+
+  @override
+  String get tripleTap => 'سه ضربه';
+
+  @override
+  String get longPress => 'فشار طولانی';
+
+  @override
+  String get singleTapAction => 'عمل یک ضربه';
+
+  @override
+  String get tripleTapAction => 'عمل سه ضربه';
+
+  @override
+  String get powerOnOff => 'روشن / خاموش کردن';
+
+  @override
+  String get doNothing => 'هیچ کاری نکن';
+
+  @override
+  String get longPressFixedSubtitle => 'برای روشن یا خاموش کردن Omi، ۳ ثانیه نگه دارید. این قابل تغییر نیست.';
+
+  @override
   String get endAndProcess => 'پایان‌دادن و پردازش گفتگو';
 
   @override
