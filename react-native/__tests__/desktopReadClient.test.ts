@@ -95,6 +95,7 @@ import {
   fairUseBudgetResetCopy,
   dailySummaryDateCopy,
   dailySummaryCopy,
+  dailySummaryDefaultHeadlineCopy,
   dailySummaryDurationCopy,
   dailySummaryHourCopy,
   dailySummaryScheduleCopy,
@@ -1225,7 +1226,7 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
   expect(fairUseBudgetResetCopy(undefined, now)).toBe('');
 });
 
-test('daily summary copy names GET headlines without inventing Your Day in Review', () => {
+test('daily summary copy names GET headlines and Flutter omitted-headline Your Day in Review', () => {
   const now = new Date(2026, 8, 10);
   expect(dailySummaryDateCopy('2026-09-10', now)).toBe('Today');
   expect(dailySummaryDateCopy('2026-09-09', now)).toBe('Yesterday');
@@ -1238,6 +1239,11 @@ test('daily summary copy names GET headlines without inventing Your Day in Revie
         {id: 'sum-1', date: '2026-09-10', headline: 'Met with the team'},
         {id: 'sum-2', date: '', headline: 'Shipped the recap'},
         {id: 'sum-empty', date: '2026-09-08', headline: ' \t'},
+        {
+          id: 'sum-default',
+          date: '',
+          headline: dailySummaryDefaultHeadlineCopy(),
+        },
         {
           id: 'sum-stats',
           date: '2026-09-10',
@@ -1255,6 +1261,10 @@ test('daily summary copy names GET headlines without inventing Your Day in Revie
   ).toEqual([
     {title: 'Daily summary', copy: 'Today · Met with the team'},
     {title: 'Daily summary', copy: 'Shipped the recap'},
+    {
+      title: 'Daily summary',
+      copy: dailySummaryDefaultHeadlineCopy(),
+    },
     {
       title: 'Daily summary',
       copy: '🎯 Today · Shipped the recap · 3 conversations · 1h 30m · 1 action item · 10m watching · 1 proactive moment',

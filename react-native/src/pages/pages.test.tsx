@@ -27,7 +27,7 @@ jest.mock('../omiNative', () => ({
 
 const {ConnectorsPage} = require('./Connectors');
 const {SettingsPage} = require('./Settings');
-const {developerKeyCreatedCopy, desktopBackendServiceCopy} = require('../desktopReadClient');
+const {developerKeyCreatedCopy, desktopBackendServiceCopy, dailySummaryDefaultHeadlineCopy} = require('../desktopReadClient');
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -1509,6 +1509,33 @@ test('Settings names GET daily summaries without regenerate or a write sheet', a
   expect(tree).not.toContain('Notification frequency');
   expect(tree).not.toContain('Custom vocabulary');
   expect(tree).not.toContain('Automatic translation');
+});
+
+test('Settings names Flutter DailySummaryCard omitted GET headlines as Your Day in Review', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          summaries: [
+            {id: 'sum-omitted'},
+            {id: 'sum-empty', headline: ' \t'},
+            {id: 'sum-kept', headline: 'Met with the team'},
+          ],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Daily summary');
+  expect(tree).toContain(dailySummaryDefaultHeadlineCopy());
+  expect(tree).toContain('Met with the team');
+  expect(tree).not.toContain('📅');
+  expect(tree).not.toContain('Regenerate');
 });
 
 test('Settings names a failed daily summaries GET instead of empty success', async () => {

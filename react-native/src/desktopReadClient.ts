@@ -970,6 +970,10 @@ export function dailySummaryDurationCopy(minutes: number | undefined): string {
   return remaining > 0 ? `${hours}h ${remaining}m` : `${hours}h`;
 }
 
+export function dailySummaryDefaultHeadlineCopy(): string {
+  return 'Your Day in Review';
+}
+
 export function dailySummaryCopy(
   rows: readonly {
     id: string;

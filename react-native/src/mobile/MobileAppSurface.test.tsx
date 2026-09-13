@@ -49,7 +49,11 @@ jest.mock('react-native-safe-area-context', () => ({
     require('react').createElement('SafeAreaContextView', props, children),
 }));
 
-import {desktopBackendServiceCopy, formatTaskDue} from '../desktopReadClient';
+import {
+  dailySummaryDefaultHeadlineCopy,
+  desktopBackendServiceCopy,
+  formatTaskDue,
+} from '../desktopReadClient';
 import {MobileAppSurface, type MobileAppSurfaceProps} from './MobileAppSurface';
 
 function buildProps(
@@ -1619,6 +1623,45 @@ test('compact Home names GET daily-summary headlines without a map or detail pag
       String(call[0].path).startsWith('/v1/users/daily-summaries/'),
     ),
   ).toBe(false);
+  act(() => renderer.unmount());
+});
+
+test('compact Home names Flutter DailySummaryCard omitted GET headlines as Your Day in Review', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          summaries: [
+            {id: 'sum-omitted', date: '2020-01-15'},
+            {id: 'sum-empty', headline: ' \t'},
+            {id: 'sum-kept', headline: 'Shipped the recap'},
+          ],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <MobileAppSurface
+        {...buildProps({
+          backend: {request} as never,
+        })}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Daily Recaps');
+  expect(tree).toContain(dailySummaryDefaultHeadlineCopy());
+  expect(tree).toContain('Wed, Jan 15');
+  expect(tree).toContain('Shipped the recap');
+  expect(tree).not.toContain('📅');
+  expect(tree).not.toContain('View All Daily Recaps');
   act(() => renderer.unmount());
 });
 

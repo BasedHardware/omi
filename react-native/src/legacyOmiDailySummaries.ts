@@ -1,5 +1,8 @@
 import type {OmiBackend} from './omiNativeTypes';
-import {visibleDisplayText} from './desktopReadClient';
+import {
+  dailySummaryDefaultHeadlineCopy,
+  visibleDisplayText,
+} from './desktopReadClient';
 
 const MAX_DAILY_SUMMARIES = 3;
 
@@ -67,6 +70,17 @@ function optionalWireString(value: unknown, limit: number): string {
   return visibleDisplayText(text(value, limit));
 }
 
+function headlineCopy(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return dailySummaryDefaultHeadlineCopy();
+  }
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const headline = visibleDisplayText(text(value, 1_000_000));
+  return headline === '' ? undefined : headline;
+}
+
 function summaryStats(value: unknown): {
   conversations?: number;
   actionItems?: number;
@@ -115,8 +129,8 @@ export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
     if (seen.has(id)) {
       throw new DailySummaryError();
     }
-    const headline = optionalWireString(summary.headline, 1_000_000);
-    if (headline === '') {
+    const headline = headlineCopy(summary.headline);
+    if (headline === undefined) {
       continue;
     }
     seen.add(id);

@@ -1,3 +1,4 @@
+import {dailySummaryDefaultHeadlineCopy} from './desktopReadClient';
 import {
   loadOmiDailySummaries,
   parseOmiDailySummaries,
@@ -60,6 +61,34 @@ test('parses GET daily summary headlines and omits empty headlines', () => {
   ]);
 });
 
+test('names Flutter DailySummaryCard omitted or JSON-null GET headlines as Your Day in Review', () => {
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {id: 'sum-omitted', date: '2026-09-10'},
+          {id: 'sum-null', date: '2026-09-09', headline: null},
+          {id: 'sum-empty', date: '2026-09-08', headline: ' \t'},
+          {id: 'sum-number', date: '2026-09-07', headline: 1},
+          {id: 'sum-kept', headline: 'Met with the team'},
+        ],
+      }),
+    ),
+  ).toEqual([
+    {
+      id: 'sum-omitted',
+      date: '2026-09-10',
+      headline: dailySummaryDefaultHeadlineCopy(),
+    },
+    {
+      id: 'sum-null',
+      date: '2026-09-09',
+      headline: dailySummaryDefaultHeadlineCopy(),
+    },
+    {id: 'sum-kept', date: '', headline: 'Met with the team'},
+  ]);
+});
+
 test('does not omit a neighboring daily summary when stored headline or stats cannot project', () => {
   expect(
     parseOmiDailySummaries(
@@ -67,7 +96,6 @@ test('does not omit a neighboring daily summary when stored headline or stats ca
         summaries: [
           {id: 'sum-kept', headline: 'Met with the team'},
           {id: 'sum-headline-number', headline: 1},
-          {id: 'sum-headline-missing'},
           {id: '', headline: 'Empty id'},
           {id: 7, headline: 'Numeric id'},
           {
