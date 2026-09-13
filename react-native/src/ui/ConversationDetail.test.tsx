@@ -8,6 +8,10 @@ import {
   chatDiscoveryShowLessCopy,
   desktopBackendServiceCopy,
   conversationFirstPartySummaryCopy,
+  conversationActionItemsTodoCopy,
+  conversationActionItemsNoPendingCopy,
+  conversationActionItemsCompletedCopy,
+  conversationActionItemsNoCompletedCopy,
   conversationUnknownAppCopy,
 } from '../desktopReadClient';
 
@@ -1112,9 +1116,12 @@ test('legacy conversation details name GET action items without a write toggle',
     }),
   );
   expect(copy).toContain('Action Items');
-  expect(copy).toContain('Call Alex');
+  expect(copy).toContain(conversationActionItemsTodoCopy());
   expect(copy).toContain('Send notes');
-  expect(copy).toContain('Completed');
+  expect(copy).toContain(conversationActionItemsCompletedCopy());
+  expect(copy).toContain('Call Alex');
+  expect(copy).not.toContain(conversationActionItemsNoPendingCopy());
+  expect(copy).not.toContain(conversationActionItemsNoCompletedCopy());
   expect(copy).not.toContain('in_progress');
 });
 
@@ -1142,7 +1149,67 @@ test('legacy conversation details omit empty or whitespace action items', () => 
     }),
   );
   expect(copy).not.toContain('Action Items');
+  expect(copy).not.toContain(conversationActionItemsTodoCopy());
+  expect(copy).not.toContain(conversationActionItemsNoPendingCopy());
+  expect(copy).not.toContain(conversationActionItemsNoCompletedCopy());
   expect(copy).not.toContain('\u0085');
+});
+
+test('legacy conversation details name GET action-item To-Do empty groups without a write toggle', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [{description: 'Send notes', completed: false}],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const pending = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(pending).toContain(conversationActionItemsTodoCopy());
+  expect(pending).toContain('Send notes');
+  expect(pending).toContain(conversationActionItemsCompletedCopy());
+  expect(pending).toContain(conversationActionItemsNoCompletedCopy());
+  expect(pending).not.toContain(conversationActionItemsNoPendingCopy());
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [{description: 'Call Alex', completed: true}],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const done = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(done).toContain(conversationActionItemsTodoCopy());
+  expect(done).toContain(conversationActionItemsNoPendingCopy());
+  expect(done).toContain(conversationActionItemsCompletedCopy());
+  expect(done).toContain('Call Alex');
+  expect(done).not.toContain(conversationActionItemsNoCompletedCopy());
 });
 
 test('legacy conversation details name GET geolocation address', () => {

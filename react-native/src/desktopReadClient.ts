@@ -444,6 +444,22 @@ export function conversationFirstPartySummaryCopy(): string {
   return 'Summary';
 }
 
+export function conversationActionItemsTodoCopy(): string {
+  return 'To-Do';
+}
+
+export function conversationActionItemsNoPendingCopy(): string {
+  return 'No pending action items';
+}
+
+export function conversationActionItemsCompletedCopy(): string {
+  return 'Completed';
+}
+
+export function conversationActionItemsNoCompletedCopy(): string {
+  return 'No completed items yet';
+}
+
 export function chatBlockUnavailableCopy(): string {
   return 'No longer available';
 }

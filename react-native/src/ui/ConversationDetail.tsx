@@ -10,6 +10,10 @@ import {
   conversationStatusCopy,
   conversationTranscriptDurationCopy,
   conversationVisibilityCopy,
+  conversationActionItemsTodoCopy,
+  conversationActionItemsNoPendingCopy,
+  conversationActionItemsCompletedCopy,
+  conversationActionItemsNoCompletedCopy,
   formatConversationDuration,
   legacyTranscriptCanDisplaySeconds,
   legacyTranscriptTimestampCopy,
@@ -294,6 +298,8 @@ function LegacyConversationBody({
     }
     return [{...item, description}];
   });
+  const pendingActionItems = actionItems.filter(item => !item.completed);
+  const completedActionItems = actionItems.filter(item => item.completed);
   const showLegacyClocks =
     detail.transcript.status === 'loaded' &&
     legacyTranscriptCanDisplaySeconds(detail.transcript.segments);
@@ -552,18 +558,52 @@ function LegacyConversationBody({
           <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
             Action Items
           </Text>
-          {actionItems.map((item, index) => (
-            <View key={index} style={styles.conversationDetailFields}>
-              <Text selectable style={[styles.conversationTranscriptText, ink]}>
-                {item.description}
-              </Text>
-              {item.completed ? (
-                <Text style={[styles.conversationDetailField, ink]}>
-                  Completed
+          <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
+            {conversationActionItemsTodoCopy()}
+          </Text>
+          <Text style={[styles.conversationDetailField, ink]}>
+            {String(pendingActionItems.length)}
+          </Text>
+          {pendingActionItems.length > 0 ? (
+            pendingActionItems.map((item, index) => (
+              <View
+                key={`pending-${index}`}
+                style={styles.conversationDetailFields}>
+                <Text
+                  selectable
+                  style={[styles.conversationTranscriptText, ink]}>
+                  {item.description}
                 </Text>
-              ) : null}
-            </View>
-          ))}
+              </View>
+            ))
+          ) : (
+            <Text style={[styles.conversationDetailField, ink]}>
+              {conversationActionItemsNoPendingCopy()}
+            </Text>
+          )}
+          <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
+            {conversationActionItemsCompletedCopy()}
+          </Text>
+          <Text style={[styles.conversationDetailField, ink]}>
+            {String(completedActionItems.length)}
+          </Text>
+          {completedActionItems.length > 0 ? (
+            completedActionItems.map((item, index) => (
+              <View
+                key={`completed-${index}`}
+                style={styles.conversationDetailFields}>
+                <Text
+                  selectable
+                  style={[styles.conversationTranscriptText, ink]}>
+                  {item.description}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={[styles.conversationDetailField, ink]}>
+              {conversationActionItemsNoCompletedCopy()}
+            </Text>
+          )}
         </>
       ) : null}
       <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>

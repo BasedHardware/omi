@@ -82,6 +82,10 @@ import {
   conversationVisibilityCopy,
   conversationUnknownAppCopy,
   conversationFirstPartySummaryCopy,
+  conversationActionItemsTodoCopy,
+  conversationActionItemsNoPendingCopy,
+  conversationActionItemsCompletedCopy,
+  conversationActionItemsNoCompletedCopy,
   parseMemoryText,
   chatClockLabel,
   clockLabel,
@@ -2474,6 +2478,17 @@ test('conversation unknown-app copy names Flutter catalog-miss attribution', () 
 
 test('conversation first-party summary copy names Flutter appId-null attribution', () => {
   expect(conversationFirstPartySummaryCopy()).toBe('Summary');
+});
+
+test('conversation action-item copy names Flutter ActionItemsTab To-Do chrome', () => {
+  expect(conversationActionItemsTodoCopy()).toBe('To-Do');
+  expect(conversationActionItemsNoPendingCopy()).toBe(
+    'No pending action items',
+  );
+  expect(conversationActionItemsCompletedCopy()).toBe('Completed');
+  expect(conversationActionItemsNoCompletedCopy()).toBe(
+    'No completed items yet',
+  );
 });
 
 test('conversation day labels prefer startedAt and keep Today/Yesterday/date', () => {
