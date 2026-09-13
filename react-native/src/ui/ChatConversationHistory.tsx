@@ -11,6 +11,7 @@ import {
   chatDaySummaryItems,
   chatDaySummaryRowCopy,
   chatMemoryCitationCopy,
+  chatHumanQuotedContextCopy,
   chatMessageDisplayText,
   chatSenderCopy,
   paintedChatContentBlock,
@@ -107,7 +108,14 @@ export function ChatConversationHistory({
             result.messages.map(message => {
               const human = message.sender === 'human';
               const sender = chatSenderCopy(message.sender);
-              const body = chatMessageDisplayText(message);
+              const quoted = human
+                ? chatHumanQuotedContextCopy(message.text)
+                : {context: null, remainder: message.text};
+              const body = chatMessageDisplayText(
+                quoted.context === null
+                  ? message
+                  : {...message, text: quoted.remainder},
+              );
               const daySummary = chatDaySummaryCopy(
                 message.type,
                 message.createdAt,
@@ -125,6 +133,13 @@ export function ChatConversationHistory({
               });
               return (
                 <View key={message.id}>
+                  {quoted.context !== null ? (
+                    <Text
+                      numberOfLines={2}
+                      style={[styles.conversationDetailField, ink]}>
+                      {quoted.context}
+                    </Text>
+                  ) : null}
                   {showSummaryItems ? null : (
                     <Text
                       selectable

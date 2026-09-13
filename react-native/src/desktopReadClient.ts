@@ -1577,6 +1577,22 @@ export function paintedChatContentBlock(
   };
 }
 
+export function chatHumanQuotedContextCopy(text: string): {
+  context: string | null;
+  remainder: string;
+} {
+  const match = /^Context: "([\s\S]+?)"\n\n/.exec(text);
+  if (match === null) {
+    return {context: null, remainder: text};
+  }
+  const captured = match[1];
+  return {
+    context:
+      captured.length > 50 ? `${captured.slice(0, 50)}...` : captured,
+    remainder: text.slice(match[0].length),
+  };
+}
+
 export function chatMessageDisplayText(
   message: {
     text: string;

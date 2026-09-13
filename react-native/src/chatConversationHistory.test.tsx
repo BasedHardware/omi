@@ -1009,3 +1009,29 @@ test('a cancelled conversation-detail chat message with text still says Response
   expect(textOf(renderer)).toContain('Omi · partial answer');
   expect(textOf(renderer)).toContain('Response stopped');
 });
+
+test('conversation-detail chat names Flutter HumanMessage Context chrome', async () => {
+  mockRequest.mockResolvedValue(
+    historyResponse([
+      {
+        id: 'human-context',
+        text: 'Context: "Meeting notes from standup about the launch"\n\nWhat should I do next?',
+        sender: 'human',
+        generationOutcome: null,
+      },
+    ]),
+  );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  const tree = textOf(renderer);
+  expect(tree).toContain('Meeting notes from standup about the launch');
+  expect(tree).toContain('You · What should I do next?');
+  expect(tree).not.toContain('Context: "');
+});

@@ -10,6 +10,7 @@ import {
   chatDaySummaryItems,
   chatDaySummaryRowCopy,
   chatMemoryCitationCopy,
+  chatHumanQuotedContextCopy,
   chatMessageDisplayText,
   chatSenderCopy,
   paintedChatContentBlock,
@@ -56,7 +57,14 @@ const ChatMessageRow = memo(function ChatMessageRow({
     ]).start();
   }, [animate, opacity, reduceMotion, translateY]);
   const human = message.sender === 'human';
-  const body = chatMessageDisplayText(message);
+  const quoted = human
+    ? chatHumanQuotedContextCopy(message.text)
+    : {context: null, remainder: message.text};
+  const body = chatMessageDisplayText(
+    quoted.context === null
+      ? message
+      : {...message, text: quoted.remainder},
+  );
   const daySummary = chatDaySummaryCopy(message.type, message.createdAt);
   const summaryItems =
     daySummary === '' ? [] : chatDaySummaryItems(message.text);
@@ -86,6 +94,11 @@ const ChatMessageRow = memo(function ChatMessageRow({
             : styles.chatMessageColumnDesktop,
           human && styles.chatMessageColumnHuman,
         ]}>
+        {quoted.context !== null ? (
+          <Text numberOfLines={2} style={styles.cancelledLabel}>
+            {quoted.context}
+          </Text>
+        ) : null}
         {message.generationOutcome === 'failed' ||
         (!showSummaryItems && body !== '') ? (
           <View

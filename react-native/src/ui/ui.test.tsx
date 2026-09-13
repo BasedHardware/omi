@@ -1028,6 +1028,43 @@ test('a zero chat timestamp says Time unavailable instead of 1970', () => {
   expect(tree).not.toContain('1970');
 });
 
+test('chat human messages name Flutter Context chrome without the prefix in the bubble', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-human-context',
+        text: 'Context: "Meeting notes from standup about the launch"\n\nWhat should I do next?',
+        sender: 'human',
+        createdAt: Date.now(),
+        generationOutcome: null,
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Meeting notes from standup about the launch');
+  expect(copies).toContain('What should I do next?');
+  expect(copies.some(copy => copy.includes('Context: "'))).toBe(false);
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('an out-of-range chat timestamp says Time unavailable instead of Invalid Date', () => {
   const tree = JSON.stringify(
     render(

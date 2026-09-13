@@ -19,6 +19,7 @@ import {
   chatDaySummaryItems,
   chatDaySummaryRowCopy,
   chatMemoryCitationCopy,
+  chatHumanQuotedContextCopy,
   chatMessageDisplayText,
   chatSenderCopy,
   desktopBackendUnavailableCopy,
@@ -139,7 +140,15 @@ function AskExchange({
       ) : null}
       {messages.map(item => {
         const human = item.sender === 'human';
-        const body = chatMessageDisplayText(item, 'Response stopped.');
+        const quoted = human
+          ? chatHumanQuotedContextCopy(item.text)
+          : {context: null, remainder: item.text};
+        const body = chatMessageDisplayText(
+          quoted.context === null
+            ? item
+            : {...item, text: quoted.remainder},
+          'Response stopped.',
+        );
         const daySummary = chatDaySummaryCopy(item.type, item.createdAt);
         const summaryItems =
           daySummary === '' ? [] : chatDaySummaryItems(item.text);
@@ -155,6 +164,11 @@ function AskExchange({
         return (
           <View key={item.id} style={styles.exchangeRow}>
             <Text style={styles.rowMeta}>{chatSenderCopy(item.sender)}</Text>
+            {quoted.context !== null ? (
+              <Text numberOfLines={2} style={styles.rowMeta}>
+                {quoted.context}
+              </Text>
+            ) : null}
             {daySummary !== '' ? (
               <Text style={styles.rowMeta}>{daySummary}</Text>
             ) : null}

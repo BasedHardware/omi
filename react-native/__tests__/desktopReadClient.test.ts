@@ -32,6 +32,7 @@ import {
   deviceDisplayName,
   accountFieldCopy,
   connectionIdentityCopy,
+  chatHumanQuotedContextCopy,
   chatMessageDisplayText,
   chatChartCopy,
   paintedChatContentBlock,
@@ -1721,6 +1722,43 @@ test('empty chat bodies stay visible instead of a blank bubble', () => {
       generationRetryable: true,
     }),
   ).toBe('Response failed. Try again.');
+});
+
+test('chat human quoted context copy names Flutter HumanMessage Context chrome', () => {
+  expect(
+    chatHumanQuotedContextCopy(
+      'Context: "Meeting notes from standup about the launch"\n\nWhat should I do next?',
+    ),
+  ).toEqual({
+    context: 'Meeting notes from standup about the launch',
+    remainder: 'What should I do next?',
+  });
+  expect(
+    chatHumanQuotedContextCopy(
+      'Context: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"\n\nAsk this',
+    ),
+  ).toEqual({
+    context: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX...',
+    remainder: 'Ask this',
+  });
+  expect(chatHumanQuotedContextCopy('What should I do next?')).toEqual({
+    context: null,
+    remainder: 'What should I do next?',
+  });
+  expect(
+    chatHumanQuotedContextCopy('Context: "no blank line"\nWhat next?'),
+  ).toEqual({
+    context: null,
+    remainder: 'Context: "no blank line"\nWhat next?',
+  });
+  expect(
+    chatMessageDisplayText({
+      text: 'Context: "Meeting notes from standup about the launch"\n\nWhat should I do next?',
+      generationOutcome: null,
+    }),
+  ).toBe(
+    'Context: "Meeting notes from standup about the launch"\n\nWhat should I do next?',
+  );
 });
 
 test('chat message copy names GET chart points and omits empty charts', () => {
