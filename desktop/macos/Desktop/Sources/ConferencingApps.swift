@@ -167,13 +167,27 @@ enum ConferencingApps {
   /// window-title fallback (`browserCallWindowPresent()`, which needs Screen Recording permission).
   @available(macOS 14.4, *)
   static func callAppIsUsingMicrophone() -> Bool {
+    bundleIDsRunningInput().contains(where: isCallSurface(bundleID:))
+  }
+
+  /// Whether a bundle ID is a call surface: a native conferencing app or a web browser. Shared by
+  /// meeting detection and `DictationMicSuppressionPolicy`, where a call surface holding the mic
+  /// outranks a dictation app.
+  static func isCallSurface(bundleID: String) -> Bool {
+    isNativeCallApp(bundleID: bundleID) || isBrowserBundleID(bundleID)
+  }
+
+  /// Lowercased bundle IDs of every process currently running microphone input, as CoreAudio
+  /// reports them (macOS 14.4+; no permission needed). Processes without a readable bundle ID
+  /// are omitted; order is unspecified.
+  @available(macOS 14.4, *)
+  static func bundleIDsRunningInput() -> [String] {
+    var ids: [String] = []
     for process in audioProcessObjects() where processIsRunningInput(process) {
       guard let bundleID = processBundleID(process) else { continue }
-      if isNativeCallApp(bundleID: bundleID) || isBrowserBundleID(bundleID) {
-        return true
-      }
+      ids.append(bundleID.lowercased())
     }
-    return false
+    return ids
   }
 
   /// True if an on-screen browser window's title indicates a call. Window titles require Screen

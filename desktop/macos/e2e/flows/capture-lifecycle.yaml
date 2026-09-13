@@ -55,6 +55,10 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift
   - desktop/macos/Desktop/Sources/MeetingDetector.swift
+  # The dictation-app mic monitor is created on mic capture start and stopped with the
+  # meeting detector on teardown, so this lifecycle flow is what exercises its wiring.
+  - desktop/macos/Desktop/Sources/Audio/DictationMicSuppression.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+DictationMicSuppression.swift
   - desktop/macos/Desktop/Sources/CalendarMeetingContext/SystemCalendarMeetingContextFeature.swift
   - desktop/macos/Desktop/Sources/CalendarMeetingContext/SystemCalendarMeetingContextService.swift
   - desktop/macos/Desktop/Sources/CalendarMeetingContext/DerivedDataEgressPolicy.swift
