@@ -100,7 +100,7 @@ void main() {
     AnalyticsManager.resetForTesting();
   });
 
-  Future<void> _awaitDisconnectHandling(DeviceProvider device) async {
+  Future<void> awaitDisconnectHandling(DeviceProvider device) async {
     await Future<void>.delayed(Duration.zero);
     await device.pendingRolesReconciliation;
   }
@@ -164,7 +164,7 @@ void main() {
     await device.registerConnectedDevice(glass);
 
     device.onDeviceConnectionStateChanged('omi-1', DeviceConnectionState.disconnected);
-    await _awaitDisconnectHandling(device);
+    await awaitDisconnectHandling(device);
 
     expect(device.connectedDevice?.id, 'glass-1');
     expect(device.companionDevice, isNull);
@@ -180,7 +180,7 @@ void main() {
     await device.registerConnectedDevice(glass);
 
     device.onDeviceConnectionStateChanged('glass-1', DeviceConnectionState.disconnected);
-    await _awaitDisconnectHandling(device);
+    await awaitDisconnectHandling(device);
 
     expect(device.connectedDevice?.id, 'omi-1');
     expect(device.isConnected, isTrue);
@@ -194,7 +194,7 @@ void main() {
     await device.registerConnectedDevice(omi);
 
     device.onDeviceConnectionStateChanged('someone-elses-device', DeviceConnectionState.disconnected);
-    await _awaitDisconnectHandling(device);
+    await awaitDisconnectHandling(device);
 
     expect(device.connectedDevice?.id, 'omi-1');
     expect(device.isConnected, isTrue);
