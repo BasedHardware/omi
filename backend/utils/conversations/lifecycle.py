@@ -411,6 +411,7 @@ def open_recording_session(
     recording_session_id: str,
     proposed_conversation_id: str,
     *,
+    shared_capture: bool = False,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Open or resume a durable session through the single lifecycle owner.
@@ -423,6 +424,7 @@ def open_recording_session(
             uid,
             recording_session_id,
             proposed_conversation_id,
+            shared_capture=shared_capture,
             firestore_client=firestore_client,
         )
     except Exception:
@@ -448,6 +450,7 @@ def open_recording_session(
             'lifecycle_phase': None,
             'lifecycle_sequence': None,
             'mapping_conflict': False,
+            'shared_capture': shared_capture,
         }
     if binding['mapping_conflict']:
         record_fallback(
@@ -484,6 +487,7 @@ def record_recording_session_event(
     conversation_id: str,
     phase: recording_sessions_db.RecordingPhase,
     *,
+    shared_capture: bool = False,
     firestore_client: Any = None,
 ) -> dict[str, Any] | None:
     """Persist and return an ordered client envelope, discarding stale callbacks."""
@@ -517,6 +521,7 @@ def record_recording_session_event(
             'lifecycle_version': None,
             'lifecycle_phase': None,
             'lifecycle_sequence': None,
+            'shared_capture': shared_capture,
         }
     if event['accepted']:
         return dict(event)
@@ -545,6 +550,7 @@ def record_recording_session_event(
             'lifecycle_version': None,
             'lifecycle_phase': None,
             'lifecycle_sequence': None,
+            'shared_capture': shared_capture,
         }
     return None
 
@@ -645,6 +651,7 @@ def open_live_recording_session(
     recording_session_id: str,
     proposed_conversation_id: str,
     *,
+    shared_capture: bool = False,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Open a live binding or require a fresh generation for a missing old row.
@@ -662,8 +669,24 @@ def open_live_recording_session(
         uid,
         recording_session_id,
         proposed_conversation_id,
+        shared_capture=shared_capture,
         firestore_client=firestore_client,
     )
+    if shared_capture and not binding['mapping_conflict']:
+        try:
+            conversations_db.mark_conversation_shared_capture(
+                uid,
+                binding['conversation_id'],
+                firestore_client=firestore_client,
+            )
+        except Exception:
+            # The session marker still protects the joining client, and the
+            # transcript writer also recognizes the explicit Omi/desktop pair.
+            logger.exception(
+                'shared capture marker persistence failed uid=%s conversation=%s',
+                uid,
+                binding['conversation_id'],
+            )
     if existing is None:
         return dict(binding) | {'requires_rollover': False}
 

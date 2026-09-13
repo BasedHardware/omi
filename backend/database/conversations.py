@@ -952,6 +952,31 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
     return True
 
 
+def mark_conversation_shared_capture(
+    uid: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    """Persist the explicit Omi/desktop pairing marker on the conversation."""
+    client = firestore_client if firestore_client is not None else db
+    conversation_ref = (
+        client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    )
+
+    @firestore.transactional
+    def _mark(transaction) -> bool:
+        snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(snapshot, 'exists', False):
+            return False
+        if bool((snapshot.to_dict() or {}).get('shared_capture', False)):
+            return True
+        transaction.update(conversation_ref, {'shared_capture': True})
+        return True
+
+    return run_transactional(client, _mark)
+
+
 def try_claim_conversation_memory_analytics(uid: str, conversation_id: str, firestore_client: Any = None) -> bool:
     """Atomically claim the one analytics success slot for a conversation.
 

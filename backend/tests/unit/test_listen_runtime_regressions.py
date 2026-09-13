@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from database import conversations as conversations_db
 from routers.listen.contracts import ListenRequest
 from routers.listen.conversations import resolve_onboarding_provenance_marker
 from routers.listen.runtime import ListenSessionRuntime
@@ -104,6 +105,37 @@ async def test_teardown_rechecks_deletion_authority_before_owner_persistence():
     assert authority_reads[0][1] == ('newly-deleted-owner',)
     assert request.owner_persistence_blocked.is_set()
     _assert_deletion_teardown_skipped_owner_writes(runtime)
+
+
+@pytest.mark.anyio
+async def test_shared_desktop_teardown_waits_for_active_capture_peer(monkeypatch):
+    import routers.listen.runtime as runtime_module
+
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=WebSocketState.DISCONNECTED),
+        uid='paired-user',
+    )
+
+    async def persistence_call(function, *_args, **_kwargs):
+        if function.__name__ == '_account_deletion_blocks_owner_persistence':
+            return False
+        if function is conversations_db.get_conversation:
+            return {
+                'id': 'conversation-1',
+                'source': 'desktop',
+                'transcript_segments': [{'id': 'segment-1'}],
+                'photos': [],
+            }
+        raise AssertionError(f'unexpected persistence call: {function}')
+
+    runtime = _deletion_teardown_runtime(request, persistence_call)
+    runtime.state.close_code = 1000
+    monkeypatch.setattr(runtime_module, 'has_shared_capture_peer', lambda *_args: True)
+
+    await runtime._teardown()
+
+    runtime.conversations.process_conversation.assert_not_awaited()
+    runtime.transcripts.flush_speaker_assignments.assert_not_awaited()
 
 
 def _runtime_for_periodic_usage(*, tracking, exhausted):
@@ -884,6 +916,28 @@ async def test_transcript_delivery_marks_live_transcription_success_only_after_a
     assert websocket.sent == [[{'id': 'segment-1', 'text': 'Hello'}]]
     assert delivered == [True]
     assert flushed == ['conversation-1']
+    assert processor.host.state.words_transcribed_since_last_record == 1
+
+
+@pytest.mark.anyio
+async def test_transcript_delivery_skips_segments_rejected_by_live_deduplication(monkeypatch):
+    class WebSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send_json(self, payload):
+            self.sent.append(payload)
+
+    websocket = WebSocket()
+    processor, delivered, flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+    processor.last_accepted_segments = []
+
+    await processor.process_loop()
+
+    assert websocket.sent == []
+    assert delivered == []
+    assert flushed == ['conversation-1']
+    assert processor.host.state.words_transcribed_since_last_record == 0
 
 
 @pytest.mark.anyio

@@ -217,9 +217,11 @@ def test_conversation_lifecycle_actions():
     )
 
 
-def test_cross_source_in_progress_must_not_attach():
+def test_source_pairing_allows_only_omi_desktop_cross_source_capture():
     assert should_attach_to_existing_in_progress(existing_source='omi', request_source='omi') is True
     assert should_attach_to_existing_in_progress(existing_source='omi', request_source=None) is True
+    assert should_attach_to_existing_in_progress(existing_source='omi', request_source='desktop') is True
+    assert should_attach_to_existing_in_progress(existing_source='desktop', request_source='omi') is True
     assert should_attach_to_existing_in_progress(existing_source='omi', request_source='web') is False
     assert should_attach_to_existing_in_progress(existing_source='web', request_source='desktop') is False
     assert should_attach_to_existing_in_progress(existing_source=None, request_source='') is True

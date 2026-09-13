@@ -707,6 +707,7 @@ class GeneratedConversation {
   final String? processingMemoryId;
   final String? processingState;
   final bool screenshotSharingEnabled;
+  final bool sharedCapture;
   final String? source;
   final bool starred;
   final DateTime? startedAt;
@@ -752,6 +753,7 @@ class GeneratedConversation {
     this.processingMemoryId,
     this.processingState,
     this.screenshotSharingEnabled = true,
+    this.sharedCapture = false,
     this.source = "omi",
     this.starred = false,
     required this.startedAt,
@@ -799,6 +801,7 @@ class GeneratedConversation {
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
+      sharedCapture: _required(_readFieldValue<bool>(_readField(json, const ["shared_capture"]), "shared_capture", _readBool, requiredField: false, nullable: false, defaultValue: false), "shared_capture"),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
       starred: _required(_readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool, requiredField: false, nullable: false, defaultValue: false), "starred"),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: true),
@@ -847,6 +850,7 @@ class GeneratedConversation {
       'processing_memory_id': processingMemoryId,
       'processing_state': processingState,
       'screenshot_sharing_enabled': screenshotSharingEnabled,
+      'shared_capture': sharedCapture,
       'source': source,
       'starred': starred,
       'started_at': startedAt?.toUtc().toIso8601String(),
@@ -1084,6 +1088,7 @@ class GeneratedConversationSearchItem {
   final String? processingMemoryId;
   final String? processingState;
   final bool screenshotSharingEnabled;
+  final bool sharedCapture;
   final String? source;
   final bool starred;
   final DateTime? startedAt;
@@ -1130,6 +1135,7 @@ class GeneratedConversationSearchItem {
     this.processingMemoryId,
     this.processingState,
     this.screenshotSharingEnabled = true,
+    this.sharedCapture = false,
     this.source = "omi",
     this.starred = false,
     required this.startedAt,
@@ -1178,6 +1184,7 @@ class GeneratedConversationSearchItem {
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
+      sharedCapture: _required(_readFieldValue<bool>(_readField(json, const ["shared_capture"]), "shared_capture", _readBool, requiredField: false, nullable: false, defaultValue: false), "shared_capture"),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
       starred: _required(_readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool, requiredField: false, nullable: false, defaultValue: false), "starred"),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: true),
@@ -1227,6 +1234,7 @@ class GeneratedConversationSearchItem {
       'processing_memory_id': processingMemoryId,
       'processing_state': processingState,
       'screenshot_sharing_enabled': screenshotSharingEnabled,
+      'shared_capture': sharedCapture,
       'source': source,
       'starred': starred,
       'started_at': startedAt?.toUtc().toIso8601String(),
