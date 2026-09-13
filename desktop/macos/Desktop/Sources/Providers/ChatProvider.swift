@@ -1329,6 +1329,25 @@ class ChatProvider: ObservableObject {
     AgentRuntimeRouting.harnessMode(for: mode).rawValue
   }
 
+  /// Inverse of `harnessMode(for:)`, disambiguated by `providerMode` for the
+  /// one harness two `BridgeMode`s share (piMono's Node harness, split into
+  /// "omi"/"omi-local" by `AIProvider.providerMode(forBridgeModeRawValue:)`).
+  /// Used to roll `bridgeMode` back to what was actually running when a
+  /// switch's restart/reconfigure fails: `activeBridgeHarness`/
+  /// `activeProviderMode`, not `bridgeMode` itself, are the only trustworthy
+  /// source for what was applied before this attempt, because a picker's own
+  /// `@AppStorage` binding for the same key may already have overwritten
+  /// `bridgeMode` with the destination value before this function ever ran.
+  nonisolated static func resolvedBridgeMode(forHarness harness: String, providerMode: String) -> BridgeMode {
+    if harness == Self.harnessMode(for: .piMono) {
+      return providerMode == "omi-local" ? .local : .piMono
+    }
+    if harness == Self.harnessMode(for: .userClaude) { return .userClaude }
+    if harness == Self.harnessMode(for: .hermes) { return .hermes }
+    if harness == Self.harnessMode(for: .openClaw) { return .openClaw }
+    return .piMono
+  }
+
   private func resolvedHarnessMode() -> String {
     if let override = bridgeHarnessOverride {
       return override.rawValue
@@ -2271,7 +2290,6 @@ class ChatProvider: ObservableObject {
     let newProviderMode = AIProvider.providerMode(forBridgeModeRawValue: resolvedMode.rawValue)
     let previousHarness = activeBridgeHarness
     let previousProviderMode = activeProviderMode
-    let previousBridgeMode = bridgeMode
     // piMono and local share the same Node harness ("piMono") but configure
     // different pi providers via environment variables baked in at process
     // spawn time (see AgentRuntimeProcess.performStartProcess); compare on
@@ -2346,8 +2364,12 @@ class ChatProvider: ObservableObject {
         // persisted as the new value. Roll it back so the Settings picker and
         // a future cold launch agree with what is actually still running,
         // instead of both disagreeing with reality until the user happens to
-        // retry.
-        bridgeMode = previousBridgeMode
+        // retry (see `resolvedBridgeMode(forHarness:providerMode:)` for why
+        // this must be derived from the truth trackers, not a `bridgeMode`
+        // string captured at this function's entry).
+        bridgeMode =
+          Self.resolvedBridgeMode(forHarness: previousHarness, providerMode: previousProviderMode)
+          .rawValue
         logError("Failed to restart runtime for provider change", error: error)
         errorMessage = "Could not switch AI provider. Try again."
       }
@@ -2374,6 +2396,13 @@ class ChatProvider: ObservableObject {
       )
     } catch {
       guard preferenceChange == profilePreferenceChangeGeneration else { return }
+      // Same failure class as the restart branch above: the reconfigure RPC
+      // (e.g. `.stopped`/`.authMissing`/`.agentError`) never applied, so
+      // `activeBridgeHarness`/`activeProviderMode` are correctly left
+      // untouched, but `bridgeMode` was already persisted as the new value.
+      bridgeMode =
+        Self.resolvedBridgeMode(forHarness: previousHarness, providerMode: previousProviderMode)
+        .rawValue
       logError("Failed to configure future-session profile", error: error)
       errorMessage = "Could not update AI provider preference. Try again."
     }
