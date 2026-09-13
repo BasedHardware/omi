@@ -61,16 +61,20 @@ class ExternalHapticRateLimiter {
   }
 }
 
+final ExternalHapticRateLimiter _defaultExternalHapticRateLimiter = ExternalHapticRateLimiter();
+
 Future<ExternalHapticTriggerResult> runExternalHapticTrigger(
   Uri uri, {
   required String deviceId,
-  required ExternalHapticRateLimiter rateLimiter,
+  ExternalHapticRateLimiter? rateLimiter,
   required ExternalHapticPlayer playHaptic,
 }) async {
   final trigger = ExternalHapticTrigger.tryParse(uri);
   if (trigger == null) return ExternalHapticTriggerResult.notHandled;
   if (deviceId.isEmpty) return ExternalHapticTriggerResult.noPairedDevice;
-  if (!rateLimiter.tryAcquire(deviceId)) return ExternalHapticTriggerResult.rateLimited;
+
+  final limiter = rateLimiter ?? _defaultExternalHapticRateLimiter;
+  if (!limiter.tryAcquire(deviceId)) return ExternalHapticTriggerResult.rateLimited;
 
   final played = await playHaptic(deviceId, trigger.level);
   return played ? ExternalHapticTriggerResult.played : ExternalHapticTriggerResult.unavailable;
