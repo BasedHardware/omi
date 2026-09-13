@@ -2446,7 +2446,7 @@ test('Settings names a failed integrations GET instead of empty success', async 
   expect(labelsOf(renderer).includes('Connect')).toBe(false);
 });
 
-test('Settings names GET app changelogs without dismiss or a default icon', async () => {
+test('Settings names GET app changelogs without dismiss', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/announcements/changelogs?limit=5') {
@@ -2479,10 +2479,9 @@ test('Settings names GET app changelogs without dismiss or a default icon', asyn
   const tree = textOf(renderer);
   expect(tree).toContain("What's New in 1.2.0");
   expect(tree).toContain('🚀 · Faster sync · Uploads finish sooner.');
-  expect(tree).toContain('Offline replay');
+  expect(tree).toContain('✨ · Offline replay');
   expect(tree).not.toContain('Release notes');
   expect(tree).not.toContain('ann-1');
-  expect(tree).not.toContain('✨');
   expect(tree).not.toContain('Dismiss');
   expect(mockBackend.request).toHaveBeenCalledWith({
     id: expect.any(String),

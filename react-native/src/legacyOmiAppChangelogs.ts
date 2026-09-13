@@ -133,7 +133,7 @@ export function parseOmiAppChangelogs(body: string): OmiAppChangelogRow[] {
           : visibleDisplayText(text(change.description, 1_000_000));
       const icon =
         change.icon === undefined || change.icon === null
-          ? ''
+          ? '✨'
           : visibleDisplayText(text(change.icon, 1_000_000));
       pending.push({
         key: `${id}:${changeIndex}`,

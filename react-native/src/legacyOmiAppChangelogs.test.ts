@@ -5,7 +5,7 @@ import {
 } from './legacyOmiAppChangelogs';
 import type {OmiBackend} from './omiNativeTypes';
 
-test('parses GET app changelogs without inventing a missing icon', () => {
+test('parses GET app changelogs with Flutter omitted-icon ✨', () => {
   expect(
     parseOmiAppChangelogs(
       JSON.stringify([
@@ -23,6 +23,8 @@ test('parses GET app changelogs without inventing a missing icon', () => {
               },
               {title: '  ', description: 'Hidden empty title.'},
               {title: 'Offline replay', description: ' \t'},
+              {title: 'Empty icon', description: '', icon: ''},
+              {title: 'Null icon', description: '', icon: null},
             ],
           },
         },
@@ -46,7 +48,17 @@ test('parses GET app changelogs without inventing a missing icon', () => {
     {
       key: 'ann-1:1',
       title: "What's New in 1.2.0",
-      copy: 'Offline replay',
+      copy: '✨ · Offline replay',
+    },
+    {
+      key: 'ann-1:2',
+      title: "What's New in 1.2.0",
+      copy: 'Empty icon',
+    },
+    {
+      key: 'ann-1:3',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Null icon',
     },
   ]);
   expect(appChangelogHeading('')).toBe("What's New");
@@ -85,7 +97,7 @@ test('names neighboring GET changelogs when one announcement change cannot proje
     {
       key: 'ann-good:0',
       title: "What's New in 1.2.0",
-      copy: 'Offline replay',
+      copy: '✨ · Offline replay',
     },
   ]);
   expect(
@@ -123,7 +135,7 @@ test('keeps GET app changelogs when the announcement list exceeds 10', () => {
     Array.from({length: 5}, (_, index) => ({
       key: `ann-${index}:0`,
       title: "What's New in 1.2.0",
-      copy: `Change ${index}`,
+      copy: `✨ · Change ${index}`,
     })),
   );
 });
@@ -154,12 +166,12 @@ test('keeps GET app changelog changes when more than 32', () => {
     ...changes.map((change, index) => ({
       key: `ann-long:${index}`,
       title: "What's New in 1.4.0",
-      copy: change.title,
+      copy: `✨ · ${change.title}`,
     })),
     {
       key: 'ann-good:0',
       title: "What's New in 1.2.0",
-      copy: 'Offline replay',
+      copy: '✨ · Offline replay',
     },
   ]);
 });
@@ -194,7 +206,7 @@ test('keeps GET app changelog icon longer than 32', () => {
     {
       key: 'ann-good:0',
       title: "What's New in 1.2.0",
-      copy: 'Offline replay',
+      copy: '✨ · Offline replay',
     },
   ]);
 });
@@ -231,7 +243,7 @@ test('keeps GET app changelog title, description, or icon longer than 10000', ()
     {
       key: 'ann-good:0',
       title: "What's New in 1.2.0",
-      copy: 'Offline replay',
+      copy: '✨ · Offline replay',
     },
   ]);
 });
@@ -259,12 +271,12 @@ test('keeps GET app changelog app_version longer than 64', () => {
     {
       key: 'ann-version:0',
       title: `What's New in ${app_version}`,
-      copy: 'Faster sync',
+      copy: '✨ · Faster sync',
     },
     {
       key: 'ann-good:0',
       title: "What's New in 1.2.0",
-      copy: 'Offline replay',
+      copy: '✨ · Offline replay',
     },
   ]);
 });
@@ -292,12 +304,12 @@ test('keeps GET app changelog app_version longer than 10000', () => {
     {
       key: 'ann-version:0',
       title: `What's New in ${app_version}`,
-      copy: 'Faster sync',
+      copy: '✨ · Faster sync',
     },
     {
       key: 'ann-good:0',
       title: "What's New in 1.2.0",
-      copy: 'Offline replay',
+      copy: '✨ · Offline replay',
     },
   ]);
 });
@@ -325,7 +337,7 @@ test('keeps GET app changelogs when a non-changelog type exceeds 64', () => {
     {
       key: 'ann-good:0',
       title: "What's New in 1.2.0",
-      copy: 'Offline replay',
+      copy: '✨ · Offline replay',
     },
   ]);
 });
@@ -353,7 +365,7 @@ test('keeps GET app changelogs when a non-changelog type exceeds 10000', () => {
     {
       key: 'ann-good:0',
       title: "What's New in 1.2.0",
-      copy: 'Offline replay',
+      copy: '✨ · Offline replay',
     },
   ]);
 });
@@ -381,12 +393,12 @@ test('keeps GET app changelogs when an announcement id exceeds 256', () => {
     {
       key: `${id}:0`,
       title: "What's New in 1.0.0",
-      copy: 'Faster sync',
+      copy: '✨ · Faster sync',
     },
     {
       key: 'ann-good:0',
       title: "What's New in 1.2.0",
-      copy: 'Offline replay',
+      copy: '✨ · Offline replay',
     },
   ]);
 });
@@ -411,7 +423,7 @@ test('loadOmiAppChangelogs names GET rows and omits failures', async () => {
     {
       key: 'ann-1:0',
       title: "What's New in 2.0.0",
-      copy: 'New Home · A calmer capture card.',
+      copy: '✨ · New Home · A calmer capture card.',
     },
   ]);
   expect(request).toHaveBeenCalledWith({
