@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/models/omi_button_action.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
@@ -183,21 +184,54 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
-  String _doubleTapActionLabel(int action) {
-    switch (action) {
-      case 1:
-        return context.l10n.deviceOnboardingMuteUnmute;
-      case 2:
-        return context.l10n.starConversation;
-      default:
-        return context.l10n.endConversation;
-    }
+  String _gestureTitle(OmiButtonGesture gesture) {
+    return switch (gesture) {
+      OmiButtonGesture.singleTap => context.l10n.singleTap,
+      OmiButtonGesture.doubleTap => context.l10n.doubleTap,
+      OmiButtonGesture.tripleTap => context.l10n.tripleTap,
+    };
   }
 
-  Future<void> _pickDoubleTapAction() async {
-    final action = await showDoubleTapActionSheet(context, current: SharedPreferencesUtil().doubleTapAction);
+  String _buttonActionLabel(OmiButtonAction action) {
+    return switch (action) {
+      OmiButtonAction.endConversation => context.l10n.endConversation,
+      OmiButtonAction.muteUnmute => context.l10n.deviceOnboardingMuteUnmute,
+      OmiButtonAction.starConversation => context.l10n.starConversation,
+      OmiButtonAction.askQuestion => context.l10n.deviceOnboardingAskQuestionTitle,
+      OmiButtonAction.none => context.l10n.doNothing,
+    };
+  }
+
+  Future<void> _pickButtonAction(OmiButtonGesture gesture) async {
+    final action = await showButtonActionSheet(
+      context,
+      gesture: gesture,
+      current: SharedPreferencesUtil().buttonActionFor(gesture),
+    );
     if (action == null || !mounted) return;
-    setState(() => SharedPreferencesUtil().doubleTapAction = action);
+    setState(() => SharedPreferencesUtil().setButtonActionFor(gesture, action));
+  }
+
+  List<Widget> _remappableButtonGestureRows() {
+    return [
+      for (final gesture in OmiButtonGesture.values)
+        OmiSettingsRow(
+          key: Key('button_gesture_${gesture.name}'),
+          leading: const FaIcon(FontAwesomeIcons.handPointer),
+          title: _gestureTitle(gesture),
+          value: _buttonActionLabel(SharedPreferencesUtil().buttonActionFor(gesture)),
+          onTap: () => _pickButtonAction(gesture),
+          showChevron: true,
+        ),
+      OmiSettingsRow(
+        key: const Key('button_gesture_longPress'),
+        leading: const FaIcon(FontAwesomeIcons.powerOff),
+        title: context.l10n.longPress,
+        subtitle: context.l10n.longPressFixedSubtitle,
+        value: context.l10n.powerOnOff,
+        showChevron: false,
+      ),
+    ];
   }
 
   Future<void> _findDevice(DeviceProvider provider) async {
@@ -389,13 +423,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final l10n = context.l10n;
     final isOmi = device?.type == DeviceType.omi;
     final supportsFind = isOmi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
-    final doubleTapRow = OmiSettingsRow(
-      leading: const FaIcon(FontAwesomeIcons.handPointer),
-      title: l10n.doubleTap,
-      value: _doubleTapActionLabel(SharedPreferencesUtil().doubleTapAction),
-      onTap: _pickDoubleTapAction,
-      showChevron: true,
-    );
     return OmiSettingsGroup(
       header: l10n.customizationSection,
       children: [
@@ -424,10 +451,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               }
             },
           ),
-          // Double tap is only configurable while Omi button actions are enabled.
-          if (_omiButtonActionsEnabled) doubleTapRow,
+          if (_omiButtonActionsEnabled) ..._remappableButtonGestureRows(),
         ] else
-          doubleTapRow,
+          ..._remappableButtonGestureRows(),
         if (_isDimRatioLoaded && _hasDimmingFeature == true)
           OmiSettingsRow(
             leading: const FaIcon(FontAwesomeIcons.lightbulb),
