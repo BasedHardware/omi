@@ -1127,7 +1127,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               item.finishedAt,
               recapNow,
             ),
-            ...(conversationHasFinishClock(item)
+            ...(typeof item.transcriptEndSeconds === 'number' ||
+            conversationHasFinishClock(item)
               ? {duration: conversationListDurationCopy(item)}
               : {}),
             title: conversationRecapTitle(item),

@@ -246,7 +246,9 @@ export const ProjectionRow = memo(function ProjectionRow({
           {item.exportCopy}
         </Text>
       ) : null}
-      {conversation !== null && conversationHasFinishClock(conversation) ? (
+      {conversation !== null &&
+      (conversationHasFinishClock(conversation) ||
+        typeof conversation.transcriptEndSeconds === 'number') ? (
         <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
           {conversationListDurationCopy(conversation)}
         </Text>

@@ -9,6 +9,7 @@ import {
   conversationDetailSpeakerCopy,
   conversationDayLabel,
   conversationRecapDateLabel,
+  conversationListDurationCopy,
   conversationListNewCopy,
   conversationGroupLabel,
   conversationCaptureCopy,
@@ -830,6 +831,22 @@ test('compact recaps keep list overview speech when GET title is empty', () => {
       summary: 'Short title with later speech',
     }),
   ).toBe(false);
+});
+
+test('conversation list duration prefers GET transcript span over wall clocks', () => {
+  expect(
+    conversationListDurationCopy({
+      startedAt: '2026-09-07T00:00:00.000Z',
+      finishedAt: '2026-09-07T00:10:00.000Z',
+      transcriptEndSeconds: 120,
+    }),
+  ).toBe('2 min');
+  expect(
+    conversationListDurationCopy({
+      startedAt: '2026-09-07T00:00:00.000Z',
+      finishedAt: '2026-09-07T00:10:00.000Z',
+    }),
+  ).toBe('10 min');
 });
 
 test('discarded conversation titles use Flutter transcript excerpt and people names', () => {

@@ -471,6 +471,38 @@ test('discarded Home and Library rows name GET transcript span instead of Durati
   }
 });
 
+test('non-discarded Home and Library rows name GET transcript span instead of Duration unavailable', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:timed',
+    title: 'Product review',
+    summary: 'Talked through the release.',
+    searchableText: 'Product review\nTalked through the release.',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+    transcriptEndSeconds: 120,
+  };
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  let library!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    home = ReactTestRenderer.create(<ReadRow item={item} />);
+    library = ReactTestRenderer.create(<ConversationRow item={item} />);
+  });
+  for (const copy of [textOf(home), textOf(library)]) {
+    expect(copy).toContain('2 min');
+    expect(copy).not.toContain('Duration unavailable');
+  }
+});
+
 function taskItem(dueAt: number | null, completed = false): TaskProjection {
   return {
     kind: 'task',

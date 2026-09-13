@@ -114,7 +114,7 @@ test('old discarded conversations name GET transcript_segments as the list title
   expect(result.items[3].title).toBe('Real title');
 });
 
-test('old discarded conversations keep GET transcript span seconds when clocks are missing', async () => {
+test('old conversations keep GET transcript span seconds when clocks are missing', async () => {
   const {api} = backend([
     {
       ...conversation,
@@ -143,7 +143,7 @@ test('old discarded conversations keep GET transcript span seconds when clocks a
       discarded: false,
       transcript_segments: [
         {
-          text: 'Should not become list duration',
+          text: 'Flutter list duration uses last segment end',
           speaker: 'SPEAKER_00',
           is_user: false,
           start: 0,
@@ -155,7 +155,7 @@ test('old discarded conversations keep GET transcript span seconds when clocks a
   const result = await loadConversations(api);
   expect(result.items[0]).toMatchObject({transcriptEndSeconds: 120});
   expect(result.items[1]).not.toHaveProperty('transcriptEndSeconds');
-  expect(result.items[2]).not.toHaveProperty('transcriptEndSeconds');
+  expect(result.items[2]).toMatchObject({transcriptEndSeconds: 120});
 });
 
 test('old discarded conversations name GET transcript start/end numeric strings', async () => {

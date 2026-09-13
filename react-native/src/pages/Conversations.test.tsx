@@ -1214,6 +1214,98 @@ test('discarded list rows name GET transcript span instead of Duration unavailab
   expect(copy).not.toContain('Duration unavailable');
 });
 
+test('non-discarded list rows name GET transcript span instead of Duration unavailable', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:timed',
+    title: 'Product review',
+    summary: 'Talked through the release.',
+    searchableText: 'Product review\nTalked through the release.',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+    transcriptEndSeconds: 120,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('2 min');
+  expect(copy).not.toContain('Duration unavailable');
+});
+
+test('processing list rows name GET transcript span without a finish clock', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:processing-timed',
+    title: 'Product review',
+    summary: 'Talked through the release.',
+    searchableText: 'Product review\nTalked through the release.',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: 'processing',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+    transcriptEndSeconds: 120,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('2 min');
+  expect(copy).not.toContain('Duration unavailable');
+});
+
 test('conversation list names failed conversations without Status on every row', () => {
   const base = {
     kind: 'conversation' as const,

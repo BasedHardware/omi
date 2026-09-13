@@ -162,7 +162,8 @@ const ConversationRow = memo(function ConversationRow({
           {conversationDisplaySummary(item)}
         </Text>
       )}
-      {conversationHasFinishClock(item) ? (
+      {conversationHasFinishClock(item) ||
+      typeof item.transcriptEndSeconds === 'number' ? (
         <Text style={styles.conversationRowDuration}>
           {conversationListDurationCopy(item)}
         </Text>

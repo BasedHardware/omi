@@ -579,14 +579,10 @@ export function conversationListDurationCopy(item: {
   finishedAt: string | null;
   transcriptEndSeconds?: number;
 }): string {
-  const fromClocks = formatConversationDuration(item.startedAt, item.finishedAt);
-  if (fromClocks !== 'Duration unavailable') {
-    return fromClocks;
+  if (typeof item.transcriptEndSeconds === 'number') {
+    return formatConversationDurationSeconds(item.transcriptEndSeconds);
   }
-  if (typeof item.transcriptEndSeconds !== 'number') {
-    return fromClocks;
-  }
-  return formatConversationDurationSeconds(item.transcriptEndSeconds);
+  return formatConversationDuration(item.startedAt, item.finishedAt);
 }
 
 export function conversationTranscriptEndSeconds(

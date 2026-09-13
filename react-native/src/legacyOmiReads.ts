@@ -189,9 +189,8 @@ export async function loadOmiConversations(
     const structuredTitle = text(structured.title, ''),
       summary = text(structured.overview, '');
     const discarded = bool(row.discarded);
-    const discardedSegments = discarded
-      ? discardedTranscriptSegments(row.transcript_segments)
-      : [];
+    const listSegments = discardedTranscriptSegments(row.transcript_segments);
+    const discardedSegments = discarded ? listSegments : [];
     const createdAt = date(row.created_at);
     if (createdAt === null)
       throw new Error('Omi conversation creation time is malformed');
@@ -212,6 +211,7 @@ export async function loadOmiConversations(
       summary,
       discarded,
       discardedSegments,
+      listSegments,
       createdAt,
       visibility,
       status,
@@ -236,6 +236,7 @@ export async function loadOmiConversations(
       summary,
       discarded,
       discardedSegments,
+      listSegments,
       createdAt,
       visibility,
       status,
@@ -246,9 +247,8 @@ export async function loadOmiConversations(
       const discardedExcerpt = discarded
         ? conversationDiscardedTranscriptCopy(discardedSegments, peopleNames)
         : null;
-      const transcriptEndSeconds = discarded
-        ? conversationTranscriptEndSeconds(discardedSegments)
-        : null;
+      const transcriptEndSeconds =
+        conversationTranscriptEndSeconds(listSegments);
       const title =
         discardedExcerpt !== null ? discardedExcerpt : structuredTitle;
       return {
