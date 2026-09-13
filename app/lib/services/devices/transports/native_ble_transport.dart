@@ -192,6 +192,13 @@ class NativeBleTransport extends DeviceTransport {
     return false;
   }
 
+  /// Returns whether the currently discovered GATT table exposes a characteristic.
+  ///
+  /// This is intentionally read-only so higher-level commands can fail closed
+  /// instead of treating NativeBleTransport's compatibility no-op writes as success.
+  bool hasCharacteristic(String serviceUuid, String characteristicUuid) =>
+      _hasCharacteristic(serviceUuid, characteristicUuid);
+
   @override
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
     if (!_hasCharacteristic(serviceUuid, characteristicUuid)) return [];
