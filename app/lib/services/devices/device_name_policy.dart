@@ -19,9 +19,15 @@ class OmiDeviceNamePolicy {
   /// end with a space, so the UI never sends what the user did not mean.
   static String normalize(String raw) => raw.trim();
 
-  /// Returns null when [name] (already normalized) is acceptable.
+  /// Payload that resets the device name to the factory default on the pendant.
+  static const List<int> resetPayload = [];
+
+  /// Returns null when [name] (already normalized) is acceptable for rename.
   static DeviceNameError? validate(String name) {
     if (name.isEmpty) return DeviceNameError.empty;
+    if (name.startsWith(' ') || name.endsWith(' ')) {
+      return DeviceNameError.invalidCharacters;
+    }
     for (final rune in name.runes) {
       if (rune < 0x20 || rune == 0x7F) return DeviceNameError.invalidCharacters;
       // Unpaired surrogates cannot be encoded as UTF-8.
@@ -30,6 +36,9 @@ class OmiDeviceNamePolicy {
     if (utf8.encode(name).length > maxBytes) return DeviceNameError.tooLong;
     return null;
   }
+
+  /// UTF-8 bytes for a factory reset (empty write). Not a user-visible name.
+  static List<int> encodeReset() => resetPayload;
 
   /// UTF-8 bytes to write to the characteristic. Throws [ArgumentError] when
   /// [name] does not pass [validate].

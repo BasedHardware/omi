@@ -10108,7 +10108,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get renameDeviceDescription =>
-      'O nome fica guardado no próprio Omi, por isso aparece em qualquer telemóvel com que o emparelhar.';
+      'O nome fica salvo no próprio Omi, então aparece em qualquer celular com que você emparelhar.';
 
   @override
   String get tapToRename => 'Toque para renomear';
@@ -10118,7 +10118,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String deviceNameTooLong(int maxBytes) {
-    return 'O nome é demasiado longo (até $maxBytes caracteres; emojis e acentos contam mais)';
+    return 'Nome muito longo (até $maxBytes bytes; emoji e acentos contam a mais)';
   }
 
   @override

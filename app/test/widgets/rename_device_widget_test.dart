@@ -154,6 +154,25 @@ void main() {
     expect(_lastResult, isTrue);
   });
 
+  testWidgets('recovers when onRename throws instead of leaving a stuck spinner', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        onRename: (_) async {
+          throw StateError('ble disconnected');
+        },
+      ),
+    );
+    await _openDialog(tester);
+
+    await tester.enterText(find.byKey(const Key('rename_device_field')), 'Kitchen Omi');
+    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.textContaining('Could not save'), findsOneWidget);
+    expect(_lastResult, isNull);
+  });
+
   testWidgets('an unchanged name closes without touching the device', (tester) async {
     var calls = 0;
     await tester.pumpWidget(

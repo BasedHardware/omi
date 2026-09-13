@@ -64,7 +64,17 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
       _errorText = null;
     });
 
-    final renamed = await widget.onRename(name);
+    bool renamed;
+    try {
+      renamed = await widget.onRename(name);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _errorText = context.l10n.deviceRenameFailed;
+      });
+      return;
+    }
     if (!mounted) return;
 
     if (renamed) {

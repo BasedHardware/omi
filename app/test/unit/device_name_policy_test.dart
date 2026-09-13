@@ -31,6 +31,11 @@ void main() {
       expect(OmiDeviceNamePolicy.validate('🎧🎧🎧🎧🎧a'), DeviceNameError.tooLong);
     });
 
+    test('rejects leading and trailing ASCII spaces', () {
+      expect(OmiDeviceNamePolicy.validate(' Omi'), DeviceNameError.invalidCharacters);
+      expect(OmiDeviceNamePolicy.validate('Omi '), DeviceNameError.invalidCharacters);
+    });
+
     test('rejects control characters and unpaired surrogates', () {
       expect(OmiDeviceNamePolicy.validate('Omi\n'), DeviceNameError.invalidCharacters);
       expect(OmiDeviceNamePolicy.validate('Om\ti'), DeviceNameError.invalidCharacters);
@@ -53,6 +58,10 @@ void main() {
     test('encode refuses invalid names instead of sending them', () {
       expect(() => OmiDeviceNamePolicy.encode(''), throwsArgumentError);
       expect(() => OmiDeviceNamePolicy.encode('x' * 21), throwsArgumentError);
+    });
+
+    test('encodeReset is the empty payload for a factory reset write', () {
+      expect(OmiDeviceNamePolicy.encodeReset(), isEmpty);
     });
 
     test('decode returns null for empty or malformed payloads', () {
