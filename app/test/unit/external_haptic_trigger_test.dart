@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/external_haptic_trigger.dart';
 
 void main() {
+  ExternalHapticRateLimiter freshLimiter() => ExternalHapticRateLimiter();
+
   group('runExternalHapticTrigger', () {
     test('dispatches supported production, dev, and beta links', () async {
       for (final scheme in ['omi', 'omi-dev', 'omi-beta']) {
@@ -11,6 +15,7 @@ void main() {
         final result = await runExternalHapticTrigger(
           Uri.parse('$scheme://device/haptic?level=2'),
           deviceId: 'device-123',
+          rateLimiter: freshLimiter(),
           playHaptic: (deviceId, level) async {
             observedDeviceId = deviceId;
             observedLevel = level;
@@ -30,6 +35,7 @@ void main() {
       final result = await runExternalHapticTrigger(
         Uri.parse('https://device/haptic?level=2'),
         deviceId: 'device-123',
+        rateLimiter: freshLimiter(),
         playHaptic: (_, __) async {
           called = true;
           return true;
@@ -56,6 +62,7 @@ void main() {
         final result = await runExternalHapticTrigger(
           uri,
           deviceId: 'device-123',
+          rateLimiter: freshLimiter(),
           playHaptic: (_, __) async {
             called = true;
             return true;
@@ -73,6 +80,7 @@ void main() {
       final result = await runExternalHapticTrigger(
         Uri.parse('omi://device/haptic?level=1'),
         deviceId: '',
+        rateLimiter: freshLimiter(),
         playHaptic: (_, __) async {
           called = true;
           return true;
@@ -87,10 +95,97 @@ void main() {
       final result = await runExternalHapticTrigger(
         Uri.parse('omi://device/haptic?level=3'),
         deviceId: 'device-123',
+        rateLimiter: freshLimiter(),
         playHaptic: (_, __) async => false,
       );
 
       expect(result, ExternalHapticTriggerResult.unavailable);
+    });
+
+    test('reserves cooldown before awaiting the first haptic dispatch', () async {
+      var elapsed = Duration.zero;
+      final limiter = ExternalHapticRateLimiter(
+        cooldown: const Duration(seconds: 2),
+        elapsed: () => elapsed,
+      );
+      final firstDispatch = Completer<bool>();
+      var calls = 0;
+
+      Future<bool> player(String _, int __) {
+        calls++;
+        if (calls == 1) return firstDispatch.future;
+        return Future.value(true);
+      }
+
+      final first = runExternalHapticTrigger(
+        Uri.parse('omi://device/haptic?level=3'),
+        deviceId: 'device-123',
+        rateLimiter: limiter,
+        playHaptic: player,
+      );
+      final second = await runExternalHapticTrigger(
+        Uri.parse('omi://device/haptic?level=3'),
+        deviceId: 'device-123',
+        rateLimiter: limiter,
+        playHaptic: player,
+      );
+
+      expect(second, ExternalHapticTriggerResult.rateLimited);
+      expect(calls, 1);
+
+      firstDispatch.complete(true);
+      expect(await first, ExternalHapticTriggerResult.played);
+
+      elapsed = const Duration(seconds: 2);
+      final afterCooldown = await runExternalHapticTrigger(
+        Uri.parse('omi://device/haptic?level=3'),
+        deviceId: 'device-123',
+        rateLimiter: limiter,
+        playHaptic: player,
+      );
+      expect(afterCooldown, ExternalHapticTriggerResult.played);
+      expect(calls, 2);
+    });
+
+    test('failed dispatch still consumes cooldown and bounds reconnect attempts', () async {
+      var elapsed = Duration.zero;
+      final limiter = ExternalHapticRateLimiter(
+        cooldown: const Duration(seconds: 2),
+        elapsed: () => elapsed,
+      );
+      var calls = 0;
+
+      Future<bool> unavailable(String _, int __) async {
+        calls++;
+        return false;
+      }
+
+      final first = await runExternalHapticTrigger(
+        Uri.parse('omi://device/haptic?level=1'),
+        deviceId: 'device-123',
+        rateLimiter: limiter,
+        playHaptic: unavailable,
+      );
+      final immediateRetry = await runExternalHapticTrigger(
+        Uri.parse('omi://device/haptic?level=1'),
+        deviceId: 'device-123',
+        rateLimiter: limiter,
+        playHaptic: unavailable,
+      );
+
+      expect(first, ExternalHapticTriggerResult.unavailable);
+      expect(immediateRetry, ExternalHapticTriggerResult.rateLimited);
+      expect(calls, 1);
+
+      elapsed = const Duration(seconds: 2);
+      final laterRetry = await runExternalHapticTrigger(
+        Uri.parse('omi://device/haptic?level=1'),
+        deviceId: 'device-123',
+        rateLimiter: limiter,
+        playHaptic: unavailable,
+      );
+      expect(laterRetry, ExternalHapticTriggerResult.unavailable);
+      expect(calls, 2);
     });
   });
 }
