@@ -8,10 +8,16 @@
  */
 (() => {
   const g = typeof globalThis !== 'undefined' ? globalThis : global;
+  const origin = Date.now();
+  let lastElapsed = 0;
+  const now = () => {
+    lastElapsed = Math.max(lastElapsed, Date.now() - origin);
+    return lastElapsed;
+  };
   if (!g.performance) {
-    g.performance = {now: () => Date.now()};
+    g.performance = {now};
   } else if (typeof g.performance.now !== 'function') {
-    g.performance.now = () => Date.now();
+    g.performance.now = now;
   }
 })();
 
