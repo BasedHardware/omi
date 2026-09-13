@@ -71,6 +71,7 @@ import {
   memoryLedgerSlotCopy,
   memoryLedgerPlaybookCopy,
   memoryBaselineCopy,
+  memoryHistoryCopy,
   memoryCaptureDeviceCopy,
   conversationListCategory,
   conversationListSourceTag,
@@ -2151,6 +2152,9 @@ test('Omi memory ledger chrome names GET slot, playbook body, baseline, and know
   expect(memoryBaselineCopy({})).toBeNull();
   expect(memoryBaselineCopy({isBaseline: false})).toBeNull();
   expect(memoryBaselineCopy({isBaseline: true})).toBe('Baseline Memory');
+  expect(memoryHistoryCopy({})).toBeNull();
+  expect(memoryHistoryCopy({history: false})).toBeNull();
+  expect(memoryHistoryCopy({history: true})).toBe('History');
   expect(memoryCaptureDeviceCopy(null)).toBeNull();
   expect(memoryCaptureDeviceCopy(' \t')).toBeNull();
   expect(memoryCaptureDeviceCopy('windows_ab12cd34')).toBeNull();
@@ -3164,6 +3168,11 @@ test('canonical memories omit Omi ledger chrome even when extra keys are present
               ledger_schema_version: 'knowledge_ledger.v1',
               is_baseline: true,
               primary_capture_device: 'macos_ab12cd34',
+              intent_backed: true,
+              user_review: false,
+              superseded_by: 'newer-fact',
+              invalid_at: '2026-09-06T00:00:00Z',
+              deleted: true,
             },
           ],
           'recall-completeness-v1',
@@ -3175,6 +3184,7 @@ test('canonical memories omit Omi ledger chrome even when extra keys are present
   expect(result.items[0]).not.toHaveProperty('ledgerBody');
   expect(result.items[0]).not.toHaveProperty('isBaseline');
   expect(result.items[0]).not.toHaveProperty('captureDeviceLabel');
+  expect(result.items[0]).not.toHaveProperty('history');
 });
 
 test('canonical conversations omit Omi category chrome even when extra keys are present', async () => {

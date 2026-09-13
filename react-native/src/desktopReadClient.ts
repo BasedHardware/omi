@@ -1826,6 +1826,12 @@ export function memoryBaselineCopy(item: {
   return item.isBaseline === true ? 'Baseline Memory' : null;
 }
 
+export function memoryHistoryCopy(item: {
+  history?: boolean;
+}): string | null {
+  return item.history === true ? 'History' : null;
+}
+
 export function memoryLockedCopy(item: {locked?: boolean}): string | null {
   return item.locked === true ? 'Locked' : null;
 }
@@ -1995,6 +2001,7 @@ export type MemoryProjection = {
   isBaseline?: boolean;
   captureDeviceLabel?: string;
   locked?: boolean;
+  history?: boolean;
 };
 
 export type TaskProjection = {

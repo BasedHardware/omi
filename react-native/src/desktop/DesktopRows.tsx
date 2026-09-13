@@ -24,6 +24,7 @@ import {
   memoryLedgerSlotCopy,
   memoryLedgerPlaybookCopy,
   memoryBaselineCopy,
+  memoryHistoryCopy,
   memorySynthesisCopy,
   visibleDisplayText,
   projectionClockLabel,
@@ -137,6 +138,7 @@ export const ReadRow = memo(function ReadRow({
   const ledgerPlaybook =
     item.kind === 'memory' ? memoryLedgerPlaybookCopy(item) : null;
   const baseline = item.kind === 'memory' ? memoryBaselineCopy(item) : null;
+  const history = item.kind === 'memory' ? memoryHistoryCopy(item) : null;
   const captureDevice =
     item.kind === 'memory'
       ? visibleDisplayText(item.captureDeviceLabel ?? '')
@@ -158,6 +160,9 @@ export const ReadRow = memo(function ReadRow({
           {meta.filter(part => part !== '').join(' · ')}
         </Text>
         {locked !== null ? <Text style={styles.rowMeta}>{locked}</Text> : null}
+        {history !== null ? (
+          <Text style={styles.rowMeta}>{history}</Text>
+        ) : null}
         {ledgerSlot !== null ? (
           <Text style={styles.rowMeta}>{ledgerSlot}</Text>
         ) : null}

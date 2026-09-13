@@ -2673,6 +2673,38 @@ test('wide Home search and compact Home current memory rows name GET ledger chro
   expect(omittedTree).not.toContain('Mac');
 });
 
+test('wide Home search and compact Home current memory rows name GET History chrome', () => {
+  const item = {
+    kind: 'memory' as const,
+    id: 'memory-history-home-search',
+    title: 'A walk.',
+    summary: 'A walk.',
+    searchableText: 'A walk.',
+    citations: [],
+    timestamp: 1_788_492_408,
+    provenance: {
+      label: null,
+      synthesisVersion: null,
+      inputDigest: null,
+      outputDigest: null,
+    },
+    history: true,
+  };
+  const search = render(<ProjectionRow item={item} />);
+  expect(JSON.stringify(search.toJSON())).toContain('History');
+  const currents = render(
+    <ProjectionRow home item={{...item, id: 'memory-history-home-current'}} />,
+  );
+  expect(JSON.stringify(currents.toJSON())).toContain('History');
+  const omitted = render(
+    <ProjectionRow
+      home
+      item={{...item, id: 'memory-history-home-omitted', history: false}}
+    />,
+  );
+  expect(JSON.stringify(omitted.toJSON())).not.toContain('History');
+});
+
 test('a zero wide Home search conversation timestamp says Time unavailable', () => {
   const item = {
     kind: 'conversation' as const,

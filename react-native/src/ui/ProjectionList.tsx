@@ -26,6 +26,7 @@ import {
   memoryLedgerSlotCopy,
   memoryLedgerPlaybookCopy,
   memoryBaselineCopy,
+  memoryHistoryCopy,
   visibleDisplayText,
   taskDisplaySummary,
   taskDisplayTitle,
@@ -78,6 +79,7 @@ export const ProjectionRow = memo(function ProjectionRow({
   const ledgerPlaybook =
     item.kind === 'memory' ? memoryLedgerPlaybookCopy(item) : null;
   const baseline = item.kind === 'memory' ? memoryBaselineCopy(item) : null;
+  const history = item.kind === 'memory' ? memoryHistoryCopy(item) : null;
   const captureDevice =
     item.kind === 'memory'
       ? visibleDisplayText(item.captureDeviceLabel ?? '')
@@ -212,6 +214,11 @@ export const ProjectionRow = memo(function ProjectionRow({
       {captureCopy !== null ? (
         <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
           {captureCopy}
+        </Text>
+      ) : null}
+      {history !== null ? (
+        <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+          {history}
         </Text>
       ) : null}
       {ledgerSlot !== null ? (

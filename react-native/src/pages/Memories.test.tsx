@@ -662,6 +662,48 @@ test('Memories rows name GET ledger slot, playbook body, baseline, and known dev
   }
 });
 
+test('Memories rows name GET knowledge-ledger History chrome and omit current rows', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...memory('history'),
+                title: 'Previous name was Sam.',
+                summary: 'Previous name was Sam.',
+                searchableText: 'Previous name was Sam.',
+                history: true,
+              },
+              {
+                ...memory('current'),
+                title: 'Prefers concise recaps.',
+                summary: 'Prefers concise recaps.',
+                searchableText: 'Prefers concise recaps.',
+              },
+            ],
+            page: page(null),
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    expect(textOf(view)).toContain('History');
+    expect(
+      view.root.findAll(
+        node => node.type === Text && node.props.children === 'History',
+      ),
+    ).toHaveLength(1);
+  } finally {
+    act(() => view.unmount());
+  }
+});
+
 test('Memories rows name GET locked and omit unlocked rows', () => {
   let view!: Renderer.ReactTestRenderer;
   act(() => {

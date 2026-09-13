@@ -190,6 +190,35 @@ test('Home currents name GET memory ledger chrome and omit empty fields', () => 
   expect(omittedCopy).not.toContain('Mac');
 });
 
+test('Home currents name GET memory History chrome and omit current rows', () => {
+  const item: MemoryProjection = {
+    kind: 'memory',
+    id: 'memory-history',
+    title: 'A walk.',
+    summary: 'A walk.',
+    searchableText: 'A walk.',
+    citations: [],
+    timestamp: 1_788_492_408,
+    provenance: {
+      label: null,
+      synthesisVersion: null,
+      inputDigest: null,
+      outputDigest: null,
+    },
+    history: true,
+  };
+  let named!: ReactTestRenderer.ReactTestRenderer;
+  let omitted!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    named = ReactTestRenderer.create(<ReadRow item={item} />);
+    omitted = ReactTestRenderer.create(
+      <ReadRow item={{...item, id: 'memory-current', history: false}} />,
+    );
+  });
+  expect(textOf(named)).toContain('History');
+  expect(textOf(omitted)).not.toContain('History');
+});
+
 test('Home currents omit whitespace-only memory citations from the count', () => {
   const item: MemoryProjection = {
     kind: 'memory',

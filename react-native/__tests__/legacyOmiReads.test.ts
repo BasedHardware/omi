@@ -732,6 +732,50 @@ test('old memories keep GET ledger slot, playbook body, baseline, and known devi
   expect(result.items[1]).not.toHaveProperty('captureDeviceLabel');
 });
 
+test('old memories name GET knowledge-ledger History chrome Flutter paints on non-current rows', async () => {
+  const {api} = backend([
+    {
+      id: 'current',
+      content: 'Prefers concise recaps.',
+      created_at: '2026-09-07T00:00:00Z',
+      conversation_id: null,
+      kind: 'fact',
+      ledger_schema_version: 'knowledge_ledger.v1',
+      intent_backed: true,
+    },
+    {
+      id: 'rejected',
+      content: 'Previous name was Sam.',
+      created_at: '2026-09-06T00:00:00Z',
+      conversation_id: null,
+      kind: 'fact',
+      ledger_schema_version: 'knowledge_ledger.v1',
+      intent_backed: true,
+      user_review: false,
+    },
+    {
+      id: 'omitted-intent',
+      content: 'Used to live in Berlin.',
+      created_at: '2026-09-05T00:00:00Z',
+      conversation_id: null,
+      kind: 'document',
+      ledger_schema_version: 'knowledge_ledger.v1',
+    },
+    {
+      id: 'plain',
+      content: 'Likes walking.',
+      created_at: '2026-09-07T00:00:00Z',
+      conversation_id: null,
+      user_review: false,
+    },
+  ]);
+  const result = await loadMemories(api);
+  expect(result.items[0]).not.toHaveProperty('history');
+  expect(result.items[1]).toMatchObject({history: true});
+  expect(result.items[2]).toMatchObject({history: true});
+  expect(result.items[3]).not.toHaveProperty('history');
+});
+
 test('old memories name GET locked and omit unlocked rows', async () => {
   const {api} = backend([
     {
@@ -790,6 +834,32 @@ test('old memories fail closed for malformed ledger chrome', async () => {
           created_at: '2026-09-07T00:00:00Z',
           conversation_id: null,
           is_locked: 'true',
+        },
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi boolean is malformed');
+  await expect(
+    loadMemories(
+      backend([
+        {
+          id: 'bad-intent',
+          content: 'Prefers concise recaps.',
+          created_at: '2026-09-07T00:00:00Z',
+          conversation_id: null,
+          intent_backed: 'true',
+        },
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi boolean is malformed');
+  await expect(
+    loadMemories(
+      backend([
+        {
+          id: 'bad-review',
+          content: 'Prefers concise recaps.',
+          created_at: '2026-09-07T00:00:00Z',
+          conversation_id: null,
+          user_review: 'false',
         },
       ]).api,
     ),

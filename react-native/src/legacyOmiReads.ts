@@ -39,6 +39,11 @@ function bool(value: unknown, fallback = false): boolean {
   if (typeof value !== 'boolean') throw new Error('Omi boolean is malformed');
   return value;
 }
+function optionalBool(value: unknown): boolean | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'boolean') throw new Error('Omi boolean is malformed');
+  return value;
+}
 function date(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== 'string')
@@ -304,6 +309,26 @@ function memoryItem(row: Record<string, unknown>): MemoryProjection {
   const captureDeviceLabel = memoryCaptureDeviceCopy(
     text(row.primary_capture_device, ''),
   );
+  const knowledgeKind =
+    ledgerKind === 'fact' ||
+    ledgerKind === 'document' ||
+    ledgerKind === 'trigger';
+  const knowledgeLedger =
+    ledgerSchema === 'knowledge_ledger.v1' && knowledgeKind;
+  const supersededBy = visibleDisplayText(
+    row.superseded_by == null ? '' : text(row.superseded_by),
+  );
+  const intentBacked = bool(row.intent_backed);
+  const deleted = bool(row.deleted);
+  const invalidAt = date(row.invalid_at);
+  const userReview = optionalBool(row.user_review);
+  const currentLedger =
+    knowledgeLedger &&
+    intentBacked &&
+    !deleted &&
+    invalidAt == null &&
+    supersededBy === '' &&
+    userReview !== false;
   return {
     kind: 'memory' as const,
     id: id(row.id),
@@ -323,6 +348,7 @@ function memoryItem(row: Record<string, unknown>): MemoryProjection {
     ...(bool(row.is_baseline) ? {isBaseline: true} : {}),
     ...(captureDeviceLabel === null ? {} : {captureDeviceLabel}),
     ...(bool(row.is_locked) ? {locked: true} : {}),
+    ...(knowledgeLedger && !currentLedger ? {history: true} : {}),
   };
 }
 export async function loadOmiMemories(
