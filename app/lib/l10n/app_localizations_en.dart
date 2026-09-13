@@ -9991,7 +9991,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String deviceNameTooLong(int maxBytes) {
-    return 'Name is too long (up to $maxBytes characters; emoji and accents count extra)';
+    return 'Name is too long (up to $maxBytes bytes; emoji and accents count extra)';
   }
 
   @override

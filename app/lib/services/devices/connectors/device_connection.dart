@@ -20,6 +20,7 @@ import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/services/devices/transports/rayban_meta_transport.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/omi_glass_protocol.dart';
 
 /// Status of the device's offline storage (new multi-file firmware protocol).
 class StorageStatus {
@@ -98,13 +99,6 @@ class DeviceConnectionFactory {
     final locator = device.locator;
     if (locator == null) return null;
 
-    // Use name-based detection as fallback for OmiGlass devices (some advertise as DeviceType.omi).
-    final deviceName = device.name.toLowerCase();
-    final isOmiGlass = device.type == DeviceType.openglass ||
-        deviceName.contains('openglass') ||
-        deviceName.contains('omiglass') ||
-        deviceName.contains('glass');
-
     switch (locator.kind) {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
@@ -124,9 +118,8 @@ class DeviceConnectionFactory {
 
     switch (device.type) {
       case DeviceType.omi:
-        // Check if this is actually an OmiGlass device by name
-        if (isOmiGlass) {
-          Logger.debug('DeviceConnectionFactory: Device name suggests OmiGlass, creating OmiGlassConnection');
+        if (OmiGlassProtocol.usesOmiGlassProtocol(device)) {
+          Logger.debug('DeviceConnectionFactory: OmiGlass protocol detected, creating OmiGlassConnection');
           return OmiGlassConnection(device, transport);
         }
         return OmiDeviceConnection(device, transport);

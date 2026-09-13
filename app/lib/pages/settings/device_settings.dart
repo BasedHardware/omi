@@ -35,6 +35,8 @@ class DeviceSettings extends StatefulWidget {
 class _DeviceSettingsState extends State<DeviceSettings> {
   static const Duration _findDeviceRequestTimeout = Duration(seconds: 30);
 
+  DeviceProvider? _deviceProvider;
+
   double _dimRatio = 100.0;
   bool _isDimRatioLoaded = false;
   bool? _hasDimmingFeature;
@@ -46,6 +48,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   // Firmware that stores a user-chosen name (OmiFeatures.deviceName). Null
   // until the features characteristic has been read.
   bool? _hasDeviceNameFeature;
+  String? _featuresLoadedForDeviceId;
 
   Timer? _debounce;
   Timer? _micGainDebounce;
@@ -65,18 +68,41 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   @override
   void initState() {
+    super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await context.read<DeviceProvider>().getDeviceInfo();
+      _deviceProvider = context.read<DeviceProvider>();
+      _deviceProvider!.addListener(_onDeviceProviderChanged);
+      await _deviceProvider!.getDeviceInfo();
       _loadInitialDimRatio();
     });
-    super.initState();
   }
 
   @override
   void dispose() {
+    _deviceProvider?.removeListener(_onDeviceProviderChanged);
     _debounce?.cancel();
     _micGainDebounce?.cancel();
     super.dispose();
+  }
+
+  void _onDeviceProviderChanged() {
+    if (!mounted) return;
+    final provider = context.read<DeviceProvider>();
+    final pairedId = provider.pairedDevice?.id;
+    if (!provider.isConnected || pairedId == null || pairedId.isEmpty) {
+      if (_featuresLoadedForDeviceId != null) {
+        setState(() {
+          _featuresLoadedForDeviceId = null;
+          _hasDeviceNameFeature = null;
+          _hasDimmingFeature = null;
+          _hasMicGainFeature = null;
+        });
+      }
+      return;
+    }
+    if (pairedId != _featuresLoadedForDeviceId) {
+      _loadInitialDimRatio();
+    }
   }
 
   void _loadInitialDimRatio() async {
@@ -91,6 +117,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
         if (!mounted) return;
         setState(() {
+          _featuresLoadedForDeviceId = deviceProvider.pairedDevice?.id;
           _hasDimmingFeature = hasDimming;
           _hasMicGainFeature = hasMicGain;
           _hasDeviceNameFeature = hasDeviceName;

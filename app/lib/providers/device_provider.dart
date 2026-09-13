@@ -203,21 +203,47 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return preferences.uid == uid ? firstPairedAt : null;
   }
 
+  void _applyOnDeviceNameIfCurrent({required String deviceId, required String? name}) {
+    if (name == null || name.isEmpty) return;
+    if (connectedDevice?.id != deviceId) return;
+    if (connectedDevice!.name != name) {
+      connectedDevice!.name = name;
+      SharedPreferencesUtil().deviceName = name;
+    }
+    if (pairedDevice?.id == deviceId && pairedDevice!.name != name) {
+      pairedDevice!.name = name;
+    }
+  }
+
   Future getDeviceInfo() async {
     if (connectedDevice != null) {
-      if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
-        SharedPreferencesUtil().btDevice = pairedDevice!;
+      final requestedId = connectedDevice!.id;
+      var connection = await ServiceManager.instance().device.ensureConnection(requestedId);
+      if (connection == null) {
+        notifyListeners();
         return;
       }
-      var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
+
+      if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
+        final onDeviceName = await connection.getDeviceName();
+        if (connectedDevice?.id == requestedId) {
+          _applyOnDeviceNameIfCurrent(deviceId: requestedId, name: onDeviceName);
+          if (pairedDevice != null) {
+            SharedPreferencesUtil().btDevice = pairedDevice!;
+          }
+        }
+        notifyListeners();
+        return;
+      }
+
       pairedDevice = await connectedDevice?.getDeviceInfo(connection);
+      if (connectedDevice?.id != requestedId) {
+        notifyListeners();
+        return;
+      }
       // getDeviceInfo may have read a name persisted on the device (renamed
       // from this or another phone); keep the live record and prefs in step.
-      final storedName = pairedDevice?.name ?? '';
-      if (storedName.isNotEmpty && connectedDevice != null && connectedDevice!.name != storedName) {
-        connectedDevice!.name = storedName;
-        SharedPreferencesUtil().deviceName = storedName;
-      }
+      _applyOnDeviceNameIfCurrent(deviceId: requestedId, name: pairedDevice?.name);
       SharedPreferencesUtil().btDevice = pairedDevice!;
     } else {
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
@@ -242,9 +268,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final renamed = await connection.setDeviceName(name);
     if (!renamed) return false;
 
+    if (!identical(connectedDevice, device) || !isConnected) {
+      return true;
+    }
+
     device.name = name;
-    pairedDevice?.name = name;
-    if (pairedDevice != null) {
+    if (pairedDevice?.id == device.id) {
+      pairedDevice!.name = name;
       SharedPreferencesUtil().btDevice = pairedDevice!;
     }
     SharedPreferencesUtil().deviceName = name;

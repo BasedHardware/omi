@@ -271,6 +271,12 @@ class BtDevice {
   String? _hardwareRevision;
   String? _manufacturerName;
   String? _serialNumber;
+  /// Cached from the features characteristic: Omi CV1 firmware that supports
+  /// persisting a user-chosen name (bit 9). When true, name-based OmiGlass
+  /// heuristics must not apply.
+  bool? omiRenamable;
+  /// Cached from the image-stream probe during [getDeviceInfo].
+  bool? omiOpenGlassImageStream;
 
   BtDevice({
     required this.name,
@@ -283,6 +289,8 @@ class BtDevice {
     String? hardwareRevision,
     String? manufacturerName,
     String? serialNumber,
+    this.omiRenamable,
+    this.omiOpenGlassImageStream,
   }) {
     _modelNumber = modelNumber;
     _firmwareRevision = firmwareRevision;
@@ -302,7 +310,9 @@ class BtDevice {
         _firmwareRevision = '',
         _hardwareRevision = '',
         _manufacturerName = '',
-        _serialNumber = '';
+        _serialNumber = '',
+        omiRenamable = null,
+        omiOpenGlassImageStream = null;
 
   // getters
   String get modelNumber => _modelNumber ?? 'Unknown';
@@ -342,6 +352,8 @@ class BtDevice {
     String? hardwareRevision,
     String? manufacturerName,
     String? serialNumber,
+    bool? omiRenamable,
+    bool? omiOpenGlassImageStream,
   }) {
     return BtDevice(
       name: name ?? this.name,
@@ -354,6 +366,8 @@ class BtDevice {
       hardwareRevision: hardwareRevision ?? _hardwareRevision,
       manufacturerName: manufacturerName ?? _manufacturerName,
       serialNumber: serialNumber ?? _serialNumber,
+      omiRenamable: omiRenamable ?? this.omiRenamable,
+      omiOpenGlassImageStream: omiOpenGlassImageStream ?? this.omiOpenGlassImageStream,
     );
   }
 
@@ -426,6 +440,8 @@ class BtDevice {
     String? serialNumber;
     String? deviceName;
     var t = DeviceType.omi;
+    bool? omiRenamable;
+    bool? omiOpenGlassImageStream;
 
     try {
       Map<String, dynamic>? deviceInfo;
@@ -433,6 +449,7 @@ class BtDevice {
       if (conn is OmiGlassConnection) {
         deviceInfo = await conn.getDeviceInfo();
         t = DeviceType.openglass;
+        omiOpenGlassImageStream = true;
       } else if (conn is OmiDeviceConnection) {
         deviceInfo = await conn.getDeviceInfo();
 
@@ -441,6 +458,14 @@ class BtDevice {
           t = DeviceType.openglass;
         } else if (deviceInfo['hasImageStream'] == 'true') {
           t = DeviceType.openglass;
+        }
+        omiOpenGlassImageStream = deviceInfo['hasImageStream'] == 'true';
+        try {
+          final features = await conn.getFeatures();
+          // OMI_FEATURE_DEVICE_NAME (features.h bit 9)
+          omiRenamable = (features & (1 << 9)) != 0;
+        } catch (_) {
+          omiRenamable = omiRenamable ?? this.omiRenamable;
         }
       }
 
@@ -467,6 +492,8 @@ class BtDevice {
       manufacturerName: manufacturerName,
       serialNumber: serialNumber,
       type: t,
+      omiRenamable: omiRenamable,
+      omiOpenGlassImageStream: omiOpenGlassImageStream,
     );
   }
 
@@ -721,6 +748,9 @@ class BtDevice {
       hardwareRevision: json['hardwareRevision'] is String ? json['hardwareRevision'] : null,
       manufacturerName: json['manufacturerName'] is String ? json['manufacturerName'] : null,
       serialNumber: json['serialNumber'] is String ? json['serialNumber'] : null,
+      omiRenamable: json['omiRenamable'] is bool ? json['omiRenamable'] as bool : null,
+      omiOpenGlassImageStream:
+          json['omiOpenGlassImageStream'] is bool ? json['omiOpenGlassImageStream'] as bool : null,
     );
   }
 
@@ -740,6 +770,8 @@ class BtDevice {
       'hardwareRevision': hardwareRevision,
       'manufacturerName': manufacturerName,
       'serialNumber': _serialNumber,
+      if (omiRenamable != null) 'omiRenamable': omiRenamable,
+      if (omiOpenGlassImageStream != null) 'omiOpenGlassImageStream': omiOpenGlassImageStream,
     };
   }
 }
