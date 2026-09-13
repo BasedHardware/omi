@@ -49,7 +49,7 @@ omi auth login
 Apple бүртгэлээр нэвтрэх:
 
 ```bash
-omi auth login --provider apple
+omi auth login --browser --provider apple
 ```
 
 ### Б арга: Хөгжүүлэгчийн API түлхүүр (Агентууд болон CI/CD системүүд)
@@ -104,7 +104,7 @@ omi memory list --limit 10 --offset 10
 omi memory get <memory-id>
 
 # Шинэ дурсамж үүсгэх
-omi memory create --content "Үйлчлүүлэгчтэй шинэ төслийн талаар ярилцав"
+omi memory create "Үйлчлүүлэгчтэй шинэ төслийн талаар ярилцав"
 ```
 
 ### 2. Ярианууд (Conversations)
@@ -125,13 +125,13 @@ omi conversation get <conversation-id>
 
 ```bash
 # Бүх ажлуудын жагсаалт
-omi action-items list
+omi action-item list
 
-# Гүйцэтгээгүй (хүлээгдэж буй) ажлууд
-omi action-items list --status pending
+# Гүйцэтгээгүй (нээлттэй) ажлууд
+omi action-item list --open
 
 # Ажлын төлөвийг шинэчлэх (гүйцэтгэсэн болгох)
-omi action-items update <item-id> --status completed
+omi action-item update <item-id> --completed
 ```
 
 ### 4. Зорилтууд (Goals)
@@ -143,7 +143,7 @@ omi action-items update <item-id> --status completed
 omi goal list
 
 # Шинэ зорилт нэмэх
-omi goal create --title "Python CLI тестийг 100 хувьд хүргэх"
+omi goal create "Python CLI тестийг 100 хувьд хүргэх"
 ```
 
 ---
@@ -170,10 +170,13 @@ AI агентууд болон бүрхүүл (shell) скриптүүдэд з�
 # 1. Дурсамжийн ID, агуулга, үүсгэсэн огноог ялгаж авах
 omi --json memory list | jq '.[] | {id: .id, content: .content, created_at: .created_at}'
 
-# 2. Гүйцэтгээгүй үлдсэн даалгавруудын тоог олох
-omi --json action-items list | jq '[.[] | select(.completed == false)] | length'
+# 2. Ярианы ID болон сэдвийг авах
+omi --json conversation list | jq -r '.[] | "\(.id): \(.structured.title)"'
 
-# 3. Хамгийн сүүлийн дурсамжийн цэвэр агуулгыг унших
+# 3. Гүйцэтгээгүй үлдсэн даалгавруудын тоог олох
+omi --json action-item list | jq '[.[] | select(.completed == false)] | length'
+
+# 4. Хамгийн сүүлийн дурсамжийн цэвэр агуулгыг унших
 omi --json memory list --limit 1 | jq -r '.[0].content'
 ```
 
@@ -183,14 +186,16 @@ omi --json memory list --limit 1 | jq -r '.[0].content'
 
 `omi-cli` нь POSIX стандарт болон `omi_cli/errors.py` тодорхойлолтод бүрэн нийцсэн дараах гаралтын кодуудыг буцаана:
 
-| Гаралтын код | Төлөв | Тайлбар ба учир шалтгаан |
-| :---: | :--- | :--- |
-| `0` | **Success** | Команд амжилттай биелсэн. |
-| `1` | **General Error** | Ерөнхий алдаа эсвэл үл хүлээгдэх онцгой тохиолдол. |
-| `2` | **Usage Error** | Синтаксийн алдаа, буруу параметр эсвэл аргумент (Click шалгалт). |
-| `3` | **Auth Error** | API түлхүүр дутуу, буруу эсвэл хугацаа нь дууссан. |
-| `4` | **Network Error** | Сүлжээний тасалдал эсвэл Omi сервертэй холбогдож чадсангүй. |
-| `5` | **Not Found** | Заасан танигчаар (ID) хайсан өгөгдөл олдсонгүй. |
+| Гаралтын код | Төлөв | Sabit | Тайлбар ба учир шалтгаан |
+| :---: | :--- | :--- | :--- |
+| **`0`** | `EXIT_OK` | **Success** | Команд амжилттай биелсэн. |
+| **`1`** | `EXIT_USAGE` | **Usage Error** | `omi-cli` дотоод шалгалтын алдаа (жишээ нь `--browser` ба `--api-key` зэрэг өгөх). Click синтаксийн алдаа **2** кодыг буцаана. |
+| **`2`** | `EXIT_AUTH` | **Auth Error** | API түлхүүр дутуу, буруу эсвэл хугацаа нь дууссан. Click параметрийн алдаа ч мөн адил. |
+| **`3`** | `EXIT_SERVER` | **Server / Network** | HTTP 5xx хариу эсвэл Omi сервертэй холбогдож чадсангүй. |
+| **`4`** | `EXIT_RATE_LIMITED` | **Rate Limited** | HTTP 429 хариу. CLI `Retry-After` толгойг баримтлан автоматаар дахин оролдоно. |
+| **`5`** | `EXIT_NOT_FOUND` | **Not Found** | HTTP 404 хариу. Заасан танигчаар (ID) өгөгдөл олдсонгүй. |
+
+> **Нэвтрэх токен шинэчлэх:** `omi auth refresh` команд нь зөвхөн вэб хөтчийн (OAuth) сессэд зориулагдсан. Хөгжүүлэгчийн API түлхүүрийн хувьд энэ команд алдаа заана (гаралтын код 1), учир нь шинэчлэх токен байхгүй.
 
 ---
 
@@ -202,10 +207,10 @@ omi --json memory list --limit 1 | jq -r '.[0].content'
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Нэвтрэлтийн төлөв шалгах
-if ! omi auth status > /dev/null 2>&1; then
+# Баталгаажуулалтыг серверээр шалгах
+if ! omi auth whoami > /dev/null 2>&1; then
   echo "Алдаа: Omi-д нэвтрээгүй байна. 'omi auth login' командыг ажиллуулна уу." >&2
-  exit 3
+  exit 2
 fi
 
 echo "Omi-той мэдээлэл синк хийж байна..."
@@ -222,15 +227,15 @@ echo "Амжилттай татсан дурсамжийн тоо: $count"
 ```powershell
 $ErrorActionPreference = "Stop"
 
-# Нэвтрэлтийн төлөвийг шалгах
-omi auth status | Out-Null
+# Баталгаажуулалтыг серверээр шалгах
+omi auth whoami | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Omi баталгаажуулалт амжилтгүй. 'omi auth login' ажиллуулна уу."
-    exit 3
+    exit 2
 }
 
-# Дурсамжийг JSON-оор татан авч боловсруулах
-$memoriesJson = omi --json memory list --limit 5
+# Дурсамжийг JSON-оор татан авч боловсруулах (мөрүүдийг нэгтгэх)
+$memoriesJson = (omi --json memory list --limit 5) -join "`n"
 $memories = $memoriesJson | ConvertFrom-Json
 
 Write-Host "Амжилттай татагдсан $($memories.Count) дурсамж байна."
