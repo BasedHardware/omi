@@ -1,3 +1,0 @@
-{
-  "change": "Dictations into Wispr Flow, superwhisper, or macOS Dictation no longer become conversations: while a dictation app is using the microphone (and no call is), Omi mutes its own listening for exactly that window. Calls are never muted. Toggle under Transcription → Ignore Dictation Apps"
-}
