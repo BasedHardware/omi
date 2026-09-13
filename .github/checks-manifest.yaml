@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: plugin-db-transcript-segments-tests
+    command: ["python3", "plugins/test_db_transcript_segments.py"]
+    triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
+    lanes: ["local", "ci"]
+    reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
