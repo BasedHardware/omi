@@ -63,6 +63,7 @@ Pretty output displays returned text literally, including square brackets and
 emoji-like codes such as `:warning:`. Styling applies to the table layout, not
 to the contents of your memories or conversations.
 Tables without predefined columns include fields from every row, in first-seen order.
+> [🇹🇭 คู่มือเริ่มต้นใช้งาน omi-cli (Thai Quickstart)](examples/quickstart.th.md)
 
 > Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md) or the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md).
 
