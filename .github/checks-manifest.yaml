@@ -956,6 +956,11 @@ checks:
     triggers: [".github/scripts/check_duplicate_routes.py", ".github/scripts/test_check_duplicate_routes.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "hermetic fixture coverage for the duplicate-route scanner: shadowed duplicate fails with the colliding path, unique routes pass, same path on different apps is not a duplicate, api_route methods expand"
+  - id: firmware-button-gesture-tests
+    command: ["bash", "omi/firmware/common/test/run.sh"]
+    triggers: ["omi/firmware/common/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the button gesture recogniser shared by the CV1 and DevKit firmware decides which BLE button state (1/2/5/6) the app receives and when a hold powers the device off; it is pure C so its tap-window, triple-tap, long-press, and uptime-wraparound contracts are executed on the host instead of only on hardware"
 
   - id: slack-explicit-channel-search-tests
     command: ["python3", "plugins/omi-slack-app/test_slack_search.py"]

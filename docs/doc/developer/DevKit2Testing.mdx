@@ -124,9 +124,17 @@ After connecting to the BLE notification service, these events fire:
 |------------|--------|
 | `1` | Single tap |
 | `2` | Double tap |
-| `3` | Long press (~3 seconds) |
-| `4` | Button pressed down |
-| `5` | Button released |
+| `6` | Triple tap |
+| `5` | Button released (follows every tap gesture, and any hold shorter than the power-off long press) |
+| — | Long press (~3 seconds) powers the device off; nothing is sent |
+
+Codes `3` (long press) and `4` (button pressed down) are reserved for older firmware and are no longer emitted.
+Taps must be shorter than 300 ms and separated by less than 350 ms to count as one gesture; single and double taps are
+reported once that window closes, triple taps on the third release. The recogniser lives in
+`omi/firmware/common/button_gesture.c` and is host-tested by `omi/firmware/common/test/run.sh`.
+
+In the app, single/double/triple tap each run the action configured under Settings → Device (Ask a Question, Mute/Unmute,
+End Conversation, Star Conversation, or Do Nothing). The long-press power toggle is fixed in firmware.
 
 Verify that each physical action sends the correct BLE packet.
 
