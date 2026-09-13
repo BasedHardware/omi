@@ -3250,5 +3250,6 @@
     "secondDevice": "Secondo dispositivo",
     "pairSecondDevice": "Associa un secondo dispositivo",
     "pairSecondDeviceDescription": "Collega OmiGlass insieme al tuo Omi così foto e audio finiscono nella stessa conversazione.",
-    "forgetSecondDevice": "Dimentica il secondo dispositivo"
+    "forgetSecondDevice": "Dimentica il secondo dispositivo",
+    "processingTakingLonger": "Ancora in corso: ci sta mettendo più del solito."
 }

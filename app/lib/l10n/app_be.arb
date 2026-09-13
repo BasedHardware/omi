@@ -10837,5 +10837,6 @@
     "secondDevice": "Другая прылада",
     "pairSecondDevice": "Спалучыць другую прыладу",
     "pairSecondDeviceDescription": "Падключыце OmiGlass разам з Omi, каб фота і аўдыя траплялі ў адну размову.",
-    "forgetSecondDevice": "Забыць другую прыладу"
+    "forgetSecondDevice": "Забыць другую прыладу",
+    "processingTakingLonger": "Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна."
 }

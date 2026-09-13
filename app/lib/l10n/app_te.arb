@@ -10837,5 +10837,6 @@
     "secondDevice": "రెండవ పరికరం",
     "pairSecondDevice": "రెండవ పరికరాన్ని జోడించండి",
     "pairSecondDeviceDescription": "ఫోటోలు మరియు ఆడియో ఒకే సంభాషణలోకి వెళ్లేలా మీ Omi తో పాటు OmiGlass ను కనెక్ట్ చేయండి.",
-    "forgetSecondDevice": "రెండవ పరికరాన్ని మర్చిపోండి"
+    "forgetSecondDevice": "రెండవ పరికరాన్ని మర్చిపోండి",
+    "processingTakingLonger": "ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది."
 }

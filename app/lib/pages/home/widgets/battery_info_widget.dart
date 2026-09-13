@@ -60,7 +60,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
               isConnecting,
               isCharging,
               companionDevice,
-              companionBatteryLevel
+              companionBatteryLevel,
             ) = data;
             if (connectedDevice != null) {
               final batteryPill = GestureDetector(
@@ -94,51 +94,53 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                             fit: BoxFit.contain,
                           ),
                         ),
-                      // Only show battery indicator and percentage when battery level is valid (> 0)
-                      if (batteryLevel > 0) ...[
-                        const SizedBox(width: 6.0),
-                        if (isCharging)
-                          const Icon(Icons.bolt, color: Color.fromARGB(255, 0, 255, 8), size: 14)
-                        else
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: batteryLevel > 75
-                                  ? const Color.fromARGB(255, 0, 255, 8)
-                                  : batteryLevel > 20
-                                      ? Colors.yellow.shade700
-                                      : Colors.red,
-                              shape: BoxShape.circle,
+                        // Only show battery indicator and percentage when battery level is valid (> 0)
+                        if (batteryLevel > 0) ...[
+                          const SizedBox(width: 6.0),
+                          if (isCharging)
+                            const Icon(Icons.bolt, color: Color.fromARGB(255, 0, 255, 8), size: 14)
+                          else
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: batteryLevel > 75
+                                    ? const Color.fromARGB(255, 0, 255, 8)
+                                    : batteryLevel > 20
+                                        ? Colors.yellow.shade700
+                                        : Colors.red,
+                                shape: BoxShape.circle,
+                              ),
                             ),
-                          ),
-                        const SizedBox(width: 4.0),
-                        Text(
-                          '$batteryLevel%',
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                      // Second connected device (OmiGlass next to an Omi): its
-                      // icon and battery share the pill so both links are visible.
-                      if (companionDevice != null) ...[
-                        const SizedBox(width: 8.0),
-                        Container(width: 1, height: 16, color: const Color(0xFF3C3C43)),
-                        const SizedBox(width: 8.0),
-                        SizedBox(
-                          key: const Key('companion_device_pill_icon'),
-                          width: 16,
-                          height: 16,
-                          child:
-                              Image.asset(DeviceUtils.getDeviceImageFromBtDevice(companionDevice), fit: BoxFit.contain),
-                        ),
-                        if (companionBatteryLevel > 0) ...[
                           const SizedBox(width: 4.0),
                           Text(
-                            '$companionBatteryLevel%',
+                            '$batteryLevel%',
                             style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                           ),
                         ],
-                      ],
+                        // Second connected device (OmiGlass next to an Omi): its
+                        // icon and battery share the pill so both links are visible.
+                        if (companionDevice != null) ...[
+                          const SizedBox(width: 8.0),
+                          Container(width: 1, height: 16, color: const Color(0xFF3C3C43)),
+                          const SizedBox(width: 8.0),
+                          SizedBox(
+                            key: const Key('companion_device_pill_icon'),
+                            width: 16,
+                            height: 16,
+                            child: Image.asset(
+                              DeviceUtils.getDeviceImageFromBtDevice(companionDevice),
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                          if (companionBatteryLevel > 0) ...[
+                            const SizedBox(width: 4.0),
+                            Text(
+                              '$companionBatteryLevel%',
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ],
                       ],
                     ),
                   ),

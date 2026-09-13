@@ -3285,5 +3285,6 @@
     "secondDevice": "Второе устройство",
     "pairSecondDevice": "Подключить второе устройство",
     "pairSecondDeviceDescription": "Подключите OmiGlass вместе с Omi, чтобы фото и звук попадали в один разговор.",
-    "forgetSecondDevice": "Забыть второе устройство"
+    "forgetSecondDevice": "Забыть второе устройство",
+    "processingTakingLonger": "Ещё обрабатывается — это занимает больше обычного."
 }

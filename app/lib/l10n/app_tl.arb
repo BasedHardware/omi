@@ -10837,5 +10837,6 @@
     "secondDevice": "Ikalawang device",
     "pairSecondDevice": "Ipares ang ikalawang device",
     "pairSecondDeviceDescription": "Ikonekta ang OmiGlass kasama ng iyong Omi para mapunta sa iisang usapan ang mga larawan at audio.",
-    "forgetSecondDevice": "Kalimutan ang ikalawang device"
+    "forgetSecondDevice": "Kalimutan ang ikalawang device",
+    "processingTakingLonger": "Ginagawa pa — mas matagal ito kaysa karaniwan."
 }

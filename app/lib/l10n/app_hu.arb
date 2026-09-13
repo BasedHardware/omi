@@ -3346,5 +3346,6 @@
     "secondDevice": "Második eszköz",
     "pairSecondDevice": "Második eszköz párosítása",
     "pairSecondDeviceDescription": "Csatlakoztasd az OmiGlass-t az Omi mellé, hogy a fotók és a hang ugyanabba a beszélgetésbe kerüljenek.",
-    "forgetSecondDevice": "Második eszköz elfelejtése"
+    "forgetSecondDevice": "Második eszköz elfelejtése",
+    "processingTakingLonger": "Még folyamatban — ez tovább tart a szokásosnál."
 }
