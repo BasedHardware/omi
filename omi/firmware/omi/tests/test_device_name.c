@@ -74,6 +74,11 @@ static void test_rejects_malformed_utf8(void)
     CHECK(!valid("Omi\xE2\x9C"));      /* truncated 3-byte sequence */
     CHECK(!valid("\x80Omi"));          /* stray continuation byte */
     CHECK(!valid("\xC0\xAF"));         /* overlong encoding */
+    CHECK(!valid("\xE0\x80\x80"));     /* overlong U+0000 */
+    CHECK(!valid("\xE0\x9F\xBF"));     /* overlong U+07FF */
+    CHECK(!valid("\xF0\x80\x80\x80")); /* overlong */
+    CHECK(!valid("\xF0\x8F\xBF\xBF")); /* overlong U+FFFF */
+    CHECK(!valid("\xF4\x90\x80\x80")); /* U+110000, above U+10FFFF */
     CHECK(!valid("\xED\xA0\x80"));     /* UTF-16 surrogate */
     CHECK(!valid("\xF5\x80\x80\x80")); /* above U+10FFFF */
     CHECK(!valid("\xC3\x41"));         /* bad continuation byte */
