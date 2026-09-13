@@ -117,14 +117,17 @@ describe('route manifest', () => {
     expect(resolveRoute('/nope')).toBeUndefined()
   })
 
-  it('navRoutes are Home, Conversations, Tasks, Rewind, Apps, Insights in nav order', () => {
+  it('navRoutes are Home, Conversations, Tasks, Rewind, Apps, Insights, Activity in nav order', () => {
+    // Activity is appended rather than placed near Home so the existing rail
+    // order is unchanged for anyone already used to it.
     expect(navRoutes().map((e) => e.id)).toEqual([
       'home',
       'conversations',
       'tasks',
       'rewind',
       'apps',
-      'insights'
+      'insights',
+      'activity'
     ])
   })
 
@@ -138,7 +141,8 @@ describe('route manifest', () => {
       'goals',
       'apps',
       'rewind',
-      'insights'
+      'insights',
+      'activity'
     ])
   })
 
