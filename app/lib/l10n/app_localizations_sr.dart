@@ -11206,7 +11206,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String deviceNameTooLong(int maxBytes) {
-    return 'Име је предугачко (до $maxBytes бајтова; емоџији и дијакритички знаци (нпр. š, ž) се рачунају више)';
+    return 'Име је предугачко (до $maxBytes знакова; емоџији и dijakritički znakovi se računaju više)';
   }
 
   @override

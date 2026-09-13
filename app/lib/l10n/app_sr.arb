@@ -11105,7 +11105,7 @@
     "renameDeviceDescription": "Име се чува на самом Omi уређају, па се приказује на сваком телефону са којим га упарите.",
     "tapToRename": "Додирните за преименовање",
     "deviceNameCannotBeEmpty": "Име уређаја не може бити празно",
-    "deviceNameTooLong": "Име је предугачко (до {maxBytes} знакова; емоџији и ћирилица се рачунају више)",
+    "deviceNameTooLong": "Име је предугачко (до {maxBytes} знакова; емоџији и dijakritički znakovi se računaju više)",
     "deviceNameInvalidCharacters": "Име садржи неподржане знакове",
     "deviceRenameFailed": "Име није могло да се сачува на Omi. Проверите да ли је повезан и покушајте поново.",
     "deviceRenamed": "Уређај је преименован у {name}"
