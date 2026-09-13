@@ -84,6 +84,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
     FloatingBarUsageLimiter.shared.reset()
     ManagedProactivityDecisionSource.setOverride(nil)
     NegativeFeedbackRemediationFeature.testOverride = nil
+    NetworkReachability.shared.testingOverrideIsOnline = nil
   }
 
   override func tearDown() async throws {
@@ -198,25 +199,45 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   /// This gate (`FloatingBarUsageLimiter`) is independent of the trial-expired
   /// flag `desktop_isPaywalled`; it is left unset here, matching the actual
   /// bug: a user well within their trial can still exhaust the monthly
-  /// question quota. PTT is exempt on `isLocalProviderActive` alone: unlike
-  /// typed chat, a PTT turn does not run its completion against the user's
-  /// own server (it runs end to end through Omi's cloud realtime hub
-  /// regardless of provider), so this only suppresses the client-side
-  /// free-tier popup, the server still enforces its own quota independently.
-  func testPushToTalkExemptForLocalProvider() throws {
+  /// question quota. Unlike typed chat, a PTT turn does not run its
+  /// completion against the user's own server: whenever online it runs end
+  /// to end through Omi's cloud realtime hub regardless of provider (see
+  /// `PTTRoutePolicy.decide`), so an online Local turn must stay on this same
+  /// gate exactly like every other provider — exempting it would let a free
+  /// user keep making cloud-backed PTT turns after exhausting their quota
+  /// merely by selecting Local. Only offline, where PTT falls back to
+  /// on-device dictation with no AI response to meter, is Local exempt.
+  func testPushToTalkStaysGatedForLocalProviderWhenOnline() throws {
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    NetworkReachability.shared.testingOverrideIsOnline = true
+    FloatingBarUsageLimiter.shared.applyQuota(try exhaustedFreeQuota())
+
+    XCTAssertTrue(
+      PushToTalkManager.shared.isPushToTalkUsageLimitBlocked,
+      "an online PTT turn under Local still answers from Omi's cloud hub, so the quota still applies")
+  }
+
+  /// Regression: offline PTT under Local never reaches the hub (on-device
+  /// dictation only, no AI response), so the quota gate legitimately doesn't
+  /// apply there.
+  func testPushToTalkExemptForLocalProviderWhenOffline() throws {
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    NetworkReachability.shared.testingOverrideIsOnline = false
     FloatingBarUsageLimiter.shared.applyQuota(try exhaustedFreeQuota())
 
     XCTAssertFalse(
       PushToTalkManager.shared.isPushToTalkUsageLimitBlocked,
-      "PTT's question quota does not apply under the Local provider")
+      "offline PTT under Local is on-device dictation with no AI response to meter")
   }
 
-  /// Regression: the Omi provider is unaffected by this change.
+  /// Regression: the Omi provider is unaffected by this change, online or off.
   func testPushToTalkStaysGatedForOmiProvider() throws {
     UserDefaults.standard.set("piMono", forKey: bridgeModeKey)
     FloatingBarUsageLimiter.shared.applyQuota(try exhaustedFreeQuota())
 
+    NetworkReachability.shared.testingOverrideIsOnline = true
+    XCTAssertTrue(PushToTalkManager.shared.isPushToTalkUsageLimitBlocked)
+    NetworkReachability.shared.testingOverrideIsOnline = false
     XCTAssertTrue(PushToTalkManager.shared.isPushToTalkUsageLimitBlocked)
   }
 

@@ -95,8 +95,8 @@ extension PushToTalkManager {
   ///
   /// This is the monthly free-tier question-quota gate (`FloatingBarUsageLimiter`),
   /// independent of the separate trial-expired flag `isPaywalledEffective`
-  /// guards, so the exemption here is BYOK, or the Local provider being
-  /// active at all. The quota this gate enforces meters chat *questions*, not
+  /// guards, so the exemption here is BYOK, or Local while genuinely offline
+  /// (see below). The quota this gate enforces meters chat *questions*, not
   /// audio capture: a PTT turn's transcription is a separate axis (gated
   /// instead by `isTranscriptionExemptFromPaywall`/`blockIfPaywalled` at
   /// transcription start).
@@ -104,13 +104,21 @@ extension PushToTalkManager {
   /// Unlike typed chat, a PTT turn does NOT run its completion against the
   /// user's own Local server: whenever online it runs end to end (audio in,
   /// transcript, and the reply) inside Omi's cloud realtime hub
-  /// (`RealtimeHubController`), regardless of which AI provider is selected.
-  /// This is purely a client-side suppression of the free-tier popup for
-  /// Local users, who would otherwise see an "upgrade to Omi AI" message that
-  /// makes no sense once they've opted into Local; the server still enforces
-  /// its own realtime quota independently of this client-side check.
+  /// (`RealtimeHubController`), regardless of which AI provider is selected
+  /// — see `PTTRoutePolicy.decide`, which routes online turns to the hub
+  /// unconditionally. So the Local-provider exemption below only ever fires
+  /// for the one case where a PTT turn genuinely never reaches the hub:
+  /// offline, where it falls back to on-device dictation with no AI response
+  /// at all, and the free-tier chat-question quota has nothing to meter.
+  /// An online turn under Local still stays on this same gate as every other
+  /// provider — it is answered by the same cloud hub, so exempting it here
+  /// would let a free user keep making cloud-backed PTT turns after
+  /// exhausting their quota merely by selecting Local as their provider.
   var isPushToTalkUsageLimitBlocked: Bool {
-    guard !APIKeyService.isByokActive, !AIProvider.isLocalProviderActive else { return false }
+    guard !APIKeyService.isByokActive else { return false }
+    if AIProvider.isLocalProviderActive, !NetworkReachability.shared.isOnline {
+      return false
+    }
     return FloatingBarUsageLimiter.shared.isLimitReached
   }
 
