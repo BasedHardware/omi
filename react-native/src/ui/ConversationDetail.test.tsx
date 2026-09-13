@@ -1657,6 +1657,61 @@ test('legacy conversation details name GET people names on transcript speakers',
   expect(copy).not.toContain('person-alex');
 });
 
+test('legacy conversation details name GET speakers from the minimum speaker id', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'First words',
+              speaker: 'SPEAKER_05',
+              isUser: false,
+              start: 0,
+              end: 1,
+            },
+            {
+              text: 'Later words',
+              speaker: 'SPEAKER_06',
+              isUser: false,
+              start: 2,
+              end: 3,
+            },
+            {
+              text: 'Your turn',
+              speaker: 'SPEAKER_00',
+              isUser: true,
+              start: 4,
+              end: 5,
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('Speaker 1  ·  First words');
+  expect(copy).toContain('Speaker 2  ·  Later words');
+  expect(copy).toContain('You  ·  Your turn');
+  expect(copy).not.toContain('Speaker 6');
+  expect(copy).not.toContain('Speaker 7');
+});
+
 test('legacy conversation details name a failed GET people instead of empty success', () => {
   mockLegacy.mockReturnValue({
     result: {

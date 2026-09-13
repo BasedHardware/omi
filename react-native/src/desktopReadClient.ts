@@ -271,6 +271,45 @@ export function recordingTranscriptSpeakerCopy(segment: {
   return labeled !== null ? `Speaker ${Number(labeled[1]) + 1}` : trimmed;
 }
 
+export function conversationDetailSpeakerCopy(
+  segment: {
+    isUser?: boolean;
+    speaker?: string | number | null;
+    personName?: string;
+  },
+  segments: readonly {
+    isUser?: boolean;
+    speaker?: string | number | null;
+  }[],
+): string {
+  if (segment.isUser === true) {
+    return 'You';
+  }
+  const namedPerson = visibleDisplayText(segment.personName ?? '');
+  if (namedPerson !== '') {
+    return namedPerson;
+  }
+  const trimmed =
+    typeof segment.speaker === 'string'
+      ? visibleDisplayText(segment.speaker)
+      : '';
+  const labeled = /^SPEAKER_(\d+)$/.exec(trimmed);
+  if (labeled === null) {
+    return trimmed === '' ? 'Speaker' : trimmed;
+  }
+  let minSpeakerId: number | null = null;
+  for (const row of segments) {
+    if (row.isUser === true) {
+      continue;
+    }
+    const speakerId = discardedTranscriptSpeakerId(row.speaker);
+    if (minSpeakerId === null || speakerId < minSpeakerId) {
+      minSpeakerId = speakerId;
+    }
+  }
+  return `Speaker ${Number(labeled[1]) - (minSpeakerId ?? 0) + 1}`;
+}
+
 export function recordingTranscriptCanDisplaySeconds(
   segments: readonly {start: number | null; end: number | null}[],
 ): boolean {

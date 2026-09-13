@@ -3,6 +3,7 @@ import {ActivityIndicator, Image, Linking, Text, View} from 'react-native';
 import {
   clockLabel,
   conversationCaptureCopy,
+  conversationDetailSpeakerCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationHasFinishClock,
@@ -559,15 +560,10 @@ function LegacyConversationBody({
         </Text>
       ) : (
         transcriptSegments.map((segment, index) => {
-          const namedPerson = visibleDisplayText(segment.personName ?? '');
-          const speaker = segment.isUser
-            ? 'You'
-            : namedPerson !== ''
-            ? namedPerson
-            : segment.speaker?.replace(
-                /^SPEAKER_(\d+)$/,
-                (_, number: string) => `Speaker ${Number(number) + 1}`,
-              ) || 'Speaker';
+          const speaker = conversationDetailSpeakerCopy(
+            segment,
+            transcriptSegments,
+          );
           const clock = showLegacyClocks
             ? legacyTranscriptTimestampCopy(segment.start, segment.end)
             : null;

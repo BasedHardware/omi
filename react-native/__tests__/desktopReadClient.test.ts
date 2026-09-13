@@ -6,6 +6,7 @@ import {
   conversationListUsesListenOverview,
   conversationRecapTitle,
   conversationDiscardedTranscriptCopy,
+  conversationDetailSpeakerCopy,
   conversationDayLabel,
   conversationRecapDateLabel,
   conversationListNewCopy,
@@ -882,6 +883,44 @@ test('discarded conversation titles use Flutter transcript excerpt and people na
   ).toBe(
     '[00:00:00 - 00:00:01] Speaker 1: A \n\n[00:00:02 - 00:00:03] Speaker 2: B',
   );
+  expect(
+    conversationDetailSpeakerCopy(
+      {speaker: 'SPEAKER_05', isUser: false},
+      [
+        {speaker: 'SPEAKER_05', isUser: false},
+        {speaker: 'SPEAKER_06', isUser: false},
+        {speaker: 'SPEAKER_00', isUser: true},
+      ],
+    ),
+  ).toBe('Speaker 1');
+  expect(
+    conversationDetailSpeakerCopy(
+      {speaker: 'SPEAKER_06', isUser: false},
+      [
+        {speaker: 'SPEAKER_05', isUser: false},
+        {speaker: 'SPEAKER_06', isUser: false},
+        {speaker: 'SPEAKER_00', isUser: true},
+      ],
+    ),
+  ).toBe('Speaker 2');
+  expect(
+    conversationDetailSpeakerCopy(
+      {speaker: 'SPEAKER_00', isUser: true},
+      [{speaker: 'SPEAKER_00', isUser: true}],
+    ),
+  ).toBe('You');
+  expect(
+    conversationDetailSpeakerCopy(
+      {speaker: 'SPEAKER_01', isUser: false},
+      [{speaker: 'SPEAKER_01', isUser: false}],
+    ),
+  ).toBe('Speaker 1');
+  expect(
+    conversationDetailSpeakerCopy(
+      {speaker: 'SPEAKER_00', isUser: false, personName: 'Alex Chen'},
+      [{speaker: 'SPEAKER_00', isUser: false}],
+    ),
+  ).toBe('Alex Chen');
   expect(
     conversationDiscardedTranscriptCopy([
       {
