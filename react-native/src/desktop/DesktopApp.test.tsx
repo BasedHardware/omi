@@ -5613,6 +5613,90 @@ test('Settings names GET developer and MCP keys without revoke or a full secret'
   ).toBe(false);
 });
 
+test('Settings names GET developer-key empty scopes Read Only without inventing it on MCP keys', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: [],
+    webhooksError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/dev/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'dev-empty',
+            name: 'Readonly',
+            key_prefix: 'omi_sk_ro',
+            created_at: '2026-09-09T12:00:00.000Z',
+            scopes: [],
+          },
+          {
+            id: 'dev-omitted',
+            name: 'Omitted',
+            key_prefix: 'omi_sk_om',
+            created_at: '2026-09-09T12:00:00.000Z',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/mcp/keys') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'mcp-1',
+            name: 'Cursor',
+            key_prefix: 'omi_mcp_cd',
+            created_at: '2026-09-09T12:00:00.000Z',
+            scopes: [],
+          },
+        ]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  const created = developerKeyCreatedCopy(
+    Date.parse('2026-09-09T12:00:00.000Z'),
+  );
+  expect(tree).toContain(`Readonly · omi_sk_ro · ${created} · Read Only`);
+  expect(tree).toContain(`Omitted · omi_sk_om · ${created} · Read Only`);
+  expect(tree).toContain('Cursor · omi_mcp_cd');
+  expect(tree).not.toContain('Cursor · omi_mcp_cd · Read Only');
+  expect(tree).not.toContain('Revoke');
+});
+
 test('Settings names a failed developer and MCP keys GET instead of empty success', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;

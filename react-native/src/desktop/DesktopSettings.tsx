@@ -588,6 +588,7 @@ export function DesktopSettings({
       nextDeveloperKeys = developerKeysCopy(
         developerKeysResult.keys,
         'Developer key',
+        {emptyScopesCopy: 'Read Only'},
       );
       nextDeveloperKeysError = developerKeysResult.error;
       const mcpKeysResult = await mcpKeysTask;

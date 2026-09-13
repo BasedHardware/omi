@@ -1476,6 +1476,45 @@ test('developer key copy names GET name and prefix without a full secret', () =>
   ).toBe('Read');
 });
 
+test('developer key copy names GET empty scopes Read Only without inventing it on MCP keys', () => {
+  const createdAtMs = Date.parse('2026-09-09T12:00:00.000Z');
+  const created = developerKeyCreatedCopy(createdAtMs);
+  expect(
+    developerKeysCopy(
+      [
+        {name: 'Local', keyPrefix: 'omi_sk_ab', createdAtMs, scopes: []},
+        {name: 'Omitted', keyPrefix: 'omi_sk_om', createdAtMs},
+      ],
+      'Developer key',
+      {emptyScopesCopy: 'Read Only'},
+    ),
+  ).toEqual([
+    {
+      title: 'Developer key',
+      copy: `Local · omi_sk_ab · ${created} · Read Only`,
+    },
+    {
+      title: 'Developer key',
+      copy: `Omitted · omi_sk_om · ${created} · Read Only`,
+    },
+  ]);
+  expect(
+    developerKeysCopy(
+      [{name: 'Cursor', keyPrefix: 'omi_mcp_cd', createdAtMs}],
+      'MCP key',
+    ),
+  ).toEqual([{title: 'MCP key', copy: `Cursor · omi_mcp_cd · ${created}`}]);
+  expect(developerKeyScopeCopy([])).toBe('');
+  expect(developerKeyScopeCopy(undefined)).toBe('');
+  expect(developerKeyScopeCopy([], {emptyCopy: 'Read Only'})).toBe('Read Only');
+  expect(developerKeyScopeCopy(undefined, {emptyCopy: 'Read Only'})).toBe(
+    'Read Only',
+  );
+  expect(
+    developerKeyScopeCopy(['conversations:write'], {emptyCopy: 'Read Only'}),
+  ).toBe('Write');
+});
+
 test('developer webhook status copy does not say unknown for a missing enablement bit', () => {
   expect(developerWebhookStatusCopy(true)).toBe('Enabled');
   expect(developerWebhookStatusCopy(false)).toBe('Disabled');

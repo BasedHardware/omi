@@ -666,7 +666,9 @@ export function SettingsPage({
     );
     setTranscriptionPreferencesError(transcriptionPreferencesResult.error);
     setDeveloperKeys(
-      developerKeysCopy(developerKeysResult.keys, 'Developer key'),
+      developerKeysCopy(developerKeysResult.keys, 'Developer key', {
+        emptyScopesCopy: 'Read Only',
+      }),
     );
     setDeveloperKeysError(developerKeysResult.error);
     setMcpKeys(

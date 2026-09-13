@@ -1319,9 +1319,10 @@ export function developerKeyCreatedCopy(createdAtMs: number): string {
 
 export function developerKeyScopeCopy(
   scopes: readonly string[] | undefined,
+  options?: {emptyCopy?: string},
 ): string {
   if (scopes === undefined || scopes.length === 0) {
-    return '';
+    return options?.emptyCopy ?? '';
   }
   const hasRead = scopes.some(scope => scope.endsWith(':read'));
   const hasWrite = scopes.some(scope => scope.endsWith(':write'));
@@ -1333,12 +1334,15 @@ export function developerKeyScopeCopy(
     .join(' · ');
 }
 
-export function developerKeyRowCopy(key: {
-  name: string;
-  keyPrefix: string;
-  createdAtMs?: number;
-  scopes?: readonly string[];
-}): string {
+export function developerKeyRowCopy(
+  key: {
+    name: string;
+    keyPrefix: string;
+    createdAtMs?: number;
+    scopes?: readonly string[];
+  },
+  options?: {emptyScopesCopy?: string},
+): string {
   const name = visibleDisplayText(key.name);
   if (name === '') {
     return '';
@@ -1349,7 +1353,12 @@ export function developerKeyRowCopy(key: {
       ? developerKeyCreatedCopy(key.createdAtMs)
       : '';
   const labeled = prefix === '' ? name : `${name} · ${prefix}`;
-  const scope = developerKeyScopeCopy(key.scopes);
+  const scope = developerKeyScopeCopy(
+    key.scopes,
+    options?.emptyScopesCopy === undefined
+      ? undefined
+      : {emptyCopy: options.emptyScopesCopy},
+  );
   return [labeled, created, scope].filter(copy => copy !== '').join(' · ');
 }
 
@@ -1361,9 +1370,10 @@ export function developerKeysCopy(
     scopes?: readonly string[];
   }[],
   title: string,
+  options?: {emptyScopesCopy?: string},
 ): {title: string; copy: string}[] {
   return keys.flatMap(key => {
-    const copy = developerKeyRowCopy(key);
+    const copy = developerKeyRowCopy(key, options);
     if (copy === '') {
       return [];
     }
