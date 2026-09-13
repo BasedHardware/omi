@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: tvmaze-integration-tests
+    command: ["python3", "plugins/omi-tvmaze-app/test_service.py"]
+    triggers: ["plugins/omi-tvmaze-app/**"]
+    lanes: ["local", "ci"]
+    reason: "TVMaze chat tools must preserve distinct show identities and schedule offsets, distinguish absent episodes from provider failures, and validate inputs at the request boundary"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
