@@ -166,6 +166,40 @@ def test_save_creates_file_with_secure_perms(config_path: Path) -> None:
     _assert_owner_only(config_path)
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits only")
+def test_save_tightens_perms_on_newly_created_parent_dir(config_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    nested = config_path.parent / "nested" / "config.toml"
+    monkeypatch.setenv(cfg.ENV_CONFIG_PATH, str(nested))
+    assert not nested.parent.exists()
+
+    config = cfg.load()
+    profile = config.get_profile()
+    profile.auth_method = "api_key"
+    profile.api_key = "omi_dev_secret"
+    config.set_profile(profile)
+    cfg.save(config)
+
+    assert stat.S_IMODE(nested.parent.stat().st_mode) == 0o700
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits only")
+def test_save_preserves_perms_on_existing_custom_parent_dir(config_path: Path) -> None:
+    """A pre-existing, user-selected $OMI_CONFIG directory may be shared with
+    other files/processes; save() must not silently tighten its mode."""
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.parent.chmod(0o750)
+
+    config = cfg.load()
+    profile = config.get_profile()
+    profile.auth_method = "api_key"
+    profile.api_key = "omi_dev_secret"
+    config.set_profile(profile)
+    cfg.save(config)
+
+    assert stat.S_IMODE(config_path.parent.stat().st_mode) == 0o750
+    _assert_owner_only(config_path)
+
+
 def test_save_does_not_leave_world_readable_window(monkeypatch, config_path: Path) -> None:
     """TOCTOU regression test (Greptile P1).
 
