@@ -495,8 +495,6 @@ class RingStorageSyncImpl implements RingStorageSync {
               pct,
               speedKBps: _currentSpeedKBps,
               phase: SyncPhase.downloadingFromDevice,
-              currentFile: 1,
-              totalFiles: 1,
             );
           }
         }
