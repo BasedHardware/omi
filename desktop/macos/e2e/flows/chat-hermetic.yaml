@@ -90,6 +90,12 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeJournalContracts.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeMessageKind.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentControlService.swift
+  # Area ownership: every chat turn resolves its harness through
+  # AgentRuntimeRouting (startup preferred-harness validation), and this flow
+  # sends a real chat turn. The persisted-preference spellings are covered
+  # behaviorally in AgentControlServiceTests.
+  - desktop/macos/Desktop/Sources/Providers/AgentRuntimeRouting.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+BackendRouting.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+JITKnowledgeToolsGate.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
