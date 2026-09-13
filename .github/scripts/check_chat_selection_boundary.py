@@ -19,11 +19,21 @@ rebuild to thrash. That file is protected here too, so the AppKit path can
 never quietly acquire the SwiftUI one.
 
 The conversation-detail summary pane joined the same failure class when its
-markdown gained a SwiftUI `.textSelection(.enabled)` ancestor: the pane hosts
-the tallest attributed block in the app, and a background list refresh or
-app-catalog load re-rendering that ancestor re-laid-out the visible summary
-2–3 times while the reader scrolled. Those files are protected below by a
-narrower rule.
+markdown gained a SwiftUI-selection ancestor: the pane hosts the tallest
+attributed block in the app, and a background list refresh or app-catalog
+load re-rendering that ancestor re-laid-out the visible summary 2–3 times
+while the reader scrolled. Two guards came out of that:
+
+- The conversation-detail files carry the same blanket ban as the
+  transcript: no SwiftUI native selection there at all. Selectable summary
+  prose is hosted through `OmiMarkdown(appKitProseSelection: true)`.
+- A repo-wide chained-modifier rule: `OmiMarkdown(` followed, within its
+  SwiftUI modifier chain, by enabled native selection must fail CI wherever
+  it appears. That is what would have caught conversation detail on the PR
+  that introduced it. Short plain-`Text` selections elsewhere (task panels,
+  referrals, the live transcript's per-bubble rows) still pass: a
+  single-line `Text` has a stable intrinsic size and is not this failure
+  class.
 """
 
 from __future__ import annotations
@@ -43,26 +53,44 @@ LIVE_TRANSCRIPT_FILES = (
 MARKDOWN_FILE = LIVE_TRANSCRIPT_FILES[2]
 SELECTION_FILE = LIVE_TRANSCRIPT_FILES[3]
 
-# The conversation-detail summary is the same failure class on a new host. It
-# renders the tallest markdown in the app, and an ancestor `.textSelection(
-# .enabled)` chained onto `OmiMarkdown` installs SelectionOverlay on exactly
-# that block. Short plain `Text` (section headings, action-item rows) keeps
-# SwiftUI selection — a single-line Text has a stable intrinsic size and is
-# not the failure class — so the rule below is deliberately narrower than the
-# transcript's: it forbids the modifier only where it chains onto `OmiMarkdown`.
+# The conversation-detail summary is the same failure class on a new host: it
+# renders the tallest markdown in the app, and a SwiftUI-selection ancestor
+# chained onto `OmiMarkdown` installs SelectionOverlay on exactly that block.
+# These files take the transcript's blanket ban — even their short `Text`
+# rows (section headings, action items) stay SwiftUI-selection-free, because
+# copyable prose here is hosted by AppKit, not by an overlay.
 CONVERSATION_DETAIL_FILES = (
     "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift",
     "desktop/macos/Desktop/Sources/MainWindow/Components/ConversationSummarySections.swift",
 )
 
-# Line numbers (1-based) where `.textSelection(.enabled)` chains onto an
-# `OmiMarkdown(...)` call: the modifier sits on the same line as the call, or
-# on a chain of modifier lines (first non-whitespace character `.`) directly
-# below it. Deliberately a line heuristic rather than a paren parser: it never
-# false-positives on the short plain-`Text` selections these files legitimately
-# keep, which a naive "OmiMarkdown followed by .textSelection" regex cannot
-# promise across Swift escapes like `\u{2026}` inside nested call arguments.
+# The chained-modifier rule scans every desktop Swift source, not a fixed
+# list: the next surface that reinstalls the banned ancestor is usually a
+# file this checker has never heard of. Generated sources are out of scope,
+# matching the formatter's exclusion.
+DESKTOP_SWIFT_ROOT = "desktop/macos/Desktop/Sources"
+DESKTOP_SWIFT_EXCLUDED_PARTS = ("Generated",)
+
+FORBIDDEN_PATTERNS = {
+    ".textSelection(.enabled)": (
+        "this protected surface must not install SwiftUI SelectionOverlay; selection belongs "
+        "to ChatSelectableProse, whose NSTextView owns it without one"
+    ),
+    "textSelectionEnabled": (
+        "OmiMarkdown must not expose a native-selection escape hatch"
+    ),
+}
+
+
 def omimarkdown_swiftui_selection_lines(source: str) -> list[int]:
+    """Line numbers (1-based) where enabled native selection chains onto an
+    `OmiMarkdown(...)` call: the modifier sits on the same line as the call,
+    or on the chain of modifier lines (first non-whitespace character `.`)
+    directly below it. Deliberately a line heuristic rather than a paren
+    parser: it never false-positives on the short plain-`Text` selections
+    other surfaces legitimately keep, which a naive "OmiMarkdown followed by
+    .textSelection" regex cannot promise across Swift escapes like
+    `\\u{2026}` inside nested call arguments."""
     lines = source.splitlines()
     hits: list[int] = []
     for index, line in enumerate(lines):
@@ -76,16 +104,6 @@ def omimarkdown_swiftui_selection_lines(source: str) -> list[int]:
         if "OmiMarkdown(" in lines[anchor] or (anchor > 0 and "OmiMarkdown(" in lines[anchor - 1]):
             hits.append(index + 1)
     return hits
-
-FORBIDDEN_PATTERNS = {
-    ".textSelection(.enabled)": (
-        "live chat must not install SwiftUI SelectionOverlay; selection belongs to "
-        "ChatSelectableProse, whose NSTextView owns it without one"
-    ),
-    "textSelectionEnabled": (
-        "OmiMarkdown must not expose a native-selection escape hatch"
-    ),
-}
 
 
 def check_sources(sources: Mapping[str, str]) -> list[str]:
@@ -105,11 +123,25 @@ def check_sources(sources: Mapping[str, str]) -> list[str]:
     for relative in CONVERSATION_DETAIL_FILES:
         source = sources.get(relative)
         if source is None:
+            failures.append(f"{relative}: protected conversation-detail source is missing")
+            continue
+
+        for pattern, explanation in FORBIDDEN_PATTERNS.items():
+            for line_number, line in enumerate(source.splitlines(), start=1):
+                if pattern in line:
+                    failures.append(
+                        f"{relative}:{line_number}: conversation detail joins the transcript's "
+                        f"selection ban ({explanation}); selectable summary prose is hosted "
+                        "through OmiMarkdown(appKitProseSelection: true)"
+                    )
+
+    for relative, source in sources.items():
+        if relative in LIVE_TRANSCRIPT_FILES or relative in CONVERSATION_DETAIL_FILES:
             continue
         for line_number in omimarkdown_swiftui_selection_lines(source):
             failures.append(
-                f"{relative}:{line_number}: conversation-detail markdown must not gain a SwiftUI "
-                ".textSelection(.enabled) ancestor; selectable summary prose is hosted through "
+                f"{relative}:{line_number}: OmiMarkdown must not gain a SwiftUI-selection "
+                "ancestor anywhere on desktop; selectable prose is hosted through "
                 "OmiMarkdown(appKitProseSelection: true), whose NSTextView owns selection "
                 "without an overlay"
             )
@@ -134,10 +166,22 @@ def check_sources(sources: Mapping[str, str]) -> list[str]:
 
 def load_sources(root: Path) -> dict[str, str]:
     sources: dict[str, str] = {}
-    for relative in LIVE_TRANSCRIPT_FILES + CONVERSATION_DETAIL_FILES:
+    protected = LIVE_TRANSCRIPT_FILES + CONVERSATION_DETAIL_FILES
+    for relative in protected:
         path = root / relative
         if path.is_file():
             sources[relative] = path.read_text(encoding="utf-8")
+    swift_root = root / DESKTOP_SWIFT_ROOT
+    for path in sorted(swift_root.rglob("*.swift")):
+        relative = path.relative_to(root).as_posix()
+        if relative in sources:
+            continue
+        if any(part in DESKTOP_SWIFT_EXCLUDED_PARTS for part in path.parts):
+            continue
+        try:
+            sources[relative] = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
     return sources
 
 

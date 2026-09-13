@@ -38,11 +38,10 @@ struct ConversationSummarySections: View {
               Text(section.heading)
                 .scaledFont(size: OmiType.body, weight: .semibold)
                 .foregroundColor(Ink.primary)
-                .textSelection(.enabled)
             }
             // Markdown, not `Text`: these bodies carry lists and emphasis, and a plain `Text`
             // renders their syntax as literal characters. Selection is AppKit prose — the same
-            // contract as chat — because a SwiftUI `.textSelection(.enabled)` ancestor of
+            // contract as chat — because a SwiftUI native-selection modifier on an ancestor of
             // `OmiMarkdown` installs SelectionOverlay around a tall attributed block and
             // re-lays it out while the reader scrolls (FC-selection-overlay-layout-loop).
             OmiMarkdown(text: section.bodyMarkdown, style: .assistant, appKitProseSelection: true)

@@ -1306,9 +1306,9 @@ struct ConversationDetailView: View {
       // page is `glassContent()`, which already pins the panel's light appearance, and the markdown
       // inherits it.
       //
-      // Selection is AppKit prose, not a SwiftUI `.textSelection(.enabled)` ancestor: that wraps
-      // this tall block in SelectionOverlay and re-lays-out the visible portion while the reader
-      // scrolls (FC-selection-overlay-layout-loop; same contract chat already enforces).
+      // Selection is AppKit prose, not a SwiftUI native-selection modifier on an ancestor:
+      // that wraps this tall block in SelectionOverlay and re-lays-out the visible portion
+      // while the reader scrolls (FC-selection-overlay-layout-loop; same contract as chat).
       OmiMarkdown(text: selection.content, sender: .ai, appKitProseSelection: true)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1559,7 +1559,6 @@ struct ConversationDetailView: View {
             Text(item.description)
               .scaledFont(size: OmiType.body)
               .foregroundColor(item.completed ? Ink.secondary : Ink.primary)
-              .textSelection(.enabled)
               .strikethrough(item.completed, color: Ink.secondary)
 
             Spacer(minLength: OmiSpacing.sm)
