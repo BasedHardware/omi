@@ -354,9 +354,10 @@ class _FoundDevicesState extends State<FoundDevices> {
                   if (provider.isConnected) {
                     final deviceProvider = provider.deviceProvider;
                     final connectedDevice = [deviceProvider?.connectedDevice, deviceProvider?.companionDevice]
-                            .firstWhereOrNull((connected) => connected?.id == device.id) ??
-                        device;
-                    await _showFirmwareWarningIfNeeded(connectedDevice);
+                        .firstWhereOrNull((connected) => connected?.id == device.id);
+                    if (connectedDevice != null) {
+                      await _showFirmwareWarningIfNeeded(connectedDevice);
+                    }
                   }
                 }
               }
