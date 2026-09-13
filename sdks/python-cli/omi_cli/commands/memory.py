@@ -85,8 +85,9 @@ def get_memory(
                 if item.get("id") == memory_id:
                     ctx.renderer.emit(item, title="memory")
                     return
-            if len(page) < page_size:
-                raise NotFoundError(message=f"Memory not found: {memory_id}")
+            # The API validates records after applying its database offset, so
+            # malformed historical rows can make a non-final page short.
+            # Keep scanning at the next database offset in that case.
             offset += page_size
 
 

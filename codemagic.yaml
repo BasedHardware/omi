@@ -1878,7 +1878,10 @@ workflows:
         BACKEND_IMAGE: "gcr.io/based-hardware/desktop-backend"
         GCS_DESKTOP_UPDATES_BUCKET: "gs://omi_macos_updates"
         DMGBUILD_VERSION: "1.6.7"
-      xcode: 16.4
+      # Desktop Swift ship/CI toolchain pin. Keep in sync with
+      # desktop/macos/ci/xcode-pin.json (enforced by the
+      # desktop-swift-ci-contract check); never `latest` or `edge`.
+      xcode: 26.6
     # API-dispatched by desktop_auto_release.yml after its exact tag is pushed.
     # Keeping this workflow manual prevents a webhook/API race from creating
     # duplicate builds for one immutable candidate.
@@ -2884,7 +2887,10 @@ workflows:
         # This registry remains on the production control plane even when the
         # preview artifact itself is configured to use a preview backend.
         DESKTOP_PREVIEW_REGISTRY_URL: "https://api.omi.me"
-      xcode: 16.4
+      # Desktop Swift ship/CI toolchain pin. Keep in sync with
+      # desktop/macos/ci/xcode-pin.json (enforced by the
+      # desktop-swift-ci-contract check); never `latest` or `edge`.
+      xcode: 26.6
     working_directory: desktop/macos
     cache:
       cache_paths:
