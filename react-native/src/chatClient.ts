@@ -45,6 +45,7 @@ export type ChatMessage = {
   }[];
   appId?: string;
   appName?: string;
+  appImage?: string;
 };
 
 export type ChatHistoryPage = {

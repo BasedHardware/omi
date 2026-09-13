@@ -1172,7 +1172,11 @@ test('old chat history names resolved GET apps and omits unresolved ids', async 
       return {
         id: 'app',
         status: 200,
-        body: JSON.stringify({id: 'notes', name: 'Notes'}),
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          image: 'https://cdn.example.test/notes.png',
+        }),
       };
     }
     return {id: 'app', status: 404, body: '{}'};
@@ -1183,7 +1187,11 @@ test('old chat history names resolved GET apps and omits unresolved ids', async 
   } as unknown as OmiBackend;
   const page = await loadNewestChatHistory(backend);
   expect(page.messages.find(item => item.id === 'old-ai')).toEqual(
-    expect.objectContaining({appId: 'notes', appName: 'Notes'}),
+    expect.objectContaining({
+      appId: 'notes',
+      appName: 'Notes',
+      appImage: 'https://cdn.example.test/notes.png',
+    }),
   );
   expect(page.messages.find(item => item.id === 'old-ghost')).toEqual(
     expect.objectContaining({appId: 'ghost'}),
@@ -1191,6 +1199,9 @@ test('old chat history names resolved GET apps and omits unresolved ids', async 
   expect(
     page.messages.find(item => item.id === 'old-ghost'),
   ).not.toHaveProperty('appName');
+  expect(
+    page.messages.find(item => item.id === 'old-ghost'),
+  ).not.toHaveProperty('appImage');
   expect(request).toHaveBeenCalledWith({
     id: expect.any(String),
     method: 'GET',

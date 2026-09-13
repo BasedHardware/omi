@@ -1618,6 +1618,7 @@ test('a chat message names a resolved GET app and omits raw ids', () => {
         generationOutcome: 'completed',
         appId: 'notes',
         appName: 'Notes',
+        appImage: 'https://cdn.example.test/notes.png',
       }}
       reduceMotion
     />,
@@ -1639,6 +1640,14 @@ test('a chat message names a resolved GET app and omits raw ids', () => {
   expect(copies).toContain('Saved your note.');
   expect(copies).toContain('Notes');
   expect(copies).not.toContain('notes');
+  expect(
+    renderer.root
+      .findAll(node => String(node.type) === 'Image')
+      .map(node => node.props.source?.uri),
+  ).toEqual(['https://cdn.example.test/notes.png']);
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    'raw.githubusercontent.com',
+  );
   const unresolved = render(
     <ChatMessageRow
       animate={false}
@@ -1669,6 +1678,47 @@ test('a chat message names a resolved GET app and omits raw ids', () => {
       return [];
     });
   expect(unresolvedCopies).not.toContain('notes');
+  expect(
+    unresolved.root.findAll(node => String(node.type) === 'Image'),
+  ).toHaveLength(0);
+  const relative = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-app-relative',
+        text: 'Saved your note.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        appId: 'notes',
+        appName: 'Notes',
+        appImage: '/assets/apps/notes.png',
+      }}
+      reduceMotion
+    />,
+  );
+  const relativeCopies = relative.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(relativeCopies).toContain('Notes');
+  expect(
+    relative.root.findAll(node => String(node.type) === 'Image'),
+  ).toHaveLength(0);
+  expect(JSON.stringify(relative.toJSON())).not.toContain(
+    'raw.githubusercontent.com',
+  );
   const human = render(
     <ChatMessageRow
       animate={false}
@@ -1681,6 +1731,7 @@ test('a chat message names a resolved GET app and omits raw ids', () => {
         generationOutcome: null,
         appId: 'notes',
         appName: 'Notes',
+        appImage: 'https://cdn.example.test/notes.png',
       }}
       reduceMotion
     />,
@@ -1701,9 +1752,13 @@ test('a chat message names a resolved GET app and omits raw ids', () => {
     });
   expect(humanCopies).toContain('Save this.');
   expect(humanCopies).not.toContain('Notes');
+  expect(human.root.findAll(node => String(node.type) === 'Image')).toHaveLength(
+    0,
+  );
   act(() => {
     renderer.unmount();
     unresolved.unmount();
+    relative.unmount();
     human.unmount();
   });
 });

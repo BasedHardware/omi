@@ -170,16 +170,32 @@ test('loadOmiApps names resolved GET apps and omits failures', async () => {
 });
 
 test('attachOmiChatAppNames keeps unresolved app ids off the named chrome', async () => {
-  const request = jest.fn(async () => ({
-    id: 'app',
-    status: 200,
-    body: JSON.stringify({
-      id: 'notes',
-      name: 'Notes',
-      description: 'Saves notes from calls',
-      image: 'https://cdn.example.test/notes.png',
-    }),
-  }));
+  const request = jest.fn(async (input: {path: string}) => {
+    if (input.path === '/v1/apps/notes') {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({
+          id: 'notes',
+          name: 'Notes',
+          description: 'Saves notes from calls',
+          image: 'https://cdn.example.test/notes.png',
+        }),
+      };
+    }
+    if (input.path === '/v1/apps/relative') {
+      return {
+        id: 'app',
+        status: 200,
+        body: JSON.stringify({
+          id: 'relative',
+          name: 'Relative',
+          image: '/assets/apps/notes.png',
+        }),
+      };
+    }
+    return {id: 'app', status: 404, body: '{}'};
+  });
   const backend = {request} as unknown as OmiBackend;
   const messages = await attachOmiChatAppNames(backend, [
     {
@@ -205,18 +221,36 @@ test('attachOmiChatAppNames keeps unresolved app ids off the named chrome', asyn
       createdAt: 3,
       generationOutcome: null,
     },
+    {
+      id: 'ai-4',
+      text: 'Relative icon.',
+      sender: 'ai',
+      createdAt: 4,
+      generationOutcome: null,
+      appId: 'relative',
+    },
   ]);
-  expect(messages[0]).toMatchObject({appId: 'notes', appName: 'Notes'});
+  expect(messages[0]).toMatchObject({
+    appId: 'notes',
+    appName: 'Notes',
+    appImage: 'https://cdn.example.test/notes.png',
+  });
   expect(messages[0]).not.toHaveProperty('appDescription');
-  expect(messages[0]).not.toHaveProperty('appImage');
   expect(messages[0]).not.toHaveProperty('image');
   expect(JSON.stringify(messages[0])).not.toContain('Saves notes from calls');
   expect(JSON.stringify(messages[0])).not.toContain(
-    'https://cdn.example.test/notes.png',
+    'raw.githubusercontent.com',
   );
   expect(messages[1]).toEqual(expect.objectContaining({appId: 'ghost'}));
   expect(messages[1]).not.toHaveProperty('appName');
+  expect(messages[1]).not.toHaveProperty('appImage');
   expect(messages[2]).not.toHaveProperty('appId');
   expect(messages[2]).not.toHaveProperty('appName');
-  expect(request).toHaveBeenCalledTimes(2);
+  expect(messages[2]).not.toHaveProperty('appImage');
+  expect(messages[3]).toMatchObject({appId: 'relative', appName: 'Relative'});
+  expect(messages[3]).not.toHaveProperty('appImage');
+  expect(JSON.stringify(messages[3])).not.toContain(
+    'raw.githubusercontent.com',
+  );
+  expect(request).toHaveBeenCalledTimes(3);
 });

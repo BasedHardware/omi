@@ -201,6 +201,7 @@ test('conversation-detail history names GET content_blocks without inventing wri
           createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
           generationOutcome: 'completed',
           appName: 'Notes',
+          appImage: 'https://cdn.example.test/notes.png',
           memories: [{title: 'Morning standup', emoji: '🚀'}],
           evidence: [{title: 'Calendar', detail: 'Tuesday agenda'}],
           contentBlocks: [
@@ -220,6 +221,7 @@ test('conversation-detail history names GET content_blocks without inventing wri
           createdAt: Date.parse('2026-09-07T12:01:00.000Z'),
           generationOutcome: null,
           appName: 'Notes',
+          appImage: 'https://cdn.example.test/notes.png',
           contentBlocks: [{eyebrow: 'Discovery', title: 'Quiet mornings'}],
         },
       ],
@@ -256,6 +258,11 @@ test('conversation-detail history names GET content_blocks without inventing wri
   expect(tree).not.toContain('Open conversation');
   expect(tree).not.toContain('Open in Goals');
   expect(tree).not.toContain('Show more');
+  expect(
+    view.root.findAll(
+      node => node.props.source?.uri === 'https://cdn.example.test/notes.png',
+    ).length,
+  ).toBeGreaterThan(0);
   mockChat.mockReturnValue({
     result: {
       status: 'loaded',
@@ -267,6 +274,7 @@ test('conversation-detail history names GET content_blocks without inventing wri
           createdAt: Date.parse('2026-09-07T12:01:00.000Z'),
           generationOutcome: null,
           appName: 'Notes',
+          appImage: 'https://cdn.example.test/notes.png',
           contentBlocks: [{eyebrow: 'Discovery', title: 'Quiet mornings'}],
         },
       ],
@@ -292,6 +300,11 @@ test('conversation-detail history names GET content_blocks without inventing wri
   expect(humanTree).not.toContain('Notes');
   expect(humanTree).not.toContain('Discovery');
   expect(humanTree).not.toContain('Quiet mornings');
+  expect(
+    human.root.findAll(
+      node => node.props.source?.uri === 'https://cdn.example.test/notes.png',
+    ),
+  ).toHaveLength(0);
 });
 
 test('conversation-detail history names loaded GET task_card description without leaking ids', () => {

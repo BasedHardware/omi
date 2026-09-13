@@ -1,7 +1,16 @@
-import React, {memo, useEffect, useRef} from 'react';
-import {Animated, Easing, Image, Text, View} from 'react-native';
+import React, {memo, useEffect, useRef, useState} from 'react';
+import {
+  Animated,
+  Easing,
+  Image,
+  Text,
+  View,
+  type StyleProp,
+  type TextStyle,
+} from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {
+  appImageUrl,
   chatAppAttributionCopy,
   chatAttachmentDisplayName,
   chatAttachmentThumbnailUrl,
@@ -19,6 +28,65 @@ import {
 } from '../desktopReadClient';
 import {OmiAvatar} from './OmiAvatar';
 import {styles} from './styles';
+
+function ChatAppImage({
+  accessibilityLabel,
+  uri,
+}: {
+  accessibilityLabel: string;
+  uri: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return null;
+  }
+  return (
+    <Image
+      accessibilityLabel={accessibilityLabel}
+      onError={() => setFailed(true)}
+      source={{uri}}
+      style={styles.chatAppImage}
+    />
+  );
+}
+
+export function ChatAppAttribution({
+  appImage,
+  appName,
+  human,
+  textStyle,
+}: {
+  appImage?: string;
+  appName?: string;
+  human: boolean;
+  textStyle: StyleProp<TextStyle>;
+}) {
+  if (human) {
+    return null;
+  }
+  const appAttribution = chatAppAttributionCopy(appName);
+  const uri = appImageUrl(appImage);
+  if (appAttribution === '' && uri === null) {
+    return null;
+  }
+  return (
+    <View style={styles.chatAppAttributionRow}>
+      {uri === null ? null : (
+        <ChatAppImage
+          accessibilityLabel={
+            appAttribution === '' ? 'App image' : appAttribution
+          }
+          uri={uri}
+        />
+      )}
+      {appAttribution === '' ? null : (
+        <Text numberOfLines={1} style={[textStyle, {marginTop: 0}]}>
+          {appAttribution}
+        </Text>
+      )}
+    </View>
+  );
+}
 
 const ChatMessageRow = memo(function ChatMessageRow({
   animate,
@@ -70,7 +138,6 @@ const ChatMessageRow = memo(function ChatMessageRow({
     daySummary === '' ? [] : chatDaySummaryItems(message.text);
   const showSummaryItems =
     daySummary !== '' && message.generationOutcome !== 'failed';
-  const appAttribution = human ? '' : chatAppAttributionCopy(message.appName);
   const citations = (message.memories ?? []).flatMap(memory => {
     const copy = chatMemoryCitationCopy(memory);
     return copy === null ? [] : [copy];
@@ -147,11 +214,12 @@ const ChatMessageRow = memo(function ChatMessageRow({
           visibleDisplayText(message.text) !== '' && (
             <Text style={styles.cancelledLabel}>Response stopped</Text>
           )}
-        {appAttribution !== '' && (
-          <Text numberOfLines={1} style={styles.cancelledLabel}>
-            {appAttribution}
-          </Text>
-        )}
+        <ChatAppAttribution
+          appImage={message.appImage}
+          appName={message.appName}
+          human={human}
+          textStyle={styles.cancelledLabel}
+        />
         {citations.map((copy, index) => (
           <Text key={index} numberOfLines={1} style={styles.cancelledLabel}>
             {copy}

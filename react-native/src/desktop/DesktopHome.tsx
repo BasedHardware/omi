@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {
-  chatAppAttributionCopy,
   chatAttachmentDisplayName,
   chatAttachmentThumbnailUrl,
   chatClockLabel,
@@ -34,6 +33,7 @@ import {
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
+import {ChatAppAttribution} from '../ui/ChatTranscript';
 import {TaskMutationStatus, type TaskMutationProps} from '../ui/TaskEditor';
 import {
   ReadStatus,
@@ -154,9 +154,6 @@ function AskExchange({
           daySummary === '' ? [] : chatDaySummaryItems(item.text);
         const showSummaryItems =
           daySummary !== '' && item.generationOutcome !== 'failed';
-        const appAttribution = human
-          ? ''
-          : chatAppAttributionCopy(item.appName);
         const citations = (item.memories ?? []).flatMap(memory => {
           const copy = chatMemoryCitationCopy(memory);
           return copy === null ? [] : [copy];
@@ -212,11 +209,12 @@ function AskExchange({
             visibleDisplayText(item.text) !== '' ? (
               <Text style={styles.rowMeta}>Response stopped</Text>
             ) : null}
-            {appAttribution !== '' ? (
-              <Text numberOfLines={1} style={styles.rowMeta}>
-                {appAttribution}
-              </Text>
-            ) : null}
+            <ChatAppAttribution
+              appImage={item.appImage}
+              appName={item.appName}
+              human={human}
+              textStyle={styles.rowMeta}
+            />
             {citations.map((copy, index) => (
               <Text key={index} numberOfLines={1} style={styles.rowMeta}>
                 {copy}

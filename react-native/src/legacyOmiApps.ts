@@ -115,6 +115,10 @@ export async function attachOmiChatAppNames(
     if (app === undefined) {
       return message;
     }
-    return {...message, appName: app.name};
+    return {
+      ...message,
+      appName: app.name,
+      ...(app.image === undefined ? {} : {appImage: app.image}),
+    };
   });
 }

@@ -3,7 +3,6 @@ import {ActivityIndicator, Image, Text, View} from 'react-native';
 import {chatHistoryHasOlder} from '../chatClient';
 import {useChatConversationHistory} from '../chatConversationHistory';
 import {
-  chatAppAttributionCopy,
   chatAttachmentDisplayName,
   chatAttachmentThumbnailUrl,
   chatClockLabel,
@@ -19,6 +18,7 @@ import {
   type TaskCardLookup,
 } from '../desktopReadClient';
 import {desktopTokens} from '../desktop/tokens';
+import {ChatAppAttribution} from './ChatTranscript';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
 
@@ -124,9 +124,6 @@ export function ChatConversationHistory({
                 daySummary === '' ? [] : chatDaySummaryItems(message.text);
               const showSummaryItems =
                 daySummary !== '' && message.generationOutcome !== 'failed';
-              const appAttribution = human
-                ? ''
-                : chatAppAttributionCopy(message.appName);
               const citations = (message.memories ?? []).flatMap(memory => {
                 const copy = chatMemoryCitationCopy(memory);
                 return copy === null ? [] : [copy];
@@ -185,13 +182,12 @@ export function ChatConversationHistory({
                       Response stopped
                     </Text>
                   ) : null}
-                  {appAttribution !== '' ? (
-                    <Text
-                      numberOfLines={1}
-                      style={[styles.conversationDetailField, ink]}>
-                      {appAttribution}
-                    </Text>
-                  ) : null}
+                  <ChatAppAttribution
+                    appImage={message.appImage}
+                    appName={message.appName}
+                    human={human}
+                    textStyle={[styles.conversationDetailField, ink]}
+                  />
                   {citations.map((copy, index) => (
                     <Text
                       key={index}

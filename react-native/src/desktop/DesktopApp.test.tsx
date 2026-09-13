@@ -705,6 +705,7 @@ test('desktop chat names GET content_blocks without inventing write actions', ()
         createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
         generationOutcome: 'completed',
         appName: 'Notes',
+        appImage: 'https://cdn.example.test/notes.png',
         memories: [{title: 'Morning standup', emoji: '🚀'}],
         evidence: [{title: 'Calendar', detail: 'Tuesday agenda'}],
         contentBlocks: [
@@ -735,6 +736,11 @@ test('desktop chat names GET content_blocks without inventing write actions', ()
   expect(copy).not.toContain('Open conversation');
   expect(copy).not.toContain('Open in Goals');
   expect(copy).not.toContain('Show more');
+  expect(
+    renderer.root.findAll(
+      node => node.props.source?.uri === 'https://cdn.example.test/notes.png',
+    ).length,
+  ).toBeGreaterThan(0);
   const humanOnly = renderDesktop({
     messages: [
       {
@@ -744,6 +750,7 @@ test('desktop chat names GET content_blocks without inventing write actions', ()
         createdAt: Date.parse('2026-09-07T12:01:00.000Z'),
         generationOutcome: null,
         appName: 'Notes',
+        appImage: 'https://cdn.example.test/notes.png',
         contentBlocks: [{eyebrow: 'Discovery', title: 'Quiet mornings'}],
       },
     ],
@@ -753,6 +760,11 @@ test('desktop chat names GET content_blocks without inventing write actions', ()
   expect(humanCopy).not.toContain('Notes');
   expect(humanCopy).not.toContain('Discovery');
   expect(humanCopy).not.toContain('Quiet mornings');
+  expect(
+    humanOnly.root.findAll(
+      node => node.props.source?.uri === 'https://cdn.example.test/notes.png',
+    ),
+  ).toHaveLength(0);
 });
 
 test('desktop chat treats a whitespace-only reply as Message text unavailable', () => {

@@ -577,6 +577,18 @@ export const styles = StyleSheet.create({
     marginTop: 2,
     width: 112,
   },
+  chatAppAttributionRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 1,
+    gap: 4,
+    marginTop: 4,
+  },
+  chatAppImage: {
+    borderRadius: 3,
+    height: 15,
+    width: 15,
+  },
   chatAvatar: {
     alignItems: 'center',
     height: 40,
