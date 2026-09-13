@@ -12,6 +12,25 @@ Shared contract for device SDKs (`sdks/python`, `sdks/swift`, `sdks/react-native
 | Battery service | `0000180f-0000-1000-8000-00805f9b34fb` |
 | Battery level | `00002a19-0000-1000-8000-00805f9b34fb` |
 
+## Settings service (Omi CV1 firmware, `omi/firmware/omi/src/lib/core/transport.c`)
+
+| Role | UUID | Value |
+|------|------|-------|
+| Settings service | `19b10010-e8f2-537e-4f6c-d104768a1214` | |
+| LED dim ratio (read/write) | `19b10011-e8f2-537e-4f6c-d104768a1214` | 1 byte, 0–100 |
+| Mic gain (read/write) | `19b10012-e8f2-537e-4f6c-d104768a1214` | 1 byte, 0–8 |
+| Charging status (read/notify) | `19b10013-e8f2-537e-4f6c-d104768a1214` | 1 byte, 0/1 |
+| Device name (read/write) | `19b10014-e8f2-537e-4f6c-d104768a1214` | UTF-8, 1–20 bytes |
+
+Device name: the pendant persists the written name in NVS, applies it to GAP and to the
+advertisement/scan response, and restores it on every boot, so any phone that pairs later
+sees it. Rules (`omi/firmware/omi/src/lib/core/device_name.h`): 1–20 bytes of well-formed
+UTF-8, no ASCII control characters, no leading/trailing space; an empty write resets to the
+factory name. Invalid values are refused with an ATT error and nothing changes. The primary
+advertisement carries at most 8 bytes of the name (shortened, UTF-8 safe) next to the Omi
+service UUID; the scan response always carries the complete name. Support is announced by
+bit 9 (`0x200`) of the features characteristic (`19b10021-…`).
+
 ## Codec IDs (first byte of codec characteristic)
 
 | ID | Codec | Firmware |
