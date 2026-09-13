@@ -69,6 +69,17 @@ final class DictationMicSuppressionPolicyTests: XCTestCase {
     XCTAssertTrue(ConferencingApps.isCallSurface(bundleID: "com.google.chrome.helper"))
     XCTAssertFalse(ConferencingApps.isCallSurface(bundleID: superwhisper))
   }
+
+  /// Mute polarity makes a missed call surface worse than the same gap was for meeting
+  /// detection: a channel variant or browser missing here silences a real call while dictating.
+  func testCallSurfaceCoversChannelVariantsAndOtherChromiumBrowsers() {
+    for bundleID in [
+      "com.hnc.DiscordPTB", "com.hnc.DiscordCanary",
+      "org.chromium.Chromium.helper", "org.mozilla.nightly", "com.openai.atlas.helper",
+    ] {
+      XCTAssertTrue(ConferencingApps.isCallSurface(bundleID: bundleID), bundleID)
+    }
+  }
 }
 
 final class DictationMicSuppressionGateTests: XCTestCase {

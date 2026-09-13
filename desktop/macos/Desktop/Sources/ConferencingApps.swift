@@ -107,6 +107,8 @@ enum ConferencingApps {
     "com.logmein.gotomeeting",  // GoTo Meeting
     "com.logmein.goto",  // GoTo
     "com.hnc.discord",  // Discord (com.hnc.Discord)
+    "com.hnc.discordptb",  // Discord PTB
+    "com.hnc.discordcanary",  // Discord Canary
     "com.tinyspeck.slackmacgap",  // Slack
     "net.whatsapp.whatsapp",  // WhatsApp (net.whatsapp.WhatsApp)
   ]).union(telegramBundleIDs)
@@ -125,6 +127,9 @@ enum ConferencingApps {
     "company.thebrowser",  // Arc
     "net.imput.helium",  // Helium
     "org.mozilla.firefox",
+    "org.mozilla.nightly",  // Firefox Nightly
+    "org.chromium.chromium",
+    "com.openai.atlas",  // ChatGPT Atlas (Chromium-based)
     "com.microsoft.edgemac",
     "com.brave.browser",
     "com.operasoftware.opera",
