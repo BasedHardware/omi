@@ -976,6 +976,12 @@ checks:
     lanes: ["local", "ci"]
     reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
 
+  - id: plugin-db-eval-security-tests
+    command: ["python3", "plugins/test_db.py"]
+    triggers: ["plugins/db.py", "plugins/test_db.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "eval in get_upsert_segment_to_transcript_plugin executed arbitrary python code from Redis transcript buffer; literal_eval prevents code execution"
+
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
