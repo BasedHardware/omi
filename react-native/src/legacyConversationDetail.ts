@@ -96,8 +96,8 @@ function finite(value: unknown): number {
   }
   return value;
 }
-function array(value: unknown, limit: number): unknown[] {
-  if (!Array.isArray(value) || value.length > limit) {
+function array(value: unknown): unknown[] {
+  if (!Array.isArray(value)) {
     throw new DetailError('invalid');
   }
   return value;
@@ -403,7 +403,7 @@ export async function loadLegacyConversationDetail(
       : {
           status: 'loaded',
           segments: await (async () => {
-            const segments = array(value.transcript_segments, 20000).map(
+            const segments = array(value.transcript_segments).map(
               raw => {
                 const segment = object(raw);
                 const personId =

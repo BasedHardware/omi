@@ -1871,6 +1871,34 @@ test('keeps GET conversation action items when more than 1000', async () => {
   );
 });
 
+test('keeps GET conversation transcript_segments when more than 20000', async () => {
+  const transcript_segments = Array.from({length: 20001}, (_, index) => ({
+    ...fixture.transcript_segments[0],
+    text: `Speech ${index}`,
+  }));
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments,
+    }),
+  );
+  const loaded = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(loaded.title).toBe(fixture.structured.title);
+  expect(loaded.sections).toEqual([
+    {heading: 'Notes', bodyMarkdown: 'Full notes'},
+  ]);
+  expect(loaded.transcript).toEqual({
+    status: 'loaded',
+    segments: transcript_segments.map(segment => ({
+      text: segment.text,
+      speaker: 'SPEAKER_00',
+      isUser: true,
+      start: 0.25,
+      end: 4.5,
+    })),
+  });
+});
+
 test('does not fail conversation detail when stored title or overview is omitted', async () => {
   mockRequest.mockResolvedValueOnce(
     response({
@@ -2015,10 +2043,6 @@ test.each([
         stt_provider: 1,
       },
     ],
-  },
-  {
-    ...fixture,
-    transcript_segments: Array(20001).fill(fixture.transcript_segments[0]),
   },
 ])(
   'rejects mismatched or malformed detail without partial acknowledgement',
