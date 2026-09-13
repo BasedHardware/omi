@@ -251,13 +251,17 @@ def save(config: Config) -> None:
         raise PermissionError(
             f"refusing to overwrite {config.path}: {config.load_error}. " "Fix or remove the config file and try again."
         )
-    config.path.parent.mkdir(parents=True, exist_ok=True)
-    # Tighten parent dir perms too — credentials live underneath. Best-effort:
-    # don't fail if the user has a custom mode they want to keep.
-    try:
-        os.chmod(config.path.parent, 0o700)
-    except OSError:
-        pass
+    parent = config.path.parent
+    parent_existed = parent.exists()
+    parent.mkdir(parents=True, exist_ok=True)
+    # Owner-only perms on a directory we create ourselves. Leave a
+    # pre-existing (e.g. user-selected via $OMI_CONFIG, possibly shared)
+    # directory's permissions untouched — best-effort, don't fail on it.
+    if not parent_existed:
+        try:
+            os.chmod(parent, 0o700)
+        except OSError:
+            pass
 
     payload: dict[str, Any] = {
         **config.extra,

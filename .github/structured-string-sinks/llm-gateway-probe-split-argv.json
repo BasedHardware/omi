@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "llm-gateway-probe-split-argv",
+  "kind": "script-split-argv",
+  "failure_class": "FC-workflow-script-input-contract",
+  "evidence_prs": [9945, 9947],
+  "safe_encoding": "pass every registered option and value as two shell arguments, for example --project test-project",
+  "scope": {
+    "globs": [
+      ".github/actions/*/action.yml",
+      ".github/actions/*/action.yaml",
+      ".github/workflows/*.yml",
+      ".github/workflows/*.yaml"
+    ]
+  },
+  "command": "probe-llm-gateway-from-cloud-run.sh",
+  "split_options": [
+    "--project",
+    "--region",
+    "--image",
+    "--gateway-url",
+    "--network",
+    "--subnet",
+    "--vpc-egress",
+    "--token-secret",
+    "--name-suffix",
+    "--lane"
+  ],
+  "fixtures": {
+    "passing": ".github/scripts/fixtures/structured_string_sinks/llm-gateway-probe-argv.pass.yml",
+    "failing": ".github/scripts/fixtures/structured_string_sinks/llm-gateway-probe-argv.fail.yml"
+  }
+}

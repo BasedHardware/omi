@@ -131,6 +131,9 @@ enum DefaultsKey: String {
   /// Silent Type: a dictation still types into the focused app, but the turn is
   /// never written to the chat transcript. Absent means off.
   case shortcutSilentTypeEnabled = "shortcut_silentTypeEnabled"
+  /// Ambient capture mutes its microphone contribution while a dictation app (Wispr Flow,
+  /// superwhisper, macOS Dictation) holds the mic. Absent means on.
+  case transcriptionIgnoreDictationApps = "transcription_ignoreDictationApps"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case floatingBarCachedPlan = "floatingBar_cachedPlan"
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"

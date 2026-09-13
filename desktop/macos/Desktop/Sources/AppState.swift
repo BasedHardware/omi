@@ -486,6 +486,12 @@ class AppState: ObservableObject {
     get { servicesCoordinator.meetingDetector }
     set { servicesCoordinator.meetingDetector = newValue }
   }
+  /// Mutes the ambient mic contribution while a dictation app holds the microphone. Lives for
+  /// one transcription session, alongside `meetingDetector`.
+  var dictationMicSuppressionMonitor: DictationMicSuppressionMonitor? {
+    get { servicesCoordinator.dictationMicSuppressionMonitor }
+    set { servicesCoordinator.dictationMicSuppressionMonitor = newValue }
+  }
   var captureGateInFlight = false
   var captureReconcilePending = false
   var pendingCoreAudioCaptureRecoveryReason: String?
