@@ -112,18 +112,17 @@ async function loadKeys(
     expectedApiContract: 'omi',
     path,
   });
+  if (response.status === 404) {
+    return [];
+  }
   if (
     response.status !== 200 ||
     response.body === null ||
     response.body.length > 1024 * 1024
   ) {
-    return [];
+    throw new DeveloperKeyError();
   }
-  try {
-    return parseOmiDeveloperKeys(response.body);
-  } catch {
-    return [];
-  }
+  return parseOmiDeveloperKeys(response.body);
 }
 
 export async function loadOmiDevApiKeys(

@@ -333,6 +333,26 @@ test('loadOmiDevApiKeys and loadOmiMcpApiKeys name resolved GET keys and omit fa
   });
   request.mockResolvedValueOnce({id: 'dev', status: 404, body: '[]'});
   expect(await loadOmiDevApiKeys(backend)).toEqual([]);
-  request.mockResolvedValueOnce({id: 'mcp', status: 200, body: '{'});
-  expect(await loadOmiMcpApiKeys(backend)).toEqual([]);
+});
+
+test('loadOmiDevApiKeys names HTTP 500 instead of empty success', async () => {
+  const request = jest.fn(async () => ({
+    id: 'dev',
+    status: 500,
+    body: '{"error":"internal"}',
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(loadOmiDevApiKeys(backend)).rejects.toThrow(
+    'Omi developer keys are malformed',
+  );
+});
+
+test('loadOmiMcpApiKeys names malformed GET instead of empty success', async () => {
+  const request = jest.fn(async () => ({
+    id: 'mcp',
+    status: 200,
+    body: '{',
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(loadOmiMcpApiKeys(backend)).rejects.toThrow();
 });

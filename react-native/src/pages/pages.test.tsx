@@ -27,7 +27,7 @@ jest.mock('../omiNative', () => ({
 
 const {ConnectorsPage} = require('./Connectors');
 const {SettingsPage} = require('./Settings');
-const {developerKeyCreatedCopy, desktopBackendServiceCopy, dailySummaryDefaultHeadlineCopy} = require('../desktopReadClient');
+const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy} = require('../desktopReadClient');
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -2024,6 +2024,31 @@ test('Settings names a failed developer and MCP keys GET instead of empty succes
   expect(tree).toContain('Developer key');
   expect(tree).toContain('MCP key');
   expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('omi_sk_abcdef_secret');
+  expect(tree).not.toContain('Revoke');
+  expect(tree).not.toContain('Create');
+});
+
+test('Settings names HTTP 500 developer and MCP keys GET instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/dev/keys' || request.path === '/v1/mcp/keys') {
+      return {id: request.id, status: 500, body: '{"error":"internal"}'};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Developer key');
+  expect(tree).toContain('MCP key');
+  expect(tree).toContain(
+    desktopReadErrorCopy(new Error('Omi developer keys are malformed')),
+  );
   expect(tree).not.toContain('omi_sk_abcdef_secret');
   expect(tree).not.toContain('Revoke');
   expect(tree).not.toContain('Create');

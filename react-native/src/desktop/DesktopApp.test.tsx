@@ -17,6 +17,7 @@ import {
   desktopBackendServiceCopy,
   desktopBackendUnavailableCopy,
   developerKeyCreatedCopy,
+  desktopReadErrorCopy,
 } from '../desktopReadClient';
 
 jest.mock('../app/useReduceMotion', () => ({
@@ -5882,6 +5883,74 @@ test('Settings names a failed developer and MCP keys GET instead of empty succes
   expect(tree).toContain('Developer key');
   expect(tree).toContain('MCP key');
   expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('omi_sk_abcdef_secret');
+  expect(tree).not.toContain('Revoke');
+});
+
+test('Settings names HTTP 500 developer and MCP keys GET instead of empty success', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: {
+      plan: 'plus',
+      status: 'active',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    },
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: [],
+    webhooksError: null,
+    usage: null,
+    usageError: null,
+    language: null,
+    languageError: null,
+    languageNames: null,
+    languageNamesError: null,
+  });
+  omiBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/dev/keys' || request.path === '/v1/mcp/keys') {
+      return {id: request.id, status: 500, body: '{"error":"internal"}'};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Developer key');
+  expect(tree).toContain('MCP key');
+  expect(tree).toContain(
+    desktopReadErrorCopy(new Error('Omi developer keys are malformed')),
+  );
   expect(tree).not.toContain('omi_sk_abcdef_secret');
   expect(tree).not.toContain('Revoke');
 });
