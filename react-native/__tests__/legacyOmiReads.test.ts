@@ -1,4 +1,5 @@
 import {
+  conversationStructuredEmojiDefaultCopy,
   loadConversations,
   loadMemories,
   loadTasks,
@@ -538,6 +539,66 @@ test('old conversations keep wire-non-empty emoji and omit whitespace', async ()
   expect(result.items[1]).not.toHaveProperty('emoji');
 });
 
+test('old conversations name omitted or JSON-null GET structured.emoji as Flutter 🧠', async () => {
+  const omitted = await loadConversations(
+    backend([
+      {
+        ...conversation,
+        id: 'emoji-omitted',
+        structured: {title: 'Real title', overview: 'Actual overview'},
+      },
+    ]).api,
+  );
+  expect(omitted.items[0]).toMatchObject({
+    emoji: conversationStructuredEmojiDefaultCopy(),
+  });
+  const jsonNull = await loadConversations(
+    backend([
+      {
+        ...conversation,
+        id: 'emoji-null',
+        structured: {
+          title: 'Real title',
+          overview: 'Actual overview',
+          emoji: null,
+        },
+      },
+    ]).api,
+  );
+  expect(jsonNull.items[0]).toMatchObject({
+    emoji: conversationStructuredEmojiDefaultCopy(),
+  });
+  const empty = await loadConversations(
+    backend([
+      {
+        ...conversation,
+        id: 'emoji-empty',
+        structured: {
+          title: 'Real title',
+          overview: 'Actual overview',
+          emoji: '',
+        },
+      },
+    ]).api,
+  );
+  expect(empty.items[0]).not.toHaveProperty('emoji');
+  await expect(
+    loadConversations(
+      backend([
+        {
+          ...conversation,
+          id: 'emoji-bad',
+          structured: {
+            title: 'Real title',
+            overview: 'Actual overview',
+            emoji: 1,
+          },
+        },
+      ]).api,
+    ),
+  ).rejects.toThrow('Omi text is malformed');
+});
+
 test('old conversations keep GET captured_at_ms and omit missing values', async () => {
   const {api} = backend([
     {
@@ -570,8 +631,8 @@ test('old bare conversation array preserves nullable metadata and offset paginat
     summary: 'Actual overview',
     updatedAt: null,
     startedAt: null,
+    emoji: conversationStructuredEmojiDefaultCopy(),
   });
-  expect(first.items[0]).not.toHaveProperty('emoji');
   expect(first.items[0]).not.toHaveProperty('photoCount');
   expect(first.items[0]).not.toHaveProperty('category');
   expect(first.items[0]).not.toHaveProperty('capturedAtMs');

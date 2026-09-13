@@ -3,6 +3,7 @@ import {
   conversationDiscardedTranscriptCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
+  conversationStructuredEmojiCopy,
   conversationTranscriptEndSeconds,
   memoryCaptureDeviceCopy,
   taskDisplayTitle,
@@ -208,7 +209,11 @@ export async function loadOmiConversations(
     if (!isOptionalCaptureTimestamp(row.captured_at_ms)) {
       throw new Error('Omi captured_at_ms is malformed');
     }
-    const emoji = visibleDisplayText(text(structured.emoji, ''));
+    const emoji = conversationStructuredEmojiCopy(
+      structured.emoji === undefined || structured.emoji === null
+        ? structured.emoji
+        : text(structured.emoji),
+    );
     const category = visibleDisplayText(text(structured.category, ''));
     return {
       row,
@@ -276,7 +281,7 @@ export async function loadOmiConversations(
         folderId: row.folder_id == null ? null : text(row.folder_id),
         locked: bool(row.is_locked),
         discarded,
-        ...(emoji === '' ? {} : {emoji}),
+        ...(emoji === undefined ? {} : {emoji}),
         ...(category === '' ? {} : {category}),
         ...(photos === 0 ? {} : {photoCount: photos}),
         ...(row.captured_at_ms === undefined

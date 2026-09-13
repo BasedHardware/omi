@@ -83,6 +83,8 @@ import {
   conversationUnknownAppCopy,
   transcriptSttProviderCopy,
   transcriptSttUnknownCopy,
+  conversationStructuredEmojiCopy,
+  conversationStructuredEmojiDefaultCopy,
   conversationFirstPartySummaryCopy,
   conversationActionItemsTodoCopy,
   conversationActionItemsNoPendingCopy,
@@ -2488,6 +2490,19 @@ test('transcript STT copy names Flutter getDisplayName empty as Unknown', () => 
   expect(transcriptSttProviderCopy(' \t\u0085 ')).toBeUndefined();
   expect(transcriptSttProviderCopy(undefined)).toBeUndefined();
   expect(transcriptSttProviderCopy(null)).toBeUndefined();
+});
+
+test('conversation structured emoji copy names Flutter omitted GET emoji as 🧠', () => {
+  expect(conversationStructuredEmojiDefaultCopy()).toBe('🧠');
+  expect(conversationStructuredEmojiCopy(undefined)).toBe(
+    conversationStructuredEmojiDefaultCopy(),
+  );
+  expect(conversationStructuredEmojiCopy(null)).toBe(
+    conversationStructuredEmojiDefaultCopy(),
+  );
+  expect(conversationStructuredEmojiCopy('🚀')).toBe('🚀');
+  expect(conversationStructuredEmojiCopy('')).toBeUndefined();
+  expect(conversationStructuredEmojiCopy(' \t\u0085 ')).toBeUndefined();
 });
 
 test('conversation first-party summary copy names Flutter appId-null attribution', () => {

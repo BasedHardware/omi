@@ -446,6 +446,20 @@ export function conversationListNewCopy(
   return seconds > 0 && seconds < 60 ? 'New 🚀' : null;
 }
 
+export function conversationStructuredEmojiDefaultCopy(): string {
+  return '🧠';
+}
+
+export function conversationStructuredEmojiCopy(
+  value: string | null | undefined,
+): string | undefined {
+  if (value === undefined || value === null) {
+    return conversationStructuredEmojiDefaultCopy();
+  }
+  const token = visibleDisplayText(value);
+  return token === '' ? undefined : token;
+}
+
 export function conversationUnknownAppCopy(): string {
   return 'Unknown App';
 }
