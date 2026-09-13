@@ -588,6 +588,10 @@ void configure_ble()
 {
     Serial.println("Initializing BLE...");
     BLEDevice::init(BLE_DEVICE_NAME);
+    // Apply the configured BLE TX power. Previously BLE_TX_POWER was defined but
+    // never applied, so the radio advertised at a weak default and the device was
+    // frequently undiscoverable by phones even at close range.
+    BLEDevice::setPower(BLE_TX_POWER);
     BLEServer *server = BLEDevice::createServer();
     server->setCallbacks(new ServerHandler());
 
