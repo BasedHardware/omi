@@ -1181,7 +1181,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             tasks={
               readOutcomes?.tasks.status === 'success'
                 ? readOutcomes.tasks.value.items
-                : []
+                : undefined
             }
           />
         }
@@ -1716,7 +1716,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                 tasks={
                                   readOutcomes?.tasks.status === 'success'
                                     ? readOutcomes.tasks.value.items
-                                    : []
+                                    : undefined
                                 }
                               />
                             ))}
@@ -1751,7 +1751,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     tasks={
                       readOutcomes?.tasks.status === 'success'
                         ? readOutcomes.tasks.value.items
-                        : []
+                        : undefined
                     }
                   />
                 ) : route === 'Memories' ? (

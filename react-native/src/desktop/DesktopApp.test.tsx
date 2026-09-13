@@ -7,6 +7,7 @@ import {DesktopApp} from './DesktopApp';
 import {TaskPagination} from '../ui/TaskPagination';
 import {
   chatDaySummaryCopy,
+  chatBlockUnavailableCopy,
   dailySummaryDefaultHeadlineCopy,
   desktopAccountSettingUnavailableCopy,
   desktopAppsUnavailableCopy,
@@ -732,7 +733,9 @@ test('desktop chat names GET content_blocks without inventing write actions', ()
   expect(copy).toContain('You like a slow start.');
   expect(copy).toContain('Prefers concise notes');
   expect(copy).toContain('Task');
+  expect(copy).toContain(chatBlockUnavailableCopy());
   expect(copy).not.toContain('task-join');
+  expect(copy).not.toContain('Loading');
   expect(copy).not.toContain('Open in Memories');
   expect(copy).not.toContain('Open conversation');
   expect(copy).not.toContain('Open in Goals');

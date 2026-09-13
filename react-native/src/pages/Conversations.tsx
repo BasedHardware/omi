@@ -183,7 +183,7 @@ export function ConversationsPage({
   requestedConversationId = null,
   onRequestedConversationConsumed,
   backend = null,
-  tasks = [],
+  tasks,
 }: {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;

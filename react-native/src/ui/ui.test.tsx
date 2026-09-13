@@ -91,6 +91,7 @@ import {Icon} from './Icon';
 import {FocusPressable} from './Pressable';
 import {ProjectionRow} from './ProjectionList';
 import {
+  chatBlockUnavailableCopy,
   chatDaySummaryCopy,
   clockLabel,
   projectionClockLabel,
@@ -1812,6 +1813,8 @@ test('a chat message names GET content_blocks without inventing write actions', 
   expect(copies).toContain('Schedule the follow-up?');
   expect(copies).toContain('Task');
   expect(copies).not.toContain('task-1');
+  expect(copies).not.toContain('Loading');
+  expect(copies).not.toContain(chatBlockUnavailableCopy());
   expect(copies).not.toContain('Open in Memories');
   expect(copies).not.toContain('Open conversation');
   expect(copies).not.toContain('Open in Goals');
@@ -1938,9 +1941,10 @@ test('a chat message names loaded GET task_card description without leaking ids'
       return [];
     });
   expect(unmatchedCopies).toContain('Task');
+  expect(unmatchedCopies).toContain(chatBlockUnavailableCopy());
   expect(unmatchedCopies).not.toContain('Send the follow-up notes');
   expect(unmatchedCopies).not.toContain('task-join');
-  expect(unmatchedCopies).not.toContain('No longer available');
+  expect(unmatchedCopies).not.toContain('Loading');
   act(() => {
     renderer.unmount();
     unmatched.unmount();

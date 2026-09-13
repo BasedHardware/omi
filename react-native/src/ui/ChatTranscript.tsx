@@ -93,7 +93,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
   compact,
   message,
   reduceMotion,
-  tasks = [],
+  tasks,
 }: {
   animate: boolean;
   compact: boolean;

@@ -25,7 +25,7 @@ import {styles} from './styles';
 export function ChatConversationHistory({
   conversationId,
   desktop = false,
-  tasks = [],
+  tasks,
 }: {
   conversationId: string;
   desktop?: boolean;

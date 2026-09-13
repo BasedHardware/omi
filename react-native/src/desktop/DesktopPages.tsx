@@ -107,7 +107,7 @@ export function LibraryPage({
             tasks={
               outcomes?.tasks.status === 'success'
                 ? outcomes.tasks.value.items
-                : []
+                : undefined
             }
           />
         </ScrollView>

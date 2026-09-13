@@ -171,7 +171,7 @@ export function ConversationDetail({
   conversation,
   desktop = false,
   apiContract,
-  tasks = [],
+  tasks,
 }: {
   conversation: ConversationProjection;
   desktop?: boolean;

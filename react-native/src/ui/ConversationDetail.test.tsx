@@ -3,6 +3,7 @@ import Renderer, {act} from 'react-test-renderer';
 import {Linking, Text} from 'react-native';
 import type {ConversationProjection} from '../desktopReadClient';
 import {
+  chatBlockUnavailableCopy,
   desktopBackendServiceCopy,
   conversationFirstPartySummaryCopy,
   conversationUnknownAppCopy,
@@ -348,7 +349,34 @@ test('conversation-detail history names loaded GET task_card description without
   expect(tree).toContain('Send the follow-up notes');
   expect(tree).not.toContain('task-join');
   expect(tree).not.toContain('Loading');
-  expect(tree).not.toContain('No longer available');
+  expect(tree).not.toContain(chatBlockUnavailableCopy());
+  const unmatched = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+    tasks: [{id: 'other', title: 'Send the follow-up notes'}],
+  });
+  const unmatchedTree = text(unmatched);
+  expect(unmatchedTree).toContain('Task');
+  expect(unmatchedTree).toContain(chatBlockUnavailableCopy());
+  expect(unmatchedTree).not.toContain('Send the follow-up notes');
+  expect(unmatchedTree).not.toContain('task-join');
+  expect(unmatchedTree).not.toContain('Loading');
+  const unloaded = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+  });
+  const unloadedTree = text(unloaded);
+  expect(unloadedTree).toContain('Task');
+  expect(unloadedTree).not.toContain(chatBlockUnavailableCopy());
+  expect(unloadedTree).not.toContain('Loading');
 });
 
 test('canonical listen rows do not invent a transcript producer', () => {

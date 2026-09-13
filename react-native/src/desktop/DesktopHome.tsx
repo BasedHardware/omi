@@ -115,7 +115,7 @@ function AskExchange({
   loadingOlderChat,
   messages,
   onLoadOlderChat,
-  tasks = [],
+  tasks,
 }: {
   chatBusy: boolean;
   olderChatAvailable: boolean;
@@ -393,7 +393,9 @@ export function DesktopHome({
             loadingOlderChat={loadingOlderChat}
             messages={messages}
             tasks={
-              tasksOutcome?.status === 'success' ? tasksOutcome.value.items : []
+              tasksOutcome?.status === 'success'
+                ? tasksOutcome.value.items
+                : undefined
             }
             onLoadOlderChat={() => {
               shouldFollowChat.current = false;

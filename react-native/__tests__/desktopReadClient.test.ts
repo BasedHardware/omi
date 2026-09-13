@@ -37,6 +37,7 @@ import {
   chatMessageDisplayText,
   chatChartCopy,
   paintedChatContentBlock,
+  chatBlockUnavailableCopy,
   taskCardDescription,
   chatAttachmentThumbnailUrl,
   chatSenderCopy,
@@ -1901,12 +1902,29 @@ test('task card chrome names loaded GET task description and omits ids', () => {
   ).toEqual({eyebrow: 'Task', title: 'Send the follow-up notes'});
   expect(
     paintedChatContentBlock({eyebrow: 'Task', taskId: 'missing'}, tasks),
+  ).toEqual({eyebrow: 'Task', title: chatBlockUnavailableCopy()});
+  expect(
+    paintedChatContentBlock({eyebrow: 'Task', taskId: 'missing'}),
+  ).toEqual({eyebrow: 'Task'});
+  expect(
+    paintedChatContentBlock({eyebrow: 'Task', taskId: 'missing'}, []),
+  ).toEqual({eyebrow: 'Task', title: chatBlockUnavailableCopy()});
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Task', taskId: 'task-join'},
+      [{id: 'task-join', title: ' \t'}],
+    ),
   ).toEqual({eyebrow: 'Task'});
   expect(
     JSON.stringify(
       paintedChatContentBlock({eyebrow: 'Task', taskId: 'task-join'}, tasks),
     ),
   ).not.toContain('task-join');
+  expect(
+    JSON.stringify(
+      paintedChatContentBlock({eyebrow: 'Task', taskId: 'missing'}, tasks),
+    ),
+  ).not.toContain('missing');
   expect(
     paintedChatContentBlock({eyebrow: 'Task', taskId: 'task-join'}, tasks),
   ).not.toHaveProperty('taskId');

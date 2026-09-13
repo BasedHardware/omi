@@ -444,6 +444,10 @@ export function conversationFirstPartySummaryCopy(): string {
   return 'Summary';
 }
 
+export function chatBlockUnavailableCopy(): string {
+  return 'No longer available';
+}
+
 export function conversationVisibilityCopy(
   visibility: string | null | undefined,
 ): string | null {
@@ -1579,13 +1583,19 @@ export function paintedChatContentBlock(
     detail?: string;
     taskId?: string;
   },
-  tasks: readonly TaskCardLookup[] = [],
+  tasks?: readonly TaskCardLookup[],
 ): {eyebrow: string; title?: string; detail?: string} {
   const joined =
     block.title === undefined &&
     block.eyebrow === 'Task' &&
-    block.taskId !== undefined
-      ? taskCardDescription(block.taskId, tasks)
+    block.taskId !== undefined &&
+    tasks !== undefined
+      ? taskCardDescription(block.taskId, tasks) ??
+        (tasks.some(
+          task => task.id === block.taskId || task.taskId === block.taskId,
+        )
+          ? undefined
+          : chatBlockUnavailableCopy())
       : undefined;
   const title = block.title ?? joined;
   const visibleTitle = title === undefined ? '' : visibleDisplayText(title);
