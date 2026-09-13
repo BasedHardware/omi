@@ -51,7 +51,7 @@ def list_memories(
     for m in items or []:
         rows.append(
             {
-                "id": shorten(m.get("id"), 14),
+                "id": m.get("id"),
                 "category": m.get("category"),
                 "visibility": m.get("visibility"),
                 "content": shorten(m.get("content"), 60),
