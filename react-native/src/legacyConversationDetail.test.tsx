@@ -1498,25 +1498,64 @@ test('keeps GET geolocation address and omits empty or missing locations', async
   mockRequest.mockResolvedValue(
     response({
       ...fixture,
-      geolocation: {address: '123 Market St, San Francisco'},
+      geolocation: {
+        address: '123 Market St, San Francisco',
+        latitude: 37.7749,
+        longitude: -122.4194,
+      },
     }),
   );
   expect(
     (await loadLegacyConversationDetail(backend, fixture.id)).locationAddress,
   ).toBe('123 Market St, San Francisco');
-  mockRequest.mockResolvedValue(
-    response({
-      ...fixture,
-      geolocation: {address: ' \t\n'},
-    }),
-  );
-  expect(
-    (await loadLegacyConversationDetail(backend, fixture.id)).locationAddress,
-  ).toBeUndefined();
   mockRequest.mockResolvedValue(response(fixture));
   expect(
     (await loadLegacyConversationDetail(backend, fixture.id)).locationAddress,
   ).toBeUndefined();
+});
+
+test('keeps GET geolocation maps open Flutter paints from required coordinates', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        address: '123 Market St, San Francisco',
+        latitude: 37.7749,
+        longitude: -122.4194,
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    locationAddress: '123 Market St, San Francisco',
+    locationMapsUrl:
+      'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {latitude: 37.7749, longitude: -122.4194},
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    locationAddress: 'Unknown location',
+    locationMapsUrl:
+      'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {
+        address: ' \t\n',
+        latitude: '37.7749',
+        longitude: -122.4194,
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    locationAddress: 'Unknown location',
+    locationMapsUrl:
+      'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
+  });
 });
 
 test('keeps first GET apps_results content and falls back to plugins_results', async () => {
@@ -1734,6 +1773,24 @@ test('fails closed for malformed GET geolocation', async () => {
     response({
       ...fixture,
       geolocation: {address: 1},
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {address: '123 Market St, San Francisco'},
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      geolocation: {latitude: true, longitude: -122.4194},
     }),
   );
   await expect(

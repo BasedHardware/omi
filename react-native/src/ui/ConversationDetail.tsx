@@ -314,6 +314,9 @@ function LegacyConversationBody({
   const address = conversation.discarded
     ? ''
     : visibleDisplayText(detail.locationAddress ?? '');
+  const locationMapsUrl = conversation.discarded
+    ? ''
+    : visibleDisplayText(detail.locationMapsUrl ?? '');
   const appSummary = conversation.discarded
     ? ''
     : visibleDisplayText(detail.appSummary ?? '');
@@ -413,7 +416,16 @@ function LegacyConversationBody({
             : null
         }
       />
-      {address === '' ? null : (
+      {address === '' ? null : /^https?:\/\//i.test(locationMapsUrl) ? (
+        <FocusPressable
+          accessibilityRole="link"
+          accessibilityLabel="Open in Maps"
+          onPress={() => {
+            Linking.openURL(locationMapsUrl).catch(() => undefined);
+          }}>
+          <Text style={[styles.conversationDetailField, ink]}>{address}</Text>
+        </FocusPressable>
+      ) : (
         <Text style={[styles.conversationDetailField, ink]}>{address}</Text>
       )}
       {calendarTitle === '' ? null : (

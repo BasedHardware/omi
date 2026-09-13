@@ -18,6 +18,7 @@ export type LegacyConversationDetail = {
   sections: {heading: string; bodyMarkdown: string}[];
   actionItems: {description: string; completed: boolean}[];
   locationAddress?: string;
+  locationMapsUrl?: string;
   appSummary?: string;
   appSummaryName?: string;
   appSummaryDescription?: string;
@@ -148,16 +149,24 @@ function firstAppSummary(
   }
   return undefined;
 }
-function locationAddress(value: unknown): string | undefined {
+function locationChrome(value: unknown): {
+  locationAddress?: string;
+  locationMapsUrl?: string;
+} {
   if (value === undefined || value === null) {
-    return undefined;
+    return {};
   }
   const geo = object(value);
-  if (geo.address === undefined || geo.address === null) {
-    return undefined;
-  }
-  const address = visibleDisplayText(text(geo.address));
-  return address === '' ? undefined : address;
+  const latitude = finite(geo.latitude);
+  const longitude = finite(geo.longitude);
+  const address =
+    geo.address === undefined || geo.address === null
+      ? ''
+      : visibleDisplayText(text(geo.address));
+  return {
+    locationAddress: address === '' ? 'Unknown location' : address,
+    locationMapsUrl: `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`,
+  };
 }
 function externalText(value: unknown): string | undefined {
   if (value === undefined || value === null) {
@@ -459,7 +468,7 @@ export async function loadLegacyConversationDetail(
             });
           })(),
         };
-  const address = locationAddress(value.geolocation);
+  const location = locationChrome(value.geolocation);
   const linkedEvent = calendarEvent(value.calendar_event);
   const photos = conversationPhotos(value.photos);
   const integrationText = externalText(value.external_data);
@@ -501,7 +510,12 @@ export async function loadLegacyConversationDetail(
     locked,
     sections,
     actionItems,
-    ...(address === undefined ? {} : {locationAddress: address}),
+    ...(location.locationAddress === undefined
+      ? {}
+      : {locationAddress: location.locationAddress}),
+    ...(location.locationMapsUrl === undefined
+      ? {}
+      : {locationMapsUrl: location.locationMapsUrl}),
     ...(appSummary === undefined ? {} : {appSummary}),
     ...(appSummaryName === undefined || appSummaryName === ''
       ? {}

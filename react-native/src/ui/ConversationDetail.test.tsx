@@ -1065,6 +1065,8 @@ test('legacy conversation details name GET geolocation address', () => {
         sections: [],
         actionItems: [],
         locationAddress: '123 Market St, San Francisco',
+        locationMapsUrl:
+          'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
         transcript: {status: 'loaded', segments: []},
       },
     },
@@ -1084,6 +1086,50 @@ test('legacy conversation details name GET geolocation address', () => {
     }),
   );
   expect(discarded).not.toContain('123 Market St, San Francisco');
+});
+
+test('legacy conversation details name GET geolocation maps open', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        locationAddress: '123 Market St, San Francisco',
+        locationMapsUrl:
+          'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(text(view)).toContain('123 Market St, San Francisco');
+  const links = view.root.findAll(
+    node =>
+      node.props.accessibilityRole === 'link' &&
+      node.props.accessibilityLabel === 'Open in Maps' &&
+      typeof node.props.onPress === 'function',
+  );
+  expect(links.length).toBeGreaterThan(0);
+  const openURL = jest
+    .spyOn(Linking, 'openURL')
+    .mockResolvedValue(undefined as never);
+  act(() => {
+    links[0].props.onPress();
+  });
+  expect(openURL).toHaveBeenCalledWith(
+    'https://www.google.com/maps/search/?api=1&query=37.7749,-122.4194',
+  );
+  openURL.mockRestore();
 });
 
 test('legacy conversation details name GET app result content', () => {
