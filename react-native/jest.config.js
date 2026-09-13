@@ -1,8 +1,8 @@
 module.exports = {
   moduleNameMapper: {
-    '^react$': '<rootDir>/node_modules/react',
-    '^react-native$': '<rootDir>/node_modules/react-native',
-    '^react-native/(.*)$': '<rootDir>/node_modules/react-native/$1',
+    '^react$': '<rootDir>/../node_modules/react',
+    '^react-native$': '<rootDir>/../node_modules/react-native',
+    '^react-native/(.*)$': '<rootDir>/../node_modules/react-native/$1',
     '^@omi-core/ratified-contracts/(.*)$':
       '<rootDir>/../packages/contracts/ratified/dist/$1.js',
     '^lucide-react-native/icons/(.*)$': '<rootDir>/test/lucideIcon.js',
