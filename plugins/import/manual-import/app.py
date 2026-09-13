@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory
 import requests
+from urllib.parse import quote
 import json
 import os
 import re
@@ -308,7 +309,7 @@ def submit_memories():
                 time.sleep(0.5)  # Half second delay between requests
 
             # Send the request to OMI API with dynamic user_id (still using the facts endpoint)
-            response = requests.post(f"{API_URL}?uid={user_id}", headers=headers, data=json.dumps(memory_data))
+            response = requests.post(f"{API_URL}?uid={quote(user_id, safe='')}", headers=headers, data=json.dumps(memory_data))
 
             # Record result
             result = {
