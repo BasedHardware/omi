@@ -129,6 +129,7 @@ class _AppShellState extends State<AppShell> {
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const UsagePage(showUpgradeDialog: true)));
       }
     } else if (uri.host == 'todoist' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      // Handle Todoist OAuth callback
       final error = uri.queryParameters['error'];
       if (error != null) {
         Logger.debug('Todoist OAuth error: $error');
@@ -144,6 +145,7 @@ class _AppShellState extends State<AppShell> {
         Logger.debug('Todoist callback received but no success flag');
       }
     } else if (uri.host == 'asana' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      // Handle Asana OAuth callback
       final error = uri.queryParameters['error'];
       if (error != null) {
         Logger.debug('Asana OAuth error: $error');
@@ -160,6 +162,7 @@ class _AppShellState extends State<AppShell> {
         Logger.debug('Asana callback received but no success flag');
       }
     } else if (uri.host == 'google-tasks' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      // Handle Google Tasks OAuth callback
       final error = uri.queryParameters['error'];
       if (error != null) {
         Logger.debug('Google Tasks OAuth error: $error');
@@ -175,6 +178,7 @@ class _AppShellState extends State<AppShell> {
         Logger.debug('Google Tasks callback received but no success flag');
       }
     } else if (uri.host == 'clickup' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      // Handle ClickUp OAuth callback
       final error = uri.queryParameters['error'];
       if (error != null) {
         Logger.debug('ClickUp OAuth error: $error');
@@ -239,6 +243,7 @@ class _AppShellState extends State<AppShell> {
             .map((t) => {'description': t['description'] ?? '', 'due_at': t['due_at']})
             .toList(),
         onAccepted: () {
+          // Refresh action items after accepting
           if (mounted) {
             context.read<ActionItemsProvider>().forceRefreshActionItems();
           }
@@ -258,6 +263,8 @@ class _AppShellState extends State<AppShell> {
       Logger.debug('✓ Todoist authentication completed successfully');
       Logger.debug('✓ Task integration enabled: Todoist - authentication complete');
       AppSnackbar.showSnackbar(context.l10n.successfullyConnectedTodoist);
+
+      // Notify task integration provider to refresh UI from Firebase
       context.read<TaskIntegrationProvider>().refresh();
     } else {
       PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'todoist');
@@ -277,8 +284,11 @@ class _AppShellState extends State<AppShell> {
       Logger.debug('✓ Asana authentication completed successfully');
       Logger.debug('✓ Task integration enabled: Asana - authentication complete');
       AppSnackbar.showSnackbar(context.l10n.successfullyConnectedAsana);
+
+      // Notify task integration provider to refresh UI from Firebase
       context.read<TaskIntegrationProvider>().refresh();
 
+      // Auto-open settings page for configuration
       if (requiresSetup && mounted) {
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AsanaSettingsPage()));
       }
@@ -300,6 +310,8 @@ class _AppShellState extends State<AppShell> {
       Logger.debug('✓ Google Tasks authentication completed successfully');
       Logger.debug('✓ Task integration enabled: Google Tasks - authentication complete');
       AppSnackbar.showSnackbar(context.l10n.successfullyConnectedGoogleTasks);
+
+      // Notify task integration provider to refresh UI from Firebase
       context.read<TaskIntegrationProvider>().refresh();
     } else {
       PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'google_tasks');
@@ -319,8 +331,11 @@ class _AppShellState extends State<AppShell> {
       Logger.debug('✓ ClickUp authentication completed successfully');
       Logger.debug('✓ Task integration enabled: ClickUp - authentication complete');
       AppSnackbar.showSnackbar(context.l10n.successfullyConnectedClickUp);
+
+      // Notify task integration provider to refresh UI from Firebase
       context.read<TaskIntegrationProvider>().refresh();
 
+      // Auto-open settings page for configuration
       if (requiresSetup && mounted) {
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ClickUpSettingsPage()));
       }
@@ -335,7 +350,11 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
 
     try {
+      // Capture provider before async operation to avoid use_build_context_synchronously
       final integrationProvider = context.read<IntegrationProvider>();
+
+      // IntegrationProvider.loadFromBackend() fetches all connection statuses
+      // and syncs SharedPreferences for backward compatibility
       await integrationProvider.loadFromBackend();
 
       if (!mounted) return;
@@ -354,6 +373,8 @@ class _AppShellState extends State<AppShell> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _initializeProviders();
+      // Start deep link handling AFTER providers are ready,
+      // so getInitialLink() doesn't race against cache loading (#4763)
       if (mounted) {
         initDeepLinks();
       }
@@ -366,6 +387,8 @@ class _AppShellState extends State<AppShell> {
     if (isSignedIn) {
       final homeProvider = context.read<HomeProvider>();
       homeProvider.setupHasSpeakerProfile();
+      // Not awaited: the picker must not open on the bundled list while the
+      // served one is in flight, but the rest of startup should not wait.
       homeProvider.loadLanguagesThenSetupPrimary();
       context.read<UserProvider>().initialize();
       context.read<PeopleProvider>().initialize();
@@ -381,6 +404,8 @@ class _AppShellState extends State<AppShell> {
       context.read<MessageProvider>().refreshMessages();
       context.read<UsageProvider>().fetchSubscription();
       context.read<TaskIntegrationProvider>().loadFromBackend();
+      // Same fire-and-forget as task integrations: chat/settings must not
+      // treat an empty in-memory map as "not connected" after process death.
       context.read<IntegrationProvider>().loadFromBackend();
 
       NotificationService.instance.saveNotificationToken();
