@@ -64,6 +64,13 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 
 On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-device-speech.md).
 
+## Device Connections (Omi + OmiGlass together)
+
+- `DeviceService` (`lib/services/devices.dart`) holds one `DeviceConnection` per device id; `ensureConnection(id)` never disconnects another device. Inject `connectionFactory` to test it without BLE (`test/services/devices/device_service_multi_connection_test.dart`).
+- Saved devices live in two prefs slots: `btDevice` (primary) and `companionBtDevice`; `pairedDeviceIds` is the auto-connect set. Slots are not roles — `forgetSavedBtDevice` promotes the companion when the primary is forgotten.
+- Roles are derived at runtime by `DevicePairingRoles` (`lib/services/devices/device_pairing_roles.dart`): a non-camera device carries audio, the camera device carries photos; OmiGlass alone does both. `DeviceProvider._reconcileRoles` drives the existing single-device connect/disconnect paths for the audio device (`connectedDevice`) and `companionDevice` + `CaptureController.updatePhotoDevice` for the camera. Photos ride the audio session's `/v4/listen` socket; the backend relabels the conversation `openglass` on the first photo (`resolve_photo_conversation_source`).
+- Pairing a second device goes through `OnboardingProvider.handleTap`: `DevicePairingRoles.canPairAsCompanion(primary, tapped)` decides between "add next to" and "replace".
+
 ## Permission Matrix
 
 | Permission | Android | iOS | Feature |
