@@ -566,6 +566,10 @@ static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
     ARG_UNUSED(attr);
     ARG_UNUSED(flags);
 
+    if (!IS_ENABLED(CONFIG_BT_DEVICE_NAME_DYNAMIC)) {
+        return BT_GATT_ERR(BT_ATT_ERR_WRITE_NOT_PERMITTED);
+    }
+
     if (offset != 0) {
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
     }
@@ -622,6 +626,10 @@ static ssize_t settings_device_name_read_handler(struct bt_conn *conn,
                                                  uint16_t len,
                                                  uint16_t offset)
 {
+    if (!IS_ENABLED(CONFIG_BT_DEVICE_NAME_DYNAMIC)) {
+        return BT_GATT_ERR(BT_ATT_ERR_READ_NOT_PERMITTED);
+    }
+
     const char *name = bt_get_name();
     LOG_INF("Reading device name: %s", name);
     return bt_gatt_attr_read(conn, attr, buf, len, offset, name, strlen(name));

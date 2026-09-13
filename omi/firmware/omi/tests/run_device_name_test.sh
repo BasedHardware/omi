@@ -7,5 +7,6 @@ out="$(mktemp -d)"
 trap 'rm -rf "$out"' EXIT
 
 cc="${CC:-cc}"
-"$cc" -std=c11 -Wall -Wextra -Werror -o "$out/test_device_name" "$here/test_device_name.c"
+# shellcheck disable=SC2086
+$cc -std=c11 -Wall -Wextra -Werror -o "$out/test_device_name" "$here/test_device_name.c"
 "$out/test_device_name"

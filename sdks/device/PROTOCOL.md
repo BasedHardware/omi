@@ -29,7 +29,7 @@ UTF-8, no ASCII control characters, no leading/trailing space; an empty write re
 factory name. Invalid values are refused with an ATT error and nothing changes. The primary
 advertisement carries at most 8 bytes of the name (shortened, UTF-8 safe) next to the Omi
 service UUID; the scan response always carries the complete name. Support is announced by
-bit 9 (`0x200`) of the features characteristic (`19b10021-…`).
+bit 9 (`0x200`) of the features characteristic (`19b10021-e8f2-537e-4f6c-d104768a1214`).
 
 ## Codec IDs (first byte of codec characteristic)
 
