@@ -62,14 +62,7 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops events with a foreign id so a stale native event can't clobber a fresh session; `start()` onto a live native session adopts the new id and re-emits state so the caller converges; `stop()` always forwards to native (kills an orphaned session) and runs local teardown once
 - Two capture modes, fixed per session at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode (OpusKit iOS, libopus JNI shim Android) → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Mode selection lives in `CaptureController.streamRecording` (explicit `batchModeEnabled` or auto offline fallback; iOS + Android); `omibatchphoneauto` recordings auto-upload on reconnect
 
-On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-device-speech.md).
-
-## Device Connections (Omi + OmiGlass together)
-
-- `DeviceService` (`lib/services/devices.dart`) holds one `DeviceConnection` per device id; `ensureConnection(id)` never disconnects another device. Inject `connectionFactory` to test it without BLE (`test/services/devices/device_service_multi_connection_test.dart`).
-- Saved devices live in two prefs slots: `btDevice` (primary) and `companionBtDevice`; `pairedDeviceIds` is the auto-connect set. Slots are not roles — `forgetSavedBtDevice` promotes the companion when the primary is forgotten.
-- Roles are derived at runtime by `DevicePairingRoles` (`lib/services/devices/device_pairing_roles.dart`): a non-camera device carries audio, the camera device carries photos; OmiGlass alone does both. `DeviceProvider._reconcileRoles` drives the existing single-device connect/disconnect paths for the audio device (`connectedDevice`) and `companionDevice` + `CaptureController.updatePhotoDevice` for the camera. Photos ride the audio session's `/v4/listen` socket; the backend relabels the conversation `openglass` on the first photo (`resolve_photo_conversation_source`).
-- Pairing a second device goes through `OnboardingProvider.handleTap`: `DevicePairingRoles.canPairAsCompanion(primary, tapped)` decides between "add next to" and "replace".
+Contracts: [on-device speech](../.github/agent-docs/on-device-speech.md); [Omi + OmiGlass together](../.github/agent-docs/multi-device-capture.md) (multi-connection, audio/photo roles).
 
 ## Permission Matrix
 
@@ -83,8 +76,6 @@ On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-devi
 | Camera | — | NSCameraUsageDescription | QR/photo features |
 | Notifications | POST_NOTIFICATIONS | (automatic) | Push notifications |
 | Background | FOREGROUND_SERVICE_* (4 types) | UIBackgroundModes (7 modes) | Continuous capture |
-
-Android: 26 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 consent strings.
 
 ## Test Strategy
 
