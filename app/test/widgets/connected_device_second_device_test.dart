@@ -107,8 +107,8 @@ Widget _app(_StubDeviceProvider device) {
     home: MultiProvider(
       providers: [
         ChangeNotifierProvider<DeviceProvider>.value(value: device),
-        ChangeNotifierProvider<CaptureProvider>.value(value: _StubCaptureProvider()),
-        ChangeNotifierProvider<SyncProvider>.value(value: _StubSyncProvider()),
+        ChangeNotifierProvider<CaptureProvider>(create: (_) => _StubCaptureProvider()),
+        ChangeNotifierProvider<SyncProvider>(create: (_) => _StubSyncProvider()),
       ],
       child: const ConnectedDevice(),
     ),

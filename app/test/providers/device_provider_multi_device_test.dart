@@ -91,12 +91,19 @@ void main() {
     await SharedPreferencesUtil.init();
     // Batch mode keeps streamDeviceRecording off the transcription socket.
     SharedPreferencesUtil().batchModeEnabled = true;
+    DeviceProvider.disconnectDebounceDelay = Duration.zero;
   });
 
   tearDown(() {
     SharedPreferencesUtil().batchModeEnabled = false;
+    DeviceProvider.disconnectDebounceDelay = const Duration(milliseconds: 500);
     AnalyticsManager.resetForTesting();
   });
+
+  Future<void> _awaitDisconnectHandling(DeviceProvider device) async {
+    await Future<void>.delayed(Duration.zero);
+    await device.pendingRolesReconciliation;
+  }
 
   Future<(DeviceProvider, CaptureProvider)> providers() async {
     final capture = CaptureProvider();
@@ -157,8 +164,7 @@ void main() {
     await device.registerConnectedDevice(glass);
 
     device.onDeviceConnectionStateChanged('omi-1', DeviceConnectionState.disconnected);
-    // Disconnects are debounced (500 ms) so a BLE flap does not tear down capture.
-    await Future<void>.delayed(const Duration(milliseconds: 700));
+    await _awaitDisconnectHandling(device);
 
     expect(device.connectedDevice?.id, 'glass-1');
     expect(device.companionDevice, isNull);
@@ -174,7 +180,7 @@ void main() {
     await device.registerConnectedDevice(glass);
 
     device.onDeviceConnectionStateChanged('glass-1', DeviceConnectionState.disconnected);
-    await Future<void>.delayed(const Duration(milliseconds: 700));
+    await _awaitDisconnectHandling(device);
 
     expect(device.connectedDevice?.id, 'omi-1');
     expect(device.isConnected, isTrue);
@@ -188,7 +194,7 @@ void main() {
     await device.registerConnectedDevice(omi);
 
     device.onDeviceConnectionStateChanged('someone-elses-device', DeviceConnectionState.disconnected);
-    await Future<void>.delayed(const Duration(milliseconds: 700));
+    await _awaitDisconnectHandling(device);
 
     expect(device.connectedDevice?.id, 'omi-1');
     expect(device.isConnected, isTrue);
