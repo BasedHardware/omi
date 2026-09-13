@@ -29,13 +29,17 @@ extension AppState {
   ///   text to Omi regardless of the cloud-assist setting), so the
   ///   free-tier question quota does not apply: `isLocalProviderActive`
   ///   alone is enough.
-  /// - `"ptt"`: exempted for a different reason than `"chat"`, a PTT turn
-  ///   does NOT run its completion against the user's own server. Online,
-  ///   it runs end to end (audio in, transcript, and the reply) inside
-  ///   Omi's cloud realtime hub, regardless of the active chat provider.
-  ///   This is a client-side suppression of the free-tier popup only (a
-  ///   Local user shouldn't see an "upgrade to Omi AI" message); the server
-  ///   still enforces its own realtime quota independently of this check.
+  /// - `"ptt"`: exempted for a different reason than `"chat"`, and only in
+  ///   one specific case. A PTT turn does NOT run its completion against the
+  ///   user's own server: online, it runs end to end (audio in, transcript,
+  ///   and the reply) inside Omi's cloud realtime hub regardless of the
+  ///   active chat provider (see `PTTRoutePolicy.decide`), so an online PTT
+  ///   turn under Local must stay on this gate exactly like every other
+  ///   provider — this mirrors `PushToTalkButtonTrigger.isPushToTalkUsageLimitBlocked`,
+  ///   the leaf gate this backstops, and must never disagree with it (a
+  ///   turn it blocks but this suppresses the popup for is a silent no-op
+  ///   click). Only offline, where PTT falls back to on-device dictation
+  ///   with no AI response to meter, is Local exempt.
   /// - `"screen_capture"`: matches `isScreenCaptureExemptFromPaywall`'s
   ///   Local-specific clause exactly, so this backstop can never disagree
   ///   with the leaf gate it backstops (see `isScreenCaptureExemptFromPaywall`'s
@@ -50,8 +54,14 @@ extension AppState {
   ///   trial state, which Local does not change.
   nonisolated static func isUsageLimitExemptLocally(reason: String) -> Bool {
     switch reason {
-    case "chat", "ptt":
+    case "chat":
       return AIProvider.isLocalProviderActive
+    case "ptt":
+      // `NetworkReachability` is `@MainActor`; every caller of this
+      // `nonisolated` function (the `triggerUsageLimitPopup` choke point,
+      // and tests) already runs on the main actor.
+      guard AIProvider.isLocalProviderActive else { return false }
+      return MainActor.assumeIsolated { !NetworkReachability.shared.isOnline }
     case "screen_capture":
       return AIProvider.isLocalProviderFailingClosed
     default:

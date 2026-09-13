@@ -537,10 +537,7 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
   }
 
   /// "chat" is exempt on `isLocalProviderActive` alone, since its completion
-  /// always runs against the user's own server under Local. "ptt" is exempt
-  /// too, but for a different reason: see `testPushToTalkExemptForLocalProvider`
-  /// above, it's a client-side popup suppression, not a completion-routing
-  /// parity with typed chat.
+  /// always runs against the user's own server under Local.
   func testTriggerUsageLimitPopupSuppressedForChatWhenLocalActive() {
     UserDefaults.standard.set(true, forKey: paywallKey)
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
@@ -551,6 +548,41 @@ private final class FixedStatusURLCapture: URLProtocol, @unchecked Sendable {
     XCTAssertFalse(
       state.showUsageLimitPopup,
       "chat must be exempt under Local")
+  }
+
+  /// Regression: this central choke point must never disagree with the leaf
+  /// gate it backstops (`PushToTalkButtonTrigger.isPushToTalkUsageLimitBlocked`,
+  /// see `testPushToTalkStaysGatedForLocalProviderWhenOnline`). Before this
+  /// fix it exempted every "ptt" reason under Local unconditionally, so once
+  /// the leaf gate started correctly blocking an online Local PTT turn, this
+  /// choke point silently swallowed the popup that block is supposed to
+  /// surface -- a blocked click with no explanation.
+  func testTriggerUsageLimitPopupStaysForPTTWhenLocalActiveAndOnline() {
+    UserDefaults.standard.set(true, forKey: paywallKey)
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    NetworkReachability.shared.testingOverrideIsOnline = true
+
+    let state = AppState()
+    state.triggerUsageLimitPopup(reason: "ptt")
+
+    XCTAssertTrue(
+      state.showUsageLimitPopup,
+      "an online PTT turn under Local still answers from Omi's cloud hub, so the popup must still show")
+  }
+
+  /// Regression: offline PTT under Local never reaches the hub (on-device
+  /// dictation only), so the popup is correctly suppressed there.
+  func testTriggerUsageLimitPopupSuppressedForPTTWhenLocalActiveAndOffline() {
+    UserDefaults.standard.set(true, forKey: paywallKey)
+    UserDefaults.standard.set("local", forKey: bridgeModeKey)
+    NetworkReachability.shared.testingOverrideIsOnline = false
+
+    let state = AppState()
+    state.triggerUsageLimitPopup(reason: "ptt")
+
+    XCTAssertFalse(
+      state.showUsageLimitPopup,
+      "offline PTT under Local is on-device dictation with no AI response to meter")
   }
 
   /// "screen_capture" mirrors `isScreenCaptureExemptFromPaywall` exactly: off
