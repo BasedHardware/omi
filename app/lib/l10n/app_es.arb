@@ -3259,7 +3259,7 @@
     "memoryHistoryPartial": "Parte del historial de recuerdos no está disponible. Se muestra el historial recibido hasta ahora.",
     "tapPlusToStartRecording": "Toca + para empezar a grabar",
     "secondDevice": "Segundo dispositivo",
-    "pairSecondDevice": "Vincular un segundo dispositivo",
+    "pairSecondDevice": "Emparejar un segundo dispositivo",
     "pairSecondDeviceDescription": "Conecta OmiGlass junto a tu Omi para que las fotos y el audio vayan a la misma conversación.",
     "forgetSecondDevice": "Olvidar segundo dispositivo"
 }

@@ -10018,7 +10018,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get pairSecondDeviceDescription =>
-      'Povežite OmiGlass ob svoj Omi, da gredo fotografije in zvok v isti pogovor.';
+      'Povežite OmiGlass ob svojem Omi, da gredo fotografije in zvok v isti pogovor.';
 
   @override
   String get forgetSecondDevice => 'Pozabi drugo napravo';

@@ -9982,7 +9982,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get secondDevice => 'Andre enhet';
 
   @override
-  String get pairSecondDevice => 'Par en andre enhet';
+  String get pairSecondDevice => 'Par en annen enhet';
 
   @override
   String get pairSecondDeviceDescription =>

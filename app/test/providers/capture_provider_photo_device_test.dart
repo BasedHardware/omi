@@ -49,7 +49,7 @@ void main() {
   final omi = _device('omi-1');
   final glass = _device('glass-1', type: DeviceType.openglass, name: 'OmiGlass');
 
-  test('photos follow the companion glasses while the pendant records audio', () async {
+  test('companion glasses become the photo device without streaming until a session is active', () async {
     final provider = CaptureProvider();
     addTearDown(provider.dispose);
     provider.updateRecordingDevice(omi);

@@ -9933,5 +9933,5 @@ class AppLocalizationsTh extends AppLocalizations {
       'เชื่อมต่อ OmiGlass ควบคู่กับ Omi ของคุณ เพื่อให้รูปภาพและเสียงอยู่ในบทสนทนาเดียวกัน';
 
   @override
-  String get forgetSecondDevice => 'ลบอุปกรณ์เครื่องที่สอง';
+  String get forgetSecondDevice => 'ลืมอุปกรณ์เครื่องที่สอง';
 }
