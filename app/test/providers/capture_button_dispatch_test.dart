@@ -100,6 +100,17 @@ void main() {
       expect(provider.isVoiceQuestionSessionActive, isFalse);
     });
 
+    test('the release the firmware sends right after a tap does not end the question', () async {
+      // Regression: the trailing 5 after every tap gesture used to end the
+      // toggle session ~40 ms after it started, so no audio was ever captured.
+      final provider = await providerWith({});
+
+      provider.handleDeviceButtonState(_deviceId, OmiButtonState.singleTap);
+      provider.handleDeviceButtonState(_deviceId, OmiButtonState.release);
+
+      expect(provider.isVoiceQuestionSessionActive, isTrue);
+    });
+
     test('double tap mutes, then unmutes, without overlapping requests', () async {
       final provider = await providerWith({});
 
@@ -168,6 +179,17 @@ void main() {
 
       provider.handleDeviceButtonState(_deviceId, OmiButtonState.release);
       expect(provider.isVoiceQuestionSessionActive, isFalse);
+    });
+
+    test('a hold cannot restart a session a tap already opened', () async {
+      final provider = await providerWith({});
+
+      provider.handleDeviceButtonState(_deviceId, OmiButtonState.singleTap);
+      provider.handleDeviceButtonState(_deviceId, OmiButtonState.longPress);
+      provider.handleDeviceButtonState(_deviceId, OmiButtonState.release);
+
+      // Still the tap-started session: only another tap ends it.
+      expect(provider.isVoiceQuestionSessionActive, isTrue);
     });
   });
 
