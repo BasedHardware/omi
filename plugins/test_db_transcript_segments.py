@@ -99,6 +99,11 @@ class TranscriptSegmentPersistenceTests(unittest.TestCase):
         result = self.db.get_upsert_segment_to_transcript_plugin('mentor-01', 's1', [self._segment('hi')])
         self.assertEqual([s.dict()['text'] for s in result], ['hi'])
 
+    def test_valid_literal_non_list_resets_buffer(self):
+        self.db.r.store['plugin:mentor-01:session:s1:transcript_segments'] = '42'
+        result = self.db.get_upsert_segment_to_transcript_plugin('mentor-01', 's1', [self._segment('hi')])
+        self.assertEqual([s.dict()['text'] for s in result], ['hi'])
+
     def test_non_dict_elements_are_dropped(self):
         legacy = str([{'text': 'ok', 'is_user': True, 'start': 0.0, 'end': 1.0}, 42, 'junk'])
         self.db.r.store['plugin:mentor-01:session:s1:transcript_segments'] = legacy

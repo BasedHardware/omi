@@ -101,7 +101,7 @@ def get_upsert_segment_to_transcript_plugin(
     else:
         try:
             segments = ast.literal_eval(segments.decode('utf-8'))
-        except (ValueError, SyntaxError):
+        except (ValueError, SyntaxError, RecursionError, MemoryError):
             segments = []
         if not isinstance(segments, list):
             segments = []
