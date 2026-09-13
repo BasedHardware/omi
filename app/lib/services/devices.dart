@@ -163,7 +163,8 @@ class DeviceService {
   Future<void> _connectToDevice(String id) async {
     // Replace only this device's connection. Other devices stay connected so an
     // Omi pendant and OmiGlass can be attached simultaneously.
-    await _disposeConnection(id);
+    // Caller holds the per-device mutex (see [ensureConnection]).
+    await _disposeConnectionUnlocked(id);
 
     var device = _devices.firstWhereOrNull((f) => f.id == id);
     Logger.debug(
@@ -203,7 +204,7 @@ class DeviceService {
     );
   }
 
-  Future<void> _disposeConnection(String id) async {
+  Future<void> _disposeConnectionUnlocked(String id) async {
     final existing = _connections.remove(id);
     if (existing == null) return;
     if (existing.status == DeviceConnectionState.connected) {
@@ -217,6 +218,16 @@ class DeviceService {
       await existing.transport.dispose();
     } catch (e) {
       Logger.debug('[DeviceService] transport dispose failed: $e');
+    }
+  }
+
+  Future<void> _disposeConnection(String id) async {
+    final mutex = _connectionMutexes.putIfAbsent(id, Mutex.new);
+    await mutex.acquire();
+    try {
+      await _disposeConnectionUnlocked(id);
+    } finally {
+      mutex.release();
     }
   }
 
@@ -362,16 +373,28 @@ class DeviceService {
   /// connection object stays tracked so a later forced [ensureConnection]
   /// disposes its transport before creating a fresh one.
   Future<void> disconnectDevice(String deviceId) async {
-    final connection = _connections[deviceId];
-    if (connection == null) return;
-    Logger.debug("DeviceService: Disconnecting device $deviceId...");
-    await connection.disconnect();
+    final mutex = _connectionMutexes.putIfAbsent(deviceId, Mutex.new);
+    await mutex.acquire();
+    try {
+      final connection = _connections[deviceId];
+      if (connection == null) return;
+      Logger.debug("DeviceService: Disconnecting device $deviceId...");
+      await connection.disconnect();
+    } finally {
+      mutex.release();
+    }
   }
 
   Future<void> forgetDevice(String deviceId) async {
-    Logger.debug("DeviceService: Forgetting device $deviceId");
-    clearStaleBondRecoveryRequirement();
-    await _disposeConnection(deviceId);
-    _devices.removeWhere((d) => d.id == deviceId);
+    final mutex = _connectionMutexes.putIfAbsent(deviceId, Mutex.new);
+    await mutex.acquire();
+    try {
+      Logger.debug("DeviceService: Forgetting device $deviceId");
+      clearStaleBondRecoveryRequirement();
+      await _disposeConnectionUnlocked(deviceId);
+      _devices.removeWhere((d) => d.id == deviceId);
+    } finally {
+      mutex.release();
+    }
   }
 }
