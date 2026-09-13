@@ -102,7 +102,7 @@ void main() {
       expect(result, ExternalHapticTriggerResult.unavailable);
     });
 
-    test('reserves cooldown before awaiting the first haptic dispatch', () async {
+    test('keeps a device single-flight after cooldown while dispatch is pending', () async {
       var elapsed = Duration.zero;
       final limiter = ExternalHapticRateLimiter(
         cooldown: const Duration(seconds: 2),
@@ -123,27 +123,31 @@ void main() {
         rateLimiter: limiter,
         playHaptic: player,
       );
-      final second = await runExternalHapticTrigger(
+
+      // Even after the admission cooldown has fully elapsed, an unresolved
+      // reconnect/write remains single-flight for this device.
+      elapsed = const Duration(seconds: 2);
+      final whilePending = await runExternalHapticTrigger(
         Uri.parse('omi://device/haptic?level=3'),
         deviceId: 'device-123',
         rateLimiter: limiter,
         playHaptic: player,
       );
-
-      expect(second, ExternalHapticTriggerResult.rateLimited);
+      expect(whilePending, ExternalHapticTriggerResult.rateLimited);
       expect(calls, 1);
 
       firstDispatch.complete(true);
       expect(await first, ExternalHapticTriggerResult.played);
 
-      elapsed = const Duration(seconds: 2);
-      final afterCooldown = await runExternalHapticTrigger(
+      // The original admission was two seconds ago, so once the in-flight
+      // operation releases, the next dispatch may use the new slot.
+      final afterCompletion = await runExternalHapticTrigger(
         Uri.parse('omi://device/haptic?level=3'),
         deviceId: 'device-123',
         rateLimiter: limiter,
         playHaptic: player,
       );
-      expect(afterCooldown, ExternalHapticTriggerResult.played);
+      expect(afterCompletion, ExternalHapticTriggerResult.played);
       expect(calls, 2);
     });
 
@@ -185,6 +189,51 @@ void main() {
         playHaptic: unavailable,
       );
       expect(laterRetry, ExternalHapticTriggerResult.unavailable);
+      expect(calls, 2);
+    });
+
+    test('a thrown player error releases single-flight but preserves cooldown', () async {
+      var elapsed = Duration.zero;
+      final limiter = ExternalHapticRateLimiter(
+        cooldown: const Duration(seconds: 2),
+        elapsed: () => elapsed,
+      );
+      var calls = 0;
+
+      Future<bool> throwingPlayer(String _, int __) async {
+        calls++;
+        throw StateError('dispatch failed');
+      }
+
+      await expectLater(
+        runExternalHapticTrigger(
+          Uri.parse('omi://device/haptic?level=2'),
+          deviceId: 'device-123',
+          rateLimiter: limiter,
+          playHaptic: throwingPlayer,
+        ),
+        throwsStateError,
+      );
+
+      final duringCooldown = await runExternalHapticTrigger(
+        Uri.parse('omi://device/haptic?level=2'),
+        deviceId: 'device-123',
+        rateLimiter: limiter,
+        playHaptic: throwingPlayer,
+      );
+      expect(duringCooldown, ExternalHapticTriggerResult.rateLimited);
+      expect(calls, 1);
+
+      elapsed = const Duration(seconds: 2);
+      await expectLater(
+        runExternalHapticTrigger(
+          Uri.parse('omi://device/haptic?level=2'),
+          deviceId: 'device-123',
+          rateLimiter: limiter,
+          playHaptic: throwingPlayer,
+        ),
+        throwsStateError,
+      );
       expect(calls, 2);
     });
   });
