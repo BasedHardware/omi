@@ -9,6 +9,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**"]
     lanes: ["local", "ci"]
     reason: "Issue #13176: Graph JSON and raw-file requests must honor server cooldowns without exhausting retries early"
+  - id: plugin-db-transcript-segments-tests
+    command: ["python3", "plugins/test_db_transcript_segments.py"]
+    triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
+    lanes: ["local", "ci"]
+    reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
@@ -980,6 +985,12 @@ checks:
     triggers: ["plugins/notifications/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
+
+  - id: plugin-mentor-session-auth-tests
+    command: ["bash", "scripts/run-plugin-mentor-session-auth-tests.sh"]
+    triggers: ["plugins/basic/mentor.py", "plugins/basic/mentor_webhook_auth.py", "plugins/test_mentor_session_auth.py", "scripts/run-plugin-mentor-session-auth-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "POST /mentor trusted client session_id for the shared Redis transcript buffer without auth, so callers could read or poison another user's buffer"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

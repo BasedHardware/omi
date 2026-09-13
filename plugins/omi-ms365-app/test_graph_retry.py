@@ -46,7 +46,7 @@ class GraphRetryTests(unittest.IsolatedAsyncioTestCase):
     async def test_server_cooldown_then_success(self):
         for method in ('get', 'get_bytes'):
             for status in (429, 503):
-                for header, delay in [('60', 60), ('0', 0), (' 7 ', 7),
+                for header, delay in [('60', 60), ('0', 2), ('1', 2), (' 7 ', 7),
                                       (str(int(sys.float_info.max)), int(sys.float_info.max))]:
                     with self.subTest(method=method, status=status, header=header):
                         await self.exercise(method, [response(status, header), response(200)], [delay])

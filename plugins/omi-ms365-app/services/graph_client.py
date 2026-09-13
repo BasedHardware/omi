@@ -17,6 +17,7 @@ MAX_RETRIES = 3
 
 def _retry_delay(retry_after: str | None, attempt: int) -> int:
     """Honor schedulable Graph delay-seconds; otherwise back off locally."""
+    fallback = min(2 ** attempt + 1, 30)
     if retry_after is not None:
         value = retry_after.strip()
         if value.isascii() and value.isdecimal():
@@ -24,10 +25,10 @@ def _retry_delay(retry_after: str | None, attempt: int) -> int:
                 delay = int(value)
                 # asyncio timers add the delay to a floating-point loop clock.
                 float(delay)  # Reject integers that overflow that conversion.
-                return delay
+                return max(delay, fallback)
             except (ValueError, OverflowError):
                 pass
-    return 2 ** attempt + 1
+    return fallback
 
 
 class GraphError(Exception):
