@@ -32,6 +32,11 @@ and background processing.
   A caller must have already acquired a finalization-job lease before invoking
   it; it loads the conversation, performs enrichment through the postprocess
   bulkhead, and runs external integrations.
+- `duplicate_capture.py` is the pure cross-device duplicate policy (#3244): at
+  finalization, a conversation whose wall window and word bigrams are already
+  carried by another capture client's conversation takes the discard exit and
+  records its primary in `external_data.duplicate_capture_of`. Callers load the
+  candidate rows and persist the verdict; the module holds no I/O.
 - `meeting_treatment.py` owns the post-capture meeting policy. It uses durable
   conversation timestamps plus the union of transcribed-speech intervals, so
   dual microphone/system-audio transcripts cannot double-count speech.
