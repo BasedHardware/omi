@@ -1839,6 +1839,12 @@ class AnalyticsManager {
     );
   }
 
+  /// Single/triple tap actions on the device button. Double taps keep the
+  /// historical [omiDoubleTap] series.
+  void omiButtonGesture({required String gesture, required String feature}) {
+    track('Omi Button Gesture', properties: {'gesture': gesture, 'feature': feature});
+  }
+
   // ============================================================================
   // WRAPPED 2025 TRACKING
   // ============================================================================
