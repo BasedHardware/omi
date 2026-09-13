@@ -271,6 +271,8 @@ export function recordingTranscriptSpeakerCopy(segment: {
   return labeled !== null ? `Speaker ${Number(labeled[1]) + 1}` : trimmed;
 }
 
+const OMI_SPEAKER_ID = 99;
+
 export function conversationDetailSpeakerCopy(
   segment: {
     isUser?: boolean;
@@ -285,15 +287,18 @@ export function conversationDetailSpeakerCopy(
   if (segment.isUser === true) {
     return 'You';
   }
-  const namedPerson = visibleDisplayText(segment.personName ?? '');
-  if (namedPerson !== '') {
-    return namedPerson;
-  }
   const trimmed =
     typeof segment.speaker === 'string'
       ? visibleDisplayText(segment.speaker)
       : '';
   const labeled = /^SPEAKER_(\d+)$/.exec(trimmed);
+  if (labeled !== null && Number(labeled[1]) === OMI_SPEAKER_ID) {
+    return 'omi';
+  }
+  const namedPerson = visibleDisplayText(segment.personName ?? '');
+  if (namedPerson !== '') {
+    return namedPerson;
+  }
   if (labeled === null) {
     return trimmed === '' ? 'Speaker' : trimmed;
   }
