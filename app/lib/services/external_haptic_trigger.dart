@@ -11,6 +11,7 @@ class ExternalHapticTrigger {
   const ExternalHapticTrigger({required this.level});
 
   static const Set<String> _supportedSchemes = {'omi', 'omi-dev', 'omi-beta'};
+  static const Set<String> _supportedLevels = {'1', '2', '3'};
 
   final int level;
 
@@ -19,10 +20,10 @@ class ExternalHapticTrigger {
     if (uri.host.toLowerCase() != 'device') return null;
     if (uri.pathSegments.length != 1 || uri.pathSegments.single != 'haptic') return null;
 
-    final level = int.tryParse(uri.queryParameters['level'] ?? '');
-    if (level == null || level < 1 || level > 3) return null;
+    final levels = uri.queryParametersAll['level'];
+    if (levels == null || levels.length != 1 || !_supportedLevels.contains(levels.single)) return null;
 
-    return ExternalHapticTrigger(level: level);
+    return ExternalHapticTrigger(level: int.parse(levels.single));
   }
 }
 
