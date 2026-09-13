@@ -34,6 +34,7 @@ export type LegacyConversationDetail = {
   photoRows?: {caption?: string; imageUri?: string}[];
   folderName?: string;
   folderColor?: string;
+  folderIcon?: string;
   peopleError?: string;
   appsError?: string;
   externalText?: string;
@@ -528,6 +529,7 @@ export async function loadLegacyConversationDetail(
       : {
           folderName: folder.name,
           ...(folder.color === undefined ? {} : {folderColor: folder.color}),
+          ...(folder.icon === undefined ? {} : {folderIcon: folder.icon}),
         }),
     ...(integrationText === undefined ? {} : {externalText: integrationText}),
     transcript,

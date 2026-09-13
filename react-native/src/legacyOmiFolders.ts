@@ -68,7 +68,18 @@ export function parseOmiFolders(body: string): OmiFolder[] {
     }
     names.set(id, name);
     const color = omiFolderHexColor(folder.color);
-    folders.push(color === undefined ? {id, name} : {id, name, color});
+    const icon =
+      folder.icon === undefined
+        ? undefined
+        : visibleDisplayText(text(folder.icon, 1_000_000));
+    folders.push({
+      id,
+      name,
+      ...(color === undefined ? {} : {color}),
+      ...(icon === undefined || icon === '' || icon === 'folder'
+        ? {}
+        : {icon}),
+    });
   }
   return folders;
 }
@@ -81,6 +92,7 @@ export type OmiFolder = {
   id: string;
   name: string;
   color?: string;
+  icon?: string;
 };
 
 export async function loadOmiFolderNames(

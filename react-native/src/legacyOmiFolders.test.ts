@@ -36,12 +36,32 @@ test('parses GET folder color and omits empty or invalid color', () => {
       ]),
     ),
   ).toEqual([
-    {id: 'folder-work', name: 'Work', color: '#3B82F6'},
+    {id: 'folder-work', name: 'Work', color: '#3B82F6', icon: '💼'},
     {id: 'folder-plain', name: 'Plain'},
     {id: 'folder-bad', name: 'Bad'},
     {id: 'folder-short', name: 'Short'},
     {id: 'folder-hashless', name: 'Hashless', color: '#00AA11'},
   ]);
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {id: 'folder-emoji', name: 'Home', icon: '🏠'},
+        {id: 'folder-default', name: 'Inbox', icon: 'folder'},
+        {id: 'folder-blank', name: 'Blank', icon: ' \t'},
+        {id: 'folder-omitted', name: 'Omitted'},
+      ]),
+    ),
+  ).toEqual([
+    {id: 'folder-emoji', name: 'Home', icon: '🏠'},
+    {id: 'folder-default', name: 'Inbox'},
+    {id: 'folder-blank', name: 'Blank'},
+    {id: 'folder-omitted', name: 'Omitted'},
+  ]);
+  expect(() =>
+    parseOmiFolders(
+      JSON.stringify([{id: 'folder-bad-icon', name: 'Bad', icon: 1}]),
+    ),
+  ).toThrow();
 });
 
 test('does not omit a neighboring named folder when stored name cannot project', () => {
@@ -162,6 +182,7 @@ test('loadOmiFolder names a resolved GET folder color and omits misses', async (
     id: 'folder-work',
     name: 'Work',
     color: '#3B82F6',
+    icon: '💼',
   });
   expect(await loadOmiFolder(backend, 'folder-empty')).toBeUndefined();
   expect(await loadOmiFolder(backend, 'folder-missing')).toBeUndefined();

@@ -1545,6 +1545,7 @@ test('legacy conversation details name GET folder color without hex copy', () =>
         actionItems: [],
         folderName: 'Work',
         folderColor: '#3B82F6',
+        folderIcon: '💼',
         transcript: {status: 'loaded', segments: []},
       },
     },
@@ -1559,6 +1560,7 @@ test('legacy conversation details name GET folder color without hex copy', () =>
     },
   });
   expect(text(view)).toContain('Work');
+  expect(text(view)).toContain('💼');
   expect(text(view)).not.toContain('#3B82F6');
   const folder = view.root.find(
     node =>

@@ -2228,7 +2228,7 @@ test('conversation list names GET folder color on the selected chip', async () =
   const tree = textOf(renderer);
   expect(tree).toContain('Work');
   expect(tree).not.toContain('#3B82F6');
-  expect(tree).not.toContain('💼');
+  expect(tree).toContain('💼');
   expect(tree).not.toContain('99');
   expect(tree).not.toContain('Add');
   const chip = renderer.root.find(

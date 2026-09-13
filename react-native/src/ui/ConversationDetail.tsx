@@ -350,6 +350,7 @@ function LegacyConversationBody({
   );
   const folderName = visibleDisplayText(detail.folderName ?? '');
   const folderColor = visibleDisplayText(detail.folderColor ?? '');
+  const folderIcon = visibleDisplayText(detail.folderIcon ?? '');
   const externalText = visibleDisplayText(detail.externalText ?? '');
   const showExternalTranscript =
     externalText !== '' &&
@@ -485,6 +486,7 @@ function LegacyConversationBody({
             ink,
             folderColor === '' ? null : {color: folderColor},
           ]}>
+          {folderIcon === '' ? null : `${folderIcon} `}
           {folderName}
         </Text>
       )}

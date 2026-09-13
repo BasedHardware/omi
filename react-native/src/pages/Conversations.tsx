@@ -495,6 +495,7 @@ export function ConversationsPage({
                           ? {color: folder.color}
                           : null,
                       ]}>
+                      {folder.icon === undefined ? null : `${folder.icon} `}
                       {folder.name}
                     </Text>
                   </FocusPressable>

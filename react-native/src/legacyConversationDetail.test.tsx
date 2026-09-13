@@ -1294,6 +1294,7 @@ test('names GET folder name when folders resolve and omits otherwise', async () 
     expect.objectContaining({
       folderName: 'Work',
       folderColor: '#3B82F6',
+      folderIcon: '💼',
     }),
   );
   mockRequest.mockImplementation(async (request: {path?: string}) => {
