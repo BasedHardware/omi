@@ -1,6 +1,6 @@
 import React from 'react';
 import Renderer, {act} from 'react-test-renderer';
-import {Text} from 'react-native';
+import {Linking, Text} from 'react-native';
 import type {ConversationProjection} from '../desktopReadClient';
 import {desktopBackendServiceCopy} from '../desktopReadClient';
 
@@ -1318,14 +1318,29 @@ test('legacy conversation details name GET calendar html_link', () => {
     },
     reload: jest.fn(),
   });
-  const copy = text(
-    render({
-      apiContract: 'omi',
-      conversation: {...conversation, id: 'old-1'},
-    }),
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(text(view)).toContain('Standup');
+  expect(text(view)).toContain('Open in Google Calendar');
+  const links = view.root.findAll(
+    node =>
+      node.props.accessibilityRole === 'link' &&
+      node.props.accessibilityLabel === 'Open in Google Calendar' &&
+      typeof node.props.onPress === 'function',
   );
-  expect(copy).toContain('Standup');
-  expect(copy).toContain('Open in Google Calendar');
+  expect(links.length).toBeGreaterThan(0);
+  const openURL = jest
+    .spyOn(Linking, 'openURL')
+    .mockResolvedValue(undefined as never);
+  act(() => {
+    links[0].props.onPress();
+  });
+  expect(openURL).toHaveBeenCalledWith(
+    'https://calendar.google.com/calendar/event?eid=standup',
+  );
+  openURL.mockRestore();
 });
 
 test('legacy conversation details name GET photo counts and captions', () => {

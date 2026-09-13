@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {ActivityIndicator, Image, Text, View} from 'react-native';
+import {ActivityIndicator, Image, Linking, Text, View} from 'react-native';
 import {
   clockLabel,
   conversationCaptureCopy,
@@ -430,9 +430,19 @@ function LegacyConversationBody({
         </Text>
       )}
       {calendarHtmlLink === '' ? null : (
-        <Text style={[styles.conversationDetailField, ink]}>
-          Open in Google Calendar
-        </Text>
+        <FocusPressable
+          accessibilityRole="link"
+          accessibilityLabel="Open in Google Calendar"
+          onPress={() => {
+            if (!/^https?:\/\//i.test(calendarHtmlLink)) {
+              return;
+            }
+            Linking.openURL(calendarHtmlLink).catch(() => undefined);
+          }}>
+          <Text style={[styles.conversationDetailField, ink]}>
+            Open in Google Calendar
+          </Text>
+        </FocusPressable>
       )}
       {detail.photoCount !== undefined && detail.photoCount > 0 ? (
         <Text style={[styles.conversationDetailField, ink]}>
