@@ -24,11 +24,13 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/external_haptic_trigger.dart';
 import 'package:omi/services/integrations/asana_service.dart';
 import 'package:omi/services/integrations/clickup_service.dart';
 import 'package:omi/services/integrations/google_tasks_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/integrations/todoist_service.dart';
+import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -62,6 +64,25 @@ class _AppShellState extends State<AppShell> {
   }
 
   void openAppLink(Uri uri) async {
+    final externalHapticResult = await runExternalHapticTrigger(
+      uri,
+      deviceId: SharedPreferencesUtil().btDevice.id,
+      playHaptic: (deviceId, level) async {
+        try {
+          final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+          if (connection == null) return false;
+          return connection.performPlayToSpeakerHaptic(level);
+        } catch (e) {
+          Logger.debug('External haptic trigger failed: $e');
+          return false;
+        }
+      },
+    );
+    if (externalHapticResult != ExternalHapticTriggerResult.notHandled) {
+      Logger.debug('External haptic trigger result: $externalHapticResult');
+      return;
+    }
+
     if (uri.pathSegments.isEmpty) {
       Logger.debug('No path segments in URI: $uri');
       return;
@@ -292,7 +313,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _handleClickUpCallback(bool requiresSetup) async {
-    final clickupService = ClickUpService();
+    final clickupService = ClickupService();
     final success = await clickupService.handleCallback();
 
     if (!mounted) return;
