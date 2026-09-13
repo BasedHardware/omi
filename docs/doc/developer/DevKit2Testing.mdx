@@ -133,8 +133,8 @@ Taps must be shorter than 300 ms and separated by less than 350 ms to count as o
 reported once that window closes, triple taps on the third release. The recogniser lives in
 `omi/firmware/common/button_gesture.c` and is host-tested by `omi/firmware/common/test/run.sh`.
 
-In the app, single/double/triple tap each run the action configured under Settings → Device (Ask a Question, Mute/Unmute,
-End Conversation, Star Conversation, or Do Nothing). The long-press power toggle is fixed in firmware.
+In the app, single/double/triple tap each run the action configured under Settings → Device Settings (Ask a Question, Mute/Unmute,
+End Conversation, Star Conversation, or Do Nothing). The long-press power-off gesture is fixed in firmware.
 
 Verify that each physical action sends the correct BLE packet.
 

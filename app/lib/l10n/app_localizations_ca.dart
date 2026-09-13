@@ -609,13 +609,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get tripleTapAction => 'Acció de triple toc';
 
   @override
-  String get powerOnOff => 'Engega / Apaga';
+  String get powerOnOff => 'Apaga';
 
   @override
   String get doNothing => 'No fer res';
 
   @override
-  String get longPressFixedSubtitle => 'Mantén premut 3 segons per engegar o apagar l\'Omi. Això no es pot canviar.';
+  String get longPressFixedSubtitle => 'Mantingueu premut 3 segons per apagar l\'Omi. Això no es pot canviar.';
 
   @override
   String get endAndProcess => 'Finalitzar i processar conversa';

@@ -198,7 +198,12 @@ int button_init()
         return ret;
     }
 
-    button_gesture_init(&gesture_fsm);
+    static bool gesture_fsm_initialized;
+
+    if (!gesture_fsm_initialized) {
+        button_gesture_init(&gesture_fsm);
+        gesture_fsm_initialized = true;
+    }
 
     return 0;
 }
