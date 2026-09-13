@@ -414,7 +414,7 @@ extension APIClient {
     // not-completed (consistent with the invalid-URL and network-failure paths
     // below). Returning true here would wrongly mark an unconfigured app as set up.
     guard !url.isEmpty else { return false }
-    guard let fullUrl = URL(string: "\(url)?uid=\(uid)") else { return false }
+    guard let fullUrl = AppSetupURL.withUID(url, uid: uid) else { return false }
     var request = URLRequest(url: fullUrl)
     request.httpMethod = "GET"
     do {

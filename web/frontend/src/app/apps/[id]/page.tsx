@@ -8,6 +8,7 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import { ProductBanner } from '@/src/app/components/product-banner';
+import { APP_STORE_HARDWARE_PRODUCT } from '@/src/constants/app-store-hardware-product';
 import { PRODUCT_INFO } from '@/src/app/components/product-banner/types';
 import { getAppById, getAppsByCategory } from '@/src/lib/api/apps';
 import envConfig from '@/src/constants/envConfig';
@@ -107,16 +108,16 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
       {
         '@context': 'https://schema.org',
         '@type': 'Product',
-        name: 'Omi',
-        description: 'AI-powered wearable. Real-time AI voice assistant.',
+        name: APP_STORE_HARDWARE_PRODUCT.name,
+        description: APP_STORE_HARDWARE_PRODUCT.description,
         brand: {
           '@type': 'Brand',
           name: 'OMI',
         },
         offers: {
           '@type': 'Offer',
-          price: '89',
-          priceCurrency: 'USD',
+          price: APP_STORE_HARDWARE_PRODUCT.schemaPrice,
+          priceCurrency: APP_STORE_HARDWARE_PRODUCT.currency,
           availability: 'https://schema.org/InStock',
           url: PRODUCT_INFO.url,
           priceValidUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)

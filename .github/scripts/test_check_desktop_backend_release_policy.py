@@ -596,6 +596,79 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn("expected exactly one desktop-backend-1 container image", result.stderr)
 
+    def test_agent_vm_sha_reuse_guard_rejects_python_repr_boolean(self) -> None:
+        broken = (
+            "      - name: Resolve Agent VM SHA release\n"
+            "        run: |\n"
+            "          python backend/scripts/resolve_agent_vm_sha_release.py\n"
+            '          reuse="$(python3 -c \'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])\' '
+            '"$RUNNER_TEMP/agent-vm-sha-release.json")"\n'
+            '          if [[ "$reuse" == "true" ]]; then\n'
+        )
+        errors = POLICY.validate_deploy_workflow(broken, production=False)
+        self.assertTrue(any("Python repr" in error for error in errors))
+
+    def test_agent_vm_sha_reuse_guard_catches_dollar_brace_reuse_compare(self) -> None:
+        broken = (
+            "      - name: Resolve Agent VM SHA release\n"
+            "        run: |\n"
+            "          python backend/scripts/resolve_agent_vm_sha_release.py\n"
+            '          reuse="$(python3 -c \'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])\' '
+            '"$RUNNER_TEMP/agent-vm-sha-release.json")"\n'
+            '          if [[ "${reuse}" == "true" ]]; then\n'
+        )
+        errors = POLICY.validate_deploy_workflow(broken, production=False)
+        self.assertTrue(any("Python repr" in error for error in errors))
+
+    def test_agent_vm_sha_reuse_guard_rejects_unrelated_helper_mention(self) -> None:
+        broken = (
+            "      - name: Other step\n"
+            "        run: python .github/scripts/workflow_json_field_for_shell.py\n"
+            "      - name: Resolve Agent VM SHA release\n"
+            "        run: |\n"
+            "          python backend/scripts/resolve_agent_vm_sha_release.py\n"
+            '          reuse="$(python3 -c \'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])\' '
+            '"$RUNNER_TEMP/agent-vm-sha-release.json")"\n'
+            '          if [[ "$reuse" == "true" ]]; then\n'
+        )
+        errors = POLICY.validate_deploy_workflow(broken, production=False)
+        self.assertTrue(any("Python repr" in error for error in errors))
+        self.assertTrue(any("shell-safe reuse extraction" in error for error in errors))
+
+    def _agent_vm_resolver_step(self, *, reuse_extract: str, reuse_compare: str = 'if [[ "$reuse" == "true" ]]; then') -> str:
+        return (
+            "      - name: Resolve Agent VM SHA release\n"
+            "        run: |\n"
+            "          python backend/scripts/resolve_agent_vm_sha_release.py\n"
+            f"          {reuse_extract}\n"
+            f"          {reuse_compare}\n"
+        )
+
+    def test_agent_vm_sha_reuse_guard_accepts_json_dumps_extract(self) -> None:
+        snippet = (
+            'reuse="$(python3 -c \'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"]))\' '
+            '"$RUNNER_TEMP/agent-vm-sha-release.json")"'
+        )
+        text = self._agent_vm_resolver_step(reuse_extract=snippet)
+        errors = POLICY.validate_deploy_workflow(text, production=False)
+        reuse_errors = [error for error in errors if "reuse" in error.lower() or "Python repr" in error]
+        self.assertEqual(reuse_errors, [])
+
+    def test_agent_vm_sha_reuse_guard_accepts_workflow_json_field_helper(self) -> None:
+        snippet = (
+            'reuse="$(python3 .github/scripts/workflow_json_field_for_shell.py '
+            '"$RUNNER_TEMP/agent-vm-sha-release.json" reuse)"'
+        )
+        text = self._agent_vm_resolver_step(reuse_extract=snippet)
+        errors = POLICY.validate_deploy_workflow(text, production=False)
+        reuse_errors = [error for error in errors if "reuse" in error.lower() or "Python repr" in error]
+        self.assertEqual(reuse_errors, [])
+
+    def test_live_desktop_backend_workflows_do_not_use_python_repr_reuse_extract(self) -> None:
+        broken = 'print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])'
+        self.assertNotIn(broken, self.dev)
+        self.assertNotIn(broken, self.prod)
+
 
 if __name__ == "__main__":
     unittest.main()
