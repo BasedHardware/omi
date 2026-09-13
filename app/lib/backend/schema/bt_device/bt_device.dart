@@ -271,10 +271,12 @@ class BtDevice {
   String? _hardwareRevision;
   String? _manufacturerName;
   String? _serialNumber;
+
   /// Cached from the features characteristic: Omi CV1 firmware that supports
   /// persisting a user-chosen name (bit 9). When true, name-based OmiGlass
   /// heuristics must not apply.
   bool? omiRenamable;
+
   /// Cached from the image-stream probe during [getDeviceInfo].
   bool? omiOpenGlassImageStream;
 
@@ -749,8 +751,7 @@ class BtDevice {
       manufacturerName: json['manufacturerName'] is String ? json['manufacturerName'] : null,
       serialNumber: json['serialNumber'] is String ? json['serialNumber'] : null,
       omiRenamable: json['omiRenamable'] is bool ? json['omiRenamable'] as bool : null,
-      omiOpenGlassImageStream:
-          json['omiOpenGlassImageStream'] is bool ? json['omiOpenGlassImageStream'] as bool : null,
+      omiOpenGlassImageStream: json['omiOpenGlassImageStream'] is bool ? json['omiOpenGlassImageStream'] as bool : null,
     );
   }
 
