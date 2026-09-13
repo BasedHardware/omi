@@ -13,6 +13,7 @@ import {
   conversationActionItemsCompletedCopy,
   conversationActionItemsNoCompletedCopy,
   conversationUnknownAppCopy,
+  transcriptSttUnknownCopy,
 } from '../desktopReadClient';
 
 const mockRecording = jest.fn(() => ({
@@ -2253,5 +2254,44 @@ test('legacy conversation details name GET stt_provider without inventing Flutte
   );
   expect(copy).toContain('Deepgram');
   expect(copy).toContain('whisper-cloudflare');
+  expect(copy).not.toContain('Omi');
+});
+
+test('legacy conversation details name Flutter Unknown for empty GET stt_provider', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'Hello there',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              start: 0,
+              end: 1,
+              sttProvider: transcriptSttUnknownCopy(),
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain(transcriptSttUnknownCopy());
   expect(copy).not.toContain('Omi');
 });

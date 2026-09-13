@@ -236,10 +236,20 @@ const TRANSCRIPT_STT_PROVIDER_COPY: Readonly<Record<string, string>> = {
   onDeviceWhisper: 'On-Device',
 };
 
+export function transcriptSttUnknownCopy(): string {
+  return 'Unknown';
+}
+
 export function transcriptSttProviderCopy(
   value: string | null | undefined,
 ): string | undefined {
-  const token = visibleDisplayText(value ?? '');
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (value === '') {
+    return transcriptSttUnknownCopy();
+  }
+  const token = visibleDisplayText(value);
   if (token === '') {
     return undefined;
   }

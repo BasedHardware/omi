@@ -6,6 +6,7 @@ import {
   conversationPhotoDiscardedCopy,
   conversationUnknownAppCopy,
   desktopBackendServiceCopy,
+  transcriptSttUnknownCopy,
 } from './desktopReadClient';
 import {
   loadLegacyConversationDetail,
@@ -646,6 +647,32 @@ test('names GET transcript stt_provider without inventing Flutter Omi for unknow
         start: 0.25,
         end: 4.5,
         sttProvider: 'whisper-cloudflare',
+      },
+    ],
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          stt_provider: '',
+        },
+      ],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).transcript,
+  ).toEqual({
+    status: 'loaded',
+    segments: [
+      {
+        text: fixture.transcript_segments[0].text,
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        start: 0.25,
+        end: 4.5,
+        sttProvider: transcriptSttUnknownCopy(),
       },
     ],
   });

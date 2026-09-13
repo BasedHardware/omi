@@ -81,6 +81,8 @@ import {
   conversationListTag,
   conversationVisibilityCopy,
   conversationUnknownAppCopy,
+  transcriptSttProviderCopy,
+  transcriptSttUnknownCopy,
   conversationFirstPartySummaryCopy,
   conversationActionItemsTodoCopy,
   conversationActionItemsNoPendingCopy,
@@ -2474,6 +2476,18 @@ test('conversation visibility copy names GET private, shared, and public as Flut
 
 test('conversation unknown-app copy names Flutter catalog-miss attribution', () => {
   expect(conversationUnknownAppCopy()).toBe('Unknown App');
+});
+
+test('transcript STT copy names Flutter getDisplayName empty as Unknown', () => {
+  expect(transcriptSttUnknownCopy()).toBe('Unknown');
+  expect(transcriptSttProviderCopy('')).toBe(transcriptSttUnknownCopy());
+  expect(transcriptSttProviderCopy('deepgram')).toBe('Deepgram');
+  expect(transcriptSttProviderCopy('whisper-cloudflare')).toBe(
+    'whisper-cloudflare',
+  );
+  expect(transcriptSttProviderCopy(' \t\u0085 ')).toBeUndefined();
+  expect(transcriptSttProviderCopy(undefined)).toBeUndefined();
+  expect(transcriptSttProviderCopy(null)).toBeUndefined();
 });
 
 test('conversation first-party summary copy names Flutter appId-null attribution', () => {
