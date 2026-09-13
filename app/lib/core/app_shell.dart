@@ -78,6 +78,7 @@ class _AppShellState extends State<AppShell> {
         }
       },
     );
+    if (!mounted) return;
     if (externalHapticResult != ExternalHapticTriggerResult.notHandled) {
       Logger.debug('External haptic trigger result: $externalHapticResult');
       return;
