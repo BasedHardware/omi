@@ -66,23 +66,26 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                   height: 36,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                   decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Add device icon
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: Image.asset(
-                          DeviceUtils.getDeviceImagePath(
-                            deviceType: connectedDevice.type,
-                            modelNumber: connectedDevice.modelNumber,
-                            deviceName: connectedDevice.name,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Add device icon
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: Image.asset(
+                            DeviceUtils.getDeviceImagePath(
+                              deviceType: connectedDevice.type,
+                              modelNumber: connectedDevice.modelNumber,
+                              deviceName: connectedDevice.name,
+                            ),
+                            fit: BoxFit.contain,
                           ),
-                          fit: BoxFit.contain,
                         ),
-                      ),
                       // Only show battery indicator and percentage when battery level is valid (> 0)
                       if (batteryLevel > 0) ...[
                         const SizedBox(width: 6.0),
@@ -128,7 +131,8 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                           ),
                         ],
                       ],
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               );

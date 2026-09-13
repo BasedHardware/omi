@@ -349,6 +349,10 @@ class CaptureController extends ChangeNotifier
   /// camera even after roles change.
   String? _photoStreamDeviceId;
 
+  /// Bumped when photo streaming stops or moves so in-flight chunk callbacks
+  /// cannot send to a superseded `/v4/listen` session.
+  int _photoStreamGeneration = 0;
+
   BtDevice? get companionPhotoDevice => _companionPhotoDevice;
 
   /// The device whose camera is streamed during the active device session.
@@ -1482,10 +1486,13 @@ class CaptureController extends ChangeNotifier
     if (connection == null || !await connection.hasPhotoStreamingCharacteristic()) return;
 
     await _blePhotoStream?.cancel();
+    _blePhotoStream = null;
+    final generation = ++_photoStreamGeneration;
     _photoStreamDeviceId = device.id;
     await connection.performCameraStartPhotoController();
     _blePhotoStream = await connection.performGetImageListener(
       onImageReceived: (orientedImage) async {
+        if (generation != _photoStreamGeneration) return;
         final rotatedImageBytes = rotateImage(orientedImage);
         final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
         final String base64Image = base64Encode(rotatedImageBytes);
@@ -1501,6 +1508,7 @@ class CaptureController extends ChangeNotifier
         final totalChunks = (base64Image.length / chunkSize).ceil();
 
         for (int i = 0; i < totalChunks; i++) {
+          if (generation != _photoStreamGeneration) return;
           final start = i * chunkSize;
           final end = (start + chunkSize > base64Image.length) ? base64Image.length : start + chunkSize;
           final chunk = base64Image.substring(start, end);
@@ -1520,7 +1528,9 @@ class CaptureController extends ChangeNotifier
         }
       },
     );
-    if (_blePhotoStream == null) _photoStreamDeviceId = null;
+    if (_blePhotoStream == null) {
+      await _stopDevicePhotoStreaming();
+    }
     notifyListeners();
   }
 
@@ -1528,6 +1538,7 @@ class CaptureController extends ChangeNotifier
   Future<void> _stopDevicePhotoStreaming() async {
     await _blePhotoStream?.cancel();
     _blePhotoStream = null;
+    _photoStreamGeneration++;
     final deviceId = _photoStreamDeviceId;
     _photoStreamDeviceId = null;
     if (deviceId == null) return;
