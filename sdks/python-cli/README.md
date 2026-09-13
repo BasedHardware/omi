@@ -63,9 +63,8 @@ Pretty output displays returned text literally, including square brackets and
 emoji-like codes such as `:warning:`. Styling applies to the table layout, not
 to the contents of your memories or conversations.
 Tables without predefined columns include fields from every row, in first-seen order.
-> [🇹🇭 คู่มือเริ่มต้นใช้งาน omi-cli (Thai Quickstart)](examples/quickstart.th.md)
 
-> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), the [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md), the [🇷🇺 Быстрый старт с omi-cli (Russian Quickstart)](examples/quickstart.ru.md), or the [🇧🇬 Българско ръководство за бърз старт (Bulgarian Quickstart)](examples/quickstart.bg.md).
+> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), or [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md).
 
 ## Auth
 
@@ -268,6 +267,7 @@ looking up an older or missing item may require several API requests.
 --api-base URL         Override the API base URL.
 --verbose, -v          Log HTTP traffic to stderr.
 --no-color             Disable colored output (also honors $NO_COLOR).
+--timeout SECONDS      Per-operation HTTP timeout (default 30).
 --version              Print the version.
 --help                 Show contextual help.
 ```

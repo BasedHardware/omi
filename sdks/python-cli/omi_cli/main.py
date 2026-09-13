@@ -11,6 +11,7 @@ Global flags:
 * ``--api-base URL`` Override the API base URL (handy for staging/local).
 * ``-v/--verbose``   Log HTTP traffic to stderr.
 * ``--no-color``     Disable colored output (also honors ``NO_COLOR`` env var).
+* ``--timeout``      Per-operation HTTP timeout in seconds (default 30).
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import click
+import httpx
 import typer
 
 from omi_cli import __version__
@@ -61,6 +63,7 @@ class AppContext:
     api_base_override: Optional[str]
     renderer: Renderer
     verbose: bool
+    timeout_seconds: Optional[float] = None
     _config: Optional[cfg.Config] = field(default=None, init=False)
 
     def load_config(self) -> cfg.Config:
@@ -91,7 +94,10 @@ class AppContext:
         return profile
 
     def make_client(self) -> OmiClient:
-        return OmiClient(self.get_profile(), verbose=self.verbose)
+        timeout = None
+        if self.timeout_seconds is not None:
+            timeout = httpx.Timeout(self.timeout_seconds, connect=min(10.0, self.timeout_seconds))
+        return OmiClient(self.get_profile(), timeout=timeout, verbose=self.verbose)
 
     def make_local_client(self) -> LocalOmiClient:
         profile = self.get_profile()
@@ -129,6 +135,13 @@ def _root(
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Log HTTP traffic to stderr."),
     no_color: bool = typer.Option(False, "--no-color", help="Disable color output (also honors $NO_COLOR)."),
+    timeout: Optional[float] = typer.Option(
+        None,
+        "--timeout",
+        min=0.1,
+        max=600.0,
+        help="Per-operation HTTP timeout in seconds (default 30).",
+    ),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -149,6 +162,7 @@ def _root(
         api_base_override=api_base,
         renderer=renderer,
         verbose=verbose,
+        timeout_seconds=timeout,
     )
 
 
