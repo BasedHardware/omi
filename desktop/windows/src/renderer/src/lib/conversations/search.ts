@@ -32,6 +32,9 @@ export const SEARCH_DEBOUNCE_MS = 250
 /** Mac fetches one page of 50; the backend clamps anything larger. */
 export const SEARCH_PAGE_SIZE = 50
 
+/** Safety cap so a very broad query cannot fan out unbounded parallel pages. */
+export const SEARCH_MAX_PAGES = 20
+
 /** Longest preview we lift from a spoken-word snippet or the overview. Matches
  *  the list's 200-char preview truncation. */
 const PREVIEW_CHARS = 200
@@ -93,6 +96,15 @@ export function searchItemToRow(item: ConversationSearchItem): ConversationRow {
 /** One page of remote hits as list rows, newest first. Throws on transport/5xx
  *  so the page can show the "couldn't search" state (a 503 is what the backend
  *  returns when Typesense is unavailable). */
+function rowsFromSearchItems(items: unknown[]): ConversationRow[] {
+  return items
+    .filter((item): item is ConversationSearchItem => {
+      const hit = item as ConversationSearchItem
+      return !!item && typeof hit.id === 'string' && !hit.is_locked
+    })
+    .map(searchItemToRow)
+}
+
 export async function searchConversations(
   query: string,
   dateRange: DateRange
@@ -101,11 +113,33 @@ export async function searchConversations(
     '/v1/conversations/search',
     buildSearchRequest(query, dateRange)
   )
-  const items = Array.isArray(r.data?.items) ? r.data.items : []
-  return items
-    .filter((item) => item && typeof item.id === 'string' && !item.is_locked)
-    .map(searchItemToRow)
-    .sort((a, b) => b.sortAt - a.sortAt)
+  const data = r.data
+  let items = Array.isArray(data?.items) ? data.items : []
+  const totalPages = Math.min(
+    typeof data?.total_pages === 'number' && data.total_pages > 0 ? data.total_pages : 1,
+    SEARCH_MAX_PAGES
+  )
+  if (totalPages > 1) {
+    const extraPages = await Promise.all(
+      Array.from({ length: totalPages - 1 }, (_, i) =>
+        omiApi.post<SearchConversationsResponse>(
+          '/v1/conversations/search',
+          buildSearchRequest(query, dateRange, i + 2)
+        )
+      )
+    )
+    for (const page of extraPages) {
+      const pageItems = Array.isArray(page.data?.items) ? page.data.items : []
+      items = items.concat(pageItems)
+    }
+  }
+  const seen = new Set<string>()
+  const rows = rowsFromSearchItems(items).filter((row) => {
+    if (seen.has(row.id)) return false
+    seen.add(row.id)
+    return true
+  })
+  return rows.sort((a, b) => b.sortAt - a.sortAt)
 }
 
 /** Compose the rows shown while a search is active.

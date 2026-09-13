@@ -17,8 +17,15 @@ vi.mock('../../../lib/transcriptionVocabulary', () => ({
   VOCABULARY_LIMIT: 100,
   fetchTranscriptionVocabulary: vi.fn().mockResolvedValue([]),
   saveTranscriptionVocabulary: vi.fn().mockResolvedValue(undefined),
-  addVocabularyTerms: vi.fn(),
-  removeVocabularyTerm: vi.fn()
+  addVocabularyTerms: (existing: string[], raw: string) => {
+    const added = raw
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .filter((t) => !existing.some((e) => e.toLowerCase() === t.toLowerCase()))
+    return { terms: [...existing, ...added], added, duplicates: [], overflow: [], tooLong: [] }
+  },
+  removeVocabularyTerm: (existing: string[], term: string) => existing.filter((t) => t !== term)
 }))
 
 const renderTab = (): void => {

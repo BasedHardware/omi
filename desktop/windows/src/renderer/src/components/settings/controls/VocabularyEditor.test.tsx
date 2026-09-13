@@ -19,6 +19,7 @@ vi.mock('../../../lib/apiClient', () => ({ omiApi: {} }))
 vi.mock('../../../lib/ptt/userVocabulary', () => ({ refreshUserVocabulary: vi.fn() }))
 vi.mock('../../../lib/toast', () => ({ toast: (...a: unknown[]) => toastMock(...a) }))
 
+import { VOCABULARY_LIMIT } from '../../../lib/transcriptionVocabulary'
 import { VocabularyEditor } from './VocabularyEditor'
 
 beforeEach(() => {
@@ -68,6 +69,15 @@ describe('VocabularyEditor', () => {
     // Optimistically gone, then back once the rejection lands.
     await waitFor(() => expect(screen.getByText('Omi')).toBeTruthy())
     expect(toastMock).toHaveBeenCalledWith('Could not save vocabulary', expect.anything())
+  })
+
+  it('disables add at the term cap and toasts when overflow is submitted', async () => {
+    fetchMock.mockResolvedValue(Array.from({ length: VOCABULARY_LIMIT }, (_, i) => `t${i}`))
+    render(<VocabularyEditor />)
+    await screen.findByText('t0')
+    const input = screen.getByLabelText('Add a vocabulary term') as HTMLInputElement
+    expect(input.disabled).toBe(true)
+    expect(input.placeholder).toMatch(/Limit of 100 terms reached/)
   })
 
   it('shows a retry affordance when the list cannot be loaded', async () => {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Loader2, Plus, RefreshCw, X } from 'lucide-react'
 import {
   VOCABULARY_LIMIT,
+  VOCABULARY_TERM_MAX_CHARS,
   addVocabularyTerms,
   fetchTranscriptionVocabulary,
   removeVocabularyTerm,
@@ -69,19 +70,26 @@ export function VocabularyEditor(): React.JSX.Element {
   }
 
   const onAdd = (): void => {
-    if (!terms) return
+    if (!terms || saving) return
     const result = addVocabularyTerms(terms, draft)
-    setDraft('')
     if (result.overflow.length > 0) {
       toast(`Vocabulary is limited to ${VOCABULARY_LIMIT} terms`, {
         tone: 'warn',
         body: 'Remove a term before adding another.'
       })
     }
+    if (result.tooLong.length > 0) {
+      toast(`Terms must be ${VOCABULARY_TERM_MAX_CHARS} characters or fewer`, {
+        tone: 'warn',
+        body: 'Shorten the term and try again.'
+      })
+    }
     if (result.added.length === 0) {
+      if (result.tooLong.length === 0) setDraft('')
       inputRef.current?.focus()
       return
     }
+    setDraft('')
     void commit(result.terms, terms)
     inputRef.current?.focus()
   }
@@ -117,7 +125,7 @@ export function VocabularyEditor(): React.JSX.Element {
   }
 
   const full = terms.length >= VOCABULARY_LIMIT
-  const canAdd = draft.trim().length > 0 && !full
+  const canAdd = draft.trim().length > 0 && !full && !saving
 
   return (
     <div className="space-y-3">

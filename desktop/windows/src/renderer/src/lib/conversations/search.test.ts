@@ -152,6 +152,30 @@ describe('searchConversations', () => {
     postMock.mockImplementationOnce(() => Promise.reject(new Error('503')))
     await expect(searchConversations('q', NO_DATE_RANGE)).rejects.toThrow('503')
   })
+
+  it('fetches additional pages when total_pages > 1 and dedupes by id', async () => {
+    postMock
+      .mockResolvedValueOnce({
+        data: {
+          items: [item({ id: 'p1-a' }), item({ id: 'dup' })],
+          total_pages: 2,
+          current_page: 1,
+          per_page: 50
+        }
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [item({ id: 'dup' }), item({ id: 'p2-b', created_at: '2026-07-01T00:00:00Z' })],
+          total_pages: 2,
+          current_page: 2,
+          per_page: 50
+        }
+      })
+    const rows = await searchConversations('budget', NO_DATE_RANGE)
+    expect(postMock).toHaveBeenCalledTimes(2)
+    expect(postMock.mock.calls[1][1]).toMatchObject({ page: 2 })
+    expect(rows.map((r) => r.id)).toEqual(['p2-b', 'p1-a', 'dup'])
+  })
 })
 
 describe('composeSearchRows', () => {

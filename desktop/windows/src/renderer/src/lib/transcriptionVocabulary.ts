@@ -33,16 +33,16 @@ export type AddTermsResult = {
   duplicates: string[]
   /** Terms skipped because the list was full. */
   overflow: string[]
+  /** Terms rejected because they exceed the per-term character limit. */
+  tooLong: string[]
 }
 
-/** Split a submission into candidate terms: comma-separated, trimmed, non-empty,
- *  clipped to the per-term bound. */
+/** Split a submission into candidate terms: comma-separated, trimmed, non-empty. */
 export function parseVocabularyInput(raw: string): string[] {
   return raw
     .split(',')
     .map((t) => t.trim().replace(/\s+/g, ' '))
     .filter((t) => t.length > 0)
-    .map((t) => t.slice(0, VOCABULARY_TERM_MAX_CHARS))
 }
 
 /** Add one submission to the list. Dedupe is case-insensitive against both the
@@ -54,7 +54,12 @@ export function addVocabularyTerms(existing: string[], raw: string): AddTermsRes
   const added: string[] = []
   const duplicates: string[] = []
   const overflow: string[] = []
+  const tooLong: string[] = []
   for (const candidate of parseVocabularyInput(raw)) {
+    if (candidate.length > VOCABULARY_TERM_MAX_CHARS) {
+      tooLong.push(candidate)
+      continue
+    }
     const key = candidate.toLowerCase()
     if (seen.has(key)) {
       duplicates.push(candidate)
@@ -68,7 +73,7 @@ export function addVocabularyTerms(existing: string[], raw: string): AddTermsRes
     terms.push(candidate)
     added.push(candidate)
   }
-  return { terms, added, duplicates, overflow }
+  return { terms, added, duplicates, overflow, tooLong }
 }
 
 /** Remove one term (exact match — the chip carries the stored spelling). */
@@ -92,5 +97,5 @@ export async function saveTranscriptionVocabulary(terms: string[]): Promise<void
   await omiApi.patch('/v1/users/transcription-preferences', {
     vocabulary: terms.slice(0, VOCABULARY_LIMIT)
   })
-  refreshUserVocabulary()
+  refreshUserVocabulary({ force: true })
 }

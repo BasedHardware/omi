@@ -12,6 +12,7 @@ import { MemoryRouter } from 'react-router-dom'
 
 const patchMock = vi.fn().mockResolvedValue({ data: { status: 'Ok' } })
 const getMock = vi.fn()
+const invalidateCacheMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../lib/apiClient', () => ({
   omiApi: {
@@ -20,7 +21,7 @@ vi.mock('../lib/apiClient', () => ({
   }
 }))
 
-vi.mock('../lib/pageCache', () => ({ invalidateConversationsCache: vi.fn() }))
+vi.mock('../lib/pageCache', () => ({ invalidateConversationsCache: () => invalidateCacheMock() }))
 vi.mock('../lib/toast', () => ({ toast: vi.fn() }))
 
 import { ConversationDetail } from './ConversationDetail'
@@ -157,6 +158,10 @@ const CONVERSATION_WITH_SEGMENTS = {
 }
 
 describe('ConversationDetail — edit transcript segment text', () => {
+  beforeEach(() => {
+    invalidateCacheMock.mockClear()
+  })
+
   const openDrawer = async (): Promise<void> => {
     fireEvent.click(await screen.findByRole('button', { name: 'View Transcript' }))
   }
@@ -196,6 +201,7 @@ describe('ConversationDetail — edit transcript segment text', () => {
     })
     await findByText('We shipped the feature')
     expect(queryByText('We shipped the thing')).toBeNull()
+    expect(invalidateCacheMock).toHaveBeenCalledTimes(1)
   })
 
   it('keeps Save disabled while the text is empty or unchanged', async () => {

@@ -9,7 +9,9 @@ vi.mock('./apiClient', () => ({
     patch: (...args: unknown[]) => patchMock(...args)
   }
 }))
-vi.mock('./ptt/userVocabulary', () => ({ refreshUserVocabulary: () => refreshMock() }))
+vi.mock('./ptt/userVocabulary', () => ({
+  refreshUserVocabulary: (opts?: { force?: boolean }) => refreshMock(opts)
+}))
 
 import {
   VOCABULARY_LIMIT,
@@ -35,9 +37,9 @@ describe('parseVocabularyInput', () => {
       'Based Hardware'
     ])
   })
-  it('clips an oversized term', () => {
+  it('preserves oversized terms (length check happens in addVocabularyTerms)', () => {
     const long = 'x'.repeat(VOCABULARY_TERM_MAX_CHARS + 20)
-    expect(parseVocabularyInput(long)[0]).toHaveLength(VOCABULARY_TERM_MAX_CHARS)
+    expect(parseVocabularyInput(long)[0]).toBe(long)
   })
 })
 
@@ -69,6 +71,14 @@ describe('addVocabularyTerms', () => {
     expect(r.terms).toEqual(['Omi'])
     expect(r.added).toEqual([])
   })
+
+  it('rejects terms longer than the per-term cap without adding them', () => {
+    const long = 'x'.repeat(VOCABULARY_TERM_MAX_CHARS + 1)
+    const r = addVocabularyTerms(['Omi'], long)
+    expect(r.terms).toEqual(['Omi'])
+    expect(r.added).toEqual([])
+    expect(r.tooLong).toEqual([long])
+  })
 })
 
 describe('removeVocabularyTerm', () => {
@@ -99,6 +109,7 @@ describe('saveTranscriptionVocabulary', () => {
       vocabulary: ['Omi', 'Deepgram']
     })
     expect(refreshMock).toHaveBeenCalledTimes(1)
+    expect(refreshMock).toHaveBeenCalledWith({ force: true })
   })
 
   it('does not touch the PTT cache when the PATCH is rejected', async () => {

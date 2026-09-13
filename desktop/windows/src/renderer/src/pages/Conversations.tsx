@@ -175,6 +175,11 @@ export function Conversations(): React.JSX.Element {
   }>({ key: '', results: null, error: null })
   // Bumped by "Try again" after a failed search to re-run the same query.
   const [searchNonce, setSearchNonce] = useState(0)
+  // Bumped when search goes inactive → active so re-entering the same text cannot
+  // treat a prior session's hits/errors as the current answer.
+  const [searchActivation, setSearchActivation] = useState(0)
+  // Bumped each time search goes inactive → active so re-entering the same query
+  // still shows in-flight state and cannot reuse a stale answer/error as current.
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
@@ -421,6 +426,16 @@ export function Conversations(): React.JSX.Element {
   // local set actually changes.
   const unsyncedPast = useMemo(() => backfillCandidates(locals).length, [locals])
 
+  const updateSearchQuery = (value: string): void => {
+    const wasInactive = !isSearchActive(query)
+    if (!isSearchActive(value)) {
+      setSearch({ key: '', results: null, error: null })
+    } else if (wasInactive) {
+      setSearchActivation((n) => n + 1)
+    }
+    setQuery(value)
+  }
+
   // Debounced remote search (Mac: DebouncedSearchCoordinator, 250ms). Re-runs when
   // the query or the date window changes (both travel to the backend); folder and
   // type refinements are client-side over the returned rows, so changing them
@@ -431,7 +446,7 @@ export function Conversations(): React.JSX.Element {
   const searchStart = dateRange.start
   const searchEnd = dateRange.end
   const searchKey = searchActive
-    ? `${normalizedQuery}\u0000${searchStart ?? ''}\u0000${searchEnd ?? ''}\u0000${searchNonce}`
+    ? `${normalizedQuery}\u0000${searchStart ?? ''}\u0000${searchEnd ?? ''}\u0000${searchNonce}\u0000${searchActivation}`
     : ''
   useEffect(() => {
     if (!panelIsActive || !searchActive) return
@@ -450,7 +465,7 @@ export function Conversations(): React.JSX.Element {
           })
         })
         .catch((e: unknown) => {
-          if (cancelled) return
+          if (cancelled || getCacheUid() !== originUid) return
           setSearch({ key: searchKey, results: [], error: (e as Error).message || 'Search failed' })
         })
     }, SEARCH_DEBOUNCE_MS)
@@ -460,7 +475,7 @@ export function Conversations(): React.JSX.Element {
     }
   }, [searchKey, searchActive, normalizedQuery, searchStart, searchEnd, panelIsActive])
   // Derived view of the search state for the CURRENT key only.
-  const searchResults = searchActive && search.key === searchKey ? search.results : null
+  const searchResults = searchActive ? search.results : null
   const searchError = searchActive && search.key === searchKey ? search.error : null
   // Debounce + in-flight window: the current key has no answer yet.
   const searching = searchActive && search.key !== searchKey
@@ -540,7 +555,7 @@ export function Conversations(): React.JSX.Element {
       )
     )
     setSearch((prev) =>
-      prev.results
+      prev.results && prev.key === searchKey
         ? {
             ...prev,
             results: restoreRows(
@@ -734,7 +749,7 @@ export function Conversations(): React.JSX.Element {
   const clearAllFilters = (): void => {
     setFolderFilter({ kind: 'all' })
     setType('all')
-    setQuery('')
+    updateSearchQuery('')
     setDateRange(NO_DATE_RANGE)
   }
 
@@ -787,13 +802,16 @@ export function Conversations(): React.JSX.Element {
           )}
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => updateSearchQuery(e.target.value)}
             placeholder="Search titles, summaries and transcripts…"
             aria-label="Search conversations"
             className="flex-1 border-0 bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-0"
           />
           {query && (
-            <button onClick={() => setQuery('')} className="text-xs text-white/45 hover:text-white">
+            <button
+              onClick={() => updateSearchQuery('')}
+              className="text-xs text-white/45 hover:text-white"
+            >
               Clear
             </button>
           )}

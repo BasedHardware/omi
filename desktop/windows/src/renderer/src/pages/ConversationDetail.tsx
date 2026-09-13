@@ -528,8 +528,21 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
     apply(text)
     try {
       await setConversationSegmentText(id, segmentId, text)
+      invalidateConversationsCache()
+      // Spoken-word search uses backend transcript-chunk vectors (Typesense + Pinecone).
+      // PATCH …/segments/text updates Firestore only today — same as mobile — so search
+      // can lag until the backend reindexes chunks on segment edit.
     } catch (e) {
-      apply(prev)
+      setConv((c) =>
+        c?.transcript_segments
+          ? {
+              ...c,
+              transcript_segments: c.transcript_segments.map((s) =>
+                s.id === segmentId && s.text === text ? { ...s, text: prev } : s
+              )
+            }
+          : c
+      )
       toast('Could not update transcript', { tone: 'error', body: (e as Error).message })
     }
   }
