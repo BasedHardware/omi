@@ -207,3 +207,41 @@ def test_goal_update_rejects_set_and_clear_unit(authed_profile, respx_mock, monk
     assert "--unit" in error["detail"]
     assert "--clear-unit" in error["detail"]
     assert not respx_mock.calls
+
+
+def test_goal_create_includes_planning_context(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.post("/v1/dev/user/goals").respond(
+        json={
+            "id": "g5",
+            "title": "ship cli",
+            "desired_outcome": "usable export",
+            "why_it_matters": "users need backups",
+            "success_criteria": ["export works", "tests pass"],
+            "horizon_at": "2026-12-01T00:00:00",
+        }
+    )
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "goal",
+            "create",
+            "ship cli",
+            "--desired-outcome",
+            "usable export",
+            "--why-it-matters",
+            "users need backups",
+            "--success-criterion",
+            "export works",
+            "--success-criterion",
+            "tests pass",
+            "--horizon-at",
+            "2026-12-01T00:00:00",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    body = json.loads(route.calls.last.request.content)
+    assert body["desired_outcome"] == "usable export"
+    assert body["why_it_matters"] == "users need backups"
+    assert body["success_criteria"] == ["export works", "tests pass"]
+    assert body["horizon_at"].startswith("2026-12-01")

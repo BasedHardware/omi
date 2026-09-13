@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 import typer
 
+from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import UsageError
 from omi_cli.models import GoalType
 from omi_cli.output import shorten
@@ -87,6 +89,14 @@ def create_goal(
     unit: Optional[str] = typer.Option(
         None, "--unit", help="Unit label (e.g. 'users', 'points'). Requires a metric option such as --target."
     ),
+    desired_outcome: Optional[str] = typer.Option(None, "--desired-outcome", help="What success looks like."),
+    why_it_matters: Optional[str] = typer.Option(None, "--why-it-matters", help="Why this goal matters."),
+    success_criterion: Optional[list[str]] = typer.Option(
+        None, "--success-criterion", help="Success criterion (repeatable)."
+    ),
+    horizon_at: Optional[datetime] = typer.Option(
+        None, "--horizon-at", formats=ISO_DATETIME_FORMATS, help="ISO datetime goal horizon."
+    ),
 ) -> None:
     ctx = _ctx(typer_ctx)
     has_metrics = any(value is not None for value in (target_value, goal_type, current_value, min_value, max_value))
@@ -114,6 +124,16 @@ def create_goal(
         body["current_value"] = current_value if current_value is not None else 0
         body["min_value"] = min_value if min_value is not None else 0
         body["max_value"] = max_value if max_value is not None else 10
+    if desired_outcome is not None:
+        body["desired_outcome"] = desired_outcome
+    if why_it_matters is not None:
+        body["why_it_matters"] = why_it_matters
+    if success_criterion:
+        criteria = [c for c in success_criterion if c and c.strip()]
+        if criteria:
+            body["success_criteria"] = criteria
+    if horizon_at is not None:
+        body["horizon_at"] = horizon_at.isoformat()
     # No metric options given: send a qualitative goal (the API supports omitting all metric fields).
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/goals", json_body=body)
