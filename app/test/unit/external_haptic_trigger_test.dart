@@ -40,10 +40,18 @@ void main() {
       expect(called, isFalse);
     });
 
-    test('rejects invalid haptic levels', () async {
-      for (final level in ['0', '4', 'fast', '']) {
+    test('rejects non-canonical or repeated haptic levels', () async {
+      for (final uri in [
+        Uri.parse('omi://device/haptic?level=0'),
+        Uri.parse('omi://device/haptic?level=4'),
+        Uri.parse('omi://device/haptic?level=fast'),
+        Uri.parse('omi://device/haptic?level='),
+        Uri.parse('omi://device/haptic?level=0x2'),
+        Uri.parse('omi://device/haptic?level=02'),
+        Uri.parse('omi://device/haptic?level=%2B2'),
+        Uri.parse('omi://device/haptic?level=2&level=3'),
+      ]) {
         var called = false;
-        final uri = Uri.parse('omi://device/haptic?level=$level');
 
         final result = await runExternalHapticTrigger(
           uri,
@@ -54,7 +62,7 @@ void main() {
           },
         );
 
-        expect(result, ExternalHapticTriggerResult.notHandled);
+        expect(result, ExternalHapticTriggerResult.notHandled, reason: '$uri should be rejected');
         expect(called, isFalse);
       }
     });
