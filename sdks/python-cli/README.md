@@ -66,6 +66,8 @@ Tables without predefined columns include fields from every row, in first-seen o
 
 > Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md) or the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md).
 
+> 🇩🇰 På dansk: [hurtigstartguide til omi-cli](examples/quickstart.da.md).
+
 ## Auth
 
 Two auth methods, both fully wired:
