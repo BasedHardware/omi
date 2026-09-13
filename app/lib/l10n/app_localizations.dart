@@ -1347,10 +1347,10 @@ abstract class AppLocalizations {
   /// **'Triple Tap Action'**
   String get tripleTapAction;
 
-  /// Fixed long press behaviour of the device button
+  /// Fixed long-press power-off gesture on the device button
   ///
   /// In en, this message translates to:
-  /// **'Power On / Off'**
+  /// **'Power Off'**
   String get powerOnOff;
 
   /// Button action that ignores the gesture
@@ -1359,10 +1359,10 @@ abstract class AppLocalizations {
   /// **'Do Nothing'**
   String get doNothing;
 
-  /// Explains that the long press power toggle is fixed in firmware
+  /// Explains that the long-press power-off gesture is fixed in firmware
   ///
   /// In en, this message translates to:
-  /// **'Hold for 3 seconds to turn your Omi on or off. This can\'t be changed.'**
+  /// **'Hold for 3 seconds to power off your Omi. This can\'t be changed.'**
   String get longPressFixedSubtitle;
 
   /// End and process action
