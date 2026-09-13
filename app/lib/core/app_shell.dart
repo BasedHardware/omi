@@ -313,7 +313,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _handleClickUpCallback(bool requiresSetup) async {
-    final clickupService = ClickupService();
+    final clickupService = ClickUpService();
     final success = await clickupService.handleCallback();
 
     if (!mounted) return;
