@@ -183,6 +183,35 @@ test('old discarded conversations name GET transcript start/end numeric strings'
   expect(result.items[0]).toMatchObject({transcriptEndSeconds: 120});
 });
 
+test('old discarded conversations keep GET transcript_segments when more than 20000', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'discarded-long',
+      discarded: true,
+      structured: {title: '', overview: 'Actual overview'},
+      transcript_segments: Array.from({length: 20001}, (_, index) => ({
+        text: `Speech ${index}`,
+        speaker: 'SPEAKER_00',
+        is_user: false,
+        start: 0,
+        end: 1,
+      })),
+    },
+    {
+      ...conversation,
+      id: 'neighbor',
+    },
+  ]);
+  const result = await loadConversations(api);
+  expect(result.items.map(row => row.id)).toEqual([
+    'discarded-long',
+    'neighbor',
+  ]);
+  expect(result.items[0].title).toContain('Speech 20000');
+  expect(result.items[1].title).toBe('Real title');
+});
+
 test('old conversations keep GET timestamps Flutter DateTime.tryParse accepts', async () => {
   const {api} = backend([
     {

@@ -154,7 +154,7 @@ function discardedTranscriptSegments(value: unknown): {
   if (value === undefined || value === null) {
     return [];
   }
-  if (!Array.isArray(value) || value.length > 20000) {
+  if (!Array.isArray(value)) {
     throw new Error('Omi transcript is malformed');
   }
   return value.map(raw => {
