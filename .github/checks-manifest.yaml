@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: inaturalist-plugin-tests
+    command: ["python3", "plugins/omi-inaturalist-app/test_inaturalist.py"]
+    triggers: ["plugins/omi-inaturalist-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#3120 integration: exercise the production public-data tools, input boundary, bounded transport, cache and shared upstream request budget without network or third-party packages"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
