@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.345",
+      "date": "2026-09-13",
+      "changes": [
+        "Fixed external app setup so sign-in links and completion checks keep working when the provider's URL already carries its own query parameters"
+      ]
+    },
+    {
       "version": "0.12.344",
       "date": "2026-09-13",
       "changes": [
