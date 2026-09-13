@@ -111,7 +111,7 @@ void main() {
       expect(provider.isVoiceQuestionSessionActive, isTrue);
     });
 
-    test('double tap mutes, then unmutes, without overlapping requests', () async {
+    test('double tap mutes, and a second tap while pause is in flight is dropped', () async {
       final provider = await providerWith({});
 
       provider.handleDeviceButtonState(_deviceId, OmiButtonState.doubleTap);

@@ -112,8 +112,8 @@ void main() {
     // Defaults: single = ask question, double = mute (seeded), triple = end conversation.
     expect(find.text('Ask Omi a Question'), findsOneWidget);
     expect(find.text('End Conversation'), findsOneWidget);
-    expect(find.text('Power On / Off'), findsOneWidget);
-    expect(find.text("Hold for 3 seconds to turn your Omi on or off. This can't be changed."), findsOneWidget);
+    expect(find.text('Power Off'), findsOneWidget);
+    expect(find.text("Hold for 3 seconds to power off your Omi. This can't be changed."), findsOneWidget);
   });
 
   testWidgets('picking a triple tap action persists it and updates the chip', (tester) async {
@@ -153,7 +153,8 @@ void main() {
     await tester.tap(find.byKey(const Key('button_gesture_longPress')));
     await tester.pumpAndSettle();
 
-    expect(find.byType(ListTile), findsNothing);
+    expect(find.byKey(const Key('button_gesture_longPress')), findsOneWidget);
+    expect(find.byType(BottomSheet), findsNothing);
   });
 
   testWidgets('Find triggers one guarded request for a connected Omi', (tester) async {

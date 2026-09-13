@@ -63,7 +63,10 @@ static void sim_hold(sim_t *sim, bool pressed, uint32_t duration_ms)
 static void sim_tap(sim_t *sim, uint32_t press_ms, uint32_t gap_ms)
 {
     sim_hold(sim, true, press_ms);
-    sim_hold(sim, false, gap_ms);
+    sim_tick(sim, false); /* release edge */
+    if (gap_ms > 0) {
+        sim_hold(sim, false, gap_ms);
+    }
 }
 
 static void settle(sim_t *sim)
@@ -212,6 +215,27 @@ static void test_tap_followed_by_medium_hold_drops_the_tap(void)
     EXPECT_EQ(sim.log[0], BUTTON_GESTURE_RELEASE);
 }
 
+static void test_new_press_after_gap_expires_is_not_double_tap(void)
+{
+    current_test = __func__;
+    sim_t sim;
+    sim_init(&sim);
+
+    sim_tap(&sim, 120, 0);
+    /* Gap elapsed since the last release, but the next poll is a press edge. */
+    sim.fsm.last_release_ms = sim.now_ms - BUTTON_GESTURE_MULTI_TAP_GAP_MS;
+    sim_tick(&sim, true);
+
+    sim_hold(&sim, true, 120);
+    sim_tick(&sim, false);
+    settle(&sim);
+
+    EXPECT_EQ(sim.log[0], BUTTON_GESTURE_SINGLE_TAP);
+    for (int i = 0; i < sim.log_len; i++) {
+        EXPECT_EQ(sim.log[i] == BUTTON_GESTURE_DOUBLE_TAP, 0);
+    }
+}
+
 static void test_uptime_wraparound_does_not_break_timing(void)
 {
     current_test = __func__;
@@ -238,6 +262,7 @@ int main(void)
     test_tap_then_long_press_only_reports_long_press();
     test_medium_hold_is_a_plain_release();
     test_tap_followed_by_medium_hold_drops_the_tap();
+    test_new_press_after_gap_expires_is_not_double_tap();
     test_uptime_wraparound_does_not_break_timing();
 
     if (failures != 0) {

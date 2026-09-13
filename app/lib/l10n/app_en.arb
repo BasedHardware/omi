@@ -795,17 +795,17 @@
     "@tripleTapAction": {
         "description": "Triple tap action setting"
     },
-    "powerOnOff": "Power On / Off",
+    "powerOnOff": "Power Off",
     "@powerOnOff": {
-        "description": "Fixed long press behaviour of the device button"
+        "description": "Fixed long-press power-off gesture on the device button"
     },
     "doNothing": "Do Nothing",
     "@doNothing": {
         "description": "Button action that ignores the gesture"
     },
-    "longPressFixedSubtitle": "Hold for 3 seconds to turn your Omi on or off. This can't be changed.",
+    "longPressFixedSubtitle": "Hold for 3 seconds to power off your Omi. This can't be changed.",
     "@longPressFixedSubtitle": {
-        "description": "Explains that the long press power toggle is fixed in firmware"
+        "description": "Explains that the long-press power-off gesture is fixed in firmware"
     },
     "endAndProcess": "End & Process Conversation",
     "@endAndProcess": {

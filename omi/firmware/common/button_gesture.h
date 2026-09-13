@@ -42,6 +42,7 @@ typedef struct {
     bool pressed;
     bool long_press_fired;
     bool release_pending;
+    bool pending_press;
     uint8_t tap_count;
     uint32_t press_start_ms;
     uint32_t last_release_ms;

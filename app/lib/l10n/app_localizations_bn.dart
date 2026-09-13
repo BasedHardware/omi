@@ -607,13 +607,13 @@ class AppLocalizationsBn extends AppLocalizations {
   String get tripleTapAction => 'তিনবার ট্যাপ ক্রিয়া';
 
   @override
-  String get powerOnOff => 'চালু / বন্ধ';
+  String get powerOnOff => 'বন্ধ করুন';
 
   @override
   String get doNothing => 'কিছু করবেন না';
 
   @override
-  String get longPressFixedSubtitle => 'আপনার Omi চালু বা বন্ধ করতে 3 সেকেন্ড ধরে রাখুন। এটি পরিবর্তন করা যাবে না।';
+  String get longPressFixedSubtitle => 'আপনার Omi বন্ধ করতে 3 সেকেন্ড ধরে রাখুন। এটি পরিবর্তন করা যাবে না।';
 
   @override
   String get endAndProcess => 'কথোপকথন শেষ এবং প্রক্রিয়া করুন';

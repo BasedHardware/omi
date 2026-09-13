@@ -609,13 +609,13 @@ class AppLocalizationsFa extends AppLocalizations {
   String get tripleTapAction => 'عمل سه ضربه';
 
   @override
-  String get powerOnOff => 'روشن / خاموش کردن';
+  String get powerOnOff => 'خاموش کردن';
 
   @override
   String get doNothing => 'هیچ کاری نکن';
 
   @override
-  String get longPressFixedSubtitle => 'برای روشن یا خاموش کردن Omi، ۳ ثانیه نگه دارید. این قابل تغییر نیست.';
+  String get longPressFixedSubtitle => 'برای خاموش کردن Omi، ۳ ثانیه نگه دارید. این قابل تغییر نیست.';
 
   @override
   String get endAndProcess => 'پایان‌دادن و پردازش گفتگو';
