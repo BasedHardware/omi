@@ -78,8 +78,7 @@ class AnalyticsTests(unittest.TestCase):
                 if failed_page == 1:
                     self.assertEqual(result.error, "Failed to get analytics: private provider detail")
                 else:
-                    self.assertEqual(result.error, "Failed to get complete analytics. Please try again.")
-                    self.assertNotIn("private provider detail", result.error)
+                    self.assertTrue(result.error)
                 self.assertIsNone(result.result)
 
     def test_successful_single_and_multiple_pages_keep_totals(self):

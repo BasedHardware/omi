@@ -882,6 +882,24 @@ STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     ),
 )
 
+# Duplicate-capture detection (#3244): the other capture clients' conversations
+# whose activity clock runs past this recording's start. Shares the composite
+# above with the stale sweep; the range and order both sit on `finished_at`.
+CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY = FirestoreQuerySpec(
+    identifier='conversations_by_status_finished_after',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('finished_at', '>=', 'finished_after'),
+    ),
+    index_fields=(
+        _asc('status'),
+        _asc('finished_at'),
+        _asc('__name__'),
+    ),
+)
+
 CONVERSATIONS_ACTIVE_ORDERED_QUERY = FirestoreQuerySpec(
     identifier='conversations_discarded_created',
     collection_group='conversations',
@@ -1386,6 +1404,7 @@ QUERY_SPECS = (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
     ENTITY_TIMELINE_CONVERSATIONS_QUERY,
     ENTITY_TIMELINE_MEETINGS_QUERY,
     ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY,
