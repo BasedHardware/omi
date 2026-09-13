@@ -43,6 +43,7 @@ class ExternalHapticRateLimiter {
   final Duration cooldown;
   final ExternalHapticElapsed _elapsed;
   final Map<String, Duration> _lastAcceptedAt = <String, Duration>{};
+  final Set<String> _inFlight = <String>{};
 
   static ExternalHapticElapsed _monotonicElapsed() {
     final stopwatch = Stopwatch()..start();
@@ -50,14 +51,25 @@ class ExternalHapticRateLimiter {
   }
 
   bool tryAcquire(String deviceId) {
+    // Keep each device single-flight even after the wall-clock cooldown expires.
+    // A slow reconnect must not accumulate accepted work behind the device mutex
+    // and later turn that queue into a burst of physical haptic writes.
+    if (_inFlight.contains(deviceId)) return false;
+
     final now = _elapsed();
     final lastAcceptedAt = _lastAcceptedAt[deviceId];
     if (lastAcceptedAt != null && now - lastAcceptedAt < cooldown) return false;
 
-    // Reserve synchronously before any awaited connection or BLE write. This keeps
-    // concurrent deep-link deliveries from racing through the same cooldown slot.
+    // Reserve synchronously before any awaited connection or BLE write. The
+    // admission timestamp remains even after release, so failed dispatches also
+    // consume the cooldown window.
     _lastAcceptedAt[deviceId] = now;
+    _inFlight.add(deviceId);
     return true;
+  }
+
+  void release(String deviceId) {
+    _inFlight.remove(deviceId);
   }
 }
 
@@ -76,6 +88,10 @@ Future<ExternalHapticTriggerResult> runExternalHapticTrigger(
   final limiter = rateLimiter ?? _defaultExternalHapticRateLimiter;
   if (!limiter.tryAcquire(deviceId)) return ExternalHapticTriggerResult.rateLimited;
 
-  final played = await playHaptic(deviceId, trigger.level);
-  return played ? ExternalHapticTriggerResult.played : ExternalHapticTriggerResult.unavailable;
+  try {
+    final played = await playHaptic(deviceId, trigger.level);
+    return played ? ExternalHapticTriggerResult.played : ExternalHapticTriggerResult.unavailable;
+  } finally {
+    limiter.release(deviceId);
+  }
 }
