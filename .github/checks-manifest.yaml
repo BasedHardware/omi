@@ -9,6 +9,11 @@ checks:
     triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13183: shared helper must not turn empty HTTP errors into created WROs or empty read results; preserve upstream cancellation guards"
+  - id: plugin-db-transcript-segments-tests
+    command: ["python3", "plugins/test_db_transcript_segments.py"]
+    triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
+    lanes: ["local", "ci"]
+    reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
