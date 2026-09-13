@@ -4,6 +4,8 @@ import {Linking, Text} from 'react-native';
 import type {ConversationProjection} from '../desktopReadClient';
 import {
   chatBlockUnavailableCopy,
+  chatDiscoveryShowMoreCopy,
+  chatDiscoveryShowLessCopy,
   desktopBackendServiceCopy,
   conversationFirstPartySummaryCopy,
   conversationUnknownAppCopy,
@@ -310,6 +312,65 @@ test('conversation-detail history names GET content_blocks without inventing wri
       node => node.props.source?.uri === 'https://cdn.example.test/notes.png',
     ),
   ).toHaveLength(0);
+});
+
+test('conversation-detail history names GET discovery fullText Show more without a write', () => {
+  mockChat.mockReturnValue({
+    result: {
+      status: 'loaded',
+      messages: [
+        {
+          id: 'ai-1',
+          sender: 'ai',
+          text: 'Here is what I found.',
+          createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+          generationOutcome: 'completed',
+          contentBlocks: [
+            {
+              eyebrow: 'Discovery',
+              title: 'Quiet mornings',
+              detail: 'You like a slow start.',
+              more: 'Longer body stays collapsed.',
+            },
+          ],
+        },
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    },
+    reload: jest.fn(),
+    loadingOlder: false,
+    loadOlder: jest.fn(),
+    olderNotice: null,
+    olderRetryable: true,
+  });
+  const view = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+  });
+  const tree = text(view);
+  expect(tree).toContain('Discovery');
+  expect(tree).toContain('You like a slow start.');
+  expect(tree).toContain(chatDiscoveryShowMoreCopy());
+  expect(tree).not.toContain('Longer body stays collapsed.');
+  expect(tree).not.toContain(chatDiscoveryShowLessCopy());
+  const more = view.root.find(
+    node =>
+      node.props.accessibilityLabel === chatDiscoveryShowMoreCopy() &&
+      typeof node.props.onPress === 'function',
+  );
+  act(() => {
+    more.props.onPress();
+  });
+  const expanded = text(view);
+  expect(expanded).toContain('Longer body stays collapsed.');
+  expect(expanded).toContain(chatDiscoveryShowLessCopy());
+  expect(expanded).not.toContain(chatDiscoveryShowMoreCopy());
+  expect(expanded).not.toContain('You like a slow start.');
 });
 
 test('conversation-detail history names loaded GET task_card description without leaking ids', () => {

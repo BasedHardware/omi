@@ -557,7 +557,7 @@ function questionHasOptions(row: Record<string, unknown>): boolean {
 
 function parseContentBlock(
   raw: unknown,
-): {eyebrow: string; title?: string; detail?: string; taskId?: string}[] {
+): {eyebrow: string; title?: string; detail?: string; taskId?: string; more?: string}[] {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     return [];
   }
@@ -576,14 +576,26 @@ function parseContentBlock(
   }
   switch (type) {
     case 'discoveryCard':
-    case 'discovery_card':
+    case 'discovery_card': {
+      const summary = wireString(row, 'summary');
+      const fullText = wireString(row, 'fullText', 'full_text');
+      const summaryVisible =
+        summary === undefined ? '' : visibleDisplayText(summary);
+      const fullVisible =
+        fullText === undefined ? '' : visibleDisplayText(fullText);
       return [
-        contentBlockChrome(
-          'Discovery',
-          wireString(row, 'title'),
-          wireString(row, 'summary'),
-        ),
+        {
+          ...contentBlockChrome(
+            'Discovery',
+            wireString(row, 'title'),
+            summary,
+          ),
+          ...(fullVisible !== '' && fullVisible !== summaryVisible
+            ? {more: fullVisible}
+            : {}),
+        },
       ];
+    }
     case 'questionCard':
     case 'question_card': {
       const text = wireString(row, 'text');
@@ -758,7 +770,7 @@ function parseOmiChatContentBlocksRaw(
 
 function parseOmiChatContentBlocks(
   row: Record<string, unknown>,
-): {eyebrow: string; title?: string; detail?: string; taskId?: string}[] {
+): {eyebrow: string; title?: string; detail?: string; taskId?: string; more?: string}[] {
   try {
     const raw = parseOmiChatContentBlocksRaw(row);
     if (raw === null) {

@@ -92,6 +92,8 @@ import {FocusPressable} from './Pressable';
 import {ProjectionRow} from './ProjectionList';
 import {
   chatBlockUnavailableCopy,
+  chatDiscoveryShowMoreCopy,
+  chatDiscoveryShowLessCopy,
   chatDaySummaryCopy,
   clockLabel,
   projectionClockLabel,
@@ -1871,6 +1873,80 @@ test('a chat message names GET content_blocks without inventing write actions', 
     renderer.unmount();
     omitted.unmount();
     human.unmount();
+  });
+});
+
+test('a chat message names GET discovery fullText Show more without a write', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-discovery-more',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        contentBlocks: [
+          {
+            eyebrow: 'Discovery',
+            title: 'Quiet mornings',
+            detail: 'You like a slow start.',
+            more: 'Longer body stays collapsed.',
+          },
+        ],
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Discovery');
+  expect(copies).toContain('Quiet mornings');
+  expect(copies).toContain('You like a slow start.');
+  expect(copies).toContain(chatDiscoveryShowMoreCopy());
+  expect(copies).not.toContain('Longer body stays collapsed.');
+  expect(copies).not.toContain(chatDiscoveryShowLessCopy());
+  const more = renderer.root.find(
+    node =>
+      node.props.accessibilityLabel === chatDiscoveryShowMoreCopy() &&
+      typeof node.props.onPress === 'function',
+  );
+  act(() => {
+    more.props.onPress();
+  });
+  const expanded = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(expanded).toContain('Longer body stays collapsed.');
+  expect(expanded).toContain(chatDiscoveryShowLessCopy());
+  expect(expanded).not.toContain(chatDiscoveryShowMoreCopy());
+  expect(expanded).not.toContain('You like a slow start.');
+  act(() => {
+    renderer.unmount();
   });
 });
 

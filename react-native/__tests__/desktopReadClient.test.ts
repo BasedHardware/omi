@@ -38,6 +38,8 @@ import {
   chatChartCopy,
   paintedChatContentBlock,
   chatBlockUnavailableCopy,
+  chatDiscoveryShowMoreCopy,
+  chatDiscoveryShowLessCopy,
   taskCardDescription,
   chatAttachmentThumbnailUrl,
   chatSenderCopy,
@@ -1934,6 +1936,33 @@ test('task card chrome names loaded GET task description and omits ids', () => {
       tasks,
     ),
   ).toEqual({eyebrow: 'Memory', title: 'Prefers concise notes'});
+});
+
+test('discovery chrome names GET fullText Show more without leaking the wire key', () => {
+  const block = {
+    eyebrow: 'Discovery',
+    title: 'Quiet mornings',
+    detail: 'You like a slow start.',
+    more: 'Longer body stays collapsed.',
+  };
+  expect(paintedChatContentBlock(block)).toEqual({
+    eyebrow: 'Discovery',
+    title: 'Quiet mornings',
+    detail: 'You like a slow start.',
+  });
+  expect(paintedChatContentBlock(block, undefined, true)).toEqual({
+    eyebrow: 'Discovery',
+    title: 'Quiet mornings',
+    detail: 'Longer body stays collapsed.',
+  });
+  expect(JSON.stringify(paintedChatContentBlock(block))).not.toContain(
+    'full_text',
+  );
+  expect(JSON.stringify(paintedChatContentBlock(block))).not.toContain(
+    chatDiscoveryShowMoreCopy(),
+  );
+  expect(chatDiscoveryShowMoreCopy()).toBe('Show more');
+  expect(chatDiscoveryShowLessCopy()).toBe('Show less');
 });
 
 test('chat attachment thumbnails keep http image GET urls and omit local or non-image paths', () => {

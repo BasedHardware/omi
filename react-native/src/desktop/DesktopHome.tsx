@@ -24,7 +24,6 @@ import {
   desktopBackendUnavailableCopy,
   desktopReadsCanRetry,
   conversationRecapTitle,
-  paintedChatContentBlock,
   taskDisplayTitle,
   visibleDisplayText,
   type DesktopReadOutcomes,
@@ -33,7 +32,7 @@ import {
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
-import {ChatAppAttribution} from '../ui/ChatTranscript';
+import {ChatAppAttribution, ChatContentBlockList} from '../ui/ChatTranscript';
 import {TaskMutationStatus, type TaskMutationProps} from '../ui/TaskEditor';
 import {
   ReadStatus,
@@ -230,27 +229,13 @@ function AskExchange({
                 </Text>
               </View>
             ))}
-            {!human &&
-              (item.contentBlocks ?? []).map((block, index) => {
-                const painted = paintedChatContentBlock(block, tasks);
-                return (
-                  <View key={`block-${index}`}>
-                    <Text numberOfLines={1} style={styles.rowMeta}>
-                      {painted.eyebrow}
-                    </Text>
-                    {painted.title !== undefined ? (
-                      <Text numberOfLines={2} style={styles.rowMeta}>
-                        {painted.title}
-                      </Text>
-                    ) : null}
-                    {painted.detail !== undefined ? (
-                      <Text numberOfLines={6} style={styles.rowMeta}>
-                        {painted.detail}
-                      </Text>
-                    ) : null}
-                  </View>
-                );
-              })}
+            {!human && (item.contentBlocks ?? []).length > 0 ? (
+              <ChatContentBlockList
+                blocks={item.contentBlocks ?? []}
+                tasks={tasks}
+                textStyle={styles.rowMeta}
+              />
+            ) : null}
             <Text style={styles.rowMeta}>
               {chatClockLabel(item.createdAt, Date.now()) || 'Time unavailable'}
             </Text>

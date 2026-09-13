@@ -918,6 +918,7 @@ test('old chat history names GET content_blocks without inventing writes', () =>
       eyebrow: 'Discovery',
       title: 'Quiet mornings',
       detail: 'You like a slow start.',
+      more: 'Longer body stays collapsed.',
     },
     {eyebrow: 'Memory', title: 'Prefers concise notes'},
     {eyebrow: 'Goal', title: 'Ship the release notes'},
@@ -954,6 +955,48 @@ test('old chat history names GET content_blocks without inventing writes', () =>
   expect(
     page.messages.find(row => row.id === 'blocks-metadata')?.contentBlocks,
   ).toEqual([{eyebrow: 'Conversation', title: 'Kitchen capture'}]);
+});
+
+test('old chat history omits discovery more when GET fullText matches summary', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'same',
+        sender: 'ai',
+        text: 'Here is what I found.',
+        created_at: '2026-09-07T01:02:03Z',
+        content_blocks: [
+          {
+            type: 'discoveryCard',
+            id: 'd-same',
+            title: 'Quiet mornings',
+            summary: 'You like a slow start.',
+            fullText: 'You like a slow start.',
+          },
+          {
+            type: 'discovery_card',
+            id: 'd-empty',
+            title: 'Quiet mornings',
+            summary: 'You like a slow start.',
+            full_text: ' \t',
+          },
+        ],
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'same')?.contentBlocks).toEqual([
+    {
+      eyebrow: 'Discovery',
+      title: 'Quiet mornings',
+      detail: 'You like a slow start.',
+    },
+    {
+      eyebrow: 'Discovery',
+      title: 'Quiet mornings',
+      detail: 'You like a slow start.',
+    },
+  ]);
 });
 
 test('old chat history names empty-text GET tool thinking and citation fallbacks', () => {

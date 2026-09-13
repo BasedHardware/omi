@@ -23,11 +23,88 @@ import {
   chatMessageDisplayText,
   chatSenderCopy,
   paintedChatContentBlock,
+  chatDiscoveryShowMoreCopy,
+  chatDiscoveryShowLessCopy,
   visibleDisplayText,
   type TaskCardLookup,
 } from '../desktopReadClient';
 import {OmiAvatar} from './OmiAvatar';
+import {FocusPressable} from './Pressable';
 import {styles} from './styles';
+
+function ChatContentBlockRow({
+  block,
+  tasks,
+  textStyle,
+}: {
+  block: NonNullable<ChatMessage['contentBlocks']>[number];
+  tasks?: readonly TaskCardLookup[];
+  textStyle: StyleProp<TextStyle>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const painted = paintedChatContentBlock(block, tasks, expanded);
+  const more = block.more === undefined ? '' : visibleDisplayText(block.more);
+  const detail =
+    block.detail === undefined ? '' : visibleDisplayText(block.detail);
+  const hasMore = more !== '' && more !== detail;
+  const showCopy = expanded
+    ? chatDiscoveryShowLessCopy()
+    : chatDiscoveryShowMoreCopy();
+  return (
+    <View
+      accessibilityLabel={
+        painted.title === undefined
+          ? painted.eyebrow
+          : `${painted.eyebrow}: ${painted.title}`
+      }>
+      <Text numberOfLines={1} style={textStyle}>
+        {painted.eyebrow}
+      </Text>
+      {painted.title !== undefined ? (
+        <Text numberOfLines={2} style={textStyle}>
+          {painted.title}
+        </Text>
+      ) : null}
+      {painted.detail !== undefined ? (
+        <Text numberOfLines={6} style={textStyle}>
+          {painted.detail}
+        </Text>
+      ) : null}
+      {hasMore ? (
+        <FocusPressable
+          accessibilityLabel={showCopy}
+          accessibilityRole="button"
+          accessibilityState={{expanded}}
+          onPress={() => setExpanded(value => !value)}>
+          <Text style={textStyle}>{showCopy}</Text>
+        </FocusPressable>
+      ) : null}
+    </View>
+  );
+}
+
+export function ChatContentBlockList({
+  blocks,
+  tasks,
+  textStyle,
+}: {
+  blocks: NonNullable<ChatMessage['contentBlocks']>;
+  tasks?: readonly TaskCardLookup[];
+  textStyle: StyleProp<TextStyle>;
+}) {
+  return (
+    <>
+      {blocks.map((block, index) => (
+        <ChatContentBlockRow
+          key={index}
+          block={block}
+          tasks={tasks}
+          textStyle={textStyle}
+        />
+      ))}
+    </>
+  );
+}
 
 function ChatAppImage({
   accessibilityLabel,
@@ -237,33 +314,13 @@ const ChatMessageRow = memo(function ChatMessageRow({
             </Text>
           </View>
         ))}
-        {!human &&
-          (message.contentBlocks ?? []).map((item, index) => {
-            const painted = paintedChatContentBlock(item, tasks);
-            return (
-              <View
-                key={`block-${index}`}
-                accessibilityLabel={
-                  painted.title === undefined
-                    ? painted.eyebrow
-                    : `${painted.eyebrow}: ${painted.title}`
-                }>
-                <Text numberOfLines={1} style={styles.cancelledLabel}>
-                  {painted.eyebrow}
-                </Text>
-                {painted.title !== undefined && (
-                  <Text numberOfLines={2} style={styles.cancelledLabel}>
-                    {painted.title}
-                  </Text>
-                )}
-                {painted.detail !== undefined && (
-                  <Text numberOfLines={6} style={styles.cancelledLabel}>
-                    {painted.detail}
-                  </Text>
-                )}
-              </View>
-            );
-          })}
+        {!human && (message.contentBlocks ?? []).length > 0 ? (
+          <ChatContentBlockList
+            blocks={message.contentBlocks ?? []}
+            tasks={tasks}
+            textStyle={styles.cancelledLabel}
+          />
+        ) : null}
         {message.sender === 'unknown' && (
           <Text style={styles.cancelledLabel}>
             {chatSenderCopy(message.sender)}

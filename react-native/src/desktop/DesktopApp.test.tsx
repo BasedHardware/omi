@@ -8,6 +8,8 @@ import {TaskPagination} from '../ui/TaskPagination';
 import {
   chatDaySummaryCopy,
   chatBlockUnavailableCopy,
+  chatDiscoveryShowMoreCopy,
+  chatDiscoveryShowLessCopy,
   dailySummaryDefaultHeadlineCopy,
   desktopAccountSettingUnavailableCopy,
   desktopAppsUnavailableCopy,
@@ -769,6 +771,47 @@ test('desktop chat names GET content_blocks without inventing write actions', ()
       node => node.props.source?.uri === 'https://cdn.example.test/notes.png',
     ),
   ).toHaveLength(0);
+});
+
+test('desktop chat names GET discovery fullText Show more without a write', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'discovery-more',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+        contentBlocks: [
+          {
+            eyebrow: 'Discovery',
+            title: 'Quiet mornings',
+            detail: 'You like a slow start.',
+            more: 'Longer body stays collapsed.',
+          },
+        ],
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Discovery');
+  expect(copy).toContain('You like a slow start.');
+  expect(copy).toContain(chatDiscoveryShowMoreCopy());
+  expect(copy).not.toContain('Longer body stays collapsed.');
+  expect(copy).not.toContain(chatDiscoveryShowLessCopy());
+  const more = renderer.root.find(
+    node =>
+      node.props.accessibilityLabel === chatDiscoveryShowMoreCopy() &&
+      typeof node.props.onPress === 'function',
+  );
+  act(() => {
+    more.props.onPress();
+  });
+  const expanded = renderedText(renderer);
+  expect(expanded).toContain('Longer body stays collapsed.');
+  expect(expanded).toContain(chatDiscoveryShowLessCopy());
+  expect(expanded).not.toContain(chatDiscoveryShowMoreCopy());
+  expect(expanded).not.toContain('You like a slow start.');
 });
 
 test('desktop chat treats a whitespace-only reply as Message text unavailable', () => {

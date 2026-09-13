@@ -448,6 +448,14 @@ export function chatBlockUnavailableCopy(): string {
   return 'No longer available';
 }
 
+export function chatDiscoveryShowMoreCopy(): string {
+  return 'Show more';
+}
+
+export function chatDiscoveryShowLessCopy(): string {
+  return 'Show less';
+}
+
 export function conversationVisibilityCopy(
   visibility: string | null | undefined,
 ): string | null {
@@ -1582,8 +1590,10 @@ export function paintedChatContentBlock(
     title?: string;
     detail?: string;
     taskId?: string;
+    more?: string;
   },
   tasks?: readonly TaskCardLookup[],
+  expanded = false,
 ): {eyebrow: string; title?: string; detail?: string} {
   const joined =
     block.title === undefined &&
@@ -1600,7 +1610,11 @@ export function paintedChatContentBlock(
   const title = block.title ?? joined;
   const visibleTitle = title === undefined ? '' : visibleDisplayText(title);
   const visibleDetail =
-    block.detail === undefined ? '' : visibleDisplayText(block.detail);
+    expanded && block.more !== undefined
+      ? visibleDisplayText(block.more)
+      : block.detail === undefined
+        ? ''
+        : visibleDisplayText(block.detail);
   return {
     eyebrow: block.eyebrow,
     ...(visibleTitle === '' ? {} : {title: visibleTitle}),
@@ -1643,6 +1657,7 @@ export function chatMessageDisplayText(
       title?: string;
       detail?: string;
       taskId?: string;
+      more?: string;
     }[];
   },
   cancelledEmptyCopy = 'Response stopped',

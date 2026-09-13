@@ -13,12 +13,11 @@ import {
   chatHumanQuotedContextCopy,
   chatMessageDisplayText,
   chatSenderCopy,
-  paintedChatContentBlock,
   visibleDisplayText,
   type TaskCardLookup,
 } from '../desktopReadClient';
 import {desktopTokens} from '../desktop/tokens';
-import {ChatAppAttribution} from './ChatTranscript';
+import {ChatAppAttribution, ChatContentBlockList} from './ChatTranscript';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
 
@@ -210,33 +209,13 @@ export function ChatConversationHistory({
                       </Text>
                     </View>
                   ))}
-                  {!human &&
-                    (message.contentBlocks ?? []).map((item, index) => {
-                      const painted = paintedChatContentBlock(item, tasks);
-                      return (
-                        <View key={`block-${index}`}>
-                          <Text
-                            numberOfLines={1}
-                            style={[styles.conversationDetailField, ink]}>
-                            {painted.eyebrow}
-                          </Text>
-                          {painted.title !== undefined ? (
-                            <Text
-                              numberOfLines={2}
-                              style={[styles.conversationDetailField, ink]}>
-                              {painted.title}
-                            </Text>
-                          ) : null}
-                          {painted.detail !== undefined ? (
-                            <Text
-                              numberOfLines={6}
-                              style={[styles.conversationDetailField, ink]}>
-                              {painted.detail}
-                            </Text>
-                          ) : null}
-                        </View>
-                      );
-                    })}
+                  {!human && (message.contentBlocks ?? []).length > 0 ? (
+                    <ChatContentBlockList
+                      blocks={message.contentBlocks ?? []}
+                      tasks={tasks}
+                      textStyle={[styles.conversationDetailField, ink]}
+                    />
+                  ) : null}
                   <Text style={[styles.conversationDetailField, ink]}>
                     {chatClockLabel(message.createdAt, Date.now()) ||
                       'Time unavailable'}
