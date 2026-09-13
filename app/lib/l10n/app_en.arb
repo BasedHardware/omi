@@ -11914,5 +11914,21 @@
                 "type": "String"
             }
         }
+    },
+    "secondDevice": "Second device",
+    "@secondDevice": {
+        "description": "Section title on the device page for the device paired next to the primary one (Omi + OmiGlass)"
+    },
+    "pairSecondDevice": "Pair a second device",
+    "@pairSecondDevice": {
+        "description": "Action on the device page that opens the device picker to pair an OmiGlass next to an Omi (or vice versa)"
+    },
+    "pairSecondDeviceDescription": "Connect OmiGlass next to your Omi so photos and audio go into the same conversation.",
+    "@pairSecondDeviceDescription": {
+        "description": "Explains what pairing a second device does; product names Omi and OmiGlass stay untranslated"
+    },
+    "forgetSecondDevice": "Forget second device",
+    "@forgetSecondDevice": {
+        "description": "Action that unpairs the second (companion) device only"
     }
 }
