@@ -10,3 +10,6 @@
 * [`quickstart.tr.md`](quickstart.tr.md) — Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart).
 * [`quickstart.ru.md`](quickstart.ru.md) — быстрый старт с omi-cli на
   русском (Russian Quickstart).
+* [`export_open_action_items.md`](export_open_action_items.md) — export every
+  open action item to a validated UTF-8 JSONL file via
+  `examples/export_open_action_items.py`.
