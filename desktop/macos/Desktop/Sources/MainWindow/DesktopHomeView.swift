@@ -716,6 +716,11 @@ struct DesktopHomeView: View {
       selectedSettingsSection = .about
     }
     if let route = ChatFirstRoute.automationVisibilityDestination(named: target) {
+      // Conversations and Memories share the one `.memories` shell route; the
+      // hub's persisted sub-destination decides which page actually mounts.
+      if let hubDestination = MemoryHubDestination.destination(forAutomationTarget: target) {
+        memoryDestinationRawValue = hubDestination.rawValue
+      }
       switch route {
       case .more(let page):
         chatFirstNavigation.selectMore(page)

@@ -142,6 +142,16 @@ checks:
     triggers: [".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/test_check_product_file_line_count_ratchet.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "base-derived oversized-file checks must reject growth and stale approvals while ratcheting reductions down automatically"
+  - id: structured-string-sink-registry
+    command: ["bash", "scripts/run-structured-string-sinks.sh"]
+    triggers: [".github/workflows/**", ".github/actions/**", ".github/structured-string-sinks/**", ".github/scripts/check_structured_string_sinks.py", ".github/scripts/fixtures/structured_string_sinks/**", "scripts/run-structured-string-sinks.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#10337 registers the three delimiter, argv, and executable workflow sinks that blocked deploys in #9986, #9947, and #9945"
+  - id: structured-string-sink-registry-tests
+    command: ["bash", "scripts/run-structured-string-sink-tests.sh"]
+    triggers: [".github/structured-string-sinks/**", ".github/scripts/check_structured_string_sinks.py", ".github/scripts/test_check_structured_string_sinks.py", ".github/scripts/fixtures/structured_string_sinks/**", "scripts/run-structured-string-sink-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "every registered sink must keep a paired historical mutation fixture proving the checker rejects the incident grammar"
   - id: desktop-release-manifest-v1
     command: ["python3", ".github/scripts/test_desktop_release_manifest.py"]
     triggers: [".github/schemas/desktop-release-manifest-v1.schema.json", ".github/scripts/desktop_release_manifest.py", ".github/scripts/test_desktop_release_manifest.py", ".github/scripts/fixtures/desktop_release_manifest/**"]
@@ -417,6 +427,16 @@ checks:
     triggers: ["infrastructure/opentofu/pilots/development-wif-plan/**", "infrastructure/opentofu/probes/development-project-read/**", ".github/scripts/check_opentofu_development_wif_pilot.py", ".github/scripts/test_check_opentofu_development_wif_pilot.py", ".github/workflows/opentofu-development-wif-pilot.yml", ".github/workflows/opentofu-development-wif-pilot-validate.yml"]
     lanes: ["local", "ci"]
     reason: "development WIF pilot fixtures must reject secret access, apply, and scope expansion"
+  - id: opentofu-gha-wif-notifications
+    command: ["python3", ".github/scripts/check_opentofu_gha_wif_notifications.py"]
+    triggers: ["infrastructure/opentofu/slices/gha-wif-notifications/**", ".github/scripts/check_opentofu_gha_wif_notifications.py"]
+    lanes: ["local", "ci"]
+    reason: "notifications-job development WIF stays job-scoped, GitHub-main-scoped, and outside Owner JSON keys"
+  - id: opentofu-gha-wif-notifications-fixtures
+    command: ["python3", ".github/scripts/test_check_opentofu_gha_wif_notifications.py"]
+    triggers: ["infrastructure/opentofu/slices/gha-wif-notifications/**", ".github/scripts/check_opentofu_gha_wif_notifications.py", ".github/scripts/test_check_opentofu_gha_wif_notifications.py"]
+    lanes: ["local", "ci"]
+    reason: "notifications-job development WIF checker must remain executable"
   - id: public-build-contract
     command: ["python3", ".github/scripts/check_public_build_contract.py"]
     triggers: [".github/actions/deploy-public-build/**", ".github/actions/prepare-public-build/**", ".github/actions/public-build-candidate-promotion/**", ".github/workflows/gcp_admin.yml", ".github/workflows/gcp_app.yml", ".github/workflows/gcp_frontend.yml", ".github/workflows/gcp_personas.yml", ".github/workflows/public-build-config-preflight.yml", ".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/public_build_acceptance_route.py", ".github/scripts/test_check_public_build_contract.py", "config/public-build-contract.json", "config/public-build-values.json", "config/deployment-setting-classification.json", "web/admin/Dockerfile", "web/app/Dockerfile", "web/frontend/Dockerfile", "web/personas-open-source/Dockerfile", "web/admin/components/public-build-canary.tsx", "web/app/src/components/public-build-canary.tsx", "web/frontend/src/components/public-build-canary.tsx", "web/personas-open-source/src/components/public-build-canary.tsx", "web/personas-open-source/src/app/api/social-profile/route.ts"]
@@ -594,7 +614,7 @@ checks:
     reason: "conversation lifecycle has one mutation owner"
   - id: desktop-swift-ci-contract
     command: ["python3", ".github/scripts/test_desktop_swift_ci_contract.py"]
-    triggers: [".github/workflows/desktop-swift-ci.yml", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_swift_ci_contract.py", "desktop/macos/ci/xcode-pin.json", "desktop/macos/scripts/run-swift-ci.sh", "desktop/macos/tests/test-run-swift-ci.sh", "codemagic.yaml"]
+    triggers: [".github/workflows/desktop-swift-ci.yml", "scripts/pre_push_ci_prediction.py", "scripts/pre-push", ".github/scripts/test_desktop_swift_ci_contract.py", "desktop/macos/ci/xcode-pin.json", "desktop/macos/scripts/run-swift-ci.sh", "desktop/macos/scripts/swift-test-suites.sh", "desktop/macos/tests/test-run-swift-ci.sh", "codemagic.yaml"]
     lanes: ["local", "ci"]
     reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved; the pin (version+build+app path) lives only in desktop/macos/ci/xcode-pin.json and the workflow, runner script, and the two Codemagic desktop Swift workflows must agree with it (#12867/#13548 ship-vs-CI divergence class)"
   - id: desktop-windows-ci-contract

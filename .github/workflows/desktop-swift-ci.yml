@@ -35,6 +35,7 @@ jobs:
       should_run_static: ${{ steps.changed.outputs.should_run_static }}
       should_run_tests: ${{ steps.changed.outputs.should_run_tests }}
       should_release_compile: ${{ steps.changed.outputs.should_release_compile }}
+      should_release_test_compile: ${{ steps.changed.outputs.should_release_test_compile }}
       should_notification_release_regression: ${{ steps.changed.outputs.should_notification_release_regression }}
       desktop_swift_changed_files: ${{ steps.changed.outputs.desktop_swift_changed_files }}
       swift_test_effective_lane: ${{ steps.changed.outputs.swift_test_effective_lane }}
@@ -452,7 +453,7 @@ jobs:
           RELEASE_RESULT: ${{ needs.desktop-swift-release-compile.result }}
           STATIC_REQUIRED: ${{ needs.changes.outputs.should_run_static }}
           TESTS_REQUIRED: ${{ needs.changes.outputs.should_run_tests }}
-          RELEASE_REQUIRED: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
+          RELEASE_REQUIRED: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_release_test_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
         run: |
           if [ "$STATIC_REQUIRED" = true ] || [ "$TESTS_REQUIRED" = true ]; then
             test "$VERIFY_RESULT" = success
@@ -484,7 +485,9 @@ jobs:
     # notification boundary paths — the notification flag is gated on both
     # outputs so a future pathspec change cannot silently skip the
     # regression's runner.
-    if: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
+    # Source/test/package changes also compile every release test target
+    # (#13123/#13467); reuse one combined app/test build (#13481).
+    if: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_release_test_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -522,7 +525,14 @@ jobs:
 
       - name: Release compile
         working-directory: desktop/macos
-        run: ./scripts/run-swift-ci.sh --release-compile
+        env:
+          BUILD_RELEASE_TESTS: ${{ needs.changes.outputs.should_release_test_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
+        run: |
+          if [ "$BUILD_RELEASE_TESTS" = true ]; then
+            ./scripts/run-swift-ci.sh --release-test-compile
+          else
+            ./scripts/run-swift-ci.sh --release-compile
+          fi
 
       # Runs here, not in the verify job: the regression needs release-mode
       # artifacts, and building them twice on two hosted Macs cost ~31 min per
