@@ -17,42 +17,6 @@ enum ConversationDetailRequestGate {
   }
 }
 
-/// A parent can replace a conversation row without changing its identity
-/// (rename, folder move, processing completion). Keying detail work only by ID
-/// leaves the open panel pinned to the old value, so these visible revisions
-/// participate in the request identity as well.
-struct ConversationDetailRequestToken: Hashable {
-  let conversationID: String
-  let updatedAt: Date?
-  let title: String
-  let folderID: String?
-  let status: String
-
-  init(conversation: ServerConversation) {
-    self.init(
-      conversationID: conversation.id,
-      updatedAt: conversation.updatedAt,
-      title: conversation.title,
-      folderID: conversation.folderId,
-      status: String(describing: conversation.status)
-    )
-  }
-
-  init(
-    conversationID: String,
-    updatedAt: Date?,
-    title: String,
-    folderID: String?,
-    status: String
-  ) {
-    self.conversationID = conversationID
-    self.updatedAt = updatedAt
-    self.title = title
-    self.folderID = folderID
-    self.status = status
-  }
-}
-
 struct ConversationDetailProcessingLayout<Banner: View, Content: View>: View {
   let isProcessing: Bool
   let banner: Banner
