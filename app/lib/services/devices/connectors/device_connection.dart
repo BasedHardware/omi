@@ -641,6 +641,28 @@ abstract class DeviceConnection {
 
   Future<int?> performGetMicGain();
 
+  /// Name stored on the device itself, or null when the device does not
+  /// expose one (older firmware, other vendors) or is disconnected.
+  Future<String?> getDeviceName() async {
+    if (await isConnected()) {
+      return await performGetDeviceName();
+    }
+    return null;
+  }
+
+  Future<String?> performGetDeviceName() async => null;
+
+  /// Persists [name] on the device. Returns true only when the device
+  /// confirmed the new name; false when unsupported, rejected, or disconnected.
+  Future<bool> setDeviceName(String name) async {
+    if (await isConnected()) {
+      return await performSetDeviceName(name);
+    }
+    return false;
+  }
+
+  Future<bool> performSetDeviceName(String name) async => false;
+
   /// Called when the server transcription WebSocket reconnects after a
   /// network-only outage (BLE stayed connected throughout). Override to
   /// re-initialize device streaming if the device may have stopped sending

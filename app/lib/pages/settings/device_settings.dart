@@ -15,6 +15,7 @@ import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
+import 'package:omi/pages/settings/rename_device_widget.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
@@ -41,6 +42,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   double _micGain = 5.0;
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
+
+  // Firmware that stores a user-chosen name (OmiFeatures.deviceName). Null
+  // until the features characteristic has been read.
+  bool? _hasDeviceNameFeature;
 
   Timer? _debounce;
   Timer? _micGainDebounce;
@@ -82,11 +87,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         var features = await connection.getFeatures();
         final hasDimming = (features & OmiFeatures.ledDimming) != 0;
         final hasMicGain = (features & OmiFeatures.micGain) != 0;
+        final hasDeviceName = (features & OmiFeatures.deviceName) != 0;
 
         if (!mounted) return;
         setState(() {
           _hasDimmingFeature = hasDimming;
           _hasMicGainFeature = hasMicGain;
+          _hasDeviceNameFeature = hasDeviceName;
         });
 
         if (!hasDimming) {
@@ -141,6 +148,19 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     if (deviceProvider.pairedDevice != null) {
       var connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
       await connection?.setMicGain(value.toInt());
+    }
+  }
+
+  Future<void> _showRenameDeviceDialog(String currentName) async {
+    final provider = context.read<DeviceProvider>();
+    final renamed = await showDialog<bool>(
+      context: context,
+      builder: (_) => RenameDeviceWidget(initialName: currentName, onRename: provider.renameConnectedDevice),
+    );
+    if (renamed == true && mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(context.l10n.deviceRenamed(provider.pairedDevice?.name ?? ''))));
     }
   }
 
@@ -253,16 +273,23 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       return id;
     }
 
+    // Renaming needs firmware that persists the name; older firmware keeps the
+    // read-only, tap-to-copy row.
+    final canRename = _hasDeviceNameFeature == true && provider.isConnected;
+
     return Container(
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           _buildProfileStyleItem(
+            key: const Key('device_name_row'),
             icon: FontAwesomeIcons.microchip,
             title: context.l10n.deviceName,
+            subtitle: canRename ? context.l10n.tapToRename : null,
             chipValue: deviceName,
-            copyValue: deviceName,
-            showChevron: false,
+            copyValue: canRename ? null : deviceName,
+            showChevron: canRename,
+            onTap: canRename ? () => _showRenameDeviceDialog(deviceName) : null,
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(

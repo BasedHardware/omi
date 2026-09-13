@@ -10129,4 +10129,34 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get renameDevice => 'Переименовать устройство';
+
+  @override
+  String get renameDeviceDescription =>
+      'Имя сохраняется на самом Omi, поэтому оно появится на любом телефоне, с которым вы его сопряжёте.';
+
+  @override
+  String get tapToRename => 'Нажмите, чтобы переименовать';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Имя устройства не может быть пустым';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Имя слишком длинное (до $maxBytes символов; эмодзи и кириллица занимают больше)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Имя содержит неподдерживаемые символы';
+
+  @override
+  String get deviceRenameFailed =>
+      'Не удалось сохранить имя на Omi. Убедитесь, что устройство подключено, и попробуйте снова.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Устройство переименовано в $name';
+  }
 }

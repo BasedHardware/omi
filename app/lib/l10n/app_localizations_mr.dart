@@ -10101,4 +10101,34 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get renameDevice => 'डिव्हाइसचे नाव बदला';
+
+  @override
+  String get renameDeviceDescription =>
+      'नाव तुमच्या Omi वरच सेव्ह केले जाते, त्यामुळे तुम्ही ज्या फोनसोबत जोडाल त्या प्रत्येक फोनवर ते दिसते.';
+
+  @override
+  String get tapToRename => 'नाव बदलण्यासाठी टॅप करा';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'डिव्हाइसचे नाव रिकामे असू शकत नाही';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'नाव खूप लांब आहे (कमाल $maxBytes अक्षरे; इमोजी आणि मात्रा जास्त मोजल्या जातात)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'नावात असमर्थित अक्षरे आहेत';
+
+  @override
+  String get deviceRenameFailed =>
+      'तुमच्या Omi वर नाव सेव्ह करता आले नाही. ते कनेक्ट आहे का ते तपासा आणि पुन्हा प्रयत्न करा.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'डिव्हाइसचे नाव बदलून $name केले';
+  }
 }
