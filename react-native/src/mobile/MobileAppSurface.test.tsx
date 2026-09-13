@@ -248,7 +248,7 @@ describe('MobileAppSurface', () => {
     expect(tree).toContain('Listening');
     expect(tree).toContain('Tasks');
     expect(tree).toContain('Prepare product demo');
-    expect(tree).toContain('Daily Recaps');
+    expect(tree).toContain('View All Conversations');
     expect(tree).toContain('Omi gets simpler');
     expect(tree).toContain('Mind Map');
     expect(tree).not.toContain('Saved data unavailable');
@@ -849,8 +849,7 @@ test('Daily Recaps name discarded photo counts without a photo viewer', () => {
 });
 
 test('Daily Recaps name discarded GET transcript excerpt as the title', () => {
-  const excerpt =
-    '[00:00:00 - 00:00:02] Speaker 1: Hello from the recording';
+  const excerpt = '[00:00:00 - 00:00:02] Speaker 1: Hello from the recording';
   const flagged = render({
     recaps: [
       {
@@ -975,7 +974,11 @@ test('Daily Recaps name GET structured.emoji and list tags without inventing def
 
   const plain = render({
     recaps: [
-      {id: 'recap-plain-emoji', title: 'Omi gets simpler', dateLabel: 'Yesterday'},
+      {
+        id: 'recap-plain-emoji',
+        title: 'Omi gets simpler',
+        dateLabel: 'Yesterday',
+      },
     ],
   });
   expect(renderedText(plain)).not.toContain('🚀');
@@ -1038,7 +1041,11 @@ test('Daily Recaps name Flutter New chrome instead of the day clock', () => {
 
   const plain = render({
     recaps: [
-      {id: 'recap-plain-new', title: 'Omi gets simpler', dateLabel: 'Yesterday'},
+      {
+        id: 'recap-plain-new',
+        title: 'Omi gets simpler',
+        dateLabel: 'Yesterday',
+      },
     ],
   });
   expect(renderedText(plain)).toContain('Yesterday');
@@ -1522,6 +1529,161 @@ test('compact Tasks tab names a failed GET goals instead of empty success', asyn
     false,
   );
   expect(request.mock.calls.some(call => call[0].path === '/v1/goals')).toBe(
+    false,
+  );
+  act(() => renderer.unmount());
+});
+
+test('compact Home names GET daily-summary headlines without a map or detail page', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          summaries: [
+            {
+              id: 'sum-1',
+              date: '2020-01-15',
+              headline: 'Met with the team',
+              overview: 'Your Day in Review',
+              day_emoji: '📅',
+              stats: {total_conversations: 4},
+            },
+            {
+              id: 'sum-empty',
+              date: '2020-01-14',
+              headline: ' \t',
+            },
+            {
+              id: 'sum-2',
+              date: '2020-01-13',
+              headline: 'Shipped the recap',
+            },
+          ],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <MobileAppSurface
+        {...buildProps({
+          backend: {request} as never,
+        })}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Daily Recaps');
+  expect(tree).toContain('Met with the team');
+  expect(tree).toContain('Wed, Jan 15');
+  expect(tree).toContain('Shipped the recap');
+  expect(tree).toContain('Mon, Jan 13');
+  expect(tree).toContain('Omi gets simpler');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'View All Conversations',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(tree).not.toContain('Your Day in Review');
+  expect(tree).not.toContain('📅');
+  expect(tree).not.toContain('4 conversations');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'View All Daily Recaps',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(node =>
+      String(node.props.accessibilityLabel ?? '').startsWith(
+        'Open daily summary',
+      ),
+    ),
+  ).toHaveLength(0);
+  expect(request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v1/users/daily-summaries?limit=3&offset=0',
+  });
+  expect(request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
+    false,
+  );
+  expect(
+    request.mock.calls.some(call =>
+      String(call[0].path).startsWith('/v1/users/daily-summaries/'),
+    ),
+  ).toBe(false);
+  act(() => renderer.unmount());
+});
+
+test('compact Home hides empty GET daily summaries instead of claiming emptiness', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({summaries: []}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <MobileAppSurface
+        {...buildProps({
+          backend: {request} as never,
+        })}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Omi gets simpler');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'View All Conversations',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(tree).not.toContain('Daily Recaps');
+  expect(tree).not.toContain('No daily recaps yet');
+  expect(tree).not.toContain(desktopBackendServiceCopy);
+  act(() => renderer.unmount());
+});
+
+test('compact Home names a failed GET daily summaries instead of empty success', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {
+      throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <MobileAppSurface
+        {...buildProps({
+          backend: {request} as never,
+        })}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Daily Recaps');
+  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).toContain('Omi gets simpler');
+  expect(tree).not.toContain('No daily recaps yet');
+  expect(tree).not.toContain('Your Day in Review');
+  expect(request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
     false,
   );
   act(() => renderer.unmount());

@@ -24,6 +24,7 @@ import Puzzle from 'lucide-react-native/icons/puzzle';
 import Settings from 'lucide-react-native/icons/settings';
 import {
   conversationDiscardedPhotoCopy,
+  dailySummaryDateCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
   formatTaskDue,
@@ -37,6 +38,10 @@ import {
   mobileSpace,
   mobileType,
 } from './mobileTokens';
+import {
+  loadOmiDailySummaries,
+  type OmiDailySummary,
+} from '../legacyOmiDailySummaries';
 import {goalProgressCopy, loadOmiGoals, type OmiGoal} from '../legacyOmiGoals';
 import type {OmiBackend} from '../omiNativeTypes';
 
@@ -129,6 +134,7 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
 type DashboardRow =
   | {kind: 'capture'; key: 'capture'}
   | {kind: 'tasks'; key: 'tasks'}
+  | {kind: 'daily-summaries'; key: 'daily-summaries'}
   | {kind: 'recaps'; key: 'recaps'}
   | {kind: 'mind-map'; key: 'mind-map'};
 
@@ -370,20 +376,22 @@ function SectionHeader({
   actionLabel,
   title,
 }: {
-  action: () => void;
-  actionLabel: string;
+  action?: () => void;
+  actionLabel?: string;
   title: string;
 }) {
   return (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
-      <Pressable
-        accessibilityLabel={`${actionLabel} ${title}`}
-        accessibilityRole="button"
-        onPress={action}
-        style={styles.quietButton}>
-        <Text style={styles.quietButtonText}>{actionLabel}</Text>
-      </Pressable>
+      {action !== undefined && actionLabel !== undefined ? (
+        <Pressable
+          accessibilityLabel={`${actionLabel} ${title}`}
+          accessibilityRole="button"
+          onPress={action}
+          style={styles.quietButton}>
+          <Text style={styles.quietButtonText}>{actionLabel}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -439,10 +447,16 @@ export function MobileAppSurface({
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [goals, setGoals] = useState<OmiGoal[]>([]);
   const [goalsError, setGoalsError] = useState<string | null>(null);
+  const [dailySummaries, setDailySummaries] = useState<OmiDailySummary[]>([]);
+  const [dailySummariesError, setDailySummariesError] = useState<string | null>(
+    null,
+  );
   useEffect(() => {
     if (backend === undefined || backend === null) {
       setGoals([]);
       setGoalsError(null);
+      setDailySummaries([]);
+      setDailySummariesError(null);
       return;
     }
     let cancelled = false;
@@ -460,10 +474,40 @@ export function MobileAppSurface({
         }
       },
     );
+    loadOmiDailySummaries(backend).then(
+      rows => {
+        if (!cancelled) {
+          setDailySummaries(rows);
+          setDailySummariesError(null);
+        }
+      },
+      reason => {
+        if (!cancelled) {
+          setDailySummaries([]);
+          setDailySummariesError(desktopReadErrorCopy(reason));
+        }
+      },
+    );
     return () => {
       cancelled = true;
     };
   }, [backend]);
+  const dailySummaryCards = useMemo(() => {
+    const now = new Date();
+    return dailySummaries.flatMap(row => {
+      const headline = visibleDisplayText(row.headline);
+      if (headline === '') {
+        return [];
+      }
+      return [
+        {
+          dateLabel: dailySummaryDateCopy(row.date, now),
+          headline,
+          id: row.id,
+        },
+      ];
+    });
+  }, [dailySummaries]);
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
   const taskFeedback = useMemo(
     () => (
@@ -497,15 +541,20 @@ export function MobileAppSurface({
       selectedTask,
     ],
   );
-  const rows = useMemo<DashboardRow[]>(
-    () => [
+  const rows = useMemo<DashboardRow[]>(() => {
+    const items: DashboardRow[] = [
       {kind: 'capture', key: 'capture'},
       {kind: 'tasks', key: 'tasks'},
+    ];
+    if (dailySummariesError !== null || dailySummaryCards.length > 0) {
+      items.push({kind: 'daily-summaries', key: 'daily-summaries'});
+    }
+    items.push(
       {kind: 'recaps', key: 'recaps'},
       {kind: 'mind-map', key: 'mind-map'},
-    ],
-    [],
-  );
+    );
+    return items;
+  }, [dailySummariesError, dailySummaryCards.length]);
 
   const renderRow = useCallback(
     ({item}: {item: DashboardRow}) => {
@@ -589,13 +638,40 @@ export function MobileAppSurface({
           </View>
         );
       }
+      if (item.kind === 'daily-summaries') {
+        return (
+          <View style={styles.section}>
+            <SectionHeader title="Daily Recaps" />
+            {dailySummariesError !== null ? (
+              <Text style={styles.stateText}>{dailySummariesError}</Text>
+            ) : (
+              <FlatList
+                data={dailySummaryCards}
+                horizontal
+                keyExtractor={summary => summary.id}
+                renderItem={({item: summary}) => (
+                  <View style={styles.recapCard}>
+                    <Text numberOfLines={5} style={styles.recapTitle}>
+                      {summary.headline}
+                    </Text>
+                    {summary.dateLabel !== '' ? (
+                      <Text style={styles.recapDate}>{summary.dateLabel}</Text>
+                    ) : null}
+                  </View>
+                )}
+                showsHorizontalScrollIndicator={false}
+              />
+            )}
+          </View>
+        );
+      }
       if (item.kind === 'recaps') {
         return (
           <View style={styles.section}>
             <SectionHeader
               action={onViewRecaps}
               actionLabel="View All"
-              title="Daily Recaps"
+              title="Conversations"
             />
             {recapStatus === 'ready' ? (
               recaps.length === 0 ? (
@@ -702,6 +778,8 @@ export function MobileAppSurface({
       mindMapErrorCopy,
       mindMapCoverageCopy,
       onRefresh,
+      dailySummariesError,
+      dailySummaryCards,
     ],
   );
 
