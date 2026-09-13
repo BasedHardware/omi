@@ -10051,5 +10051,15 @@ class AppLocalizationsTa extends AppLocalizations {
       'பேச்சை உரையாக மாற்றும் வசதி தற்போது கிடைக்கவில்லை. உங்கள் இணைய இணைப்பையும் சாதனத்தின் பேச்சு அறிதல் அமைப்புகளையும் சரிபார்த்து, மீண்டும் முயற்சிக்கவும்.';
 
   @override
-  String get processingTakingLonger => 'இன்னும் செயல்படுகிறது — இது வழக்கத்தை விட அதிக நேரம் எடுக்கிறது.';
+  String get secondDevice => 'இரண்டாவது சாதனம்';
+
+  @override
+  String get pairSecondDevice => 'இரண்டாவது சாதனத்தை இணைக்கவும்';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'புகைப்படங்களும் ஒலியும் ஒரே உரையாடலுக்குச் செல்ல, உங்கள் Omi உடன் OmiGlass ஐ இணைக்கவும்.';
+
+  @override
+  String get forgetSecondDevice => 'இரண்டாவது சாதனத்தை மறக்கவும்';
 }

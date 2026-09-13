@@ -10004,5 +10004,15 @@ class AppLocalizationsLv extends AppLocalizations {
       'Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.';
 
   @override
-  String get processingTakingLonger => 'Joprojām notiek — tas aizņem ilgāk nekā parasti.';
+  String get secondDevice => 'Otrā ierīce';
+
+  @override
+  String get pairSecondDevice => 'Savienot pārī otro ierīci';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Pievienojiet OmiGlass līdzās savam Omi, lai fotoattēli un audio nonāktu vienā sarunā.';
+
+  @override
+  String get forgetSecondDevice => 'Aizmirst otro ierīci';
 }

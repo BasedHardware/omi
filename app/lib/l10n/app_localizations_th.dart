@@ -9923,5 +9923,15 @@ class AppLocalizationsTh extends AppLocalizations {
       'ขณะนี้ไม่สามารถแปลงเสียงเป็นข้อความได้ โปรดตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและการตั้งค่าการรู้จำเสียงของอุปกรณ์ แล้วลองอีกครั้ง';
 
   @override
-  String get processingTakingLonger => 'ยังทำงานอยู่ — ใช้เวลานานกว่าปกติ';
+  String get secondDevice => 'อุปกรณ์เครื่องที่สอง';
+
+  @override
+  String get pairSecondDevice => 'จับคู่อุปกรณ์เครื่องที่สอง';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'เชื่อมต่อ OmiGlass ควบคู่กับ Omi ของคุณ เพื่อให้รูปภาพและเสียงอยู่ในบทสนทนาเดียวกัน';
+
+  @override
+  String get forgetSecondDevice => 'ลบอุปกรณ์เครื่องที่สอง';
 }

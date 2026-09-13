@@ -9810,5 +9810,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get speechToTextUnavailableDesc => '現在、音声をテキストに変換できません。インターネット接続とデバイスの音声認識設定を確認してから、もう一度お試しください。';
 
   @override
-  String get processingTakingLonger => 'まだ処理中です。通常より時間がかかっています。';
+  String get secondDevice => '2台目のデバイス';
+
+  @override
+  String get pairSecondDevice => '2台目のデバイスをペアリング';
+
+  @override
+  String get pairSecondDeviceDescription => 'Omi と一緒に OmiGlass を接続すると、写真と音声が同じ会話にまとまります。';
+
+  @override
+  String get forgetSecondDevice => '2台目のデバイスを削除';
 }

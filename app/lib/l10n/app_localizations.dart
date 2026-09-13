@@ -18579,11 +18579,29 @@ abstract class AppLocalizations {
   /// **'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.'**
   String get speechToTextUnavailableDesc;
 
-  /// Shown on the homepage processing card after ~2 minutes with a Retry action (#5481).
+  /// Section title on the device page for the device paired next to the primary one (Omi + OmiGlass)
   ///
   /// In en, this message translates to:
-  /// **'Still working — this is taking longer than usual.'**
-  String get processingTakingLonger;
+  /// **'Second device'**
+  String get secondDevice;
+
+  /// Action on the device page that opens the device picker to pair an OmiGlass next to an Omi (or vice versa)
+  ///
+  /// In en, this message translates to:
+  /// **'Pair a second device'**
+  String get pairSecondDevice;
+
+  /// Explains what pairing a second device does; product names Omi and OmiGlass stay untranslated
+  ///
+  /// In en, this message translates to:
+  /// **'Connect OmiGlass next to your Omi so photos and audio go into the same conversation.'**
+  String get pairSecondDeviceDescription;
+
+  /// Action that unpairs the second (companion) device only
+  ///
+  /// In en, this message translates to:
+  /// **'Forget second device'**
+  String get forgetSecondDevice;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

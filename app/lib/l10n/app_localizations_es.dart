@@ -10005,5 +10005,15 @@ class AppLocalizationsEs extends AppLocalizations {
       'La transcripción de voz no está disponible en este momento. Comprueba tu conexión a Internet y los ajustes de reconocimiento de voz de tu dispositivo e inténtalo de nuevo.';
 
   @override
-  String get processingTakingLonger => 'Sigue trabajando: esto está tardando más de lo habitual.';
+  String get secondDevice => 'Segundo dispositivo';
+
+  @override
+  String get pairSecondDevice => 'Vincular un segundo dispositivo';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Conecta OmiGlass junto a tu Omi para que las fotos y el audio vayan a la misma conversación.';
+
+  @override
+  String get forgetSecondDevice => 'Olvidar segundo dispositivo';
 }

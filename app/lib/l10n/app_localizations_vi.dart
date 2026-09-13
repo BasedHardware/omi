@@ -9976,5 +9976,15 @@ class AppLocalizationsVi extends AppLocalizations {
       'Hiện không thể chuyển giọng nói thành văn bản. Hãy kiểm tra kết nối internet và cài đặt nhận dạng giọng nói trên thiết bị rồi thử lại.';
 
   @override
-  String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
+  String get secondDevice => 'Thiết bị thứ hai';
+
+  @override
+  String get pairSecondDevice => 'Ghép nối thiết bị thứ hai';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Kết nối OmiGlass cùng với Omi để ảnh và âm thanh đi vào cùng một cuộc trò chuyện.';
+
+  @override
+  String get forgetSecondDevice => 'Quên thiết bị thứ hai';
 }

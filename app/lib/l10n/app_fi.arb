@@ -3257,5 +3257,8 @@
     "speechToTextUnavailableDesc": "Puheen muuntaminen tekstiksi ei ole juuri nyt käytettävissä. Tarkista internetyhteytesi ja laitteesi puheentunnistusasetukset ja yritä uudelleen.",
     "memoryHistoryPartial": "Osa muistojen historiasta ei ole saatavilla. Näytetään tähän mennessä saatu historia.",
     "tapPlusToStartRecording": "Aloita tallennus napauttamalla +",
-    "processingTakingLonger": "Vielä käynnissä — tämä kestää tavallista kauemmin."
+    "secondDevice": "Toinen laite",
+    "pairSecondDevice": "Yhdistä toinen laite",
+    "pairSecondDeviceDescription": "Yhdistä OmiGlass Omi-laitteesi rinnalle, jotta kuvat ja ääni päätyvät samaan keskusteluun.",
+    "forgetSecondDevice": "Unohda toinen laite"
 }

@@ -9971,5 +9971,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.';
 
   @override
-  String get processingTakingLonger => 'Still working — this is taking longer than usual.';
+  String get secondDevice => 'Second device';
+
+  @override
+  String get pairSecondDevice => 'Pair a second device';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Connect OmiGlass next to your Omi so photos and audio go into the same conversation.';
+
+  @override
+  String get forgetSecondDevice => 'Forget second device';
 }

@@ -10068,5 +10068,15 @@ class AppLocalizationsFr extends AppLocalizations {
       'La transcription vocale est indisponible pour le moment. Vérifiez votre connexion Internet et les réglages de reconnaissance vocale de votre appareil, puis réessayez.';
 
   @override
-  String get processingTakingLonger => 'Toujours en cours — cela prend plus de temps que d’habitude.';
+  String get secondDevice => 'Deuxième appareil';
+
+  @override
+  String get pairSecondDevice => 'Associer un deuxième appareil';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Connectez OmiGlass en plus de votre Omi pour que les photos et l\'audio rejoignent la même conversation.';
+
+  @override
+  String get forgetSecondDevice => 'Oublier le deuxième appareil';
 }

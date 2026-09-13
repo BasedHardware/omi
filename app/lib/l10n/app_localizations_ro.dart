@@ -10028,5 +10028,15 @@ class AppLocalizationsRo extends AppLocalizations {
       'Conversia vorbirii în text nu este disponibilă momentan. Verifică conexiunea la internet și setările de recunoaștere vocală ale dispozitivului, apoi încearcă din nou.';
 
   @override
-  String get processingTakingLonger => 'Încă se procesează — durează mai mult decât de obicei.';
+  String get secondDevice => 'Al doilea dispozitiv';
+
+  @override
+  String get pairSecondDevice => 'Asociază un al doilea dispozitiv';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Conectează OmiGlass alături de Omi, astfel încât fotografiile și sunetul să ajungă în aceeași conversație.';
+
+  @override
+  String get forgetSecondDevice => 'Uită al doilea dispozitiv';
 }

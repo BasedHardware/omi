@@ -10823,5 +10823,8 @@
     "speechToTextUnavailableDesc": "Pretvaranje govora u tekst trenutno nije dostupno. Provjerite internetsku vezu i postavke prepoznavanja govora na uređaju, pa pokušajte ponovo.",
     "memoryHistoryPartial": "Dio historije sjećanja nije dostupan. Prikazuje se dosad primljena historija.",
     "tapPlusToStartRecording": "Dodirnite + za početak snimanja",
-    "processingTakingLonger": "Još traje — ovo traje duže nego inače."
+    "secondDevice": "Drugi uređaj",
+    "pairSecondDevice": "Upari drugi uređaj",
+    "pairSecondDeviceDescription": "Povežite OmiGlass uz svoj Omi kako bi fotografije i zvuk išli u isti razgovor.",
+    "forgetSecondDevice": "Zaboravi drugi uređaj"
 }

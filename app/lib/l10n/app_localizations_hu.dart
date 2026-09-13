@@ -10022,5 +10022,15 @@ class AppLocalizationsHu extends AppLocalizations {
       'A beszéd szöveggé alakítása jelenleg nem érhető el. Ellenőrizd az internetkapcsolatot és az eszköz beszédfelismerési beállításait, majd próbáld újra.';
 
   @override
-  String get processingTakingLonger => 'Még folyamatban — ez tovább tart a szokásosnál.';
+  String get secondDevice => 'Második eszköz';
+
+  @override
+  String get pairSecondDevice => 'Második eszköz párosítása';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Csatlakoztasd az OmiGlass-t az Omi mellé, hogy a fotók és a hang ugyanabba a beszélgetésbe kerüljenek.';
+
+  @override
+  String get forgetSecondDevice => 'Második eszköz elfelejtése';
 }

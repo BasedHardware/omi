@@ -9973,5 +9973,15 @@ class AppLocalizationsSk extends AppLocalizations {
       'Prevod reči na text momentálne nie je dostupný. Skontrolujte internetové pripojenie a nastavenia rozpoznávania reči v zariadení a skúste to znova.';
 
   @override
-  String get processingTakingLonger => 'Stále prebieha — trvá to dlhšie ako zvyčajne.';
+  String get secondDevice => 'Druhé zariadenie';
+
+  @override
+  String get pairSecondDevice => 'Spárovať druhé zariadenie';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Pripojte OmiGlass k svojmu Omi, aby fotky a zvuk išli do rovnakej konverzácie.';
+
+  @override
+  String get forgetSecondDevice => 'Zabudnúť druhé zariadenie';
 }

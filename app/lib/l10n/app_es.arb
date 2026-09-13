@@ -3258,5 +3258,8 @@
     "speechToTextUnavailableDesc": "La transcripción de voz no está disponible en este momento. Comprueba tu conexión a Internet y los ajustes de reconocimiento de voz de tu dispositivo e inténtalo de nuevo.",
     "memoryHistoryPartial": "Parte del historial de recuerdos no está disponible. Se muestra el historial recibido hasta ahora.",
     "tapPlusToStartRecording": "Toca + para empezar a grabar",
-    "processingTakingLonger": "Sigue trabajando: esto está tardando más de lo habitual."
+    "secondDevice": "Segundo dispositivo",
+    "pairSecondDevice": "Vincular un segundo dispositivo",
+    "pairSecondDeviceDescription": "Conecta OmiGlass junto a tu Omi para que las fotos y el audio vayan a la misma conversación.",
+    "forgetSecondDevice": "Olvidar segundo dispositivo"
 }

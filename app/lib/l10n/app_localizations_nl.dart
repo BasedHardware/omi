@@ -10008,5 +10008,15 @@ class AppLocalizationsNl extends AppLocalizations {
       'Spraak naar tekst is momenteel niet beschikbaar. Controleer je internetverbinding en de instellingen voor spraakherkenning op je apparaat en probeer het opnieuw.';
 
   @override
-  String get processingTakingLonger => 'Nog bezig — dit duurt langer dan normaal.';
+  String get secondDevice => 'Tweede apparaat';
+
+  @override
+  String get pairSecondDevice => 'Tweede apparaat koppelen';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Verbind OmiGlass naast je Omi zodat foto\'s en audio in hetzelfde gesprek terechtkomen.';
+
+  @override
+  String get forgetSecondDevice => 'Tweede apparaat vergeten';
 }

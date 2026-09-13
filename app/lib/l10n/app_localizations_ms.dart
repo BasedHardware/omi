@@ -10007,5 +10007,15 @@ class AppLocalizationsMs extends AppLocalizations {
       'Penukaran pertuturan kepada teks tidak tersedia sekarang. Semak sambungan internet dan tetapan pengecaman pertuturan peranti anda, kemudian cuba lagi.';
 
   @override
-  String get processingTakingLonger => 'Masih diproses — ini mengambil masa lebih lama daripada biasa.';
+  String get secondDevice => 'Peranti kedua';
+
+  @override
+  String get pairSecondDevice => 'Pasangkan peranti kedua';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Sambungkan OmiGlass bersama Omi anda supaya foto dan audio masuk ke perbualan yang sama.';
+
+  @override
+  String get forgetSecondDevice => 'Lupakan peranti kedua';
 }

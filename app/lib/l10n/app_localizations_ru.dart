@@ -10018,5 +10018,15 @@ class AppLocalizationsRu extends AppLocalizations {
       'Преобразование речи в текст сейчас недоступно. Проверьте подключение к интернету и настройки распознавания речи на устройстве, затем попробуйте ещё раз.';
 
   @override
-  String get processingTakingLonger => 'Ещё обрабатывается — это занимает больше обычного.';
+  String get secondDevice => 'Второе устройство';
+
+  @override
+  String get pairSecondDevice => 'Подключить второе устройство';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Подключите OmiGlass вместе с Omi, чтобы фото и звук попадали в один разговор.';
+
+  @override
+  String get forgetSecondDevice => 'Забыть второе устройство';
 }

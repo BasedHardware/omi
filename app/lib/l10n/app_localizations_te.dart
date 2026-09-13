@@ -10030,5 +10030,15 @@ class AppLocalizationsTe extends AppLocalizations {
       'ప్రస్తుతం మాటలను వచనంగా మార్చే సదుపాయం అందుబాటులో లేదు. మీ ఇంటర్నెట్ కనెక్షన్ మరియు పరికరంలోని వాయిస్ గుర్తింపు సెట్టింగ్‌లను తనిఖీ చేసి, మళ్లీ ప్రయత్నించండి.';
 
   @override
-  String get processingTakingLonger => 'ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది.';
+  String get secondDevice => 'రెండవ పరికరం';
+
+  @override
+  String get pairSecondDevice => 'రెండవ పరికరాన్ని జోడించండి';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'ఫోటోలు మరియు ఆడియో ఒకే సంభాషణలోకి వెళ్లేలా మీ Omi తో పాటు OmiGlass ను కనెక్ట్ చేయండి.';
+
+  @override
+  String get forgetSecondDevice => 'రెండవ పరికరాన్ని మర్చిపోండి';
 }

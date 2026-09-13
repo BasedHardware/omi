@@ -9993,5 +9993,15 @@ class AppLocalizationsUr extends AppLocalizations {
       'اس وقت آواز کو متن میں تبدیل کرنے کی سہولت دستیاب نہیں ہے۔ اپنا انٹرنیٹ کنکشن اور آلے کی آواز پہچاننے کی ترتیبات چیک کریں، پھر دوبارہ کوشش کریں۔';
 
   @override
-  String get processingTakingLonger => 'ابھی کام جاری ہے — اس میں معمول سے زیادہ وقت لگ رہا ہے۔';
+  String get secondDevice => 'دوسرا ڈیوائس';
+
+  @override
+  String get pairSecondDevice => 'دوسرا ڈیوائس جوڑیں';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'اپنے Omi کے ساتھ OmiGlass کو کنیکٹ کریں تاکہ تصاویر اور آڈیو ایک ہی گفتگو میں جائیں۔';
+
+  @override
+  String get forgetSecondDevice => 'دوسرا ڈیوائس بھول جائیں';
 }

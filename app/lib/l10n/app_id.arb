@@ -3299,5 +3299,8 @@
     "speechToTextUnavailableDesc": "Konversi suara ke teks sedang tidak tersedia. Periksa koneksi internet dan pengaturan pengenalan suara perangkat Anda, lalu coba lagi.",
     "memoryHistoryPartial": "Sebagian riwayat memori tidak tersedia. Menampilkan riwayat yang sudah diterima.",
     "tapPlusToStartRecording": "Ketuk + untuk mulai merekam",
-    "processingTakingLonger": "Masih diproses — ini memakan waktu lebih lama dari biasanya."
+    "secondDevice": "Perangkat kedua",
+    "pairSecondDevice": "Pasangkan perangkat kedua",
+    "pairSecondDeviceDescription": "Sambungkan OmiGlass bersama Omi Anda agar foto dan audio masuk ke percakapan yang sama.",
+    "forgetSecondDevice": "Lupakan perangkat kedua"
 }

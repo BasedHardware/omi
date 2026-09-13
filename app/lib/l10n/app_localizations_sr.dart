@@ -9996,5 +9996,15 @@ class AppLocalizationsSr extends AppLocalizations {
       'Претварање говора у текст тренутно није доступно. Проверите интернет везу и подешавања препознавања говора на уређају, па покушајте поново.';
 
   @override
-  String get processingTakingLonger => 'Još traje — ovo traje duže nego inače.';
+  String get secondDevice => 'Други уређај';
+
+  @override
+  String get pairSecondDevice => 'Упари други уређај';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Повежите OmiGlass уз свој Omi како би фотографије и звук ишли у исти разговор.';
+
+  @override
+  String get forgetSecondDevice => 'Заборави други уређај';
 }

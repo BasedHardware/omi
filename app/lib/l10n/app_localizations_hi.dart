@@ -9960,5 +9960,15 @@ class AppLocalizationsHi extends AppLocalizations {
       'अभी बोली को टेक्स्ट में बदलना उपलब्ध नहीं है। अपना इंटरनेट कनेक्शन और डिवाइस की वाक् पहचान सेटिंग जाँचें, फिर दोबारा कोशिश करें।';
 
   @override
-  String get processingTakingLonger => 'अभी भी काम हो रहा है — इसमें सामान्य से ज़्यादा समय लग रहा है।';
+  String get secondDevice => 'दूसरा डिवाइस';
+
+  @override
+  String get pairSecondDevice => 'दूसरा डिवाइस पेयर करें';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'अपने Omi के साथ OmiGlass कनेक्ट करें ताकि फ़ोटो और ऑडियो एक ही बातचीत में जाएँ।';
+
+  @override
+  String get forgetSecondDevice => 'दूसरा डिवाइस भूल जाएँ';
 }

@@ -9979,5 +9979,15 @@ class AppLocalizationsNo extends AppLocalizations {
       'Tale til tekst er ikke tilgjengelig akkurat nå. Kontroller internettforbindelsen og enhetens innstillinger for talegjenkjenning, og prøv igjen.';
 
   @override
-  String get processingTakingLonger => 'Jobber fortsatt — dette tar lengre tid enn vanlig.';
+  String get secondDevice => 'Andre enhet';
+
+  @override
+  String get pairSecondDevice => 'Par en andre enhet';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Koble til OmiGlass sammen med Omi slik at bilder og lyd havner i samme samtale.';
+
+  @override
+  String get forgetSecondDevice => 'Glem andre enhet';
 }
