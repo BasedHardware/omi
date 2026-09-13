@@ -9,7 +9,7 @@ import sys
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 import requests
 from dotenv import load_dotenv
@@ -861,6 +861,9 @@ async def tool_query_database(request: Request):
 @app.get("/")
 async def root(uid: str = Query(None)):
     """Root endpoint - Homepage."""
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid or "", safe="")
     if not uid:
         return {
             "app": "Notion Omi Integration",
@@ -876,7 +879,7 @@ async def root(uid: str = Query(None)):
     tokens = get_notion_tokens(uid)
 
     if not tokens:
-        auth_url = f"/auth/notion?uid={uid}"
+        auth_url = f"/auth/notion?uid={uid_q}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -942,7 +945,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"Search for budget in Notion"</div>
                 </div>
 
-                <a href="/disconnect?uid={uid}" class="btn btn-secondary btn-block">
+                <a href="/disconnect?uid={uid_q}" class="btn btn-secondary btn-block">
                     Disconnect Notion
                 </a>
 
@@ -1024,6 +1027,10 @@ async def notion_callback(
 
     delete_oauth_state(uid)
 
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid, safe="")
+
     # Exchange code for tokens
     try:
         import base64
@@ -1072,7 +1079,7 @@ async def notion_callback(
                         <p>Your Notion workspace is now linked to Omi</p>
                     </div>
 
-                    <a href="/?uid={uid}" class="btn btn-primary btn-block">
+                    <a href="/?uid={uid_q}" class="btn btn-primary btn-block">
                         Continue to Settings
                     </a>
 
@@ -1105,8 +1112,11 @@ async def check_setup(uid: str = Query(...)):
 @app.get("/disconnect")
 async def disconnect(uid: str = Query(...)):
     """Disconnect Notion."""
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid or "", safe="")
     delete_notion_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={uid_q}")
 
 
 @app.get("/health")

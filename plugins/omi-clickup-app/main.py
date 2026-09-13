@@ -5,6 +5,8 @@ import sys
 from dotenv import load_dotenv
 from typing import List, Dict, Any
 import secrets
+import html
+from urllib.parse import quote
 import asyncio
 
 # Force unbuffered output for instant logs
@@ -151,6 +153,9 @@ async def shutdown_event():
 @app.get("/")
 async def root(uid: str = Query(None)):
     """Root endpoint - Homepage with list selection."""
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid or "", safe="")
     if not uid:
         return {
             "app": "OMI ClickUp Integration",
@@ -168,7 +173,7 @@ async def root(uid: str = Query(None)):
     
     if not user or not user.get("access_token"):
         # Not authenticated - show auth page
-        auth_url = f"/auth?uid={uid}"
+        auth_url = f"/auth?uid={uid_q}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -384,7 +389,7 @@ async def root(uid: str = Query(None)):
                     const list = select.value;
                     
                     try {{
-                        const response = await fetch('/update-list?uid={uid}&list=' + encodeURIComponent(list), {{
+                        const response = await fetch('/update-list?uid={uid_q}&list=' + encodeURIComponent(list), {{
                             method: 'POST'
                         }});
                         
@@ -401,7 +406,7 @@ async def root(uid: str = Query(None)):
                 }}
                 
                 function refreshLists() {{
-                    fetch('/refresh-lists?uid={uid}', {{
+                    fetch('/refresh-lists?uid={uid_q}', {{
                         method: 'POST'
                     }})
                     .then(response => response.json())
@@ -423,7 +428,7 @@ async def root(uid: str = Query(None)):
                     const timezone = select.value;
                     
                     try {{
-                        const response = await fetch('/update-timezone?uid={uid}&timezone=' + encodeURIComponent(timezone), {{
+                        const response = await fetch('/update-timezone?uid={uid_q}&timezone=' + encodeURIComponent(timezone), {{
                             method: 'POST'
                         }});
                         
@@ -442,14 +447,14 @@ async def root(uid: str = Query(None)):
                 
                 async function logoutUser() {{
                     try {{
-                        const response = await fetch('/logout?uid={uid}', {{
+                        const response = await fetch('/logout?uid={uid_q}', {{
                             method: 'POST'
                         }});
                         
                         const data = await response.json();
                         
                         if (data.success) {{
-                            window.location.href = '/?uid={uid}';
+                            window.location.href = '/?uid={uid_q}';
                         }} else {{
                             alert('❌ Logout failed: ' + data.error);
                         }}
@@ -534,6 +539,10 @@ async def auth_callback(
             status_code=400
         )
     
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid, safe="")
+
     try:
         # Exchange code for access token
         token_data = clickup_client.exchange_code_for_token(code)
@@ -597,7 +606,7 @@ async def auth_callback(
                             </p>
                         </div>
                         
-                        <a href="/?uid={uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
+                        <a href="/?uid={uid_q}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
                             Continue to Settings →
                         </a>
                         
@@ -631,7 +640,7 @@ async def auth_callback(
                         <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
                             <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Authentication Error</h2>
                             <p style="margin-bottom: 16px;">Failed to complete authentication: {str(e)}</p>
-                            <a href="/auth?uid={uid}" class="btn btn-primary">Try again</a>
+                            <a href="/auth?uid={uid_q}" class="btn btn-primary">Try again</a>
                         </div>
                     </div>
                 </body>
@@ -1030,6 +1039,10 @@ async def process_segments(
 @app.get("/test")
 async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(None)):
     """Development testing interface."""
+    # uid is reflected into href/redirect URLs below — percent-encode
+    # it once so quotes/&/.. cannot break the attribute or the query.
+    uid_q = quote(uid or "", safe="")
+    uid_h = html.escape(uid or '', quote=True)
     if not dev or dev != "true":
         return HTMLResponse(content=f"""
         <html>
@@ -1071,7 +1084,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                     <h2>Authentication</h2>
                     <div class="input-group">
                         <label>User ID (UID):</label>
-                        <input type="text" id="uid" value="{uid}">
+                        <input type="text" id="uid" value="{uid_h}">
                     </div>
                     <button class="btn btn-primary" onclick="authenticate()">🔐 Authenticate ClickUp</button>
                     <button class="btn btn-secondary" onclick="checkAuth()">🔍 Check Auth Status</button>
@@ -1140,7 +1153,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                 async function checkAuth() {{
                     const uid = document.getElementById('uid').value;
                     try {{
-                        const response = await fetch(`/setup-completed?uid=${{uid}}`);
+                        const response = await fetch(`/setup-completed?uid=${{encodeURIComponent(uid)}}`);
                         const data = await response.json();
                         
                         const authStatus = document.getElementById('authStatus');
@@ -1159,7 +1172,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                 function authenticate() {{
                     const uid = document.getElementById('uid').value;
                     addLog('Opening ClickUp authentication...');
-                    window.open(`/auth?uid=${{uid}}`, '_blank');
+                    window.open(`/auth?uid=${{encodeURIComponent(uid)}}`, '_blank');
                     setTimeout(() => addLog('After authenticating, click "Check Auth Status"'), 1000);
                 }}
                 
@@ -1185,7 +1198,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                             end: 5.0
                         }}];
                         
-                        const response = await fetch(`/webhook?session_id=${{sessionId}}&uid=${{uid}}`, {{
+                        const response = await fetch(`/webhook?session_id=${{sessionId}}&uid=${{encodeURIComponent(uid)}}`, {{
                             method: 'POST',
                             headers: {{ 'Content-Type': 'application/json' }},
                             body: JSON.stringify(segments)
@@ -1229,7 +1242,7 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                     
                     try {{
                         addLog('Logging out...');
-                        const response = await fetch(`/logout?uid=${{uid}}`, {{
+                        const response = await fetch(`/logout?uid=${{encodeURIComponent(uid)}}`, {{
                             method: 'POST'
                         }});
                         
