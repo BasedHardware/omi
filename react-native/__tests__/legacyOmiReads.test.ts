@@ -947,6 +947,111 @@ test('old memories use v3 content without manufacturing canonical provenance', a
   expect(result.page.completenessStatus).toBe('unknown');
 });
 
+test('old memories name GET ledger-history rows Flutter merges onto the current list', async () => {
+  const request = jest.fn(async (input: {path?: string}) => {
+    if (input.path?.includes('ledger-history')) {
+      return {
+        id: 'read',
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'closed-fact',
+            content: 'Previous name was Sam.',
+            created_at: '2026-09-06T00:00:00Z',
+            conversation_id: null,
+          },
+          {
+            id: 'fact',
+            content: 'Duplicate of the current row.',
+            created_at: '2026-09-07T00:00:00Z',
+            conversation_id: null,
+          },
+        ]),
+      };
+    }
+    return {
+      id: 'read',
+      status: 200,
+      body: JSON.stringify([
+        {
+          id: 'fact',
+          content: 'I enjoy walking.',
+          created_at: '2026-09-07T00:00:00Z',
+          conversation_id: null,
+        },
+      ]),
+    };
+  });
+  const api = {
+    getApiContract: async () => 'omi',
+    request,
+  } as unknown as OmiBackend;
+  const result = await loadMemories(api);
+  expect(request).toHaveBeenCalledWith(
+    expect.objectContaining({
+      path: '/v3/memories/ledger-history?limit=500&offset=0',
+    }),
+  );
+  expect(result.items.map(row => row.id)).toEqual(['fact', 'closed-fact']);
+  expect(result.items[1]).toMatchObject({
+    title: 'Previous name was Sam.',
+    timestamp: 1788652800,
+  });
+  expect(result.page.nextCursor).toBeNull();
+});
+
+test('old memories keep the current list when ledger-history is unavailable', async () => {
+  const request = jest.fn(async (input: {path?: string}) => {
+    if (input.path?.includes('ledger-history')) {
+      return {id: 'read', status: 404, body: '{"detail":"not found"}'};
+    }
+    return {
+      id: 'read',
+      status: 200,
+      body: JSON.stringify([
+        {
+          id: 'fact',
+          content: 'I enjoy walking.',
+          created_at: '2026-09-07T00:00:00Z',
+          conversation_id: null,
+        },
+      ]),
+    };
+  });
+  const api = {
+    getApiContract: async () => 'omi',
+    request,
+  } as unknown as OmiBackend;
+  const result = await loadMemories(api);
+  expect(result.items.map(row => row.id)).toEqual(['fact']);
+});
+
+test('old memories keep the current list when ledger-history 200 cannot project', async () => {
+  const request = jest.fn(async (input: {path?: string}) => {
+    if (input.path?.includes('ledger-history')) {
+      return {id: 'read', status: 200, body: '{"memories":[]}'};
+    }
+    return {
+      id: 'read',
+      status: 200,
+      body: JSON.stringify([
+        {
+          id: 'fact',
+          content: 'I enjoy walking.',
+          created_at: '2026-09-07T00:00:00Z',
+          conversation_id: null,
+        },
+      ]),
+    };
+  });
+  const api = {
+    getApiContract: async () => 'omi',
+    request,
+  } as unknown as OmiBackend;
+  const result = await loadMemories(api);
+  expect(result.items.map(row => row.id)).toEqual(['fact']);
+});
+
 test('old tasks name GET sort_order and indent_level integer strings', async () => {
   const {api} = backend({
     action_items: [

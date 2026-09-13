@@ -283,6 +283,48 @@ export async function loadOmiConversations(
   );
   return {apiContract: 'omi', items, page: page(start, items.length)};
 }
+function memoryItem(row: Record<string, unknown>): MemoryProjection {
+  const content = text(row.content),
+    created = milliseconds(row.created_at);
+  const parsedConversationId =
+    row.conversation_id == null ? null : text(row.conversation_id);
+  const conversation =
+    parsedConversationId === null ||
+    visibleDisplayText(parsedConversationId) === ''
+      ? null
+      : parsedConversationId;
+  const ledgerSlot = visibleDisplayText(text(row.slot, ''));
+  const ledgerKind = visibleDisplayText(text(row.kind, ''));
+  const ledgerSchema = visibleDisplayText(text(row.ledger_schema_version, ''));
+  const ledgerBody = visibleDisplayText(text(row.body, ''));
+  const playbook =
+    ledgerSchema === 'knowledge_ledger.v1' && ledgerKind === 'document'
+      ? ledgerBody
+      : '';
+  const captureDeviceLabel = memoryCaptureDeviceCopy(
+    text(row.primary_capture_device, ''),
+  );
+  return {
+    kind: 'memory' as const,
+    id: id(row.id),
+    title: content,
+    summary: content,
+    searchableText: content,
+    citations: conversation === null ? [] : [conversation],
+    timestamp: created === null ? null : created / 1000,
+    provenance: {
+      label: null,
+      synthesisVersion: null,
+      inputDigest: null,
+      outputDigest: null,
+    },
+    ...(ledgerSlot === '' ? {} : {ledgerSlot}),
+    ...(playbook === '' ? {} : {ledgerBody: playbook}),
+    ...(bool(row.is_baseline) ? {isBaseline: true} : {}),
+    ...(captureDeviceLabel === null ? {} : {captureDeviceLabel}),
+    ...(bool(row.is_locked) ? {locked: true} : {}),
+  };
+}
 export async function loadOmiMemories(
   read: Read,
   cursor: string | null,
@@ -291,51 +333,38 @@ export async function loadOmiMemories(
   const records = rows(
     await read(`/v3/memories?limit=${limit}&offset=${start}`),
   );
-  const items = records.map(row => {
-    const content = text(row.content),
-      created = milliseconds(row.created_at);
-    const parsedConversationId =
-      row.conversation_id == null ? null : text(row.conversation_id);
-    const conversation =
-      parsedConversationId === null ||
-      visibleDisplayText(parsedConversationId) === ''
-        ? null
-        : parsedConversationId;
-    const ledgerSlot = visibleDisplayText(text(row.slot, ''));
-    const ledgerKind = visibleDisplayText(text(row.kind, ''));
-    const ledgerSchema = visibleDisplayText(
-      text(row.ledger_schema_version, ''),
-    );
-    const ledgerBody = visibleDisplayText(text(row.body, ''));
-    const playbook =
-      ledgerSchema === 'knowledge_ledger.v1' && ledgerKind === 'document'
-        ? ledgerBody
-        : '';
-    const captureDeviceLabel = memoryCaptureDeviceCopy(
-      text(row.primary_capture_device, ''),
-    );
-    return {
-      kind: 'memory' as const,
-      id: id(row.id),
-      title: content,
-      summary: content,
-      searchableText: content,
-      citations: conversation === null ? [] : [conversation],
-      timestamp: created === null ? null : created / 1000,
-      provenance: {
-        label: null,
-        synthesisVersion: null,
-        inputDigest: null,
-        outputDigest: null,
-      },
-      ...(ledgerSlot === '' ? {} : {ledgerSlot}),
-      ...(playbook === '' ? {} : {ledgerBody: playbook}),
-      ...(bool(row.is_baseline) ? {isBaseline: true} : {}),
-      ...(captureDeviceLabel === null ? {} : {captureDeviceLabel}),
-      ...(bool(row.is_locked) ? {locked: true} : {}),
-    };
-  });
-  return {apiContract: 'omi', items, page: page(start, items.length)};
+  const items = records.map(memoryItem);
+  if (start === 0) {
+    const seen = new Set(items.map(item => item.id));
+    const historyLimit = 500;
+    let historyOffset = 0;
+    for (let pageIndex = 0; pageIndex < 10; pageIndex++) {
+      let raw: unknown;
+      try {
+        raw = await read(
+          `/v3/memories/ledger-history?limit=${historyLimit}&offset=${historyOffset}`,
+        );
+      } catch {
+        break;
+      }
+      if (!Array.isArray(raw)) break;
+      const history = raw.slice(0, historyLimit);
+      let projected: MemoryProjection[];
+      try {
+        projected = history.map(item => memoryItem(object(item)));
+      } catch {
+        break;
+      }
+      for (const item of projected) {
+        if (seen.has(item.id)) continue;
+        seen.add(item.id);
+        items.push(item);
+      }
+      if (history.length < historyLimit) break;
+      historyOffset += history.length;
+    }
+  }
+  return {apiContract: 'omi', items, page: page(start, records.length)};
 }
 export async function loadOmiTasks(
   read: Read,
