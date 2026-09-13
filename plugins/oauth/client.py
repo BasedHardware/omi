@@ -1,5 +1,6 @@
 import base64
 import os
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import requests
 
@@ -98,8 +99,9 @@ class NotionClient:
 
     def get_oauth_url(self, uid: str):
         # Should use encryption on state (with some salt) to prevent attacks
-        state = uid
-        return f"{self.auth_url}&state={state}"
+        parts = urlsplit(self.auth_url or "")
+        query = f"{parts.query}&" if parts.query else ""
+        return urlunsplit(parts._replace(query=f"{query}state={quote(uid, safe='')}"))
 
     def get_database(self, database_id: str, access_token: str):
         resp: requests.Response
