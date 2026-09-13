@@ -15,6 +15,7 @@ import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/omi_button_action.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/capture/capture_policy.dart';
 import 'package:omi/utils/logger.dart';
@@ -561,15 +562,21 @@ class SharedPreferencesUtil {
 
   set batchModeSuspendedForOnboarding(bool value) => saveBool('batchModeSuspendedForOnboarding', value);
 
-  // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
-  int get doubleTapAction => getInt('doubleTapAction');
+  // Remappable device button gestures (#2825). Each gesture stores an
+  // OmiButtonAction.storedValue under its own key; 'doubleTapAction' keeps the
+  // 0 = end, 1 = mute, 2 = star encoding it has always had. A missing key or an
+  // unknown value resolves to the gesture's default.
+  OmiButtonAction buttonActionFor(OmiButtonGesture gesture) {
+    return OmiButtonAction.fromStoredValue(_preferences?.getInt(gesture.prefsKey)) ?? gesture.defaultAction;
+  }
 
-  set doubleTapAction(int value) => saveInt('doubleTapAction', value);
+  Future<bool> setButtonActionFor(OmiButtonGesture gesture, OmiButtonAction action) {
+    return saveInt(gesture.prefsKey, action.storedValue);
+  }
 
-  // Keep backward compatibility
-  bool get doubleTapPausesMuting => doubleTapAction == 1;
+  int get doubleTapAction => buttonActionFor(OmiButtonGesture.doubleTap).storedValue;
 
-  set doubleTapPausesMuting(bool value) => doubleTapAction = value ? 1 : 0;
+  set doubleTapAction(int value) => saveInt(OmiButtonGesture.doubleTap.prefsKey, value);
 
   // Custom STT configuration
   CustomSttConfig get customSttConfig {
