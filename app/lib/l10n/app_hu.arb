@@ -3624,5 +3624,13 @@
     "transcriptionUnavailableRecordingContinues": "Átiratok nem érhetők el, a felvétel folytatódik az eszközön, és később feldolgozásra kerül",
     "transcriptionUnavailableSavingOnDevice": "Átirat nem érhető el · mentés az eszközön",
     "transcriptionsPendingFraction": "Függő átiratok {pending}/{total}",
-    "transcriptionsPendingCount": "Függő átiratok {count}"
+    "transcriptionsPendingCount": "Függő átiratok {count}",
+    "renameDevice": "Eszköz átnevezése",
+    "renameDeviceDescription": "A név magán az Omin tárolódik, így minden telefonon megjelenik, amellyel párosítod.",
+    "tapToRename": "Koppints az átnevezéshez",
+    "deviceNameCannotBeEmpty": "Az eszköz neve nem lehet üres",
+    "deviceNameTooLong": "A név túl hosszú (legfeljebb {maxBytes} karakter; az emodzsik és ékezetek többet számítanak)",
+    "deviceNameInvalidCharacters": "A név nem támogatott karaktereket tartalmaz",
+    "deviceRenameFailed": "A nevet nem sikerült elmenteni az Omira. Ellenőrizd, hogy csatlakoztatva van, majd próbáld újra.",
+    "deviceRenamed": "Az eszköz új neve: {name}"
 }

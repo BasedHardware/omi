@@ -3528,5 +3528,13 @@
     "transcriptionUnavailableRecordingContinues": "Transkripsi tidak tersedia, rakaman diteruskan pada peranti dan akan diproses kemudian",
     "transcriptionUnavailableSavingOnDevice": "Transkripsi tidak tersedia · disimpan pada peranti",
     "transcriptionsPendingFraction": "Transkripsi tertunggak {pending}/{total}",
-    "transcriptionsPendingCount": "Transkripsi tertunggak {count}"
+    "transcriptionsPendingCount": "Transkripsi tertunggak {count}",
+    "renameDevice": "Namakan Semula Peranti",
+    "renameDeviceDescription": "Nama disimpan pada Omi itu sendiri, jadi ia dipaparkan pada mana-mana telefon yang anda pasangkan.",
+    "tapToRename": "Ketik untuk menamakan semula",
+    "deviceNameCannotBeEmpty": "Nama peranti tidak boleh kosong",
+    "deviceNameTooLong": "Nama terlalu panjang (maksimum {maxBytes} aksara; emoji dan aksen dikira lebih)",
+    "deviceNameInvalidCharacters": "Nama mengandungi aksara yang tidak disokong",
+    "deviceRenameFailed": "Nama tidak dapat disimpan ke Omi anda. Pastikan ia disambungkan dan cuba lagi.",
+    "deviceRenamed": "Peranti dinamakan semula kepada {name}"
 }

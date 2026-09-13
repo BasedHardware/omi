@@ -3528,5 +3528,13 @@
     "transcriptionUnavailableRecordingContinues": "Transcripties zijn niet beschikbaar, de opname gaat door op het apparaat en wordt later verwerkt",
     "transcriptionUnavailableSavingOnDevice": "Transcriptie niet beschikbaar · wordt op het apparaat opgeslagen",
     "transcriptionsPendingFraction": "Transcripties in behandeling {pending}/{total}",
-    "transcriptionsPendingCount": "Transcripties in behandeling {count}"
+    "transcriptionsPendingCount": "Transcripties in behandeling {count}",
+    "renameDevice": "Apparaat hernoemen",
+    "renameDeviceDescription": "De naam wordt op je Omi zelf opgeslagen en verschijnt dus op elke telefoon waarmee je hem koppelt.",
+    "tapToRename": "Tik om te hernoemen",
+    "deviceNameCannotBeEmpty": "De apparaatnaam mag niet leeg zijn",
+    "deviceNameTooLong": "Naam is te lang (maximaal {maxBytes} tekens; emoji en accenten tellen extra)",
+    "deviceNameInvalidCharacters": "De naam bevat niet-ondersteunde tekens",
+    "deviceRenameFailed": "De naam kon niet op je Omi worden opgeslagen. Controleer of hij verbonden is en probeer het opnieuw.",
+    "deviceRenamed": "Apparaat hernoemd naar {name}"
 }

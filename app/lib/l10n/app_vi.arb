@@ -3528,5 +3528,13 @@
     "transcriptionUnavailableRecordingContinues": "Bản chép âm không khả dụng, quá trình ghi âm tiếp tục trên thiết bị và sẽ được xử lý sau",
     "transcriptionUnavailableSavingOnDevice": "Bản chép âm không khả dụng · đang lưu trên thiết bị",
     "transcriptionsPendingFraction": "Bản chép âm đang chờ {pending}/{total}",
-    "transcriptionsPendingCount": "Bản chép âm đang chờ {count}"
+    "transcriptionsPendingCount": "Bản chép âm đang chờ {count}",
+    "renameDevice": "Đổi tên thiết bị",
+    "renameDeviceDescription": "Tên được lưu ngay trên Omi, nên sẽ hiển thị trên mọi điện thoại mà bạn ghép nối.",
+    "tapToRename": "Chạm để đổi tên",
+    "deviceNameCannotBeEmpty": "Tên thiết bị không được để trống",
+    "deviceNameTooLong": "Tên quá dài (tối đa {maxBytes} ký tự; emoji và chữ có dấu được tính nhiều hơn)",
+    "deviceNameInvalidCharacters": "Tên chứa ký tự không được hỗ trợ",
+    "deviceRenameFailed": "Không thể lưu tên vào Omi. Hãy kiểm tra thiết bị đã kết nối rồi thử lại.",
+    "deviceRenamed": "Đã đổi tên thiết bị thành {name}"
 }

@@ -11100,5 +11100,13 @@
     "transcriptionUnavailableRecordingContinues": "ಲಿಪ್ಯಂತರಗಳು ಲಭ್ಯವಿಲ್ಲ, ಧ್ವನಿಮುದ್ರಣ ಸಾಧನದಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ ಮತ್ತು ನಂತರ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ",
     "transcriptionUnavailableSavingOnDevice": "ಲಿಪ್ಯಂತರ ಲಭ್ಯವಿಲ್ಲ · ಸಾಧನದಲ್ಲಿ ಉಳಿಸಲಾಗುತ್ತಿದೆ",
     "transcriptionsPendingFraction": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {pending}/{total}",
-    "transcriptionsPendingCount": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {count}"
+    "transcriptionsPendingCount": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {count}",
+    "renameDevice": "ಸಾಧನದ ಹೆಸರು ಬದಲಿಸಿ",
+    "renameDeviceDescription": "ಹೆಸರು ನಿಮ್ಮ Omi ನಲ್ಲಿಯೇ ಉಳಿಯುತ್ತದೆ, ಆದ್ದರಿಂದ ನೀವು ಜೋಡಿಸುವ ಯಾವುದೇ ಫೋನ್‌ನಲ್ಲಿ ಇದು ಕಾಣಿಸುತ್ತದೆ.",
+    "tapToRename": "ಹೆಸರು ಬದಲಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
+    "deviceNameCannotBeEmpty": "ಸಾಧನದ ಹೆಸರು ಖಾಲಿಯಾಗಿರಲು ಸಾಧ್ಯವಿಲ್ಲ",
+    "deviceNameTooLong": "ಹೆಸರು ತುಂಬಾ ಉದ್ದವಾಗಿದೆ (ಗರಿಷ್ಠ {maxBytes} ಅಕ್ಷರಗಳು; ಎಮೋಜಿ ಮತ್ತು ಒತ್ತಕ್ಷರಗಳು ಹೆಚ್ಚು ಎಣಿಸಲ್ಪಡುತ್ತವೆ)",
+    "deviceNameInvalidCharacters": "ಹೆಸರಿನಲ್ಲಿ ಬೆಂಬಲವಿಲ್ಲದ ಅಕ್ಷರಗಳಿವೆ",
+    "deviceRenameFailed": "ನಿಮ್ಮ Omi ನಲ್ಲಿ ಹೆಸರನ್ನು ಉಳಿಸಲಾಗಲಿಲ್ಲ. ಅದು ಸಂಪರ್ಕದಲ್ಲಿದೆಯೇ ಎಂದು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "deviceRenamed": "ಸಾಧನದ ಹೆಸರನ್ನು {name} ಎಂದು ಬದಲಿಸಲಾಗಿದೆ"
 }

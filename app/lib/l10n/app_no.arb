@@ -3528,5 +3528,13 @@
     "transcriptionUnavailableRecordingContinues": "Transkripsjoner er utilgjengelige, opptaket fortsetter på enheten og behandles senere",
     "transcriptionUnavailableSavingOnDevice": "Transkripsjon utilgjengelig · lagres på enheten",
     "transcriptionsPendingFraction": "Transkripsjoner i kø {pending}/{total}",
-    "transcriptionsPendingCount": "Transkripsjoner i kø {count}"
+    "transcriptionsPendingCount": "Transkripsjoner i kø {count}",
+    "renameDevice": "Gi enheten nytt navn",
+    "renameDeviceDescription": "Navnet lagres på selve Omi-enheten, så det vises på alle telefoner du parer den med.",
+    "tapToRename": "Trykk for å gi nytt navn",
+    "deviceNameCannotBeEmpty": "Enhetsnavnet kan ikke være tomt",
+    "deviceNameTooLong": "Navnet er for langt (opptil {maxBytes} tegn; emoji og aksenter teller ekstra)",
+    "deviceNameInvalidCharacters": "Navnet inneholder tegn som ikke støttes",
+    "deviceRenameFailed": "Kunne ikke lagre navnet på Omi-enheten. Sjekk at den er tilkoblet, og prøv igjen.",
+    "deviceRenamed": "Enheten har fått navnet {name}"
 }

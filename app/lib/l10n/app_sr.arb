@@ -11100,5 +11100,13 @@
     "transcriptionUnavailableRecordingContinues": "Транскрипције нису доступне, снимање се наставља на уређају и биће обрађено касније",
     "transcriptionUnavailableSavingOnDevice": "Транскрипција недоступна · чува се на уређају",
     "transcriptionsPendingFraction": "Транскрипције на чекању {pending}/{total}",
-    "transcriptionsPendingCount": "Транскрипције на чекању {count}"
+    "transcriptionsPendingCount": "Транскрипције на чекању {count}",
+    "renameDevice": "Преименуј уређај",
+    "renameDeviceDescription": "Име се чува на самом Omi уређају, па се приказује на сваком телефону са којим га упарите.",
+    "tapToRename": "Додирните за преименовање",
+    "deviceNameCannotBeEmpty": "Име уређаја не може бити празно",
+    "deviceNameTooLong": "Име је предугачко (до {maxBytes} знакова; емоџији и ћирилица се рачунају више)",
+    "deviceNameInvalidCharacters": "Име садржи неподржане знакове",
+    "deviceRenameFailed": "Име није могло да се сачува на Omi. Проверите да ли је повезан и покушајте поново.",
+    "deviceRenamed": "Уређај је преименован у {name}"
 }

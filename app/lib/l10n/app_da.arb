@@ -3570,5 +3570,13 @@
     "transcriptionUnavailableRecordingContinues": "Transskriptioner er utilgængelige, optagelsen fortsætter på enheden og behandles senere",
     "transcriptionUnavailableSavingOnDevice": "Transskription utilgængelig · gemmes på enheden",
     "transcriptionsPendingFraction": "Transskriptioner i kø {pending}/{total}",
-    "transcriptionsPendingCount": "Transskriptioner i kø {count}"
+    "transcriptionsPendingCount": "Transskriptioner i kø {count}",
+    "renameDevice": "Omdøb enhed",
+    "renameDeviceDescription": "Navnet gemmes på selve din Omi, så det vises på enhver telefon, du parrer den med.",
+    "tapToRename": "Tryk for at omdøbe",
+    "deviceNameCannotBeEmpty": "Enhedsnavnet må ikke være tomt",
+    "deviceNameTooLong": "Navnet er for langt (op til {maxBytes} tegn; emoji og accenter tæller ekstra)",
+    "deviceNameInvalidCharacters": "Navnet indeholder tegn, der ikke understøttes",
+    "deviceRenameFailed": "Navnet kunne ikke gemmes på din Omi. Tjek, at den er forbundet, og prøv igen.",
+    "deviceRenamed": "Enheden er omdøbt til {name}"
 }

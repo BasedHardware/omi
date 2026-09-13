@@ -11170,4 +11170,33 @@ class AppLocalizationsVi extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Bản chép âm đang chờ $count';
   }
+
+  @override
+  String get renameDevice => 'Đổi tên thiết bị';
+
+  @override
+  String get renameDeviceDescription =>
+      'Tên được lưu ngay trên Omi, nên sẽ hiển thị trên mọi điện thoại mà bạn ghép nối.';
+
+  @override
+  String get tapToRename => 'Chạm để đổi tên';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Tên thiết bị không được để trống';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Tên quá dài (tối đa $maxBytes ký tự; emoji và chữ có dấu được tính nhiều hơn)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Tên chứa ký tự không được hỗ trợ';
+
+  @override
+  String get deviceRenameFailed => 'Không thể lưu tên vào Omi. Hãy kiểm tra thiết bị đã kết nối rồi thử lại.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Đã đổi tên thiết bị thành $name';
+  }
 }

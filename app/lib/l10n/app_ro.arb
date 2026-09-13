@@ -3528,5 +3528,13 @@
     "transcriptionUnavailableRecordingContinues": "Transcrierile nu sunt disponibile, înregistrarea continuă pe dispozitiv și va fi procesată mai târziu",
     "transcriptionUnavailableSavingOnDevice": "Transcriere indisponibilă · se salvează pe dispozitiv",
     "transcriptionsPendingFraction": "Transcrieri în așteptare {pending}/{total}",
-    "transcriptionsPendingCount": "Transcrieri în așteptare {count}"
+    "transcriptionsPendingCount": "Transcrieri în așteptare {count}",
+    "renameDevice": "Redenumește dispozitivul",
+    "renameDeviceDescription": "Numele este salvat pe Omi, așa că apare pe orice telefon cu care îl asociezi.",
+    "tapToRename": "Atinge pentru a redenumi",
+    "deviceNameCannotBeEmpty": "Numele dispozitivului nu poate fi gol",
+    "deviceNameTooLong": "Numele este prea lung (până la {maxBytes} caractere; emoji-urile și diacriticele contează mai mult)",
+    "deviceNameInvalidCharacters": "Numele conține caractere neacceptate",
+    "deviceRenameFailed": "Numele nu a putut fi salvat pe Omi. Verifică dacă este conectat și încearcă din nou.",
+    "deviceRenamed": "Dispozitivul a fost redenumit în {name}"
 }

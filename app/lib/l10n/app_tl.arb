@@ -11100,5 +11100,13 @@
     "transcriptionUnavailableRecordingContinues": "Hindi available ang mga transcript, nagpapatuloy ang pag-record sa device at ipoproseso mamaya",
     "transcriptionUnavailableSavingOnDevice": "Hindi available ang transcript · naka-save sa device",
     "transcriptionsPendingFraction": "Mga transcript na naghihintay {pending}/{total}",
-    "transcriptionsPendingCount": "Mga transcript na naghihintay {count}"
+    "transcriptionsPendingCount": "Mga transcript na naghihintay {count}",
+    "renameDevice": "Palitan ang Pangalan ng Device",
+    "renameDeviceDescription": "Naka-save ang pangalan sa mismong Omi, kaya lalabas ito sa anumang teleponong ipapares mo.",
+    "tapToRename": "I-tap para palitan ang pangalan",
+    "deviceNameCannotBeEmpty": "Hindi maaaring blangko ang pangalan ng device",
+    "deviceNameTooLong": "Masyadong mahaba ang pangalan (hanggang {maxBytes} character; mas malaki ang bilang ng emoji at accent)",
+    "deviceNameInvalidCharacters": "May hindi sinusuportahang character ang pangalan",
+    "deviceRenameFailed": "Hindi ma-save ang pangalan sa iyong Omi. Tiyaking nakakonekta ito at subukang muli.",
+    "deviceRenamed": "Pinalitan ang pangalan ng device sa {name}"
 }

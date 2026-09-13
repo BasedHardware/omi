@@ -13262,5 +13262,49 @@
                 "type": "int"
             }
         }
+    },
+    "renameDevice": "Rename Device",
+    "@renameDevice": {
+        "description": "Title of the dialog that renames the connected Omi device"
+    },
+    "renameDeviceDescription": "The name is saved on your Omi, so it shows up on any phone you pair with.",
+    "@renameDeviceDescription": {
+        "description": "Explains that the device name is stored on the device itself"
+    },
+    "tapToRename": "Tap to rename",
+    "@tapToRename": {
+        "description": "Subtitle of the device name row when renaming is supported"
+    },
+    "deviceNameCannotBeEmpty": "Device name cannot be empty",
+    "@deviceNameCannotBeEmpty": {
+        "description": "Validation error when the device name is blank"
+    },
+    "deviceNameTooLong": "Name is too long (up to {maxBytes} characters; emoji and accents count extra)",
+    "@deviceNameTooLong": {
+        "description": "Validation error when the device name exceeds the byte limit",
+        "placeholders": {
+            "maxBytes": {
+                "type": "int",
+                "example": "20"
+            }
+        }
+    },
+    "deviceNameInvalidCharacters": "Name contains unsupported characters",
+    "@deviceNameInvalidCharacters": {
+        "description": "Validation error when the device name has control characters"
+    },
+    "deviceRenameFailed": "Could not save the name to your Omi. Check that it is connected and try again.",
+    "@deviceRenameFailed": {
+        "description": "Error shown when the device rejected or did not confirm the new name"
+    },
+    "deviceRenamed": "Device renamed to {name}",
+    "@deviceRenamed": {
+        "description": "Confirmation after the device accepted the new name",
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "My Omi"
+            }
+        }
     }
 }

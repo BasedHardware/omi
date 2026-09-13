@@ -17,11 +17,18 @@ class DeviceInfoGroups extends StatelessWidget {
     required this.pairedDevice,
     required this.isDeviceConnected,
     this.rayBanCameraStatus,
+    this.canRename = false,
+    this.onRename,
   });
 
   final BtDevice? pairedDevice;
   final bool isDeviceConnected;
   final Future<String>? rayBanCameraStatus;
+
+  /// Firmware that stores a user-chosen name ([OmiFeatures.deviceName]). When
+  /// true the Device Name row opens rename instead of copying the name.
+  final bool canRename;
+  final VoidCallback? onRename;
 
   static String _truncate(String value) {
     if (value.length > 12) return '${value.substring(0, 5)}•••${value.substring(value.length - 4)}';
@@ -66,7 +73,16 @@ class DeviceInfoGroups extends StatelessWidget {
         OmiSettingsGroup(
           header: l10n.deviceInfoSection,
           children: [
-            _copyRow(context, icon: FontAwesomeIcons.microchip, title: l10n.deviceName, value: device?.name),
+            if (canRename)
+              OmiSettingsRow(
+                leading: const FaIcon(FontAwesomeIcons.microchip),
+                title: l10n.deviceName,
+                subtitle: l10n.tapToRename,
+                value: device?.name,
+                onTap: onRename,
+              )
+            else
+              _copyRow(context, icon: FontAwesomeIcons.microchip, title: l10n.deviceName, value: device?.name),
             if (isRayBan) ...[
               OmiSettingsRow(
                 leading: const FaIcon(FontAwesomeIcons.microphone),

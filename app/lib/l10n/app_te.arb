@@ -11100,5 +11100,13 @@
     "transcriptionUnavailableRecordingContinues": "ట్రాన్స్‌క్రిప్షన్‌లు అందుబాటులో లేవు, రికార్డింగ్ పరికరంలో కొనసాగుతుంది మరియు తర్వాత ప్రాసెస్ చేయబడుతుంది",
     "transcriptionUnavailableSavingOnDevice": "ట్రాన్స్‌క్రిప్షన్ అందుబాటులో లేదు · పరికరంలో సేవ్ చేయబడుతోంది",
     "transcriptionsPendingFraction": "పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు {pending}/{total}",
-    "transcriptionsPendingCount": "పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు {count}"
+    "transcriptionsPendingCount": "పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు {count}",
+    "renameDevice": "పరికరం పేరు మార్చండి",
+    "renameDeviceDescription": "పేరు మీ Omi లోనే సేవ్ అవుతుంది, అందువల్ల మీరు జోడించే ఏ ఫోన్‌లోనైనా అది కనిపిస్తుంది.",
+    "tapToRename": "పేరు మార్చడానికి నొక్కండి",
+    "deviceNameCannotBeEmpty": "పరికరం పేరు ఖాళీగా ఉండకూడదు",
+    "deviceNameTooLong": "పేరు చాలా పొడవుగా ఉంది (గరిష్ఠంగా {maxBytes} అక్షరాలు; ఎమోజీలు మరియు గుణింతాలు ఎక్కువగా లెక్కించబడతాయి)",
+    "deviceNameInvalidCharacters": "పేరులో మద్దతు లేని అక్షరాలు ఉన్నాయి",
+    "deviceRenameFailed": "మీ Omi లో పేరును సేవ్ చేయలేకపోయాము. అది కనెక్ట్ అయి ఉందో లేదో తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "deviceRenamed": "పరికరం పేరు {name} గా మార్చబడింది"
 }

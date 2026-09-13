@@ -11204,4 +11204,33 @@ class AppLocalizationsMs extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkripsi tertunggak $count';
   }
+
+  @override
+  String get renameDevice => 'Namakan Semula Peranti';
+
+  @override
+  String get renameDeviceDescription =>
+      'Nama disimpan pada Omi itu sendiri, jadi ia dipaparkan pada mana-mana telefon yang anda pasangkan.';
+
+  @override
+  String get tapToRename => 'Ketik untuk menamakan semula';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Nama peranti tidak boleh kosong';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Nama terlalu panjang (maksimum $maxBytes aksara; emoji dan aksen dikira lebih)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Nama mengandungi aksara yang tidak disokong';
+
+  @override
+  String get deviceRenameFailed => 'Nama tidak dapat disimpan ke Omi anda. Pastikan ia disambungkan dan cuba lagi.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Peranti dinamakan semula kepada $name';
+  }
 }

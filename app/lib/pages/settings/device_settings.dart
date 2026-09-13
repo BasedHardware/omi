@@ -18,6 +18,7 @@ import 'package:omi/pages/settings/device/device_control_sheets.dart';
 import 'package:omi/pages/settings/device/device_info_groups.dart';
 import 'package:omi/pages/settings/device/device_page_header.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
+import 'package:omi/pages/settings/rename_device_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -69,6 +70,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
 
+  // Firmware that stores a user-chosen name (OmiFeatures.deviceName). Null
+  // until the features characteristic has been read.
+  bool? _hasDeviceNameFeature;
+
   Timer? _debounce;
   Timer? _micGainDebounce;
   bool _isFindingDevice = false;
@@ -112,10 +117,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final features = await connection.getFeatures();
     final hasDimming = (features & OmiFeatures.ledDimming) != 0;
     final hasMicGain = (features & OmiFeatures.micGain) != 0;
+    final hasDeviceName = (features & OmiFeatures.deviceName) != 0;
     if (!mounted) return;
     setState(() {
       _hasDimmingFeature = hasDimming;
       _hasMicGainFeature = hasMicGain;
+      _hasDeviceNameFeature = hasDeviceName;
     });
 
     final ratio = hasDimming ? await connection.getLedDimRatio() : null;
@@ -145,6 +152,19 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     if (deviceProvider.pairedDevice == null) return;
     final connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
     await connection?.setMicGain(value.toInt());
+  }
+
+  Future<void> _showRenameDeviceDialog(String currentName) async {
+    final provider = context.read<DeviceProvider>();
+    final renamed = await showDialog<bool>(
+      context: context,
+      builder: (_) => RenameDeviceWidget(initialName: currentName, onRename: provider.renameConnectedDevice),
+    );
+    if (renamed == true && mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(context.l10n.deviceRenamed(provider.pairedDevice?.name ?? ''))));
+    }
   }
 
   void _showBrightnessSheet() {
@@ -590,6 +610,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             pairedDevice: paired,
             isDeviceConnected: connected != null,
             rayBanCameraStatus: paired?.type == DeviceType.raybanMeta ? _rayBanMetaCameraStatus(provider) : null,
+            canRename: _hasDeviceNameFeature == true && provider.isConnected,
+            onRename: () => _showRenameDeviceDialog(paired?.name ?? connected?.name ?? ''),
           ),
           gap,
           _forgetGroup(provider),

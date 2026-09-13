@@ -3528,5 +3528,13 @@
     "transcriptionUnavailableRecordingContinues": "Les transcripcions no estan disponibles, l'enregistrament continua al dispositiu i es processarà més tard",
     "transcriptionUnavailableSavingOnDevice": "Transcripció no disponible · s'està desant al dispositiu",
     "transcriptionsPendingFraction": "Transcripcions pendents {pending}/{total}",
-    "transcriptionsPendingCount": "Transcripcions pendents {count}"
+    "transcriptionsPendingCount": "Transcripcions pendents {count}",
+    "renameDevice": "Canvia el nom del dispositiu",
+    "renameDeviceDescription": "El nom es desa al mateix Omi, així que apareix a qualsevol telèfon amb què l'emparellis.",
+    "tapToRename": "Toca per canviar el nom",
+    "deviceNameCannotBeEmpty": "El nom del dispositiu no pot estar buit",
+    "deviceNameTooLong": "El nom és massa llarg (fins a {maxBytes} caràcters; els emojis i els accents compten més)",
+    "deviceNameInvalidCharacters": "El nom conté caràcters no compatibles",
+    "deviceRenameFailed": "No s'ha pogut desar el nom a l'Omi. Comprova que estigui connectat i torna-ho a provar.",
+    "deviceRenamed": "Dispositiu reanomenat a {name}"
 }

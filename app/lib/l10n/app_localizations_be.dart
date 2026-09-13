@@ -11205,4 +11205,34 @@ class AppLocalizationsBe extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Транскрыпцый у чаканні $count';
   }
+
+  @override
+  String get renameDevice => 'Перайменаваць прыладу';
+
+  @override
+  String get renameDeviceDescription =>
+      'Імя захоўваецца на самім Omi, таму яно з\'явіцца на любым тэлефоне, з якім вы яго спалучыце.';
+
+  @override
+  String get tapToRename => 'Націсніце, каб перайменаваць';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Імя прылады не можа быць пустым';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Імя занадта доўгае (да $maxBytes сімвалаў; эмодзі і дыякрытыка лічацца за больш)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Імя змяшчае непадтрымоўваныя сімвалы';
+
+  @override
+  String get deviceRenameFailed =>
+      'Не ўдалося захаваць імя на Omi. Пераканайцеся, што прылада падключана, і паспрабуйце яшчэ раз.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Прылада перайменавана ў $name';
+  }
 }

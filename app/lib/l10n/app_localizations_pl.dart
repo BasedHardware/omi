@@ -11209,4 +11209,34 @@ class AppLocalizationsPl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkrypcje w kolejce $count';
   }
+
+  @override
+  String get renameDevice => 'Zmień nazwę urządzenia';
+
+  @override
+  String get renameDeviceDescription =>
+      'Nazwa jest zapisywana w samym Omi, więc pojawia się na każdym telefonie, z którym je sparujesz.';
+
+  @override
+  String get tapToRename => 'Dotknij, aby zmienić nazwę';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Nazwa urządzenia nie może być pusta';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Nazwa jest za długa (maks. $maxBytes znaków; emoji i znaki diakrytyczne liczą się podwójnie)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Nazwa zawiera nieobsługiwane znaki';
+
+  @override
+  String get deviceRenameFailed =>
+      'Nie udało się zapisać nazwy w Omi. Sprawdź, czy jest połączone, i spróbuj ponownie.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Zmieniono nazwę urządzenia na $name';
+  }
 }

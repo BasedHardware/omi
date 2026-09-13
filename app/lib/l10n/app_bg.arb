@@ -3528,5 +3528,13 @@
     "transcriptionUnavailableRecordingContinues": "Транскрипциите са недостъпни, записването продължава на устройството и ще бъде обработено по-късно",
     "transcriptionUnavailableSavingOnDevice": "Транскрипцията е недостъпна · записва се на устройството",
     "transcriptionsPendingFraction": "Чакащи транскрипции {pending}/{total}",
-    "transcriptionsPendingCount": "Чакащи транскрипции {count}"
+    "transcriptionsPendingCount": "Чакащи транскрипции {count}",
+    "renameDevice": "Преименуване на устройството",
+    "renameDeviceDescription": "Името се записва в самото Omi, така че се показва на всеки телефон, с който го сдвоите.",
+    "tapToRename": "Докоснете за преименуване",
+    "deviceNameCannotBeEmpty": "Името на устройството не може да е празно",
+    "deviceNameTooLong": "Името е твърде дълго (до {maxBytes} знака; емоджи и ударения се броят за повече)",
+    "deviceNameInvalidCharacters": "Името съдържа неподдържани знаци",
+    "deviceRenameFailed": "Името не можа да бъде записано в Omi. Проверете дали е свързано и опитайте отново.",
+    "deviceRenamed": "Устройството е преименувано на {name}"
 }

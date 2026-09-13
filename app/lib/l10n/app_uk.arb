@@ -3528,5 +3528,13 @@
     "transcriptionUnavailableRecordingContinues": "Транскрипція недоступна, запис триває на пристрої та буде оброблений пізніше",
     "transcriptionUnavailableSavingOnDevice": "Транскрипція недоступна · зберігається на пристрої",
     "transcriptionsPendingFraction": "Транскрипцій у черзі {pending}/{total}",
-    "transcriptionsPendingCount": "Транскрипцій у черзі {count}"
+    "transcriptionsPendingCount": "Транскрипцій у черзі {count}",
+    "renameDevice": "Перейменувати пристрій",
+    "renameDeviceDescription": "Ім'я зберігається на самому Omi, тому воно з'явиться на будь-якому телефоні, з яким ви його з'єднаєте.",
+    "tapToRename": "Торкніться, щоб перейменувати",
+    "deviceNameCannotBeEmpty": "Ім'я пристрою не може бути порожнім",
+    "deviceNameTooLong": "Ім'я надто довге (до {maxBytes} символів; емодзі та кирилиця займають більше)",
+    "deviceNameInvalidCharacters": "Ім'я містить непідтримувані символи",
+    "deviceRenameFailed": "Не вдалося зберегти ім'я на Omi. Перевірте, чи пристрій підключено, і спробуйте ще раз.",
+    "deviceRenamed": "Пристрій перейменовано на {name}"
 }

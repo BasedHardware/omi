@@ -3528,5 +3528,13 @@
     "transcriptionUnavailableRecordingContinues": "النسخ غير متوفر حاليًا، يستمر التسجيل على الجهاز وستتم المعالجة لاحقًا",
     "transcriptionUnavailableSavingOnDevice": "النسخ غير متوفر · يتم الحفظ على الجهاز",
     "transcriptionsPendingFraction": "نسخ معلّق {pending}/{total}",
-    "transcriptionsPendingCount": "نسخ معلّق {count}"
+    "transcriptionsPendingCount": "نسخ معلّق {count}",
+    "renameDevice": "إعادة تسمية الجهاز",
+    "renameDeviceDescription": "يُحفظ الاسم على جهاز Omi نفسه، لذا يظهر على أي هاتف تقرنه به.",
+    "tapToRename": "انقر لإعادة التسمية",
+    "deviceNameCannotBeEmpty": "لا يمكن أن يكون اسم الجهاز فارغًا",
+    "deviceNameTooLong": "الاسم طويل جدًا (حتى {maxBytes} حرفًا؛ الرموز التعبيرية وعلامات التشكيل تُحسب أكثر)",
+    "deviceNameInvalidCharacters": "يحتوي الاسم على أحرف غير مدعومة",
+    "deviceRenameFailed": "تعذّر حفظ الاسم على جهاز Omi. تأكد من أنه متصل وحاول مرة أخرى.",
+    "deviceRenamed": "تمت إعادة تسمية الجهاز إلى {name}"
 }

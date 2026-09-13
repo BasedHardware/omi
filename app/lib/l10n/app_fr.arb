@@ -3563,5 +3563,13 @@
     "transcriptionUnavailableRecordingContinues": "Les transcriptions sont indisponibles, l'enregistrement continue sur l'appareil et sera traité plus tard",
     "transcriptionUnavailableSavingOnDevice": "Transcription indisponible · enregistrement sur l'appareil",
     "transcriptionsPendingFraction": "Transcriptions en attente {pending}/{total}",
-    "transcriptionsPendingCount": "Transcriptions en attente {count}"
+    "transcriptionsPendingCount": "Transcriptions en attente {count}",
+    "renameDevice": "Renommer l'appareil",
+    "renameDeviceDescription": "Le nom est enregistré sur votre Omi, il apparaît donc sur tout téléphone avec lequel vous l'associez.",
+    "tapToRename": "Touchez pour renommer",
+    "deviceNameCannotBeEmpty": "Le nom de l'appareil ne peut pas être vide",
+    "deviceNameTooLong": "Le nom est trop long (jusqu'à {maxBytes} caractères ; les emojis et accents comptent davantage)",
+    "deviceNameInvalidCharacters": "Le nom contient des caractères non pris en charge",
+    "deviceRenameFailed": "Impossible d'enregistrer le nom sur votre Omi. Vérifiez qu'il est connecté et réessayez.",
+    "deviceRenamed": "Appareil renommé en {name}"
 }

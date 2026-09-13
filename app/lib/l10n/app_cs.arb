@@ -3528,5 +3528,13 @@
     "transcriptionUnavailableRecordingContinues": "Přepisy nejsou k dispozici, nahrávání pokračuje v zařízení a později se zpracuje",
     "transcriptionUnavailableSavingOnDevice": "Přepis není k dispozici · ukládá se v zařízení",
     "transcriptionsPendingFraction": "Čekající přepisy {pending}/{total}",
-    "transcriptionsPendingCount": "Čekající přepisy {count}"
+    "transcriptionsPendingCount": "Čekající přepisy {count}",
+    "renameDevice": "Přejmenovat zařízení",
+    "renameDeviceDescription": "Název se ukládá přímo do Omi, takže se zobrazí na každém telefonu, se kterým ho spárujete.",
+    "tapToRename": "Klepnutím přejmenujete",
+    "deviceNameCannotBeEmpty": "Název zařízení nemůže být prázdný",
+    "deviceNameTooLong": "Název je příliš dlouhý (max. {maxBytes} znaků; emoji a diakritika se počítají víc)",
+    "deviceNameInvalidCharacters": "Název obsahuje nepodporované znaky",
+    "deviceRenameFailed": "Název se nepodařilo uložit do Omi. Zkontrolujte, že je připojeno, a zkuste to znovu.",
+    "deviceRenamed": "Zařízení přejmenováno na {name}"
 }

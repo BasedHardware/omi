@@ -3528,5 +3528,13 @@
     "transcriptionUnavailableRecordingContinues": "Transkriptiot eivät ole käytettävissä, tallennus jatkuu laitteella ja käsitellään myöhemmin",
     "transcriptionUnavailableSavingOnDevice": "Transkriptio ei käytettävissä · tallennetaan laitteelle",
     "transcriptionsPendingFraction": "Jonossa olevat transkriptiot {pending}/{total}",
-    "transcriptionsPendingCount": "Jonossa olevat transkriptiot {count}"
+    "transcriptionsPendingCount": "Jonossa olevat transkriptiot {count}",
+    "renameDevice": "Nimeä laite uudelleen",
+    "renameDeviceDescription": "Nimi tallennetaan itse Omiin, joten se näkyy jokaisessa puhelimessa, johon sen yhdistät.",
+    "tapToRename": "Napauta nimetäksesi uudelleen",
+    "deviceNameCannotBeEmpty": "Laitteen nimi ei voi olla tyhjä",
+    "deviceNameTooLong": "Nimi on liian pitkä (enintään {maxBytes} merkkiä; emojit ja ääkköset vievät enemmän)",
+    "deviceNameInvalidCharacters": "Nimi sisältää merkkejä, joita ei tueta",
+    "deviceRenameFailed": "Nimeä ei voitu tallentaa Omiin. Tarkista, että se on yhdistetty, ja yritä uudelleen.",
+    "deviceRenamed": "Laite nimettiin uudelleen: {name}"
 }
