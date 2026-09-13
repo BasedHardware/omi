@@ -1,3 +1,5 @@
+import 'package:omi/services/wals/wal.dart';
+
 /// User-facing math for offline sync / upload progress.
 ///
 /// Progress must read as **completed** (0% → 100%), never remaining.
@@ -46,5 +48,31 @@ class OfflineProcessingDisplay {
       return 0;
     }
     return (normalized.processed / normalized.total).clamp(0.0, 1.0);
+  }
+
+  /// Server-side job progress for uploads that returned 202.
+  ///
+  /// [trackedUploadedWalIds] is the upload batch scope (accepted in one or more
+  /// passes). Only WALs in that set count toward the meter so a partial drain
+  /// never treats still-missing recordings as processed, and a later sync does
+  /// not mix its missing count with global `uploaded` queue length.
+  static ({int processed, int total}) serverJobCounts({
+    required Set<String> trackedUploadedWalIds,
+    required Iterable<Wal> wals,
+  }) {
+    if (trackedUploadedWalIds.isEmpty) {
+      final pending = wals.where((w) => w.status == WalStatus.uploaded).length;
+      if (pending <= 0) {
+        return (processed: 0, total: 0);
+      }
+      return (processed: 0, total: pending);
+    }
+
+    final total = trackedUploadedWalIds.length;
+    final stillWaiting = wals
+        .where((w) => trackedUploadedWalIds.contains(w.id) && w.status == WalStatus.uploaded)
+        .length;
+    final processed = (total - stillWaiting).clamp(0, total);
+    return (processed: processed, total: total);
   }
 }

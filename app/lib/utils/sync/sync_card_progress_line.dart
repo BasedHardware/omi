@@ -16,8 +16,14 @@ class SyncCardProgressLine {
       return speedSuffix;
     }
 
+    var current = currentFile ?? 0;
+    // Device download reports the 1-based active file index; upload uses completed count.
+    if (phase == SyncPhase.downloadingFromDevice && current > 0) {
+      current -= 1;
+    }
+
     final normalized = OfflineProcessingDisplay.normalizeCounts(
-      current: currentFile ?? 0,
+      current: current,
       total: totalFiles ?? 0,
     );
     if (normalized.total <= 0) {
