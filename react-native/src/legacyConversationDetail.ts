@@ -2,6 +2,7 @@ import type {OmiBackend} from './omiNativeTypes';
 import {
   conversationPhotoChrome,
   conversationPhotoDataUri,
+  conversationUnknownAppCopy,
   desktopReadErrorCopy,
   transcriptSttProviderCopy,
   visibleDisplayText,
@@ -513,7 +514,13 @@ export async function loadLegacyConversationDetail(
             },
           )
         ).get(appRecap.appId);
-  const appSummaryName = appChrome?.name;
+  const resolvedAppName = visibleDisplayText(appChrome?.name ?? '');
+  const appSummaryName =
+    resolvedAppName !== ''
+      ? resolvedAppName
+      : appRecap?.appId !== undefined && appsError === undefined
+        ? conversationUnknownAppCopy()
+        : undefined;
   const appSummaryDescription = appChrome?.description;
   const appSummaryImageUri = appChrome?.image;
   const folderId =

@@ -3,6 +3,7 @@ import ReactTestRenderer, {act} from 'react-test-renderer';
 import {
   conversationPhotoAnalyzingCopy,
   conversationPhotoDiscardedCopy,
+  conversationUnknownAppCopy,
   desktopBackendServiceCopy,
 } from './desktopReadClient';
 import {
@@ -1725,7 +1726,7 @@ test('keeps GET conversation plugins_results when more than 1000', async () => {
   expect(loaded.appSummary).toBe('Legacy plugin recap');
 });
 
-test('names GET apps_results app when catalog resolves and omits Unknown App', async () => {
+test('names GET apps_results app when catalog resolves and Unknown App when it misses', async () => {
   mockRequest.mockImplementation(async (request: {path?: string}) => {
     if (request.path === '/v1/apps/notes') {
       return {
@@ -1778,7 +1779,7 @@ test('names GET apps_results app when catalog resolves and omits Unknown App', a
   });
   const unresolved = await loadLegacyConversationDetail(backend, fixture.id);
   expect(unresolved.appSummary).toBe('App wrote this recap');
-  expect(unresolved.appSummaryName).toBeUndefined();
+  expect(unresolved.appSummaryName).toBe(conversationUnknownAppCopy());
   expect(unresolved.appSummaryDescription).toBeUndefined();
   expect(unresolved.appSummaryImageUri).toBeUndefined();
   expect(unresolved.appsError).toBeUndefined();

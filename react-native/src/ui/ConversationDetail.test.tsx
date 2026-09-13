@@ -2,7 +2,7 @@ import React from 'react';
 import Renderer, {act} from 'react-test-renderer';
 import {Linking, Text} from 'react-native';
 import type {ConversationProjection} from '../desktopReadClient';
-import {desktopBackendServiceCopy} from '../desktopReadClient';
+import {desktopBackendServiceCopy, conversationUnknownAppCopy} from '../desktopReadClient';
 
 const mockRecording = jest.fn(() => ({
   result: {
@@ -1162,7 +1162,7 @@ test('legacy conversation details name GET app result content', () => {
   expect(copy).toContain('App wrote this recap');
   expect(copy).toContain('Notes');
   expect(copy).toContain('Saves notes from calls');
-  expect(copy).not.toContain('Unknown App');
+  expect(copy).not.toContain(conversationUnknownAppCopy());
   expect(copy).not.toContain('Official');
   expect(copy).not.toContain('raw.githubusercontent.com');
   expect(
@@ -1187,6 +1187,46 @@ test('legacy conversation details name GET app result content', () => {
   expect(
     discardedView.root.findAll(node => node.props.source?.uri === imageUri),
   ).toHaveLength(0);
+});
+
+test('legacy conversation details name Flutter Unknown App when the catalog misses', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        appSummary: 'App wrote this recap',
+        appSummaryName: conversationUnknownAppCopy(),
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  const copy = text(view);
+  expect(copy).toContain('App wrote this recap');
+  expect(copy).toContain(conversationUnknownAppCopy());
+  expect(copy).not.toContain('Official');
+  expect(
+    view.root.findAll(node => node.props.source?.uri !== undefined),
+  ).toHaveLength(0);
+  const discarded = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', discarded: true},
+    }),
+  );
+  expect(discarded).not.toContain('App wrote this recap');
+  expect(discarded).not.toContain(conversationUnknownAppCopy());
 });
 
 test('legacy conversation details name a failed GET app catalog instead of empty success', () => {
@@ -1216,7 +1256,7 @@ test('legacy conversation details name a failed GET app catalog instead of empty
   );
   expect(copy).toContain('App wrote this recap');
   expect(copy).toContain(desktopBackendServiceCopy);
-  expect(copy).not.toContain('Unknown App');
+  expect(copy).not.toContain(conversationUnknownAppCopy());
   expect(copy).not.toContain('Official');
   const discarded = text(
     render({

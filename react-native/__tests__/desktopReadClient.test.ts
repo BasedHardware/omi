@@ -77,6 +77,7 @@ import {
   conversationListSourceTag,
   conversationListTag,
   conversationVisibilityCopy,
+  conversationUnknownAppCopy,
   parseMemoryText,
   chatClockLabel,
   clockLabel,
@@ -2407,6 +2408,10 @@ test('conversation visibility copy names GET private, shared, and public as Flut
   expect(conversationVisibilityCopy(' \t\n')).toBeNull();
   expect(conversationVisibilityCopy(undefined)).toBeNull();
   expect(conversationVisibilityCopy('secret')).toBeNull();
+});
+
+test('conversation unknown-app copy names Flutter catalog-miss attribution', () => {
+  expect(conversationUnknownAppCopy()).toBe('Unknown App');
 });
 
 test('conversation day labels prefer startedAt and keep Today/Yesterday/date', () => {

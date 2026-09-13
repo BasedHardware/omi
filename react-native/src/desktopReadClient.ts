@@ -436,6 +436,10 @@ export function conversationListNewCopy(
   return seconds > 0 && seconds < 60 ? 'New 🚀' : null;
 }
 
+export function conversationUnknownAppCopy(): string {
+  return 'Unknown App';
+}
+
 export function conversationVisibilityCopy(
   visibility: string | null | undefined,
 ): string | null {
