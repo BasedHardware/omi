@@ -919,9 +919,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     var nextTotal = totalFiles ?? _syncState.totalFiles;
 
     // Per-chunk device downloads report 1/1; do not clobber multi-recording upload counts.
-    if (incomingPhase == SyncPhase.downloadingFromDevice &&
-        totalFiles == 1 &&
-        (_syncState.totalFiles ?? 0) > 1) {
+    if (incomingPhase == SyncPhase.downloadingFromDevice && totalFiles == 1 && (_syncState.totalFiles ?? 0) > 1) {
       nextCurrent = _syncState.currentFile;
       nextTotal = _syncState.totalFiles;
     }
@@ -1001,10 +999,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// Server-side processing progress after uploads returned 202 (uploaded WALs
   /// still reconciling). Completed = recordings no longer waiting on a job.
   ({int processed, int total}) get offlineServerProcessingCounts {
-    return OfflineProcessingDisplay.serverJobCounts(
-      trackedUploadedWalIds: _trackedServerJobWalIds,
-      wals: _allWals,
-    );
+    return OfflineProcessingDisplay.serverJobCounts(trackedUploadedWalIds: _trackedServerJobWalIds, wals: _allWals);
   }
 
   @override

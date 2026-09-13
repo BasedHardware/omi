@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/utils/sync/offline_processing_display.dart';
 import 'package:omi/utils/sync/sync_card_progress_line.dart';
@@ -27,12 +29,8 @@ void main() {
     });
 
     test('serverJobCounts scopes to tracked upload batch', () {
-      Wal wal(int timerStart, WalStatus status) => Wal(
-            timerStart: timerStart,
-            codec: BleAudioCodec.pcm16,
-            seconds: 1,
-            status: status,
-          );
+      Wal wal(int timerStart, WalStatus status) =>
+          Wal(timerStart: timerStart, codec: BleAudioCodec.pcm16, seconds: 1, status: status);
 
       final partialDrain = OfflineProcessingDisplay.serverJobCounts(
         trackedUploadedWalIds: {'phone_1', 'phone_2'},
