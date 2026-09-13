@@ -202,8 +202,9 @@ export OMI_API_KEY="omi_dev_d_eochair_anseo"
 
 # Rith ordú agus deimhnigh an cód scoir
 omi --json memory list --limit 10
-if [ $? -ne 0 ]; then
-    echo "Tharla earráid agus cuimhní á bhfáil (cód scoir: $?)." >&2
+status=$?
+if [ $status -ne 0 ]; then
+    echo "Tharla earráid agus cuimhní á bhfáil (cód scoir: $status)." >&2
 fi
 ```
 
@@ -227,7 +228,7 @@ set OMI_API_KEY=omi_dev_d_eochair_anseo
 
 omi --json memory list --limit 10
 if %ERRORLEVEL% neq 0 (
-    echo Tharla earraid agus cuimhni a bhfail (cod scoir: %ERRORLEVEL%). >&2
+    echo Tharla earraid agus cuimhni a bhfail - cod scoir: %ERRORLEVEL%. 1>&2
 )
 ```
 
