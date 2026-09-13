@@ -3238,5 +3238,6 @@
     "secondDevice": "Druhé zařízení",
     "pairSecondDevice": "Spárovat druhé zařízení",
     "pairSecondDeviceDescription": "Připojte OmiGlass k vašemu Omi, aby fotky a zvuk šly do stejné konverzace.",
-    "forgetSecondDevice": "Zapomenout druhé zařízení"
+    "forgetSecondDevice": "Zapomenout druhé zařízení",
+    "processingTakingLonger": "Stále probíhá — trvá to déle než obvykle."
 }

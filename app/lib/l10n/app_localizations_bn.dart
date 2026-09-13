@@ -9997,4 +9997,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'দ্বিতীয় ডিভাইস ভুলে যান';
+
+  @override
+  String get processingTakingLonger => 'এখনও কাজ চলছে — এটি স্বাভাবিকের চেয়ে বেশি সময় নিচ্ছে।';
 }

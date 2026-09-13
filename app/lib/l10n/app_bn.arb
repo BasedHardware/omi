@@ -10826,5 +10826,6 @@
     "secondDevice": "দ্বিতীয় ডিভাইস",
     "pairSecondDevice": "দ্বিতীয় ডিভাইস যুক্ত করুন",
     "pairSecondDeviceDescription": "আপনার Omi-এর পাশে OmiGlass সংযুক্ত করুন, যাতে ছবি ও অডিও একই কথোপকথনে যায়।",
-    "forgetSecondDevice": "দ্বিতীয় ডিভাইস ভুলে যান"
+    "forgetSecondDevice": "দ্বিতীয় ডিভাইস ভুলে যান",
+    "processingTakingLonger": "এখনও কাজ চলছে — এটি স্বাভাবিকের চেয়ে বেশি সময় নিচ্ছে।"
 }

@@ -9993,4 +9993,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Unohda toinen laite';
+
+  @override
+  String get processingTakingLonger => 'Vielä käynnissä — tämä kestää tavallista kauemmin.';
 }

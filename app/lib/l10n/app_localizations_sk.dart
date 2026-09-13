@@ -9984,4 +9984,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Zabudnúť druhé zariadenie';
+
+  @override
+  String get processingTakingLonger => 'Stále prebieha — trvá to dlhšie ako zvyčajne.';
 }

@@ -3282,5 +3282,6 @@
     "secondDevice": "第二台设备",
     "pairSecondDevice": "配对第二台设备",
     "pairSecondDeviceDescription": "将 OmiGlass 与你的 Omi 一起连接，让照片和音频进入同一段对话。",
-    "forgetSecondDevice": "忘记第二台设备"
+    "forgetSecondDevice": "忘记第二台设备",
+    "processingTakingLonger": "仍在处理中——比平时耗时更长。"
 }

@@ -10019,4 +10019,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Tweede apparaat vergeten';
+
+  @override
+  String get processingTakingLonger => 'Nog bezig — dit duurt langer dan normaal.';
 }

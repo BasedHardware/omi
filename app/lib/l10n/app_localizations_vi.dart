@@ -9987,4 +9987,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Quên thiết bị thứ hai';
+
+  @override
+  String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
 }

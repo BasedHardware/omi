@@ -9996,4 +9996,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Glöm andra enhet';
+
+  @override
+  String get processingTakingLonger => 'Fortfarande igång — det tar längre tid än vanligt.';
 }

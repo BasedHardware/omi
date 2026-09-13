@@ -10001,4 +10001,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'दुसरे डिव्हाइस विसरा';
+
+  @override
+  String get processingTakingLonger => 'अजूनही काम सुरू आहे — याला नेहमीपेक्षा जास्त वेळ लागत आहे.';
 }

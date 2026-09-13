@@ -10045,4 +10045,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Заборави го вториот уред';
+
+  @override
+  String get processingTakingLonger => 'Сè уште се обработува — ова трае подолго од вообичаеното.';
 }

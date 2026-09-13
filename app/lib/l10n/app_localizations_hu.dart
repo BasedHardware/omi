@@ -10033,4 +10033,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Második eszköz elfelejtése';
+
+  @override
+  String get processingTakingLonger => 'Még folyamatban — ez tovább tart a szokásosnál.';
 }

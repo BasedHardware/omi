@@ -11841,5 +11841,9 @@
     "forgetSecondDevice": "Forget second device",
     "@forgetSecondDevice": {
         "description": "Action that unpairs the second (companion) device only"
+    },
+    "processingTakingLonger": "Still working — this is taking longer than usual.",
+    "@processingTakingLonger": {
+        "description": "Shown on the homepage processing card after ~2 minutes with a Retry action (#5481)."
     }
 }

@@ -10023,4 +10023,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Забыць другую прыладу';
+
+  @override
+  String get processingTakingLonger => 'Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.';
 }

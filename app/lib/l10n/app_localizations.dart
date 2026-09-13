@@ -18602,6 +18602,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Forget second device'**
   String get forgetSecondDevice;
+
+  /// Shown on the homepage processing card after ~2 minutes with a Retry action (#5481).
+  ///
+  /// In en, this message translates to:
+  /// **'Still working — this is taking longer than usual.'**
+  String get processingTakingLonger;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

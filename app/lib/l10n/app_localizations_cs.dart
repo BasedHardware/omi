@@ -9992,4 +9992,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Zapomenout druhé zařízení';
+
+  @override
+  String get processingTakingLonger => 'Stále probíhá — trvá to déle než obvykle.';
 }

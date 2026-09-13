@@ -3260,5 +3260,6 @@
     "secondDevice": "Tweede apparaat",
     "pairSecondDevice": "Tweede apparaat koppelen",
     "pairSecondDeviceDescription": "Verbind OmiGlass naast je Omi zodat foto's en audio in hetzelfde gesprek terechtkomen.",
-    "forgetSecondDevice": "Tweede apparaat vergeten"
+    "forgetSecondDevice": "Tweede apparaat vergeten",
+    "processingTakingLonger": "Nog bezig — dit duurt langer dan normaal."
 }

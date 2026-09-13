@@ -10007,4 +10007,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Заборави други уређај';
+
+  @override
+  String get processingTakingLonger => 'Još traje — ovo traje duže nego inače.';
 }

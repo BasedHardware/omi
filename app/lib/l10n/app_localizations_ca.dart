@@ -10049,4 +10049,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Oblida el segon dispositiu';
+
+  @override
+  String get processingTakingLonger => 'Encara en curs: això està trigant més del normal.';
 }

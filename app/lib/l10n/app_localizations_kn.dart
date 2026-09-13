@@ -10024,4 +10024,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'ಎರಡನೇ ಸಾಧನವನ್ನು ಮರೆತುಬಿಡಿ';
+
+  @override
+  String get processingTakingLonger => 'ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ — ಇದು ಸಾಮಾನ್ಯಕ್ಕಿಂತ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ.';
 }

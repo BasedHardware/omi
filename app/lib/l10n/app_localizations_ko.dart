@@ -9823,4 +9823,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => '두 번째 기기 삭제';
+
+  @override
+  String get processingTakingLonger => '아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요.';
 }

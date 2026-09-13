@@ -3260,5 +3260,6 @@
     "secondDevice": "Andre enhet",
     "pairSecondDevice": "Par en annen enhet",
     "pairSecondDeviceDescription": "Koble til OmiGlass sammen med Omi slik at bilder og lyd havner i samme samtale.",
-    "forgetSecondDevice": "Glem andre enhet"
+    "forgetSecondDevice": "Glem andre enhet",
+    "processingTakingLonger": "Jobber fortsatt — dette tar lengre tid enn vanlig."
 }

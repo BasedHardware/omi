@@ -9820,4 +9820,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => '2台目のデバイスを忘れる';
+
+  @override
+  String get processingTakingLonger => 'まだ処理中です。通常より時間がかかっています。';
 }

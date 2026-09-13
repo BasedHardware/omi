@@ -10029,4 +10029,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Забрави второто устройство';
+
+  @override
+  String get processingTakingLonger => 'Все още работи — отнема повече време от обичайното.';
 }

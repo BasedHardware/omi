@@ -10022,4 +10022,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Pozabi drugo napravo';
+
+  @override
+  String get processingTakingLonger => 'Še poteka — traja dlje kot običajno.';
 }
