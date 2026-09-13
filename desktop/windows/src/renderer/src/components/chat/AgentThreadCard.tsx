@@ -1,4 +1,5 @@
 import { AlertCircle, Bot, CheckCircle2, CircleSlash, Loader2 } from 'lucide-react'
+import { ConnectorBrandMark, type ConnectorBrand } from '../home/hub/connections/ConnectorBrandMark'
 import type { AgentThreadCardBlock } from '../../../../shared/types'
 
 // Shared-thread agent cards (B4, INV-CHAT-1). The two durable artifacts a
@@ -16,6 +17,39 @@ const STATUS: Record<CompletionStatus, { label: string; dot: string; Icon: typeo
 
 function coerceStatus(status: string): CompletionStatus {
   return status === 'succeeded' || status === 'stopped' || status === 'failed' ? status : 'failed'
+}
+
+// Maps the spawn's resolved coding-agent adapter id (adapterRegistry.ts's
+// ProductionAdapterId) to the connections panel's brand mark, so the card
+// shows which agent actually ran instead of a generic bot glyph. Not every
+// adapter has a dedicated asset: codex reuses the OpenAI mark (same vendor as
+// ChatGPT), acp (Claude Code) reuses the Claude mark — both real brand marks,
+// just not adapter-specific ones. `provider` is absent on cards from before
+// this field existed, or when the producing surface stamped no provenance —
+// those fall back to the plain Bot icon below, same as always.
+const PROVIDER_BRAND: Partial<Record<string, ConnectorBrand>> = {
+  acp: 'claude',
+  openclaw: 'openclaw',
+  hermes: 'hermes',
+  codex: 'chatgpt',
+  'pi-mono': 'omi'
+}
+
+function AgentIcon({
+  provider,
+  compact
+}: {
+  provider?: string
+  compact: boolean
+}): React.JSX.Element {
+  const size = compact ? 'h-3.5 w-3.5' : 'h-4 w-4'
+  const brand = provider ? PROVIDER_BRAND[provider] : undefined
+  if (!brand) return <Bot className={`${size} shrink-0 text-white/70`} />
+  return (
+    <span className={`flex ${size} shrink-0 items-center justify-center`}>
+      <ConnectorBrandMark brand={brand} />
+    </span>
+  )
 }
 
 /**
@@ -39,7 +73,7 @@ export function AgentThreadCard({
     return (
       <div className={`bubble-in ${shell}`}>
         <div className="flex items-center gap-2">
-          <Bot className={`${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} shrink-0 text-white/70`} />
+          <AgentIcon provider={block.provider} compact={compact} />
           <span className={titleCls}>{block.title}</span>
           <span className="ml-1 flex shrink-0 items-center gap-1 text-white/45">
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -58,7 +92,7 @@ export function AgentThreadCard({
   return (
     <div className={`bubble-in ${shell}`}>
       <div className="flex items-center gap-2">
-        <Bot className={`${compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} shrink-0 text-white/70`} />
+        <AgentIcon provider={block.provider} compact={compact} />
         <span className={titleCls}>{block.title}</span>
         <span className={`ml-1 flex shrink-0 items-center gap-1 ${dot}`}>
           <Icon className="h-3.5 w-3.5" />
