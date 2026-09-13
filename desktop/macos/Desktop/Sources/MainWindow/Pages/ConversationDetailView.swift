@@ -17,42 +17,6 @@ enum ConversationDetailRequestGate {
   }
 }
 
-/// A parent can replace a conversation row without changing its identity
-/// (rename, folder move, processing completion). Keying detail work only by ID
-/// leaves the open panel pinned to the old value, so these visible revisions
-/// participate in the request identity as well.
-struct ConversationDetailRequestToken: Hashable {
-  let conversationID: String
-  let updatedAt: Date?
-  let title: String
-  let folderID: String?
-  let status: String
-
-  init(conversation: ServerConversation) {
-    self.init(
-      conversationID: conversation.id,
-      updatedAt: conversation.updatedAt,
-      title: conversation.title,
-      folderID: conversation.folderId,
-      status: String(describing: conversation.status)
-    )
-  }
-
-  init(
-    conversationID: String,
-    updatedAt: Date?,
-    title: String,
-    folderID: String?,
-    status: String
-  ) {
-    self.conversationID = conversationID
-    self.updatedAt = updatedAt
-    self.title = title
-    self.folderID = folderID
-    self.status = status
-  }
-}
-
 struct ConversationDetailProcessingLayout<Banner: View, Content: View>: View {
   let isProcessing: Bool
   let banner: Banner
@@ -1341,8 +1305,11 @@ struct ConversationDetailView: View {
       // whole summary — the longest prose in the app — in near-white on a near-white ground. The
       // page is `glassContent()`, which already pins the panel's light appearance, and the markdown
       // inherits it.
-      OmiMarkdown(text: selection.content, sender: .ai)
-        .textSelection(.enabled)
+      //
+      // Selection is AppKit prose, not a SwiftUI native-selection modifier on an ancestor:
+      // that wraps this tall block in SelectionOverlay and re-lays-out the visible portion
+      // while the reader scrolls (FC-selection-overlay-layout-loop; same contract as chat).
+      OmiMarkdown(text: selection.content, sender: .ai, appKitProseSelection: true)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
@@ -1592,7 +1559,6 @@ struct ConversationDetailView: View {
             Text(item.description)
               .scaledFont(size: OmiType.body)
               .foregroundColor(item.completed ? Ink.secondary : Ink.primary)
-              .textSelection(.enabled)
               .strikethrough(item.completed, color: Ink.secondary)
 
             Spacer(minLength: OmiSpacing.sm)
@@ -1769,12 +1735,10 @@ struct AppResultCard: View {
 
       // Content
       if isExpanded || result.content.count < 200 {
-        OmiMarkdown(text: result.content, sender: .ai)
-          .textSelection(.enabled)
+        OmiMarkdown(text: result.content, sender: .ai, appKitProseSelection: true)
           .frame(maxWidth: .infinity, alignment: .leading)
       } else {
-        OmiMarkdown(text: String(result.content.prefix(200)) + "\u{2026}", sender: .ai)
-          .textSelection(.enabled)
+        OmiMarkdown(text: String(result.content.prefix(200)) + "\u{2026}", sender: .ai, appKitProseSelection: true)
           .frame(maxWidth: .infinity, alignment: .leading)
       }
 
