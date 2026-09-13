@@ -11085,4 +11085,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'תמלילים ממתינים $count';
   }
+
+  @override
+  String get secondDevice => 'מכשיר שני';
+
+  @override
+  String get pairSecondDevice => 'צימוד מכשיר שני';
+
+  @override
+  String get pairSecondDeviceDescription => 'חברו את OmiGlass לצד ה-Omi שלכם כדי שתמונות ואודיו ייכנסו לאותה שיחה.';
+
+  @override
+  String get forgetSecondDevice => 'שכח את המכשיר השני';
 }

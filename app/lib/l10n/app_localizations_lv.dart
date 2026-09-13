@@ -11202,4 +11202,17 @@ class AppLocalizationsLv extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Gaidošas transkripcijas $count';
   }
+
+  @override
+  String get secondDevice => 'Otrā ierīce';
+
+  @override
+  String get pairSecondDevice => 'Savienot pārī otro ierīci';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Pievienojiet OmiGlass līdzās savam Omi, lai fotoattēli un audio nonāktu vienā sarunā.';
+
+  @override
+  String get forgetSecondDevice => 'Aizmirst otro ierīci';
 }

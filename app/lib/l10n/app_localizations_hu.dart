@@ -11218,4 +11218,17 @@ class AppLocalizationsHu extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Függő átiratok $count';
   }
+
+  @override
+  String get secondDevice => 'Második eszköz';
+
+  @override
+  String get pairSecondDevice => 'Második eszköz párosítása';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Csatlakoztasd az OmiGlass-t az Omi mellé, hogy a fotók és a hang ugyanabba a beszélgetésbe kerüljenek.';
+
+  @override
+  String get forgetSecondDevice => 'Második eszköz elfelejtése';
 }

@@ -11187,4 +11187,17 @@ class AppLocalizationsTr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Bekleyen transkriptler $count';
   }
+
+  @override
+  String get secondDevice => 'İkinci cihaz';
+
+  @override
+  String get pairSecondDevice => 'İkinci cihazı eşleştir';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Fotoğraflar ve ses aynı sohbete gitsin diye OmiGlass\'ı Omi\'nizin yanına bağlayın.';
+
+  @override
+  String get forgetSecondDevice => 'İkinci cihazı unut';
 }

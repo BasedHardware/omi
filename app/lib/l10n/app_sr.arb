@@ -11100,5 +11100,9 @@
     "transcriptionUnavailableRecordingContinues": "Транскрипције нису доступне, снимање се наставља на уређају и биће обрађено касније",
     "transcriptionUnavailableSavingOnDevice": "Транскрипција недоступна · чува се на уређају",
     "transcriptionsPendingFraction": "Транскрипције на чекању {pending}/{total}",
-    "transcriptionsPendingCount": "Транскрипције на чекању {count}"
+    "transcriptionsPendingCount": "Транскрипције на чекању {count}",
+    "secondDevice": "Други уређај",
+    "pairSecondDevice": "Упари други уређај",
+    "pairSecondDeviceDescription": "Повежите OmiGlass уз свој Omi како би фотографије и звук ишли у исти разговор.",
+    "forgetSecondDevice": "Заборави други уређај"
 }

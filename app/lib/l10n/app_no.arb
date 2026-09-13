@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "Transkripsjoner er utilgjengelige, opptaket fortsetter på enheten og behandles senere",
     "transcriptionUnavailableSavingOnDevice": "Transkripsjon utilgjengelig · lagres på enheten",
     "transcriptionsPendingFraction": "Transkripsjoner i kø {pending}/{total}",
-    "transcriptionsPendingCount": "Transkripsjoner i kø {count}"
+    "transcriptionsPendingCount": "Transkripsjoner i kø {count}",
+    "secondDevice": "Andre enhet",
+    "pairSecondDevice": "Par en annen enhet",
+    "pairSecondDeviceDescription": "Koble til OmiGlass sammen med Omi slik at bilder og lyd havner i samme samtale.",
+    "forgetSecondDevice": "Glem andre enhet"
 }

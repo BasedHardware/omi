@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "Οι απομαγνητοφωνήσεις δεν είναι διαθέσιμες, η ηχογράφηση συνεχίζεται στη συσκευή και θα επεξεργαστεί αργότερα",
     "transcriptionUnavailableSavingOnDevice": "Η απομαγνητοφώνηση δεν είναι διαθέσιμη · αποθήκευση στη συσκευή",
     "transcriptionsPendingFraction": "Αναμενόμενες απομαγνητοφωνήσεις {pending}/{total}",
-    "transcriptionsPendingCount": "Αναμενόμενες απομαγνητοφωνήσεις {count}"
+    "transcriptionsPendingCount": "Αναμενόμενες απομαγνητοφωνήσεις {count}",
+    "secondDevice": "Δεύτερη συσκευή",
+    "pairSecondDevice": "Σύζευξη δεύτερης συσκευής",
+    "pairSecondDeviceDescription": "Συνδέστε τα OmiGlass μαζί με το Omi σας, ώστε φωτογραφίες και ήχος να πηγαίνουν στην ίδια συζήτηση.",
+    "forgetSecondDevice": "Διαγραφή δεύτερης συσκευής"
 }

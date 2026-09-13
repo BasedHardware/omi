@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "文字起こしは利用できません。録音は端末上で続き、後で処理されます",
     "transcriptionUnavailableSavingOnDevice": "文字起こし不可 · 端末に保存中",
     "transcriptionsPendingFraction": "文字起こし待ち {pending}/{total}",
-    "transcriptionsPendingCount": "文字起こし待ち {count}"
+    "transcriptionsPendingCount": "文字起こし待ち {count}",
+    "secondDevice": "2台目のデバイス",
+    "pairSecondDevice": "2台目のデバイスをペアリング",
+    "pairSecondDeviceDescription": "Omi と一緒に OmiGlass を接続すると、写真と音声が同じ会話にまとまります。",
+    "forgetSecondDevice": "2台目のデバイスを忘れる"
 }

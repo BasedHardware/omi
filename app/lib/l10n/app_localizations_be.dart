@@ -11205,4 +11205,17 @@ class AppLocalizationsBe extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Транскрыпцый у чаканні $count';
   }
+
+  @override
+  String get secondDevice => 'Другая прылада';
+
+  @override
+  String get pairSecondDevice => 'Спалучыць другую прыладу';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Падключыце OmiGlass разам з Omi, каб фота і аўдыя траплялі ў адну размову.';
+
+  @override
+  String get forgetSecondDevice => 'Забыць другую прыладу';
 }

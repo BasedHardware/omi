@@ -11207,4 +11207,17 @@ class AppLocalizationsSl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkripcije v čakanju $count';
   }
+
+  @override
+  String get secondDevice => 'Druga naprava';
+
+  @override
+  String get pairSecondDevice => 'Seznani drugo napravo';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Povežite OmiGlass ob svojem Omi, da gredo fotografije in zvok v isti pogovor.';
+
+  @override
+  String get forgetSecondDevice => 'Pozabi drugo napravo';
 }

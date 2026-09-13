@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "Les transcripcions no estan disponibles, l'enregistrament continua al dispositiu i es processarà més tard",
     "transcriptionUnavailableSavingOnDevice": "Transcripció no disponible · s'està desant al dispositiu",
     "transcriptionsPendingFraction": "Transcripcions pendents {pending}/{total}",
-    "transcriptionsPendingCount": "Transcripcions pendents {count}"
+    "transcriptionsPendingCount": "Transcripcions pendents {count}",
+    "secondDevice": "Segon dispositiu",
+    "pairSecondDevice": "Vincula un segon dispositiu",
+    "pairSecondDeviceDescription": "Connecta les OmiGlass al costat del teu Omi perquè les fotos i l'àudio vagin a la mateixa conversa.",
+    "forgetSecondDevice": "Oblida el segon dispositiu"
 }

@@ -11107,4 +11107,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'نسخ معلّق $count';
   }
+
+  @override
+  String get secondDevice => 'الجهاز الثاني';
+
+  @override
+  String get pairSecondDevice => 'إقران جهاز ثانٍ';
+
+  @override
+  String get pairSecondDeviceDescription => 'اربط OmiGlass بجانب جهاز Omi حتى تذهب الصور والصوت إلى المحادثة نفسها.';
+
+  @override
+  String get forgetSecondDevice => 'نسيان الجهاز الثاني';
 }

@@ -11100,5 +11100,9 @@
     "transcriptionUnavailableRecordingContinues": "Hindi available ang mga transcript, nagpapatuloy ang pag-record sa device at ipoproseso mamaya",
     "transcriptionUnavailableSavingOnDevice": "Hindi available ang transcript · naka-save sa device",
     "transcriptionsPendingFraction": "Mga transcript na naghihintay {pending}/{total}",
-    "transcriptionsPendingCount": "Mga transcript na naghihintay {count}"
+    "transcriptionsPendingCount": "Mga transcript na naghihintay {count}",
+    "secondDevice": "Ikalawang device",
+    "pairSecondDevice": "Ipares ang ikalawang device",
+    "pairSecondDeviceDescription": "Ikonekta ang OmiGlass kasama ng iyong Omi para mapunta sa iisang usapan ang mga larawan at audio.",
+    "forgetSecondDevice": "Kalimutan ang ikalawang device"
 }

@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "Transkriptionen sind nicht verfügbar, die Aufnahme läuft auf dem Gerät weiter und wird später verarbeitet",
     "transcriptionUnavailableSavingOnDevice": "Transkription nicht verfügbar · wird auf dem Gerät gespeichert",
     "transcriptionsPendingFraction": "Offene Transkriptionen {pending}/{total}",
-    "transcriptionsPendingCount": "Offene Transkriptionen {count}"
+    "transcriptionsPendingCount": "Offene Transkriptionen {count}",
+    "secondDevice": "Zweites Gerät",
+    "pairSecondDevice": "Zweites Gerät koppeln",
+    "pairSecondDeviceDescription": "Verbinde OmiGlass zusätzlich zu deinem Omi, damit Fotos und Audio in dieselbe Unterhaltung fließen.",
+    "forgetSecondDevice": "Zweites Gerät vergessen"
 }

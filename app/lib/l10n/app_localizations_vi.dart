@@ -11170,4 +11170,17 @@ class AppLocalizationsVi extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Bản chép âm đang chờ $count';
   }
+
+  @override
+  String get secondDevice => 'Thiết bị thứ hai';
+
+  @override
+  String get pairSecondDevice => 'Ghép nối thiết bị thứ hai';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Kết nối OmiGlass cùng với Omi để ảnh và âm thanh đi vào cùng một cuộc trò chuyện.';
+
+  @override
+  String get forgetSecondDevice => 'Quên thiết bị thứ hai';
 }

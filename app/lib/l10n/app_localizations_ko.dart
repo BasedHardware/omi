@@ -10994,4 +10994,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return '대기 중인 전사 $count';
   }
+
+  @override
+  String get secondDevice => '두 번째 기기';
+
+  @override
+  String get pairSecondDevice => '두 번째 기기 페어링';
+
+  @override
+  String get pairSecondDeviceDescription => 'Omi와 함께 OmiGlass를 연결하면 사진과 오디오가 같은 대화에 담깁니다.';
+
+  @override
+  String get forgetSecondDevice => '두 번째 기기 삭제';
 }

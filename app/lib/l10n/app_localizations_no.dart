@@ -11174,4 +11174,17 @@ class AppLocalizationsNo extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkripsjoner i kø $count';
   }
+
+  @override
+  String get secondDevice => 'Andre enhet';
+
+  @override
+  String get pairSecondDevice => 'Par en annen enhet';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Koble til OmiGlass sammen med Omi slik at bilder og lyd havner i samme samtale.';
+
+  @override
+  String get forgetSecondDevice => 'Glem andre enhet';
 }

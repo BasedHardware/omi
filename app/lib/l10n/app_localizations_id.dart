@@ -11185,4 +11185,17 @@ class AppLocalizationsId extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkripsi tertunda $count';
   }
+
+  @override
+  String get secondDevice => 'Perangkat kedua';
+
+  @override
+  String get pairSecondDevice => 'Pasangkan perangkat kedua';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Sambungkan OmiGlass bersama Omi Anda agar foto dan audio masuk ke percakapan yang sama.';
+
+  @override
+  String get forgetSecondDevice => 'Lupakan perangkat kedua';
 }

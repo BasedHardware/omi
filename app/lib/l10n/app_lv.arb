@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "Transkripcijas nav pieejamas, ierakstīšana turpinās ierīcē un tiks apstrādāta vēlāk",
     "transcriptionUnavailableSavingOnDevice": "Transkripcija nav pieejama · tiek saglabāta ierīcē",
     "transcriptionsPendingFraction": "Gaidošas transkripcijas {pending}/{total}",
-    "transcriptionsPendingCount": "Gaidošas transkripcijas {count}"
+    "transcriptionsPendingCount": "Gaidošas transkripcijas {count}",
+    "secondDevice": "Otrā ierīce",
+    "pairSecondDevice": "Savienot pārī otro ierīci",
+    "pairSecondDeviceDescription": "Pievienojiet OmiGlass līdzās savam Omi, lai fotoattēli un audio nonāktu vienā sarunā.",
+    "forgetSecondDevice": "Aizmirst otro ierīci"
 }

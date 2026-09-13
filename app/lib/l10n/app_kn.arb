@@ -11100,5 +11100,9 @@
     "transcriptionUnavailableRecordingContinues": "ಲಿಪ್ಯಂತರಗಳು ಲಭ್ಯವಿಲ್ಲ, ಧ್ವನಿಮುದ್ರಣ ಸಾಧನದಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ ಮತ್ತು ನಂತರ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ",
     "transcriptionUnavailableSavingOnDevice": "ಲಿಪ್ಯಂತರ ಲಭ್ಯವಿಲ್ಲ · ಸಾಧನದಲ್ಲಿ ಉಳಿಸಲಾಗುತ್ತಿದೆ",
     "transcriptionsPendingFraction": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {pending}/{total}",
-    "transcriptionsPendingCount": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {count}"
+    "transcriptionsPendingCount": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {count}",
+    "secondDevice": "ಎರಡನೇ ಸಾಧನ",
+    "pairSecondDevice": "ಎರಡನೇ ಸಾಧನವನ್ನು ಜೋಡಿಸಿ",
+    "pairSecondDeviceDescription": "ಫೋಟೋಗಳು ಮತ್ತು ಆಡಿಯೊ ಒಂದೇ ಸಂವಾದಕ್ಕೆ ಹೋಗಲು ನಿಮ್ಮ Omi ಜೊತೆಗೆ OmiGlass ಅನ್ನು ಸಂಪರ್ಕಿಸಿ.",
+    "forgetSecondDevice": "ಎರಡನೇ ಸಾಧನವನ್ನು ಮರೆತುಬಿಡಿ"
 }

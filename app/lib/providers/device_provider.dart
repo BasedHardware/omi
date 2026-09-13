@@ -673,6 +673,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   @visibleForTesting
   bool get hasActiveDiscoveryTimer => _discoveryTimer?.isActive ?? false;
+
   Future<void> _runDiscoveryScan() async {
     if (!_discoveryWhilePaired && (SharedPreferencesUtil().btDevice.id.isNotEmpty || isConnected)) {
       _discoveryTimer?.cancel();

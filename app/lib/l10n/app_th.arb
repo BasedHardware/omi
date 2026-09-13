@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "การถอดเสียงไม่พร้อมใช้งาน การบันทึกยังดำเนินต่อในอุปกรณ์และจะประมวลผลในภายหลัง",
     "transcriptionUnavailableSavingOnDevice": "การถอดเสียงไม่พร้อมใช้งาน · กำลังบันทึกในอุปกรณ์",
     "transcriptionsPendingFraction": "การถอดเสียงที่รออยู่ {pending}/{total}",
-    "transcriptionsPendingCount": "การถอดเสียงที่รออยู่ {count}"
+    "transcriptionsPendingCount": "การถอดเสียงที่รออยู่ {count}",
+    "secondDevice": "อุปกรณ์เครื่องที่สอง",
+    "pairSecondDevice": "จับคู่อุปกรณ์เครื่องที่สอง",
+    "pairSecondDeviceDescription": "เชื่อมต่อ OmiGlass ควบคู่กับ Omi ของคุณ เพื่อให้รูปภาพและเสียงอยู่ในบทสนทนาเดียวกัน",
+    "forgetSecondDevice": "ลืมอุปกรณ์เครื่องที่สอง"
 }

@@ -3563,5 +3563,9 @@
     "transcriptionUnavailableRecordingContinues": "Транскрипция недоступна, запись продолжается на устройстве и будет обработана позже",
     "transcriptionUnavailableSavingOnDevice": "Транскрипция недоступна · сохраняется на устройстве",
     "transcriptionsPendingFraction": "Транскрипций в ожидании {pending}/{total}",
-    "transcriptionsPendingCount": "Транскрипций в ожидании {count}"
+    "transcriptionsPendingCount": "Транскрипций в ожидании {count}",
+    "secondDevice": "Второе устройство",
+    "pairSecondDevice": "Подключить второе устройство",
+    "pairSecondDeviceDescription": "Подключите OmiGlass вместе с Omi, чтобы фото и звук попадали в один разговор.",
+    "forgetSecondDevice": "Забыть второе устройство"
 }

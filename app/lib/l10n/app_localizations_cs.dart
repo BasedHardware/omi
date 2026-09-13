@@ -11172,4 +11172,17 @@ class AppLocalizationsCs extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Čekající přepisy $count';
   }
+
+  @override
+  String get secondDevice => 'Druhé zařízení';
+
+  @override
+  String get pairSecondDevice => 'Spárovat druhé zařízení';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Připojte OmiGlass k vašemu Omi, aby fotky a zvuk šly do stejné konverzace.';
+
+  @override
+  String get forgetSecondDevice => 'Zapomenout druhé zařízení';
 }

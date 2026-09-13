@@ -11100,5 +11100,9 @@
     "transcriptionUnavailableRecordingContinues": "התמלילים אינם זמינים, ההקלטה ממשיכה במכשיר ותעובד מאוחר יותר",
     "transcriptionUnavailableSavingOnDevice": "תמליל לא זמין · נשמר במכשיר",
     "transcriptionsPendingFraction": "תמלילים ממתינים {pending}/{total}",
-    "transcriptionsPendingCount": "תמלילים ממתינים {count}"
+    "transcriptionsPendingCount": "תמלילים ממתינים {count}",
+    "secondDevice": "מכשיר שני",
+    "pairSecondDevice": "צימוד מכשיר שני",
+    "pairSecondDeviceDescription": "חברו את OmiGlass לצד ה-Omi שלכם כדי שתמונות ואודיו ייכנסו לאותה שיחה.",
+    "forgetSecondDevice": "שכח את המכשיר השני"
 }

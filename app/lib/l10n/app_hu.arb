@@ -3624,5 +3624,9 @@
     "transcriptionUnavailableRecordingContinues": "Átiratok nem érhetők el, a felvétel folytatódik az eszközön, és később feldolgozásra kerül",
     "transcriptionUnavailableSavingOnDevice": "Átirat nem érhető el · mentés az eszközön",
     "transcriptionsPendingFraction": "Függő átiratok {pending}/{total}",
-    "transcriptionsPendingCount": "Függő átiratok {count}"
+    "transcriptionsPendingCount": "Függő átiratok {count}",
+    "secondDevice": "Második eszköz",
+    "pairSecondDevice": "Második eszköz párosítása",
+    "pairSecondDeviceDescription": "Csatlakoztasd az OmiGlass-t az Omi mellé, hogy a fotók és a hang ugyanabba a beszélgetésbe kerüljenek.",
+    "forgetSecondDevice": "Második eszköz elfelejtése"
 }

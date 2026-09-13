@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "Přepisy nejsou k dispozici, nahrávání pokračuje v zařízení a později se zpracuje",
     "transcriptionUnavailableSavingOnDevice": "Přepis není k dispozici · ukládá se v zařízení",
     "transcriptionsPendingFraction": "Čekající přepisy {pending}/{total}",
-    "transcriptionsPendingCount": "Čekající přepisy {count}"
+    "transcriptionsPendingCount": "Čekající přepisy {count}",
+    "secondDevice": "Druhé zařízení",
+    "pairSecondDevice": "Spárovat druhé zařízení",
+    "pairSecondDeviceDescription": "Připojte OmiGlass k vašemu Omi, aby fotky a zvuk šly do stejné konverzace.",
+    "forgetSecondDevice": "Zapomenout druhé zařízení"
 }

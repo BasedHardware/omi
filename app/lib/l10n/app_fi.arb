@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "Transkriptiot eivät ole käytettävissä, tallennus jatkuu laitteella ja käsitellään myöhemmin",
     "transcriptionUnavailableSavingOnDevice": "Transkriptio ei käytettävissä · tallennetaan laitteelle",
     "transcriptionsPendingFraction": "Jonossa olevat transkriptiot {pending}/{total}",
-    "transcriptionsPendingCount": "Jonossa olevat transkriptiot {count}"
+    "transcriptionsPendingCount": "Jonossa olevat transkriptiot {count}",
+    "secondDevice": "Toinen laite",
+    "pairSecondDevice": "Yhdistä toinen laite",
+    "pairSecondDeviceDescription": "Yhdistä OmiGlass Omi-laitteesi rinnalle, jotta kuvat ja ääni päätyvät samaan keskusteluun.",
+    "forgetSecondDevice": "Unohda toinen laite"
 }

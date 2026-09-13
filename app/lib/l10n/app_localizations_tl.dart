@@ -11273,4 +11273,17 @@ class AppLocalizationsTl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Mga transcript na naghihintay $count';
   }
+
+  @override
+  String get secondDevice => 'Ikalawang device';
+
+  @override
+  String get pairSecondDevice => 'Ipares ang ikalawang device';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Ikonekta ang OmiGlass kasama ng iyong Omi para mapunta sa iisang usapan ang mga larawan at audio.';
+
+  @override
+  String get forgetSecondDevice => 'Kalimutan ang ikalawang device';
 }

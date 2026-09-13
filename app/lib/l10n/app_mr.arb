@@ -11100,5 +11100,9 @@
     "transcriptionUnavailableRecordingContinues": "ट्रान्सक्रिप्शन उपलब्ध नाही, रेकॉर्डिंग डिव्हाइसवर सुरू आहे आणि नंतर प्रोसेस होईल",
     "transcriptionUnavailableSavingOnDevice": "ट्रान्सक्रिप्शन अनुपलब्ध · डिव्हाइसवर जतन केले जात आहे",
     "transcriptionsPendingFraction": "प्रलंबित ट्रान्सक्रिप्शन {pending}/{total}",
-    "transcriptionsPendingCount": "प्रलंबित ट्रान्सक्रिप्शन {count}"
+    "transcriptionsPendingCount": "प्रलंबित ट्रान्सक्रिप्शन {count}",
+    "secondDevice": "दुसरे डिव्हाइस",
+    "pairSecondDevice": "दुसरे डिव्हाइस जोडा",
+    "pairSecondDeviceDescription": "फोटो आणि ऑडिओ एकाच संभाषणात जाण्यासाठी तुमच्या Omi सोबत OmiGlass कनेक्ट करा.",
+    "forgetSecondDevice": "दुसरे डिव्हाइस विसरा"
 }

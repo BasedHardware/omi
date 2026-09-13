@@ -11239,4 +11239,17 @@ class AppLocalizationsCa extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcripcions pendents $count';
   }
+
+  @override
+  String get secondDevice => 'Segon dispositiu';
+
+  @override
+  String get pairSecondDevice => 'Vincula un segon dispositiu';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Connecta les OmiGlass al costat del teu Omi perquè les fotos i l\'àudio vagin a la mateixa conversa.';
+
+  @override
+  String get forgetSecondDevice => 'Oblida el segon dispositiu';
 }

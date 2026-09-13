@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "Bản chép âm không khả dụng, quá trình ghi âm tiếp tục trên thiết bị và sẽ được xử lý sau",
     "transcriptionUnavailableSavingOnDevice": "Bản chép âm không khả dụng · đang lưu trên thiết bị",
     "transcriptionsPendingFraction": "Bản chép âm đang chờ {pending}/{total}",
-    "transcriptionsPendingCount": "Bản chép âm đang chờ {count}"
+    "transcriptionsPendingCount": "Bản chép âm đang chờ {count}",
+    "secondDevice": "Thiết bị thứ hai",
+    "pairSecondDevice": "Ghép nối thiết bị thứ hai",
+    "pairSecondDeviceDescription": "Kết nối OmiGlass cùng với Omi để ảnh và âm thanh đi vào cùng một cuộc trò chuyện.",
+    "forgetSecondDevice": "Quên thiết bị thứ hai"
 }

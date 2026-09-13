@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "Transkripcijos neprieinamos, įrašymas tęsiamas įrenginyje ir bus apdorotas vėliau",
     "transcriptionUnavailableSavingOnDevice": "Transkripcija neprieinama · saugoma įrenginyje",
     "transcriptionsPendingFraction": "Laukiančios transkripcijos {pending}/{total}",
-    "transcriptionsPendingCount": "Laukiančios transkripcijos {count}"
+    "transcriptionsPendingCount": "Laukiančios transkripcijos {count}",
+    "secondDevice": "Antras įrenginys",
+    "pairSecondDevice": "Susieti antrą įrenginį",
+    "pairSecondDeviceDescription": "Prijunkite OmiGlass kartu su savo Omi, kad nuotraukos ir garsas patektų į tą patį pokalbį.",
+    "forgetSecondDevice": "Pamiršti antrą įrenginį"
 }

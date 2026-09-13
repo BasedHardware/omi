@@ -10971,4 +10971,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return '待处理转录 $count';
   }
+
+  @override
+  String get secondDevice => '第二台设备';
+
+  @override
+  String get pairSecondDevice => '配对第二台设备';
+
+  @override
+  String get pairSecondDeviceDescription => '将 OmiGlass 与你的 Omi 一起连接，让照片和音频进入同一段对话。';
+
+  @override
+  String get forgetSecondDevice => '忘记第二台设备';
 }

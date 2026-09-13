@@ -11184,4 +11184,17 @@ class AppLocalizationsMr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'प्रलंबित ट्रान्सक्रिप्शन $count';
   }
+
+  @override
+  String get secondDevice => 'दुसरे डिव्हाइस';
+
+  @override
+  String get pairSecondDevice => 'दुसरे डिव्हाइस जोडा';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'फोटो आणि ऑडिओ एकाच संभाषणात जाण्यासाठी तुमच्या Omi सोबत OmiGlass कनेक्ट करा.';
+
+  @override
+  String get forgetSecondDevice => 'दुसरे डिव्हाइस विसरा';
 }

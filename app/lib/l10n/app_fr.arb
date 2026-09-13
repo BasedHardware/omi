@@ -3563,5 +3563,9 @@
     "transcriptionUnavailableRecordingContinues": "Les transcriptions sont indisponibles, l'enregistrement continue sur l'appareil et sera traité plus tard",
     "transcriptionUnavailableSavingOnDevice": "Transcription indisponible · enregistrement sur l'appareil",
     "transcriptionsPendingFraction": "Transcriptions en attente {pending}/{total}",
-    "transcriptionsPendingCount": "Transcriptions en attente {count}"
+    "transcriptionsPendingCount": "Transcriptions en attente {count}",
+    "secondDevice": "Deuxième appareil",
+    "pairSecondDevice": "Associer un deuxième appareil",
+    "pairSecondDeviceDescription": "Connectez OmiGlass en plus de votre Omi pour que les photos et l'audio rejoignent la même conversation.",
+    "forgetSecondDevice": "Oublier le deuxième appareil"
 }

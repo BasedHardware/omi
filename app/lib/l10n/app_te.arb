@@ -11100,5 +11100,9 @@
     "transcriptionUnavailableRecordingContinues": "ట్రాన్స్‌క్రిప్షన్‌లు అందుబాటులో లేవు, రికార్డింగ్ పరికరంలో కొనసాగుతుంది మరియు తర్వాత ప్రాసెస్ చేయబడుతుంది",
     "transcriptionUnavailableSavingOnDevice": "ట్రాన్స్‌క్రిప్షన్ అందుబాటులో లేదు · పరికరంలో సేవ్ చేయబడుతోంది",
     "transcriptionsPendingFraction": "పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు {pending}/{total}",
-    "transcriptionsPendingCount": "పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు {count}"
+    "transcriptionsPendingCount": "పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు {count}",
+    "secondDevice": "రెండవ పరికరం",
+    "pairSecondDevice": "రెండవ పరికరాన్ని జోడించండి",
+    "pairSecondDeviceDescription": "ఫోటోలు మరియు ఆడియో ఒకే సంభాషణలోకి వెళ్లేలా మీ Omi తో పాటు OmiGlass ను కనెక్ట్ చేయండి.",
+    "forgetSecondDevice": "రెండవ పరికరాన్ని మర్చిపోండి"
 }

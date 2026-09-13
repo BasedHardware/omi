@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "Транскрипція недоступна, запис триває на пристрої та буде оброблений пізніше",
     "transcriptionUnavailableSavingOnDevice": "Транскрипція недоступна · зберігається на пристрої",
     "transcriptionsPendingFraction": "Транскрипцій у черзі {pending}/{total}",
-    "transcriptionsPendingCount": "Транскрипцій у черзі {count}"
+    "transcriptionsPendingCount": "Транскрипцій у черзі {count}",
+    "secondDevice": "Другий пристрій",
+    "pairSecondDevice": "Підключити другий пристрій",
+    "pairSecondDeviceDescription": "Підключіть OmiGlass разом з Omi, щоб фото та звук потрапляли в одну розмову.",
+    "forgetSecondDevice": "Забути другий пристрій"
 }

@@ -3563,5 +3563,9 @@
     "transcriptionUnavailableRecordingContinues": "As transcrições estão indisponíveis, a gravação continua no dispositivo e será processada mais tarde",
     "transcriptionUnavailableSavingOnDevice": "Transcrição indisponível · salvando no dispositivo",
     "transcriptionsPendingFraction": "Transcrições pendentes {pending}/{total}",
-    "transcriptionsPendingCount": "Transcrições pendentes {count}"
+    "transcriptionsPendingCount": "Transcrições pendentes {count}",
+    "secondDevice": "Segundo dispositivo",
+    "pairSecondDevice": "Emparelhar um segundo dispositivo",
+    "pairSecondDeviceDescription": "Conecte o OmiGlass junto ao seu Omi para que fotos e áudio entrem na mesma conversa.",
+    "forgetSecondDevice": "Esquecer segundo dispositivo"
 }

@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "전사를 이용할 수 없습니다. 기기에서 녹음이 계속되며 나중에 처리됩니다",
     "transcriptionUnavailableSavingOnDevice": "전사 불가 · 기기에 저장 중",
     "transcriptionsPendingFraction": "대기 중인 전사 {pending}/{total}",
-    "transcriptionsPendingCount": "대기 중인 전사 {count}"
+    "transcriptionsPendingCount": "대기 중인 전사 {count}",
+    "secondDevice": "두 번째 기기",
+    "pairSecondDevice": "두 번째 기기 페어링",
+    "pairSecondDeviceDescription": "Omi와 함께 OmiGlass를 연결하면 사진과 오디오가 같은 대화에 담깁니다.",
+    "forgetSecondDevice": "두 번째 기기 삭제"
 }

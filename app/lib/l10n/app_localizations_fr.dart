@@ -11271,4 +11271,17 @@ class AppLocalizationsFr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcriptions en attente $count';
   }
+
+  @override
+  String get secondDevice => 'Deuxième appareil';
+
+  @override
+  String get pairSecondDevice => 'Associer un deuxième appareil';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Connectez OmiGlass en plus de votre Omi pour que les photos et l\'audio rejoignent la même conversation.';
+
+  @override
+  String get forgetSecondDevice => 'Oublier le deuxième appareil';
 }

@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "Transcrierile nu sunt disponibile, înregistrarea continuă pe dispozitiv și va fi procesată mai târziu",
     "transcriptionUnavailableSavingOnDevice": "Transcriere indisponibilă · se salvează pe dispozitiv",
     "transcriptionsPendingFraction": "Transcrieri în așteptare {pending}/{total}",
-    "transcriptionsPendingCount": "Transcrieri în așteptare {count}"
+    "transcriptionsPendingCount": "Transcrieri în așteptare {count}",
+    "secondDevice": "Al doilea dispozitiv",
+    "pairSecondDevice": "Asociază un al doilea dispozitiv",
+    "pairSecondDeviceDescription": "Conectează OmiGlass alături de Omi, astfel încât fotografiile și sunetul să ajungă în aceeași conversație.",
+    "forgetSecondDevice": "Uită al doilea dispozitiv"
 }

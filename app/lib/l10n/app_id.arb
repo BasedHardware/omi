@@ -3563,5 +3563,9 @@
     "transcriptionUnavailableRecordingContinues": "Transkripsi tidak tersedia, perekaman berlanjut di perangkat dan akan diproses nanti",
     "transcriptionUnavailableSavingOnDevice": "Transkripsi tidak tersedia · disimpan di perangkat",
     "transcriptionsPendingFraction": "Transkripsi tertunda {pending}/{total}",
-    "transcriptionsPendingCount": "Transkripsi tertunda {count}"
+    "transcriptionsPendingCount": "Transkripsi tertunda {count}",
+    "secondDevice": "Perangkat kedua",
+    "pairSecondDevice": "Pasangkan perangkat kedua",
+    "pairSecondDeviceDescription": "Sambungkan OmiGlass bersama Omi Anda agar foto dan audio masuk ke percakapan yang sama.",
+    "forgetSecondDevice": "Lupakan perangkat kedua"
 }

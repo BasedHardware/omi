@@ -3528,5 +3528,9 @@
     "transcriptionUnavailableRecordingContinues": "Transcripties zijn niet beschikbaar, de opname gaat door op het apparaat en wordt later verwerkt",
     "transcriptionUnavailableSavingOnDevice": "Transcriptie niet beschikbaar · wordt op het apparaat opgeslagen",
     "transcriptionsPendingFraction": "Transcripties in behandeling {pending}/{total}",
-    "transcriptionsPendingCount": "Transcripties in behandeling {count}"
+    "transcriptionsPendingCount": "Transcripties in behandeling {count}",
+    "secondDevice": "Tweede apparaat",
+    "pairSecondDevice": "Tweede apparaat koppelen",
+    "pairSecondDeviceDescription": "Verbind OmiGlass naast je Omi zodat foto's en audio in hetzelfde gesprek terechtkomen.",
+    "forgetSecondDevice": "Tweede apparaat vergeten"
 }

@@ -11210,4 +11210,17 @@ class AppLocalizationsKn extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು $count';
   }
+
+  @override
+  String get secondDevice => 'ಎರಡನೇ ಸಾಧನ';
+
+  @override
+  String get pairSecondDevice => 'ಎರಡನೇ ಸಾಧನವನ್ನು ಜೋಡಿಸಿ';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'ಫೋಟೋಗಳು ಮತ್ತು ಆಡಿಯೊ ಒಂದೇ ಸಂವಾದಕ್ಕೆ ಹೋಗಲು ನಿಮ್ಮ Omi ಜೊತೆಗೆ OmiGlass ಅನ್ನು ಸಂಪರ್ಕಿಸಿ.';
+
+  @override
+  String get forgetSecondDevice => 'ಎರಡನೇ ಸಾಧನವನ್ನು ಮರೆತುಬಿಡಿ';
 }
