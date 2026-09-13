@@ -80,8 +80,7 @@ static inline bool omi_device_name_is_valid(const uint8_t *buf, size_t len)
                 }
             }
             /* Reject overlong encodings and code points above U+10FFFF. */
-            if ((seq == 3 && lead == 0xE0 && buf[i + 1] < 0xA0) ||
-                (seq == 4 && lead == 0xF0 && buf[i + 1] < 0x90) ||
+            if ((seq == 3 && lead == 0xE0 && buf[i + 1] < 0xA0) || (seq == 4 && lead == 0xF0 && buf[i + 1] < 0x90) ||
                 (seq == 4 && lead == 0xF4 && buf[i + 1] > 0x8F)) {
                 return false;
             }
