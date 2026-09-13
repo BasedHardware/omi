@@ -1,4 +1,4 @@
-﻿"""
+"""
 Convert Omi conversation JSON exports to clean Markdown notes for Obsidian, Notion, or personal archives.
 
 Usage:
@@ -12,7 +12,7 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
@@ -55,26 +55,33 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
     # Transcript segments
     transcript_segments = conv.get("transcript_segments") or []
 
-    # Clean date representation
+    # Clean date representation normalized to UTC
     date_str = ""
     if started_at:
         try:
             dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
             date_str = dt.strftime("%Y-%m-%d %H:%M:%S UTC")
         except Exception:
             date_str = started_at
 
+    category_tag = category.lower().replace(" ", "-")
+
+    # Serialize YAML frontmatter scalars safely using json.dumps to prevent injection and Python 3.10/3.11 SyntaxError
     lines: List[str] = [
         "---",
-        f"id: \"{conv_id}\"",
-        f"title: \"{title.replace('\"', '\\\"')}\"",
-        f"category: \"{category}\"",
-        f"date: \"{started_at}\"",
-        f"source: \"{source}\"",
+        f"id: {json.dumps(str(conv_id))}",
+        f"title: {json.dumps(str(title))}",
+        f"category: {json.dumps(str(category))}",
+        f"date: {json.dumps(str(started_at))}",
+        f"source: {json.dumps(str(source))}",
         "tags:",
         "  - omi",
         "  - conversation",
-        f"  - {category.lower().replace(' ', '-')}",
+        f"  - {json.dumps(category_tag)}",
         "---",
         "",
         f"# {title}",
@@ -176,13 +183,19 @@ def main() -> None:
             continue
         conv_id = conv.get("id", f"conv_{count}")
         started_at = conv.get("started_at") or ""
-        date_prefix = started_at[:10] if len(started_at) >= 10 else "undated"
+
+        # Validate date_prefix strictly against YYYY-MM-DD to avoid path traversal
+        date_match = re.match(r"^(\d{4}-\d{2}-\d{2})", str(started_at))
+        date_prefix = date_match.group(1) if date_match else "undated"
 
         structured = conv.get("structured") or {}
         title = structured.get("title") if isinstance(structured, dict) else ""
-        slug = slugify(title or conv_id[:8])
+        slug = slugify(title or "conversation")
 
-        filename = f"{date_prefix}_{slug}.md"
+        # Sanitize unique suffix to avoid silent overwrites for duplicate title/date pairs
+        short_id = re.sub(r"[^\w-]", "", str(conv_id))[:8] or f"{count:03d}"
+
+        filename = f"{date_prefix}_{slug}_{short_id}.md"
         filepath = output_dir / filename
 
         md_content = conversation_to_markdown(conv)

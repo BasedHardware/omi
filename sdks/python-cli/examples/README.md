@@ -1,4 +1,4 @@
-﻿# omi-cli examples
+# omi-cli examples
 
 * [`agent_quickstart.md`](agent_quickstart.md) — how an LLM/agent should drive
   the CLI.
@@ -7,5 +7,7 @@
 * [`quickstart.ja.md`](quickstart.ja.md) — 日本語クイックスタートガイド (Japanese Quickstart).
 * [`quickstart.es.md`](quickstart.es.md) — primeros pasos con omi-cli en
   español.
-* [`quickstart.ms.md`](quickstart.ms.md) — Panduan pantas omi-cli dalam Bahasa Melayu (Malay Quickstart).
+* [`quickstart.tr.md`](quickstart.tr.md) — Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart).
+* [`quickstart.ru.md`](quickstart.ru.md) — быстрый старт с omi-cli на
+  русском (Russian Quickstart).
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversation transcripts and summaries to Obsidian/Notion Markdown notes.
