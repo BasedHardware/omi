@@ -1049,7 +1049,7 @@ class CaptureController extends ChangeNotifier
       _startVoiceQuestionSession(deviceId, endsOnRelease: true);
       return;
     }
-    if (buttonState == OmiButtonState.release && _voiceCommandSession != null) {
+    if (buttonState == OmiButtonState.release && _voiceCommandSession != null && _voiceSessionEndsOnRelease) {
       debugPrint("Legacy: Release detected - ending voice command");
       _endVoiceCommandSession(deviceId);
     }
