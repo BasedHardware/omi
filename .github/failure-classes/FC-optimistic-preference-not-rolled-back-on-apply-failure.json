@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-optimistic-preference-not-rolled-back-on-apply-failure",
+  "violated_contract": "A user-facing preference persisted optimistically before the operation that actually applies it completes must be rolled back to its prior value when that operation fails. `ChatProvider.switchBridgeMode` wrote the new `bridgeMode` (the `@AppStorage`-backed Settings preference) before calling `resolvedAgentClient().restart()`, and left it at the new value even when `restart()` threw `requestAlreadyActive` (a chat request in flight) — the internal truth trackers (`activeBridgeHarness`/`activeProviderMode`) were correctly left unchanged on that path, but the persisted preference the Settings picker and a future cold launch read was not, so it permanently disagreed with which provider was actually running.",
+  "canonical_prevention": "Capture the prior persisted value before optimistically writing the new one, and restore it in the failure path of the apply operation before surfacing the error, so a failed apply leaves persisted state and actual runtime state in agreement. Reaching the failure path behaviorally requires a registered, live runtime with a genuinely in-flight request; where that seam does not exist, a labeled source-inspection test pinning the capture-before-write ordering and the rollback assignment inside the specific catch block is the documented fallback (see the two prior source-inspection tests for this same function's ordering/no-op-guard invariants).",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift",
+    "desktop/macos/Desktop/Tests/PiMonoWiringTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift",
+    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift",
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift"
+  ],
+  "status": "open"
+}

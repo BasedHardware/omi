@@ -364,6 +364,67 @@ final class PiMonoWiringTests: XCTestCase {
         + "function ever sets the flag for its own call")
   }
 
+  // omi-test-quality: source-inspection -- static contract: a failed
+  // `restart()` in the same-harness branch (e.g. `BridgeError.requestAlreadyActive`
+  // because a chat request is in flight) must roll `bridgeMode` back to what it
+  // was before this call persisted the new value, not leave the Settings
+  // picker/a future cold launch claiming a switch that never actually applied
+  // while `activeBridgeHarness`/`activeProviderMode` correctly still say the
+  // old provider is running. Reaching this behaviorally needs a registered,
+  // live shared runtime with a genuinely in-flight request to force
+  // `requestAlreadyActive` (see `testSwitchBridgeModeAssignsActiveStateOnlyAfterRestartOrReconfigureSucceeds`
+  // above, which hits the same wall for the sibling ordering contract); this
+  // pins the rollback directly instead of standing up that whole stack.
+  func testSwitchBridgeModeRollsBackPersistedPreferenceWhenRestartFails() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Providers/ChatProvider.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    let functionStart = try XCTUnwrap(source.range(of: "func switchBridgeMode(to mode: BridgeMode) async {"))
+    let nextFunctionStart = try XCTUnwrap(
+      source.range(
+        of: "\n  func restartLocalBridgeIfActive()",
+        range: functionStart.upperBound..<source.endIndex))
+    let body = String(source[functionStart.upperBound..<nextFunctionStart.lowerBound])
+
+    // `previousBridgeMode` must be captured before `bridgeMode` is first
+    // overwritten with the new value, or it would just capture the value
+    // this same call already persisted.
+    let previousBridgeModeCapture = try XCTUnwrap(body.range(of: "let previousBridgeMode = bridgeMode"))
+    let firstBridgeModeWrite = try XCTUnwrap(body.range(of: "bridgeMode = resolvedMode.rawValue"))
+    XCTAssertTrue(
+      previousBridgeModeCapture.lowerBound < firstBridgeModeWrite.lowerBound,
+      "previousBridgeMode must be captured before bridgeMode is persisted, not after")
+
+    let restartBranchStart = try XCTUnwrap(body.range(of: "if newHarness == previousHarness {"))
+    let reconfigureBranchStart = try XCTUnwrap(
+      body.range(
+        of: "\n    do {\n      guard let adapterId",
+        range: restartBranchStart.upperBound..<body.endIndex))
+    let restartRegion = restartBranchStart.lowerBound..<reconfigureBranchStart.lowerBound
+
+    let restartCallRange = try XCTUnwrap(
+      body.range(of: "try await resolvedAgentClient().restart()", range: restartRegion))
+    let restartCatchRange = try XCTUnwrap(
+      body.range(of: "} catch {", range: restartCallRange.upperBound..<restartRegion.upperBound))
+    let restartErrorMessageRange = try XCTUnwrap(
+      body.range(
+        of: "errorMessage = \"Could not switch AI provider. Try again.\"",
+        range: restartCatchRange.upperBound..<restartRegion.upperBound))
+    let rollbackInRestartCatch = try XCTUnwrap(
+      body.range(
+        of: "bridgeMode = previousBridgeMode",
+        range: restartCatchRange.upperBound..<restartErrorMessageRange.upperBound),
+      "the restart branch's catch block must roll bridgeMode back before reporting the error")
+    XCTAssertTrue(
+      rollbackInRestartCatch.lowerBound > restartCatchRange.upperBound
+        && rollbackInRestartCatch.upperBound < restartErrorMessageRange.lowerBound,
+      "the rollback must live inside the restart branch's own catch block, "
+        + "not merely somewhere later in the function")
+  }
+
   // MARK: - Cloud-assisted features gate
   // Regression coverage for the unified Local-provider "Cloud-assisted
   // features" setting as it applies to connector synthesis (Apple

@@ -2271,6 +2271,7 @@ class ChatProvider: ObservableObject {
     let newProviderMode = AIProvider.providerMode(forBridgeModeRawValue: resolvedMode.rawValue)
     let previousHarness = activeBridgeHarness
     let previousProviderMode = activeProviderMode
+    let previousBridgeMode = bridgeMode
     // piMono and local share the same Node harness ("piMono") but configure
     // different pi providers via environment variables baked in at process
     // spawn time (see AgentRuntimeProcess.performStartProcess); compare on
@@ -2339,6 +2340,14 @@ class ChatProvider: ObservableObject {
         log("ChatProvider: Runtime restarted for provider change: \(resolvedMode.rawValue)")
       } catch {
         guard preferenceChange == profilePreferenceChangeGeneration else { return }
+        // The restart never applied (e.g. `requestAlreadyActive` because a chat
+        // request is in flight): `activeBridgeHarness`/`activeProviderMode`
+        // above were correctly left untouched, but `bridgeMode` was already
+        // persisted as the new value. Roll it back so the Settings picker and
+        // a future cold launch agree with what is actually still running,
+        // instead of both disagreeing with reality until the user happens to
+        // retry.
+        bridgeMode = previousBridgeMode
         logError("Failed to restart runtime for provider change", error: error)
         errorMessage = "Could not switch AI provider. Try again."
       }
