@@ -4305,6 +4305,7 @@ test('Settings names GET mentor notification frequency without a purple slider',
   const tree = renderedText(renderer);
   expect(tree).toContain('Notification frequency');
   expect(tree).toContain('Maximum');
+  expect(tree).toContain('Stay constantly engaged');
   expect(tree).not.toContain('Balanced');
   expect(
     omiBackend.request.mock.calls.some(call => call[0].method === 'PATCH'),

@@ -1038,13 +1038,13 @@ export function dailySummaryScheduleCopy(
   ];
 }
 
-const mentorNotificationFrequencyLabels = [
-  'Off',
-  'Minimal',
-  'Low',
-  'Balanced',
-  'High',
-  'Maximum',
+const mentorNotificationFrequencyChrome = [
+  {label: 'Off', description: 'No proactive notifications'},
+  {label: 'Minimal', description: 'Only critical reminders'},
+  {label: 'Low', description: 'Important updates only'},
+  {label: 'Balanced', description: 'Regular helpful nudges'},
+  {label: 'High', description: 'Frequent check-ins'},
+  {label: 'Maximum', description: 'Stay constantly engaged'},
 ] as const;
 
 export function mentorNotificationFrequencyCopy(
@@ -1053,10 +1053,13 @@ export function mentorNotificationFrequencyCopy(
   if (typeof frequency !== 'number' || !Number.isInteger(frequency)) {
     return [];
   }
+  const chrome =
+    mentorNotificationFrequencyChrome[frequency] ??
+    mentorNotificationFrequencyChrome[3];
   return [
     {
       title: 'Notification frequency',
-      copy: mentorNotificationFrequencyLabels[frequency] ?? 'Balanced',
+      copy: `${chrome.label} · ${chrome.description}`,
     },
   ];
 }

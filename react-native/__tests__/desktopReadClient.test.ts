@@ -1292,34 +1292,58 @@ test('daily summary schedule copy names GET hour without Flutter 10:00 PM defaul
   expect(dailySummaryScheduleCopy(undefined)).toEqual([]);
 });
 
-test('mentor notification copy names GET frequency without Balanced default', () => {
+test('mentor notification copy names GET frequency and Flutter descriptions', () => {
   expect(mentorNotificationFrequencyCopy(0)).toEqual([
-    {title: 'Notification frequency', copy: 'Off'},
+    {
+      title: 'Notification frequency',
+      copy: 'Off · No proactive notifications',
+    },
   ]);
   expect(mentorNotificationFrequencyCopy(1)).toEqual([
-    {title: 'Notification frequency', copy: 'Minimal'},
+    {
+      title: 'Notification frequency',
+      copy: 'Minimal · Only critical reminders',
+    },
   ]);
   expect(mentorNotificationFrequencyCopy(2)).toEqual([
-    {title: 'Notification frequency', copy: 'Low'},
+    {
+      title: 'Notification frequency',
+      copy: 'Low · Important updates only',
+    },
   ]);
   expect(mentorNotificationFrequencyCopy(3)).toEqual([
-    {title: 'Notification frequency', copy: 'Balanced'},
+    {
+      title: 'Notification frequency',
+      copy: 'Balanced · Regular helpful nudges',
+    },
   ]);
   expect(mentorNotificationFrequencyCopy(4)).toEqual([
-    {title: 'Notification frequency', copy: 'High'},
+    {
+      title: 'Notification frequency',
+      copy: 'High · Frequent check-ins',
+    },
   ]);
   expect(mentorNotificationFrequencyCopy(5)).toEqual([
-    {title: 'Notification frequency', copy: 'Maximum'},
+    {
+      title: 'Notification frequency',
+      copy: 'Maximum · Stay constantly engaged',
+    },
   ]);
   expect(mentorNotificationFrequencyCopy(null)).toEqual([]);
 });
 
 test('names GET mentor notification frequency outside 0-5 as Balanced', () => {
   expect(mentorNotificationFrequencyCopy(6)).toEqual([
-    {title: 'Notification frequency', copy: 'Balanced'},
+    {
+      title: 'Notification frequency',
+      copy: 'Balanced · Regular helpful nudges',
+    },
   ]);
   expect(mentorNotificationFrequencyCopy(-1)).toEqual([
-    {title: 'Notification frequency', copy: 'Balanced'},
+    {
+      title: 'Notification frequency',
+      copy: 'Balanced · Regular helpful nudges',
+    },
   ]);
 });
 

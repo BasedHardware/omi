@@ -1591,8 +1591,8 @@ test('Settings names GET mentor notification frequency without a purple slider',
   const tree = textOf(renderer);
   expect(tree).toContain('Notification frequency');
   expect(tree).toContain('Minimal');
+  expect(tree).toContain('Only critical reminders');
   expect(tree).not.toContain('Balanced');
-  expect(tree).not.toContain('Only critical reminders');
   expect(mockBackend.request).toHaveBeenCalledWith({
     id: expect.any(String),
     method: 'GET',
