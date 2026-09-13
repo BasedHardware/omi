@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {
+  conversationFirstPartySummaryCopy,
   conversationPhotoAnalyzingCopy,
   conversationPhotoDiscardedCopy,
   conversationUnknownAppCopy,
@@ -1800,6 +1801,89 @@ test('names GET apps_results app when catalog resolves and Unknown App when it m
   );
   await loadLegacyConversationDetail(backend, fixture.id);
   expect(mockRequest).toHaveBeenCalledTimes(1);
+});
+
+test('names Flutter first-party Summary when GET apps_results omits plugin_id', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        overview: 'Day recap notes',
+      },
+      apps_results: [{content: 'App wrote this recap'}],
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({
+      summary: 'Day recap notes',
+      appSummary: 'App wrote this recap',
+      appSummaryName: conversationFirstPartySummaryCopy(),
+    }),
+  );
+  expect(mockRequest).toHaveBeenCalledTimes(1);
+  mockRequest.mockReset().mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        ...fixture.structured,
+        overview: 'Day recap notes',
+      },
+      apps_results: [{content: 'App wrote this recap', app_id: null}],
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummaryName,
+  ).toBe(conversationFirstPartySummaryCopy());
+  expect(mockRequest).toHaveBeenCalledTimes(1);
+});
+
+test('names Flutter first-party Summary when GET overview or sections have no app recap', async () => {
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummaryName,
+  ).toBe(conversationFirstPartySummaryCopy());
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        title: fixture.structured.title,
+        overview: 'Day recap notes',
+        sections: [],
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({
+      summary: 'Day recap notes',
+      appSummaryName: conversationFirstPartySummaryCopy(),
+    }),
+  );
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        title: fixture.structured.title,
+        overview: '',
+        sections: [{heading: 'Notes', body_markdown: 'Full notes'}],
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummaryName,
+  ).toBe(conversationFirstPartySummaryCopy());
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      structured: {
+        title: fixture.structured.title,
+        overview: ' \t\n',
+        sections: [],
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).appSummaryName,
+  ).toBeUndefined();
 });
 
 test('names a failed GET apps catalog instead of omitting Unknown App as empty success', async () => {

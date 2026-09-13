@@ -2,6 +2,7 @@ import type {OmiBackend} from './omiNativeTypes';
 import {
   conversationPhotoChrome,
   conversationPhotoDataUri,
+  conversationFirstPartySummaryCopy,
   conversationUnknownAppCopy,
   desktopReadErrorCopy,
   transcriptSttProviderCopy,
@@ -124,20 +125,64 @@ function optionalArray(value: unknown): unknown[] {
   }
   return value;
 }
-function appResultId(row: Record<string, unknown>): string | undefined {
+function appResultId(row: Record<string, unknown>): {
+  appId?: string;
+  unusable?: true;
+} {
   const raw = row.plugin_id ?? row.app_id;
+  if (raw === undefined || raw === null) {
+    return {};
+  }
   if (typeof raw !== 'string') {
-    return undefined;
+    return {unusable: true};
   }
   const id = visibleDisplayText(raw);
-  return id === '' ? undefined : id;
+  return id === '' ? {} : {appId: id};
+}
+
+function firstPartySummaryChrome(
+  overview: string,
+  sections: LegacyConversationDetail['sections'],
+): boolean {
+  if (visibleDisplayText(overview) !== '') {
+    return true;
+  }
+  return sections.some(
+    section =>
+      visibleDisplayText(section.heading) !== '' ||
+      visibleDisplayText(section.bodyMarkdown) !== '',
+  );
+}
+
+function appSummaryAttribution(recap: {
+  resolvedName: string;
+  appId?: string;
+  appsError?: string;
+  unusable?: true;
+  hasRecap: boolean;
+  hasFirstPartyChrome: boolean;
+}): string | undefined {
+  if (recap.resolvedName !== '') {
+    return recap.resolvedName;
+  }
+  if (recap.appId !== undefined) {
+    return recap.appsError === undefined
+      ? conversationUnknownAppCopy()
+      : undefined;
+  }
+  if (recap.unusable === true) {
+    return undefined;
+  }
+  return recap.hasRecap || recap.hasFirstPartyChrome
+    ? conversationFirstPartySummaryCopy()
+    : undefined;
 }
 
 function firstAppSummary(
   apps: unknown,
   plugins: unknown,
   overview: string,
-): {content: string; appId?: string} | undefined {
+): {content: string; appId?: string; unusable?: true} | undefined {
   const appRows = optionalObjectRows(apps);
   const rows =
     appRows.length > 0 ? appRows : optionalObjectRows(plugins);
@@ -145,8 +190,12 @@ function firstAppSummary(
     const row = object(raw);
     const content = visibleDisplayText(text(row.content));
     if (content !== '' && content !== overview) {
-      const appId = appResultId(row);
-      return appId === undefined ? {content} : {content, appId};
+      const id = appResultId(row);
+      return {
+        content,
+        ...(id.appId === undefined ? {} : {appId: id.appId}),
+        ...(id.unusable === true ? {unusable: true} : {}),
+      };
     }
   }
   return undefined;
@@ -515,12 +564,14 @@ export async function loadLegacyConversationDetail(
           )
         ).get(appRecap.appId);
   const resolvedAppName = visibleDisplayText(appChrome?.name ?? '');
-  const appSummaryName =
-    resolvedAppName !== ''
-      ? resolvedAppName
-      : appRecap?.appId !== undefined && appsError === undefined
-        ? conversationUnknownAppCopy()
-        : undefined;
+  const appSummaryName = appSummaryAttribution({
+    resolvedName: resolvedAppName,
+    appId: appRecap?.appId,
+    appsError,
+    unusable: appRecap?.unusable,
+    hasRecap: appRecap !== undefined,
+    hasFirstPartyChrome: firstPartySummaryChrome(overview, sections),
+  });
   const appSummaryDescription = appChrome?.description;
   const appSummaryImageUri = appChrome?.image;
   const folderId =

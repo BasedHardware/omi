@@ -440,6 +440,10 @@ export function conversationUnknownAppCopy(): string {
   return 'Unknown App';
 }
 
+export function conversationFirstPartySummaryCopy(): string {
+  return 'Summary';
+}
+
 export function conversationVisibilityCopy(
   visibility: string | null | undefined,
 ): string | null {

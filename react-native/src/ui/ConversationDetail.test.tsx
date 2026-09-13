@@ -2,7 +2,11 @@ import React from 'react';
 import Renderer, {act} from 'react-test-renderer';
 import {Linking, Text} from 'react-native';
 import type {ConversationProjection} from '../desktopReadClient';
-import {desktopBackendServiceCopy, conversationUnknownAppCopy} from '../desktopReadClient';
+import {
+  desktopBackendServiceCopy,
+  conversationFirstPartySummaryCopy,
+  conversationUnknownAppCopy,
+} from '../desktopReadClient';
 
 const mockRecording = jest.fn(() => ({
   result: {
@@ -1266,6 +1270,49 @@ test('legacy conversation details name a failed GET app catalog instead of empty
   );
   expect(discarded).not.toContain('App wrote this recap');
   expect(discarded).not.toContain(desktopBackendServiceCopy);
+});
+
+test('legacy conversation details name Flutter first-party Summary when appId is null', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Day recap notes',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        appSummary: 'App wrote this recap',
+        appSummaryName: conversationFirstPartySummaryCopy(),
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  const copy = text(view);
+  expect(copy).toContain('Day recap notes');
+  expect(copy).toContain('App wrote this recap');
+  expect(copy).toContain(conversationFirstPartySummaryCopy());
+  expect(copy).not.toContain(conversationUnknownAppCopy());
+  expect(copy).not.toContain('Official');
+  expect(
+    view.root.findAll(node => node.props.source?.uri !== undefined),
+  ).toHaveLength(0);
+  const discarded = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', discarded: true},
+    }),
+  );
+  expect(discarded).not.toContain('Day recap notes');
+  expect(discarded).not.toContain('App wrote this recap');
+  expect(discarded).not.toContain(conversationFirstPartySummaryCopy());
 });
 
 test('legacy discarded details name Discarded Conversation instead of structured title', () => {
