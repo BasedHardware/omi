@@ -11020,6 +11020,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String deviceRenamed(String name) {
-    return '기기 이름이 $name(으)로 변경되었습니다';
+    return '기기 이름이 \"$name\"(으)로 변경되었습니다';
   }
 }

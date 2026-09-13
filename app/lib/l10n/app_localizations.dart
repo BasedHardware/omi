@@ -20388,7 +20388,7 @@ abstract class AppLocalizations {
   /// Validation error when the device name exceeds the byte limit
   ///
   /// In en, this message translates to:
-  /// **'Name is too long (up to {maxBytes} characters; emoji and accents count extra)'**
+  /// **'Name is too long (up to {maxBytes} bytes; emoji and accents count extra)'**
   String deviceNameTooLong(int maxBytes);
 
   /// Validation error when the device name has control characters

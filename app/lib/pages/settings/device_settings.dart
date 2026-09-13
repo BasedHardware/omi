@@ -61,6 +61,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   static const Duration _findDeviceRequestTimeout = Duration(seconds: 30);
 
   CaptureProvider? _captureProvider;
+  DeviceProvider? _deviceProvider;
 
   double _dimRatio = 100.0;
   bool _isDimRatioLoaded = false;
@@ -73,6 +74,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   // Firmware that stores a user-chosen name (OmiFeatures.deviceName). Null
   // until the features characteristic has been read.
   bool? _hasDeviceNameFeature;
+  String? _featuresLoadedForDeviceId;
 
   Timer? _debounce;
   Timer? _micGainDebounce;
@@ -93,7 +95,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       // async device-info fetch below and leak the listener.
       _captureProvider = _maybeProvider<CaptureProvider>(context, listen: false);
       _captureProvider?.addMetricsListener();
-      await context.read<DeviceProvider>().getDeviceInfo();
+      _deviceProvider = context.read<DeviceProvider>();
+      _deviceProvider!.addListener(_onDeviceProviderChanged);
+      await _deviceProvider!.getDeviceInfo();
       if (!mounted) return;
       _loadDeviceFeatures();
     });
@@ -102,13 +106,33 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   @override
   void dispose() {
     _captureProvider?.removeMetricsListener();
+    _deviceProvider?.removeListener(_onDeviceProviderChanged);
     _debounce?.cancel();
     _micGainDebounce?.cancel();
     super.dispose();
   }
 
-  // Device features: LED dimming and mic gain.
+  void _onDeviceProviderChanged() {
+    if (!mounted) return;
+    final provider = context.read<DeviceProvider>();
+    final pairedId = provider.pairedDevice?.id;
+    if (!provider.isConnected || pairedId == null || pairedId.isEmpty) {
+      if (_featuresLoadedForDeviceId != null) {
+        setState(() {
+          _featuresLoadedForDeviceId = null;
+          _hasDeviceNameFeature = null;
+          _hasDimmingFeature = null;
+          _hasMicGainFeature = null;
+        });
+      }
+      return;
+    }
+    if (pairedId != _featuresLoadedForDeviceId) {
+      _loadDeviceFeatures();
+    }
+  }
 
+  // Device features: LED dimming, mic gain, and on-device rename.
   Future<void> _loadDeviceFeatures() async {
     final deviceProvider = context.read<DeviceProvider>();
     if (deviceProvider.pairedDevice == null) return;
@@ -120,6 +144,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final hasDeviceName = (features & OmiFeatures.deviceName) != 0;
     if (!mounted) return;
     setState(() {
+      _featuresLoadedForDeviceId = deviceProvider.pairedDevice?.id;
       _hasDimmingFeature = hasDimming;
       _hasMicGainFeature = hasMicGain;
       _hasDeviceNameFeature = hasDeviceName;
