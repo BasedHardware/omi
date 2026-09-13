@@ -388,6 +388,22 @@ class ShortcutSettings: ObservableObject {
     defaults.object(forKey: .shortcutSilentTypeEnabled) as? Bool ?? false
   }
 
+  /// Ignore dictation apps: while Wispr Flow, superwhisper, or macOS Dictation holds the
+  /// microphone and no call app does, ambient capture replaces its own mic contribution with
+  /// silence for exactly that window, so a dictation never becomes a conversation. On by
+  /// default — see `DictationMicSuppressionPolicy`.
+  @Published var ambientIgnoresDictationApps: Bool {
+    didSet {
+      UserDefaults.standard.set(ambientIgnoresDictationApps, forKey: .transcriptionIgnoreDictationApps)
+    }
+  }
+
+  /// The persisted read behind `ambientIgnoresDictationApps`'s initial value. Absent key reads
+  /// true — the feature ships on.
+  static func persistedAmbientIgnoresDictationApps(from defaults: UserDefaults = .standard) -> Bool {
+    defaults.object(forKey: .transcriptionIgnoreDictationApps) as? Bool ?? true
+  }
+
   /// Empty means Automatic. A non-empty value is a stable CoreAudio device UID
   /// selected specifically for push-to-talk, independent of the macOS default input.
   /// The one microphone choice, shared by transcription and push-to-talk.
@@ -653,6 +669,7 @@ class ShortcutSettings: ObservableObject {
     self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
     self.pttMuteSystemAudio = UserDefaults.standard.object(forKey: "shortcut_pttMuteSystemAudio") as? Bool ?? true
     self.silentTypeEnabled = Self.persistedSilentTypeEnabled()
+    self.ambientIgnoresDictationApps = Self.persistedAmbientIgnoresDictationApps()
     self.pttInputDeviceUID = UserDefaults.standard.string(forKey: .shortcutPTTInputDeviceUID) ?? ""
     self.selectedModel = ModelQoS.Claude.sanitizedSelection(
       UserDefaults.standard.string(forKey: "shortcut_selectedModel")
