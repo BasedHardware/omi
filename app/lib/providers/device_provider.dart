@@ -83,6 +83,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   Future<void> _rolesReconciliation = Future.value();
 
+  @visibleForTesting
+  Future<void> get pendingRolesReconciliation => _rolesReconciliation;
+
   /// Id of the device whose full connect path ([_onDeviceConnected]) is in
   /// effect. Distinct from [connectedDevice], which the pairing flow sets
   /// eagerly before that path has run.
@@ -131,8 +134,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   final Map<String, Debouncer> _disconnectDebouncers = {};
   final Map<String, Debouncer> _connectDebouncers = {};
 
+  @visibleForTesting
+  static Duration disconnectDebounceDelay = const Duration(milliseconds: 500);
+
   Debouncer _disconnectDebouncerFor(String deviceId) =>
-      _disconnectDebouncers.putIfAbsent(deviceId, () => Debouncer(delay: const Duration(milliseconds: 500)));
+      _disconnectDebouncers.putIfAbsent(deviceId, () => Debouncer(delay: disconnectDebounceDelay));
 
   Debouncer _connectDebouncerFor(String deviceId) =>
       _connectDebouncers.putIfAbsent(deviceId, () => Debouncer(delay: const Duration(milliseconds: 100)));
@@ -565,15 +571,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         }
       }));
       final connectedNow = connections.whereType<DeviceConnection>().map((c) => c.device).toList();
-      final audioDevice = DevicePairingRoles.selectAudioDevice(connectedNow);
-      if (audioDevice != null) {
+      if (connectedNow.isNotEmpty) {
         for (final device in connectedNow) {
-          _connectedDevices[device.id] = device;
+          await registerConnectedDevice(device);
         }
-        await setConnectedDevice(audioDevice);
-        setisDeviceStorageSupport();
-        SharedPreferencesUtil().deviceName = audioDevice.name;
-        setIsConnected(true);
       }
     } catch (e) {
       Logger.debug('scanAndConnectToDevice: connection failed: $e');
@@ -616,7 +617,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     super.dispose();
   }
 
-  void onDeviceDisconnected() async {
+  Future<void> onDeviceDisconnected() async {
     Logger.debug('onDisconnected inside: $connectedDevice');
     _activeAudioDeviceId = null;
     _havingNewFirmware = false;
@@ -909,13 +910,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final previousAudioId = _activeAudioDeviceId;
     if (audio == null) {
       if (previousAudioId != null || connectedDevice != null || isConnected) {
-        onDeviceDisconnected();
+        await onDeviceDisconnected();
       }
     } else if (audio.id != previousAudioId) {
       // The previous audio device went away (rather than being demoted to the
       // photo role) — run its full teardown first so analytics and syncs see it.
       if (previousAudioId != null && !_connectedDevices.containsKey(previousAudioId)) {
-        onDeviceDisconnected();
+        await onDeviceDisconnected();
       }
       await _onDeviceConnected(audio);
     }

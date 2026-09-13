@@ -374,6 +374,7 @@ class BtDevice {
       if (saved == null) return this;
       return copyWith(
         name: saved.name,
+        type: saved.type,
         rssi: saved.rssi,
         modelNumber: saved.modelNumber,
         firmwareRevision: saved.firmwareRevision,
