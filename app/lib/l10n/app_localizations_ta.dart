@@ -594,6 +594,31 @@ class AppLocalizationsTa extends AppLocalizations {
   String get doubleTapAction => 'இரட்டை தட்டு நடவடிக்கை';
 
   @override
+  String get singleTap => 'ஒற்றை தட்டு';
+
+  @override
+  String get tripleTap => 'மூன்று தட்டு';
+
+  @override
+  String get longPress => 'நீண்ட அழுத்தம்';
+
+  @override
+  String get singleTapAction => 'ஒற்றை தட்டு நடவடிக்கை';
+
+  @override
+  String get tripleTapAction => 'மூன்று தட்டு நடவடிக்கை';
+
+  @override
+  String get powerOnOff => 'இயக்கு / அணை';
+
+  @override
+  String get doNothing => 'எதுவும் செய்ய வேண்டாம்';
+
+  @override
+  String get longPressFixedSubtitle =>
+      'உங்கள் Omi-ஐ இயக்க அல்லது அணைக்க 3 வினாடிகள் அழுத்திப் பிடிக்கவும். இதை மாற்ற முடியாது.';
+
+  @override
   String get endAndProcess => 'முடிக்கவும் & உரையாடல் செயல்படுத்தவும்';
 
   @override

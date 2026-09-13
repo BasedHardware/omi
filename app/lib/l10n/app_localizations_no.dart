@@ -592,6 +592,30 @@ class AppLocalizationsNo extends AppLocalizations {
   String get doubleTapAction => 'Dobbelttrykk-handling';
 
   @override
+  String get singleTap => 'Enkelttrykk';
+
+  @override
+  String get tripleTap => 'Trippeltrykk';
+
+  @override
+  String get longPress => 'Langt trykk';
+
+  @override
+  String get singleTapAction => 'Enkelttrykk-handling';
+
+  @override
+  String get tripleTapAction => 'Trippeltrykk-handling';
+
+  @override
+  String get powerOnOff => 'Slå på / Slå av';
+
+  @override
+  String get doNothing => 'Gjør ingenting';
+
+  @override
+  String get longPressFixedSubtitle => 'Hold inne i 3 sekunder for å slå Omi på eller av. Dette kan ikke endres.';
+
+  @override
   String get endAndProcess => 'Avslutt og behandle samtale';
 
   @override

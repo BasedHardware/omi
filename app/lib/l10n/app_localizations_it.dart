@@ -594,6 +594,30 @@ class AppLocalizationsIt extends AppLocalizations {
   String get doubleTapAction => 'Azione Doppio Tocco';
 
   @override
+  String get singleTap => 'Tocco Singolo';
+
+  @override
+  String get tripleTap => 'Triplo Tocco';
+
+  @override
+  String get longPress => 'Pressione Prolungata';
+
+  @override
+  String get singleTapAction => 'Azione Tocco Singolo';
+
+  @override
+  String get tripleTapAction => 'Azione Triplo Tocco';
+
+  @override
+  String get powerOnOff => 'Accendi / Spegni';
+
+  @override
+  String get doNothing => 'Non fare nulla';
+
+  @override
+  String get longPressFixedSubtitle => 'Tieni premuto 3 secondi per accendere o spegnere Omi. Non è modificabile.';
+
+  @override
   String get endAndProcess => 'Termina ed Elabora Conversazione';
 
   @override

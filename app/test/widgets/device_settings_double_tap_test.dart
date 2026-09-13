@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/omi_button_action.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/device_provider.dart';
 
@@ -77,6 +78,65 @@ void main() {
 
     expect(find.text('Mute / Unmute'), findsNWidgets(2));
     expect(find.text('Pause/Resume Recording'), findsNothing);
+  });
+
+  testWidgets('shows a row per remappable gesture plus the fixed long press', (tester) async {
+    final provider = _StubDeviceProvider();
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_app(provider));
+    await tester.pump();
+
+    expect(find.byKey(const Key('button_gesture_singleTap')), findsOneWidget);
+    expect(find.byKey(const Key('button_gesture_doubleTap')), findsOneWidget);
+    expect(find.byKey(const Key('button_gesture_tripleTap')), findsOneWidget);
+    expect(find.byKey(const Key('button_gesture_longPress')), findsOneWidget);
+
+    // Defaults: single = ask question, double = mute (seeded), triple = end conversation.
+    expect(find.text('Ask Omi a Question'), findsOneWidget);
+    expect(find.text('End Conversation'), findsOneWidget);
+    expect(find.text('Power On / Off'), findsOneWidget);
+    expect(find.text("Hold for 3 seconds to turn your Omi on or off. This can't be changed."), findsOneWidget);
+  });
+
+  testWidgets('picking a triple tap action persists it and updates the chip', (tester) async {
+    final provider = _StubDeviceProvider();
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_app(provider));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('button_gesture_tripleTap')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Triple Tap Action'), findsOneWidget);
+    // The current action is ticked; every action is offered.
+    expect(find.byKey(const Key('button_action_tripleTap_endConversation')), findsOneWidget);
+    expect(find.byKey(const Key('button_action_tripleTap_askQuestion')), findsOneWidget);
+    expect(find.byKey(const Key('button_action_tripleTap_none')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('button_action_tripleTap_none')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Triple Tap Action'), findsNothing);
+    expect(find.text('Do Nothing'), findsOneWidget);
+    expect(SharedPreferencesUtil().buttonActionFor(OmiButtonGesture.tripleTap), OmiButtonAction.none);
+    expect((await SharedPreferences.getInstance()).getInt('tripleTapAction'), OmiButtonAction.none.storedValue);
+    // Other gestures are untouched.
+    expect(SharedPreferencesUtil().buttonActionFor(OmiButtonGesture.doubleTap), OmiButtonAction.muteUnmute);
+  });
+
+  testWidgets('the long press row is informational only', (tester) async {
+    final provider = _StubDeviceProvider();
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_app(provider));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('button_gesture_longPress')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ListTile), findsNothing);
   });
 
   testWidgets('Find triggers one guarded request for a connected Omi', (tester) async {

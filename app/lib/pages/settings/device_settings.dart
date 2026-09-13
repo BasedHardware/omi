@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/models/omi_button_action.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
@@ -377,82 +378,92 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
-  String _getDoubleTapActionLabel(int action) {
-    switch (action) {
-      case 0:
-        return context.l10n.endConversation;
-      case 1:
-        return context.l10n.deviceOnboardingMuteUnmute;
-      case 2:
-        return context.l10n.starConversation;
-      default:
-        return context.l10n.endConversation;
-    }
+  String _gestureTitle(OmiButtonGesture gesture) {
+    return switch (gesture) {
+      OmiButtonGesture.singleTap => context.l10n.singleTap,
+      OmiButtonGesture.doubleTap => context.l10n.doubleTap,
+      OmiButtonGesture.tripleTap => context.l10n.tripleTap,
+    };
   }
 
-  void _showDoubleTapActionSheet() {
-    int currentAction = SharedPreferencesUtil().doubleTapAction;
+  String _gestureSheetTitle(OmiButtonGesture gesture) {
+    return switch (gesture) {
+      OmiButtonGesture.singleTap => context.l10n.singleTapAction,
+      OmiButtonGesture.doubleTap => context.l10n.doubleTapAction,
+      OmiButtonGesture.tripleTap => context.l10n.tripleTapAction,
+    };
+  }
+
+  // Short label shown in the row chip.
+  String _buttonActionLabel(OmiButtonAction action) {
+    return switch (action) {
+      OmiButtonAction.endConversation => context.l10n.endConversation,
+      OmiButtonAction.muteUnmute => context.l10n.deviceOnboardingMuteUnmute,
+      OmiButtonAction.starConversation => context.l10n.starConversation,
+      OmiButtonAction.askQuestion => context.l10n.deviceOnboardingAskQuestionTitle,
+      OmiButtonAction.none => context.l10n.doNothing,
+    };
+  }
+
+  // Fuller label shown as a picker option.
+  String _buttonActionOptionLabel(OmiButtonAction action) {
+    return switch (action) {
+      OmiButtonAction.endConversation => context.l10n.endAndProcess,
+      OmiButtonAction.muteUnmute => context.l10n.deviceOnboardingMuteUnmute,
+      OmiButtonAction.starConversation => context.l10n.starOngoing,
+      OmiButtonAction.askQuestion => context.l10n.deviceOnboardingAskQuestionTitle,
+      OmiButtonAction.none => context.l10n.doNothing,
+    };
+  }
+
+  void _showButtonActionSheet(OmiButtonGesture gesture) {
+    final currentAction = SharedPreferencesUtil().buttonActionFor(gesture);
 
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(top: 12, bottom: 16),
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
-                  ),
-                  Text(
-                    context.l10n.doubleTapAction,
-                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 16),
-                  ListTile(
-                    title: Text(
-                      context.l10n.endAndProcess,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
-                    ),
-                    trailing: currentAction == 0 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                    onTap: () {
-                      setState(() => SharedPreferencesUtil().doubleTapAction = 0);
-                      Navigator.pop(sheetContext);
-                    },
-                  ),
-                  ListTile(
-                    title: Text(
-                      context.l10n.deviceOnboardingMuteUnmute,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
-                    ),
-                    trailing: currentAction == 1 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                    onTap: () {
-                      setState(() => SharedPreferencesUtil().doubleTapAction = 1);
-                      Navigator.pop(sheetContext);
-                    },
-                  ),
-                  ListTile(
-                    title: Text(
-                      context.l10n.starOngoing,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
-                    ),
-                    trailing: currentAction == 2 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                    onTap: () {
-                      setState(() => SharedPreferencesUtil().doubleTapAction = 2);
-                      Navigator.pop(sheetContext);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                ],
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
               ),
-            );
-          },
+              Text(
+                _gestureSheetTitle(gesture),
+                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.only(bottom: 16),
+                  children: [
+                    for (final action in OmiButtonAction.values)
+                      ListTile(
+                        key: Key('button_action_${gesture.name}_${action.name}'),
+                        title: Text(
+                          _buttonActionOptionLabel(action),
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                        ),
+                        trailing:
+                            currentAction == action ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                        onTap: () {
+                          SharedPreferencesUtil().setButtonActionFor(gesture, action);
+                          setState(() {});
+                          Navigator.pop(sheetContext);
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -733,7 +744,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 
   Widget _buildCustomizationSection(BtDevice? device, DeviceProvider provider) {
-    final doubleTapAction = SharedPreferencesUtil().doubleTapAction;
     final supportsFind = device?.type == DeviceType.omi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
 
     return Container(
@@ -757,12 +767,25 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),
           ],
-          // Double Tap
+          // Remappable button gestures (#2825)
+          for (final gesture in OmiButtonGesture.values) ...[
+            _buildProfileStyleItem(
+              key: Key('button_gesture_${gesture.name}'),
+              icon: FontAwesomeIcons.handPointer,
+              title: _gestureTitle(gesture),
+              chipValue: _buttonActionLabel(SharedPreferencesUtil().buttonActionFor(gesture)),
+              onTap: () => _showButtonActionSheet(gesture),
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+          ],
+          // Long press is the power switch and is fixed in firmware.
           _buildProfileStyleItem(
-            icon: FontAwesomeIcons.handPointer,
-            title: context.l10n.doubleTap,
-            chipValue: _getDoubleTapActionLabel(doubleTapAction),
-            onTap: _showDoubleTapActionSheet,
+            key: const Key('button_gesture_longPress'),
+            icon: FontAwesomeIcons.powerOff,
+            title: context.l10n.longPress,
+            subtitle: context.l10n.longPressFixedSubtitle,
+            chipValue: context.l10n.powerOnOff,
+            showChevron: false,
           ),
           // LED Brightness
           if (_isDimRatioLoaded && _hasDimmingFeature == true) ...[

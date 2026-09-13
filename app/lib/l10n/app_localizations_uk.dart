@@ -593,6 +593,30 @@ class AppLocalizationsUk extends AppLocalizations {
   String get doubleTapAction => 'Дія подвійного натискання';
 
   @override
+  String get singleTap => 'Одинарне натискання';
+
+  @override
+  String get tripleTap => 'Потрійне натискання';
+
+  @override
+  String get longPress => 'Довге натискання';
+
+  @override
+  String get singleTapAction => 'Дія одинарного натискання';
+
+  @override
+  String get tripleTapAction => 'Дія потрійного натискання';
+
+  @override
+  String get powerOnOff => 'Увімкнути / Вимкнути';
+
+  @override
+  String get doNothing => 'Нічого не робити';
+
+  @override
+  String get longPressFixedSubtitle => 'Утримуйте 3 секунди, щоб увімкнути або вимкнути Omi. Це не можна змінити.';
+
+  @override
   String get endAndProcess => 'Завершити та обробити розмову';
 
   @override

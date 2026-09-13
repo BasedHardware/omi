@@ -753,6 +753,14 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "দ্বিগুণ ট্যাপ ক্রিয়া",
+    "singleTap": "একক ট্যাপ",
+    "tripleTap": "তিনবার ট্যাপ",
+    "longPress": "দীর্ঘ চাপ",
+    "singleTapAction": "একক ট্যাপ ক্রিয়া",
+    "tripleTapAction": "তিনবার ট্যাপ ক্রিয়া",
+    "powerOnOff": "চালু / বন্ধ",
+    "doNothing": "কিছু করবেন না",
+    "longPressFixedSubtitle": "আপনার Omi চালু বা বন্ধ করতে 3 সেকেন্ড ধরে রাখুন। এটি পরিবর্তন করা যাবে না।",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

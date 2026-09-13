@@ -588,6 +588,30 @@ class AppLocalizationsTh extends AppLocalizations {
   String get doubleTapAction => 'การดำเนินการแตะสองครั้ง';
 
   @override
+  String get singleTap => 'แตะครั้งเดียว';
+
+  @override
+  String get tripleTap => 'แตะสามครั้ง';
+
+  @override
+  String get longPress => 'กดค้าง';
+
+  @override
+  String get singleTapAction => 'การดำเนินการแตะครั้งเดียว';
+
+  @override
+  String get tripleTapAction => 'การดำเนินการแตะสามครั้ง';
+
+  @override
+  String get powerOnOff => 'เปิด / ปิดเครื่อง';
+
+  @override
+  String get doNothing => 'ไม่ทำอะไร';
+
+  @override
+  String get longPressFixedSubtitle => 'กดค้าง 3 วินาทีเพื่อเปิดหรือปิด Omi ไม่สามารถเปลี่ยนแปลงได้';
+
+  @override
   String get endAndProcess => 'จบและประมวลผลบทสนทนา';
 
   @override

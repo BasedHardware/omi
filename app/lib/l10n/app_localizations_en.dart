@@ -589,6 +589,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get doubleTapAction => 'Double Tap Action';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singleTapAction => 'Single Tap Action';
+
+  @override
+  String get tripleTapAction => 'Triple Tap Action';
+
+  @override
+  String get powerOnOff => 'Power On / Off';
+
+  @override
+  String get doNothing => 'Do Nothing';
+
+  @override
+  String get longPressFixedSubtitle => 'Hold for 3 seconds to turn your Omi on or off. This can\'t be changed.';
+
+  @override
   String get endAndProcess => 'End & Process Conversation';
 
   @override

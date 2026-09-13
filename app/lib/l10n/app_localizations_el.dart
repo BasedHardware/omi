@@ -595,6 +595,31 @@ class AppLocalizationsEl extends AppLocalizations {
   String get doubleTapAction => 'Ενέργεια Διπλού Πατήματος';
 
   @override
+  String get singleTap => 'Μονό Πάτημα';
+
+  @override
+  String get tripleTap => 'Τριπλό Πάτημα';
+
+  @override
+  String get longPress => 'Παρατεταμένο Πάτημα';
+
+  @override
+  String get singleTapAction => 'Ενέργεια Μονού Πατήματος';
+
+  @override
+  String get tripleTapAction => 'Ενέργεια Τριπλού Πατήματος';
+
+  @override
+  String get powerOnOff => 'Ενεργοποίηση / Απενεργοποίηση';
+
+  @override
+  String get doNothing => 'Καμία ενέργεια';
+
+  @override
+  String get longPressFixedSubtitle =>
+      'Κρατήστε πατημένο για 3 δευτερόλεπτα για να ενεργοποιήσετε ή να απενεργοποιήσετε το Omi. Αυτό δεν μπορεί να αλλάξει.';
+
+  @override
   String get endAndProcess => 'Τερματισμός & Επεξεργασία Συνομιλίας';
 
   @override

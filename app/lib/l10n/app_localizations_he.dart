@@ -587,6 +587,30 @@ class AppLocalizationsHe extends AppLocalizations {
   String get doubleTapAction => 'פעולת לחיצה כפולה';
 
   @override
+  String get singleTap => 'לחיצה בודדת';
+
+  @override
+  String get tripleTap => 'לחיצה משולשת';
+
+  @override
+  String get longPress => 'לחיצה ארוכה';
+
+  @override
+  String get singleTapAction => 'פעולת לחיצה בודדת';
+
+  @override
+  String get tripleTapAction => 'פעולת לחיצה משולשת';
+
+  @override
+  String get powerOnOff => 'הפעלה / כיבוי';
+
+  @override
+  String get doNothing => 'לא לעשות דבר';
+
+  @override
+  String get longPressFixedSubtitle => 'החזיקו 3 שניות כדי להפעיל או לכבות את Omi. לא ניתן לשנות זאת.';
+
+  @override
   String get endAndProcess => 'סיים ועבד שיחה';
 
   @override

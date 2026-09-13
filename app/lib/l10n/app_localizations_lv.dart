@@ -592,6 +592,30 @@ class AppLocalizationsLv extends AppLocalizations {
   String get doubleTapAction => 'Dubultklikšķa darbība';
 
   @override
+  String get singleTap => 'Viens klikšķis';
+
+  @override
+  String get tripleTap => 'Trīskāršs klikšķis';
+
+  @override
+  String get longPress => 'Ilga nospiešana';
+
+  @override
+  String get singleTapAction => 'Viena klikšķa darbība';
+
+  @override
+  String get tripleTapAction => 'Trīskārša klikšķa darbība';
+
+  @override
+  String get powerOnOff => 'Ieslēgt / Izslēgt';
+
+  @override
+  String get doNothing => 'Nedarīt nekā';
+
+  @override
+  String get longPressFixedSubtitle => 'Turiet 3 sekundes, lai ieslēgtu vai izslēgtu Omi. To nevar mainīt.';
+
+  @override
   String get endAndProcess => 'Beigt un apstrādāt sarunu';
 
   @override
