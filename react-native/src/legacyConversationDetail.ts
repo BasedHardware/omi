@@ -29,6 +29,7 @@ export type LegacyConversationDetail = {
     startCopy?: string;
     endCopy?: string;
     htmlLink?: string;
+    shareMailto?: string;
   };
   photoCount?: number;
   photoCaptions?: string[];
@@ -215,7 +216,26 @@ function calendarEvent(
     const name = visibleDisplayText(text(raw));
     return name === '' ? [] : [name];
   });
+  if (
+    event.attendee_emails !== undefined &&
+    event.attendee_emails !== null &&
+    !Array.isArray(event.attendee_emails)
+  ) {
+    throw new DetailError('invalid');
+  }
+  const attendeeEmails = (
+    Array.isArray(event.attendee_emails) ? event.attendee_emails : []
+  ).flatMap(raw => {
+    const email = visibleDisplayText(text(raw));
+    return email === '' ? [] : [email];
+  });
   const htmlLink = visibleDisplayText(omittedText(event.html_link));
+  const shareMailto =
+    attendeeEmails.length === 0
+      ? ''
+      : `mailto:${attendeeEmails.join(',')}?subject=${encodeURIComponent(
+          `Notes: ${title}`,
+        )}`;
   if (
     title === '' &&
     attendees.length === 0 &&
@@ -230,6 +250,7 @@ function calendarEvent(
     ...(startCopy === '' ? {} : {startCopy}),
     ...(endCopy === '' ? {} : {endCopy}),
     ...(htmlLink === '' ? {} : {htmlLink}),
+    ...(shareMailto === '' ? {} : {shareMailto}),
   };
 }
 function segmentTranslations(value: unknown): string[] | undefined {

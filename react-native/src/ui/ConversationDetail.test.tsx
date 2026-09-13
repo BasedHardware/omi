@@ -1403,6 +1403,58 @@ test('legacy conversation details name GET calendar html_link', () => {
   openURL.mockRestore();
 });
 
+test('legacy conversation details name GET calendar Share with attendees', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        calendarEvent: {
+          title: 'Standup',
+          attendees: ['Alex Chen'],
+          startCopy: '3:00 PM',
+          endCopy: '4:00 PM',
+          shareMailto: `mailto:alex@example.com,sam@example.com?subject=${encodeURIComponent(
+            'Notes: Standup',
+          )}`,
+        },
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  expect(text(view)).toContain('Share with attendees');
+  const links = view.root.findAll(
+    node =>
+      node.props.accessibilityRole === 'link' &&
+      node.props.accessibilityLabel === 'Share with attendees' &&
+      typeof node.props.onPress === 'function',
+  );
+  expect(links.length).toBeGreaterThan(0);
+  const openURL = jest
+    .spyOn(Linking, 'openURL')
+    .mockResolvedValue(undefined as never);
+  act(() => {
+    links[0].props.onPress();
+  });
+  expect(openURL).toHaveBeenCalledWith(
+    `mailto:alex@example.com,sam@example.com?subject=${encodeURIComponent(
+      'Notes: Standup',
+    )}`,
+  );
+  openURL.mockRestore();
+});
+
 test('legacy conversation details name GET photo counts and captions', () => {
   mockLegacy.mockReturnValue({
     result: {

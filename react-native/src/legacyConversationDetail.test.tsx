@@ -220,6 +220,7 @@ test('keeps GET calendar event title and attendees and omits missing events', as
   const untitled = await loadLegacyConversationDetail(backend, fixture.id);
   expect(untitled.calendarEvent).not.toHaveProperty('title');
   expect(untitled.calendarEvent?.attendees).toEqual([]);
+  expect(untitled.calendarEvent).not.toHaveProperty('shareMailto');
   mockRequest.mockResolvedValue(response(fixture));
   expect(
     (await loadLegacyConversationDetail(backend, fixture.id)).calendarEvent,
@@ -301,6 +302,62 @@ test('keeps GET calendar event when html_link exceeds 10000', async () => {
   const loaded = await loadLegacyConversationDetail(backend, fixture.id);
   expect(loaded.title).toBe(fixture.structured.title);
   expect(loaded.calendarEvent?.htmlLink).toBe(htmlLink);
+});
+
+test('keeps GET calendar attendee_emails Share with attendees Flutter paints', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-share',
+        title: 'Standup',
+        attendees: ['Alex Chen'],
+        attendee_emails: ['alex@example.com', ' \t', 'sam@example.com'],
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    calendarEvent: {
+      title: 'Standup',
+      attendees: ['Alex Chen'],
+      shareMailto: `mailto:alex@example.com,sam@example.com?subject=${encodeURIComponent(
+        'Notes: Standup',
+      )}`,
+    },
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-empty-emails',
+        title: 'Standup',
+        attendees: [],
+        attendee_emails: [' \t', ''],
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).calendarEvent,
+  ).not.toHaveProperty('shareMailto');
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-omit-emails',
+        title: 'Standup',
+        attendees: [],
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).calendarEvent,
+  ).not.toHaveProperty('shareMailto');
 });
 
 test('keeps GET calendar event attendees when more than 1000', async () => {
@@ -994,6 +1051,38 @@ test('fails closed for malformed GET calendar_event', async () => {
         start_time: '2026-09-10T15:00:00.000Z',
         end_time: '2026-09-10T16:00:00.000Z',
         html_link: 1,
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-1',
+        title: 'Standup',
+        attendees: [],
+        attendee_emails: 'alex@example.com',
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-1',
+        title: 'Standup',
+        attendees: [],
+        attendee_emails: [1],
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
       },
     }),
   );

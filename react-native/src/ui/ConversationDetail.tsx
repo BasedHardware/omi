@@ -351,6 +351,9 @@ function LegacyConversationBody({
   const calendarHtmlLink = visibleDisplayText(
     detail.calendarEvent?.htmlLink ?? '',
   );
+  const calendarShareMailto = visibleDisplayText(
+    detail.calendarEvent?.shareMailto ?? '',
+  );
   const folderName = visibleDisplayText(detail.folderName ?? '');
   const folderColor = visibleDisplayText(detail.folderColor ?? '');
   const folderIcon = visibleDisplayText(detail.folderIcon ?? '');
@@ -455,6 +458,21 @@ function LegacyConversationBody({
           }}>
           <Text style={[styles.conversationDetailField, ink]}>
             Open in Google Calendar
+          </Text>
+        </FocusPressable>
+      )}
+      {calendarShareMailto === '' ? null : (
+        <FocusPressable
+          accessibilityRole="link"
+          accessibilityLabel="Share with attendees"
+          onPress={() => {
+            if (!/^mailto:/i.test(calendarShareMailto)) {
+              return;
+            }
+            Linking.openURL(calendarShareMailto).catch(() => undefined);
+          }}>
+          <Text style={[styles.conversationDetailField, ink]}>
+            Share with attendees
           </Text>
         </FocusPressable>
       )}
