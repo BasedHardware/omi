@@ -753,16 +753,40 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "عمل دو ضربه",
-    "singleTap": "یک ضربه",
-    "tripleTap": "سه ضربه",
-    "longPress": "فشار طولانی",
-    "singleTapAction": "عمل یک ضربه",
-    "tripleTapAction": "عمل سه ضربه",
-    "powerOnOff": "روشن / خاموش کردن",
-    "doNothing": "هیچ کاری نکن",
-    "longPressFixedSubtitle": "برای روشن یا خاموش کردن Omi، ۳ ثانیه نگه دارید. این قابل تغییر نیست.",
     "@doubleTapAction": {
         "description": "Double tap action setting"
+    },
+    "singleTap": "یک ضربه",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "tripleTap": "سه ضربه",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "longPress": "فشار طولانی",
+    "@longPress": {
+        "description": "Device button gesture: hold the button"
+    },
+    "singleTapAction": "عمل یک ضربه",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTapAction": "عمل سه ضربه",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    },
+    "powerOnOff": "خاموش کردن",
+    "@powerOnOff": {
+        "description": "Fixed long-press power-off gesture on the device button"
+    },
+    "doNothing": "هیچ کاری نکن",
+    "@doNothing": {
+        "description": "Button action that ignores the gesture"
+    },
+    "longPressFixedSubtitle": "برای خاموش کردن Omi، ۳ ثانیه نگه دارید. این قابل تغییر نیست.",
+    "@longPressFixedSubtitle": {
+        "description": "Explains that the long-press power-off gesture is fixed in firmware"
     },
     "endAndProcess": "پایان‌دادن و پردازش گفتگو",
     "@endAndProcess": {

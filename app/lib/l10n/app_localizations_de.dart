@@ -611,14 +611,13 @@ class AppLocalizationsDe extends AppLocalizations {
   String get tripleTapAction => 'Dreifach-tippen-Aktion';
 
   @override
-  String get powerOnOff => 'Ein- / Ausschalten';
+  String get powerOnOff => 'Ausschalten';
 
   @override
   String get doNothing => 'Nichts tun';
 
   @override
-  String get longPressFixedSubtitle =>
-      '3 Sekunden halten, um dein Omi ein- oder auszuschalten. Das lässt sich nicht ändern.';
+  String get longPressFixedSubtitle => '3 Sekunden halten, um Ihr Omi auszuschalten. Das lässt sich nicht ändern.';
 
   @override
   String get endAndProcess => 'Beenden & Verarbeiten';

@@ -604,13 +604,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tripleTapAction => 'Triple Tap Action';
 
   @override
-  String get powerOnOff => 'Power On / Off';
+  String get powerOnOff => 'Power Off';
 
   @override
   String get doNothing => 'Do Nothing';
 
   @override
-  String get longPressFixedSubtitle => 'Hold for 3 seconds to turn your Omi on or off. This can\'t be changed.';
+  String get longPressFixedSubtitle => 'Hold for 3 seconds to power off your Omi. This can\'t be changed.';
 
   @override
   String get endAndProcess => 'End & Process Conversation';

@@ -5,6 +5,7 @@ void button_gesture_init(button_gesture_fsm_t *fsm)
     fsm->pressed = false;
     fsm->long_press_fired = false;
     fsm->release_pending = false;
+    fsm->pending_press = false;
     fsm->tap_count = 0;
     fsm->press_start_ms = 0;
     fsm->last_release_ms = 0;
@@ -24,8 +25,28 @@ static button_gesture_t gesture_for_taps(uint8_t taps)
 
 button_gesture_t button_gesture_step(button_gesture_fsm_t *fsm, bool pressed, uint32_t now_ms)
 {
+    if (fsm->pending_press && pressed) {
+        fsm->pending_press = false;
+        fsm->pressed = true;
+        fsm->press_start_ms = now_ms;
+        fsm->long_press_fired = false;
+        return BUTTON_GESTURE_NONE;
+    }
+
     if (pressed && !fsm->pressed) {
-        /* Press edge. */
+        /* Press edge — drain expired tap / trailing release before starting a new press. */
+        if (fsm->release_pending) {
+            fsm->release_pending = false;
+            fsm->pending_press = true;
+            return BUTTON_GESTURE_RELEASE;
+        }
+        if (fsm->tap_count > 0 && (now_ms - fsm->last_release_ms) >= BUTTON_GESTURE_MULTI_TAP_GAP_MS) {
+            button_gesture_t gesture = gesture_for_taps(fsm->tap_count);
+            fsm->tap_count = 0;
+            fsm->release_pending = true;
+            fsm->pending_press = true;
+            return gesture;
+        }
         fsm->pressed = true;
         fsm->press_start_ms = now_ms;
         fsm->long_press_fired = false;
