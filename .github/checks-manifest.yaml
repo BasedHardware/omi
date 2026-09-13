@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: plugin-db-transcript-segments-tests
+    command: ["python3", "plugins/test_db_transcript_segments.py"]
+    triggers: ["plugins/db.py", "plugins/test_db_transcript_segments.py"]
+    lanes: ["local", "ci"]
+    reason: "#13663: the Redis-stored transcript segment buffer must be parsed with ast.literal_eval, never eval(), so a non-literal stored value cannot execute as code"
   - id: omi-hacker-news-tests
     command: ["python3", "plugins/omi-hacker-news-app/test_main.py"]
     triggers: ["plugins/omi-hacker-news-app/**"]
@@ -142,6 +147,16 @@ checks:
     triggers: [".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/test_check_product_file_line_count_ratchet.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "base-derived oversized-file checks must reject growth and stale approvals while ratcheting reductions down automatically"
+  - id: structured-string-sink-registry
+    command: ["bash", "scripts/run-structured-string-sinks.sh"]
+    triggers: [".github/workflows/**", ".github/actions/**", ".github/structured-string-sinks/**", ".github/scripts/check_structured_string_sinks.py", ".github/scripts/fixtures/structured_string_sinks/**", "scripts/run-structured-string-sinks.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#10337 registers the three delimiter, argv, and executable workflow sinks that blocked deploys in #9986, #9947, and #9945"
+  - id: structured-string-sink-registry-tests
+    command: ["bash", "scripts/run-structured-string-sink-tests.sh"]
+    triggers: [".github/structured-string-sinks/**", ".github/scripts/check_structured_string_sinks.py", ".github/scripts/test_check_structured_string_sinks.py", ".github/scripts/fixtures/structured_string_sinks/**", "scripts/run-structured-string-sink-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "every registered sink must keep a paired historical mutation fixture proving the checker rejects the incident grammar"
   - id: desktop-release-manifest-v1
     command: ["python3", ".github/scripts/test_desktop_release_manifest.py"]
     triggers: [".github/schemas/desktop-release-manifest-v1.schema.json", ".github/scripts/desktop_release_manifest.py", ".github/scripts/test_desktop_release_manifest.py", ".github/scripts/fixtures/desktop_release_manifest/**"]
@@ -604,9 +619,9 @@ checks:
     reason: "conversation lifecycle has one mutation owner"
   - id: desktop-swift-ci-contract
     command: ["python3", ".github/scripts/test_desktop_swift_ci_contract.py"]
-    triggers: [".github/workflows/desktop-swift-ci.yml", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_swift_ci_contract.py"]
+    triggers: [".github/workflows/desktop-swift-ci.yml", "scripts/pre_push_ci_prediction.py", "scripts/pre-push", ".github/scripts/test_desktop_swift_ci_contract.py", "desktop/macos/ci/xcode-pin.json", "desktop/macos/scripts/run-swift-ci.sh", "desktop/macos/scripts/swift-test-suites.sh", "desktop/macos/tests/test-run-swift-ci.sh", "codemagic.yaml"]
     lanes: ["local", "ci"]
-    reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved"
+    reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved; the pin (version+build+app path) lives only in desktop/macos/ci/xcode-pin.json and the workflow, runner script, and the two Codemagic desktop Swift workflows must agree with it (#12867/#13548 ship-vs-CI divergence class)"
   - id: desktop-windows-ci-contract
     command: ["python3", ".github/scripts/test_desktop_windows_ci_contract.py"]
     triggers: [".github/workflows/desktop-windows-ci.yml", ".github/scripts/test_desktop_windows_ci_contract.py", ".github/checks-manifest.yaml"]
@@ -733,6 +748,16 @@ checks:
     triggers: ["desktop/macos/scripts/check-main-actor-xctest-hooks.py", ".github/scripts/test_check_main_actor_xctest_hooks.py"]
     lanes: ["local", "ci"]
     reason: "adversarial fixtures for the @MainActor XCTest lifecycle compiler-failure tripwire"
+  - id: desktop-compiler-gates
+    command: ["python3", "desktop/macos/scripts/check-desktop-compiler-gates.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check-desktop-compiler-gates.py"]
+    lanes: ["local", "ci"]
+    reason: "#12867/#13548: `#if compiler(...)` compiled Liquid Glass APIs out of the pinned ship toolchain so CI stayed green while the shipped app silently built the system fallback; runtime `#available` with a fallback is the only sanctioned gate"
+  - id: desktop-compiler-gates-fixtures
+    command: ["python3", ".github/scripts/test_check_desktop_compiler_gates.py"]
+    triggers: ["desktop/macos/scripts/check-desktop-compiler-gates.py", ".github/scripts/test_check_desktop_compiler_gates.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "planted glass-style `#if compiler(>=6.2)` sabotage must fail the tripwire and removing it must pass; the allowlist is asserted by exact contents so it cannot silently grow"
   - id: desktop-swift-format-lint
     command: ["bash", "desktop/macos/scripts/swift-format-wrapper.sh", "lint-scope"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/Desktop/.swift-format", "desktop/macos/scripts/swift-format-wrapper.sh"]
@@ -955,6 +980,12 @@ checks:
     triggers: ["plugins/notifications/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "a 'hey omi' trigger segment without a comma dropped the entire spoken question; the next segment was answered instead"
+
+  - id: plugin-mentor-session-auth-tests
+    command: ["bash", "scripts/run-plugin-mentor-session-auth-tests.sh"]
+    triggers: ["plugins/basic/mentor.py", "plugins/basic/mentor_webhook_auth.py", "plugins/test_mentor_session_auth.py", "scripts/run-plugin-mentor-session-auth-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "POST /mentor trusted client session_id for the shared Redis transcript buffer without auth, so callers could read or poison another user's buffer"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
