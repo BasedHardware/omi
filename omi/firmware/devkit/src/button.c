@@ -10,6 +10,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/poweroff.h>
 
+#include "button_gesture.h"
 #include "led.h"
 #include "mic.h"
 #include "sdcard.h"
@@ -83,188 +84,58 @@ void check_button_level(struct k_work *work_item);
 
 K_WORK_DELAYABLE_DEFINE(button_work, check_button_level);
 
-#define DEFAULT_STATE 0
+// Values notified over the button characteristic. 3 (long tap) and 4 (press) are
+// reserved for older clients and no longer emitted: a long press powers the device off.
 #define SINGLE_TAP 1
 #define DOUBLE_TAP 2
-#define LONG_TAP 3
-#define BUTTON_PRESS 4
 #define BUTTON_RELEASE 5
+#define TRIPLE_TAP 6
 
-// 4 is button down, 5 is button up
 static FSM_STATE_T current_button_state = IDLE;
-static uint32_t inc_count_1 = 0;
-static uint32_t inc_count_0 = 0;
+static button_gesture_fsm_t gesture_fsm;
 
 static int final_button_state[2] = {0, 0};
-const static int threshold = 10;
 
-static void reset_count()
+static void notify_button_state(int state, const char *label)
 {
-    inc_count_0 = 0;
-    inc_count_1 = 0;
-}
-static inline void notify_press()
-{
-    final_button_state[0] = BUTTON_PRESS;
-    LOG_INF("Button pressed");
+    final_button_state[0] = state;
+    LOG_INF("Button %s", label);
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
 }
-
-static inline void notify_unpress()
-{
-    final_button_state[0] = BUTTON_RELEASE;
-    LOG_INF("Button released");
-    struct bt_conn *conn = get_current_connection();
-    if (conn != NULL) {
-        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-    }
-}
-
-static inline void notify_tap()
-{
-    final_button_state[0] = SINGLE_TAP;
-    LOG_INF("Button single tap");
-    struct bt_conn *conn = get_current_connection();
-    if (conn != NULL) {
-        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-    }
-}
-
-static inline void notify_double_tap()
-{
-    final_button_state[0] = DOUBLE_TAP; // button press
-    LOG_INF("Button double tap");
-    struct bt_conn *conn = get_current_connection();
-    if (conn != NULL) {
-        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-    }
-}
-
-static inline void notify_long_tap()
-{
-    final_button_state[0] = LONG_TAP; // button press
-    LOG_INF("Button long tap");
-    struct bt_conn *conn = get_current_connection();
-    if (conn != NULL) {
-        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-    }
-}
-
-#define BUTTON_PRESSED 1
-#define BUTTON_RELEASED 0
-
-#define TAP_THRESHOLD 300     // 300 ms for single tap
-#define DOUBLE_TAP_WINDOW 600 // 600 ms maximum for double-tap
-#define LONG_PRESS_TIME 3000  // 3000 ms for long press (power off)
-
-typedef enum {
-    BUTTON_EVENT_NONE,
-    BUTTON_EVENT_SINGLE_TAP,
-    BUTTON_EVENT_DOUBLE_TAP,
-    BUTTON_EVENT_LONG_PRESS,
-    BUTTON_EVENT_RELEASE
-} ButtonEvent;
-
-static uint32_t current_time = 0;
-static uint32_t btn_press_start_time;
-static uint32_t btn_release_time;
-static uint32_t btn_last_tap_time;
-static bool btn_is_pressed;
-
-static u_int8_t btn_last_event = BUTTON_EVENT_NONE;
 
 void check_button_level(struct k_work *work_item)
 {
-    current_time = current_time + 1;
+    button_gesture_t gesture = button_gesture_step(&gesture_fsm, was_pressed, k_uptime_get_32());
 
-    u_int8_t btn_state = was_pressed ? BUTTON_PRESSED : BUTTON_RELEASED;
-
-    ButtonEvent event = BUTTON_EVENT_NONE;
-
-    // Debouncing pressed state
-    if (btn_state == BUTTON_PRESSED && !btn_is_pressed) {
-        btn_is_pressed = true;
-        btn_press_start_time = current_time;
-    } else if (btn_state == BUTTON_RELEASED && btn_is_pressed) {
-        btn_is_pressed = false;
-        btn_release_time = current_time;
-
-        // Check for double tap
-        uint32_t press_duration = (btn_release_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL;
-        if (press_duration < TAP_THRESHOLD) {
-            if (btn_last_tap_time > 0 &&
-                (current_time - btn_last_tap_time) * BUTTON_CHECK_INTERVAL < DOUBLE_TAP_WINDOW) {
-                event = BUTTON_EVENT_DOUBLE_TAP;
-                btn_last_tap_time = 0; // Reset double-tap / single-tap detection
-            } else {
-                btn_last_tap_time = current_time;
-            }
-        }
-    }
-
-    // Check for single tap
-    if (btn_state == BUTTON_RELEASED && !btn_is_pressed) {
-        uint32_t press_duration = (btn_release_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL;
-        if (press_duration < TAP_THRESHOLD && btn_last_tap_time > 0 &&
-            (current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL > TAP_THRESHOLD) {
-            event = BUTTON_EVENT_SINGLE_TAP;
-            btn_last_tap_time = 0;
-        } else if ((current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL > TAP_THRESHOLD) {
-            event = BUTTON_EVENT_RELEASE;
-        }
-    }
-
-    // Check for long press
-    if (btn_is_pressed && (current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL >= LONG_PRESS_TIME) {
-        event = BUTTON_EVENT_LONG_PRESS;
-    }
-
-    // Single tap
-    if (event == BUTTON_EVENT_SINGLE_TAP) {
-        LOG_PRINTK("single tap detected\n");
-        btn_last_event = event;
-        notify_tap();
-    }
-
-    // Double tap
-    if (event == BUTTON_EVENT_DOUBLE_TAP) {
-        LOG_PRINTK("double tap detected\n");
-        btn_last_event = event;
-        notify_double_tap();
-    }
-
-    // Long press, one time event
-    if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS) {
+    switch (gesture) {
+    case BUTTON_GESTURE_SINGLE_TAP:
+        notify_button_state(SINGLE_TAP, "single tap");
+        break;
+    case BUTTON_GESTURE_DOUBLE_TAP:
+        notify_button_state(DOUBLE_TAP, "double tap");
+        break;
+    case BUTTON_GESTURE_TRIPLE_TAP:
+        notify_button_state(TRIPLE_TAP, "triple tap");
+        break;
+    case BUTTON_GESTURE_LONG_PRESS:
+        // Fixed power-off gesture; intentionally not remappable from the app.
         LOG_PRINTK("long press detected\n");
-        btn_last_event = event;
-
-        // Enter the low power mode
         is_off = true;
         bt_off();
         turnoff_all();
-    }
-
-    // Releases, one time event
-    if (event == BUTTON_EVENT_RELEASE && btn_last_event != BUTTON_EVENT_RELEASE) {
-        LOG_PRINTK("release detected\n");
-        btn_last_event = event;
-        notify_unpress();
-
-        // Reset
-        current_time = 0;
-        btn_press_start_time = 0;
-        btn_release_time = 0;
-        btn_last_tap_time = 0;
-    }
-    if (event == BUTTON_EVENT_RELEASE) {
+        break;
+    case BUTTON_GESTURE_RELEASE:
+        notify_button_state(BUTTON_RELEASE, "released");
         current_button_state = GRACE;
+        break;
+    case BUTTON_GESTURE_NONE:
+        break;
     }
 
     k_work_reschedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
-    return 0;
 }
 
 // @deprecated
@@ -446,7 +317,7 @@ static ssize_t button_data_read_characteristic(struct bt_conn *conn,
                                                uint16_t offset)
 {
     LOG_INF("button_data_read_characteristic");
-    LOG_PRINTK("was_pressed: %d\n", final_button_state[0]);
+    LOG_PRINTK("button state: %d\n", final_button_state[0]);
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &final_button_state, sizeof(final_button_state));
 }
 
@@ -491,6 +362,8 @@ int button_init()
 
     gpio_init_callback(&button_cb_data, button_pressed_callback, BIT(d5_pin_input.pin));
     gpio_add_callback(d5_pin_input.port, &button_cb_data);
+
+    button_gesture_init(&gesture_fsm);
 
     return 0;
 }
