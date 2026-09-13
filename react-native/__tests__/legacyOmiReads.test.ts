@@ -212,6 +212,176 @@ test('old discarded conversations keep GET transcript_segments when more than 20
   expect(result.items[1].title).toBe('Real title');
 });
 
+test('old discarded conversations name GET people names on transcript_segments', async () => {
+  const conversations = [
+    {
+      ...conversation,
+      id: 'discarded-named',
+      discarded: true,
+      structured: {title: '', overview: 'Actual overview'},
+      transcript_segments: [
+        {
+          text: 'Hello from the recording',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 0,
+          end: 2,
+          person_id: 'person-alex',
+        },
+      ],
+    },
+    {
+      ...conversation,
+      id: 'discarded-unresolved',
+      discarded: true,
+      structured: {title: '', overview: 'Actual overview'},
+      transcript_segments: [
+        {
+          text: 'Later speech',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 0,
+          end: 1,
+          person_id: 'person-missing',
+        },
+      ],
+    },
+    {
+      ...conversation,
+      id: 'discarded-empty-person',
+      discarded: true,
+      structured: {title: '', overview: 'Actual overview'},
+      transcript_segments: [
+        {
+          text: 'Anonymous',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 0,
+          end: 1,
+          person_id: null,
+        },
+      ],
+    },
+    {
+      ...conversation,
+      id: 'neighbor',
+    },
+  ];
+  const request = jest.fn(async (input: {path?: string}) => {
+    if (input.path === '/v1/users/people?include_speech_samples=false') {
+      return {
+        id: 'people',
+        status: 200,
+        body: JSON.stringify([
+          {id: 'person-alex', name: 'Alex Chen'},
+          {id: 'person-empty', name: ' \t'},
+        ]),
+      };
+    }
+    return {
+      id: 'read',
+      status: 200,
+      body: JSON.stringify(conversations),
+    };
+  });
+  const api = {
+    request,
+    getApiContract: async () => 'omi' as const,
+  } as unknown as OmiBackend;
+  const result = await loadConversations(api);
+  expect(result.items.map(row => row.id)).toEqual([
+    'discarded-named',
+    'discarded-unresolved',
+    'discarded-empty-person',
+    'neighbor',
+  ]);
+  expect(result.items[0].title).toBe(
+    '[00:00:00 - 00:00:02] Alex Chen: Hello from the recording',
+  );
+  expect(result.items[1].title).toBe(
+    '[00:00:00 - 00:00:01] Speaker 1: Later speech',
+  );
+  expect(result.items[2].title).toBe(
+    '[00:00:00 - 00:00:01] Speaker 1: Anonymous',
+  );
+  expect(result.items[3].title).toBe('Real title');
+});
+
+test('old discarded conversations keep neighboring titles when people names are unavailable', async () => {
+  const conversations = [
+    {
+      ...conversation,
+      id: 'discarded-named',
+      discarded: true,
+      structured: {title: '', overview: 'Actual overview'},
+      transcript_segments: [
+        {
+          text: 'Hello from the recording',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 0,
+          end: 2,
+          person_id: 'person-alex',
+        },
+      ],
+    },
+    {
+      ...conversation,
+      id: 'neighbor',
+    },
+  ];
+  const request = jest.fn(async (input: {path?: string}) => {
+    if (input.path === '/v1/users/people?include_speech_samples=false') {
+      return {id: 'people', status: 500, body: null};
+    }
+    return {
+      id: 'read',
+      status: 200,
+      body: JSON.stringify(conversations),
+    };
+  });
+  const api = {
+    request,
+    getApiContract: async () => 'omi' as const,
+  } as unknown as OmiBackend;
+  const result = await loadConversations(api);
+  expect(result.items.map(row => row.id)).toEqual([
+    'discarded-named',
+    'neighbor',
+  ]);
+  expect(result.items[0].title).toBe(
+    '[00:00:00 - 00:00:02] Speaker 1: Hello from the recording',
+  );
+  expect(result.items[1].title).toBe('Real title');
+});
+
+test('old discarded conversations throw when transcript person_id is present and not a string', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'discarded-person',
+      discarded: true,
+      transcript_segments: [
+        {
+          text: 'Hello from the recording',
+          speaker: 'SPEAKER_00',
+          is_user: false,
+          start: 0,
+          end: 2,
+          person_id: 1,
+        },
+      ],
+    },
+    {
+      ...conversation,
+      id: 'neighbor',
+    },
+  ]);
+  await expect(loadConversations(api)).rejects.toThrow(
+    'Omi text is malformed',
+  );
+});
+
 test('old conversations keep GET timestamps Flutter DateTime.tryParse accepts', async () => {
   const {api} = backend([
     {

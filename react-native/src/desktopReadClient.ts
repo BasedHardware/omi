@@ -3,6 +3,7 @@ import {
   loadOmiMemories,
   loadOmiTasks,
 } from './legacyOmiReads';
+import {loadOmiPeopleNames} from './legacyOmiPeople';
 import {isOptionalCaptureTimestamp} from './captureTimestamp';
 import type {OmiBackend} from './omiNative';
 import {decodeBase64} from './base64';
@@ -113,7 +114,9 @@ export function conversationDiscardedTranscriptCopy(
     isUser?: boolean;
     start?: number | null;
     end?: number | null;
+    personId?: string;
   }[],
+  peopleNames: ReadonlyMap<string, string> = new Map(),
 ): string | null {
   if (segments.length === 0) {
     return null;
@@ -148,14 +151,20 @@ export function conversationDiscardedTranscriptCopy(
       typeof segment.end === 'number'
         ? `[${legacyTranscriptTimestampCopy(segment.start, segment.end)}]`
         : '';
+    const personName =
+      segment.personId === undefined
+        ? undefined
+        : peopleNames.get(segment.personId);
     const speakerName =
       segment.isUser === true
         ? 'User'
-        : `Speaker ${
-            discardedTranscriptSpeakerId(segment.speaker) -
-            (minSpeakerId ?? 0) +
-            1
-          }`;
+        : personName !== undefined && personName !== ''
+          ? personName
+          : `Speaker ${
+              discardedTranscriptSpeakerId(segment.speaker) -
+              (minSpeakerId ?? 0) +
+              1
+            }`;
     transcript += `${timestampStr} ${speakerName}: ${segmentText} \n\n`;
   }
   transcript = transcript.trim();
@@ -2511,6 +2520,7 @@ export async function loadConversations(
     return loadOmiConversations(
       path => read(backend, 'desktop-omi-read', path, 'omi'),
       cursor,
+      () => loadOmiPeopleNames(backend),
     );
   }
   if (cursor !== null && (cursor.length === 0 || cursor.length > 16384)) {

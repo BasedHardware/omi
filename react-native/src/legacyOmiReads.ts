@@ -150,6 +150,7 @@ function discardedTranscriptSegments(value: unknown): {
   isUser: boolean;
   start: number;
   end: number;
+  personId?: string;
 }[] {
   if (value === undefined || value === null) {
     return [];
@@ -159,24 +160,31 @@ function discardedTranscriptSegments(value: unknown): {
   }
   return value.map(raw => {
     const segment = object(raw);
+    const personId =
+      segment.person_id === undefined || segment.person_id === null
+        ? undefined
+        : visibleDisplayText(text(segment.person_id));
     return {
       text: text(segment.text, ''),
       speaker: segment.speaker == null ? 'SPEAKER_00' : text(segment.speaker),
       isUser: bool(segment.is_user),
       start: finiteClock(segment.start),
       end: finiteClock(segment.end),
+      ...(personId === undefined || personId === '' ? {} : {personId}),
     };
   });
 }
 export async function loadOmiConversations(
   read: Read,
   cursor: string | null,
+  loadPeopleNames: () => Promise<ReadonlyMap<string, string>> = async () =>
+    new Map(),
 ): Promise<DomainRead<ConversationProjection>> {
   const start = offset(cursor);
   const records = rows(
     await read(`/v1/conversations?limit=${limit}&offset=${start}`),
   );
-  const items = records.map(row => {
+  const drafts = records.map(row => {
     const structured = object(row.structured);
     const structuredTitle = text(structured.title, ''),
       summary = text(structured.overview, '');
@@ -184,16 +192,6 @@ export async function loadOmiConversations(
     const discardedSegments = discarded
       ? discardedTranscriptSegments(row.transcript_segments)
       : [];
-    const discardedExcerpt = discarded
-      ? conversationDiscardedTranscriptCopy(discardedSegments)
-      : null;
-    const transcriptEndSeconds = discarded
-      ? conversationTranscriptEndSeconds(discardedSegments)
-      : null;
-    const title =
-      discardedExcerpt !== null ? discardedExcerpt : structuredTitle;
-    const emoji = visibleDisplayText(text(structured.emoji, ''));
-    const category = visibleDisplayText(text(structured.category, ''));
     const createdAt = date(row.created_at);
     if (createdAt === null)
       throw new Error('Omi conversation creation time is malformed');
@@ -206,35 +204,83 @@ export async function loadOmiConversations(
     if (!isOptionalCaptureTimestamp(row.captured_at_ms)) {
       throw new Error('Omi captured_at_ms is malformed');
     }
+    const emoji = visibleDisplayText(text(structured.emoji, ''));
+    const category = visibleDisplayText(text(structured.category, ''));
     return {
-      kind: 'conversation' as const,
-      id: id(row.id),
-      title,
+      row,
+      structuredTitle,
       summary,
-      searchableText: `${conversationDisplayTitle({
-        title,
-        status,
-      })}\n${conversationDisplaySummary({summary, status})}`,
-      createdAt,
-      updatedAt: date(row.updated_at),
-      startedAt: date(row.started_at),
-      finishedAt: date(row.finished_at),
-      starred: bool(row.starred),
-      status,
-      source: text(row.source, row.source === null ? 'unknown' : 'omi'),
-      visibility: visibility as ConversationProjection['visibility'],
-      folderId: row.folder_id == null ? null : text(row.folder_id),
-      locked: bool(row.is_locked),
       discarded,
-      ...(emoji === '' ? {} : {emoji}),
-      ...(category === '' ? {} : {category}),
-      ...(photos === 0 ? {} : {photoCount: photos}),
-      ...(row.captured_at_ms === undefined
-        ? {}
-        : {capturedAtMs: row.captured_at_ms}),
-      ...(transcriptEndSeconds === null ? {} : {transcriptEndSeconds}),
+      discardedSegments,
+      createdAt,
+      visibility,
+      status,
+      photos,
+      emoji,
+      category,
     };
   });
+  const needsPeople = drafts.some(({discardedSegments}) =>
+    discardedSegments.some(segment => segment.personId !== undefined),
+  );
+  const peopleNames = needsPeople
+    ? await loadPeopleNames().then(
+        value => value,
+        () => new Map<string, string>(),
+      )
+    : new Map<string, string>();
+  const items = drafts.map(
+    ({
+      row,
+      structuredTitle,
+      summary,
+      discarded,
+      discardedSegments,
+      createdAt,
+      visibility,
+      status,
+      photos,
+      emoji,
+      category,
+    }) => {
+      const discardedExcerpt = discarded
+        ? conversationDiscardedTranscriptCopy(discardedSegments, peopleNames)
+        : null;
+      const transcriptEndSeconds = discarded
+        ? conversationTranscriptEndSeconds(discardedSegments)
+        : null;
+      const title =
+        discardedExcerpt !== null ? discardedExcerpt : structuredTitle;
+      return {
+        kind: 'conversation' as const,
+        id: id(row.id),
+        title,
+        summary,
+        searchableText: `${conversationDisplayTitle({
+          title,
+          status,
+        })}\n${conversationDisplaySummary({summary, status})}`,
+        createdAt,
+        updatedAt: date(row.updated_at),
+        startedAt: date(row.started_at),
+        finishedAt: date(row.finished_at),
+        starred: bool(row.starred),
+        status,
+        source: text(row.source, row.source === null ? 'unknown' : 'omi'),
+        visibility: visibility as ConversationProjection['visibility'],
+        folderId: row.folder_id == null ? null : text(row.folder_id),
+        locked: bool(row.is_locked),
+        discarded,
+        ...(emoji === '' ? {} : {emoji}),
+        ...(category === '' ? {} : {category}),
+        ...(photos === 0 ? {} : {photoCount: photos}),
+        ...(row.captured_at_ms === undefined
+          ? {}
+          : {capturedAtMs: row.captured_at_ms}),
+        ...(transcriptEndSeconds === null ? {} : {transcriptEndSeconds}),
+      };
+    },
+  );
   return {apiContract: 'omi', items, page: page(start, items.length)};
 }
 export async function loadOmiMemories(

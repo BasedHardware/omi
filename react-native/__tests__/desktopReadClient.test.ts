@@ -830,7 +830,7 @@ test('compact recaps keep list overview speech when GET title is empty', () => {
   ).toBe(false);
 });
 
-test('discarded conversation titles use Flutter transcript excerpt without people names', () => {
+test('discarded conversation titles use Flutter transcript excerpt and people names', () => {
   expect(
     conversationDiscardedTranscriptCopy([
       {
@@ -890,10 +890,40 @@ test('discarded conversation titles use Flutter transcript excerpt without peopl
         isUser: false,
         start: 0,
         end: 1,
-        personId: 'person-1',
+        personId: 'person-alex',
       },
     ]),
   ).toBe('[00:00:00 - 00:00:01] Speaker 1: Named');
+  expect(
+    conversationDiscardedTranscriptCopy(
+      [
+        {
+          text: 'Named',
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          start: 0,
+          end: 1,
+          personId: 'person-alex',
+        },
+      ],
+      new Map([['person-alex', 'Alex Chen']]),
+    ),
+  ).toBe('[00:00:00 - 00:00:01] Alex Chen: Named');
+  expect(
+    conversationDiscardedTranscriptCopy(
+      [
+        {
+          text: 'Mine',
+          speaker: 'SPEAKER_00',
+          isUser: true,
+          start: 0,
+          end: 1,
+          personId: 'person-alex',
+        },
+      ],
+      new Map([['person-alex', 'Alex Chen']]),
+    ),
+  ).toBe('[00:00:00 - 00:00:01] User: Mine');
   expect(
     conversationDiscardedTranscriptCopy([
       {text: 'a'.repeat(90), isUser: true, start: 0, end: 2},
