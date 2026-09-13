@@ -3532,5 +3532,6 @@
     "secondDevice": "2台目のデバイス",
     "pairSecondDevice": "2台目のデバイスをペアリング",
     "pairSecondDeviceDescription": "Omi と一緒に OmiGlass を接続すると、写真と音声が同じ会話にまとまります。",
-    "forgetSecondDevice": "2台目のデバイスを忘れる"
+    "forgetSecondDevice": "2台目のデバイスを忘れる",
+    "processingTakingLonger": "まだ処理中です。通常より時間がかかっています。"
 }

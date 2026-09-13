@@ -3567,5 +3567,6 @@
     "secondDevice": "Perangkat kedua",
     "pairSecondDevice": "Pasangkan perangkat kedua",
     "pairSecondDeviceDescription": "Sambungkan OmiGlass bersama Omi Anda agar foto dan audio masuk ke percakapan yang sama.",
-    "forgetSecondDevice": "Lupakan perangkat kedua"
+    "forgetSecondDevice": "Lupakan perangkat kedua",
+    "processingTakingLonger": "Masih diproses — ini memakan waktu lebih lama dari biasanya."
 }

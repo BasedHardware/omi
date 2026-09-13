@@ -34,10 +34,7 @@ class OmiFeatures {
 abstract class IDeviceServiceSubsciption {
   void onDevices(List<BtDevice> devices);
   void onStatusChanged(DeviceServiceStatus status);
-  void onDeviceConnectionStateChanged(
-    String deviceId,
-    DeviceConnectionState state,
-  );
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state);
 }
 
 typedef DeviceConnectionFactoryFn = DeviceConnection? Function(BtDevice device);
@@ -167,16 +164,12 @@ class DeviceService {
     await _disposeConnectionUnlocked(id);
 
     var device = _devices.firstWhereOrNull((f) => f.id == id);
-    Logger.debug(
-      '[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})',
-    );
+    Logger.debug('[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})');
 
     // If device not in discovered list, try to get it from SharedPreferences
     // This allows background reconnection without scanning
     if (device == null) {
-      Logger.debug(
-        '[DeviceService] Device not in discovered list, checking stored device',
-      );
+      Logger.debug('[DeviceService] Device not in discovered list, checking stored device');
       device = _getStoredDevice(id);
       if (device != null) {
         Logger.debug('[DeviceService] Using stored device: ${device.name}');
@@ -184,24 +177,18 @@ class DeviceService {
           _devices.add(device);
         }
       } else {
-        Logger.debug(
-          '[DeviceService] No stored device available for $id, returning',
-        );
+        Logger.debug('[DeviceService] No stored device available for $id, returning');
         return;
       }
     }
 
     final connection = _connectionFactory(device);
     if (connection == null) {
-      Logger.debug(
-        '[DeviceService] Failed to create device connection for ${device.id}',
-      );
+      Logger.debug('[DeviceService] Failed to create device connection for ${device.id}');
       return;
     }
     _connections[id] = connection;
-    await connection.connect(
-      onConnectionStateChanged: onDeviceConnectionStateChanged,
-    );
+    await connection.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
   }
 
   Future<void> _disposeConnectionUnlocked(String id) async {
@@ -281,15 +268,9 @@ class DeviceService {
     }
   }
 
-  void onDeviceConnectionStateChanged(
-    String deviceId,
-    DeviceConnectionState state,
-  ) {
+  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
     Logger.debug("device connection state changed...$deviceId...$state");
-    DebugLogManager.logEvent('device_connection_state', {
-      'device_id': deviceId,
-      'state': state.name,
-    });
+    DebugLogManager.logEvent('device_connection_state', {'device_id': deviceId, 'state': state.name});
     for (var s in _subscriptions.values) {
       s.onDeviceConnectionStateChanged(deviceId, state);
     }
@@ -305,17 +286,12 @@ class DeviceService {
   /// timeout) must not hold up the glasses sitting next to the phone.
   final Map<String, Mutex> _connectionMutexes = {};
 
-  Future<DeviceConnection?> ensureConnection(
-    String deviceId, {
-    bool force = false,
-  }) async {
+  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
     final mutex = _connectionMutexes.putIfAbsent(deviceId, Mutex.new);
     await mutex.acquire();
     try {
       final existing = _connections[deviceId];
-      Logger.debug(
-        "ensureConnection $deviceId ${existing?.status} $force",
-      );
+      Logger.debug("ensureConnection $deviceId ${existing?.status} $force");
 
       if (_staleBondRecoveryRequired) {
         Logger.debug('ensureConnection blocked: stale iOS BLE bond recovery required');

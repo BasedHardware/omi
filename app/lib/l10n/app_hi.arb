@@ -3532,5 +3532,6 @@
     "secondDevice": "दूसरा डिवाइस",
     "pairSecondDevice": "दूसरा डिवाइस पेयर करें",
     "pairSecondDeviceDescription": "अपने Omi के साथ OmiGlass कनेक्ट करें ताकि फ़ोटो और ऑडियो एक ही बातचीत में जाएँ।",
-    "forgetSecondDevice": "दूसरा डिवाइस भूल जाएँ"
+    "forgetSecondDevice": "दूसरा डिवाइस भूल जाएँ",
+    "processingTakingLonger": "अभी भी काम हो रहा है — इसमें सामान्य से ज़्यादा समय लग रहा है।"
 }

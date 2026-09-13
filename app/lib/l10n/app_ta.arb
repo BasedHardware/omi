@@ -11104,5 +11104,6 @@
     "secondDevice": "இரண்டாவது சாதனம்",
     "pairSecondDevice": "இரண்டாவது சாதனத்தை இணைக்கவும்",
     "pairSecondDeviceDescription": "புகைப்படங்களும் ஒலியும் ஒரே உரையாடலுக்குச் செல்ல, உங்கள் Omi உடன் OmiGlass ஐ இணைக்கவும்.",
-    "forgetSecondDevice": "இரண்டாவது சாதனத்தை மறக்கவும்"
+    "forgetSecondDevice": "இரண்டாவது சாதனத்தை மறக்கவும்",
+    "processingTakingLonger": "இன்னும் செயல்படுகிறது — இது வழக்கத்தை விட அதிக நேரம் எடுக்கிறது."
 }
