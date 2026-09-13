@@ -15,6 +15,20 @@ import 'package:omi/services/devices/transports/device_transport.dart';
 /// In-memory transport: `connect()` flips to connected, `disconnect()` to
 /// disconnected, and every step is recorded so a test can prove one device's
 /// lifecycle never touched another's.
+class _SlowFakeTransport extends _FakeTransport {
+  _SlowFakeTransport(String deviceId, this._gate) : super(deviceId);
+
+  final Completer<void> _gate;
+  final connectEntered = Completer<void>();
+
+  @override
+  Future<void> connect() async {
+    if (!connectEntered.isCompleted) connectEntered.complete();
+    await _gate.future;
+    return super.connect();
+  }
+}
+
 class _FakeTransport extends DeviceTransport {
   _FakeTransport(this._deviceId);
 
@@ -63,6 +77,7 @@ class _FakeTransport extends DeviceTransport {
   @override
   Future<void> dispose() async {
     disposeCalls++;
+    await _states.close();
   }
 }
 
@@ -188,6 +203,23 @@ void main() {
 
     expect(glass, isNotNull);
     expect(glass!.device.type, DeviceType.openglass);
+  });
+
+  test('forgetDevice waits for an in-flight forced ensureConnection on the same device', () async {
+    SharedPreferencesUtil().btDevice = _device('omi-1');
+    final gate = Completer<void>();
+    final slowTransport = _SlowFakeTransport('omi-1', gate);
+    transports['omi-1'] = slowTransport;
+
+    final ensureFuture = service.ensureConnection('omi-1', force: true);
+    await slowTransport.connectEntered.future;
+    final forgetFuture = service.forgetDevice('omi-1');
+    gate.complete();
+    await ensureFuture;
+    await forgetFuture;
+
+    expect(slowTransport.disposeCalls, 1);
+    expect(service.connectionFor('omi-1'), isNull);
   });
 
   test('disconnectDevice keeps the connection tracked for a later forced reconnect', () async {
