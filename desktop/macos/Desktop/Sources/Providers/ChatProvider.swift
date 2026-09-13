@@ -1281,7 +1281,7 @@ class ChatProvider: ObservableObject {
     let harness = resolvedHarnessMode()
     activeBridgeHarness = harness
     activeBridgeMode =
-      UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.piMono.rawValue
+      UserDefaults.standard.string(forKey: .chatBridgeMode) ?? BridgeMode.piMono.rawValue
     let session = AgentClient.makeSession(harnessMode: harness)
     agentClient = session
     return session

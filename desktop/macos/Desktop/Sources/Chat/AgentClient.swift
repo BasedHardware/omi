@@ -675,7 +675,7 @@ enum AgentClient {
         throw BridgeError.agentError("Unknown AI runtime mode: \(harnessMode)")
       }
       let persistedChatBridgeMode =
-        UserDefaults.standard.string(forKey: "chatBridgeMode")
+        UserDefaults.standard.string(forKey: .chatBridgeMode)
         ?? ChatProvider.BridgeMode.piMono.rawValue
       let creationProfile = AgentSessionCreationProfile(
         adapterId: requestedAdapter,
