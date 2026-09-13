@@ -9986,4 +9986,33 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get speechProfileEnrollmentPrompt =>
       'برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید.';
+
+  @override
+  String get renameDevice => 'تغییر نام دستگاه';
+
+  @override
+  String get renameDeviceDescription =>
+      'نام روی خودِ Omi ذخیره می‌شود، بنابراین در هر گوشی‌ای که با آن جفت کنید نمایش داده می‌شود.';
+
+  @override
+  String get tapToRename => 'برای تغییر نام ضربه بزنید';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'نام دستگاه نمی‌تواند خالی باشد';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'نام خیلی طولانی است (حداکثر $maxBytes نویسه؛ ایموجی و اعراب بیشتر حساب می‌شوند)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'نام شامل نویسه‌های پشتیبانی‌نشده است';
+
+  @override
+  String get deviceRenameFailed => 'ذخیره نام روی Omi ممکن نشد. مطمئن شوید متصل است و دوباره تلاش کنید.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'نام دستگاه به $name تغییر یافت';
+  }
 }

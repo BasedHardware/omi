@@ -10824,5 +10824,13 @@
     "memoryHistoryPartial": "Дел од историјата на сеќавањата не е достапен. Се прикажува досега примената историја.",
     "tapPlusToStartRecording": "Допрете + за да започнете со снимање",
     "processingTakingLonger": "Сè уште се обработува — ова трае подолго од вообичаеното.",
-    "speechProfileEnrollmentPrompt": "За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди."
+    "speechProfileEnrollmentPrompt": "За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди.",
+    "renameDevice": "Преименувај го уредот",
+    "renameDeviceDescription": "Името се чува на самиот Omi, па се прикажува на секој телефон со кој ќе го спарите.",
+    "tapToRename": "Допрете за преименување",
+    "deviceNameCannotBeEmpty": "Името на уредот не може да биде празно",
+    "deviceNameTooLong": "Името е предолго (до {maxBytes} знаци; емоџи и акценти се бројат повеќе)",
+    "deviceNameInvalidCharacters": "Името содржи неподдржани знаци",
+    "deviceRenameFailed": "Името не можеше да се зачува на Omi. Проверете дали е поврзан и обидете се повторно.",
+    "deviceRenamed": "Уредот е преименуван во {name}"
 }

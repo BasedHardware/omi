@@ -3258,5 +3258,13 @@
     "memoryHistoryPartial": "En del av minneshistoriken är inte tillgänglig. Visar historiken som har tagits emot hittills.",
     "tapPlusToStartRecording": "Tryck på + för att börja spela in",
     "processingTakingLonger": "Fortfarande igång — det tar längre tid än vanligt.",
-    "speechProfileEnrollmentPrompt": "Så att Omi vet vilken röst som är din — prata om vad som helst i ungefär 5 sekunder."
+    "speechProfileEnrollmentPrompt": "Så att Omi vet vilken röst som är din — prata om vad som helst i ungefär 5 sekunder.",
+    "renameDevice": "Byt namn på enheten",
+    "renameDeviceDescription": "Namnet sparas på själva Omi-enheten, så det visas på alla telefoner du parkopplar den med.",
+    "tapToRename": "Tryck för att byta namn",
+    "deviceNameCannotBeEmpty": "Enhetsnamnet får inte vara tomt",
+    "deviceNameTooLong": "Namnet är för långt (upp till {maxBytes} tecken; emoji och accenter räknas extra)",
+    "deviceNameInvalidCharacters": "Namnet innehåller tecken som inte stöds",
+    "deviceRenameFailed": "Namnet kunde inte sparas på din Omi. Kontrollera att den är ansluten och försök igen.",
+    "deviceRenamed": "Enheten har fått namnet {name}"
 }

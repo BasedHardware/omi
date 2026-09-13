@@ -3234,5 +3234,13 @@
     "memoryHistoryPartial": "記憶の履歴の一部を取得できません。これまでに取得した履歴を表示しています。",
     "tapPlusToStartRecording": "＋をタップして録音を開始",
     "processingTakingLonger": "まだ処理中です。通常より時間がかかっています。",
-    "speechProfileEnrollmentPrompt": "Omiがあなたの声を識別できるように、好きなことを5秒ほど話してください。"
+    "speechProfileEnrollmentPrompt": "Omiがあなたの声を識別できるように、好きなことを5秒ほど話してください。",
+    "renameDevice": "デバイス名を変更",
+    "renameDeviceDescription": "名前はOmi本体に保存されるため、ペアリングしたどのスマートフォンでも表示されます。",
+    "tapToRename": "タップして名前を変更",
+    "deviceNameCannotBeEmpty": "デバイス名を空にすることはできません",
+    "deviceNameTooLong": "名前が長すぎます（最大{maxBytes}文字。絵文字や日本語などは複数文字分としてカウントされます）",
+    "deviceNameInvalidCharacters": "名前にサポートされていない文字が含まれています",
+    "deviceRenameFailed": "Omiに名前を保存できませんでした。接続されていることを確認して、もう一度お試しください。",
+    "deviceRenamed": "デバイス名を{name}に変更しました"
 }

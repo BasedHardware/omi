@@ -211,6 +211,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       }
       var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
       pairedDevice = await connectedDevice?.getDeviceInfo(connection);
+      // getDeviceInfo may have read a name persisted on the device (renamed
+      // from this or another phone); keep the live record and prefs in step.
+      final storedName = pairedDevice?.name ?? '';
+      if (storedName.isNotEmpty && connectedDevice != null && connectedDevice!.name != storedName) {
+        connectedDevice!.name = storedName;
+        SharedPreferencesUtil().deviceName = storedName;
+      }
       SharedPreferencesUtil().btDevice = pairedDevice!;
     } else {
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
@@ -220,6 +227,29 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       }
     }
     notifyListeners();
+  }
+
+  /// Stores [name] on the connected Omi and, only once the device confirms
+  /// it, updates the in-memory records and the paired-device preference so
+  /// the new name shows immediately and survives the next reconnect.
+  Future<bool> renameConnectedDevice(String name) async {
+    final device = connectedDevice;
+    if (!isConnected || device == null) return false;
+
+    final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+    if (connection == null) return false;
+
+    final renamed = await connection.setDeviceName(name);
+    if (!renamed) return false;
+
+    device.name = name;
+    pairedDevice?.name = name;
+    if (pairedDevice != null) {
+      SharedPreferencesUtil().btDevice = pairedDevice!;
+    }
+    SharedPreferencesUtil().deviceName = name;
+    notifyListeners();
+    return true;
   }
 
   Future<bool> findDevice() {

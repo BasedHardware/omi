@@ -3235,5 +3235,13 @@
     "memoryHistoryPartial": "Ein Teil des Erinnerungsverlaufs ist nicht verfügbar. Der bisher empfangene Verlauf wird angezeigt.",
     "tapPlusToStartRecording": "Tippe auf +, um die Aufnahme zu starten",
     "processingTakingLonger": "Arbeitet noch — das dauert länger als üblich.",
-    "speechProfileEnrollmentPrompt": "Damit Omi weiß, welche Stimme deine ist — sprich etwa 5 Sekunden über irgendetwas."
+    "speechProfileEnrollmentPrompt": "Damit Omi weiß, welche Stimme deine ist — sprich etwa 5 Sekunden über irgendetwas.",
+    "renameDevice": "Gerät umbenennen",
+    "renameDeviceDescription": "Der Name wird auf deinem Omi gespeichert und erscheint daher auf jedem Telefon, mit dem du es koppelst.",
+    "tapToRename": "Zum Umbenennen tippen",
+    "deviceNameCannotBeEmpty": "Der Gerätename darf nicht leer sein",
+    "deviceNameTooLong": "Name ist zu lang (bis zu {maxBytes} Zeichen; Emojis und Akzente zählen mehr)",
+    "deviceNameInvalidCharacters": "Der Name enthält nicht unterstützte Zeichen",
+    "deviceRenameFailed": "Der Name konnte nicht auf deinem Omi gespeichert werden. Prüfe, ob es verbunden ist, und versuche es erneut.",
+    "deviceRenamed": "Gerät umbenannt in {name}"
 }

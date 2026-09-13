@@ -3258,5 +3258,13 @@
     "memoryHistoryPartial": "Osa muistojen historiasta ei ole saatavilla. Näytetään tähän mennessä saatu historia.",
     "tapPlusToStartRecording": "Aloita tallennus napauttamalla +",
     "processingTakingLonger": "Vielä käynnissä — tämä kestää tavallista kauemmin.",
-    "speechProfileEnrollmentPrompt": "Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia."
+    "speechProfileEnrollmentPrompt": "Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia.",
+    "renameDevice": "Nimeä laite uudelleen",
+    "renameDeviceDescription": "Nimi tallennetaan itse Omiin, joten se näkyy jokaisessa puhelimessa, johon sen yhdistät.",
+    "tapToRename": "Napauta nimetäksesi uudelleen",
+    "deviceNameCannotBeEmpty": "Laitteen nimi ei voi olla tyhjä",
+    "deviceNameTooLong": "Nimi on liian pitkä (enintään {maxBytes} merkkiä; emojit ja ääkköset vievät enemmän)",
+    "deviceNameInvalidCharacters": "Nimi sisältää merkkejä, joita ei tueta",
+    "deviceRenameFailed": "Nimeä ei voitu tallentaa Omiin. Tarkista, että se on yhdistetty, ja yritä uudelleen.",
+    "deviceRenamed": "Laite nimettiin uudelleen: {name}"
 }

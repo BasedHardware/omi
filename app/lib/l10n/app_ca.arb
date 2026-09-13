@@ -3236,5 +3236,13 @@
     "memoryHistoryPartial": "Una part de l'historial de records no està disponible. Es mostra l'historial rebut fins ara.",
     "tapPlusToStartRecording": "Toca + per començar a gravar",
     "processingTakingLonger": "Encara en curs: això està trigant més del normal.",
-    "speechProfileEnrollmentPrompt": "Perquè Omi sàpiga quina veu és la teva — parla de qualsevol cosa durant uns 5 segons."
+    "speechProfileEnrollmentPrompt": "Perquè Omi sàpiga quina veu és la teva — parla de qualsevol cosa durant uns 5 segons.",
+    "renameDevice": "Canvia el nom del dispositiu",
+    "renameDeviceDescription": "El nom es desa al mateix Omi, així que apareix a qualsevol telèfon amb què l'emparellis.",
+    "tapToRename": "Toca per canviar el nom",
+    "deviceNameCannotBeEmpty": "El nom del dispositiu no pot estar buit",
+    "deviceNameTooLong": "El nom és massa llarg (fins a {maxBytes} caràcters; els emojis i els accents compten més)",
+    "deviceNameInvalidCharacters": "El nom conté caràcters no compatibles",
+    "deviceRenameFailed": "No s'ha pogut desar el nom a l'Omi. Comprova que estigui connectat i torna-ho a provar.",
+    "deviceRenamed": "Dispositiu reanomenat a {name}"
 }

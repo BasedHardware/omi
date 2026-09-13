@@ -424,6 +424,7 @@ class BtDevice {
     var hardwareRevision = 'Seeed Xiao BLE Sense';
     var manufacturerName = 'Based Hardware';
     String? serialNumber;
+    String? deviceName;
     var t = DeviceType.omi;
 
     try {
@@ -449,6 +450,7 @@ class BtDevice {
         hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
         manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
         serialNumber = deviceInfo['serialNumber'];
+        deviceName = deviceInfo['deviceName'];
       }
     } on PlatformException catch (e) {
       Logger.error('Device Disconnected while getting device info: $e');
@@ -457,6 +459,8 @@ class BtDevice {
     }
 
     return copyWith(
+      // The name stored on the device wins over whatever this phone last saw.
+      name: deviceName,
       modelNumber: modelNumber,
       firmwareRevision: firmwareRevision,
       hardwareRevision: hardwareRevision,

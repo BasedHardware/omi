@@ -9905,4 +9905,32 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => 'כדי ש-Omi יידע איזה קול הוא שלך — יש לדבר על כל נושא במשך כ-5 שניות.';
+
+  @override
+  String get renameDevice => 'שינוי שם המכשיר';
+
+  @override
+  String get renameDeviceDescription => 'השם נשמר על ה-Omi עצמו, ולכן יופיע בכל טלפון שתצמידו אליו.';
+
+  @override
+  String get tapToRename => 'הקישו לשינוי השם';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'שם המכשיר לא יכול להיות ריק';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'השם ארוך מדי (עד $maxBytes תווים; אמוג\'י וניקוד נספרים יותר)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'השם מכיל תווים שאינם נתמכים';
+
+  @override
+  String get deviceRenameFailed => 'לא ניתן היה לשמור את השם על ה-Omi. ודאו שהוא מחובר ונסו שוב.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'שם המכשיר שונה ל-$name';
+  }
 }

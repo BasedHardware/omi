@@ -3258,5 +3258,13 @@
     "memoryHistoryPartial": "Deler av minnehistorikken er ikke tilgjengelig. Viser historikken som er mottatt så langt.",
     "tapPlusToStartRecording": "Trykk på + for å starte opptaket",
     "processingTakingLonger": "Jobber fortsatt — dette tar lengre tid enn vanlig.",
-    "speechProfileEnrollmentPrompt": "Så Omi vet hvilken stemme som er din — snakk om hva som helst i omtrent 5 sekunder."
+    "speechProfileEnrollmentPrompt": "Så Omi vet hvilken stemme som er din — snakk om hva som helst i omtrent 5 sekunder.",
+    "renameDevice": "Gi enheten nytt navn",
+    "renameDeviceDescription": "Navnet lagres på selve Omi-enheten, så det vises på alle telefoner du parer den med.",
+    "tapToRename": "Trykk for å gi nytt navn",
+    "deviceNameCannotBeEmpty": "Enhetsnavnet kan ikke være tomt",
+    "deviceNameTooLong": "Navnet er for langt (opptil {maxBytes} tegn; emoji og aksenter teller ekstra)",
+    "deviceNameInvalidCharacters": "Navnet inneholder tegn som ikke støttes",
+    "deviceRenameFailed": "Kunne ikke lagre navnet på Omi-enheten. Sjekk at den er tilkoblet, og prøv igjen.",
+    "deviceRenamed": "Enheten har fått navnet {name}"
 }

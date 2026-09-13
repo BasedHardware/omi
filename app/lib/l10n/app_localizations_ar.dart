@@ -9926,4 +9926,32 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get speechProfileEnrollmentPrompt => 'لكي يعرف Omi أي صوت هو صوتك — تحدث عن أي شيء لمدة 5 ثوانٍ تقريبًا.';
+
+  @override
+  String get renameDevice => 'إعادة تسمية الجهاز';
+
+  @override
+  String get renameDeviceDescription => 'يُحفظ الاسم على جهاز Omi نفسه، لذا يظهر على أي هاتف تقرنه به.';
+
+  @override
+  String get tapToRename => 'انقر لإعادة التسمية';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'لا يمكن أن يكون اسم الجهاز فارغًا';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'الاسم طويل جدًا (حتى $maxBytes حرفًا؛ الرموز التعبيرية وعلامات التشكيل تُحسب أكثر)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'يحتوي الاسم على أحرف غير مدعومة';
+
+  @override
+  String get deviceRenameFailed => 'تعذّر حفظ الاسم على جهاز Omi. تأكد من أنه متصل وحاول مرة أخرى.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'تمت إعادة تسمية الجهاز إلى $name';
+  }
 }
