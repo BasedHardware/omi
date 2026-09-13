@@ -27,6 +27,7 @@ export type LegacyConversationDetail = {
     attendees: string[];
     startCopy?: string;
     endCopy?: string;
+    htmlLink?: string;
   };
   photoCount?: number;
   photoCaptions?: string[];
@@ -204,6 +205,7 @@ function calendarEvent(
     const name = visibleDisplayText(text(raw));
     return name === '' ? [] : [name];
   });
+  const htmlLink = visibleDisplayText(omittedText(event.html_link));
   if (
     title === '' &&
     attendees.length === 0 &&
@@ -217,6 +219,7 @@ function calendarEvent(
     attendees,
     ...(startCopy === '' ? {} : {startCopy}),
     ...(endCopy === '' ? {} : {endCopy}),
+    ...(htmlLink === '' ? {} : {htmlLink}),
   };
 }
 function segmentTranslations(value: unknown): string[] | undefined {

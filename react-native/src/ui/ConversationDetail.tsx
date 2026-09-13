@@ -344,6 +344,9 @@ function LegacyConversationBody({
       : calendarStart !== ''
       ? calendarStart
       : calendarEnd;
+  const calendarHtmlLink = visibleDisplayText(
+    detail.calendarEvent?.htmlLink ?? '',
+  );
   const folderName = visibleDisplayText(detail.folderName ?? '');
   const folderColor = visibleDisplayText(detail.folderColor ?? '');
   const externalText = visibleDisplayText(detail.externalText ?? '');
@@ -424,6 +427,11 @@ function LegacyConversationBody({
       {calendarAttendees === '' ? null : (
         <Text style={[styles.conversationDetailField, ink]}>
           {calendarAttendees}
+        </Text>
+      )}
+      {calendarHtmlLink === '' ? null : (
+        <Text style={[styles.conversationDetailField, ink]}>
+          Open in Google Calendar
         </Text>
       )}
       {detail.photoCount !== undefined && detail.photoCount > 0 ? (

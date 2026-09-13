@@ -226,6 +226,83 @@ test('keeps GET calendar event title and attendees and omits missing events', as
   ).toBeUndefined();
 });
 
+test('keeps GET calendar event html_link and omits empty links', async () => {
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-link',
+        title: 'Standup',
+        attendees: [],
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+        html_link: 'https://calendar.google.com/calendar/event?eid=standup',
+      },
+    }),
+  );
+  const linked = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(linked.title).toBe(fixture.structured.title);
+  expect(linked.calendarEvent).toMatchObject({
+    title: 'Standup',
+    htmlLink: 'https://calendar.google.com/calendar/event?eid=standup',
+  });
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-empty-link',
+        title: 'Standup',
+        attendees: [],
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+        html_link: ' \t',
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).calendarEvent,
+  ).not.toHaveProperty('htmlLink');
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-null-link',
+        title: 'Standup',
+        attendees: [],
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+        html_link: null,
+      },
+    }),
+  );
+  expect(
+    (await loadLegacyConversationDetail(backend, fixture.id)).calendarEvent,
+  ).not.toHaveProperty('htmlLink');
+});
+
+test('keeps GET calendar event when html_link exceeds 10000', async () => {
+  const htmlLink = `https://calendar.google.com/calendar/event?eid=${'a'.repeat(
+    10000,
+  )}`;
+  expect(htmlLink.length).toBeGreaterThan(10000);
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-long-link',
+        title: 'Standup',
+        attendees: [],
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+        html_link: htmlLink,
+      },
+    }),
+  );
+  const loaded = await loadLegacyConversationDetail(backend, fixture.id);
+  expect(loaded.title).toBe(fixture.structured.title);
+  expect(loaded.calendarEvent?.htmlLink).toBe(htmlLink);
+});
+
 test('keeps GET calendar event attendees when more than 1000', async () => {
   const attendees = Array.from({length: 1001}, (_, index) => `Person ${index}`);
   mockRequest.mockResolvedValue(
@@ -850,6 +927,22 @@ test('fails closed for malformed GET calendar_event', async () => {
         attendees: 'Alex',
         start_time: '2026-09-10T15:00:00.000Z',
         end_time: '2026-09-10T16:00:00.000Z',
+      },
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: 'evt-1',
+        title: 'Standup',
+        attendees: [],
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+        html_link: 1,
       },
     }),
   );
