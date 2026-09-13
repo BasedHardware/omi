@@ -793,9 +793,9 @@ checks:
     reason: "desktop Swift production or test structure changed"
   - id: desktop-chat-selection-boundary
     command: ["python3", ".github/scripts/check_chat_selection_boundary.py"]
-    triggers: ["desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift", "desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift", "desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift", ".github/scripts/check_chat_selection_boundary.py", ".github/failure-classes/FC-selection-overlay-layout-loop.json", ".github/checks-manifest.yaml"]
+    triggers: ["desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift", "desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift", "desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift", "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift", "desktop/macos/Desktop/Sources/MainWindow/Components/ConversationSummarySections.swift", ".github/scripts/check_chat_selection_boundary.py", ".github/failure-classes/FC-selection-overlay-layout-loop.json", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "PR #10834 reopened FC-selection-overlay-layout-loop in Omi Beta 0.12.146; SwiftUI has no type-level way to exclude SelectionOverlay from the live transcript, so this narrow boundary protects the three authoritative render files"
+    reason: "PR #10834 reopened FC-selection-overlay-layout-loop in Omi Beta 0.12.146; SwiftUI has no type-level way to exclude SelectionOverlay from the live transcript, so this narrow boundary protects the authoritative render files — the conversation-detail summary pane joined the class when its markdown gained a SwiftUI selection ancestor that re-laid-out the summary mid-scroll"
   - id: desktop-chat-selection-boundary-fixtures
     command: ["python3", ".github/scripts/test_check_chat_selection_boundary.py"]
     triggers: [".github/scripts/check_chat_selection_boundary.py", ".github/scripts/test_check_chat_selection_boundary.py", ".github/checks-manifest.yaml"]

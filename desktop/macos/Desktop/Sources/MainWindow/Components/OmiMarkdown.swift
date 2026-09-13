@@ -62,12 +62,12 @@ struct OmiMarkdown: View {
     self.appKitProseSelection = appKitProseSelection
   }
 
-  init(text: String, style: Style) {
+  init(text: String, style: Style, appKitProseSelection: Bool = false) {
     self.text = Self.renderableText(text, style: style)
     self.style = style
     self.citations = []
     self.onOpenCitation = nil
-    self.appKitProseSelection = false
+    self.appKitProseSelection = appKitProseSelection
   }
 
   /// Assistant text may open with an Interject classification token; it is
@@ -79,8 +79,8 @@ struct OmiMarkdown: View {
 
   var body: some View {
     Group {
-      if citations.isEmpty && !appKitProseSelection {
-        OmiMarkdownContent(text: text, style: style, fontScale: fontScale)
+      if citations.isEmpty && onOpenCitation == nil {
+        OmiMarkdownContent(text: text, style: style, fontScale: fontScale, appKitProseSelection: appKitProseSelection)
           .equatable()
       } else {
         OmiMarkdownContent(
@@ -106,7 +106,7 @@ struct OmiMarkdown: View {
 /// Keeps parent-only UI feedback (copy checkmarks, hover chrome, ratings) from
 /// rebuilding unchanged message content. Combined with the selection-free
 /// render boundary above, this prevents AppKit font invalidations from
-/// re-entering AttributeGraph while the transcript changes.
+/// re-entering AttributeGraph while the transcript changes. The AppKit prose path joins this island (citations opt out).
 struct OmiMarkdownContent: View, Equatable {
   let text: String
   let style: OmiMarkdown.Style

@@ -17,6 +17,13 @@ selection through `ChatSelectableProse` — one `NSTextView` per prose block,
 which *is* its own selection and installs no per-`Text` overlay for a parent
 rebuild to thrash. That file is protected here too, so the AppKit path can
 never quietly acquire the SwiftUI one.
+
+The conversation-detail summary pane joined the same failure class when its
+markdown gained a SwiftUI `.textSelection(.enabled)` ancestor: the pane hosts
+the tallest attributed block in the app, and a background list refresh or
+app-catalog load re-rendering that ancestor re-laid-out the visible summary
+2–3 times while the reader scrolled. Those files are protected below by a
+narrower rule.
 """
 
 from __future__ import annotations
@@ -35,6 +42,40 @@ LIVE_TRANSCRIPT_FILES = (
 )
 MARKDOWN_FILE = LIVE_TRANSCRIPT_FILES[2]
 SELECTION_FILE = LIVE_TRANSCRIPT_FILES[3]
+
+# The conversation-detail summary is the same failure class on a new host. It
+# renders the tallest markdown in the app, and an ancestor `.textSelection(
+# .enabled)` chained onto `OmiMarkdown` installs SelectionOverlay on exactly
+# that block. Short plain `Text` (section headings, action-item rows) keeps
+# SwiftUI selection — a single-line Text has a stable intrinsic size and is
+# not the failure class — so the rule below is deliberately narrower than the
+# transcript's: it forbids the modifier only where it chains onto `OmiMarkdown`.
+CONVERSATION_DETAIL_FILES = (
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift",
+    "desktop/macos/Desktop/Sources/MainWindow/Components/ConversationSummarySections.swift",
+)
+
+# Line numbers (1-based) where `.textSelection(.enabled)` chains onto an
+# `OmiMarkdown(...)` call: the modifier sits on the same line as the call, or
+# on a chain of modifier lines (first non-whitespace character `.`) directly
+# below it. Deliberately a line heuristic rather than a paren parser: it never
+# false-positives on the short plain-`Text` selections these files legitimately
+# keep, which a naive "OmiMarkdown followed by .textSelection" regex cannot
+# promise across Swift escapes like `\u{2026}` inside nested call arguments.
+def omimarkdown_swiftui_selection_lines(source: str) -> list[int]:
+    lines = source.splitlines()
+    hits: list[int] = []
+    for index, line in enumerate(lines):
+        if ".textSelection(.enabled)" not in line:
+            continue
+        anchor = index
+        while anchor > 0 and lines[anchor - 1].lstrip().startswith("."):
+            anchor -= 1
+        # Same line (`OmiMarkdown(...).textSelection(.enabled)`) or the head of
+        # the modifier chain one line above it.
+        if "OmiMarkdown(" in lines[anchor] or (anchor > 0 and "OmiMarkdown(" in lines[anchor - 1]):
+            hits.append(index + 1)
+    return hits
 
 FORBIDDEN_PATTERNS = {
     ".textSelection(.enabled)": (
@@ -61,6 +102,18 @@ def check_sources(sources: Mapping[str, str]) -> list[str]:
                 if pattern in line:
                     failures.append(f"{relative}:{line_number}: {explanation}")
 
+    for relative in CONVERSATION_DETAIL_FILES:
+        source = sources.get(relative)
+        if source is None:
+            continue
+        for line_number in omimarkdown_swiftui_selection_lines(source):
+            failures.append(
+                f"{relative}:{line_number}: conversation-detail markdown must not gain a SwiftUI "
+                ".textSelection(.enabled) ancestor; selectable summary prose is hosted through "
+                "OmiMarkdown(appKitProseSelection: true), whose NSTextView owns selection "
+                "without an overlay"
+            )
+
     markdown_source = sources.get(MARKDOWN_FILE)
     if markdown_source is not None and ".textSelection(.disabled)" not in markdown_source:
         failures.append(
@@ -81,7 +134,7 @@ def check_sources(sources: Mapping[str, str]) -> list[str]:
 
 def load_sources(root: Path) -> dict[str, str]:
     sources: dict[str, str] = {}
-    for relative in LIVE_TRANSCRIPT_FILES:
+    for relative in LIVE_TRANSCRIPT_FILES + CONVERSATION_DETAIL_FILES:
         path = root / relative
         if path.is_file():
             sources[relative] = path.read_text(encoding="utf-8")

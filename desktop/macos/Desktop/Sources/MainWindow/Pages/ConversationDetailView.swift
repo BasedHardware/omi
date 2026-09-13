@@ -1341,8 +1341,11 @@ struct ConversationDetailView: View {
       // whole summary — the longest prose in the app — in near-white on a near-white ground. The
       // page is `glassContent()`, which already pins the panel's light appearance, and the markdown
       // inherits it.
-      OmiMarkdown(text: selection.content, sender: .ai)
-        .textSelection(.enabled)
+      //
+      // Selection is AppKit prose, not a SwiftUI `.textSelection(.enabled)` ancestor: that wraps
+      // this tall block in SelectionOverlay and re-lays-out the visible portion while the reader
+      // scrolls (FC-selection-overlay-layout-loop; same contract chat already enforces).
+      OmiMarkdown(text: selection.content, sender: .ai, appKitProseSelection: true)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
@@ -1769,12 +1772,10 @@ struct AppResultCard: View {
 
       // Content
       if isExpanded || result.content.count < 200 {
-        OmiMarkdown(text: result.content, sender: .ai)
-          .textSelection(.enabled)
+        OmiMarkdown(text: result.content, sender: .ai, appKitProseSelection: true)
           .frame(maxWidth: .infinity, alignment: .leading)
       } else {
-        OmiMarkdown(text: String(result.content.prefix(200)) + "\u{2026}", sender: .ai)
-          .textSelection(.enabled)
+        OmiMarkdown(text: String(result.content.prefix(200)) + "\u{2026}", sender: .ai, appKitProseSelection: true)
           .frame(maxWidth: .infinity, alignment: .leading)
       }
 

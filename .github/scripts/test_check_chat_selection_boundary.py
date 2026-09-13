@@ -35,6 +35,35 @@ def clean_sources() -> dict[str, str]:
         ),
     }
 
+def conversation_detail_sources() -> dict[str, str]:
+    return {
+        CHECKER.CONVERSATION_DETAIL_FILES[0]: (
+            "struct ConversationDetailView {\n"
+            "  var summary: some View {\n"
+            "    OmiMarkdown(text: selection.content, sender: .ai, appKitProseSelection: true)\n"
+            "      .frame(maxWidth: .infinity, alignment: .leading)\n"
+            "  }\n"
+            "  var actionItem: some View {\n"
+            "    Text(item.description)\n"
+            "      .scaledFont(size: OmiType.body)\n"
+            "      .textSelection(.enabled)\n"
+            "  }\n"
+            "}\n"
+        ),
+        CHECKER.CONVERSATION_DETAIL_FILES[1]: (
+            "struct ConversationSummarySections {\n"
+            "  var heading: some View {\n"
+            "    Text(section.heading)\n"
+            "      .textSelection(.enabled)\n"
+            "  }\n"
+            "  var body: some View {\n"
+            "    OmiMarkdown(text: section.bodyMarkdown, sender: .ai, appKitProseSelection: true)\n"
+            "  }\n"
+            "}\n"
+        ),
+    }
+
+
 
 class ChatSelectionBoundaryTests(unittest.TestCase):
     def test_accepts_copy_only_live_transcript(self) -> None:
@@ -87,6 +116,47 @@ class ChatSelectionBoundaryTests(unittest.TestCase):
         failures = CHECKER.check_sources(sources)
 
         self.assertIn(f"{missing}: protected live-transcript source is missing", failures)
+
+    def test_accepts_appkit_prose_with_short_text_selection_in_detail(self) -> None:
+        sources = clean_sources()
+        sources.update(conversation_detail_sources())
+
+        self.assertEqual(CHECKER.check_sources(sources), [])
+
+    def test_rejects_swiftui_selection_chained_onto_detail_markdown(self) -> None:
+        shapes = {
+            "same-line": (
+                'OmiMarkdown(text: x, sender: .ai).textSelection(.enabled)\n'
+            ),
+            "next-line": (
+                "OmiMarkdown(text: selection.content, sender: .ai)\n"
+                "  .textSelection(.enabled)\n"
+            ),
+            "through-another-modifier": (
+                "OmiMarkdown(text: x, sender: .ai)\n"
+                "  .padding(4)\n"
+                "  .textSelection(.enabled)\n"
+            ),
+            "nested-parens-and-escape": (
+                'OmiMarkdown(text: String(result.content.prefix(200)) + "\\u{2026}", sender: .ai)\n'
+                "    .textSelection(.enabled)\n"
+            ),
+        }
+        for relative in CHECKER.CONVERSATION_DETAIL_FILES:
+            for name, snippet in shapes.items():
+                with self.subTest(relative=relative, shape=name):
+                    sources = clean_sources()
+                    sources.update(conversation_detail_sources())
+                    sources[relative] += snippet
+
+                    failures = CHECKER.check_sources(sources)
+
+                    self.assertTrue(
+                        any(
+                            relative in failure and "conversation-detail markdown" in failure
+                            for failure in failures
+                        )
+                    )
 
 
 if __name__ == "__main__":
