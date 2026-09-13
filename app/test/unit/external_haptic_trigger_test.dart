@@ -28,7 +28,7 @@ void main() {
       var called = false;
 
       final result = await runExternalHapticTrigger(
-        Uri.parse('https://h.omi.me/device/haptic?level=2'),
+        Uri.parse('https://device/haptic?level=2'),
         deviceId: 'device-123',
         playHaptic: (_, __) async {
           called = true;
