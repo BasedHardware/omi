@@ -64,7 +64,7 @@ emoji-like codes such as `:warning:`. Styling applies to the table layout, not
 to the contents of your memories or conversations.
 Tables without predefined columns include fields from every row, in first-seen order.
 
-> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), the [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md), or the [🇷🇺 Быстрый старт с omi-cli (Russian Quickstart)](examples/quickstart.ru.md).
+> Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), the [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md), or the [🇷🇺 Быстрый старт с omi-cli (Russian Quickstart)](examples/quickstart.ru.md), or the [🇧🇩 বাংলা কুইক স্টার্ট গাইড (Bengali Quickstart)](examples/quickstart.bn.md).
 
 ## Auth
 
