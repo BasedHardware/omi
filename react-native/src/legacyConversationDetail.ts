@@ -65,13 +65,13 @@ function object(value: unknown): Record<string, unknown> {
   }
   return value as Record<string, unknown>;
 }
-function text(value: unknown, limit = 1000000): string {
+function text(value: unknown, limit = 6 * 1024 * 1024): string {
   if (typeof value !== 'string' || value.length > limit) {
     throw new DetailError('invalid');
   }
   return value;
 }
-function omittedText(value: unknown, limit = 1000000): string {
+function omittedText(value: unknown, limit = 6 * 1024 * 1024): string {
   if (value === undefined || value === null) {
     return '';
   }
