@@ -296,9 +296,11 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         return;
       }
 
+      await ServiceManager.instance().device.ensureConnection(device.id, force: true);
+
       if (primary.id.isNotEmpty && primary.id != device.id) {
-        // Replacing the primary device: drop its connection so only the new
-        // device streams audio, and drop a companion that no longer pairs with it.
+        // Replacing the primary: only tear down the old link after the new one
+        // is live, and drop a companion that no longer pairs with it.
         await ServiceManager.instance().device.forgetDevice(primary.id);
         final companion = preferences.companionBtDevice;
         if (companion != null && !DevicePairingRoles.canPairAsCompanion(device, companion)) {
@@ -306,8 +308,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           await ServiceManager.instance().device.forgetDevice(companion.id);
         }
       }
-
-      await ServiceManager.instance().device.ensureConnection(device.id, force: true);
       Logger.debug('Connected to device: ${device.name}');
       deviceId = device.id;
       await SharedPreferencesUtil().btDeviceSet(device);
@@ -369,14 +369,15 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   Future<void> _pairCompanion(BtDevice device, {required bool isFromOnboarding, VoidCallback? goNext}) async {
     final preferences = SharedPreferencesUtil();
     final previousCompanion = preferences.companionBtDevice;
-    if (previousCompanion != null && previousCompanion.id != device.id) {
-      preferences.forgetSavedBtDevice(previousCompanion.id);
-      await ServiceManager.instance().device.forgetDevice(previousCompanion.id);
-    }
 
     final connection = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
     if (connection == null) {
       throw DeviceConnectionException('Could not connect to companion device ${device.id}');
+    }
+
+    if (previousCompanion != null && previousCompanion.id != device.id) {
+      preferences.forgetSavedBtDevice(previousCompanion.id);
+      await ServiceManager.instance().device.forgetDevice(previousCompanion.id);
     }
     Logger.debug('Connected to companion device: ${device.name}');
     preferences.companionBtDevice = connection.device;
