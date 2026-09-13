@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "The main chat window now loads your full conversation history from the server on startup, so messages sent from your phone, Mac, or web are visible immediately — not just messages sent from this device."
+  ]
+}
