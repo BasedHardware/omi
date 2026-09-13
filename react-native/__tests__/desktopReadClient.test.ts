@@ -2333,12 +2333,13 @@ test('conversation list source tags name only Flutter GET remaps', () => {
   ).toBe('Work');
 });
 
-test('conversation visibility copy names GET shared or public and omits private', () => {
+test('conversation visibility copy names GET private, shared, and public as Flutter chips', () => {
   expect(conversationVisibilityCopy('shared')).toBe('Shared');
-  expect(conversationVisibilityCopy('public')).toBe('Public');
-  expect(conversationVisibilityCopy('private')).toBeNull();
+  expect(conversationVisibilityCopy('public')).toBe('Shared');
+  expect(conversationVisibilityCopy('private')).toBe('Private');
   expect(conversationVisibilityCopy(' \t\n')).toBeNull();
   expect(conversationVisibilityCopy(undefined)).toBeNull();
+  expect(conversationVisibilityCopy('secret')).toBeNull();
 });
 
 test('conversation day labels prefer startedAt and keep Today/Yesterday/date', () => {

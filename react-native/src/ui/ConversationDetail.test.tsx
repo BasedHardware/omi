@@ -1231,7 +1231,7 @@ test('canonical discarded details name Discarded Conversation instead of structu
   expect(copy).not.toContain('want to retry');
 });
 
-test('conversation details name GET shared or public visibility and omit private', () => {
+test('conversation details name GET private and shared visibility', () => {
   mockLegacy.mockReturnValue({
     result: {
       status: 'loaded',
@@ -1261,16 +1261,17 @@ test('conversation details name GET shared or public visibility and omit private
       conversation: {...conversation, id: 'old-1', visibility: 'public'},
     }),
   );
-  expect(published).toContain('Public');
+  expect(published).toContain('Shared');
+  expect(published).not.toContain('Public');
   const hidden = text(
     render({
       apiContract: 'omi',
       conversation: {...conversation, id: 'old-1', visibility: 'private'},
     }),
   );
+  expect(hidden).toContain('Private');
   expect(hidden).not.toContain('Shared');
   expect(hidden).not.toContain('Public');
-  expect(hidden).not.toContain('Private');
 });
 
 test('legacy conversation details name GET calendar event title and attendees', () => {

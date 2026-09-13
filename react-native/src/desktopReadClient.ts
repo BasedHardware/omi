@@ -440,11 +440,11 @@ export function conversationVisibilityCopy(
   visibility: string | null | undefined,
 ): string | null {
   const value = visibleDisplayText(visibility ?? '');
-  if (value === 'shared') {
+  if (value === 'shared' || value === 'public') {
     return 'Shared';
   }
-  if (value === 'public') {
-    return 'Public';
+  if (value === 'private') {
+    return 'Private';
   }
   return null;
 }
