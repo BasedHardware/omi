@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.graph_client import GraphClient
+from services.graph_client import GraphClient, path_segment
 
 
 async def list_recent_chats(user_id: str, limit: int = 15) -> list[dict[str, Any]]:
@@ -24,7 +24,7 @@ async def list_recent_chats(user_id: str, limit: int = 15) -> list[dict[str, Any
 async def send_chat_message(user_id: str, chat_id: str, message: str) -> dict[str, Any]:
     payload = {"body": {"contentType": "text", "content": message}}
     async with GraphClient(user_id) as g:
-        data = await g.post(f"/chats/{chat_id}/messages", json=payload)
+        data = await g.post(f"/chats/{path_segment(chat_id)}/messages", json=payload)
         return {"id": data.get("id"), "chat_id": chat_id, "status": "sent"}
 
 

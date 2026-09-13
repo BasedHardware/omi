@@ -19,6 +19,7 @@ import logging
 import secrets
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -56,7 +57,7 @@ async def root() -> str:
 @app.get("/setup/ms365", response_class=HTMLResponse)
 async def setup_page(uid: str = Query(..., description="OMI user id")) -> str:
     """OMI loads this page inside its in-app webview when the user taps 'Setup'."""
-    redirect = f"/auth/microsoft?uid={uid}"
+    redirect = f"/auth/microsoft?uid={quote(uid, safe='')}"
     return f"""
     <html><body style="font-family: system-ui; max-width: 640px; margin: 40px auto;">
       <h2>Connect Microsoft 365</h2>

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.graph_client import GraphClient
+from services.graph_client import GraphClient, path_segment
 
 
 def _slim_message(m: dict[str, Any]) -> dict[str, Any]:
@@ -47,7 +47,7 @@ async def search(user_id: str, query: str, limit: int = 10) -> list[dict[str, An
 
 async def read(user_id: str, message_id: str) -> dict[str, Any]:
     async with GraphClient(user_id) as g:
-        m = await g.get(f"/me/messages/{message_id}")
+        m = await g.get(f"/me/messages/{path_segment(message_id)}")
         return {
             **_slim_message(m),
             "body": (m.get("body") or {}).get("content"),
