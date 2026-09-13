@@ -80,6 +80,23 @@ jobs:
           python3 -m pip install -q pyyaml
           python3 backend/scripts/validate-backend-runtime-env.py --env "${{ vars.ENV }}"
 
+      - name: Validate Firebase probe signer configuration before publishing
+        env:
+          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" ]]; then
+            echo "Development Pusher semantic probe requires FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT." >&2
+            exit 1
+          fi
+          case "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" in
+            *@based-hardware.iam.gserviceaccount.com) ;;
+            *)
+              echo "FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT must belong to the based-hardware Firebase project." >&2
+              exit 1
+              ;;
+          esac
+
       - name: Verify live finalization alert route before publishing
         env:
           # Dest ops Grafana (monitor.omiapi.com). Do not use GRAFANA_TOKEN; that
@@ -223,6 +240,17 @@ jobs:
             --namespace "${{ vars.ENV }}-omi-backend" \
             --run-id "$GITHUB_RUN_ID" \
             --output pusher-dev-semantic-probe.json
+
+      - name: Upload development Pusher probe diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pusher-dev-probe-diagnostics
+          path: |
+            pusher-dev-deployment-receipt.json
+            pusher-dev-semantic-probe.json
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Record development Pusher qualification evidence
         run: |

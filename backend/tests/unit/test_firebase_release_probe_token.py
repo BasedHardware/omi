@@ -44,7 +44,7 @@ def test_mint_probe_token_uses_fixed_uid_short_lived_custom_claims_and_discards_
         if stage == 'secret_access':
             return 'firebase-api-key-that-must-not-leak'
         if stage == 'service_account':
-            return 'deployer@omi-prod.iam.gserviceaccount.com'
+            return 'deployer@based-hardware.iam.gserviceaccount.com'
         return 'gcp-access-token-that-must-not-leak'
 
     def fake_request(url, *, body, access_token, stage):
@@ -168,7 +168,7 @@ def test_write_token_uses_owner_only_permissions(tmp_path):
 def test_mint_probe_token_rejects_a_token_for_a_different_firebase_auth_project(monkeypatch):
     module = _load_module()
     monkeypatch.setattr(module, '_access_secret', lambda _project: 'api-key-that-must-not-leak')
-    monkeypatch.setattr(module, '_active_service_account', lambda: 'deployer@omi-prod.iam.gserviceaccount.com')
+    monkeypatch.setattr(module, '_active_service_account', lambda: 'deployer@based-hardware.iam.gserviceaccount.com')
     monkeypatch.setattr(module, '_access_token', lambda: 'access-token-that-must-not-leak')
     monkeypatch.setattr(module, '_signed_custom_token', lambda _account, _token: 'custom-token-that-must-not-leak')
     monkeypatch.setattr(module, '_exchange_custom_token', lambda _custom, _key: _id_token(aud='wrong-project'))
@@ -179,6 +179,26 @@ def test_mint_probe_token_rejects_a_token_for_a_different_firebase_auth_project(
         assert error.stage == 'firebase_token_claims'
     else:
         raise AssertionError('expected Firebase auth-project mismatch')
+
+
+def test_remote_signer_rejects_a_cross_project_service_account_before_iam_signing(monkeypatch):
+    module = _load_module()
+    monkeypatch.setattr(module, '_access_secret', lambda _project: 'api-key-that-must-not-leak')
+    monkeypatch.setattr(
+        module,
+        '_request_json',
+        lambda *_args, **_kwargs: pytest.fail('cross-project signer must be rejected before IAM signing'),
+    )
+
+    with pytest.raises(module.ProbeTokenError) as caught:
+        module.mint_probe_token(
+            'based-hardware-dev',
+            'based-hardware',
+            signer_service_account='firebase-adminsdk@based-hardware-dev.iam.gserviceaccount.com',
+        )
+
+    assert caught.value.stage == 'signer_service_account'
+    assert caught.value.error_class == 'project_mismatch'
 
 
 @pytest.mark.skipif(
@@ -355,7 +375,7 @@ def test_explicit_signer_service_account_signs_as_the_firebase_projects_account(
         return 'gcp-access-token-that-must-not-leak'
 
     def fake_request(url, *, body, access_token, stage):
-        requests.append((url, stage))
+        requests.append((url, body, stage))
         if stage == 'custom_token_signing':
             return {'signedJwt': 'custom-token-that-must-not-leak'}
         return {'idToken': _id_token(), 'refreshToken': 'refresh-token-that-must-not-leak'}
@@ -366,8 +386,14 @@ def test_explicit_signer_service_account_signs_as_the_firebase_projects_account(
 
     signer = 'firebase-adminsdk-4z2mm@based-hardware.iam.gserviceaccount.com'
     assert module.mint_probe_token('based-hardware-dev', 'based-hardware', signer_service_account=signer) == _id_token()
-    signing_url = requests[0][0]
+    signing_url, signing_body, signing_stage = requests[0]
+    assert signing_stage == 'custom_token_signing'
     assert 'firebase-adminsdk-4z2mm%40based-hardware.iam.gserviceaccount.com' in signing_url
+    claims = json.loads(signing_body['payload'])
+    assert claims['iss'] == signer
+    assert claims['sub'] == signer
+    assert claims['aud'] == module.CUSTOM_TOKEN_AUDIENCE
+    assert claims['uid'] == module.PROBE_UID
 
 
 def test_signer_service_account_must_look_like_a_service_account(monkeypatch):
@@ -431,6 +457,7 @@ def test_probe_action_stages_the_signer_key_as_transient_owner_only_material():
     assert 'rm -f "$token_file" ${signer_file:+"$signer_file"}' in action
     assert 'rm -f "$signer_file"' in action
 
+
 WORKFLOWS_DIR = REPOSITORY_ROOT / '.github' / 'workflows'
 SIGNER_ARGUMENT_PATTERN = re.compile(r'--signer-service-account[ =]"\$([A-Za-z_][A-Za-z0-9_]*)"')
 STEP_BOUNDARY = re.compile(r'(?m)^(?=\s*- name: )')
@@ -475,9 +502,7 @@ def test_every_workflow_probe_signer_argument_is_the_documented_variable() -> No
     violations: list[str] = []
     for pattern in ('*.yml', '*.yaml'):
         for workflow in sorted(WORKFLOWS_DIR.glob(pattern)):
-            violations.extend(
-                _signer_argument_violations(workflow.read_text(encoding='utf-8'), workflow.name)
-            )
+            violations.extend(_signer_argument_violations(workflow.read_text(encoding='utf-8'), workflow.name))
     assert violations == []
 
 
@@ -503,8 +528,6 @@ def test_signer_guard_rejects_the_deploy_identity_and_coincidental_secret_names(
         assert violations, source
 
     assert (
-        _signer_argument_violations(
-            synthetic_probe_step('vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT'), 'probe.yml'
-        )
+        _signer_argument_violations(synthetic_probe_step('vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT'), 'probe.yml')
         == []
     )

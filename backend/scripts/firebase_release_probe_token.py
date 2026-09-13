@@ -86,9 +86,11 @@ def _access_secret(project: str) -> str:
     return value
 
 
-def _validated_service_account(account: str, stage: str) -> str:
+def _validated_service_account(account: str, stage: str, *, firebase_project: str | None = None) -> str:
     if '\n' in account or '@' not in account or not account.endswith('.gserviceaccount.com') or len(account) > 320:
         raise ProbeTokenError(stage)
+    if firebase_project is not None and not account.endswith(f'@{firebase_project}.iam.gserviceaccount.com'):
+        raise ProbeTokenError(stage, 'project_mismatch')
     return account
 
 
@@ -368,13 +370,19 @@ def mint_probe_token(
             # roles/iam.serviceAccountTokenCreator on that account) resolves
             # the mismatch without moving the runtime off production auth.
             service_account = (
-                _validated_service_account(signer_service_account, 'signer_service_account')
+                _validated_service_account(
+                    signer_service_account,
+                    'signer_service_account',
+                    firebase_project=firebase_project,
+                )
                 if signer_service_account
-                else _active_service_account()
+                else _validated_service_account(
+                    _active_service_account(),
+                    'service_account',
+                    firebase_project=firebase_project,
+                )
             )
-            if signer_service_account and not service_account.endswith(
-                f'@{firebase_project}.iam.gserviceaccount.com'
-            ):
+            if signer_service_account and not service_account.endswith(f'@{firebase_project}.iam.gserviceaccount.com'):
                 # Same fail-closed pairing as the credentials-file path: a
                 # named signer from another project cannot mint a token
                 # Identity Toolkit accepts for this Firebase project, so
