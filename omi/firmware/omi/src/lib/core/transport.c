@@ -5,6 +5,7 @@
 #include <math.h> // For float conversion in logs
 #include <shell/shell_bt_nus.h>
 #include <stdint.h>
+#include <string.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/hci.h>
@@ -23,6 +24,7 @@
 #include "accel.h"
 #include "button.h"
 #include "config.h"
+#include "device_name.h"
 #include "features.h"
 #include "haptic.h"
 #include "mic.h"
@@ -103,6 +105,19 @@ static ssize_t settings_charging_status_read_handler(struct bt_conn *conn,
                                                      uint16_t len,
                                                      uint16_t offset);
 static int notify_charging_status(struct bt_conn *conn, bool force_notify);
+static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
+                                                  const struct bt_gatt_attr *attr,
+                                                  const void *buf,
+                                                  uint16_t len,
+                                                  uint16_t offset,
+                                                  uint8_t flags);
+static ssize_t settings_device_name_read_handler(struct bt_conn *conn,
+                                                 const struct bt_gatt_attr *attr,
+                                                 void *buf,
+                                                 uint16_t len,
+                                                 uint16_t offset);
+static void refresh_adv_name(void);
+static void adv_data_refresh_work_handler(struct k_work *work);
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 
@@ -179,6 +194,17 @@ static struct bt_uuid_128 settings_mic_gain_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10012, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 settings_charging_status_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10013, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+// Device name (19B10014): read returns the current UTF-8 name; write
+// 1..OMI_DEVICE_NAME_MAX_LEN bytes to rename (persisted in NVS, re-applied on
+// boot); write 0 bytes to reset to CONFIG_BT_DEVICE_NAME.
+static struct bt_uuid_128 settings_device_name_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10014, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+BUILD_ASSERT(sizeof(CONFIG_BT_DEVICE_NAME) - 1 <= OMI_DEVICE_NAME_MAX_LEN,
+             "CONFIG_BT_DEVICE_NAME must fit the rename buffer");
+#if defined(CONFIG_BT_DEVICE_NAME_MAX)
+BUILD_ASSERT(OMI_DEVICE_NAME_MAX_LEN <= CONFIG_BT_DEVICE_NAME_MAX,
+             "OMI_DEVICE_NAME_MAX_LEN must not exceed the Zephyr dynamic name buffer");
+#endif
 
 static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
@@ -201,6 +227,14 @@ static struct bt_gatt_attr settings_service_attr[] = {
                            NULL,
                            NULL),
     BT_GATT_CCC(charging_status_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    // Appended after the charging CCC so settings_service.attrs[6] (used by
+    // notify_charging_status) keeps its index.
+    BT_GATT_CHARACTERISTIC(&settings_device_name_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           settings_device_name_read_handler,
+                           settings_device_name_write_handler,
+                           NULL),
 };
 
 static struct bt_gatt_service settings_service = BT_GATT_SERVICE(settings_service_attr);
@@ -292,17 +326,90 @@ static struct bt_gatt_attr time_sync_service_attr[] = {
 
 static struct bt_gatt_service time_sync_service = BT_GATT_SERVICE(time_sync_service_attr);
 
-// Advertisement data
-static const struct bt_data bt_ad[] = {
+// Advertisement data. The name entries are filled from bt_get_name() by
+// refresh_adv_name() so a persisted rename is what scanners see: the primary
+// advertisement keeps the 128-bit audio service UUID the app filters on and
+// only has room for OMI_DEVICE_NAME_ADV_MAX_LEN name bytes (shortened when
+// longer); the scan response always carries the complete name.
+static uint8_t adv_name[OMI_DEVICE_NAME_MAX_LEN];
+static struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
     BT_DATA(BT_DATA_UUID128_ALL, audio_service_uuid.val, sizeof(audio_service_uuid.val)),
-    BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
+    BT_DATA(BT_DATA_NAME_COMPLETE, adv_name, 0),
 };
+#define BT_AD_NAME_INDEX 2
 
 // Scan response data
-static const struct bt_data bt_sd[] = {
+static struct bt_data bt_sd[] = {
     BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_DIS_VAL)),
+    BT_DATA(BT_DATA_NAME_COMPLETE, adv_name, 0),
 };
+#define BT_SD_NAME_INDEX 1
+
+// Set when the name changed while the advertiser was not running (i.e. during
+// a connection); the controller keeps the old payload across the automatic
+// advertising resume, so the data is pushed again once advertising is back.
+static bool adv_data_stale = false;
+#define ADV_DATA_REFRESH_DELAY_MS 300
+#define ADV_DATA_REFRESH_MAX_ATTEMPTS 5
+static uint8_t adv_data_refresh_attempts = 0;
+K_WORK_DELAYABLE_DEFINE(adv_data_refresh_work, adv_data_refresh_work_handler);
+
+static void refresh_adv_name(void)
+{
+    const char *name = bt_get_name();
+    size_t len = strlen(name);
+    if (len > sizeof(adv_name)) {
+        len = omi_device_name_utf8_prefix_len((const uint8_t *) name, len, sizeof(adv_name));
+    }
+    memcpy(adv_name, name, len);
+
+    size_t ad_len = omi_device_name_utf8_prefix_len(adv_name, len, OMI_DEVICE_NAME_ADV_MAX_LEN);
+    bt_ad[BT_AD_NAME_INDEX].type = (ad_len < len) ? BT_DATA_NAME_SHORTENED : BT_DATA_NAME_COMPLETE;
+    bt_ad[BT_AD_NAME_INDEX].data_len = (uint8_t) ad_len;
+    bt_sd[BT_SD_NAME_INDEX].data_len = (uint8_t) len;
+}
+
+// Pushes the current bt_ad/bt_sd payload to the controller. Returns -EAGAIN
+// while the legacy advertiser is stopped (connected), in which case the
+// caller defers to the disconnect path.
+static int push_adv_data(void)
+{
+    int err = bt_le_adv_update_data(bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+    if (err == 0) {
+        adv_data_stale = false;
+        LOG_INF("Advertising name updated to %s", bt_get_name());
+    }
+    return err;
+}
+
+static void adv_data_refresh_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    if (!adv_data_stale) {
+        return;
+    }
+
+    int err = push_adv_data();
+    if (err == 0) {
+        return;
+    }
+
+    adv_data_refresh_attempts++;
+    if (err == -EAGAIN && adv_data_refresh_attempts < ADV_DATA_REFRESH_MAX_ATTEMPTS) {
+        k_work_reschedule(&adv_data_refresh_work, K_MSEC(ADV_DATA_REFRESH_DELAY_MS));
+        return;
+    }
+
+    LOG_WRN("Advertising data refresh failed (err %d); new name applies after the next power cycle", err);
+}
+
+static void schedule_adv_data_refresh(void)
+{
+    adv_data_refresh_attempts = 0;
+    k_work_reschedule(&adv_data_refresh_work, K_MSEC(ADV_DATA_REFRESH_DELAY_MS));
+}
 
 //
 // State and Characteristics
@@ -448,6 +555,78 @@ static ssize_t settings_mic_gain_read_handler(struct bt_conn *conn,
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &current_gain, sizeof(current_gain));
 }
 
+static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
+                                                  const struct bt_gatt_attr *attr,
+                                                  const void *buf,
+                                                  uint16_t len,
+                                                  uint16_t offset,
+                                                  uint8_t flags)
+{
+    ARG_UNUSED(conn);
+    ARG_UNUSED(attr);
+    ARG_UNUSED(flags);
+
+    if (offset != 0) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+    }
+    if (len > OMI_DEVICE_NAME_MAX_LEN) {
+        LOG_WRN("Device name too long: %u bytes (max %u)", len, OMI_DEVICE_NAME_MAX_LEN);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    char new_name[OMI_DEVICE_NAME_MAX_LEN + 1];
+    if (len == 0) {
+        // Empty write resets to the factory name.
+        int err = app_settings_clear_device_name();
+        if (err) {
+            return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+        }
+        strcpy(new_name, CONFIG_BT_DEVICE_NAME);
+    } else {
+        if (!omi_device_name_is_valid((const uint8_t *) buf, len)) {
+            LOG_WRN("Rejected malformed device name (%u bytes)", len);
+            return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+        }
+        memcpy(new_name, buf, len);
+        new_name[len] = '\0';
+
+        // Persist first: a name that will not survive a reboot must not be
+        // applied, otherwise the app would confirm a rename that later reverts.
+        int err = app_settings_save_device_name(new_name, len);
+        if (err) {
+            LOG_ERR("Failed to persist device name (err %d)", err);
+            return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+        }
+    }
+
+    int err = bt_set_name(new_name);
+    if (err) {
+        LOG_ERR("bt_set_name failed (err %d)", err);
+        return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+    }
+    LOG_INF("Device renamed to %s", new_name);
+
+    refresh_adv_name();
+    adv_data_stale = true;
+    if (push_adv_data() == -EAGAIN) {
+        // Not advertising while connected; _transport_disconnected() re-pushes.
+        LOG_DBG("Advertising paused; new name is pushed after disconnect");
+    }
+
+    return len;
+}
+
+static ssize_t settings_device_name_read_handler(struct bt_conn *conn,
+                                                 const struct bt_gatt_attr *attr,
+                                                 void *buf,
+                                                 uint16_t len,
+                                                 uint16_t offset)
+{
+    const char *name = bt_get_name();
+    LOG_INF("Reading device name: %s", name);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, name, strlen(name));
+}
+
 static ssize_t settings_charging_status_read_handler(struct bt_conn *conn,
                                                      const struct bt_gatt_attr *attr,
                                                      void *buf,
@@ -489,6 +668,10 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
     features |= OMI_FEATURE_LED_DIMMING;
     // Mic gain control is always enabled.
     features |= OMI_FEATURE_MIC_GAIN;
+    // Renaming needs bt_set_name(), which only works with a dynamic name buffer.
+    if (IS_ENABLED(CONFIG_BT_DEVICE_NAME_DYNAMIC)) {
+        features |= OMI_FEATURE_DEVICE_NAME;
+    }
 
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &features, sizeof(features));
 }
@@ -696,6 +879,12 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     }
     current_mtu = 0;
     charging_status_last_notified = -1;
+
+    if (adv_data_stale) {
+        // The stack resumes legacy advertising with the payload the controller
+        // already holds; re-push the renamed payload once it is running again.
+        schedule_adv_data_refresh();
+    }
 
     // Reset the audio TX throttle semaphore so the pusher thread is not
     // left blocked forever if it was waiting for a slot when the connection dropped.
@@ -1274,6 +1463,7 @@ int transport_off()
     }
 
     // Stop advertising
+    k_work_cancel_delayable(&adv_data_refresh_work);
     int err = bt_le_adv_stop();
     if (err) {
         LOG_ERR("Failed to stop Bluetooth advertising %d", err);
@@ -1338,6 +1528,14 @@ int transport_start()
     if (err) {
         LOG_WRN("Continuing without confirmed BLE identity (err %d)", err);
     }
+
+    // Apply the user-chosen name persisted by app_settings (loaded in
+    // app_settings_init()) so both GAP and the advertisement carry it.
+    err = bt_set_name(app_settings_get_device_name());
+    if (err) {
+        LOG_WRN("Failed to apply stored device name (err %d), advertising as %s", err, bt_get_name());
+    }
+    refresh_adv_name();
 
     // Production-line helper: emit local BLE addresses on UART for fixture parsing.
     log_local_ble_addresses();
