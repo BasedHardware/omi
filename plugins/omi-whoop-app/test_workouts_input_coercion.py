@@ -210,6 +210,15 @@ class WorkoutsInputCoercionTests(unittest.TestCase):
         self.assertEqual(params["limit"], 10)
         self.assertEqual(_window_days(params), 7)
 
+    def test_booleans_are_not_treated_as_counts(self):
+        # bool is an int subclass; True must not become 1 and False must not become 0.
+        response, calls = self._run({"days": True, "max_results": False})
+
+        self.assertIsNone(response.error, response.error)
+        _, params = calls[0]
+        self.assertEqual(params["limit"], 10)
+        self.assertEqual(_window_days(params), 7)
+
     def test_overflowing_json_numbers_fall_back_to_defaults(self):
         # json.loads turns 1e309 into float('inf'); int(inf) raises OverflowError.
         response, calls = self._run({"days": float("inf"), "max_results": float("-inf")})
