@@ -45,7 +45,7 @@ omi --help
 | **OAuth login preko browsera (Google/Apple)** | Lokalni development na licnom racunalu | `omi auth login --browser` (Google) / `--provider apple` |
 
 ### Interaktivni login
-Izvravanje komande bez dodatnih parametara pokrece interaktivni meni:
+Izvršavanje komande bez dodatnih parametara pokrece interaktivni meni:
 
 ```bash
 omi auth login
@@ -125,7 +125,7 @@ Automatski prepoznati zadaci iz vodjenih razgovora:
 # Ispis otvorenih zadataka
 omi action-item list --open
 
-# Oznacavanje zadataka kao zavrsega
+# Oznacavanje zadataka kao završene
 omi action-item complete <ACTION_ITEM_ID>
 ```
 
@@ -144,17 +144,16 @@ omi goal create "Pij 2 litra vode dnevno" --type numeric --target 2 --unit liter
 
 ## 4. Strukturirana automatizacija i JSON izlaz (`--json`)
 
-`omi-cli` je optimiziran za skriptnu integraciju i napajanje AI agenada. Globalni flag `--json` vracva validan JSON format za obradu sa alatima poput `jq`:
+`omi-cli` je optimiziran za skriptnu integraciju i napajanje AI agenata. Globalni flag `--json` vracva validan JSON format za obradu sa alatima poput `jq`:
 
 ```bash
 # Lista sjececa u JSON formatu i filtriranje s jq
 omi --json memory list | jq '.[] | {id, content, category}'
-',
 
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
-',
 
-omi --json action-item list --open | jq '.'```
+omi --json action-item list --open | jq '.'
+```
 
 > **Vazno pravilo sintakse:**
 > Flag `--json` je **globalna opcija**, sto znaci da mora biti postavljen **prije** podkomande:
@@ -176,7 +175,7 @@ Redirekcija u fajl preuziva ili kreira fajl lokalno. Uvijek provjerite exit kod 
 
 ## 5. Exit kodovi (Exit Codes)
 
-Pouzdan obrada gresaka u CLI skriptama i CI/CD cevovima:
+Pouzdana obrada gresaka u CLI skriptama i CI/CD cevovima:
 
 | Kod | Znacaj | Opis |
 | :---: | :--- | :--- |
@@ -195,7 +194,7 @@ Pouzdan obrada gresaka u CLI skriptama i CI/CD cevovima:
 ```bash
 export OMI_API_KEY="omi_dev_vas_kljuc_ovdje"
 
-# Izvravanje komande i provjera exit koda
+# Izvršavanje komande i provjera exit koda
 omi --json memory list --limit 10
 if [ $? -ne 0 ]; then
     echo "Doslo je do greske pri izvrsavanju komande." >&2
@@ -237,7 +236,7 @@ omi --json local search-screen "Kvartalni izvjestaj" --days 7 --app Safari
 
 ---
 
-## 8. Rad sa vec brojem profila (Profiles)
+## 8. Rad sa većim brojem profila (Profiles)
 
 Flag `--profile` omogucava razdvajanje poslovnih, licnih naloga ili testirajucih okruzenja. Konfiguracija se cuvaju u `~/.omi/config.toml`:
 
@@ -248,7 +247,7 @@ omi --profile personal auth login
 # Kreiranje i login u poslovni profil
 omi --profile work auth login
 
-# Izvravanje komande sa odredjenim profilom
+# Izvršavanje komande sa odredjenim profilom
 omi --profile work memory list
 
 # Koristenje staging okruzenja
