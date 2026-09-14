@@ -3229,6 +3229,32 @@ test('conversation list source tags name only Flutter GET remaps', () => {
       source: 'omi',
     }),
   ).toBe('Work');
+  expect(
+    conversationListTag({
+      discarded: false,
+      source: 'screenpipe',
+    }),
+  ).toBeNull();
+  expect(
+    conversationListTag({
+      discarded: false,
+      category: '',
+      source: 'openglass',
+    }),
+  ).toBeNull();
+  expect(
+    conversationListTag({
+      discarded: false,
+      category: ' \t',
+      source: 'sdcard',
+    }),
+  ).toBeNull();
+  expect(
+    conversationListTag({
+      discarded: true,
+      source: 'rayban_meta',
+    }),
+  ).toBeNull();
 });
 
 test('conversation visibility copy names GET private, shared, and public as Flutter chips', () => {

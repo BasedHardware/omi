@@ -431,6 +431,9 @@ export function conversationListTag(item: {
   category?: string | null;
   source?: string | null;
 }): string | null {
+  if (visibleDisplayText(item.category ?? '') === '') {
+    return null;
+  }
   return conversationListSourceTag(item) ?? conversationListCategory(item);
 }
 

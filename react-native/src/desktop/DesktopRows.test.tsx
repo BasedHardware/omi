@@ -984,6 +984,33 @@ test('library conversation rows name GET source remaps and omit ordinary sources
   expect(textOf(ordinary)).not.toContain('omi');
 });
 
+test('library conversation rows omit Flutter getTag source remaps when GET category is empty', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'omi-screenpipe',
+    title: 'Empty category talk',
+    summary: 'Notes',
+    searchableText: 'Empty category talk\nNotes',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'screenpipe',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let empty!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    empty = ReactTestRenderer.create(<ConversationRow item={item} />);
+  });
+  expect(textOf(empty)).toContain('Empty category talk');
+  expect(textOf(empty)).not.toContain('Screenpipe');
+});
+
 test('library conversation rows name GET photo counts', () => {
   const item: ConversationProjection = {
     kind: 'conversation',
