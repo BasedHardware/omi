@@ -222,10 +222,7 @@ async def auth_callback(
         refresh_token = token_data.get('refresh_token')
         expires_in = token_data.get('expires_in', 7200)
         
-        print(f"🔑 Token data received:", flush=True)
-        print(f"   Access token: {access_token[:20]}..." if access_token else "   Access token: None", flush=True)
-        print(f"   Refresh token: {refresh_token[:20]}..." if refresh_token else "   Refresh token: None", flush=True)
-        print(f"   Expires in: {expires_in}s ({expires_in/3600:.1f}h)", flush=True)
+        print(f"🔑 Token data received and saved (expires in {expires_in/3600:.1f}h)", flush=True)
         
         SimpleUserStorage.save_user(
             uid=uid,
@@ -638,12 +635,8 @@ async def webhook(
         # Direct list of segments
         segments = payload
     
-    # Log what we received for debugging
+    # Log count received
     print(f"📥 Received {len(segments) if segments else 0} segment(s) from OMI", flush=True)
-    if segments:
-        for i, seg in enumerate(segments[:3]):  # Show first 3
-            text = seg.get('text', 'NO TEXT') if isinstance(seg, dict) else str(seg)
-            print(f"   Segment {i}: {text[:100]}", flush=True)
     
     if not segments or not isinstance(segments, list):
         # Silent response for empty/invalid data
@@ -697,7 +690,6 @@ async def process_segments(
     
     session_id = session["session_id"]
     
-    print(f"🔍 Received: '{full_text}'", flush=True)
     print(f"📊 Session mode: {session['tweet_mode']}, Count: {session.get('segments_count', 0)}/3", flush=True)
     
     # Check for trigger phrase
@@ -705,7 +697,6 @@ async def process_segments(
         tweet_content = tweet_detector.extract_tweet_content(full_text)
         
         print(f"🎤 TRIGGER! Starting 3-segment collection...", flush=True)
-        print(f"   Segment 1 content: '{tweet_content}'", flush=True)
         
         # Start collecting - ALWAYS wait for 2 more segments
         SimpleSessionStorage.update_session(
@@ -727,8 +718,7 @@ async def process_segments(
         accumulated += " " + full_text
         segments_count += 1
         
-        print(f"📝 Segment {segments_count}/3: '{full_text}'", flush=True)
-        print(f"📚 Full accumulated: '{accumulated[:150]}...'", flush=True)
+        print(f"📝 Segment {segments_count}/3 collected", flush=True)
         
         # Always collect 3 segments
         if segments_count >= 3:
@@ -736,8 +726,6 @@ async def process_segments(
             
             # AI extracts the actual tweet from all 3 segments
             cleaned_content = await tweet_detector.ai_extract_tweet_from_segments(accumulated)
-            
-            print(f"✨ AI extracted tweet: '{cleaned_content}'", flush=True)
             
             if len(cleaned_content.strip()) > 3:
                 print(f"📤 Posting to Twitter...", flush=True)

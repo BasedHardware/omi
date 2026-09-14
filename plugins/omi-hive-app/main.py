@@ -84,8 +84,6 @@ def hive_graphql_request(
     
     print(f"🐝 Hive GraphQL Request:")
     print(f"   URL: {HIVE_GRAPHQL_URL}")
-    print(f"   API Key (first 8 chars): {api_key[:8]}...")
-    print(f"   Query: {query[:100]}...")
     
     try:
         response = requests.post(
@@ -96,10 +94,9 @@ def hive_graphql_request(
         )
         
         print(f"🐝 Hive Response: Status {response.status_code}")
-        print(f"   Body: {response.text[:500]}")
         
         if response.status_code != 200:
-            return {"errors": [{"message": f"HTTP {response.status_code}: {response.text}"}]}
+            return {"errors": [{"message": f"HTTP {response.status_code}: Request failed"}]}
         
         result = response.json()
         return result
@@ -304,14 +301,12 @@ def verify_api_key(api_key: str) -> Optional[Dict[str, Any]]:
             if user_id:
                 headers["user_id"] = user_id
                 
-            print(f"   REST Headers: {headers}")
             response = requests.get(
                 f"{HIVE_REST_API_BASE}/workspaces",
                 headers=headers,
                 timeout=10
             )
             print(f"   REST Response Status: {response.status_code}")
-            print(f"   REST Response Body: {response.text[:200]}")
             
             if response.status_code == 200:
                 workspaces = response.json()

@@ -1066,8 +1066,8 @@ async def notion_callback(
         )
 
         if response.status_code != 200:
-            log(f"Token exchange failed: {response.text}")
-            return HTMLResponse(content=f"Token exchange failed: {response.text}", status_code=400)
+            log(f"Token exchange failed: HTTP {response.status_code}")
+            return HTMLResponse(content="Token exchange failed. Please try again.", status_code=400)
 
         token_data = response.json()
         access_token = token_data.get("access_token")

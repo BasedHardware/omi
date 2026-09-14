@@ -123,14 +123,14 @@ class ZapierClient:
                     "message": "TooManyRedirects",
                 },
             }
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.RequestException:
             err = {
                 "error": {
-                    "message": f"RequestException {e}",
+                    "message": "RequestException failed",
                 },
             }
         if err is None and resp.status_code != 200:
-            resp_text = f"{resp}"
+            resp_text = f"HTTP {resp.status_code}"
             err = {
                 "error": {
                     "status": resp.status_code,
@@ -138,10 +138,7 @@ class ZapierClient:
                 },
             }
         if err is not None:
-            print(err)
             return err
-
-        print(resp)
 
         return {"result": "{}"}
 
@@ -198,14 +195,14 @@ class OmiClient:
                     "message": "TooManyRedirects",
                 },
             }
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.RequestException:
             err = {
                 "error": {
-                    "message": f"RequestException {e}",
+                    "message": "RequestException failed",
                 },
             }
         if err is None and resp.status_code != 200:
-            resp_text = f"{resp}"
+            resp_text = f"HTTP {resp.status_code}"
             err = {
                 "error": {
                     "status": resp.status_code,
@@ -213,10 +210,7 @@ class OmiClient:
                 },
             }
         if err is not None:
-            print(err)
             return err
-
-        print(resp)
 
         return {"result": "{}"}
 
@@ -253,14 +247,14 @@ class OmiClient:
                     "message": "TooManyRedirects",
                 },
             }
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.RequestException:
             err = {
                 "error": {
-                    "message": f"RequestException {e}",
+                    "message": "RequestException failed",
                 },
             }
         if err is None and resp.status_code != 200:
-            resp_text = f"{resp}"
+            resp_text = f"HTTP {resp.status_code}"
             err = {
                 "error": {
                     "status": resp.status_code,
@@ -268,10 +262,7 @@ class OmiClient:
                 },
             }
         if err is not None:
-            print(err)
             return err
-
-        print(resp)
 
         # view
         resp_json = resp.json()
