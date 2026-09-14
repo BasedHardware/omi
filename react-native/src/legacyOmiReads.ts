@@ -365,11 +365,13 @@ export async function loadOmiMemories(
     await read(`/v3/memories?limit=${limit}&offset=${start}`),
   );
   const items = records.map(memoryItem);
+  let ledgerHistoryTruncated = false;
   if (start === 0) {
     const seen = new Set(items.map(item => item.id));
     const historyLimit = 500;
+    const maxHistoryPages = 10;
     let historyOffset = 0;
-    for (let pageIndex = 0; pageIndex < 10; pageIndex++) {
+    for (let pageIndex = 0; pageIndex < maxHistoryPages; pageIndex++) {
       let raw: unknown;
       try {
         raw = await read(
@@ -393,9 +395,15 @@ export async function loadOmiMemories(
       }
       if (history.length < historyLimit) break;
       historyOffset += history.length;
+      if (pageIndex === maxHistoryPages - 1) ledgerHistoryTruncated = true;
     }
   }
-  return {apiContract: 'omi', items, page: page(start, records.length)};
+  return {
+    apiContract: 'omi',
+    items,
+    page: page(start, records.length),
+    ...(ledgerHistoryTruncated ? {ledgerHistoryTruncated: true} : {}),
+  };
 }
 export async function loadOmiTasks(
   read: Read,

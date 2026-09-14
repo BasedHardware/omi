@@ -662,6 +662,57 @@ test('Memories rows name GET ledger slot, playbook body, baseline, and known dev
   }
 });
 
+test('Memories names Flutter ledger-history 10-page partial chrome', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [memory('fact')],
+            page: page(null),
+            ledgerHistoryTruncated: true,
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    expect(textOf(view)).toContain(
+      'Some memory history is unavailable. Showing the history received so far.',
+    );
+  } finally {
+    act(() => view.unmount());
+  }
+});
+
+test('Memories omit ledger-history partial chrome when history settled complete', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [memory('fact')],
+            page: page(null),
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    expect(textOf(view)).not.toContain(
+      'Some memory history is unavailable. Showing the history received so far.',
+    );
+  } finally {
+    act(() => view.unmount());
+  }
+});
+
 test('Memories rows name GET knowledge-ledger History chrome and omit current rows', () => {
   let view!: Renderer.ReactTestRenderer;
   act(() => {

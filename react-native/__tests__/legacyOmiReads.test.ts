@@ -1183,6 +1183,107 @@ test('old memories keep the current list when ledger-history 200 cannot project'
   expect(result.items.map(row => row.id)).toEqual(['fact']);
 });
 
+function ledgerHistoryRow(id: string) {
+  return {
+    id,
+    content: `History ${id}`,
+    created_at: '2026-09-06T00:00:00Z',
+    conversation_id: null,
+  };
+}
+
+function ledgerHistoryPage(offset: number, count: number) {
+  return Array.from({length: count}, (_, index) =>
+    ledgerHistoryRow(`hist-${offset + index}`),
+  );
+}
+
+test('old memories name Flutter ledger-history 10-page cap as partial', async () => {
+  const request = jest.fn(async (input: {path?: string}) => {
+    if (input.path?.includes('ledger-history')) {
+      const offset = Number(
+        new URL(`https://omi.test${input.path}`).searchParams.get('offset'),
+      );
+      return {
+        id: 'read',
+        status: 200,
+        body: JSON.stringify(ledgerHistoryPage(offset, 500)),
+      };
+    }
+    return {
+      id: 'read',
+      status: 200,
+      body: JSON.stringify([
+        {
+          id: 'fact',
+          content: 'I enjoy walking.',
+          created_at: '2026-09-07T00:00:00Z',
+          conversation_id: null,
+        },
+      ]),
+    };
+  });
+  const api = {
+    getApiContract: async () => 'omi',
+    request,
+  } as unknown as OmiBackend;
+  const result = await loadMemories(api);
+  expect(
+    request.mock.calls.filter(([input]: [{path?: string}]) =>
+      input.path?.includes('ledger-history'),
+    ),
+  ).toHaveLength(10);
+  expect(request).toHaveBeenCalledWith(
+    expect.objectContaining({
+      path: '/v3/memories/ledger-history?limit=500&offset=4500',
+    }),
+  );
+  expect(result.items).toHaveLength(5001);
+  expect(result.ledgerHistoryTruncated).toBe(true);
+  expect(result.page.nextCursor).toBeNull();
+});
+
+test('old memories omit ledger-history partial chrome before the Flutter 10-page cap', async () => {
+  const request = jest.fn(async (input: {path?: string}) => {
+    if (input.path?.includes('ledger-history')) {
+      const offset = Number(
+        new URL(`https://omi.test${input.path}`).searchParams.get('offset'),
+      );
+      return {
+        id: 'read',
+        status: 200,
+        body: JSON.stringify(
+          ledgerHistoryPage(offset, offset === 4500 ? 12 : 500),
+        ),
+      };
+    }
+    return {
+      id: 'read',
+      status: 200,
+      body: JSON.stringify([
+        {
+          id: 'fact',
+          content: 'I enjoy walking.',
+          created_at: '2026-09-07T00:00:00Z',
+          conversation_id: null,
+        },
+      ]),
+    };
+  });
+  const api = {
+    getApiContract: async () => 'omi',
+    request,
+  } as unknown as OmiBackend;
+  const result = await loadMemories(api);
+  expect(
+    request.mock.calls.filter(([input]: [{path?: string}]) =>
+      input.path?.includes('ledger-history'),
+    ),
+  ).toHaveLength(10);
+  expect(result.items).toHaveLength(1 + 9 * 500 + 12);
+  expect(result).not.toHaveProperty('ledgerHistoryTruncated');
+});
+
 test('old tasks name GET sort_order and indent_level integer strings', async () => {
   const {api} = backend({
     action_items: [

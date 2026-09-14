@@ -630,6 +630,16 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   memorySearchInput: {color: '#ffffff', flex: 1, fontSize: 14, minHeight: 44},
+  memoryHistoryBanner: {
+    backgroundColor: '#202020',
+    borderColor: '#3a3a3a',
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  memoryHistoryBannerText: {color: '#b0b0b0', fontSize: 12, lineHeight: 18},
   memoryList: {gap: 8, paddingBottom: 28, paddingTop: 14},
   memoryCard: {
     backgroundColor: '#202020',

@@ -75,6 +75,7 @@ import {
   memoryLedgerPlaybookCopy,
   memoryBaselineCopy,
   memoryHistoryCopy,
+  memoryHistoryPartialCopy,
   memoryCaptureDeviceCopy,
   conversationListCategory,
   conversationListSourceTag,
@@ -2374,6 +2375,9 @@ test('Omi memory ledger chrome names GET slot, playbook body, baseline, and know
   expect(memoryHistoryCopy({})).toBeNull();
   expect(memoryHistoryCopy({history: false})).toBeNull();
   expect(memoryHistoryCopy({history: true})).toBe('History');
+  expect(memoryHistoryPartialCopy()).toBe(
+    'Some memory history is unavailable. Showing the history received so far.',
+  );
   expect(memoryCaptureDeviceCopy(null)).toBeNull();
   expect(memoryCaptureDeviceCopy(' \t')).toBeNull();
   expect(memoryCaptureDeviceCopy('windows_ab12cd34')).toBeNull();

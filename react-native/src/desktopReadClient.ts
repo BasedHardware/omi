@@ -1946,6 +1946,10 @@ export function memoryHistoryCopy(item: {
   return item.history === true ? 'History' : null;
 }
 
+export function memoryHistoryPartialCopy(): string {
+  return 'Some memory history is unavailable. Showing the history received so far.';
+}
+
 export function memoryLockedCopy(item: {locked?: boolean}): string | null {
   return item.locked === true ? 'Locked' : null;
 }
@@ -2318,6 +2322,7 @@ export type DomainRead<T extends DesktopReadProjection> = {
   apiContract?: 'omi';
   items: T[];
   page: ReadPageState;
+  ledgerHistoryTruncated?: boolean;
 };
 
 export type TaskRead = DomainRead<TaskProjection> & {
@@ -2823,6 +2828,9 @@ export async function loadMemories(
     return {
       apiContract: result.apiContract,
       page: result.page,
+      ...(result.ledgerHistoryTruncated === true
+        ? {ledgerHistoryTruncated: true}
+        : {}),
       items: result.items.map(item => {
         const parsed = parseMemoryText(
           item.summary !== '' ? item.summary : item.title,

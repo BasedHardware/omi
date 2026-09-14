@@ -21,6 +21,7 @@ import {
   memoryLedgerPlaybookCopy,
   memoryBaselineCopy,
   memoryHistoryCopy,
+  memoryHistoryPartialCopy,
   memoryLockedCopy,
   visibleDisplayText,
   type DesktopReadProjection,
@@ -243,6 +244,16 @@ export function MemoriesPage({
           </Text>
         </FocusPressable>
       )}
+      {outcome?.status === 'success' &&
+      outcome.value.ledgerHistoryTruncated === true ? (
+        <View
+          accessibilityLabel={memoryHistoryPartialCopy()}
+          style={styles.memoryHistoryBanner}>
+          <Text style={styles.memoryHistoryBannerText}>
+            {memoryHistoryPartialCopy()}
+          </Text>
+        </View>
+      ) : null}
       {loading && outcome === null ? (
         <View style={styles.projectionEmpty}>
           <ActivityIndicator color="#888888" />
