@@ -10032,7 +10032,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String deviceNameTooLong(int maxBytes) {
-    return 'Nazwa jest za długa (maks. $maxBytes znaków; emoji i znaki diakrytyczne liczą się podwójnie)';
+    return 'Nazwa jest za długa (maks. $maxBytes znaków; emoji i znaki diakrytyczne liczą się więcej)';
   }
 
   @override

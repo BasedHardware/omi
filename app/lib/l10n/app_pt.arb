@@ -3296,10 +3296,10 @@
     "processingTakingLonger": "Ainda a trabalhar — isto está a demorar mais do que o habitual.",
     "speechProfileEnrollmentPrompt": "Para que o Omi saiba qual é a sua voz — fale sobre qualquer coisa por cerca de 5 segundos.",
     "renameDevice": "Renomear dispositivo",
-    "renameDeviceDescription": "O nome fica guardado no próprio Omi, por isso aparece em qualquer telemóvel com que o emparelhar.",
+    "renameDeviceDescription": "O nome fica salvo no próprio Omi, então aparece em qualquer celular com que você o emparelhar.",
     "tapToRename": "Toque para renomear",
     "deviceNameCannotBeEmpty": "O nome do dispositivo não pode estar vazio",
-    "deviceNameTooLong": "O nome é demasiado longo (até {maxBytes} caracteres; emojis e acentos contam mais)",
+    "deviceNameTooLong": "O nome é muito longo (até {maxBytes} caracteres; emojis e acentos contam mais)",
     "deviceNameInvalidCharacters": "O nome contém caracteres não suportados",
     "deviceRenameFailed": "Não foi possível guardar o nome no seu Omi. Verifique se está ligado e tente novamente.",
     "deviceRenamed": "Dispositivo renomeado para {name}"
