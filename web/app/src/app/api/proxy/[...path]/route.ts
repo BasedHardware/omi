@@ -144,13 +144,18 @@ async function handleRequest(request: Request) {
       });
     }
 
-    // Default: return as text
-    const data = await response.text();
-    return new Response(data, {
+    // Default: stream the body through untouched. Reading it as text would
+    // decode binary payloads (e.g. /v1/static-map PNGs) as UTF-8 and corrupt them.
+    const passthroughHeaders: HeadersInit = {
+      'Content-Type': responseContentType || 'text/plain',
+    };
+    const cacheControl = response.headers.get('cache-control');
+    if (cacheControl) {
+      passthroughHeaders['Cache-Control'] = cacheControl;
+    }
+    return new Response(response.body, {
       status: response.status,
-      headers: {
-        'Content-Type': responseContentType || 'text/plain',
-      },
+      headers: passthroughHeaders,
     });
   } catch (error) {
     console.error('Proxy error:', error);
