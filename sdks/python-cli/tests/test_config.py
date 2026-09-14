@@ -527,3 +527,54 @@ def test_active_profile_non_string_diagnostics_succeed(config_path: Path, cli_ru
 
     result_path = cli_runner.invoke(app, ["config", "path"])
     assert result_path.exit_code == 0, result_path.output
+
+
+# -- Regression tests for malformed profile field types (Issue #13775) --
+
+
+@pytest.mark.parametrize(
+    "invalid_toml,expected_field,expected_type",
+    [
+        ("[profiles.default]\napi_key = 12345\n", "api_key", "int"),
+        ("[profiles.default]\nlocal_token = 12345\n", "local_token", "int"),
+        ("[profiles.default]\napi_base = 42\n", "api_base", "int"),
+        ('[profiles.default]\nid_token = ["bad_token"]\n', "id_token", "list"),
+        ("[profiles.default]\nrefresh_token = true\n", "refresh_token", "bool"),
+        ("[profiles.default]\nlocal_api_url = 9999\n", "local_api_url", "int"),
+        ('[profiles.default]\nid_token_expires_at = "not-a-number"\n', "id_token_expires_at", "str"),
+        ("[profiles.default]\nid_token_expires_at = true\n", "id_token_expires_at", "bool"),
+    ],
+)
+def test_profile_field_invalid_type_records_load_error(
+    config_path: Path, invalid_toml: str, expected_field: str, expected_type: str
+) -> None:
+    """Known profile fields with invalid types must set load_error instead of crashing."""
+    config_path.write_text(invalid_toml, encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.load_error is not None
+    assert f"profile 'default' field '{expected_field}'" in config.load_error
+    assert expected_type in config.load_error
+
+
+def test_profile_field_invalid_type_refuses_save_overwrite(config_path: Path) -> None:
+    """A config with malformed profile field types must not be overwritten by save()."""
+    config_path.write_text("[profiles.default]\nlocal_token = 12345\n", encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
+
+    assert "local_token = 12345" in config_path.read_text(encoding="utf-8")
+
+
+def test_profile_field_invalid_type_config_show_succeeds(config_path: Path, cli_runner) -> None:
+    """omi config show and diagnostics must succeed even when profile fields are malformed."""
+    config_path.write_text("[profiles.default]\nlocal_token = 12345\n", encoding="utf-8")
+    result = cli_runner.invoke(app, ["--json", "config", "show"])
+    assert result.exit_code == 0, result.output
+    assert '"profiles": []' in result.output
+
