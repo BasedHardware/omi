@@ -114,6 +114,12 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["silent", "type", "dictation", "voice typing", "private", "chat context"],
       section: .transcription,
       icon: "keyboard", settingId: "transcription.silenttype"),
+    SettingsSearchItem(
+      name: "Ignore Dictation Apps",
+      subtitle: "Stop listening while Wispr Flow, superwhisper, or macOS Dictation uses the mic",
+      keywords: ["dictation", "wispr", "superwhisper", "noise", "mute", "conversations"],
+      section: .transcription,
+      icon: "mic.slash", settingId: "transcription.ignoredictationapps"),
 
     // Notifications
     SettingsSearchItem(

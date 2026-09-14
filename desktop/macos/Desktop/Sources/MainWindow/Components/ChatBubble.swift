@@ -915,7 +915,11 @@ private struct BackgroundAgentSummaryCard: View {
             .foregroundColor(Ink.secondary)
             .lineLimit(3)
             .textSelection(.disabled)
-          OmiMarkdown(text: summary.output, sender: .ai)
+          // Long expanded output in a card that parents keep rebuilding: draw
+          // prose through ChatSelectableProse (one NSTextView) instead of a
+          // tall SwiftUI Text whose intrinsic size relays out on every parent
+          // update. FC-selection-overlay-layout-loop.
+          OmiMarkdown(text: summary.output, sender: .ai, appKitProseSelection: true)
           if showUnavailable {
             Text("Agent unavailable — it may have been dismissed.")
               .scaledFont(size: OmiType.caption)
@@ -1118,7 +1122,9 @@ struct AgentCompletionCard: View {
               .lineLimit(3)
               .textSelection(.disabled)
           }
-          OmiMarkdown(text: output, sender: .ai)
+          // Same class as the summary card above: long expanded output inside
+          // a card that parents rebuild. Keep prose on the NSTextView path.
+          OmiMarkdown(text: output, sender: .ai, appKitProseSelection: true)
           if showUnavailable {
             Text("Agent unavailable — it may have been dismissed.")
               .scaledFont(size: OmiType.caption)
@@ -2136,7 +2142,11 @@ struct DiscoveryCard: View {
           .padding(.horizontal, OmiSpacing.sm)
 
         ScrollView {
-          OmiMarkdown(text: fullText, sender: .ai)
+          // Full profile text inside a nested ScrollView: a tall SwiftUI Text
+          // here gets its intrinsic size re-laid-out on every parent rebuild.
+          // Draw prose through ChatSelectableProse instead, like the main
+          // bubble body. FC-selection-overlay-layout-loop.
+          OmiMarkdown(text: fullText, sender: .ai, appKitProseSelection: true)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.sm)
         }

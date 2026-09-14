@@ -511,8 +511,14 @@ def remove_public_conversation(conversation_id: str) -> None:
 
 
 def set_in_progress_conversation_id(uid: str, conversation_id: str, ttl: int = 300) -> None:
-    r.set(f'users:{uid}:in_progress_memory_id', conversation_id)
-    r.expire(f'users:{uid}:in_progress_memory_id', ttl)
+    # Best-effort pointer written AFTER the authoritative Firestore create of the
+    # in-progress conversation. Every reader falls back to Firestore
+    # (retrieve_in_progress_conversation, get_in_progress_conversation) when the
+    # key is absent, so a Redis capacity failure must skip the write instead of
+    # raising: under prod maxmemory the raise crashed the listen `lifecycle`
+    # lifetime task and tore down live sessions (supervisor `crash`), and the
+    # same raise inside prepare() surfaced as the ASGI WebSocket traceback.
+    _cache_set_fail_open(f'users:{uid}:in_progress_memory_id', conversation_id, ttl)
 
 
 def remove_in_progress_conversation_id(uid: str) -> None:
@@ -528,8 +534,13 @@ def get_in_progress_conversation_id(uid: str) -> str:
 
 def set_conversation_meeting_id(conversation_id: str, meeting_id: str, ttl: int = 86400) -> None:
     """Store the meeting_id for a conversation. TTL defaults to 24 hours."""
-    r.set(f'conversation:{conversation_id}:meeting_id', meeting_id)
-    r.expire(f'conversation:{conversation_id}:meeting_id', ttl)
+    # Same best-effort contract as set_in_progress_conversation_id: the mapping
+    # is an enrichment pointer (meeting-context attribution during processing,
+    # utils/conversations/process_conversation.py), written after the durable
+    # conversation create. Its absence degrades enrichment to the calendar
+    # overlap path, so a Redis capacity failure skips the write rather than
+    # raising out of the listen session bootstrap.
+    _cache_set_fail_open(f'conversation:{conversation_id}:meeting_id', meeting_id, ttl)
 
 
 def get_conversation_meeting_id(conversation_id: str) -> Optional[str]:

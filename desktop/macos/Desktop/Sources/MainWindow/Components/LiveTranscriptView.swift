@@ -140,7 +140,7 @@ struct ConversationsLiveTranscript: View {
         LiveTranscriptView(segments: monitor.segments)
           .frame(maxHeight: 220)
           // Let clicks fall through to the card's expand tap rather than being
-          // captured by the inner scroll / text selection.
+          // captured by the inner scroll view.
           .allowsHitTesting(false)
       }
     }
@@ -434,10 +434,16 @@ private struct LiveSegmentView: View {
       }
 
       // Message bubble
+      // NOTE: SwiftUI text selection was removed here because it wraps each
+      // Text in an NSTextView-backed StyledTextLayoutEngine (SelectionOverlay),
+      // the same FC-selection-overlay-layout-loop failure class the saved
+      // transcript already hit in SpeakerBubbleView. A long capture mounts one
+      // overlay per segment and every live update relays them all. Once the
+      // capture is saved, users can copy the full transcript via the Copy
+      // control in the conversation detail header.
       Text(segment.text)
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.primary)
-        .textSelection(.enabled)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
         .background(
@@ -452,7 +458,6 @@ private struct LiveSegmentView: View {
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
             .italic()
-            .textSelection(.enabled)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.xs)
             .background(

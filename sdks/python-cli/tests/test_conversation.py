@@ -61,6 +61,18 @@ def test_conversation_delete_with_yes(authed_profile, respx_mock, cli_runner) ->
     assert result.exit_code == 0
 
 
+def test_conversation_delete_missing_empty_404_exits_not_found(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.delete("/v1/dev/user/conversations/missing").respond(404)
+    result = cli_runner.invoke(app, ["conversation", "delete", "missing", "--yes"])
+    assert result.exit_code == 5  # EXIT_NOT_FOUND
+
+
+def test_conversation_get_missing_empty_404_json_exits_not_found(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/conversations/missing").respond(404)
+    result = cli_runner.invoke(app, ["--json", "conversation", "get", "missing"])
+    assert result.exit_code == 5  # EXIT_NOT_FOUND
+
+
 def test_conversation_from_segments_reads_file(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
     f = tmp_path / "segments.json"
     segments = {
