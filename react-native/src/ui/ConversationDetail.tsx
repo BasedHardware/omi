@@ -1,7 +1,6 @@
 import React, {useState} from 'react';
 import {ActivityIndicator, Image, Linking, Text, View} from 'react-native';
 import {
-  conversationCaptureCopy,
   conversationDetailDateChipCopy,
   conversationDetailSpeakerCopy,
   conversationDisplaySummary,
@@ -72,7 +71,6 @@ function ConversationClockFields({
   durationCopy?: string | null;
 }) {
   const showLocked = locked === true || conversation.locked;
-  const captureCopy = conversationCaptureCopy(conversation.capturedAtMs);
   const visibilityCopy = conversationVisibilityCopy(conversation.visibility);
   const duration =
     durationCopy === undefined
@@ -80,9 +78,6 @@ function ConversationClockFields({
       : durationCopy;
   return (
     <View style={styles.conversationDetailFields}>
-      {captureCopy !== null ? (
-        <Text style={[styles.conversationDetailField, ink]}>{captureCopy}</Text>
-      ) : null}
       <Text style={[styles.conversationDetailField, ink]}>
         Started ·{' '}
         {formatConversationDate(

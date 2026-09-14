@@ -1117,6 +1117,21 @@ test('conversation details omit Flutter GetSummaryWidgets unused finishedAt cloc
   expect(copy).not.toContain('Finished ·');
 });
 
+test('conversation details omit Flutter GetSummaryWidgets unused capturedAt clock', () => {
+  const copy = text(
+    render({
+      conversation: {
+        ...conversation,
+        startedAt: '2026-09-07T12:00:00.000Z',
+        capturedAtMs: Date.parse('2026-09-07T12:00:00.000Z'),
+        status: 'completed',
+      },
+    }),
+  );
+  expect(copy).toContain('Started ·');
+  expect(copy).not.toContain('Captured (device time)');
+});
+
 test('legacy conversation details name GET started from created_at when started_at is missing', () => {
   mockLegacy.mockReturnValue({
     result: {
