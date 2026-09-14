@@ -2296,7 +2296,7 @@ test('Apps category labels are not raw wire tokens', async () => {
           {
             id: 'catalog-app-1',
             name: 'Catalog fixture app',
-            category: 'productivity',
+            category: 'productivity-and-organization',
           },
         ]),
       };
@@ -2317,7 +2317,8 @@ test('Apps category labels are not raw wire tokens', async () => {
   const tree = textOf(renderer);
   expect(tree).toContain('Catalog fixture app');
   expect(tree).toContain('Productivity');
-  expect(tree).not.toContain('productivity');
+  expect(tree).not.toContain('productivity-and-organization');
+  expect(tree).not.toContain('Productivity and organization');
 });
 
 test('Connectors rows keep GET connected accounts as Connected instead of Installed-only', async () => {

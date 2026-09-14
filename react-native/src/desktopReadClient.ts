@@ -1592,8 +1592,41 @@ export function developerKeysCopy(
   });
 }
 
+const APP_CATEGORY_COPY: Readonly<Record<string, string>> = {
+  'conversation-analysis': 'Conversation Analysis',
+  'health-and-wellness': 'Health',
+  'education-and-learning': 'Education',
+  'communication-improvement': 'Communication',
+  'emotional-and-mental-support': 'Emotional Support',
+  'productivity-and-organization': 'Productivity',
+  'entertainment-and-fun': 'Entertainment',
+  'financial': 'Financial',
+  'travel-and-exploration': 'Travel',
+  'safety-and-security': 'Safety',
+  'shopping-and-commerce': 'Shopping',
+  'social-and-relationships': 'Social',
+  'news-and-information': 'News',
+  'utilities-and-tools': 'Utilities',
+  other: 'Other',
+  'productivity-lifestyle': 'Productivity & Lifestyle',
+  'social-entertainment': 'Social & Entertainment',
+  'productivity-tools': 'Productivity & Tools',
+  'personal-wellness': 'Personal & Lifestyle',
+};
+
 export function appCategoryCopy(category: string): string {
-  return accountWireCopy(category, '');
+  const trimmed = visibleDisplayText(category);
+  if (trimmed === '') {
+    return '';
+  }
+  const mapped = APP_CATEGORY_COPY[trimmed];
+  if (mapped !== undefined) {
+    return mapped;
+  }
+  return trimmed
+    .split('-')
+    .map(part => (part === '' ? '' : `${part[0].toUpperCase()}${part.slice(1)}`))
+    .join(' ');
 }
 
 export function appDisplayName(name: string): string {

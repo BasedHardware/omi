@@ -1710,9 +1710,17 @@ test('whitespace-only connection identity stays unavailable', () => {
 });
 
 test('app category copy is not a raw wire token', () => {
+  expect(appCategoryCopy('productivity-and-organization')).toBe('Productivity');
+  expect(appCategoryCopy('personal-wellness')).toBe('Personal & Lifestyle');
+  expect(appCategoryCopy('health-and-wellness')).toBe('Health');
+  expect(appCategoryCopy('conversation-analysis')).toBe(
+    'Conversation Analysis',
+  );
+  expect(appCategoryCopy('other')).toBe('Other');
   expect(appCategoryCopy('productivity')).toBe('Productivity');
-  expect(appCategoryCopy('health-fitness')).toBe('Health fitness');
+  expect(appCategoryCopy('health-fitness')).toBe('Health Fitness');
   expect(appCategoryCopy('')).toBe('');
+  expect(appCategoryCopy(' \t')).toBe('');
 });
 
 test('empty app source stays visible instead of a blank meta line', () => {

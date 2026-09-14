@@ -2131,7 +2131,7 @@ test('Apps gallery category labels are not raw wire tokens', async () => {
         id: 'catalog-app-1',
         name: 'Catalog fixture app',
         description: '',
-        category: 'productivity',
+        category: 'productivity-and-organization',
         author: '',
         enabled: false,
         uid: null,
@@ -2158,7 +2158,8 @@ test('Apps gallery category labels are not raw wire tokens', async () => {
   const tree = renderedText(renderer);
   expect(tree).toContain('Catalog fixture app');
   expect(tree).toContain('Productivity');
-  expect(tree).not.toContain('productivity');
+  expect(tree).not.toContain('productivity-and-organization');
+  expect(tree).not.toContain('Productivity and organization');
 });
 
 test('Apps gallery keeps GET description when an author is present', async () => {
