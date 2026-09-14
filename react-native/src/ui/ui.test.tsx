@@ -863,6 +863,10 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(orchestrator).toContain('conversationListTag(item)');
   expect(orchestrator).toContain('conversationListNewCopy(');
   expect(orchestrator).toContain("merging: item.status === 'merging'");
+  expect(orchestrator).not.toContain("failed: item.status === 'failed'");
+  expect(orchestrator).not.toContain(
+    "processing: item.status === 'processing'",
+  );
   expect(orchestrator).not.toContain(
     "item.status === 'processing' || item.status === 'merging'",
   );
@@ -3523,7 +3527,7 @@ test('wide Home search and compact Currents name GET emoji tag and discarded pho
   expect(screenpipeTree).not.toContain('Work');
 });
 
-test('wide Home search rows keep GET failed status instead of title-only', () => {
+test('wide Home search rows omit Flutter ConversationListItem Failed chips', () => {
   const renderer = render(
     <ProjectionRow
       item={{
@@ -3548,7 +3552,7 @@ test('wide Home search rows keep GET failed status instead of title-only', () =>
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Conversation title unavailable');
-  expect(tree).toContain('Failed');
+  expect(tree).not.toContain('Failed');
   const plain = render(
     <ProjectionRow
       item={{
@@ -3577,7 +3581,7 @@ test('wide Home search rows keep GET failed status instead of title-only', () =>
   expect(plainTree).not.toContain('In progress');
 });
 
-test('wide Home search rows keep GET processing status instead of title-only', () => {
+test('wide Home search rows omit Flutter ConversationListItem Processing chips', () => {
   const renderer = render(
     <ProjectionRow
       item={{
@@ -3602,7 +3606,7 @@ test('wide Home search rows keep GET processing status instead of title-only', (
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Morning standup');
-  expect(tree).toContain('Processing');
+  expect(tree).not.toContain('Processing');
   const merging = render(
     <ProjectionRow
       item={{

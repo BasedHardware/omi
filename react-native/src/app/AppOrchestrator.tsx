@@ -1156,8 +1156,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               locked: item.locked,
               discarded: item.discarded,
               photoCount: item.photoCount,
-              failed: item.status === 'failed',
-              processing: item.status === 'processing',
               merging: item.status === 'merging',
               emoji: conversationListEmoji(item),
               tag: conversationListTag(item),

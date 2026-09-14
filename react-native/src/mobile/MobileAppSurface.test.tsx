@@ -885,7 +885,7 @@ test('Daily Recaps name discarded GET transcript excerpt as the title', () => {
   expect(renderedText(flagged)).not.toContain('Duration');
 });
 
-test('Daily Recaps name failed conversations without Status on every card', () => {
+test('compact Home conversations omit Flutter ConversationListItem Failed chips', () => {
   const flagged = render({
     recaps: [
       {
@@ -896,14 +896,13 @@ test('Daily Recaps name failed conversations without Status on every card', () =
       },
     ],
   });
-  expect(renderedText(flagged)).toContain('Failed');
+  expect(renderedText(flagged)).toContain('Conversation title unavailable');
+  expect(renderedText(flagged)).not.toContain('Failed');
   expect(
     flagged.root.findAll(
-      node =>
-        node.props.accessibilityLabel === 'Failed conversation' &&
-        node.props.children === 'Failed',
-    ).length,
-  ).toBeGreaterThan(0);
+      node => node.props.accessibilityLabel === 'Failed conversation',
+    ),
+  ).toHaveLength(0);
 
   const plain = render({
     recaps: [
@@ -917,7 +916,7 @@ test('Daily Recaps name failed conversations without Status on every card', () =
   expect(renderedText(plain)).not.toContain('Failed');
 });
 
-test('Daily Recaps name processing conversations without Status on every card', () => {
+test('compact Home conversations omit Flutter ConversationListItem Processing chips', () => {
   const flagged = render({
     recaps: [
       {
@@ -928,14 +927,13 @@ test('Daily Recaps name processing conversations without Status on every card', 
       },
     ],
   });
-  expect(renderedText(flagged)).toContain('Processing');
+  expect(renderedText(flagged)).toContain('Morning standup');
+  expect(renderedText(flagged)).not.toContain('Processing');
   expect(
     flagged.root.findAll(
-      node =>
-        node.props.accessibilityLabel === 'Processing conversation' &&
-        node.props.children === 'Processing',
-    ).length,
-  ).toBeGreaterThan(0);
+      node => node.props.accessibilityLabel === 'Processing conversation',
+    ),
+  ).toHaveLength(0);
 
   const plain = render({
     recaps: [
@@ -980,7 +978,7 @@ test('compact Home conversations name GET merging as Merging... not Processing',
       },
     ],
   });
-  expect(renderedText(processing)).toContain('Processing');
+  expect(renderedText(processing)).not.toContain('Processing');
   expect(renderedText(processing)).not.toContain('Merging...');
 });
 

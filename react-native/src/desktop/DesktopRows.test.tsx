@@ -778,7 +778,7 @@ test('Home and Library rows keep GET locked and discarded flags instead of title
   expect(textOf(plain)).not.toContain('Discarded');
 });
 
-test('Home and Library rows keep GET failed status instead of title-only', () => {
+test('Home and Library rows omit Flutter ConversationListItem Failed chips', () => {
   const item: ConversationProjection = {
     kind: 'conversation',
     id: 'recording:failed-row',
@@ -805,7 +805,7 @@ test('Home and Library rows keep GET failed status instead of title-only', () =>
   });
   for (const copy of [textOf(home), textOf(library)]) {
     expect(copy).toContain('Conversation title unavailable');
-    expect(copy).toContain('Failed');
+    expect(copy).not.toContain('Failed');
     expect(copy).not.toContain('In progress');
   }
   let plain!: ReactTestRenderer.ReactTestRenderer;
@@ -819,7 +819,7 @@ test('Home and Library rows keep GET failed status instead of title-only', () =>
   expect(textOf(plain)).not.toContain('Failed');
 });
 
-test('Home and Library rows keep GET processing status instead of title-only', () => {
+test('Home and Library rows omit Flutter ConversationListItem Processing chips', () => {
   const processing: ConversationProjection = {
     kind: 'conversation',
     id: 'recording:processing-row',
@@ -852,7 +852,7 @@ test('Home and Library rows keep GET processing status instead of title-only', (
     library = ReactTestRenderer.create(<ConversationRow item={merging} />);
   });
   expect(textOf(home)).toContain('Morning standup');
-  expect(textOf(home)).toContain('Processing');
+  expect(textOf(home)).not.toContain('Processing');
   expect(textOf(library)).toContain('Standup recap');
   expect(textOf(library)).toContain('Merging...');
   expect(textOf(library)).not.toContain('Processing');

@@ -211,12 +211,6 @@ export function conversationStatusCopy(status: string): string {
 
 export function conversationListStatusCopy(status: string): string | null {
   const trimmed = visibleDisplayText(status);
-  if (trimmed === 'failed') {
-    return 'Failed';
-  }
-  if (trimmed === 'processing') {
-    return 'Processing';
-  }
   if (trimmed === 'merging') {
     return 'Merging...';
   }

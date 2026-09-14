@@ -292,22 +292,11 @@ const RecapCard = memo(function RecapCard({
           {photosCopy}
         </Text>
       ) : null}
-      {recap.failed === true ? (
-        <Text accessibilityLabel="Failed conversation" style={styles.recapStar}>
-          Failed
-        </Text>
-      ) : null}
       {recap.merging === true ? (
         <Text
           accessibilityLabel="Merging... conversation"
           style={styles.recapStar}>
           Merging...
-        </Text>
-      ) : recap.processing === true ? (
-        <Text
-          accessibilityLabel="Processing conversation"
-          style={styles.recapStar}>
-          Processing
         </Text>
       ) : null}
       {recap.newCopy == null &&

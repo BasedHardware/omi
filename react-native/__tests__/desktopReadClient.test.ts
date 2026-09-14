@@ -1186,9 +1186,9 @@ test('conversation status copy is not a raw wire token', () => {
   expect(conversationStatusCopy('  queued  ')).toBe('queued');
 });
 
-test('conversation list status copy names processing without Status on every chat', () => {
-  expect(conversationListStatusCopy('failed')).toBe('Failed');
-  expect(conversationListStatusCopy('processing')).toBe('Processing');
+test('conversation list status copy names Flutter MergingIndicator without Failed or Processing chips', () => {
+  expect(conversationListStatusCopy('failed')).toBeNull();
+  expect(conversationListStatusCopy('processing')).toBeNull();
   expect(conversationListStatusCopy('merging')).toBe('Merging...');
   expect(conversationListStatusCopy('in_progress')).toBeNull();
   expect(conversationListStatusCopy('completed')).toBeNull();

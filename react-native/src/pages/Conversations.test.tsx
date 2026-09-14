@@ -4,6 +4,7 @@ import {Text} from 'react-native';
 import {ConversationsPage} from './Conversations';
 import {
   clockLabel,
+  conversationDetailDateChipCopy,
   conversationStatusCopy,
   conversationStructuredEmojiDefaultCopy,
   conversationsEmptyCopy,
@@ -641,6 +642,7 @@ test('conversation list names Flutter DateListItem time and omits dated row cloc
     day: '2-digit',
   });
   const dated = clockLabel(older.getTime(), Date.now());
+  const chip = conversationDetailDateChipCopy(older.toISOString(), Date.now());
   const item: ConversationProjection = {
     kind: 'conversation',
     id: 'listen:older-one',
@@ -696,14 +698,8 @@ test('conversation list names Flutter DateListItem time and omits dated row cloc
   const copy = textOf(renderer);
   expect(copy).toContain('Started ·');
   expect(copy).toContain('Finished ·');
-  expect(copy).toContain(dated);
-  expect(dated).toContain(
-    older.toLocaleDateString(undefined, {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    }),
-  );
+  expect(copy).toContain(chip);
+  expect(copy).not.toContain(dated);
 });
 
 test('conversation durations under a minute do not claim 0 min', () => {
@@ -1387,7 +1383,7 @@ test('processing list rows name GET transcript span without a finish clock', () 
   expect(copy).not.toContain('Duration unavailable');
 });
 
-test('conversation list names failed conversations without Status on every row', () => {
+test('conversation list omits Flutter ConversationListItem Failed chips', () => {
   const base = {
     kind: 'conversation' as const,
     title: '',
@@ -1442,17 +1438,17 @@ test('conversation list names failed conversations without Status on every row',
   });
   const copy = textOf(renderer);
   expect(copy).toContain('Conversation title unavailable');
-  expect(copy).toContain('Failed');
+  expect(copy).not.toContain('Failed');
   expect(copy).toContain('Hello');
   expect(
     renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Failed conversation',
-    ).length,
-  ).toBeGreaterThan(0);
+    ),
+  ).toHaveLength(0);
   expect(copy).not.toContain(conversationStatusCopy('in_progress'));
 });
 
-test('conversation list names processing conversations without Status on every row', () => {
+test('conversation list omits Flutter ConversationListItem Processing chips', () => {
   const base = {
     kind: 'conversation' as const,
     title: 'Morning standup',
@@ -1519,15 +1515,9 @@ test('conversation list names processing conversations without Status on every r
   expect(
     renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Processing conversation',
-    ).length,
-  ).toBeGreaterThan(0);
-  expect(
-    renderer.root.findAll(
-      node =>
-        node.props.accessibilityLabel === 'Processing conversation' &&
-        node.props.children === 'Processing',
-    ).length,
-  ).toBeGreaterThan(0);
+    ),
+  ).toHaveLength(0);
+  expect(copy).not.toContain('Processing');
   expect(
     renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Merging... conversation',
