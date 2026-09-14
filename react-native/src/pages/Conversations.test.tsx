@@ -130,6 +130,9 @@ test('complete empty conversations may claim emptiness', () => {
   expect(textOf(renderer)).toContain(conversationsEmptyCopy());
   expect(textOf(renderer)).not.toContain('No conversations yet.');
   expect(textOf(renderer)).not.toContain('Conversations are incomplete.');
+  expect(textOf(renderer)).toContain(
+    'Conversations you record show up here. Tap a tile on the home tab to start your first one.',
+  );
 });
 
 test('starred filter names Flutter noStarredConversations instead of generic match copy', () => {

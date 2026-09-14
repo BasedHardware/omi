@@ -3194,7 +3194,9 @@ test('starred conversation filter names Flutter noStarredConversations', () => {
 });
 
 test('conversation empty copy names Flutter noConversationsYet', () => {
-  expect(conversationsEmptyCopy()).toBe('No conversations yet');
+  expect(conversationsEmptyCopy()).toBe(
+    'No conversations yet\nConversations you record show up here. Tap a tile on the home tab to start your first one.',
+  );
 });
 
 test('memory empty copy names Flutter noMemoriesYet and noMemoriesFound', () => {

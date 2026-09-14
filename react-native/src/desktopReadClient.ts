@@ -570,7 +570,7 @@ export function conversationsStarredEmptyCopy(): string {
 }
 
 export function conversationsEmptyCopy(): string {
-  return 'No conversations yet';
+  return 'No conversations yet\nConversations you record show up here. Tap a tile on the home tab to start your first one.';
 }
 
 export function memoriesEmptyCopy(): string {
