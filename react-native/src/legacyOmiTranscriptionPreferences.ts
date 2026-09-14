@@ -32,7 +32,7 @@ function vocabulary(value: unknown): string[] {
 }
 
 export type OmiTranscriptionPreferences = {
-  singleLanguageMode: boolean | undefined;
+  singleLanguageMode: boolean;
   vocabulary: string[];
 };
 
@@ -50,7 +50,7 @@ export function parseOmiTranscriptionPreferences(
     singleLanguageMode:
       typeof record.single_language_mode === 'boolean'
         ? record.single_language_mode
-        : undefined,
+        : false,
     vocabulary:
       record.vocabulary === undefined || record.vocabulary === null
         ? []

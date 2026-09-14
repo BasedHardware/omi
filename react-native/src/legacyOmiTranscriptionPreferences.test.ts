@@ -4,7 +4,7 @@ import {
 } from './legacyOmiTranscriptionPreferences';
 import type {OmiBackend} from './omiNativeTypes';
 
-test('parses GET transcription preferences without Flutter false defaults', () => {
+test('parses GET transcription preferences with Flutter omitted single_language_mode default', () => {
   expect(
     parseOmiTranscriptionPreferences(
       JSON.stringify({
@@ -17,8 +17,14 @@ test('parses GET transcription preferences without Flutter false defaults', () =
     vocabulary: ['Omi', 'Based Hardware'],
   });
   expect(parseOmiTranscriptionPreferences(JSON.stringify({}))).toEqual({
-    singleLanguageMode: undefined,
+    singleLanguageMode: false,
     vocabulary: [],
+  });
+  expect(
+    parseOmiTranscriptionPreferences(JSON.stringify({vocabulary: ['Omi']})),
+  ).toEqual({
+    singleLanguageMode: false,
+    vocabulary: ['Omi'],
   });
 });
 
@@ -45,6 +51,11 @@ test('fails closed for malformed GET transcription preferences', () => {
   expect(() =>
     parseOmiTranscriptionPreferences(
       JSON.stringify({single_language_mode: 'true'}),
+    ),
+  ).toThrow();
+  expect(() =>
+    parseOmiTranscriptionPreferences(
+      JSON.stringify({single_language_mode: null}),
     ),
   ).toThrow();
 });

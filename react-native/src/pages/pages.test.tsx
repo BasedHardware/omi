@@ -1909,7 +1909,7 @@ test('Settings names a failed transcription-preferences GET instead of empty suc
   expect(tree).not.toContain('Detect 10+ languages');
 });
 
-test('Settings omits Automatic translation when GET single_language_mode is missing', async () => {
+test('Settings names Flutter omitted GET single_language_mode as Automatic Translation Enabled', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/users/transcription-preferences') {
@@ -1925,7 +1925,9 @@ test('Settings omits Automatic translation when GET single_language_mode is miss
   const tree = textOf(renderer);
   expect(tree).toContain('Custom Vocabulary');
   expect(tree).toContain('Omi');
-  expect(tree).not.toContain('Automatic Translation');
+  expect(tree).toContain('Automatic Translation');
+  expect(tree).toContain('Enabled');
+  expect(tree).toContain('Detect 10+ languages');
 });
 
 test('Settings developer webhook URLs omit empty or whitespace values', async () => {
