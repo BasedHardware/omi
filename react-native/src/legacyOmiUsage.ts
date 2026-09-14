@@ -73,9 +73,5 @@ export async function loadOmiUsagePeriod(
   ) {
     return null;
   }
-  try {
-    return parseOmiUsagePeriod(response.body, period);
-  } catch {
-    return null;
-  }
+  return parseOmiUsagePeriod(response.body, period);
 }

@@ -2711,3 +2711,27 @@ test('Settings names a failed usage period GET instead of empty success', async 
   expect(tree).not.toContain('3 minutes');
   expect(tree).not.toContain('Upgrade');
 });
+
+test('Settings names malformed usage period GET instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (
+      typeof request.path === 'string' &&
+      request.path.startsWith('/v1/users/me/usage?period=')
+    ) {
+      return {id: request.id, status: 200, body: '{'};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('This month');
+  expect(tree).toContain('This year');
+  expect(tree).toContain('All time');
+  expect(tree).toContain(
+    desktopReadErrorCopy(new Error('Omi usage is malformed')),
+  );
+  expect(tree).not.toContain('This month · Listening');
+  expect(tree).not.toContain('3 minutes');
+  expect(tree).not.toContain('Upgrade');
+});

@@ -166,6 +166,20 @@ test('loadOmiUsagePeriod names resolved GET periods and omits failures', async (
   });
   request.mockResolvedValueOnce({id: 'usage', status: 404, body: null});
   expect(await loadOmiUsagePeriod(backend, 'yearly')).toBeNull();
-  request.mockResolvedValueOnce({id: 'usage', status: 200, body: '{'});
+  request.mockResolvedValueOnce({
+    id: 'usage',
+    status: 500,
+    body: '{"error":"internal"}',
+  });
   expect(await loadOmiUsagePeriod(backend, 'all_time')).toBeNull();
+});
+
+test('loadOmiUsagePeriod names malformed GET instead of empty success', async () => {
+  const request = jest.fn(async () => ({
+    id: 'usage',
+    status: 200,
+    body: '{',
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(loadOmiUsagePeriod(backend, 'monthly')).rejects.toThrow();
 });
