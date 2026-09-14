@@ -477,6 +477,7 @@ class CaptureController extends ChangeNotifier
   StreamSubscription? _bleButtonStream;
   StreamSubscription? _bleButtonTapsStream;
   bool _buttonTapsActive = false;
+  bool _voiceSessionFromHold = false;
   late final ButtonTapDispatcher _tapDispatcher = ButtonTapDispatcher(_tapActionForCount);
   DateTime? _voiceCommandSession;
   List<List<int>> _commandBytes = [];
@@ -1009,6 +1010,7 @@ class CaptureController extends ChangeNotifier
         OmiVoicePlaybackService.instance.interrupt();
       }
       _voiceCommandSession = DateTime.now();
+      _voiceSessionFromHold = false;
       _commandBytes = [];
       _startVoiceCommandTimeout(deviceId);
       _playSpeakerHaptic(deviceId, 1);
@@ -1038,6 +1040,12 @@ class CaptureController extends ChangeNotifier
 
   @visibleForTesting
   void handleButtonTapsForTesting(String deviceId, List<int> value) => _onButtonTaps(deviceId, value);
+
+  @visibleForTesting
+  void handleLegacyButtonForTesting(String deviceId, List<int> value) => _onLegacyButton(deviceId, value);
+
+  @visibleForTesting
+  bool get voiceQuestionActiveForTesting => _voiceCommandSession != null;
 
   Future<void> _streamButtonTaps(String deviceId) async {
     final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
@@ -1122,6 +1130,7 @@ class CaptureController extends ChangeNotifier
     if (buttonState == 3 && _voiceCommandSession == null) {
       debugPrint("Legacy: Long press start detected");
       _voiceCommandSession = DateTime.now();
+      _voiceSessionFromHold = true;
       _commandBytes = [];
       _startVoiceCommandTimeout(deviceId);
       _playSpeakerHaptic(deviceId, 1);
@@ -1129,7 +1138,7 @@ class CaptureController extends ChangeNotifier
 
     // Legacy support: release (end voice command) - older firmware
     // End on release if a voice command session is active
-    if (buttonState == 5 && _voiceCommandSession != null) {
+    if (buttonState == 5 && _voiceCommandSession != null && _voiceSessionFromHold) {
       debugPrint("Legacy: Release detected - ending voice command");
       _endVoiceCommandSession(deviceId);
     }

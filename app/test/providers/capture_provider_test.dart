@@ -1803,4 +1803,30 @@ void main() {
       expect(provider.isConversationMarkedForStarring, isFalse);
     });
   });
+
+  group('legacy button stream', () {
+    setUp(() {
+      SharedPreferencesUtil().singleTapAction = 0;
+    });
+
+    test('the release that trails a single tap does not end the question it started', () {
+      final provider = CaptureProvider();
+
+      provider.handleLegacyButtonForTesting('device', [1, 0, 0, 0, 0, 0, 0, 0]);
+      expect(provider.voiceQuestionActiveForTesting, isTrue);
+
+      provider.handleLegacyButtonForTesting('device', [5, 0, 0, 0, 0, 0, 0, 0]);
+      expect(provider.voiceQuestionActiveForTesting, isTrue);
+    });
+
+    test('a release still ends a question started by holding the button', () {
+      final provider = CaptureProvider();
+
+      provider.handleLegacyButtonForTesting('device', [3, 0, 0, 0, 0, 0, 0, 0]);
+      expect(provider.voiceQuestionActiveForTesting, isTrue);
+
+      provider.handleLegacyButtonForTesting('device', [5, 0, 0, 0, 0, 0, 0, 0]);
+      expect(provider.voiceQuestionActiveForTesting, isFalse);
+    });
+  });
 }
