@@ -61,6 +61,51 @@ def get_repo_for_request(user: dict, repo_param: str = None) -> tuple[str, str]:
     return repo_full_name, None
 
 
+def coerce_issue_number(value) -> int | None:
+    """Coerce issue_number from int, float, or string (e.g. '#42', ' 42 ') to a positive integer."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        if isinstance(value, str):
+            value = value.strip()
+            if value.startswith("#"):
+                value = value[1:].strip()
+            num = int(value)
+        elif isinstance(value, float):
+            import math
+            if not math.isfinite(value) or not value.is_integer():
+                return None
+            num = int(value)
+        elif isinstance(value, int):
+            num = value
+        else:
+            return None
+        return num if num > 0 else None
+    except (ValueError, OverflowError):
+        return None
+
+
+def coerce_limit(value, default: int = 10, maximum: int = 100) -> int:
+    """Coerce limit to a positive integer bounded by maximum."""
+    if value is None or isinstance(value, bool):
+        return default
+    try:
+        if isinstance(value, str):
+            num = int(value.strip())
+        elif isinstance(value, float):
+            import math
+            if not math.isfinite(value):
+                return default
+            num = int(value)
+        elif isinstance(value, int):
+            num = value
+        else:
+            return default
+        return max(1, min(num, maximum))
+    except (ValueError, OverflowError):
+        return default
+
+
 # ============================================
 # Chat Tools Manifest
 # ============================================
@@ -391,7 +436,7 @@ async def tool_list_issues(request: Request):
         uid = body.get("uid")
         repo = body.get("repo")
         state = body.get("state", "open")
-        limit = min(body.get("limit", 10), 50)
+        limit = coerce_limit(body.get("limit", 10), default=10, maximum=50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -406,12 +451,17 @@ async def tool_list_issues(request: Request):
         if error:
             return ChatToolResponse(error=error)
 
-        issues = github_client.list_issues(
+        result = github_client.list_issues(
             access_token=user["access_token"],
             repo_full_name=repo_full_name,
             state=state,
             per_page=limit
         )
+
+        if isinstance(result, dict) and not result.get("success"):
+            return ChatToolResponse(error=f"Failed to list issues: {result.get('error', 'Unknown error')}")
+
+        issues = result.get("issues", []) if isinstance(result, dict) else result
 
         if not issues:
             return ChatToolResponse(result=f"No {state} issues found in {repo_full_name}.")
@@ -442,8 +492,12 @@ async def tool_get_issue(request: Request):
         if not uid:
             return ChatToolResponse(error="User ID is required")
 
-        if not issue_number:
+        if issue_number is None or issue_number == "":
             return ChatToolResponse(error="Issue number is required")
+
+        issue_num = coerce_issue_number(issue_number)
+        if issue_num is None:
+            return ChatToolResponse(error="Invalid issue number. Please provide a positive integer (e.g. 42 or #42).")
 
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
@@ -458,11 +512,14 @@ async def tool_get_issue(request: Request):
         issue = github_client.get_issue(
             access_token=user["access_token"],
             repo_full_name=repo_full_name,
-            issue_number=int(issue_number)
+            issue_number=issue_num
         )
 
-        if not issue:
-            return ChatToolResponse(error=f"Issue #{issue_number} not found in {repo_full_name}")
+        if issue is None:
+            return ChatToolResponse(error=f"Issue #{issue_num} not found in {repo_full_name}")
+
+        if isinstance(issue, dict) and "error" in issue:
+            return ChatToolResponse(error=f"Failed to get issue: {issue['error']}")
 
         result_parts = [
             f"**Issue #{issue['number']}** - {issue['state'].upper()}",
@@ -552,8 +609,12 @@ async def tool_add_comment(request: Request):
         if not uid:
             return ChatToolResponse(error="User ID is required")
 
-        if not issue_number:
+        if issue_number is None or issue_number == "":
             return ChatToolResponse(error="Issue number is required")
+
+        issue_num = coerce_issue_number(issue_number)
+        if issue_num is None:
+            return ChatToolResponse(error="Invalid issue number. Please provide a positive integer (e.g. 42 or #42).")
 
         if not comment_body:
             return ChatToolResponse(error="Comment body is required")
@@ -571,13 +632,13 @@ async def tool_add_comment(request: Request):
         result = github_client.add_issue_comment(
             access_token=user["access_token"],
             repo_full_name=repo_full_name,
-            issue_number=int(issue_number),
+            issue_number=issue_num,
             body=comment_body
         )
 
         if result and result.get("success"):
             return ChatToolResponse(
-                result=f"**Comment Added**\n\nAdded comment to issue #{issue_number} in {repo_full_name}"
+                result=f"**Comment Added**\n\nAdded comment to issue #{issue_num} in {repo_full_name}"
             )
         else:
             error = result.get("error", "Unknown error") if result else "Failed"
