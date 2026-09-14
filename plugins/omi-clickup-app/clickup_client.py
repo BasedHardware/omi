@@ -171,7 +171,43 @@ class ClickUpClient:
             print(f"❌ Error getting lists: {e}", flush=True)
             return []
     
-    def get_all_lists(self, access_token: str, team_id: str) -> List[Dict]:
+
+    def get_folders(self, space_id: str) -> list:
+        """Retrieve all folders in a space."""
+        try:
+            res = requests.get(f"{self.API_BASE}/space/{space_id}/folder", headers=self._headers())
+            return res.json().get("folders", []) if res.status_code == 200 else []
+        except Exception:
+            return []
+
+    def get_all_lists(self, space_id: str) -> list:
+        """Aggregate both folderless lists and lists within folders."""
+        all_lists = []
+        try:
+            # 1. Folderless lists
+            res = requests.get(f"{self.API_BASE}/space/{space_id}/list", headers=self._headers())
+            if res.status_code == 200:
+                for lst in res.json().get("lists", []):
+                    all_lists.append({
+                        "id": lst.get("id"),
+                        "name": lst.get("name"),
+                        "folder_name": None
+                    })
+            # 2. Lists in folders
+            folders = self.get_folders(space_id)
+            for f in folders:
+                f_name = f.get("name", "Folder")
+                for lst in f.get("lists", []):
+                    all_lists.append({
+                        "id": lst.get("id"),
+                        "name": f"{f_name} / {lst.get('name')}",
+                        "folder_name": f_name
+                    })
+        except Exception as e:
+            print(f"Error fetching lists: {e}")
+        return all_lists
+
+    def _orig_get_all_lists(self, access_token: str, team_id: str) -> List[Dict]:
         """Get all lists across all spaces in a workspace."""
         all_lists = []
         
