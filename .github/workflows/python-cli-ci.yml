@@ -52,3 +52,16 @@ jobs:
 
       - name: Run tests
         run: python -m pytest -q
+
+      - name: Build wheel
+        shell: bash
+        run: |
+          rm -rf dist
+          python -m build
+
+      - name: Clean-install smoke test (PR-time guard)
+        # Same clean-install check as the publish workflow, run on every PR
+        # that touches sdks/python-cli: a missing runtime dependency is
+        # masked by the editable/dev install above and only shows up in a
+        # fresh `pip install` of the built wheel (see omi-cli 0.2.3 on PyPI).
+        run: bash verify-clean-install.sh dist
