@@ -4,6 +4,7 @@ import {
   conversationFirstPartySummaryCopy,
   conversationPhotoAnalyzingCopy,
   conversationPhotoDiscardedCopy,
+  conversationPhotoUnavailableCopy,
   conversationUnknownAppCopy,
   desktopBackendServiceCopy,
   transcriptSttUnknownCopy,
@@ -1291,7 +1292,7 @@ test('names GET discarded photos and photos still analyzing', async () => {
   );
 });
 
-test('keeps GET photo base64 inline and omits empty, invalid, or storage-only photos', async () => {
+test('names GET invalid inline photo File unavailable and omits empty or storage-only photos', async () => {
   const png =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   mockRequest.mockResolvedValue(
@@ -1330,8 +1331,8 @@ test('keeps GET photo base64 inline and omits empty, invalid, or storage-only ph
         imageUri: `data:image/png;base64,${png}`,
       },
       {caption: 'No bytes'},
-      {caption: 'Whitespace'},
-      {caption: 'Corrupt'},
+      {caption: 'Whitespace', unavailableCopy: conversationPhotoUnavailableCopy()},
+      {caption: 'Corrupt', unavailableCopy: conversationPhotoUnavailableCopy()},
       {caption: 'Stored elsewhere'},
     ],
   });

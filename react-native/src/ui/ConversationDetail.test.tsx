@@ -13,6 +13,7 @@ import {
   conversationActionItemsCompletedCopy,
   conversationActionItemsNoCompletedCopy,
   conversationUnknownAppCopy,
+  conversationPhotoUnavailableCopy,
   transcriptSttUnknownCopy,
 } from '../desktopReadClient';
 
@@ -1813,6 +1814,47 @@ test('legacy conversation details paint GET photo base64 without a viewer', () =
     view.root.findAll(node => node.props.source?.uri === uri)[0]?.props
       .onPress,
   ).toBeUndefined();
+});
+
+test('legacy conversation details name GET invalid inline photo File unavailable', () => {
+  const uri =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        photoCount: 3,
+        photoCaptions: ['Whiteboard notes', 'Corrupt', 'Stored elsewhere'],
+        photoRows: [
+          {caption: 'Whiteboard notes', imageUri: uri},
+          {caption: 'Corrupt', unavailableCopy: conversationPhotoUnavailableCopy()},
+          {caption: 'Stored elsewhere'},
+        ],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1'},
+  });
+  const copy = text(view);
+  expect(copy).toContain('3 photos');
+  expect(copy).toContain('Whiteboard notes');
+  expect(copy).toContain(conversationPhotoUnavailableCopy());
+  expect(copy).toContain('Corrupt');
+  expect(copy).toContain('Stored elsewhere');
+  expect(
+    view.root.findAll(node => node.props.source?.uri === uri).length,
+  ).toBeGreaterThan(0);
 });
 
 test('legacy conversation details name GET folder name and omit unresolved folders', () => {

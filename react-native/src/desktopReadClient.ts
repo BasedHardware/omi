@@ -537,6 +537,10 @@ export function conversationPhotoAnalyzingCopy(): string {
   return 'Analyzing...';
 }
 
+export function conversationPhotoUnavailableCopy(): string {
+  return 'File unavailable';
+}
+
 export function conversationPhotoChrome(photo: {
   discarded: boolean;
   description?: string | null;

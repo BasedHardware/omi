@@ -504,6 +504,19 @@ function LegacyConversationBody({
             />,
           );
         }
+        if (
+          photo.unavailableCopy !== undefined &&
+          photo.unavailableCopy !== ''
+        ) {
+          nodes.push(
+            <Text
+              key={`photo-unavailable-${index}`}
+              accessibilityLabel={photo.unavailableCopy}
+              style={[styles.conversationDetailField, ink]}>
+              {photo.unavailableCopy}
+            </Text>,
+          );
+        }
         if (caption !== '') {
           nodes.push(
             <Text

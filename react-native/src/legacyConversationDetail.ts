@@ -2,6 +2,7 @@ import type {OmiBackend} from './omiNativeTypes';
 import {
   conversationPhotoChrome,
   conversationPhotoDataUri,
+  conversationPhotoUnavailableCopy,
   conversationFirstPartySummaryCopy,
   conversationUnknownAppCopy,
   desktopReadErrorCopy,
@@ -35,7 +36,7 @@ export type LegacyConversationDetail = {
   };
   photoCount?: number;
   photoCaptions?: string[];
-  photoRows?: {caption?: string; imageUri?: string}[];
+  photoRows?: {caption?: string; imageUri?: string; unavailableCopy?: string}[];
   folderName?: string;
   folderColor?: string;
   folderIcon?: string;
@@ -326,7 +327,7 @@ function conversationPhotos(value: unknown):
   | {
       count: number;
       captions: string[];
-      rows: {caption?: string; imageUri?: string}[];
+      rows: {caption?: string; imageUri?: string; unavailableCopy?: string}[];
     }
   | undefined {
   if (value === undefined || value === null) {
@@ -361,9 +362,17 @@ function conversationPhotos(value: unknown):
               ? undefined
               : text(photo.content_type),
           );
+    const unavailableCopy =
+      photo.base64 === undefined ||
+      photo.base64 === null ||
+      photo.base64 === '' ||
+      imageUri !== undefined
+        ? undefined
+        : conversationPhotoUnavailableCopy();
     return {
       ...(caption === undefined ? {} : {caption}),
       ...(imageUri === undefined ? {} : {imageUri}),
+      ...(unavailableCopy === undefined ? {} : {unavailableCopy}),
     };
   });
   return {
