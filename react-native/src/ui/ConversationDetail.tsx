@@ -87,13 +87,6 @@ function ConversationClockFields({
           Duration · {duration}
         </Text>
       ) : null}
-      {conversation.starred ? (
-        <Text
-          accessibilityLabel="Starred conversation"
-          style={[styles.conversationDetailField, ink]}>
-          Starred
-        </Text>
-      ) : null}
       {visibilityCopy === null ? null : (
         <Text style={[styles.conversationDetailField, ink]}>
           {visibilityCopy}

@@ -989,21 +989,16 @@ test('an in-progress chat does not invent a Finished clock', () => {
   expect(copy).not.toContain('Duration unavailable');
 });
 
-test('conversation details name starred conversations without an empty star toggle', () => {
+test('conversation details omit Flutter GetSummaryWidgets unused Starred chip', () => {
   const starred = render({
     conversation: {...conversation, starred: true},
   });
-  expect(text(starred)).toContain('Starred');
+  expect(text(starred)).not.toContain('Starred');
   expect(
     starred.root.findAll(
       node =>
-        node.props.accessibilityLabel === 'Starred conversation' &&
+        node.props.accessibilityLabel === 'Starred conversation' ||
         node.props.children === 'Starred',
-    ).length,
-  ).toBeGreaterThan(0);
-  expect(
-    starred.root.findAll(
-      node => node.props.accessibilityLabel === 'Not starred',
     ),
   ).toHaveLength(0);
 
@@ -1016,7 +1011,7 @@ test('conversation details name starred conversations without an empty star togg
   ).toHaveLength(0);
 });
 
-test('legacy conversation details name starred conversations from the list row', () => {
+test('legacy conversation details omit Flutter GetSummaryWidgets unused Starred chip', () => {
   mockLegacy.mockReturnValue({
     result: {
       status: 'loaded',
@@ -1036,12 +1031,12 @@ test('legacy conversation details name starred conversations from the list row',
     apiContract: 'omi',
     conversation: {...conversation, id: 'old-1', starred: true},
   });
-  expect(text(starred)).toContain('Starred');
+  expect(text(starred)).not.toContain('Starred');
   expect(
     starred.root.findAll(
       node => node.props.accessibilityLabel === 'Starred conversation',
-    ).length,
-  ).toBeGreaterThan(0);
+    ),
+  ).toHaveLength(0);
 });
 
 test('legacy conversation details keep GET clocks from the list row', () => {
