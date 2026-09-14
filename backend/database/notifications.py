@@ -9,6 +9,8 @@ users/{uid}/fcm_tokens (subcollection)
       └── time_zone: "America/New_York"
 """
 
+from zoneinfo import ZoneInfo
+
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
@@ -97,6 +99,33 @@ def get_user_time_zone(uid: str) -> Optional[str]:
 def set_user_time_zone(uid: str, time_zone: str) -> None:
     """Persist the client's reported IANA timezone on the user document."""
     db.collection('users').document(uid).set({'time_zone': time_zone}, merge=True)
+
+
+def resolve_user_timezone(uid: str) -> str:
+    """Return a validated IANA timezone for ``uid``, or ``UTC`` when missing/invalid."""
+    tz = get_user_time_zone(uid)
+    if tz is None:
+        return "UTC"
+    try:
+        ZoneInfo(tz)
+        return tz
+    except Exception:
+        return "UTC"
+
+
+def sync_user_time_zone_from_client(uid: str, request_tz: Optional[str]) -> str:
+    """Persist a client-reported IANA timezone when it changes and return the resolved zone."""
+    if not request_tz:
+        return resolve_user_timezone(uid)
+    try:
+        ZoneInfo(request_tz)
+    except Exception:
+        logger.warning("sync_user_time_zone_from_client - invalid request_tz, ignoring")
+        return resolve_user_timezone(uid)
+    stored = get_user_time_zone(uid)
+    if stored != request_tz:
+        set_user_time_zone(uid, request_tz)
+    return request_tz
 
 
 def set_user_time_zone_if_missing(uid: str, time_zone: str) -> bool:
