@@ -55,6 +55,7 @@ import {
   mcpTitleCopy,
   webhooksTitleCopy,
   userIdTitleCopy,
+  userIdChipCopy,
   signOutTitleCopy,
   privacyPolicyTitleCopy,
   termsOfServiceTitleCopy,
@@ -2100,6 +2101,15 @@ test('developer key copy names GET empty keys Flutter No API keys yet plus creat
   expect(mcpTitleCopy()).toBe('MCP');
   expect(webhooksTitleCopy()).toBe('Webhooks');
   expect(userIdTitleCopy()).toBe('User ID');
+  expect(userIdChipCopy('user-1')).toBe('user-1');
+  expect(userIdChipCopy('123456')).toBe('123456');
+  expect(userIdChipCopy('user-42')).toBe('use•••••-42');
+  expect(userIdChipCopy('1234567')).toBe('123•••••567');
+  expect(userIdChipCopy('firebase-uid-abcdefghijklmnopqrstuvwxyz')).toBe(
+    'fir•••••xyz',
+  );
+  expect(userIdChipCopy('')).toBe('Account id unavailable');
+  expect(userIdChipCopy(' \t')).toBe('Account id unavailable');
   expect(signOutTitleCopy()).toBe('Sign Out');
   expect(privacyPolicyTitleCopy()).toBe('Privacy Policy');
   expect(termsOfServiceTitleCopy()).toBe('Terms of Service');

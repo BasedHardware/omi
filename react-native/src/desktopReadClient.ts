@@ -978,6 +978,16 @@ export function userIdTitleCopy(): string {
   return 'User ID';
 }
 
+export function userIdChipCopy(uid: string | null | undefined): string {
+  const copy = accountFieldCopy(uid, 'Account id unavailable');
+  if (copy === 'Account id unavailable') {
+    return copy;
+  }
+  return copy.length > 6
+    ? `${copy.slice(0, 3)}•••••${copy.slice(-3)}`
+    : copy;
+}
+
 export function signOutTitleCopy(): string {
   return 'Sign Out';
 }

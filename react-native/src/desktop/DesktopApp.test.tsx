@@ -5541,6 +5541,48 @@ test('Settings omits Flutter Profile.build() GET company, job, and data protecti
   expect(tree).not.toContain('Standard');
 });
 
+test('Settings names Flutter Profile truncated User ID', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'firebase-uid-abcdefghijklmnopqrstuvwxyz',
+      name: 'Ada',
+      email: 'ada@example.com',
+    },
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('User ID');
+  expect(tree).toContain('fir•••••xyz');
+  expect(tree).not.toContain('firebase-uid-abcdefghijklmnopqrstuvwxyz');
+  expect(tree).toContain('Ada');
+});
+
 test('Settings reports a nested non-retryable profile read as unavailable', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;
@@ -5665,7 +5707,8 @@ test('Settings shows already-loaded Account id and Name not set', async () => {
   expect(tree).not.toContain('Name not set on this account.');
   expect(tree).toContain('User ID');
   expect(tree).not.toContain('Account id');
-  expect(tree).toContain('user-42');
+  expect(tree).toContain('use•••••-42');
+  expect(tree).not.toContain('user-42');
   expect(tree).not.toContain('Signed in to Omi');
 });
 

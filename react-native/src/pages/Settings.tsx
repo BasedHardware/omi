@@ -33,6 +33,7 @@ import {
   mcpTitleCopy,
   webhooksTitleCopy,
   userIdTitleCopy,
+  userIdChipCopy,
   signOutTitleCopy,
   privacyPolicyTitleCopy,
   termsOfServiceTitleCopy,
@@ -810,10 +811,7 @@ export function SettingsPage({
               title="Email"
             />
             <SettingRow
-              copy={accountFieldCopy(
-                snapshot.profile.uid,
-                'Account id unavailable',
-              )}
+              copy={userIdChipCopy(snapshot.profile.uid)}
               title={userIdTitleCopy()}
             />
           </>

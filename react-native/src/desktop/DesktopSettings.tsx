@@ -21,6 +21,7 @@ import {
   mcpTitleCopy,
   webhooksTitleCopy,
   userIdTitleCopy,
+  userIdChipCopy,
   signOutTitleCopy,
   accountFieldCopy,
   subscriptionPlanCopy,
@@ -913,7 +914,7 @@ export function DesktopSettings({
       ) : null}
       {account?.profile != null ? (
         <Row
-          copy={accountFieldCopy(account.profile.uid, 'Account id unavailable')}
+          copy={userIdChipCopy(account.profile.uid)}
           title={userIdTitleCopy()}
         />
       ) : null}

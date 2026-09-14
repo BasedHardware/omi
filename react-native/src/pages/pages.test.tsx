@@ -1243,6 +1243,30 @@ test('Settings omits Flutter Profile.build() GET company, job, and data protecti
   expect(tree).not.toContain('Standard');
 });
 
+test('Settings names Flutter Profile truncated User ID', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          uid: 'firebase-uid-abcdefghijklmnopqrstuvwxyz',
+          name: 'Ada',
+          email: 'ada@example.com',
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('User ID');
+  expect(tree).toContain('fir•••••xyz');
+  expect(tree).not.toContain('firebase-uid-abcdefghijklmnopqrstuvwxyz');
+  expect(tree).toContain('Ada');
+});
+
 test('Settings omits NEXT LINE-only company and job instead of blank rows', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
