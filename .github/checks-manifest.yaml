@@ -986,6 +986,11 @@ checks:
     triggers: ["plugins/basic/mentor.py", "plugins/basic/mentor_webhook_auth.py", "plugins/test_mentor_session_auth.py", "scripts/run-plugin-mentor-session-auth-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "POST /mentor trusted client session_id for the shared Redis transcript buffer without auth, so callers could read or poison another user's buffer"
+  - id: github-app-client-tests
+    command: ["python3", "plugins/omi-github-app/test_github_client.py"]
+    triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13545: repository labels silently truncated at 100 because fetchers never followed next links; the suite asserts pagination and fail-closed item handling and must run in CI to catch a regression"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
