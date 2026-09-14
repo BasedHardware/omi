@@ -272,11 +272,13 @@ test('storage read failure remains unknown and can be retried', async () => {
   expect(button('Read storage status').props.disabled).toBe(false);
 });
 
-test('labels double-press only for a connected device with a confirmed button subscription', async () => {
+test('connected device omits Flutter DeviceSettings unused Double-press copy', async () => {
   await render({...device, buttonSupported: true});
-  expect(JSON.stringify(renderer.toJSON())).toContain(
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
     'Double-press to save this conversation and keep recording.',
   );
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('Double-press');
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('Double Tap');
   await act(async () =>
     renderer.update(
       <DeviceControls
