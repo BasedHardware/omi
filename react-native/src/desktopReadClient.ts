@@ -1695,6 +1695,18 @@ export function deviceUnknownCopy(): string {
   return 'Unknown';
 }
 
+export function ledBrightnessCopy(): string {
+  return 'LED Brightness';
+}
+
+export function micGainCopy(): string {
+  return 'Mic Gain';
+}
+
+export function findDeviceCopy(): string {
+  return 'Find';
+}
+
 export function firmwareUpdateCopy(
   currentFirmware: string,
   details: {

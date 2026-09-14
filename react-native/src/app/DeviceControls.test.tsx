@@ -4,6 +4,11 @@ import {omiNative} from '../omiNative';
 import type {Device} from '../omiNativeTypes';
 import {FocusPressable} from '../ui/Pressable';
 import {DeviceControls} from './DeviceControls';
+import {
+  findDeviceCopy,
+  ledBrightnessCopy,
+  micGainCopy,
+} from '../desktopReadClient';
 
 jest.mock('../omiNative', () => ({
   omiNative: {
@@ -51,8 +56,17 @@ test('requires reported feature bits and valid observed values before exposing w
   await act(async () => {
     renderer.update(<DeviceControls device={device} busy={false} />);
   });
-  expect(button('Increase microphone gain').props.disabled).toBe(true);
-  expect(button('Decrease microphone gain').props.disabled).toBe(false);
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain(`"${ledBrightnessCopy()}",":"," ","50%"`);
+  expect(tree).toContain(`"${micGainCopy()}",":"," ","8"`);
+  expect(tree).not.toContain('LED brightness');
+  expect(tree).not.toContain('Microphone gain');
+  expect(button(`Increase ${micGainCopy().toLowerCase()}`).props.disabled).toBe(
+    true,
+  );
+  expect(button(`Decrease ${micGainCopy().toLowerCase()}`).props.disabled).toBe(
+    false,
+  );
 });
 
 test('serializes writes and waits for matching native read-back without optimistic values', async () => {
@@ -129,7 +143,7 @@ test('find requires discovered support, serializes commands and reports only ack
     }),
   );
   await render(device);
-  expect(button('Find device')).toBeUndefined();
+  expect(button(findDeviceCopy())).toBeUndefined();
   await act(async () =>
     renderer.update(
       <DeviceControls
@@ -139,8 +153,8 @@ test('find requires discovered support, serializes commands and reports only ack
     ),
   );
   await act(async () => {
-    button('Find device').props.onPress();
-    button('Find device').props.onPress();
+    button(findDeviceCopy()).props.onPress();
+    button(findDeviceCopy()).props.onPress();
   });
   expect(find).toHaveBeenCalledTimes(1);
   expect(find).toHaveBeenCalledWith(device.id);
@@ -157,11 +171,11 @@ test('find failure remains retryable without claiming physical vibration', async
     new Error('disconnected'),
   );
   await render({...device, findDeviceSupported: true});
-  await act(async () => button('Find device').props.onPress());
+  await act(async () => button(findDeviceCopy()).props.onPress());
   expect(JSON.stringify(renderer.toJSON())).toContain(
     'Could not send all find device commands',
   );
-  expect(button('Find device').props.disabled).toBe(false);
+  expect(button(findDeviceCopy()).props.disabled).toBe(false);
 });
 
 test('storage read is capability gated and shows only acknowledged values', async () => {

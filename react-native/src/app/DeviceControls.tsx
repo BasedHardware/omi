@@ -4,12 +4,17 @@ import {omiNative} from '../omiNative';
 import type {Device, DeviceStorageStatus} from '../omiNativeTypes';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
+import {
+  findDeviceCopy,
+  ledBrightnessCopy,
+  micGainCopy,
+} from '../desktopReadClient';
 
 type Setting = 'ledBrightness' | 'microphoneGain';
 const controls = [
   {
     setting: 'ledBrightness',
-    label: 'LED brightness',
+    label: ledBrightnessCopy(),
     bit: 7,
     maximum: 100,
     step: 10,
@@ -17,7 +22,7 @@ const controls = [
   },
   {
     setting: 'microphoneGain',
-    label: 'Microphone gain',
+    label: micGainCopy(),
     bit: 8,
     maximum: 8,
     step: 1,
@@ -163,12 +168,12 @@ export function DeviceControls({
       device.findDeviceSupported &&
       omiNative?.findDevice ? (
         <FocusPressable
-          accessibilityLabel="Find device"
+          accessibilityLabel={findDeviceCopy()}
           accessibilityRole="button"
           disabled={busy || pending !== null}
           onPress={find}
           style={styles.scanButton}>
-          <Text style={styles.scanButtonText}>Find device</Text>
+          <Text style={styles.scanButtonText}>{findDeviceCopy()}</Text>
         </FocusPressable>
       ) : (
         <Text style={styles.deviceMeta}>Find device unavailable</Text>
