@@ -2943,11 +2943,11 @@ test('Settings names GET usage today without Upgrade', async () => {
   expect(tree).toContain('Today · Listening');
   expect(tree).toContain('2 minutes');
   expect(tree).toContain('Today · Understanding');
-  expect(tree).toContain('12 words');
+  expect(tree).toContain('12 Understanding (words)');
   expect(tree).toContain('Today · Providing');
-  expect(tree).toContain('3 insights');
+  expect(tree).toContain('3 Insights');
   expect(tree).toContain('Today · Remembering');
-  expect(tree).toContain('1 memories');
+  expect(tree).toContain('1 Memories');
   expect(tree).not.toContain('Upgrade');
 });
 

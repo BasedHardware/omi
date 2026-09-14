@@ -923,6 +923,26 @@ export function usageActivityEmptyCopy(): string {
   return 'No Activity Yet';
 }
 
+function usageCountCopy(value: number): string {
+  return value.toLocaleString('en-US');
+}
+
+export function usageListeningCopy(minutes: number): string {
+  return `${usageCountCopy(minutes)} minutes`;
+}
+
+export function usageUnderstandingCopy(words: number): string {
+  return `${usageCountCopy(words)} Understanding (words)`;
+}
+
+export function usageProvidingCopy(insights: number): string {
+  return `${usageCountCopy(insights)} Insights`;
+}
+
+export function usageRememberingCopy(memories: number): string {
+  return `${usageCountCopy(memories)} Memories`;
+}
+
 function usageStatsAreEmpty(stats: {
   transcriptionSeconds: number;
   wordsTranscribed: number;
@@ -962,19 +982,19 @@ export function usageStatsCopy(
   return [
     {
       title: 'Listening',
-      copy: `${Math.round(stats.transcriptionSeconds / 60)} minutes`,
+      copy: usageListeningCopy(Math.round(stats.transcriptionSeconds / 60)),
     },
     {
       title: 'Understanding',
-      copy: `${stats.wordsTranscribed} words`,
+      copy: usageUnderstandingCopy(stats.wordsTranscribed),
     },
     {
       title: 'Providing',
-      copy: `${stats.insightsGained} insights`,
+      copy: usageProvidingCopy(stats.insightsGained),
     },
     {
       title: 'Remembering',
-      copy: `${stats.memoriesCreated} memories`,
+      copy: usageRememberingCopy(stats.memoriesCreated),
     },
   ];
 }

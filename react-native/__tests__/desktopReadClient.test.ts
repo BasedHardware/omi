@@ -1142,9 +1142,22 @@ test('usage stats copy names GET today counts without Upgrade', () => {
     }),
   ).toEqual([
     {title: 'Listening', copy: '2 minutes'},
-    {title: 'Understanding', copy: '12 words'},
-    {title: 'Providing', copy: '3 insights'},
-    {title: 'Remembering', copy: '1 memories'},
+    {title: 'Understanding', copy: '12 Understanding (words)'},
+    {title: 'Providing', copy: '3 Insights'},
+    {title: 'Remembering', copy: '1 Memories'},
+  ]);
+  expect(
+    usageStatsCopy({
+      transcriptionSeconds: 90,
+      wordsTranscribed: 1234,
+      insightsGained: 3000,
+      memoriesCreated: 1000,
+    }),
+  ).toEqual([
+    {title: 'Listening', copy: '2 minutes'},
+    {title: 'Understanding', copy: '1,234 Understanding (words)'},
+    {title: 'Providing', copy: '3,000 Insights'},
+    {title: 'Remembering', copy: '1,000 Memories'},
   ]);
   expect(
     usageStatsCopy({
