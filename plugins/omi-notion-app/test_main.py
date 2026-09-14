@@ -3,6 +3,7 @@ import asyncio
 import importlib.util
 import json
 from pathlib import Path
+import re
 import sys
 import types
 import unittest
@@ -361,6 +362,86 @@ class PageWriteTests(unittest.TestCase):
             self.assertEqual(calls, [])
             self.assertIsNone(result.result)
             self.assertTrue(result.error)
+
+class ListedPageIdTests(unittest.TestCase):
+    """Ids printed by search and list_pages must be accepted by get_page, update_page and append_content.
+
+    Notion page ids are 36 character dashed UUIDs; format_page_info used to print
+    page_id[:20] + "...", so nothing the listing tools returned could be passed back.
+    """
+
+    PAGE_ID = "59833787-2cf9-4fdf-8782-e53db20768a5"
+
+    def page(self):
+        return {
+            "object": "page", "id": self.PAGE_ID,
+            "properties": {"title": {"type": "title", "title": [{"plain_text": "Known title"}]}},
+            "url": f"https://www.notion.so/{self.PAGE_ID.replace('-', '')}",
+            "created_time": "2026-09-01T00:00:00.000Z",
+            "last_edited_time": "2026-09-08T00:00:00.000Z",
+        }
+
+    def listed_ids(self, handler, body):
+        listing = Mock(status_code=200)
+        listing.json.return_value = {"object": "list", "results": [self.page()], "has_more": False}
+        request = Mock(json=AsyncMock(return_value=body))
+        with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.object(notion.requests, "post", return_value=listing):
+            result = asyncio.run(handler(request))
+        self.assertIsNone(result.error, result.error)
+        ids = re.findall(r"ID: `([^`]*)`", result.result)
+        self.assertEqual(ids, [self.PAGE_ID], result.result)
+        return ids
+
+    def exact_id_api(self, *methods):
+        """A requests double that only resolves the complete page id, like the Notion API."""
+        calls = []
+
+        def send(method):
+            def call(url, **kwargs):
+                calls.append((method, url))
+                response = Mock(status_code=200)
+                if url.endswith(f"/blocks/{self.PAGE_ID}/children"):
+                    children = json.loads(kwargs["data"])["children"] if "data" in kwargs else kwargs.get("json", {}).get("children", [])
+                    response.json.return_value = {
+                        "object": "list", "has_more": False,
+                        "results": [{"object": "block", "id": f"00000000-0000-4000-8000-{index:012d}"} for index, _ in enumerate(children)],
+                    }
+                elif url.rstrip("/").endswith(self.PAGE_ID):
+                    response.json.return_value = self.page()
+                else:
+                    response.status_code = 404
+                    response.text = "object_not_found"
+                return response
+            return call
+
+        return calls, {method: send(method.upper()) for method in methods}
+
+    def test_search_and_list_pages_print_complete_ids(self):
+        self.listed_ids(notion.tool_search, {"uid": "test-user", "query": "Known"})
+        self.listed_ids(notion.tool_list_pages, {"uid": "test-user"})
+
+    def test_listed_id_round_trips_through_get_update_and_append(self):
+        page_id, = self.listed_ids(notion.tool_list_pages, {"uid": "test-user"})
+        cases = (
+            (notion.tool_get_page, {"page_id": page_id}, "GET", f"/pages/{page_id}"),
+            (notion.tool_update_page, {"page_id": page_id, "archived": True}, "PATCH", f"/pages/{page_id}"),
+            (notion.tool_append_content, {"page_id": page_id, "content": "note"}, "PATCH", f"/blocks/{page_id}/children"),
+        )
+        for handler, body, method, suffix in cases:
+            with self.subTest(handler=handler.__name__):
+                calls, doubles = self.exact_id_api("get", "patch")
+                request = Mock(json=AsyncMock(return_value=dict(body, uid="test-user")))
+                with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.multiple(notion.requests, **doubles):
+                    result = asyncio.run(handler(request))
+                self.assertIsNone(result.error, result.error)
+                self.assertIn((method, suffix), [(m, u[u.index("/v1") + 3:]) for m, u in calls], calls)
+
+    def test_truncated_id_is_not_a_page(self):
+        calls, doubles = self.exact_id_api("get")
+        request = Mock(json=AsyncMock(return_value={"uid": "test-user", "page_id": self.PAGE_ID[:20]}))
+        with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.multiple(notion.requests, **doubles):
+            result = asyncio.run(notion.tool_get_page(request))
+        self.assertIsNotNone(result.error)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

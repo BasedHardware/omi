@@ -199,7 +199,7 @@ def format_page_info(page: dict, include_content: bool = False) -> str:
     parts = [
         f"**{title}**",
         f"  Created: {created} | Edited: {last_edited}",
-        f"  ID: `{page_id[:20]}...`"
+        f"  ID: `{page_id}`"
     ]
 
     if url:
