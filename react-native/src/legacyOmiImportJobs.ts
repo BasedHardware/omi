@@ -168,10 +168,19 @@ export function importJobRowCopy(
   return parts.join(' · ');
 }
 
+export function importJobsEmptyCopy(): string {
+  return 'No imports yet';
+}
+
 export function importJobsCopy(
   jobs: readonly OmiImportJob[],
   now: Date = new Date(),
 ): OmiImportJobRow[] {
+  if (jobs.length === 0) {
+    return [
+      {key: 'empty', title: 'Import Data', copy: importJobsEmptyCopy()},
+    ];
+  }
   return jobs.map(job => ({
     key: job.id,
     title: 'Import Data',

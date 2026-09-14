@@ -6510,6 +6510,36 @@ test('Settings names a failed import jobs GET instead of empty success', async (
   expect(tree).not.toContain('Limitless');
 });
 
+test('Settings names Flutter noImportsYet for empty GET import jobs', async () => {
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  omiBackend.request.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/import/jobs?limit=50') {
+      return {id: 'jobs', status: 200, body: JSON.stringify([])};
+    }
+    return {id: 'other', status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Import Data');
+  expect(tree).toContain('No imports yet');
+  expect(tree).not.toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('Limitless');
+});
+
 test('desktop Tasks does not claim editing unavailable over a failed task read', () => {
   const renderer = renderDesktop({
     outcomes: {

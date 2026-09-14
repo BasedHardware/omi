@@ -3,6 +3,8 @@ import {
   importJobRowCopy,
   importJobStatusCopy,
   importJobTimestampCopy,
+  importJobsCopy,
+  importJobsEmptyCopy,
   loadOmiImportJobs,
   parseOmiImportJobs,
 } from './legacyOmiImportJobs';
@@ -118,6 +120,13 @@ test('names GET import job rows without inventing ETA or No imports yet', () => 
   expect(importJobRowCopy({id: 'job-4', status: 'queued'})).toBe(
     importJobPendingCopy(),
   );
+});
+
+test('names GET empty import jobs as Flutter No imports yet', () => {
+  expect(importJobsEmptyCopy()).toBe('No imports yet');
+  expect(importJobsCopy([])).toEqual([
+    {key: 'empty', title: 'Import Data', copy: importJobsEmptyCopy()},
+  ]);
 });
 
 test('does not omit a neighboring import job when stored counts are integer strings', () => {
