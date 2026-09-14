@@ -204,7 +204,7 @@ class ListedEventIdsAreUsable(unittest.TestCase):
 
 
 class CreatedEventIdIsReported(unittest.TestCase):
-    def test_create_event_prints_id_that_get_event_accepts(self):
+    def test_create_event_prints_id_that_get_update_and_delete_accept(self):
         api = _FakeCalendarApi({})
         with patch.object(app, "calendar_api_request", api), patch.object(
             app, "get_valid_access_token", lambda uid: "token"
@@ -227,6 +227,14 @@ class CreatedEventIdIsReported(unittest.TestCase):
 
             fetched = _run(app.tool_get_event(_request({"uid": "u1", "event_id": ids[0]})))
             self.assertIsNone(fetched.error, fetched.error)
+
+            updated = _run(app.tool_update_event(_request({"uid": "u1", "event_id": ids[0], "title": "Dentist (moved)"})))
+            self.assertIsNone(updated.error, updated.error)
+            self.assertEqual(api.calls[-1], ("PATCH", f"/calendars/primary/events/{ids[0]}"))
+
+            deleted = _run(app.tool_delete_event(_request({"uid": "u1", "event_id": ids[0]})))
+            self.assertIsNone(deleted.error, deleted.error)
+            self.assertEqual(api.calls[-1], ("DELETE", f"/calendars/primary/events/{ids[0]}"))
 
 
 if __name__ == "__main__":
