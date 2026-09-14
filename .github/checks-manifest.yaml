@@ -70,6 +70,11 @@ checks:
     triggers: ["scripts/pre-push", "scripts/test-pre-push-backend-test-cap.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#11018: the over-broad-selection fallback swapped in the diff's own changed backend test files without re-applying PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES, so a diff changing more than the cap ran unbounded while printing 'cap is 40'; the bounded push gate must never run more than the cap it advertises"
+  - id: pre-push-hook-git-env
+    command: ["bash", "scripts/test-pre-push-git-env.sh"]
+    triggers: ["scripts/pre-push", "scripts/test-pre-push-git-env.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#11183: pushing from a linked worktree passed the hook's GIT_DIR to agents-md-lean's self-test, whose git init reinitialized the real repository and wrote core.bare=true into the config every worktree shares; four earlier fixes (#11413, #11709, #11795, #12564) scrubbed it one caller at a time"
   - id: pre-push-ci-prediction-tests
     command: ["python3", ".github/scripts/test_pre_push_ci_prediction.py"]
     triggers: ["scripts/pre-push", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_pre_push_ci_prediction.py", "desktop/macos/scripts/desktop-flow-lint.py", "desktop/macos/scripts/desktop_flow_contract.py", ".github/checks-manifest.yaml"]
