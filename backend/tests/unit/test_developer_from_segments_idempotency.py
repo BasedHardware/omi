@@ -702,3 +702,46 @@ def test_from_segments_renews_processing_lease_during_live_processing(monkeypatc
     developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-lease'))
 
     assert lease_renewed.is_set()
+
+
+def test_from_segments_rejects_timezone_naive_timestamps_with_422():
+    """GH #13505: a naive finished_at against the tz-aware started_at default made
+    the handler's finished_at <= started_at check raise TypeError — an uncaught
+    500 on a malformed body (the scripted-client failure shape). The shared model
+    now rejects offset-naive timestamps at validation, so both the developer and
+    first-party from-segments routes answer 422 instead."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match='timezone offset'):
+        developer.CreateConversationFromTranscriptRequest.model_validate(
+            {**_request_data(), 'finished_at': '2026-01-01T00:00:01'}
+        )
+
+    with pytest.raises(ValidationError, match='timezone offset'):
+        developer.CreateConversationFromTranscriptRequest.model_validate(
+            {**_request_data(), 'started_at': '2026-01-01T00:00:00'}
+        )
+
+    # Offset-aware values still validate.
+    assert developer.CreateConversationFromTranscriptRequest.model_validate(_request_data()).finished_at is not None
+
+
+def _request_data():
+    return {
+        'transcript_segments': [_segment()],
+        'source': 'desktop',
+        'started_at': NOW,
+        'finished_at': NOW.replace(second=2),
+        'language': 'en',
+    }
+
+
+def test_dev_from_segments_route_uses_the_dedicated_rate_limited_dependency():
+    """GH #13505: the developer from-segments route must not ride the bare
+    conversations:write dependency — it needs the dedicated
+    dev:conversations_from_segments budget on top of the shared ceiling."""
+    import inspect
+
+    parameter = inspect.signature(developer.create_conversation_from_segments).parameters['uid']
+    # fastapi.Depends is a factory, so assert on the resolved dependency itself.
+    assert parameter.default.dependency is developer.get_uid_with_conversations_from_segments_write

@@ -129,14 +129,18 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
     (() async {
       final provider = context.read<MemoriesProvider>();
-      await provider.init();
-      if (!mounted) return;
-
-      if (!mounted) return;
-
-      setState(() {
-        _isInitialLoad = false;
-      });
+      try {
+        await provider.init();
+      } finally {
+        // Always leave the initial-load state, even if init() threw. Otherwise
+        // `provider.loading && _isInitialLoad` stays true and the page is stuck
+        // on the loading skeleton forever.
+        if (mounted) {
+          setState(() {
+            _isInitialLoad = false;
+          });
+        }
+      }
     }).withPostFrameCallback();
   }
 

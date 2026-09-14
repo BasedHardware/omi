@@ -120,6 +120,25 @@ final class QueryComposerTests: XCTestCase {
     composer.assertTheGlassContainsTheText()
   }
 
+  // MARK: - Dropping a file on the editor itself, not just its border
+
+  /// #13774: the NSTextView covers the whole editor, so a SwiftUI `.onDrop` layered behind it only
+  /// ever sees the padding around the text — dropping on the text itself used to make AppKit insert
+  /// the file's path instead of staging it. This drives the real `performDragOperation` AppKit calls
+  /// on drop, on the exact `NSTextView` the composer mounted, rather than asserting on a wiring
+  /// static-checked in source.
+  func testDroppingAFileOnTheEditorInteriorStagesIt() throws {
+    let composer = try Composer()
+    defer { composer.tearDown() }
+    let url = URL(fileURLWithPath: "/tmp/omi-test-drop-\(UUID().uuidString).png")
+
+    composer.dropFile(url)
+
+    XCTAssertEqual(
+      composer.surface.stagedAttachments, [url],
+      "a file dropped on the editor interior never reached onAttachmentsAdded")
+  }
+
   /// **An empty bar is exactly as tall as it was.** The whole surface is laid out under this bar, so
   /// growing it would have been a regression if it had also moved the resting geometry.
   func testAnEmptyComposerLeavesTheBarAtItsRestingHeight() throws {
@@ -526,6 +545,17 @@ final class QueryComposerTests: XCTestCase {
       settle()
     }
 
+    /// Simulates a file dragged onto and dropped on the editor's own AppKit surface — the exact
+    /// `performDragOperation` call the interior text view receives, which a SwiftUI `.onDrop` layered
+    /// behind it never sees.
+    func dropFile(_ url: URL) {
+      let pasteboard = NSPasteboard(name: NSPasteboard.Name(rawValue: "omi.test.filedrop.\(UUID().uuidString)"))
+      pasteboard.clearContents()
+      pasteboard.writeObjects([url as NSURL])
+      _ = textView.performDragOperation(FakeFileDraggingInfo(pasteboard: pasteboard))
+      settle()
+    }
+
     /// SwiftUI applies a state change on the next layout pass, so ask for one rather than wait.
     private func settle() {
       host.layoutSubtreeIfNeeded()
@@ -576,6 +606,7 @@ final class QueryComposerTests: XCTestCase {
           isStopping: surface.isStopping,
           mode: mode,
           onAsk: { surface.asks += 1 },
+          onAttachmentsAdded: { surface.stagedAttachments.append(contentsOf: $0) },
           recentScreenFrames: recentScreenFrames
         )
         .background {
@@ -603,5 +634,45 @@ final class QueryComposerTests: XCTestCase {
     @Published var isWorking = false
     @Published var isStopping = false
     var asks = 0
+    var stagedAttachments: [URL] = []
   }
+}
+
+/// A minimal `NSDraggingInfo` for driving AppKit's real drag-and-drop call sites in a test — no
+/// live drag session is available outside an actual mouse-driven drag, so this stands in for one.
+/// Only `draggingPasteboard` is read by anything under test; the rest are inert stubs to satisfy
+/// the protocol.
+@MainActor
+private final class FakeFileDraggingInfo: NSObject, @MainActor NSDraggingInfo {
+  let draggingPasteboard: NSPasteboard
+  init(pasteboard: NSPasteboard) { draggingPasteboard = pasteboard }
+
+  var draggingDestinationWindow: NSWindow? { nil }
+  var draggingSourceOperationMask: NSDragOperation { .copy }
+  var draggingLocation: NSPoint { .zero }
+  var draggedImageLocation: NSPoint { .zero }
+  var draggedImage: NSImage? { nil }
+  var draggingSource: Any? { nil }
+  var draggingSequenceNumber: Int { 1 }
+  func slideDraggedImage(to screenPoint: NSPoint) {}
+  var draggingFormation: NSDraggingFormation {
+    get { .default }
+    set {}
+  }
+  var animatesToDestination: Bool {
+    get { false }
+    set {}
+  }
+  var numberOfValidItemsForDrop: Int {
+    get { 1 }
+    set {}
+  }
+  func enumerateDraggingItems(
+    options: NSDraggingItemEnumerationOptions = [], for view: NSView?,
+    classes classArray: [AnyClass], searchOptions: [NSPasteboard.ReadingOptionKey: Any] = [:],
+    using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void
+  ) {}
+  var draggingImageComponents: [NSDraggingImageComponent]? { nil }
+  var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+  func resetSpringLoading() {}
 }

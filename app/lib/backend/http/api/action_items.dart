@@ -13,6 +13,8 @@ Future<ActionItemsResponse> getActionItems({
   String? conversationId,
   DateTime? startDate,
   DateTime? endDate,
+  DateTime? dueStartDate,
+  DateTime? dueEndDate,
 }) async {
   return await tryGetActionItems(
         limit: limit,
@@ -21,6 +23,8 @@ Future<ActionItemsResponse> getActionItems({
         conversationId: conversationId,
         startDate: startDate,
         endDate: endDate,
+        dueStartDate: dueStartDate,
+        dueEndDate: dueEndDate,
       ) ??
       const ActionItemsResponse(actionItems: [], hasMore: false);
 }
@@ -33,6 +37,8 @@ Future<ActionItemsResponse?> tryGetActionItems({
   String? conversationId,
   DateTime? startDate,
   DateTime? endDate,
+  DateTime? dueStartDate,
+  DateTime? dueEndDate,
 }) async {
   String url = '${Env.apiBaseUrl}v1/action-items?limit=$limit&offset=$offset';
 
@@ -47,6 +53,12 @@ Future<ActionItemsResponse?> tryGetActionItems({
   }
   if (endDate != null) {
     url += '&end_date=${endDate.toUtc().toIso8601String()}';
+  }
+  if (dueStartDate != null) {
+    url += '&due_start_date=${dueStartDate.toUtc().toIso8601String()}';
+  }
+  if (dueEndDate != null) {
+    url += '&due_end_date=${dueEndDate.toUtc().toIso8601String()}';
   }
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '', retries: 0);

@@ -35,6 +35,7 @@ PHASE_ORDER = (
     "desktop-agent-runtime",
     "desktop-swift-tests",
     "desktop-swift-release-compile",
+    "desktop-swift-release-test-compile",
     "desktop-swift-notification-release-regression",
 )
 
@@ -118,6 +119,7 @@ DESKTOP_SWIFT_TEST_INPUTS = {
     "desktop/macos/Desktop/Package.resolved",
     "desktop/macos/test.sh",
     "desktop/macos/scripts/run-swift-ci.sh",
+    "desktop/macos/tests/test-run-swift-ci.sh",
     "desktop/macos/scripts/swift-test-suites.sh",
     "desktop/macos/scripts/swift-test-skips.json",
     "desktop/macos/scripts/swift-test-slow-suites.json",
@@ -294,6 +296,12 @@ def _is_desktop_swift_test_input(path: str) -> bool:
     )
 
 
+def _is_desktop_release_test_input(path: str) -> bool:
+    # Own the whole package tree, including native targets/resources and future
+    # target directories; a new target must not need a second selector edit.
+    return path in DESKTOP_SWIFT_TEST_INPUTS or path.startswith("desktop/macos/Desktop/")
+
+
 def _is_desktop_notification_input(path: str) -> bool:
     return (
         path in DESKTOP_NOTIFICATION_REGRESSION_INPUTS
@@ -358,6 +366,10 @@ def resolve_impact(
                 selected.add("desktop-ci-only")
             if _is_desktop_swift_test_input(path):
                 selected.add("desktop-swift-tests")
+            # Every source/test input can expose a DEBUG-only seam to the
+            # release test target (#13123, #13467), regardless of its name.
+            if _is_desktop_release_test_input(path):
+                selected.add("desktop-swift-release-test-compile")
             if _is_desktop_notification_input(path):
                 selected.add("desktop-swift-notification-release-regression")
             if _is_desktop_agent_runtime_input(path):
@@ -386,6 +398,7 @@ def resolve_impact(
                 "desktop-ci-only",
                 "desktop-flow-lint",
                 "desktop-swift-tests",
+                "desktop-swift-release-test-compile",
             }
         )
 
@@ -398,6 +411,7 @@ def resolve_impact(
                 "desktop-ci-only",
                 "desktop-swift-tests",
                 "desktop-swift-release-compile",
+                "desktop-swift-release-test-compile",
             }
         )
 
@@ -408,17 +422,10 @@ def resolve_impact(
     )
     if releasable_desktop:
         selected.add("desktop-ci-only")
-    # A release compile holds a second scarce hosted Mac for ~25 min, and every
-    # desktop-source PR used to claim one. That doubled concurrent macos-15
-    # demand against a ~5-runner cap and was the dominant source of Desktop
-    # Swift CI queue time (60-97 min observed 2026-09-08), so the PR lane now
-    # reserves it for the inputs most likely to shift whole-module behavior —
-    # the package manifest and lockfile — while every main push, the scheduled
-    # health run, and manual dispatch still compile release evidence for the
-    # exact SHA the release planner gates on. A strict-concurrency break that
-    # only manifests under WMO (#11373/#11374) can therefore merge on a green
-    # debug lane, but the push run catches it within the hour and the release
-    # train still refuses to tag without a green Release Compile check.
+    # Source/test PRs compile the complete release test target in the existing
+    # release job. It builds the app and tests once, then reuses those artifacts
+    # for the narrow notification regression (#13481). Non-target release inputs
+    # retain the cheaper app-only main-push check; pre-push stays debug-only.
     if package_changed:
         selected.add("desktop-swift-release-compile")
     if event == "push" and releasable_desktop:
@@ -449,6 +456,7 @@ def github_outputs(plan: ImpactPlan) -> dict[str, str]:
         "should_run": str(plan.includes("desktop-ci-only")).lower(),
         "should_run_tests": str(plan.includes("desktop-swift-tests")).lower(),
         "should_release_compile": str(plan.includes("desktop-swift-release-compile")).lower(),
+        "should_release_test_compile": str(plan.includes("desktop-swift-release-test-compile")).lower(),
         "should_notification_release_regression": str(
             plan.includes("desktop-swift-notification-release-regression")
         ).lower(),
