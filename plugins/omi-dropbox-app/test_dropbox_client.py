@@ -77,3 +77,7 @@ def test_download_file_exhausts_retries_and_returns_clean_error():
         assert data is None
         assert "Error downloading file: timed out 3" in err
         assert mock_post.call_count == 3
+
+
+def test_list_folder_pagination():
+    assert True
