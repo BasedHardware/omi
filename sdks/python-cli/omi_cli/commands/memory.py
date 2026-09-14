@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
+import json
+import os
+import tempfile
+from pathlib import Path
+
 import typer
 
 from omi_cli.errors import NotFoundError, UsageError
@@ -38,6 +43,11 @@ def list_memories(
         help="Comma-separated category filter (e.g. 'work,skills').",
     ),
 ) -> None:
+    """
+    List memories for the current user.
+    
+    Supports pagination via limit and offset, and filtering by memory categories.
+    """
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         items = client.get(
@@ -67,6 +77,12 @@ def get_memory(
     typer_ctx: typer.Context,
     memory_id: str = typer.Argument(..., help="Memory ID."),
 ) -> None:
+    """
+    Fetch a single memory by its unique identifier.
+    
+    Since the dev API lacks a direct get-by-id endpoint, this implements 
+    client-side filtering by paging through the user's memories.
+    """
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         # The dev API exposes list+search but no single-resource read for memories;
@@ -99,6 +115,11 @@ def create_memory(
     visibility: MemoryVisibility = typer.Option(MemoryVisibility.private, "--visibility", help="public or private."),
     tag: list[str] = typer.Option([], "--tag", help="Tag (repeat for multiple)."),
 ) -> None:
+    """
+    Create a new memory for the user.
+    
+    Content is required. Category, visibility, and tags are optional.
+    """
     ctx = _ctx(typer_ctx)
     body: dict[str, object] = {"content": content, "visibility": visibility.value, "tags": tag}
     if category is not None:
@@ -118,6 +139,11 @@ def update_memory(
     visibility: Optional[MemoryVisibility] = typer.Option(None, "--visibility", help="public or private."),
     tag: Optional[list[str]] = typer.Option(None, "--tag", help="Replace tags (repeat for multiple)."),
 ) -> None:
+    """
+    Update fields of an existing memory.
+    
+    At least one field must be provided for update.
+    """
     ctx = _ctx(typer_ctx)
     body: dict[str, object] = {}
     if content is not None:
@@ -144,6 +170,11 @@ def delete_memory(
     memory_id: str = typer.Argument(..., help="Memory ID."),
     confirm: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
 ) -> None:
+    """
+    Delete a specific memory by its ID.
+    
+    Requires confirmation unless the --yes flag is used.
+    """
     ctx = _ctx(typer_ctx)
     if not confirm:
         typer.confirm(f"Delete memory {memory_id}?", abort=True)
@@ -152,3 +183,55 @@ def delete_memory(
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
     ctx.renderer.success(f"Deleted memory [bold]{memory_id}[/bold].")
+
+
+@app.command("export", help="Export all memories to a JSON file.")
+def export_memories(
+    typer_ctx: typer.Context,
+    output: Path = typer.Option(
+        Path("memories_export.json"), "--output", "-o", help="Output file path."
+    ),
+) -> None:
+    """
+    Export all user memories to a JSON file.
+    
+    Fetches all memories using pagination and writes them atomically to the 
+    specified output file to prevent partial writes.
+    """
+    ctx = _ctx(typer_ctx)
+    all_memories = []
+    limit = 100
+    offset = 0
+
+    with ctx.make_client() as client:
+        while True:
+            page = client.get(
+                "/v1/dev/user/memories", params={"limit": limit, "offset": offset}
+            )
+            
+            # Fail-fast: if API returns None but we expected a page, stop and fail.
+            if page is None:
+                if offset == 0:
+                    # No memories at all is a valid state.
+                    break
+                raise RuntimeError(f"API returned None unexpectedly at offset {offset}. Export aborted to prevent partial write.")
+            
+            all_memories.extend(page)
+            if len(page) < limit:
+                break
+            offset += limit
+
+    # Atomic write: write to temp file first, then rename to target.
+    temp_file = tempfile.NamedTemporaryFile(
+        "w", dir=output.parent, delete=False, encoding="utf-8"
+    )
+    try:
+        json.dump(all_memories, temp_file, indent=4, ensure_ascii=False)
+        temp_file.close()
+        os.replace(temp_file.name, output)
+    except Exception:
+        if os.path.exists(temp_file.name):
+            os.remove(temp_file.name)
+        raise
+
+    ctx.renderer.success(f"Exported [bold]{len(all_memories)}[/bold] memories to [bold]{output}[/bold].")

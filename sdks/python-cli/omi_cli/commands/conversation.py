@@ -47,6 +47,11 @@ def list_conversations(
     categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
 ) -> None:
+    """
+    List conversations for the current user.
+    
+    Supports pagination, date range filtering, and category filtering.
+    """
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         items = client.get(
