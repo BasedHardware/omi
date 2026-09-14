@@ -13,3 +13,4 @@
 * [`quickstart.ru.md`](quickstart.ru.md) — быстрый старт с omi-cli на
   русском (Russian Quickstart).
 * [`quickstart.bg.md`](quickstart.bg.md) — българско ръководство за бърз старт (Bulgarian Quickstart).
+* [`quickstart.sw.md`](quickstart.sw.md) — mwongozo wa kuanza haraka wa omi-cli kwa Kiswahili (Swahili Quickstart).
