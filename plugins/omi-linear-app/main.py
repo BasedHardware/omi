@@ -572,7 +572,7 @@ def coerce_limit(value: Any, default: int = 10, min_val: int = 1, max_val: int =
         if val > max_val:
             return max_val
         return val
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
         return default
 
 
@@ -749,7 +749,7 @@ async def tool_list_recent_issues(request: Request):
                 f"   └ {state} • {assignee_name}"
             )
         
-        team_msg = f" in {team_key.upper()}" if team_key else ""
+        team_msg = f" in {clean_team}" if clean_team else ""
         return ChatToolResponse(
             result=f"📋 Latest {len(issues)} issues{team_msg} in Linear:\n\n" + "\n\n".join(results)
         )
