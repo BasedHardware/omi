@@ -41,20 +41,16 @@ class TwitterClient:
             return None
             
         except tweepy.TweepyException as e:
-            print(f"Twitter API error: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Twitter API error: {type(e).__name__}")
             return {
                 "success": False,
-                "error": str(e)
+                "error": type(e).__name__
             }
         except Exception as e:
-            print(f"Unexpected error: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Unexpected error: {type(e).__name__}")
             return {
                 "success": False,
-                "error": str(e)
+                "error": type(e).__name__
             }
     
     def get_authorization_url(self, redirect_uri: str, uid: str) -> str:

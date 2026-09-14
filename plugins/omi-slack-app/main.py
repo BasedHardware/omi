@@ -705,7 +705,7 @@ async def webhook(
     
     # Only send notifications for final message post
     if response_message and ("✅ Message sent" in response_message or "❌" in response_message):
-        print(f"✉️  USER NOTIFICATION: {response_message}", flush=True)
+        print("✉️  USER NOTIFICATION sent (message result)", flush=True)
         return {
             "message": response_message,
             "session_id": session_id,
@@ -713,7 +713,8 @@ async def webhook(
         }
     
     # Silent response during collection
-    print(f"🔇 Silent response: {response_message}", flush=True)
+    response_len = len(response_message or "")
+    print(f"🔇 Silent response (len={response_len})", flush=True)
     return {"status": "ok"}
 
 

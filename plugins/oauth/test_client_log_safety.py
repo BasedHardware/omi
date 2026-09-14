@@ -139,6 +139,8 @@ class TestPluginSourceSafety(unittest.TestCase):
         "full_question",
         "request.dict()",
         "str(e)",
+        "response_message",
+        "cleaned_content",
     ]
 
     def test_no_log_call_emits_secrets_or_response_bodies(self):
