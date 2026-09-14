@@ -1056,81 +1056,83 @@ class CaptureController extends ChangeNotifier
     _buttonTapsActive = false;
     _bleButtonStream = await _getBleButtonListener(
       deviceId,
-      onButtonReceived: (List<int> value) {
-        final snapshot = List<int>.from(value);
-        if (snapshot.isEmpty || snapshot.length < 4) return;
-        var buttonState = ByteData.view(
-          Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
-        ).getUint32(0);
-        Logger.debug("device button $buttonState");
-
-        // Intercept for interactive device onboarding
-        if (deviceOnboardingProvider?.isOnboardingActive == true) {
-          deviceOnboardingProvider!.onButtonEvent(buttonState);
-          // For step 1 (ask question), let single-tap fall through to normal voice command handling
-          if (deviceOnboardingProvider!.currentStep == 1 && buttonState == 1) {
-            // Fall through to normal single-tap handling below
-          } else {
-            return;
-          }
-        }
-
-        if (_buttonTapsActive && deviceOnboardingProvider?.isOnboardingActive != true) return;
-
-        // double tap
-        if (buttonState == 2) {
-          Logger.debug("Double tap detected");
-
-          // Guard: ignore if already processing a button event
-          if (_isProcessingButtonEvent) {
-            Logger.debug("Double tap: already processing, ignoring");
-            return;
-          }
-
-          _runButtonAction(resolveDoubleTapAction(SharedPreferencesUtil().doubleTapAction), trackDoubleTap: true);
-          return;
-        }
-
-        // Single tap (buttonState == 1) - toggle voice question mode
-        // Tap once to start, tap again to end
-        if (buttonState == 1) {
-          final onboardingAskQuestionStep =
-              deviceOnboardingProvider?.isOnboardingActive == true && deviceOnboardingProvider!.currentStep == 1;
-          final singleTapAction = resolveSingleTapActionForSession(
-            SharedPreferencesUtil().singleTapAction,
-            onboardingAskQuestionStep: onboardingAskQuestionStep,
-          );
-          if (singleTapAction != ButtonAction.askQuestion) {
-            if (_isProcessingButtonEvent) {
-              Logger.debug("Single tap: already processing, ignoring");
-              return;
-            }
-            _runButtonAction(singleTapAction, trackDoubleTap: false);
-            return;
-          }
-          debugPrint("Single tap detected");
-          _toggleVoiceQuestion(deviceId);
-          return;
-        }
-
-        // Legacy support: start long press (for voice commands) - older firmware
-        if (buttonState == 3 && _voiceCommandSession == null) {
-          debugPrint("Legacy: Long press start detected");
-          _voiceCommandSession = DateTime.now();
-          _commandBytes = [];
-          _startVoiceCommandTimeout(deviceId);
-          _playSpeakerHaptic(deviceId, 1);
-        }
-
-        // Legacy support: release (end voice command) - older firmware
-        // End on release if a voice command session is active
-        if (buttonState == 5 && _voiceCommandSession != null) {
-          debugPrint("Legacy: Release detected - ending voice command");
-          _endVoiceCommandSession(deviceId);
-        }
-      },
+      onButtonReceived: (value) => _onLegacyButton(deviceId, value),
     );
     await _streamButtonTaps(deviceId);
+  }
+
+  void _onLegacyButton(String deviceId, List<int> value) {
+    final snapshot = List<int>.from(value);
+    if (snapshot.isEmpty || snapshot.length < 4) return;
+    var buttonState = ByteData.view(
+      Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
+    ).getUint32(0);
+    Logger.debug("device button $buttonState");
+
+    // Intercept for interactive device onboarding
+    if (deviceOnboardingProvider?.isOnboardingActive == true) {
+      deviceOnboardingProvider!.onButtonEvent(buttonState);
+      // For step 1 (ask question), let single-tap fall through to normal voice command handling
+      if (deviceOnboardingProvider!.currentStep == 1 && buttonState == 1) {
+        // Fall through to normal single-tap handling below
+      } else {
+        return;
+      }
+    }
+
+    if (_buttonTapsActive && deviceOnboardingProvider?.isOnboardingActive != true) return;
+
+    // double tap
+    if (buttonState == 2) {
+      Logger.debug("Double tap detected");
+
+      // Guard: ignore if already processing a button event
+      if (_isProcessingButtonEvent) {
+        Logger.debug("Double tap: already processing, ignoring");
+        return;
+      }
+
+      _runButtonAction(resolveDoubleTapAction(SharedPreferencesUtil().doubleTapAction), trackDoubleTap: true);
+      return;
+    }
+
+    // Single tap (buttonState == 1) - toggle voice question mode
+    // Tap once to start, tap again to end
+    if (buttonState == 1) {
+      final onboardingAskQuestionStep =
+          deviceOnboardingProvider?.isOnboardingActive == true && deviceOnboardingProvider!.currentStep == 1;
+      final singleTapAction = resolveSingleTapActionForSession(
+        SharedPreferencesUtil().singleTapAction,
+        onboardingAskQuestionStep: onboardingAskQuestionStep,
+      );
+      if (singleTapAction != ButtonAction.askQuestion) {
+        if (_isProcessingButtonEvent) {
+          Logger.debug("Single tap: already processing, ignoring");
+          return;
+        }
+        _runButtonAction(singleTapAction, trackDoubleTap: false);
+        return;
+      }
+      debugPrint("Single tap detected");
+      _toggleVoiceQuestion(deviceId);
+      return;
+    }
+
+    // Legacy support: start long press (for voice commands) - older firmware
+    if (buttonState == 3 && _voiceCommandSession == null) {
+      debugPrint("Legacy: Long press start detected");
+      _voiceCommandSession = DateTime.now();
+      _commandBytes = [];
+      _startVoiceCommandTimeout(deviceId);
+      _playSpeakerHaptic(deviceId, 1);
+    }
+
+    // Legacy support: release (end voice command) - older firmware
+    // End on release if a voice command session is active
+    if (buttonState == 5 && _voiceCommandSession != null) {
+      debugPrint("Legacy: Release detected - ending voice command");
+      _endVoiceCommandSession(deviceId);
+    }
   }
 
   Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec) async {
