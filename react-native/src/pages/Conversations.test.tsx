@@ -1034,8 +1034,8 @@ test('conversation detail status is not a raw wire token', () => {
       .props.onPress();
   });
   const copy = textOf(renderer);
-  expect(copy).toContain('Status ·');
-  expect(copy).toContain(conversationStatusCopy('in_progress'));
+  expect(copy).not.toContain('Status ·');
+  expect(copy).not.toContain(conversationStatusCopy('in_progress'));
   expect(copy).not.toContain('in_progress');
   expect(copy).not.toContain('Finished ·');
   expect(copy).not.toContain('Duration ·');
@@ -1091,8 +1091,8 @@ test('whitespace conversation detail status is not a blank row', () => {
       .props.onPress();
   });
   const copy = textOf(renderer);
-  expect(copy).toContain('Status ·');
-  expect(copy).toContain('Status unavailable');
+  expect(copy).not.toContain('Status ·');
+  expect(copy).not.toContain('Status unavailable');
   expect(copy).not.toContain(' \t\n');
 });
 

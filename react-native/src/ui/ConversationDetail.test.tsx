@@ -980,7 +980,8 @@ test('an in-progress chat does not invent a Finished clock', () => {
     }),
   );
   expect(copy).toContain('Started ·');
-  expect(copy).toContain('In progress');
+  expect(copy).not.toContain('In progress');
+  expect(copy).not.toContain('Status ·');
   expect(copy).not.toContain('Finished ·');
   expect(copy).not.toContain('Duration ·');
   expect(copy).not.toContain('Duration unavailable');
@@ -1074,8 +1075,8 @@ test('legacy conversation details keep GET clocks from the list row', () => {
   expect(copy).not.toContain('Finished ·');
   expect(copy).not.toContain('Duration ·');
   expect(copy).not.toContain('Duration unavailable');
-  expect(copy).toContain('Status ·');
-  expect(copy).toContain('Completed');
+  expect(copy).not.toContain('Status ·');
+  expect(copy).not.toContain('Completed');
   expect(copy).toContain('Locked');
   expect(copy).toContain('Discarded');
   expect(copy).not.toContain('in_progress');
@@ -1115,6 +1116,21 @@ test('conversation details omit Flutter GetSummaryWidgets unused finishedAt cloc
   );
   expect(copy).toContain('Started ·');
   expect(copy).not.toContain('Finished ·');
+});
+
+test('conversation details omit Flutter GetSummaryWidgets unused status chip', () => {
+  const copy = text(
+    render({
+      conversation: {
+        ...conversation,
+        startedAt: '2026-09-07T12:00:00.000Z',
+        status: 'completed',
+      },
+    }),
+  );
+  expect(copy).toContain('Started ·');
+  expect(copy).not.toContain('Status ·');
+  expect(copy).not.toContain('Completed');
 });
 
 test('conversation details omit Flutter GetSummaryWidgets unused capturedAt clock', () => {
@@ -1443,8 +1459,8 @@ test('legacy in-progress chats omit Finished like canonical detail', () => {
     }),
   );
   expect(copy).toContain('Started ·');
-  expect(copy).toContain('Status ·');
-  expect(copy).toContain('In progress');
+  expect(copy).not.toContain('Status ·');
+  expect(copy).not.toContain('In progress');
   expect(copy).not.toContain('Finished ·');
   expect(copy).not.toContain('Duration ·');
   expect(copy).not.toContain('Duration unavailable');

@@ -6,7 +6,6 @@ import {
   conversationDisplaySummary,
   conversationDetailSummaryForStatusCopy,
   conversationDisplayTitle,
-  conversationStatusCopy,
   processingConversationNoContentCopy,
   processingConversationDetailTitleCopy,
   processingConversationDetailContentTabCopy,
@@ -89,9 +88,6 @@ function ConversationClockFields({
           Duration · {duration}
         </Text>
       ) : null}
-      <Text style={[styles.conversationDetailField, ink]}>
-        Status · {conversationStatusCopy(conversation.status)}
-      </Text>
       {conversation.starred ? (
         <Text
           accessibilityLabel="Starred conversation"
