@@ -188,6 +188,7 @@ import {
   compactHomeDeviceLabelCopy,
   fairUseCopy,
   fairUseBudgetResetCopy,
+  fairUseSpeechUsageCopy,
   fairUseDailyTranscriptionCopy,
   fairUseAboutTitleCopy,
   fairUseAboutBodyCopy,
@@ -1470,6 +1471,7 @@ test('people settings copy names Flutter createPersonHint for empty GET people',
 });
 
 test('fair use copy names GET stage hours and restrict budget without Upgrade', () => {
+  expect(fairUseSpeechUsageCopy()).toBe('Speech Usage');
   expect(fairUseDailyTranscriptionCopy()).toBe('Daily Transcription');
   expect(fairUseAboutTitleCopy()).toBe('About Fair Use');
   expect(fairUseLoadErrorCopy()).toBe(
@@ -1498,6 +1500,7 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
     ),
   ).toEqual([
     {title: 'Fair Use', copy: 'Restricted · FU-1'},
+    {title: 'Speech Usage', copy: ''},
     {title: 'Today', copy: '2.4h / 2h'},
     {title: '3-Day Rolling', copy: '8.1h / 8h'},
     {title: 'Weekly Rolling', copy: '11.0h / 10h'},
@@ -1530,6 +1533,7 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
     }),
   ).toEqual([
     {title: 'Fair Use', copy: 'Restricted · FU-1'},
+    {title: 'Speech Usage', copy: ''},
     {title: 'Today', copy: '2.4h / 2h'},
     {title: '3-Day Rolling', copy: '8.1h / 8h'},
     {title: 'Weekly Rolling', copy: '11.0h / 10h'},
@@ -1561,6 +1565,7 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
       resetsAtMs: Date.parse('2026-09-11T05:00:00Z'),
     }),
   ).toEqual([
+    {title: 'Speech Usage', copy: ''},
     {title: 'Today', copy: '0.0h / 2h'},
     {title: '3-Day Rolling', copy: '0.0h / 8h'},
     {title: 'Weekly Rolling', copy: '0.0h / 10h'},

@@ -1685,6 +1685,7 @@ test('Settings names GET fair use without Upgrade or a write sheet', async () =>
   expect(tree).toContain('Fair Use');
   expect(tree).toContain('Restricted');
   expect(tree).toContain('FU-1');
+  expect(tree).toContain('Speech Usage');
   expect(tree).toContain('2.4h / 2h');
   expect(tree).toContain('3-Day Rolling');
   expect(tree).toContain('Weekly Rolling');

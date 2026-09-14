@@ -1594,6 +1594,10 @@ function fairUseHoursCopy(hours: number, limit: number): string {
   return `${hours.toFixed(1)}h / ${limit.toFixed(0)}h`;
 }
 
+export function fairUseSpeechUsageCopy(): string {
+  return 'Speech Usage';
+}
+
 export function fairUseDailyTranscriptionCopy(): string {
   return 'Daily Transcription';
 }
@@ -1663,6 +1667,10 @@ export function fairUseCopy(
     });
   }
   rows.push(
+    {
+      title: fairUseSpeechUsageCopy(),
+      copy: '',
+    },
     {
       title: 'Today',
       copy: fairUseHoursCopy(status.speechHoursToday, status.dailyHours),
