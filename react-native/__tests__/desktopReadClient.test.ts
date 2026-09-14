@@ -121,6 +121,7 @@ import {
   conversationListSourceTag,
   conversationListTag,
   conversationVisibilityCopy,
+  conversationCalendarAttendeesChipCopy,
   conversationUnknownAppCopy,
   conversationUnknownLocationCopy,
   conversationLocationAddressCopy,
@@ -3366,6 +3367,23 @@ test('conversation visibility copy names GET private, shared, and public as Flut
   expect(conversationVisibilityCopy(' \t\n')).toBeNull();
   expect(conversationVisibilityCopy(undefined)).toBeNull();
   expect(conversationVisibilityCopy('secret')).toBeNull();
+});
+
+test('conversation calendar attendee chip names Flutter GetSummaryWidgets first names', () => {
+  expect(conversationCalendarAttendeesChipCopy(undefined)).toBeNull();
+  expect(conversationCalendarAttendeesChipCopy([])).toBeNull();
+  expect(conversationCalendarAttendeesChipCopy(['Alex Chen'])).toBe('Alex');
+  expect(
+    conversationCalendarAttendeesChipCopy(['Alex Chen', 'sam@example.com']),
+  ).toBe('Alex, Sam');
+  expect(
+    conversationCalendarAttendeesChipCopy([
+      'Alex Chen',
+      'sam@example.com',
+      'Priya Shah',
+    ]),
+  ).toBe('Alex, Sam +1');
+  expect(conversationCalendarAttendeesChipCopy([' \t\n'])).toBeNull();
 });
 
 test('conversation unknown-app copy names Flutter catalog-miss attribution', () => {

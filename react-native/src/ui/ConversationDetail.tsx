@@ -19,6 +19,7 @@ import {
   conversationActionItemsEmptyCopy,
   conversationActionItemsEmptyDescriptionCopy,
   conversationNoFolderCopy,
+  conversationCalendarAttendeesChipCopy,
   legacyTranscriptCanDisplaySeconds,
   legacyTranscriptTimestampCopy,
   visibleDisplayText,
@@ -64,6 +65,7 @@ function ConversationClockFields({
   conversation,
   ink,
   durationCopy,
+  attendeesCopy,
   folderCopy,
   folderColor,
   folderIcon,
@@ -71,6 +73,7 @@ function ConversationClockFields({
   conversation: ConversationProjection;
   ink?: {color: string};
   durationCopy?: string | null;
+  attendeesCopy?: string | null;
   folderCopy?: string;
   folderColor?: string;
   folderIcon?: string;
@@ -90,6 +93,11 @@ function ConversationClockFields({
       </Text>
       {duration !== null ? (
         <Text style={[styles.conversationDetailField, ink]}>{duration}</Text>
+      ) : null}
+      {attendeesCopy ? (
+        <Text style={[styles.conversationDetailField, ink]}>
+          {attendeesCopy}
+        </Text>
       ) : null}
       {folder === '' ? null : (
         <Text
@@ -436,6 +444,9 @@ function LegacyConversationBody({
             ? conversationTranscriptDurationCopy(detail.transcript.segments)
             : null
         }
+        attendeesCopy={conversationCalendarAttendeesChipCopy(
+          detail.calendarEvent?.attendees,
+        )}
         folderCopy={folderLabel}
         folderColor={folderColor === '' ? undefined : folderColor}
         folderIcon={folderIcon === '' ? undefined : folderIcon}

@@ -2367,6 +2367,43 @@ test('legacy conversation details name GET calendar event title and attendees', 
   expect(copy).toContain('3:00 PM – 4:00 PM');
 });
 
+test('legacy conversation details name Flutter GetSummaryWidgets attendee chip', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        calendarEvent: {
+          title: 'Standup',
+          attendees: ['Alex Chen', 'sam@example.com', 'Priya Shah'],
+          startCopy: '3:00 PM',
+          endCopy: '4:00 PM',
+        },
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('Alex, Sam +1');
+  expect(copy).toContain('Alex Chen, sam@example.com, Priya Shah');
+  const recording = render({
+    conversation: {...conversation, folderId: null},
+  });
+  expect(text(recording)).not.toContain('Alex, Sam +1');
+});
+
 test('legacy conversation details name GET calendar html_link', () => {
   mockLegacy.mockReturnValue({
     result: {

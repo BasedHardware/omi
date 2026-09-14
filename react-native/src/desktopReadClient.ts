@@ -678,6 +678,37 @@ export function conversationVisibilityCopy(
   return null;
 }
 
+export function conversationCalendarAttendeeChipName(attendee: string): string {
+  const value = visibleDisplayText(attendee);
+  if (value.includes('@')) {
+    const localPart = value.split('@')[0];
+    if (localPart.length === 0) {
+      return localPart;
+    }
+    return localPart[0].toUpperCase() + localPart.slice(1);
+  }
+  const firstName = value.split(' ')[0];
+  return firstName === undefined ? '' : firstName;
+}
+
+export function conversationCalendarAttendeesChipCopy(
+  attendees: readonly string[] | null | undefined,
+): string | null {
+  const names = (attendees ?? [])
+    .map(conversationCalendarAttendeeChipName)
+    .filter(name => name !== '');
+  if (names.length === 0) {
+    return null;
+  }
+  if (names.length === 1) {
+    return names[0];
+  }
+  if (names.length === 2) {
+    return `${names[0]}, ${names[1]}`;
+  }
+  return `${names[0]}, ${names[1]} +${names.length - 2}`;
+}
+
 export function conversationPhotoCountCopy(item: {
   photoCount?: number;
 }): string | null {
