@@ -106,6 +106,7 @@ import {
   subscriptionTranscriptionQuotaCopy,
   usageStatsCopy,
   primaryLanguageCopy,
+  primaryLanguageNotSetCopy,
   peopleNameRows,
   firmwareUpdateCopy,
   fairUseCopy,
@@ -1118,7 +1119,8 @@ test('usage stats copy names GET today counts without Upgrade', () => {
   expect(usageStatsCopy(null)).toBeNull();
 });
 
-test('primary language copy names GET language without Not set', () => {
+test('primary language copy names Flutter notSet for empty or catalog-miss GET language', () => {
+  expect(primaryLanguageNotSetCopy()).toBe('Not set');
   expect(
     primaryLanguageCopy('en', [
       {code: 'en', name: 'English'},
@@ -1129,6 +1131,12 @@ test('primary language copy names GET language without Not set', () => {
   expect(primaryLanguageCopy('', [{code: 'en', name: 'English'}])).toBeNull();
   expect(primaryLanguageCopy(null, [{code: 'en', name: 'English'}])).toBeNull();
   expect(primaryLanguageCopy('\u0085', [{code: 'en', name: 'English'}])).toBeNull();
+  expect(
+    primaryLanguageCopy('xx', [
+      {code: 'en', name: 'English'},
+      {code: 'es', name: 'Spanish'},
+    ]),
+  ).toBe(primaryLanguageNotSetCopy());
 });
 
 test('people name rows keep GET names without empty entries', () => {

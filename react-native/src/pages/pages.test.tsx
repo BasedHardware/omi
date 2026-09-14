@@ -1337,7 +1337,7 @@ test('Settings names a failed language GET instead of empty success', async () =
   expect(tree).not.toContain('Not set');
 });
 
-test('Settings omits Primary language when GET language is empty', async () => {
+test('Settings names Flutter notSet for empty GET language', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/users/language') {
@@ -1351,8 +1351,37 @@ test('Settings omits Primary language when GET language is empty', async () => {
   });
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
-  expect(tree).not.toContain('Primary language');
-  expect(tree).not.toContain('Not set');
+  expect(tree).toContain('Primary language');
+  expect(tree).toContain('Not set');
+});
+
+test('Settings names Flutter notSet for catalog-miss GET language', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/language') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({language: 'xx'}),
+      };
+    }
+    if (request.path === '/v1/users/available-languages') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          languages: [{code: 'en', name: 'English'}],
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Primary language');
+  expect(tree).toContain('Not set');
+  expect(tree).not.toContain('xx');
+  expect(tree).not.toContain('English');
 });
 
 test('Settings names GET people without a write sheet', async () => {

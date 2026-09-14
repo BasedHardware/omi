@@ -945,6 +945,10 @@ export function subscriptionPeriodCopy(
   return rows.length === 0 ? null : rows;
 }
 
+export function primaryLanguageNotSetCopy(): string {
+  return 'Not set';
+}
+
 export function primaryLanguageCopy(
   code: string | null | undefined,
   names:
@@ -956,9 +960,12 @@ export function primaryLanguageCopy(
   if (language === '') {
     return null;
   }
-  const name = names?.find(item => item.code === language)?.name;
-  const visibleName = visibleDisplayText(name ?? '');
-  return visibleName === '' ? language : visibleName;
+  if (names !== undefined && names !== null && names.length > 0) {
+    const name = names.find(item => item.code === language)?.name;
+    const visibleName = visibleDisplayText(name ?? '');
+    return visibleName === '' ? primaryLanguageNotSetCopy() : visibleName;
+  }
+  return language;
 }
 
 export function peopleNameRows(

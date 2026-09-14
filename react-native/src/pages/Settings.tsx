@@ -38,6 +38,7 @@ import {
   subscriptionPeriodCopy,
   subscriptionTranscriptionQuotaCopy,
   primaryLanguageCopy,
+  primaryLanguageNotSetCopy,
   peopleNameRows,
   fairUseCopy,
   dailySummaryCopy,
@@ -864,16 +865,15 @@ export function SettingsPage({
         ))}
         {snapshot.languageError != null ? (
           <SettingRow copy={snapshot.languageError} title="Primary language" />
-        ) : primaryLanguageCopy(snapshot.language, snapshot.languageNames) !==
-          null ? (
+        ) : (
           <SettingRow
             copy={
               primaryLanguageCopy(snapshot.language, snapshot.languageNames) ??
-              ''
+              primaryLanguageNotSetCopy()
             }
             title="Primary language"
           />
-        ) : null}
+        )}
         {transcriptionPreferencesError !== null ? (
           <>
             <SettingRow

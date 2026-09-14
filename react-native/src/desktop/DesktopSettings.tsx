@@ -25,6 +25,7 @@ import {
   subscriptionPeriodCopy,
   subscriptionTranscriptionQuotaCopy,
   primaryLanguageCopy,
+  primaryLanguageNotSetCopy,
   peopleNameRows,
   fairUseCopy,
   dailySummaryCopy,
@@ -973,11 +974,11 @@ export function DesktopSettings({
       ))}
       {account != null && account.languageError != null ? (
         <Row copy={account.languageError} title="Primary language" />
-      ) : primaryLanguageCopy(account?.language, account?.languageNames) !==
-        null ? (
+      ) : account != null ? (
         <Row
           copy={
-            primaryLanguageCopy(account?.language, account?.languageNames) ?? ''
+            primaryLanguageCopy(account.language, account.languageNames) ??
+            primaryLanguageNotSetCopy()
           }
           title="Primary language"
         />
