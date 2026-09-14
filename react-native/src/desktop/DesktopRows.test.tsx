@@ -873,10 +873,10 @@ test('library conversation rows name Flutter New chrome for a just-created row',
     title: 'Morning standup',
     summary: 'Notes',
     searchableText: 'Morning standup\nNotes',
-    createdAt: new Date(now - 30_000).toISOString(),
-    updatedAt: new Date(now - 30_000).toISOString(),
-    startedAt: new Date(now - 30_000).toISOString(),
-    finishedAt: null,
+    createdAt: new Date(now - 50_000).toISOString(),
+    updatedAt: new Date(now - 20_000).toISOString(),
+    startedAt: new Date(now - 50_000).toISOString(),
+    finishedAt: new Date(now - 20_000).toISOString(),
     starred: false,
     status: 'completed',
     source: 'omi',
@@ -895,13 +895,17 @@ test('library conversation rows name Flutter New chrome for a just-created row',
           ...item,
           id: 'omi-old',
           createdAt: '2026-09-07T00:00:00.000Z',
+          updatedAt: '2026-09-07T00:01:00.000Z',
+          startedAt: '2026-09-07T00:00:00.000Z',
           finishedAt: '2026-09-07T00:01:00.000Z',
         }}
       />,
     );
   });
   expect(textOf(shown)).toContain('New 🚀');
+  expect(textOf(shown)).not.toContain('30s');
   expect(textOf(hidden)).not.toContain('New 🚀');
+  expect(textOf(hidden)).toContain('1m');
 });
 
 test('library conversation rows name GET category and omit discarded or empty values', () => {

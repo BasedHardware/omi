@@ -316,7 +316,9 @@ const RecapCard = memo(function RecapCard({
           Processing
         </Text>
       ) : null}
-      {recap.duration != null && recap.duration !== '' ? (
+      {recap.newCopy == null &&
+      recap.duration != null &&
+      recap.duration !== '' ? (
         <Text style={styles.recapDate}>{recap.duration}</Text>
       ) : null}
       <Text style={styles.recapDate}>{recap.newCopy ?? recap.dateLabel}</Text>

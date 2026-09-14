@@ -1141,33 +1141,37 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     const recapNow = Date.now();
     const recapItems =
       readOutcomes?.conversations.status === 'success'
-        ? readOutcomes.conversations.value.items.map(item => ({
-            dateLabel: conversationRecapDateLabel(
-              item.startedAt,
-              item.createdAt,
-              recapNow,
-            ),
-            id: item.id,
-            starred: item.starred,
-            locked: item.locked,
-            discarded: item.discarded,
-            photoCount: item.photoCount,
-            failed: item.status === 'failed',
-            processing:
-              item.status === 'processing' || item.status === 'merging',
-            emoji: conversationListEmoji(item),
-            tag: conversationListTag(item),
-            newCopy: conversationListNewCopy(
+        ? readOutcomes.conversations.value.items.map(item => {
+            const newCopy = conversationListNewCopy(
               item.createdAt,
               item.finishedAt,
               recapNow,
-            ),
-            ...(typeof item.transcriptEndSeconds === 'number' ||
-            conversationHasFinishClock(item)
-              ? {duration: conversationListDurationCopy(item)}
-              : {}),
-            title: conversationRecapTitle(item),
-          }))
+            );
+            return {
+              dateLabel: conversationRecapDateLabel(
+                item.startedAt,
+                item.createdAt,
+                recapNow,
+              ),
+              id: item.id,
+              starred: item.starred,
+              locked: item.locked,
+              discarded: item.discarded,
+              photoCount: item.photoCount,
+              failed: item.status === 'failed',
+              processing:
+                item.status === 'processing' || item.status === 'merging',
+              emoji: conversationListEmoji(item),
+              tag: conversationListTag(item),
+              newCopy,
+              ...(newCopy == null &&
+              (typeof item.transcriptEndSeconds === 'number' ||
+                conversationHasFinishClock(item))
+                ? {duration: conversationListDurationCopy(item)}
+                : {}),
+              title: conversationRecapTitle(item),
+            };
+          })
         : [];
     const projectionStatus: MobileProjectionStatus =
       readsPhase === 'initial-loading' || readsPhase === 'refreshing'

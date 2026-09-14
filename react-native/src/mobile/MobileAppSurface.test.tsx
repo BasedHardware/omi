@@ -1051,11 +1051,13 @@ test('Daily Recaps name Flutter New chrome instead of the day clock', () => {
         title: 'Product review',
         dateLabel: 'Yesterday',
         newCopy: 'New 🚀',
+        duration: '30s',
       },
     ],
   });
   expect(renderedText(flagged)).toContain('New 🚀');
   expect(renderedText(flagged)).not.toContain('Yesterday');
+  expect(renderedText(flagged)).not.toContain('30s');
 
   const plain = render({
     recaps: [

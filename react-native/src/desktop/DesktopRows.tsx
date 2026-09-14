@@ -111,8 +111,9 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
       {photosCopy !== null ? (
         <Text style={styles.rowMeta}>{photosCopy}</Text>
       ) : null}
-      {conversationHasFinishClock(item) ||
-      typeof item.transcriptEndSeconds === 'number' ? (
+      {newCopy === null &&
+      (conversationHasFinishClock(item) ||
+        typeof item.transcriptEndSeconds === 'number') ? (
         <Text style={styles.rowMeta}>{conversationListDurationCopy(item)}</Text>
       ) : null}
     </View>

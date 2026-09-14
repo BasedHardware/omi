@@ -1648,8 +1648,8 @@ test('conversation list names Flutter New chrome for a just-created row', () => 
     title: 'Morning standup',
     summary: 'Notes',
     searchableText: 'Morning standup\nNotes',
-    updatedAt: new Date(now - 30_000).toISOString(),
-    startedAt: new Date(now - 30_000).toISOString(),
+    updatedAt: new Date(now - 20_000).toISOString(),
+    startedAt: new Date(now - 50_000).toISOString(),
     starred: false,
     status: 'completed' as const,
     source: 'omi' as const,
@@ -1670,8 +1670,8 @@ test('conversation list names Flutter New chrome for a just-created row', () => 
               {
                 ...base,
                 id: 'omi-new',
-                createdAt: new Date(now - 30_000).toISOString(),
-                finishedAt: null,
+                createdAt: new Date(now - 50_000).toISOString(),
+                finishedAt: new Date(now - 20_000).toISOString(),
               },
               {
                 ...base,
@@ -1696,7 +1696,9 @@ test('conversation list names Flutter New chrome for a just-created row', () => 
     );
   });
   expect(textOf(renderer)).toContain('New 🚀');
+  expect(textOf(renderer)).not.toContain('30s');
   expect(textOf(renderer)).toContain('Older talk');
+  expect(textOf(renderer)).toContain('1m');
 });
 
 test('conversation list names GET category and omits it when discarded or empty', () => {

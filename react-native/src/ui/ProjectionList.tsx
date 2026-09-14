@@ -254,6 +254,7 @@ export const ProjectionRow = memo(function ProjectionRow({
         </Text>
       ) : null}
       {conversation !== null &&
+      newCopy === null &&
       (conversationHasFinishClock(conversation) ||
         typeof conversation.transcriptEndSeconds === 'number') ? (
         <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
