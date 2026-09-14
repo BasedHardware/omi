@@ -226,6 +226,40 @@ test('keeps GET import jobs when a job_id exceeds 256', () => {
   ]);
 });
 
+test('keeps GET import jobs when a job_id exceeds 10000', () => {
+  const id = 'j'.repeat(10001);
+  expect(
+    parseOmiImportJobs(
+      JSON.stringify([
+        {job_id: id, status: 'completed'},
+        {
+          job_id: 'job-neighbor',
+          status: 'failed',
+          error: 'Zip could not be read.',
+        },
+      ]),
+    ),
+  ).toEqual([
+    {id, status: 'completed'},
+    {id: 'job-neighbor', status: 'failed', error: 'Zip could not be read.'},
+  ]);
+});
+
+test('fails closed when a job_id exceeds 1000000', () => {
+  expect(() =>
+    parseOmiImportJobs(
+      JSON.stringify([
+        {job_id: 'j'.repeat(1_000_001), status: 'completed'},
+        {
+          job_id: 'job-neighbor',
+          status: 'failed',
+          error: 'Zip could not be read.',
+        },
+      ]),
+    ),
+  ).toThrow();
+});
+
 test('keeps GET import jobs when created_at exceeds 100', () => {
   const createdAt = 'c'.repeat(101);
   expect(
