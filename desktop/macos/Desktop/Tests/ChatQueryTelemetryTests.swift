@@ -110,8 +110,44 @@ final class ChatQueryTelemetryTests: XCTestCase {
     XCTAssertEqual(properties["recovery_action"] as? String, "worker_recycled")
     XCTAssertEqual(properties["recovery_outcome"] as? String, "recovered")
     XCTAssertEqual(properties["retry_disposition"] as? String, "next_send")
+    XCTAssertEqual(properties["failure_code"] as? String, "adapter_execution_failed")
     XCTAssertFalse(String(describing: properties).contains("/Users/person"))
     XCTAssertFalse(String(describing: properties).contains("private prompt"))
+  }
+
+  func testWorkerRecoverySameTurnAndHTTP503StayOnClosedVocab() {
+    let failure = AgentRuntimeFailure(
+      code: "adapter_execution_failed",
+      userMessage: "The local agent reset its session after an error. Send your message again.",
+      technicalMessage: "HTTP 503 status code (no body)",
+      source: "adapter_execution",
+      adapterId: "pi-mono",
+      retryable: true,
+      recoveryAction: "worker_recycled",
+      recoveryOutcome: "recovered",
+      retryDisposition: "same_turn"
+    )
+    let detail = ChatQueryErrorDetail.from(BridgeError.agentRuntimeFailure(failure))
+    XCTAssertEqual(detail?.errorCode, "upstream_provider_failed")
+    XCTAssertEqual(detail?.retryable, true)
+    XCTAssertEqual(detail?.failureCode, "adapter_execution_failed")
+    XCTAssertEqual(detail?.recoveryAction, "worker_recycled")
+    XCTAssertEqual(detail?.retryDisposition, "same_turn")
+
+    let event = ChatQueryTelemetryEvent.failed(
+      ChatQueryTelemetryContext(attemptId: "attempt-503", surface: "main_chat", harness: "piMono"),
+      durationMs: 105,
+      errorClass: .agentRuntime,
+      partialResponse: false,
+      detail: detail
+    )
+    let properties = event.analyticsPayload.properties
+    XCTAssertEqual(properties["error_code"] as? String, "upstream_provider_failed")
+    XCTAssertEqual(properties["failure_code"] as? String, "adapter_execution_failed")
+    XCTAssertEqual(properties["retry_disposition"] as? String, "same_turn")
+    XCTAssertEqual(properties["recovery_action"] as? String, "worker_recycled")
+    XCTAssertFalse(String(describing: properties).contains("HTTP 503"))
+    XCTAssertFalse(String(describing: properties).contains("Send your message"))
   }
 
   func testUnknownDaemonAuthFailureReportsClassifierCodeAndIsNotRetryable() {

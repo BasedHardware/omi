@@ -1203,6 +1203,7 @@ actor AgentRuntimeProcess {
     harnessMode: String,
     binding: ExternalSurfaceRunBinding,
     terminalStatus: ExternalSurfaceRunTerminalStatus,
+    finalText: String? = nil,
     errorCode: String? = nil,
     transitionCleanupCapability: RuntimeOwnerTransitionCleanupCapability? = nil
   ) async throws -> ExternalSurfaceRunCompletion {
@@ -1247,6 +1248,7 @@ actor AgentRuntimeProcess {
         requestId: requestId,
         binding: binding,
         terminalStatus: terminalStatus,
+        finalText: finalText,
         errorCode: errorCode
       ),
       expectedKind: .externalSurfaceRunCompleteResult,
@@ -1272,7 +1274,9 @@ actor AgentRuntimeProcess {
       runID: binding.runID,
       attemptID: binding.attemptID,
       terminalStatus: confirmedStatus,
-      duplicate: result["duplicate"] as? Bool ?? false
+      duplicate: result["duplicate"] as? Bool ?? false,
+      finalTextPersisted: result["finalTextPersisted"] as? Bool ?? false,
+      journalMaterialized: result["journalMaterialized"] as? Bool ?? false
     )
   }
 
@@ -1524,6 +1528,7 @@ actor AgentRuntimeProcess {
     requestId: String,
     binding: ExternalSurfaceRunBinding,
     terminalStatus: ExternalSurfaceRunTerminalStatus,
+    finalText: String?,
     errorCode: String?
   ) -> [String: Any] {
     var message = protocolEnvelope(
@@ -1536,6 +1541,8 @@ actor AgentRuntimeProcess {
     message["runId"] = binding.runID
     message["attemptId"] = binding.attemptID
     message["terminalStatus"] = terminalStatus.rawValue
+    // Trimmed, not just non-empty; see ExternalSurfaceRunAnswer for why.
+    if let finalText = ExternalSurfaceRunAnswer.normalized(finalText) { message["finalText"] = finalText }
     if let errorCode, !errorCode.isEmpty { message["errorCode"] = errorCode }
     return message
   }

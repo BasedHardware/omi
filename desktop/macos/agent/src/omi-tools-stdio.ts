@@ -378,6 +378,21 @@ async function handleJsonRpc(
             result: { content: [{ type: "text", text: result }] },
           });
         }
+      } else if (
+        toolName === "read_conversation_evidence" ||
+        toolName === "search_conversation_evidence"
+      ) {
+        // Evidence stays in the parent kernel. The child process only relays
+        // the request so the kernel can recheck capability, owner, and the
+        // exact conversation binding before reading journal metadata.
+        const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
       } else if (isAgentControlToolName(toolName)) {
         // Runtime control tools are handled by the Node parent/kernel. They
         // still travel over the relay so MCP clients use the same tool path.

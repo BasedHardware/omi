@@ -5,7 +5,6 @@ Provides chat tools for current weather, short forecasts, and basic air-quality
 lookups using public Open-Meteo APIs.
 """
 
-from datetime import datetime
 from typing import Any, Literal, Optional
 
 import httpx
@@ -100,6 +99,36 @@ def _format_weather_code(code: Optional[int]) -> str:
         99: "thunderstorm with heavy hail",
     }
     return descriptions.get(code, f"weather code {code}")
+
+
+def _format_observed_at(current: dict[str, Any], payload: dict[str, Any]) -> str:
+    """Render the observation time with the response timezone/offset when present."""
+    observed = current.get("time") or "unknown time"
+    # Keep prior minute-precision normalization for display consistency.
+    if observed != "unknown time":
+        try:
+            from datetime import datetime
+
+            observed = datetime.fromisoformat(str(observed)).isoformat(timespec="minutes")
+        except ValueError:
+            pass
+    tz = payload.get("timezone") or ""
+    offset = payload.get("utc_offset_seconds")
+    suffix_parts = []
+    if tz:
+        suffix_parts.append(tz)
+    if offset is not None:
+        try:
+            total_minutes = int(round(int(offset) / 60))
+            sign = "+" if total_minutes >= 0 else "-"
+            total_minutes = abs(total_minutes)
+            whole, minutes = divmod(total_minutes, 60)
+            suffix_parts.append(f"UTC{sign}{whole:02d}:{minutes:02d}")
+        except (TypeError, ValueError):
+            pass
+    if suffix_parts:
+        return f"{observed} ({', '.join(suffix_parts)})"
+    return observed
 
 
 def _format_place(place: dict[str, Any]) -> str:
@@ -251,7 +280,7 @@ async def get_current_weather(request: CurrentWeatherRequest) -> ChatToolRespons
         units = payload.get("current_units") or {}
         place_name = _format_place(place)
         condition = _format_weather_code(current.get("weather_code"))
-        observed_at = current.get("time") or "unknown time"
+        observed_at = _format_observed_at(current, payload)
 
         lines = [
             f"Current weather for {place_name}",
@@ -339,16 +368,11 @@ async def get_air_quality(request: AirQualityRequest) -> ChatToolResponse:
         current = payload.get("current") or {}
         units = payload.get("current_units") or {}
         place_name = _format_place(place)
-        observed_at = current.get("time")
-        if observed_at:
-            try:
-                observed_at = datetime.fromisoformat(observed_at).isoformat(timespec="minutes")
-            except ValueError:
-                pass
+        observed_at = _format_observed_at(current, payload)
 
         lines = [
             f"Air quality for {place_name}",
-            f"Observed: {observed_at or 'unknown time'}",
+            f"Observed: {observed_at}",
             f"US AQI: {_format_number(current.get('us_aqi'))}",
             f"PM2.5: {_format_number(current.get('pm2_5'), ' ' + units.get('pm2_5', ''))}",
             f"PM10: {_format_number(current.get('pm10'), ' ' + units.get('pm10', ''))}",

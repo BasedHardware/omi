@@ -7,6 +7,22 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/home_provider.dart';
 
+/// Height of the bottom nav row above whatever system inset it reserves.
+const double kBottomNavBarHeight = 100;
+
+/// Gap between the top of the nav row and the home chat bar that floats above
+/// it. The chat bar derives its offset from this pair rather than repeating a
+/// literal, so changing the row's height cannot silently close the gap.
+const double kBottomNavChatBarGap = 22;
+
+/// The bottom inset the nav row reserves for system chrome. Anything
+/// positioned against the row must add this to stay in step with it.
+///
+/// viewPadding, not padding: the home Scaffold sets
+/// resizeToAvoidBottomInset: false, and padding.bottom collapses to zero while
+/// a keyboard is open, which would drop the row back under the system bar.
+double bottomNavBarReservedInset(BuildContext context) => MediaQuery.viewPaddingOf(context).bottom;
+
 class BottomNavBar extends StatefulWidget {
   const BottomNavBar({super.key, required this.onTabTap, this.onTabWarmup});
 
@@ -28,12 +44,21 @@ class _BottomNavBarState extends State<BottomNavBar> {
     _navigation = Selector<HomeProvider, int>(
       selector: (_, home) => home.selectedIndex,
       builder: (context, selectedIndex, _) {
+        // Reserve whatever bottom inset the window reports so the tab row's tap
+        // targets stay above the system navigation bar. When the window is not
+        // drawn under that bar the reported inset is zero and this is a no-op,
+        // so the row can never be lifted twice. The sibling bars mounted in the
+        // same home Stack (MergeActionBar, TaskSelectionActionBar) already use
+        // SafeArea to reserve the same inset.
+        final bottomInset = bottomNavBarReservedInset(context);
         return Align(
           alignment: Alignment.bottomCenter,
           child: Container(
             width: double.infinity,
-            height: 100,
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            // The content box is unchanged; only the reserved inset grows, so a
+            // device reporting a zero inset lays out exactly as before.
+            height: kBottomNavBarHeight + bottomInset,
+            padding: EdgeInsets.fromLTRB(20, 20, 20, bottomInset),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,

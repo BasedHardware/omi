@@ -112,9 +112,9 @@ struct TaskChatPanel: View {
                   await taskState.sendMessage(
                     text,
                     taskContext: coordinator.activeContextPacket,
-                    onAccepted: {
+                    onAcceptedWithAttemptID: { attemptID in
                       AnalyticsManager.shared.chatMessageSent(
-                        messageLength: text.count, source: "task_chat")
+                        messageLength: text.count, source: "task_chat", attemptID: attemptID)
                     }
                   )
                   await coordinator.refreshActiveThread()

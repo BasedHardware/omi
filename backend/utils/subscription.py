@@ -1662,9 +1662,7 @@ def _usage_seconds(usage: Any) -> Optional[int]:
     return value
 
 
-def is_marketplace_reviewer(uid: str) -> bool:
-    """The app-store reviewer identities the subscription snapshot already treats as unlimited."""
-    return uid in os.getenv('MARKETPLACE_APP_REVIEWERS', '').split(',')
+from utils.marketplace_reviewers import is_marketplace_reviewer
 
 
 def resolve_transcription_allowance(

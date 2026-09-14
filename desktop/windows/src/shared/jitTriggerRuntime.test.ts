@@ -174,6 +174,42 @@ describe('Windows JIT trigger contract', () => {
     ).toThrow(/duplicate|malformed/i)
   })
 
+  it('hands a complete empty watchlist to the ambient fallback instead of going silent', () => {
+    // Parity register item 5 (macOS KnowledgeLedgerTriggerWatchlistRuntime): an
+    // account with no standing trigger is an ambient candidate, never `none`.
+    const enabled = {
+      mode: 'enabled' as const,
+      killSwitchEnabled: false,
+      ownerId: 'u',
+      accountGeneration: 2,
+      snapshotOwnerId: 'u',
+      snapshotAccountGeneration: 2,
+      snapshotIsAuthoritative: true,
+      authorizationIsCurrent: true
+    }
+    const empty = evaluateJitWatchlist(enabled, [], { appName: 'Code' }, '2026-08-24')
+    expect(empty).toEqual({
+      status: 'evaluated',
+      nextLane: 'ambient_fallback',
+      matches: [],
+      ambiguous: []
+    })
+    // A non-empty watchlist with no match still reaches the same lane, so the
+    // two cases are indistinguishable downstream (same nano/full-turn budget).
+    const miss = evaluateJitWatchlist(
+      enabled,
+      [compileTriggerSnapshotRow(row({ apps: ['Xcode'] }))],
+      { appName: 'Code' },
+      '2026-08-24'
+    )
+    expect(miss.nextLane).toBe('ambient_fallback')
+    // Inactive authority is unchanged: no lane, no ambient spend.
+    expect(
+      evaluateJitWatchlist(JIT_RUNTIME_DEFAULT_AUTHORITY, [], { appName: 'Code' }, '2026-08-24')
+        .nextLane
+    ).toBe('none')
+  })
+
   it('keeps the runtime inactive unless the complete backend authority is current', () => {
     const compiled = compileTriggerSnapshotRow(row({ apps: ['Code'] }))
     const observation = { appName: 'Code' }
@@ -214,6 +250,6 @@ describe('Windows JIT trigger contract', () => {
         observation,
         '2026-08-24'
       ).nextLane
-    ).toBe('none')
+    ).toBe('ambient_fallback')
   })
 })

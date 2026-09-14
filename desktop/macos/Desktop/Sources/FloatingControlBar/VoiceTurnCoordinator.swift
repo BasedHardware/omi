@@ -104,6 +104,11 @@ final class VoiceTurnCoordinator {
   /// The journal funnel reads this so a reply whose audio fully drained before a
   /// barge-in is sealed as the delivered answer it was, not as a cut-off failure.
   private(set) var lastTerminalAnswerDelivered = false
+  /// Whether the most recent terminal's provider response finished, alongside
+  /// `model.lastTerminal`. The journal funnel reads this so a reply whose text
+  /// completed but whose spoken delivery was cut is not later re-answered by
+  /// the model as though it had never been given.
+  private(set) var lastTerminalAnswerTextCompleted = false
   private var pendingFacts: [VoiceTurnFact] = []
   private var isDrainingEvents = false
 
@@ -303,6 +308,12 @@ final class VoiceTurnCoordinator {
     turnFullAnswerDurationMs[turnID] != nil
   }
 
+  /// True when the given (still-active) turn's provider response has finished,
+  /// meaning its accumulated answer text is complete rather than a fragment.
+  func providerResponseFinished(turnID: VoiceTurnID) -> Bool {
+    activeTurn?.id == turnID && activeTurn?.providerFinished == true
+  }
+
   func configure(
     barState: FloatingControlBarState,
     resizeForPTT: @escaping @MainActor (Bool) -> Void = {
@@ -491,6 +502,7 @@ final class VoiceTurnCoordinator {
         let terminalDurationMs = turnStartedAt.removeValue(forKey: terminal.turnID).map(Self.elapsedMilliseconds)
         let fullAnswerDurationMs = turnFullAnswerDurationMs.removeValue(forKey: terminal.turnID)
         lastTerminalAnswerDelivered = fullAnswerDurationMs != nil
+        lastTerminalAnswerTextCompleted = terminal.answerTextCompleted
         DesktopDiagnosticsManager.shared.recordVoiceTurnTerminal(
           turnID: terminal.turnID.description,
           reason: terminal.reason.rawValue,

@@ -34,6 +34,10 @@ struct MessageMetadata: Equatable {
   /// screen observation, bounded). Journaled on the user row so later turns can answer "do you
   /// remember what I was reading?" from conversation history even when Rewind has no frame yet.
   var screenContext: String?
+  /// Bounded, typed source evidence attached to the user turn. The runtime
+  /// renders compact references and keeps the full body behind an evidence read
+  /// boundary; this local model retains the body only for journal replay.
+  var evidence: [ConversationEvidence]
 
   init(
     hasScreenshot: Bool = false,
@@ -49,7 +53,8 @@ struct MessageMetadata: Equatable {
     adapterId: String = "",
     credentialScopeLabel: String = "",
     modelsUsed: [String] = [],
-    screenContext: String? = nil
+    screenContext: String? = nil,
+    evidence: [ConversationEvidence] = []
   ) {
     self.hasScreenshot = hasScreenshot
     self.screenshotSizeBytes = screenshotSizeBytes
@@ -65,6 +70,7 @@ struct MessageMetadata: Equatable {
     self.credentialScopeLabel = credentialScopeLabel
     self.modelsUsed = modelsUsed
     self.screenContext = screenContext
+    self.evidence = evidence
   }
 
   static func fromCompletedTurn(

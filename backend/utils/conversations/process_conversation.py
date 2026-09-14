@@ -16,9 +16,10 @@ from database import redis_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.auth import get_user_name
 from utils.conversations.transcript_for_llm import (
-    conversation_transcript_for_action_items,
+    conversation_transcript_and_speaker_map,
     conversation_transcript_for_llm,
     conversation_transcripts_for_llm,
+    memory_transcript_from_segments,
 )
 from utils.conversations.wake_word import has_structural_wake_word_marker
 import database.conversations as conversations_db
@@ -64,6 +65,15 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+from utils.conversations.duplicate_capture import (
+    CANDIDATE_PAGE_LIMIT,
+    DuplicateCaptureMatch,
+    MIN_CANDIDATE_WORDS,
+    capture_record,
+    find_duplicate_capture,
+    mark_duplicate_capture,
+)
+from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
     client_processing_mutation,
@@ -73,10 +83,10 @@ from utils.conversations.projection_payload import (
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
+from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
 from utils.memory.memory_service import MemoryService
 from utils.memory.decision_path_telemetry import (
     classify_model_about,
-    count_speaker_ids,
     emit_memory_capture_decision,
     model_about_disagrees_with_attribution,
 )
@@ -84,7 +94,7 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
-from utils.metrics import record_jit_first_open
+from utils.metrics import record_jit_first_open, record_lazy_desktop_deferral
 from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
@@ -371,6 +381,48 @@ def _proposes_task_candidates(conversation: Any) -> bool:
     return getattr(conversation, 'source', None) == ConversationSource.desktop
 
 
+def _detect_duplicate_capture(
+    uid: str, conversation: Union[Conversation, CreateConversation]
+) -> Optional[DuplicateCaptureMatch]:
+    """Another capture client's conversation that already carries this one (#3244).
+
+    Fails open: a candidate-read failure keeps this conversation on the ordinary
+    path, the pre-fix outcome of two visible conversations, never a lost one.
+    """
+    candidate = capture_record(conversation)
+    if candidate is None or len(candidate.words) < MIN_CANDIDATE_WORDS:
+        return None
+    try:
+        rows = [
+            row
+            for status in (ConversationStatus.completed.value, ConversationStatus.processing.value)
+            for row in conversations_db.get_conversations_finished_after(
+                uid, status=status, finished_after=candidate.started_at, limit=CANDIDATE_PAGE_LIMIT
+            )
+        ]
+    except Exception:
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='duplicate_capture_check',
+            to_mode='keep_both_captures',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        return None
+    match = find_duplicate_capture(candidate, [record for record in map(capture_record, rows) if record is not None])
+    if match is not None:
+        logger.info(
+            'duplicate capture folded uid=%s conversation=%s primary=%s coverage=%.2f containment=%.2f',
+            uid,
+            getattr(conversation, 'id', None),
+            match.primary_conversation_id,
+            match.window_coverage,
+            match.transcript_containment,
+        )
+    return match
+
+
 def _get_structured(
     uid: str,
     language_code: str,
@@ -481,7 +533,7 @@ def _get_structured(
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {ext_conv.text_source}')
 
         main_conv = cast(Union[Conversation, CreateConversation], conversation)
-        transcript_text, action_items_transcript = conversation_transcripts_for_llm(uid, main_conv, people)
+        transcript_text, action_items_transcript, speaker_map = conversation_transcripts_for_llm(uid, main_conv, people)
         has_wake_word_marker = has_structural_wake_word_marker(action_items_transcript)
 
         # For re-processing, we don't discard, just re-structure.
@@ -496,6 +548,7 @@ def _get_structured(
                     language_code=language_code,
                     calendar_context=calendar_context,
                     photos=main_conv.photos,
+                    speaker_map=speaker_map,
                 )
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                     structured = get_conversation_notes(
@@ -534,10 +587,20 @@ def _get_structured(
                 )
             return structured, False
 
-        # Compute conversation duration for discard heuristics
-        duration_seconds: Optional[float] = None
-        if main_conv.started_at and main_conv.finished_at:
-            duration_seconds = max(0, (main_conv.finished_at - main_conv.started_at).total_seconds())
+        # A second capture client already carrying this speech (#3244: Omi device
+        # on the phone + macOS microphone in the same room) is folded away here,
+        # before any LLM spend. It takes the same discard exit as a scrap, so the
+        # transcript and audio stay on the row and the primary is recorded in
+        # external_data. Deliberately ahead of the calendar override: the primary
+        # already holds that meeting.
+        duplicate_capture = _detect_duplicate_capture(uid, main_conv)
+        if duplicate_capture is not None:
+            mark_duplicate_capture(main_conv, duplicate_capture)
+            return Structured(emoji=random.choice(['🧠', '🎉'])), True
+
+        # Transcript span, not the wall window: `started_at` is the streaming-session
+        # origin, so `finished_at - started_at` read an 8s scrap as 42 minutes (#4056).
+        duration_seconds: Optional[float] = conversation_duration_seconds(main_conv)
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
@@ -575,6 +638,7 @@ def _get_structured(
                 language_code=language_code,
                 calendar_context=calendar_context,
                 photos=main_conv.photos,
+                speaker_map=speaker_map,
             )
             with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                 structured = get_conversation_notes(
@@ -804,14 +868,16 @@ def trigger_conversation_apps(
             transcript = conversation_transcript_for_llm(uid, conversation, people)
             prompt_prefix = None
             if _conversation_notes_v2_enabled() and conversation.started_at:
+                app_transcript, app_speaker_map = conversation_transcript_and_speaker_map(uid, conversation, people)
                 prompt_prefix = build_conversation_prompt_prefix(
                     conversation_id=conversation.id,
-                    transcript=conversation_transcript_for_action_items(uid, conversation, people),
+                    transcript=app_transcript,
                     started_at=conversation.started_at,
                     timezone_name=notification_db.get_user_time_zone(uid) or '',
                     language_code=language_code,
                     calendar_context=_stored_meeting_context(conversation),
                     photos=conversation.photos,
+                    speaker_map=app_speaker_map,
                 )
             result = get_app_result(
                 transcript,
@@ -1060,16 +1126,19 @@ def _l1_subject_from_matched_segments(
     *,
     source_id: str,
     matched_segments: List[Any],
+    owner_evidence: OwnerAttributionEvidence,
 ) -> Tuple[Optional[str], SubjectAttribution, str]:
     resolved_subjects: Set[Tuple[str, SubjectAttribution, str]] = set()
     for segment in matched_segments:
-        if bool(getattr(segment, "is_user", False)):
+        if may_attribute_to_owner(owner_evidence, segment=segment):
             resolved_subjects.add(("user", SubjectAttribution.user, "user"))
             continue
         person_id = getattr(segment, "person_id", None)
         if person_id:
             resolved_subjects.add((f"person:{person_id}", SubjectAttribution.third_party, "person"))
             continue
+        if getattr(segment, "is_user", False):
+            return None, SubjectAttribution.unknown, "unknown"
         raw_speaker = str(getattr(segment, "speaker", "") or "").strip()
         speaker_id = getattr(segment, "speaker_id", None)
         speaker_label = raw_speaker or (f"speaker_{speaker_id}" if speaker_id is not None else "")
@@ -1114,6 +1183,7 @@ def _l1_candidate_subject(
     segments: List[Any],
 ) -> Tuple[Optional[str], SubjectAttribution, str]:
     """Resolve one L1 candidate without assigning the whole conversation's subject."""
+    owner_evidence = OwnerAttributionEvidence.from_segments(segments)
     about_norm = _normalized_l1_subject_label(about)
     speaker_norm = _normalized_l1_subject_label(speaker_label)
     user_aliases = {"user", "the user", "primary user"}
@@ -1141,6 +1211,14 @@ def _l1_candidate_subject(
             matched_segments.append(segment)
 
     if about_norm in user_aliases:
+        if not may_attribute_to_owner(owner_evidence):
+            if quote_matched_segments and all(
+                getattr(segment, "person_id", None) for segment in quote_matched_segments
+            ):
+                return _l1_subject_from_matched_segments(
+                    source_id=source_id, matched_segments=quote_matched_segments, owner_evidence=owner_evidence
+                )
+            return None, SubjectAttribution.unknown, "unknown"
         if quote_matched_segments:
             # Quote-bearing source segments outrank both model-authored
             # ``about`` and ``speaker_label`` fields. This applies even when
@@ -1148,6 +1226,7 @@ def _l1_candidate_subject(
             # different segment elsewhere in the conversation.
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=quote_matched_segments,
             )
         if speaker_norm and matched_segments:
@@ -1155,9 +1234,12 @@ def _l1_candidate_subject(
             # model-authored about=user label.
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=matched_segments,
             )
-        return "user", SubjectAttribution.user, "user"
+        if may_attribute_to_owner(owner_evidence):
+            return "user", SubjectAttribution.user, "user"
+        return None, SubjectAttribution.unknown, "unknown"
 
     about_names_model_speaker = bool(
         about_norm and speaker_norm and (about_norm == speaker_norm or f" {speaker_norm} " in f" {about_norm} ")
@@ -1170,6 +1252,7 @@ def _l1_candidate_subject(
         # source-scoped entity.
         return _l1_subject_from_matched_segments(
             source_id=source_id,
+            owner_evidence=owner_evidence,
             matched_segments=quote_matched_segments,
         )
 
@@ -1186,11 +1269,13 @@ def _l1_candidate_subject(
         if quote_matched_segments:
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=quote_matched_segments,
             )
         if matched_segments:
             return _l1_subject_from_matched_segments(
                 source_id=source_id,
+                owner_evidence=owner_evidence,
                 matched_segments=matched_segments,
             )
         return None, SubjectAttribution.unknown, "unknown"
@@ -1402,14 +1487,23 @@ def _extract_memories_canonical(
             people_records = users_db.get_people_by_ids(uid, list(set(person_ids))) if person_ids else []
             prompt_people = [Person(**record) for record in people_records]
             calendar_context = _stored_meeting_context(conversation)
+            prompt_transcript, prompt_speaker_map = conversation_transcript_and_speaker_map(
+                uid, conversation, prompt_people
+            )
+            if not may_attribute_to_owner(OwnerAttributionEvidence.from_segments(conversation.transcript_segments)):
+                prompt_transcript = memory_transcript_from_segments(
+                    conversation.transcript_segments, user_name=user_name, people=prompt_people
+                )
+                prompt_speaker_map = {}
             prompt_prefix = build_conversation_prompt_prefix(
                 conversation_id=conversation.id,
-                transcript=conversation_transcript_for_action_items(uid, conversation, prompt_people),
+                transcript=prompt_transcript,
                 started_at=conversation.started_at,
                 timezone_name=notification_db.get_user_time_zone(uid) or '',
                 language_code=conversation.language or 'en',
                 calendar_context=calendar_context,
                 photos=conversation.photos,
+                speaker_map=prompt_speaker_map,
             )
         try:
             extracted_candidates = extract_canonical_l1_memory_candidates(
@@ -1609,7 +1703,7 @@ def _extract_memories_canonical(
         replacement_payloads,
     )
     capture_regime = getattr(conversation.source, "value", conversation.source) or ConversationSource.unknown.value
-    distinct_speaker_ids, owner_speaker_ids = count_speaker_ids(conversation.transcript_segments)
+    owner_evidence = OwnerAttributionEvidence.from_segments(conversation.transcript_segments)
     for memory_db_obj, _, _, _ in parsed_memories:
         if not memory_db_obj.id:
             continue
@@ -1626,8 +1720,9 @@ def _extract_memories_canonical(
             subject_attribution=memory_db_obj.subject_attribution,
             model_about=model_about,
             attribution_disagreed=attribution_disagreed,
-            distinct_speaker_ids=distinct_speaker_ids,
-            owner_speaker_ids=owner_speaker_ids,
+            distinct_speaker_ids=owner_evidence.distinct_speaker_ids,
+            owner_speaker_ids=owner_evidence.owner_speaker_ids,
+            owner_trust=owner_evidence.trust,
         )
     if len(parsed_memories) == 0:
         logger.info(f"No canonical memories extracted for conversation {conversation.id}")
@@ -1995,9 +2090,11 @@ def _store_deferred_conversation(
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
     if not persisted:
         logger.info('lazy: deferred conversation creation fenced uid=%s conv=%s', uid, conversation.id)
+        record_lazy_desktop_deferral(event='fenced')
         return conversation
 
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
+    record_lazy_desktop_deferral(event='stored')
     return conversation
 
 

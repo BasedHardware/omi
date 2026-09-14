@@ -1839,9 +1839,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get openSettings => 'सेटिंग्स खोलें';
 
   @override
-  String get wantDifferentName => 'क्या आप कोई दूसरा नाम इस्तेमाल करना चाहते हैं?';
-
-  @override
   String get whatsYourName => 'आपका नाम क्या है?';
 
   @override
@@ -2017,7 +2014,8 @@ class AppLocalizationsHi extends AppLocalizations {
   String get memoryDeleted => 'याद हटा दी गई।';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'यादों के इतिहास का कुछ हिस्सा उपलब्ध नहीं है। अब तक प्राप्त इतिहास दिखाया जा रहा है।';
 
   @override
   String get undo => 'पूर्ववत करें';
@@ -9893,10 +9891,33 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name की वॉइस प्रोफ़ाइल';
+  }
+
+  @override
+  String get play => 'चलाएँ';
+
+  @override
+  String get redo => 'फिर से रिकॉर्ड करें';
+
+  @override
+  String get answerWithYourVoice => 'बोलकर जवाब दें:';
+
+  @override
+  String get speechProfileTopicLocation => 'आप कहाँ रहते हैं?';
+
+  @override
+  String get speechProfileTopicWork => 'आप क्या काम करते हैं?';
+
+  @override
+  String get speechProfileTopicGoal => 'आपका दीर्घकालिक लक्ष्य क्या है?';
+
+  @override
   String get transcriptionNoAudio => 'ट्रांसक्रिप्शन ऑडियो प्राप्त नहीं कर रहा है';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'रिकॉर्डिंग शुरू करने के लिए + टैप करें';
 
   @override
   String get chatBlockTask => 'कार्य';
@@ -9933,4 +9954,11 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'नॉलेज ग्राफ़ लोड नहीं हो सका';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'अभी बोली को टेक्स्ट में बदलना उपलब्ध नहीं है। अपना इंटरनेट कनेक्शन और डिवाइस की वाक् पहचान सेटिंग जाँचें, फिर दोबारा कोशिश करें।';
+
+  @override
+  String get processingTakingLonger => 'अभी भी काम हो रहा है — इसमें सामान्य से ज़्यादा समय लग रहा है।';
 }

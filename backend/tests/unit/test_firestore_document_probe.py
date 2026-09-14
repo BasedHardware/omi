@@ -46,7 +46,7 @@ def test_collection_pattern_bounds_cardinality():
 
 
 def test_collection_pattern_names_the_live_other_hot_paths():
-    # These three currently dominate collection="other" on the billed read line.
+    # These currently dominate collection="other" on the billed read line.
     # Nested conversation photos must not collapse to users/conversations or other.
     assert collection_pattern(('users', 'uid-abc', 'hourly_usage', '2026-09-01-00')) == 'users/hourly_usage'
     assert collection_pattern(('users', 'uid-abc', 'messages', 'msg-1')) == 'users/messages'
@@ -54,6 +54,10 @@ def test_collection_pattern_names_the_live_other_hot_paths():
         collection_pattern(('users', 'uid-abc', 'conversations', 'conv-1', 'photos', 'photo-1'))
         == 'users/conversations/photos'
     )
+    assert collection_pattern(('users', 'uid-abc', 'memories', 'mem-1')) == 'users/memories'
+    assert collection_pattern(('users', 'uid-abc', 'candidates', 'cand-1')) == 'users/candidates'
+    assert collection_pattern(('users', 'uid-abc', 'knowledge_nodes', 'node-1')) == 'users/knowledge_nodes'
+    assert collection_pattern(('users', 'uid-abc', 'knowledge_edges', 'edge-1')) == 'users/knowledge_edges'
 
 
 def test_probe_counts_hit_and_miss_and_returns_snapshot_unchanged():

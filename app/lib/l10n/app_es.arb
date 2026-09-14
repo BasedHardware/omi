@@ -3247,5 +3247,16 @@
     "chatBlockUnavailable": "Ya no está disponible",
     "chatBlockRecommendedNextSteps": "Próximos pasos recomendados",
     "couldNotLoadMemories": "No se pudieron cargar los recuerdos",
-    "couldNotLoadKnowledgeGraph": "No se pudo cargar el grafo de conocimiento"
+    "couldNotLoadKnowledgeGraph": "No se pudo cargar el grafo de conocimiento",
+    "speechProfileOwnerTitle": "Perfil de voz de {name}",
+    "play": "Reproducir",
+    "redo": "Volver a grabar",
+    "answerWithYourVoice": "Responde con tu voz:",
+    "speechProfileTopicLocation": "¿Dónde vives?",
+    "speechProfileTopicWork": "¿A qué te dedicas?",
+    "speechProfileTopicGoal": "¿Cuál es tu objetivo a largo plazo?",
+    "speechToTextUnavailableDesc": "La transcripción de voz no está disponible en este momento. Comprueba tu conexión a Internet y los ajustes de reconocimiento de voz de tu dispositivo e inténtalo de nuevo.",
+    "memoryHistoryPartial": "Parte del historial de recuerdos no está disponible. Se muestra el historial recibido hasta ahora.",
+    "tapPlusToStartRecording": "Toca + para empezar a grabar",
+    "processingTakingLonger": "Sigue trabajando: esto está tardando más de lo habitual."
 }

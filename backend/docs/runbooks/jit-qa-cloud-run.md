@@ -45,6 +45,13 @@ contains those managed lanes; the workflow only grants the QA runtime access
 and never creates, exports, or prints their values. No shared
 Redis/cache, Typesense, Pinecone, queue, connector, notification, or customer
 credential binding is copied into the plane.
+The desktop QA service also receives the development `GEMINI_API_KEY` binding
+required by its batch OCR path; backend and gateway do not receive that
+environment binding. All QA workloads share the runtime identity, so its
+resource-level Secret Manager grants are accessible to every workload using
+that identity. This is a shared QA trust boundary, not per-workload IAM
+isolation; the desktop-only binding does not prevent another QA workload from
+fetching the development key directly.
 
 Memorystore Basic M1 pricing is approximately `$0.049/GiB-hour` in Iowa, or
 about `$35.77` for 730 hours for the 1 GiB instance, before other dev costs.
@@ -88,3 +95,27 @@ or real Firebase identity path is serving.
 The QA HTTP services advertise `jit-cloud-qa-v1`; the dedicated gateway enforces
 that same provider-attempt budget. This capability is confined to these named
 QA services. It does not alter rollout enrollment or open either maintenance job.
+
+For an installed desktop startup observation, launch the exact QA bundle with
+the one-off environment override (alongside the caller's usual QA environment
+and automation setup as needed):
+
+```bash
+/usr/bin/open -n --env OMI_JIT_QA_DISABLE_REALTIME=1 /Applications/omi-jit-qa.app
+```
+
+The desktop applies this switch only when the bundle identifier is
+`com.omi.omi-jit-qa` and the value is exactly `1`; it returns before `ensureWarm`
+can mint a Live token or open a realtime socket. Stable, Beta, and other
+development bundles retain their normal realtime warmup behavior, and any other
+value leaves the QA bundle unchanged. This is a startup cost-isolation control
+for QA observation, not a product rollout flag or evidence of a completed
+realtime acceptance turn. Voice/PTT acceptance cannot be evaluated with this
+override enabled.
+
+The shared reserved QA target selector pins
+`OMI_FORCE_BUCKET_CANDIDATES=0` and `OMI_FORCE_BUCKET_WORKSTREAMS=0`;
+both wrapper and direct `run.sh` launches forward them through `open` and
+persist them in the bundle environment for cold reopen. This isolates JIT qualification from
+sibling candidate/workstream calls outside its budget. Ordinary named dev
+bundles retain their defaults; use a separately named bundle for those experiments.

@@ -1859,9 +1859,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get openSettings => 'Отвори подешавања';
 
   @override
-  String get wantDifferentName => 'Желиш да идеш под неким другим именом?';
-
-  @override
   String get whatsYourName => 'Како се зовеш?';
 
   @override
@@ -2041,7 +2038,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get memoryDeleted => 'Сећање је избрисано.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Део историје сећања није доступан. Приказује се до сада примљена историја.';
 
   @override
   String get undo => 'Врати';
@@ -9930,10 +9927,33 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Гласовни профил: $name';
+  }
+
+  @override
+  String get play => 'Пусти';
+
+  @override
+  String get redo => 'Сними поново';
+
+  @override
+  String get answerWithYourVoice => 'Одговорите гласом:';
+
+  @override
+  String get speechProfileTopicLocation => 'Где живите?';
+
+  @override
+  String get speechProfileTopicWork => 'Чиме се бавите?';
+
+  @override
+  String get speechProfileTopicGoal => 'Који је ваш дугорочни циљ?';
+
+  @override
   String get transcriptionNoAudio => 'Транскрипција не прима аудио';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Додирните + да започнете снимање';
 
   @override
   String get chatBlockTask => 'Задатак';
@@ -9970,4 +9990,11 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Није могуће учитати граф знања';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Претварање говора у текст тренутно није доступно. Проверите интернет везу и подешавања препознавања говора на уређају, па покушајте поново.';
+
+  @override
+  String get processingTakingLonger => 'Još traje — ovo traje duže nego inače.';
 }

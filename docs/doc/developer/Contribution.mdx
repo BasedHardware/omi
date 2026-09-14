@@ -71,11 +71,15 @@ Good PRs are easy to review and come with evidence that the change works.
   static tripwires only; they do not prove lifecycle, concurrency, or integration
   behavior.
 - **Product invariants** — if you touch paths listed on a locked invariant, name the ID (for example `INV-CHAT-1`) in the PR body.
-- **Fast local deterministic checks** — run `make preflight`. New deterministic diff-scoped checks belong in `.github/checks-manifest.yaml`, never directly in workflow YAML.
+- **Fast local deterministic checks** — run `make preflight`. Selection includes staged, unstaged, and untracked files; commit-based checks still need a final run after committing. New deterministic diff-scoped checks belong in `.github/checks-manifest.yaml`, never directly in workflow YAML.
 - **PR metadata contract check** — draft the body, then run `scripts/pr-preflight --pr-body-file /path/to/draft-pr-body.md`.
   Use `scripts/pr-preflight --suggest` when you need the paste-ready invariant section. Once the branch has a PR,
   `scripts/pr-preflight` reads its current body automatically with `gh` (or set `OMI_PR_BODY_FILE`). Pre-push runs these
-  same cheap contracts.
+  same contracts. When editing only the PR body, use
+  `scripts/pr-preflight --metadata-only --pr-body-file /path/to/draft-pr-body.md`.
+  This runs every applicable metadata-dependent check and reports all failures together.
+  CI uses this mode for title, body, and label edits; code updates still run the full preflight.
+  Metadata success validates the PR description and does not replace the source-code verdict.
 
 ### Contributing with an AI agent
 

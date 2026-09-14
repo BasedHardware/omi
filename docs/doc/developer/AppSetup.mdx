@@ -354,30 +354,37 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     no hosted backend can verify. Production data requires the explicit `beta`
     profile.
   </Accordion>
-  <Accordion title="iOS: Unable to flip between RX and RW memory protection" icon="apple">
-    **Error Message:**
-    ```
-    error: Unable to flip between RX and RW memory protection on pages
-    ```
+  <Accordion title="iOS: works under flutter run, crashes when opened from the Home Screen" icon="apple">
+    **Symptoms:**
+    - The dev build runs fine while `flutter run` is attached, then crashes instantly
+      when you open it from the Home Screen after disconnecting (or iOS relaunches it
+      in the background for Bluetooth/VoIP). The phone's crash report ends in
+      `SwiftAwesomeNotificationsPlugin.register(with:)` with `KERN_INVALID_ADDRESS at 0x0`.
+    - `flutter run` itself prints:
+      ```
+      error: Unable to flip between RX and RW memory protection on pages
+      ```
 
     **Cause:**
-    This error occurs because iOS security restrictions prevent the Dart VM from changing memory protection during JIT compilation in Debug mode on physical devices.
+    Debug builds run the Dart VM in JIT mode, and iOS only lets Flutter tooling
+    start a JIT VM on a physical device. Without it, `FlutterEngine` init returns
+    nil, the app's `FlutterViewController` has no engine, and plugin registration
+    has nothing to register against. The app now shows a notice explaining this
+    instead of crashing, but it still cannot run.
 
     **Solutions:**
 
-    1. **Use iOS Simulator (Recommended for Development):**
-       - In Xcode, select an iOS Simulator (e.g., "iPhone 16 Pro") instead of your physical device
-       - The simulator doesn't have this restriction, so Debug mode works normally
-       - Or run: `flutter run --flavor dev` (it will use a simulator if available)
+    1. **Install an AOT build for untethered use (physical devices):**
+       ```bash
+       OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios
+       ```
+       Profile (or `release`) builds open from the Home Screen on their own. You
+       lose hot reload; press `d` in `flutter run` to detach and keep the app running.
+       `setup.sh ios` warns whenever a debug build is about to land on a physical iPhone.
 
-    2. **Use Release/Profile Mode for Physical Devices:**
-       - If you need to test on a physical device, build in Release or Profile mode:
-         ```bash
-         flutter run --release --flavor dev
-         ```
-       - Or in Xcode, select "Release" or "Profile" scheme instead of "Debug"
-
-    **Note:** This is a known Flutter/iOS limitation. Debug mode with JIT compilation requires memory protection changes that iOS blocks on physical devices for security reasons.
+    2. **Use the iOS Simulator for debug-mode development:**
+       - The simulator has no JIT restriction, so `flutter run --flavor dev` works
+         from the Home Screen too.
   </Accordion>
 </AccordionGroup>
 

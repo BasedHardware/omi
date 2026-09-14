@@ -24,6 +24,21 @@ def test_child_env_for_offline_mode() -> None:
     assert child["OMI_LLM_GATEWAY_FEATURE_MODE"] == "off"
 
 
+def test_local_storage_links_use_dev_host_for_physical_devices() -> None:
+    # A phone built with OMI_DEV_HOST can only fetch local-storage files (the
+    # saved speech profile) if the backend advertises them on that address.
+    cfg = config.load_config(REPO_ROOT, {"OMI_DEV_HOST": "192.168.1.50", "PROVIDER_MODE": "offline"})
+    assert cfg.dev_bind_host == "0.0.0.0"
+    assert cfg.dev_advertise_host == "192.168.1.50"
+    child = config.child_env_for(cfg)
+    assert child["OMI_LOCAL_STORAGE_BASE_URL"] == f"http://192.168.1.50:{cfg.backend_port}/_local/storage"
+    # Everything else still talks to the backend over loopback.
+    assert child["BASE_API_URL"] == cfg.backend_url
+
+    loopback = config.load_config(REPO_ROOT, {"OMI_DEV_HOST": "127.0.0.1", "PROVIDER_MODE": "offline"})
+    assert loopback.dev_advertise_host == "127.0.0.1"
+
+
 def test_child_env_for_real_mode() -> None:
     cfg = config.HarnessConfig(
         repo_root=REPO_ROOT,

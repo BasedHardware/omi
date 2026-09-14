@@ -584,9 +584,11 @@ with byte-for-byte equal objects when indexed by stable Grafana UID. The determi
 both exports, including duplicate UIDs, before a change can land.
 
 Pusher release workflows additionally call `verify_pusher_live_alert_route.py`
-before publishing or promoting an image. The protected `GRAFANA_TOKEN` secret
-must be able to read provisioned alert rules, datasource health and queries,
-and contact points. The gate fails closed unless the committed memory-admission
+before publishing or promoting an image. The protected `MONITOR_GRAFANA_TOKEN`
+secret (repo-scoped for dest `monitor.omiapi.com`, `prod` environment-scoped
+for `monitor.omi.me`) must be able to read provisioned alert rules, datasource
+health and queries, and contact points. Do not reuse `GRAFANA_TOKEN` here; that
+secret belongs to the TV Cloud Run Grafana. The gate fails closed unless the committed memory-admission
 and capture-outcome pager set is live and unpaused, Prometheus reports healthy,
 both Pusher and backend-listen scrape targets are currently healthy, and the
 exact Telegram receiver exists with resolve notifications enabled. After each

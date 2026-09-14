@@ -34,7 +34,8 @@ The shared plumbing every feature call goes through.
 
 - `chat.py` — chat prompt assembly, context handling, response normalization.
 - `conversation_processing.py` — post-conversation structuring (speaker id
-  matching, discard detection, summarization).
+  matching, discard detection, summarization). The section writer uses
+  [readable, grounded note guidance](../../docs/conversation-note-style.md).
 - `conversation_folder.py` — conversation → folder assignment.
 - `followup.py` — follow-up question generation.
 - `persona.py` — persona chat, memory condensation for personas.

@@ -1344,3 +1344,170 @@ describe("PiMonoAdapter served-model attribution", () => {
     expect(modelEvents.every((e: any) => e.model === "gpt-5.6-luna")).toBe(true);
   });
 });
+
+describe("PiMonoAdapter iteration text separation", () => {
+  function makeIntermediateTurnEndEvent() {
+    return {
+      type: "turn_end",
+      message: {
+        role: "assistant",
+        stopReason: "toolUse",
+        content: [
+          { type: "text", text: "Got it." },
+          { type: "toolCall", id: "tool-1", name: "think_deeper", arguments: {} },
+        ],
+      },
+    };
+  }
+
+  function makeTextDeltaEvent(delta: string) {
+    return JSON.stringify({
+      type: "message_update",
+      assistantMessageEvent: { type: "text_delta", delta },
+    });
+  }
+
+  it("separates the continuation iteration from forwarded pre-tool text", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "how should this work" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => "",
+    );
+
+    // The provider streams a sentence, pauses to run a tool, then continues.
+    (adapter as any).handleEvent(
+      makeTextDeltaEvent("Got it, that's a tricky detail — let me think it through.")
+    );
+    (adapter as any).handleEvent(JSON.stringify(makeIntermediateTurnEndEvent()));
+    (adapter as any).handleEvent(makeTextDeltaEvent("Capture the context first."));
+
+    const deltas = events
+      .filter((e: any) => e.type === "text_delta")
+      .map((e: any) => e.text as string);
+    // The joined pre-tool sentence and continuation must not render as one
+    // run-on line ("…think it through.Capture the…").
+    expect(deltas.join("")).toBe(
+      "Got it, that's a tricky detail — let me think it through.\n\nCapture the context first."
+    );
+
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("unused — deltas already streamed"));
+    await prompt;
+  });
+
+  it("does not double-separate when the continuation carries its own break", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "q" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => "",
+    );
+
+    (adapter as any).handleEvent(makeTextDeltaEvent("First answer."));
+    (adapter as any).handleEvent(JSON.stringify(makeIntermediateTurnEndEvent()));
+    (adapter as any).handleEvent(makeTextDeltaEvent("\n\nContinuation."));
+
+    const deltas = events
+      .filter((e: any) => e.type === "text_delta")
+      .map((e: any) => e.text as string);
+    expect(deltas.join("")).toBe("First answer.\n\nContinuation.");
+
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
+    await prompt;
+  });
+
+  it("emits no separator after a tool-only iteration with no prior text", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "q" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => "",
+    );
+
+    (adapter as any).handleEvent(JSON.stringify(makeIntermediateTurnEndEvent()));
+    (adapter as any).handleEvent(makeTextDeltaEvent("Now the answer."));
+
+    const deltas = events
+      .filter((e: any) => e.type === "text_delta")
+      .map((e: any) => e.text as string);
+    expect(deltas).toEqual(["Now the answer."]);
+
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
+    await prompt;
+  });
+
+  it("joins the terminal message's tool-separated text blocks with the same separator", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "q" }],
+      [],
+      "act",
+      () => {},
+      async () => "",
+    );
+
+    const turnEnd = makeTurnEndEvent("");
+    (turnEnd.message as any).content = [
+      { type: "text", text: "Let me think it through." },
+      { type: "toolCall", id: "tool-1", name: "think_deeper", arguments: {} },
+      { type: "text", text: "Capture the context first." },
+    ];
+    (adapter as any).handleTurnEnd(turnEnd);
+
+    await expect(prompt).resolves.toMatchObject({
+      text: "Let me think it through.\n\nCapture the context first.",
+    });
+  });
+
+  it("keeps adjacent text blocks without a tool between them joined verbatim", () => {
+    expect(
+      PiMonoAdapter.terminalText([
+        { type: "text", text: "Same line " },
+        { type: "text", text: "continues here." },
+      ])
+    ).toBe("Same line continues here.");
+    // A provider break of its own is never doubled.
+    expect(
+      PiMonoAdapter.terminalText([
+        { type: "text", text: "Ended with a break.\n" },
+        { type: "toolCall", id: "t", name: "x", arguments: {} },
+        { type: "text", text: "\n\nNext paragraph." },
+      ])
+    ).toBe("Ended with a break.\n\n\nNext paragraph.");
+    // Any whitespace character (\t, \r) counts as an existing break at a
+    // tool-separated boundary — no extra blank paragraph is inserted.
+    expect(
+      PiMonoAdapter.terminalText([
+        { type: "text", text: "Ended with a tab.\t" },
+        { type: "toolCall", id: "t", name: "x", arguments: {} },
+        { type: "text", text: "Continuation." },
+      ])
+    ).toBe("Ended with a tab.\tContinuation.");
+    expect(
+      PiMonoAdapter.terminalText([
+        { type: "text", text: "Ended with a carriage return.\r" },
+        { type: "toolCall", id: "t", name: "x", arguments: {} },
+        { type: "text", text: "Continuation." },
+      ])
+    ).toBe("Ended with a carriage return.\rContinuation.");
+    expect(PiMonoAdapter.terminalText(undefined)).toBe("");
+  });
+});

@@ -872,7 +872,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               Positioned(
                                 left: 16,
                                 right: 16,
-                                bottom: 78,
+                                // Derived from the nav row's own geometry so the
+                                // two cannot drift: changing the row's height or
+                                // the inset it reserves moves this with it,
+                                // instead of silently closing the gap.
+                                bottom: kBottomNavBarHeight - kBottomNavChatBarGap + bottomNavBarReservedInset(context),
                                 child: Row(
                                   children: [
                                     Expanded(child: _buildChatBar(context)),
@@ -919,10 +923,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         child: Row(
           children: [
             const SizedBox(width: 18),
-            const Expanded(
+            Expanded(
               child: Text(
-                'Ask Omi anything about your life...',
-                style: TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
+                context.l10n.askOmi,
+                style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
                 overflow: TextOverflow.ellipsis,
               ),
             ),

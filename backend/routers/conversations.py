@@ -73,6 +73,7 @@ from utils.conversations.meeting_receipt import record_and_persist_finalized_mee
 from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
+from utils.metrics import record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
@@ -180,13 +181,21 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         reacquired = lifecycle_service.reacquire_deferred_processing(uid, conversation_id)
     except Exception as e:
         logger.error(f"lazy enrich reacquire failed uid={uid} conv={conversation_id}: {e}")
+        # A reacquire that RAISED is a broken dependency, not a lost fence.
+        # `deferred=True` doubles as the concurrency fence and clients poll
+        # during enrichment, so a merged label would bury this in benign polls.
+        record_lazy_desktop_deferral(event='enrich_reacquire_error')
         return conversation
     if not reacquired:
         # The row was terminalized or discarded before reacquisition. A stale
         # processor must not persist derived side effects after ownership loss.
+        record_lazy_desktop_deferral(event='enrich_lost_ownership')
         return conversation
 
     def _run_enrichment():
+        # Counted here, not before the submit: a rejected submit (shut-down
+        # pool during a deploy) would otherwise leave a start with no terminal.
+        record_lazy_desktop_deferral(event='enrich_started')
         try:
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
@@ -199,15 +208,23 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
                     is_reprocess=False,
                     app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
                 )
+            # The enrichment itself succeeded here; count it now so a receipt
+            # publish failure below is not misattributed to enrichment and does
+            # not skew the stored-vs-enrich_complete reconciliation.
+            record_lazy_desktop_deferral(event='enrich_complete')
             # Deferred desktop meetings must publish their exact Chat receipt
             # at the same terminal transition as ordinary finalization. The
             # initial lazy row deliberately skipped this adapter, so doing it
             # here closes the gap without waking Chat for processing rows.
             if enriched is not None:
-                record_and_persist_finalized_meeting_receipt(uid, enriched)
+                try:
+                    record_and_persist_finalized_meeting_receipt(uid, enriched)
+                except Exception:
+                    logger.exception('lazy enrich receipt publish failed uid=%s conv=%s', uid, conversation_id)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
+            record_lazy_desktop_deferral(event='enrich_failed')
             try:
                 recovered = lifecycle_service.recover_deferred_processing_failure(uid, conversation_id)
                 if not recovered:

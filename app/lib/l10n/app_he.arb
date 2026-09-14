@@ -10812,5 +10812,16 @@
     "chatBlockUnavailable": "אינו זמין עוד",
     "chatBlockRecommendedNextSteps": "השלבים הבאים המומלצים",
     "couldNotLoadMemories": "לא ניתן לטעון את הזיכרונות",
-    "couldNotLoadKnowledgeGraph": "לא ניתן לטעון את גרף הידע"
+    "couldNotLoadKnowledgeGraph": "לא ניתן לטעון את גרף הידע",
+    "speechProfileOwnerTitle": "פרופיל הקול של {name}",
+    "play": "ניגון",
+    "redo": "הקלטה מחדש",
+    "answerWithYourVoice": "השיבו בקולכם:",
+    "speechProfileTopicLocation": "איפה אתם גרים?",
+    "speechProfileTopicWork": "במה אתם עובדים?",
+    "speechProfileTopicGoal": "מה המטרה שלכם לטווח הארוך?",
+    "speechToTextUnavailableDesc": "המרת דיבור לטקסט אינה זמינה כרגע. בדקו את החיבור לאינטרנט ואת הגדרות זיהוי הדיבור במכשיר, ואז נסו שוב.",
+    "memoryHistoryPartial": "חלק מהיסטוריית הזיכרונות אינו זמין. מוצגת ההיסטוריה שהתקבלה עד כה.",
+    "tapPlusToStartRecording": "הקישו על + כדי להתחיל להקליט",
+    "processingTakingLonger": "עדיין בעבודה — זה לוקח יותר זמן מהרגיל."
 }

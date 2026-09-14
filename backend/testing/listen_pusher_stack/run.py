@@ -1082,8 +1082,8 @@ async def _inline_finalization_survives_source_close(stack: Stack) -> None:
     # The durable claim transitions the job to 'leased' (the only non-terminal
     # processing state); 'processing' is a conversation status, not a job status.
     claimed = _wait_for_job(stack, uid, conversation_id, 'leased')
-    if claimed.get('attempt_count') != 1:
-        raise StackFailure('source-close finalization was not claimed exactly once before disconnect')
+    if claimed.get('attempt_count') != 0:
+        raise StackFailure('source-close claim burned failed-processing attempts before work ran')
 
     await websocket.close(code=1000)
     _wait_until(
@@ -1094,7 +1094,7 @@ async def _inline_finalization_survives_source_close(stack: Stack) -> None:
 
     completed = _wait_for_job(stack, uid, conversation_id, 'completed')
     conversation = stack.conversation(uid, conversation_id)
-    if completed.get('attempt_count') != 1 or completed.get('fanout_status') != 'completed':
+    if completed.get('attempt_count') != 0 or completed.get('fanout_status') != 'completed':
         raise StackFailure('source-close finalization did not complete the original durable job')
     if not conversation or conversation.get('status') != 'completed':
         raise StackFailure('source-close finalization did not complete its conversation without a later session')
@@ -1159,9 +1159,9 @@ async def _pusher_restart_replay(stack: Stack) -> None:
         or replay.get('finalization_job_id') != job.get('id', replay.get('finalization_job_id'))
     ):
         raise StackFailure('pusher replay changed its durable finalization identity')
-    if job.get('attempt_count') != 1:
+    if job.get('attempt_count') != 0:
         raise StackFailure(
-            f'pusher restart processed the durable job more than once: attempts={job.get("attempt_count")}'
+            f'pusher restart burned failed-processing attempts on a successful replay: attempts={job.get("attempt_count")}'
         )
     _assert_local_provider_admission(stack, session_id)
     await websocket.close(code=1000)
@@ -1277,7 +1277,7 @@ async def _rest_finalization_survives_listener_restart(stack: Stack) -> None:
         raise StackFailure(f'restarted-listener task delivery did not complete: {delivered}')
 
     completed = _wait_for_job(stack, uid, conversation_id, 'completed')
-    if completed.get('attempt_count') != 1 or completed.get('fanout_status') != 'completed':
+    if completed.get('attempt_count') != 0 or completed.get('fanout_status') != 'completed':
         raise StackFailure('detached worker did not complete the exact REST-finalization job once')
     completed_status = await stack.finalization_status(uid, conversation_id)
     if (
@@ -1285,7 +1285,7 @@ async def _rest_finalization_survives_listener_restart(stack: Stack) -> None:
         or completed_status.get('status') != 'completed'
         or not completed_status.get('terminal')
         or completed_status.get('retryable')
-        or completed_status.get('attempt_count') != 1
+        or completed_status.get('attempt_count') != 0
     ):
         raise StackFailure(f'completed REST finalization projection was incorrect: {completed_status}')
 
@@ -1306,7 +1306,7 @@ async def _rest_finalization_survives_listener_restart(stack: Stack) -> None:
         raise StackFailure(f'duplicate REST task delivery was not safely acknowledged: {duplicate}')
     if (
         len(stack.finalization_tasks) != 1
-        or _wait_for_job(stack, uid, conversation_id, 'completed').get('attempt_count') != 1
+        or _wait_for_job(stack, uid, conversation_id, 'completed').get('attempt_count') != 0
         or len(stack.finalizer_events) != provider_event_count
     ):
         raise StackFailure('duplicate REST task delivery repeated durable work')
@@ -1362,7 +1362,7 @@ async def _shutdown_window_retries_through_cloud_tasks(stack: Stack) -> None:
     if (
         completed_job.get('status') != 'completed'
         or completed_job.get('terminal_outcome') != 'success'
-        or completed_job.get('attempt_count') != 2
+        or completed_job.get('attempt_count') != 1
     ):
         raise StackFailure('successful retry did not complete the exact durable job')
     if completed_job.get('fanout_status') != 'completed':
@@ -1399,7 +1399,7 @@ async def _terminal_cloud_tasks_failure_dead_letters(stack: Stack) -> None:
     if (
         dead_letter.get('status') != 'dead_letter'
         or dead_letter.get('terminal_outcome') != 'failure'
-        or dead_letter.get('attempt_count') != 2
+        or dead_letter.get('attempt_count') != 1
         or dead_letter.get('task_retry_count') != 2
     ):
         raise StackFailure('exhausted worker delivery did not record its terminal durable state')

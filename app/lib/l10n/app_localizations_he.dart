@@ -1844,9 +1844,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get openSettings => 'פתח הגדרות';
 
   @override
-  String get wantDifferentName => 'רוצה להכנס בשם אחר?';
-
-  @override
   String get whatsYourName => 'מה שמך?';
 
   @override
@@ -2025,7 +2022,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get memoryDeleted => 'זכרון מחוק.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'חלק מהיסטוריית הזיכרונות אינו זמין. מוצגת ההיסטוריה שהתקבלה עד כה.';
 
   @override
   String get undo => 'בטל';
@@ -9835,10 +9832,33 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'פרופיל הקול של $name';
+  }
+
+  @override
+  String get play => 'ניגון';
+
+  @override
+  String get redo => 'הקלטה מחדש';
+
+  @override
+  String get answerWithYourVoice => 'השיבו בקולכם:';
+
+  @override
+  String get speechProfileTopicLocation => 'איפה אתם גרים?';
+
+  @override
+  String get speechProfileTopicWork => 'במה אתם עובדים?';
+
+  @override
+  String get speechProfileTopicGoal => 'מה המטרה שלכם לטווח הארוך?';
+
+  @override
   String get transcriptionNoAudio => 'התמליל אינו מקבל שמע';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'הקישו על + כדי להתחיל להקליט';
 
   @override
   String get chatBlockTask => 'משימה';
@@ -9875,4 +9895,11 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'לא ניתן לטעון את גרף הידע';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'המרת דיבור לטקסט אינה זמינה כרגע. בדקו את החיבור לאינטרנט ואת הגדרות זיהוי הדיבור במכשיר, ואז נסו שוב.';
+
+  @override
+  String get processingTakingLonger => 'עדיין בעבודה — זה לוקח יותר זמן מהרגיל.';
 }

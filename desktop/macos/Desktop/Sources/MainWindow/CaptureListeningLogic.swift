@@ -22,10 +22,12 @@ enum CaptureListeningLogic {
   }
 
   /// The top-bar / Home listening readout. A session that is only *armed* (Only Meetings, no
-  /// call) is inactive — the mic is paused, so lighting the green dot would lie.
+  /// call yet) counts as on: the user switched listening on and the next call will be recorded,
+  /// so the control wears the green dot and no off-slash. Whether audio is reaching STT right now
+  /// is `isLiveCapturing`, which the live-transcript surfaces read instead.
   static func listeningStatus(appState: AppState) -> HomeStatusState {
     if appState.transcriptionServiceError != nil { return .blocked }
-    return appState.isLiveCapturing ? .active : .inactive
+    return appState.isLiveCapturing || appState.isAwaitingMeeting ? .active : .inactive
   }
 
   static func audioRecordingMode(raw: String) -> AssistantSettings.AudioRecordingMode {

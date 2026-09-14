@@ -41,6 +41,23 @@ meaning; reading those as a finite zero would hand every Free user a zero allowa
 is bridged too — charts set `300`, so the zero branch is latent, but a deployed `0` there would make
 `has_transcription_credits` false for every Free user.
 
+**D2 (2026-09-09): no repository configuration declares a `BASIC_TIER_*` overlay any more, and no serving
+identity will carry one once the prod dispatch runs.** They were deleted from both backend-listen charts and
+both pusher charts, and the four Cloud Run services (`backend`, `backend-sync`, `backend-sync-backfill`,
+`backend-integration`) declare them as `forbidden_env` in `backend/deploy/runtime_env/_base.yaml`, which the
+runtime-env validator turns into a required `--remove-env-vars` entry in
+`.github/actions/deploy-backend-stack` / `sync-backfill-lifecycle` and an absence check against the live
+service. Scope of the claim, because it is easy to overstate: the nine serving identities are those eight plus
+Cloud Run `desktop-backend`, which is **not** in the `cloud_run.services` manifest (its manifest section has no
+`forbidden_env` support) and is therefore covered by evidence rather than by a gate — read live on
+2026-09-09, dev and prod, and it carries none of the four names, nor does any desktop router read a plan
+transcription limit. The six Cloud Run jobs are outside the manifest pin and have no reader.
+`backend/tests/unit/test_plan_quota_env_retirement.py` pins the rest, and is selected by an edit to any chart,
+either composite deploy action, or the runtime-env manifest (`backend/testing/workflow_contracts.json`). The `_legacy_overlay` bridge stays
+in code only until the prod dispatch has removed the deployed values (the live check proves it); delete the bridge
+with its tests in the follow-up, never before. Behaviour change on that dispatch: prod `GET /v1/users/me/subscription`
+stops advertising 600 free minutes and reports the catalog's 300, which the listen plane already enforced (P9 ruling).
+
 The **chat overlays** (`FREE/NEO/OPERATOR_CHAT_QUESTIONS_PER_MONTH`, `ARCHITECT_CHAT_COST_USD_PER_MONTH`) and
 the **Plus transcription overlay** are deliberately **not** bridged: no chart or deploy file sets any of them,
 so there is no deployed configuration to protect, and under David's ruling a finite `0` means zero. That is

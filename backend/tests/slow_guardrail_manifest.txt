@@ -40,6 +40,7 @@ tests/unit/test_llm_gateway_coverage_guardrails.py
 tests/unit/test_managed_spend_ledger.py
 tests/unit/test_memories_validation.py
 tests/unit/test_p1_5_tools_fastapi_testclient_readiness.py
+tests/unit/test_plan_quota_env_retirement.py
 tests/unit/test_pusher_circuit_breaker.py
 tests/unit/test_pusher_ghost_connections.py
 tests/unit/test_pusher_heartbeat.py

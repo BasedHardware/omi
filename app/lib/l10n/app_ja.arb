@@ -3222,5 +3222,16 @@
     "chatBlockUnavailable": "現在は利用できません",
     "chatBlockRecommendedNextSteps": "おすすめの次のステップ",
     "couldNotLoadMemories": "記憶を読み込めませんでした",
-    "couldNotLoadKnowledgeGraph": "ナレッジグラフを読み込めませんでした"
+    "couldNotLoadKnowledgeGraph": "ナレッジグラフを読み込めませんでした",
+    "speechProfileOwnerTitle": "{name}さんの音声プロフィール",
+    "play": "再生",
+    "redo": "録り直す",
+    "answerWithYourVoice": "声で答えてください：",
+    "speechProfileTopicLocation": "どこに住んでいますか？",
+    "speechProfileTopicWork": "どんな仕事をしていますか？",
+    "speechProfileTopicGoal": "長期的な目標は何ですか？",
+    "speechToTextUnavailableDesc": "現在、音声をテキストに変換できません。インターネット接続とデバイスの音声認識設定を確認してから、もう一度お試しください。",
+    "memoryHistoryPartial": "記憶の履歴の一部を取得できません。これまでに取得した履歴を表示しています。",
+    "tapPlusToStartRecording": "＋をタップして録音を開始",
+    "processingTakingLonger": "まだ処理中です。通常より時間がかかっています。"
 }

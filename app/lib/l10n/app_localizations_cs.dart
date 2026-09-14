@@ -1861,9 +1861,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get openSettings => 'Otevřít nastavení';
 
   @override
-  String get wantDifferentName => 'Chcete jiné jméno?';
-
-  @override
   String get whatsYourName => 'Jak se jmenujete?';
 
   @override
@@ -2044,7 +2041,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get memoryDeleted => 'Vzpomínka smazána.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Část historie vzpomínek není dostupná. Zobrazuje se dosud přijatá historie.';
 
   @override
   String get undo => 'Vrátit zpět';
@@ -9915,10 +9912,33 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Hlasový profil: $name';
+  }
+
+  @override
+  String get play => 'Přehrát';
+
+  @override
+  String get redo => 'Nahrát znovu';
+
+  @override
+  String get answerWithYourVoice => 'Odpovězte hlasem:';
+
+  @override
+  String get speechProfileTopicLocation => 'Kde bydlíte?';
+
+  @override
+  String get speechProfileTopicWork => 'Čím se živíte?';
+
+  @override
+  String get speechProfileTopicGoal => 'Jaký je váš dlouhodobý cíl?';
+
+  @override
   String get transcriptionNoAudio => 'Transkripce nepřijímá zvuk';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Klepnutím na + začnete nahrávat';
 
   @override
   String get chatBlockTask => 'Úkol';
@@ -9955,4 +9975,11 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Nepodařilo se načíst graf znalostí';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Převod řeči na text momentálně není dostupný. Zkontrolujte připojení k internetu a nastavení rozpoznávání řeči v zařízení a zkuste to znovu.';
+
+  @override
+  String get processingTakingLonger => 'Stále probíhá — trvá to déle než obvykle.';
 }

@@ -1844,9 +1844,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get openSettings => 'فتح الإعدادات';
 
   @override
-  String get wantDifferentName => 'تريد أن يُناديك باسم آخر؟';
-
-  @override
   String get whatsYourName => 'ما اسمك؟';
 
   @override
@@ -2026,7 +2023,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get memoryDeleted => 'تم حذف الذكرى.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'بعض سجل الذكريات غير متاح. يتم عرض السجل المستلم حتى الآن.';
 
   @override
   String get undo => 'تراجع';
@@ -9856,10 +9853,33 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'الملف الصوتي لـ $name';
+  }
+
+  @override
+  String get play => 'تشغيل';
+
+  @override
+  String get redo => 'إعادة';
+
+  @override
+  String get answerWithYourVoice => 'أجب بصوتك:';
+
+  @override
+  String get speechProfileTopicLocation => 'أين تعيش؟';
+
+  @override
+  String get speechProfileTopicWork => 'ما طبيعة عملك؟';
+
+  @override
+  String get speechProfileTopicGoal => 'ما هدفك على المدى الطويل؟';
+
+  @override
   String get transcriptionNoAudio => 'النسخ لا يستلم الصوت';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'اضغط على + لبدء التسجيل';
 
   @override
   String get chatBlockTask => 'مهمة';
@@ -9896,4 +9916,11 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'تعذر تحميل الرسم البياني للمعرفة';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'تحويل الكلام إلى نص غير متاح الآن. تحقق من اتصالك بالإنترنت وإعدادات التعرف على الكلام في جهازك، ثم حاول مرة أخرى.';
+
+  @override
+  String get processingTakingLonger => 'ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد.';
 }

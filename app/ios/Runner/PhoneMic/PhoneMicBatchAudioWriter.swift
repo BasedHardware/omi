@@ -14,6 +14,7 @@ import Foundation
 /// from the tap's audioQueue block and close from `audioQueue.sync`).
 final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
     private let dir: String
+    private let defaults: UserDefaults
 
     private let maxFileBytes: Int64 = 32 * 1024 * 1024 // ~32 MB per file
     private let maxFileSeconds: Int64 = 900 // 15 min per file
@@ -21,6 +22,7 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
 
     private var lastAppendMs: Int64 = 0
     private var currentAudioURL: URL?
+    private var geolocationSidecarPersisted = false
     /// Session total of frames durably written (each = one 20ms opus packet). Drives
     /// onBatchProgress; muted/interrupted/storage-full periods never advance it.
     private(set) var sessionFramesWritten: Int64 = 0
@@ -31,18 +33,16 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
 
     override func onOpenedLocked(_ partURL: URL) {
         currentAudioURL = partURL.deletingPathExtension()
+        geolocationSidecarPersisted = false
         persistCurrentGeolocationSidecar()
     }
 
     private func persistCurrentGeolocationSidecar() {
-        guard let currentAudioURL,
-              let raw = UserDefaults.standard.string(forKey: "flutter.phoneBatchGeolocation"),
-              let data = raw.data(using: .utf8),
-              (try? JSONSerialization.jsonObject(with: data)) is [String: Any]
-        else { return }
-
-        persistRecordingGeolocationSidecar(
-            rawGeolocation: raw,
+        guard !geolocationSidecarPersisted, let currentAudioURL else { return }
+        // Location can arrive after capture starts. Retry absent/invalid metadata
+        // and failed writes, but stop rereading it once this recording owns a snapshot.
+        geolocationSidecarPersisted = persistRecordingGeolocationSidecar(
+            rawGeolocation: defaults.string(forKey: "flutter.phoneBatchGeolocation"),
             audioURL: currentAudioURL
         )
     }
@@ -52,8 +52,9 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
     /// so it is never re-checked per append. The recovery prefix `audio_omibatchphone`
     /// intentionally matches both the manual (`omibatchphone`) and auto
     /// (`omibatchphoneauto`) markers, and nothing else.
-    init(dir: String, queue: DispatchQueue) {
+    init(dir: String, queue: DispatchQueue, defaults: UserDefaults = .standard) {
         self.dir = dir
+        self.defaults = defaults
         super.init(
             tag: "PhoneBatchWriter",
             queueLabel: "com.omi.phoneBatchWriter",
@@ -69,7 +70,7 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
     /// (`omibatchphone` / `omibatchphoneauto`) and only shapes the file name.
     func append(opusPackets: [Data], marker: String) {
         if opusPackets.isEmpty { return }
-        let d = UserDefaults.standard
+        let d = defaults
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
 
         // Muted: drop packets but keep the open file's gap timer fresh so unmute
@@ -146,7 +147,7 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
         // The base sets flutter.batchStorageFull when the free-space guard trips;
         // read it back to distinguish a storage-full refusal from a transient open
         // failure, and latch only the false->true edge.
-        if UserDefaults.standard.bool(forKey: "flutter.batchStorageFull"), !wasStorageFull {
+        if defaults.bool(forKey: "flutter.batchStorageFull"), !wasStorageFull {
             wasStorageFull = true
             pendingStorageFullReport = true
         }

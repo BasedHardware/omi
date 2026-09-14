@@ -71,6 +71,7 @@ def ext():
         "models.structured_extraction": _leaf("models.structured_extraction"),
         "models.other": _leaf("models.other"),
         "utils.conversations.render": _leaf("utils.conversations.render"),
+        "utils.conversations.location": _leaf("utils.conversations.location"),
         "utils.llm.clients": _leaf("utils.llm.clients"),
         "utils.llm.usage_tracker": _leaf("utils.llm.usage_tracker"),
         "utils.llms.memory": _leaf("utils.llms.memory"),
@@ -121,6 +122,7 @@ def _configure(ext):
         }
     )
     ext.get_prompt_memories = MagicMock(return_value=("TestUser", ""))
+    ext.get_google_maps_location = MagicMock(return_value=None)
     ext.conversations_to_string = MagicMock(return_value="history")
     # Non-JSON LLM output -> JSONDecodeError -> _basic_daily_summary(..., locations)
     mock_llm = MagicMock()

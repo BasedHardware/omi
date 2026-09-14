@@ -301,7 +301,7 @@ jobs:
           # condition explicitly lets main runs write the cache that PRs read.
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
-      - name: Build Flutter Android dev debug APK
+      - name: Build Flutter Android dev debug APK and run native unit tests
         working-directory: app
         env:
           # GitHub Actions sets CI=true; android/app/build.gradle reads Codemagic
@@ -312,4 +312,9 @@ jobs:
           CM_KEY_PASSWORD: android
         # Single ABI: a compile smoke doesn't need arm + arm64 + x86_64 native
         # libs, and the extra ABIs double disk usage during stripDebugSymbols.
-        run: flutter build apk --debug --flavor dev --target-platform android-arm64
+        run: |
+          flutter build apk --debug --flavor dev --target-platform android-arm64
+          cd android
+          # Tests run on the JVM; their Flutter compilation dependency must keep
+          # the APK's target selection to reuse its outputs instead of rebuilding all ABIs.
+          ./gradlew :app:testDevDebugUnitTest -Ptarget-platform=android-arm64

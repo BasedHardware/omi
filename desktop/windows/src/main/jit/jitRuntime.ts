@@ -515,11 +515,8 @@ export class WindowsJitRuntime {
     }
     if (evaluation.nextLane === 'bounded_planned_triage')
       return { kind: 'suppressed', reason: 'planned_match_ambiguous' }
-    if (evaluation.nextLane === 'none') {
-      return loaded.triggers.length === 0
-        ? { kind: 'suppressed', reason: 'empty_watchlist' }
-        : { kind: 'suppressed', reason: 'planned_runtime_rejected' }
-    }
+    if (evaluation.nextLane === 'none')
+      return { kind: 'suppressed', reason: 'planned_runtime_rejected' }
     return { kind: 'suppressed', reason: 'no_eligible_planned_trigger' }
   }
 

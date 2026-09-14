@@ -72,6 +72,7 @@ from models.transcript_segment import TranscriptSegment
 from utils.analytics import record_usage
 from utils.byok import get_byok_keys, set_byok_keys, set_byok_uid
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import (
     db_executor,
@@ -117,11 +118,8 @@ from utils.stt.outcomes import (
     bounded_provider,
     failure_from_exception,
 )
-from utils.stt.speaker_embedding import (
-    SPEAKER_MATCH_THRESHOLD,
-    compare_embeddings,
-    extract_embedding_from_bytes,
-)
+from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
+from utils.stt.speaker_match import select_speaker_match
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
@@ -953,26 +951,31 @@ def identify_speakers_for_segments(
                 logger.info(f'Speaker ID: embedding extraction failed for speaker {speaker_id}: {e} uid={uid}')
                 continue
 
-            # Compare only against unmatched candidates (each person can be one speaker)
-            best_match = None
-            best_distance = float('inf')
-            for person_id, data in person_embeddings_cache.items():
-                if person_id in matched_person_ids:
-                    continue
-                distance = compare_embeddings(query_embedding, data['embedding'])
-                if distance < best_distance:
-                    best_distance = distance
-                    best_match = (person_id, data['name'])
-
-            if best_match and best_distance < SPEAKER_MATCH_THRESHOLD:
-                person_id, person_name = best_match
-                speaker_to_person_map[speaker_id] = (person_id, person_name)
+            # Keep assigned candidates in the ambiguity comparison. Removing the
+            # owner after a first match must not make a similar household voice
+            # look unambiguous; apply one-person/one-speaker dedup only afterward.
+            distances = {
+                person_id: compare_embeddings(query_embedding, data['embedding'])
+                for person_id, data in person_embeddings_cache.items()
+            }
+            decision = select_speaker_match(distances)
+            accepted = decision.person_id is not None and decision.person_id not in matched_person_ids
+            logger.info(
+                'speaker_id_decision surface=sync uid=%s speaker=%s clip_seconds=%.1f '
+                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s',
+                uid,
+                speaker_id,
+                seg_duration,
+                decision.best_id,
+                decision.best_distance,
+                decision.runner_up_distance,
+                accepted,
+            )
+            if accepted and decision.person_id is not None:
+                person_id = decision.person_id
+                speaker_to_person_map[speaker_id] = (person_id, person_embeddings_cache[person_id]['name'])
                 segment_person_assignment_map[best_seg.id] = person_id
                 matched_person_ids.add(person_id)
-                logger.info(
-                    f'Speaker ID (sync): speaker {speaker_id} -> {person_id} '
-                    f'(distance={best_distance:.3f}) uid={uid}'
-                )
 
     # Text-based detection runs independently for all unmatched speakers.
     # For speaker_id > 0 (diarized): update both speaker_to_person_map and per-segment map.
@@ -1682,6 +1685,14 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     coordinator itself holds zero thread pool slots — only leaf operations use
     threads, and only for their actual duration.
     """
+    # Enrich raw sync geolocation (address / place id) once per job before any
+    # conversation is created. This is the single enrichment point covering both
+    # the inline and Cloud Tasks dispatch branches; it runs before the
+    # concurrency gate so no slot is held during the geocode call. The resolver
+    # keeps the caller's exact coordinates and returns the input unchanged on
+    # any geocode failure, so a miss never drops the user's location.
+    geolocation = await async_resolve_geolocation(geolocation)
+
     sync_provider = 'unknown'
     sync_model = 'unknown'
     job_outcome_recorded = False

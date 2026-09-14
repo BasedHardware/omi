@@ -870,6 +870,12 @@ import XCTest
     /// Pinning the mechanism rather than the outcome: if the revocation ever became a
     /// refcount, the body would run genuinely revoked and this assertion would catch that
     /// as the behavior change it is.
+    ///
+    /// The transition only cycles the revocation when the planned owner differs from the
+    /// persisted one, so this must run against an empty, isolated defaults domain. The
+    /// standard domain is shared with every other suite process on the runner (cfprefsd
+    /// routes it past `CFFIXED_USER_HOME`), and a concurrent suite that has `auth_userId`
+    /// set there turns this into a no-op transition that leaves the revocation in place.
     func testAnOwnerTransitionDissolvesAnOutstandingRevocation() async {
       var observedInsideBody: Bool?
 
@@ -878,8 +884,15 @@ import XCTest
           RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
           "precondition: the revocation is outstanding on entry")
 
+        let suiteName = "KernelTurnRecordedProjectionTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+          return XCTFail("failed to create isolated defaults")
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
         await RuntimeOwnerIdentity.withAutomationOwnerIfMissing(
-          "revocation-dissolve-owner"
+          "revocation-dissolve-owner",
+          defaults: defaults
         ) {
           observedInsideBody = RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress
         }

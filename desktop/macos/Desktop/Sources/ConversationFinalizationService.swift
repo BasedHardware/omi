@@ -9,6 +9,7 @@ actor ConversationFinalizationService {
   private var meetingCompletionNotificationTask: Task<Void, Never>?
   private var pendingMeetingCompletionConversationIDs = Set<String>()
   private var pendingFinalizationProjectionPolls = Set<String>()
+  private var localProjectionHooks: LocalProjectionTestHooks?
 
   private init() {}
 
@@ -18,6 +19,10 @@ actor ConversationFinalizationService {
 
   func setAPIClientForTesting(_ client: APIClient?) {
     apiClient = client ?? APIClient.shared
+  }
+
+  func setLocalProjectionHooksForTesting(_ hooks: LocalProjectionTestHooks?) {
+    localProjectionHooks = hooks
   }
 
   func finalizeSession(
@@ -239,6 +244,11 @@ actor ConversationFinalizationService {
     }
 
     let iso = ISO8601DateFormatter()
+    let clientProcessing = await resolveClientProcessing(
+      sessionId: sessionId,
+      uploadSegments: uploadSegments,
+      startedAt: bundle.session.startedAt
+    )
     let request = APIClient.CreateConversationFromSegmentsRequest(
       transcript_segments: uploadSegments,
       source: bundle.session.source,
@@ -247,7 +257,8 @@ actor ConversationFinalizationService {
       language: bundle.session.language,
       client_conversation_id: Self.localClientConversationId(session: bundle.session, sessionId: sessionId),
       conversation_role: bundle.session.conversationRole.rawValue,
-      conversation_finalization_reason: bundle.session.finalizationReason?.rawValue
+      conversation_finalization_reason: bundle.session.finalizationReason?.rawValue,
+      client_processing: clientProcessing
     )
     let response = try await apiClient.createConversationFromSegments(request)
     let status = LocalConversationStatus(rawValue: response.status) ?? .processing
@@ -271,6 +282,49 @@ actor ConversationFinalizationService {
     await hydrateUploadedLocalConversation(id: response.id)
     log("ConversationFinalization: Uploaded local session \(sessionId) -> backend conversation \(response.id)")
     return response.meetingTreatmentEligible
+  }
+
+  private func resolveClientProcessing(
+    sessionId: Int64,
+    uploadSegments: [APIClient.UploadSegment],
+    startedAt: Date
+  ) async -> Data? {
+    let flagEnabled = localProjectionHooks?.flagEnabled ?? FreeTierLocalProcessingFlag.isEnabled()
+    let entitlement: SubscriptionEntitlementDecision
+    if let pinned = localProjectionHooks?.entitlement {
+      entitlement = pinned
+    } else {
+      entitlement = await SubscriptionEntitlementService.shared.decisionForManagedProactivity()
+    }
+    let thermalState = localProjectionHooks?.thermalState ?? ProcessInfo.processInfo.thermalState
+    let decision = LocalProjectionFinalization.decision(
+      flagEnabled: flagEnabled,
+      entitlement: entitlement,
+      thermalState: thermalState
+    )
+    guard decision != .skip else { return nil }
+
+    let summarizer: (any ConversationSummarizing)?
+    if let hooked = localProjectionHooks?.summarizer {
+      summarizer = hooked
+    } else {
+      summarizer = await makeProductionSummarizer()
+    }
+    return await LocalProjectionFinalization.projection(
+      decision: decision,
+      sessionId: sessionId,
+      segments: uploadSegments.map(\.hashSegment),
+      startedAt: startedAt,
+      summarizer: summarizer
+    )
+  }
+
+  private func makeProductionSummarizer() async -> ConversationChunkSummarizer? {
+    guard let queue = await RewindDatabase.shared.getDatabaseQueue() else { return nil }
+    return ConversationChunkSummarizer(
+      runtime: LocalInferenceRuntime.makeDefault(),
+      store: GRDBLocalProjectionStore(queue: queue)
+    )
   }
 
   private func hydrateUploadedLocalConversation(id conversationId: String) async {
@@ -795,6 +849,15 @@ actor ConversationFinalizationService {
 extension Notification.Name {
   static let desktopMeetingConversationDidComplete = Notification.Name(
     "com.omi.desktop.meetingConversationDidComplete")
+}
+
+/// Test seam for S11 attach. Production reads the client flag, S13
+/// entitlement cache, live thermal state, and the GRDB summarizer.
+struct LocalProjectionTestHooks: Sendable {
+  var flagEnabled: Bool
+  var entitlement: SubscriptionEntitlementDecision
+  var thermalState: ProcessInfo.ThermalState
+  var summarizer: (any ConversationSummarizing)?
 }
 
 struct ConversationCreatedTelemetry: Equatable, Sendable {

@@ -28,12 +28,14 @@ class GeneratedUserStatusResponse {
 
 class GeneratedUserWebhooksStatusResponse {
   final bool audioBytes;
+  final bool buttonEvent;
   final bool daySummary;
   final bool memoryCreated;
   final bool realtimeTranscript;
 
   const GeneratedUserWebhooksStatusResponse({
     required this.audioBytes,
+    this.buttonEvent = false,
     required this.daySummary,
     required this.memoryCreated,
     required this.realtimeTranscript,
@@ -42,6 +44,7 @@ class GeneratedUserWebhooksStatusResponse {
   factory GeneratedUserWebhooksStatusResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedUserWebhooksStatusResponse(
       audioBytes: _required(_readFieldValue<bool>(_readField(json, const ["audio_bytes"]), "audio_bytes", _readBool, requiredField: true, nullable: false), "audio_bytes"),
+      buttonEvent: _required(_readFieldValue<bool>(_readField(json, const ["button_event"]), "button_event", _readBool, requiredField: false, nullable: false, defaultValue: false), "button_event"),
       daySummary: _required(_readFieldValue<bool>(_readField(json, const ["day_summary"]), "day_summary", _readBool, requiredField: true, nullable: false), "day_summary"),
       memoryCreated: _required(_readFieldValue<bool>(_readField(json, const ["memory_created"]), "memory_created", _readBool, requiredField: true, nullable: false), "memory_created"),
       realtimeTranscript: _required(_readFieldValue<bool>(_readField(json, const ["realtime_transcript"]), "realtime_transcript", _readBool, requiredField: true, nullable: false), "realtime_transcript"),
@@ -51,6 +54,7 @@ class GeneratedUserWebhooksStatusResponse {
   Map<String, dynamic> toJson() {
     return {
       'audio_bytes': audioBytes,
+      'button_event': buttonEvent,
       'day_summary': daySummary,
       'memory_created': memoryCreated,
       'realtime_transcript': realtimeTranscript,

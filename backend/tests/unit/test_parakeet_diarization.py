@@ -70,7 +70,7 @@ def test_clusters_two_speakers_stably(monkeypatch):
 
 
 def test_clustering_threshold_is_separate_from_enrollment_verification():
-    assert SPEAKER_MATCH_THRESHOLD == 0.45
+    assert SPEAKER_MATCH_THRESHOLD == 0.65
     assert SPEAKER_CLUSTERING_THRESHOLD == 0.60
 
 
@@ -128,15 +128,14 @@ def test_clustering_boundary_at_exactly_the_threshold_creates_a_new_speaker():
     assert just_inside[1] is False  # strictly below the threshold merges
 
 
-def test_enrollment_boundary_at_exactly_the_threshold_is_not_a_match(monkeypatch):
-    # Voiceprint verification is equally strict at its own 0.45 operating
-    # point: exactly at the threshold the answer is "not the same speaker".
-    from utils.stt import speaker_embedding
+def test_enrollment_boundary_at_exactly_the_threshold_is_not_a_match():
+    # Voiceprint verification is equally strict at its own operating point:
+    # exactly at the threshold the answer is "not the same speaker".
+    from utils.stt.speaker_match import select_speaker_match
 
-    monkeypatch.setattr(speaker_embedding, 'compare_embeddings', lambda _a, _b: SPEAKER_MATCH_THRESHOLD)
-    same, distance = speaker_embedding.is_same_speaker('a', 'b')
-    assert same is False
-    assert distance == SPEAKER_MATCH_THRESHOLD
+    decision = select_speaker_match({'user': SPEAKER_MATCH_THRESHOLD})
+    assert decision.person_id is None
+    assert decision.best_distance == SPEAKER_MATCH_THRESHOLD
 
 
 def test_cap_merge_is_reported_and_does_not_drift_the_centroid(monkeypatch):

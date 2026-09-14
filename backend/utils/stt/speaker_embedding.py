@@ -3,7 +3,7 @@ import logging
 import os
 import struct
 import wave
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import httpx
@@ -14,10 +14,20 @@ from utils.http_client import get_stt_client
 
 logger = logging.getLogger(__name__)
 
-# Cosine distance threshold for enrolled-voiceprint verification only.
-# Based on VoxCeleb 1 test set EER of 2.8%. In-session clustering has its own
-# policy in speaker_clustering.py and must not silently retune this boundary.
-SPEAKER_MATCH_THRESHOLD = 0.45
+# The verification operating point lives in speaker_match.py (numpy-only) so the
+# decision policy can be shared and unit-tested without this module's HTTP client.
+# Re-exported here because callers and tests historically import it from this module.
+from utils.stt.speaker_match import SPEAKER_MATCH_THRESHOLD  # noqa: E402
+
+__all__ = [
+    'SPEAKER_MATCH_THRESHOLD',
+    'MIN_EMBEDDING_AUDIO_DURATION',
+    'extract_embedding',
+    'extract_embedding_from_bytes',
+    'async_extract_embedding',
+    'async_extract_embedding_from_bytes',
+    'compare_embeddings',
+]
 
 # Minimum audio duration (seconds) for speaker embedding extraction.
 # Audio shorter than this crashes pyannote wespeaker fbank (see issue #4572).
@@ -191,83 +201,3 @@ def compare_embeddings(embedding1: np.ndarray[Any, Any], embedding2: np.ndarray[
         return 2.0
     distance = cdist(embedding1, embedding2, metric="cosine")[0, 0]
     return float(distance)
-
-
-def is_same_speaker(
-    embedding1: np.ndarray[Any, Any], embedding2: np.ndarray[Any, Any], threshold: float = SPEAKER_MATCH_THRESHOLD
-) -> Tuple[bool, float]:
-    """
-    Determine if two embeddings belong to the same speaker.
-
-    Args:
-        embedding1: First embedding array
-        embedding2: Second embedding array
-        threshold: Cosine distance threshold for matching
-
-    Returns:
-        Tuple of (is_match, distance)
-    """
-    distance = compare_embeddings(embedding1, embedding2)
-    return distance < threshold, distance
-
-
-def embedding_to_bytes(embedding: np.ndarray[Any, Any]) -> bytes:
-    """
-    Serialize embedding to bytes for storage.
-
-    Args:
-        embedding: numpy array embedding
-
-    Returns:
-        Bytes representation of the embedding
-    """
-    return embedding.astype(np.float32).tobytes()
-
-
-def bytes_to_embedding(data: bytes, dim: int = 512) -> np.ndarray[Any, Any]:
-    """
-    Deserialize embedding from bytes.
-
-    Args:
-        data: Bytes representation of embedding
-        dim: Embedding dimension (default 512 for pyannote/embedding)
-
-    Returns:
-        numpy array of shape (1, D)
-    """
-    embedding = np.frombuffer(data, dtype=np.float32)
-    return embedding.reshape(1, -1)
-
-
-def find_best_match(
-    query_embedding: np.ndarray[Any, Any],
-    candidate_embeddings: List[np.ndarray[Any, Any]],
-    threshold: float = SPEAKER_MATCH_THRESHOLD,
-) -> Optional[Tuple[int, float]]:
-    """
-    Find the best matching speaker from a list of candidates.
-
-    Args:
-        query_embedding: Embedding to match
-        candidate_embeddings: List of candidate embeddings
-        threshold: Maximum distance for a valid match
-
-    Returns:
-        Tuple of (best_index, distance) or None if no match found
-    """
-    if not candidate_embeddings:
-        return None
-
-    best_idx = -1
-    best_distance = float('inf')
-
-    for idx, candidate in enumerate(candidate_embeddings):
-        distance = compare_embeddings(query_embedding, candidate)
-        if distance < best_distance:
-            best_distance = distance
-            best_idx = idx
-
-    if best_distance < threshold:
-        return best_idx, best_distance
-
-    return None

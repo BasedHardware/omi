@@ -88,6 +88,13 @@ _ALLOWED_SECRET_BINDINGS = {
     "OMI_LLM_GATEWAY_SERVICE_TOKEN": "jit-qa-gateway-token:latest",
     "TYPESENSE_API_KEY": "jit-qa-typesense-api-key:latest",
 }
+# Batch Gemini embeddings intentionally remain on the AI Studio route because
+# Vertex's batch wire shape is incompatible. Keep this key as a desktop-only
+# secret binding; the backend and gateway must never receive it as an env entry.
+_DESKTOP_SECRET_BINDINGS = {
+    **_ALLOWED_SECRET_BINDINGS,
+    "GEMINI_API_KEY": "GEMINI_API_KEY:latest",
+}
 _GATEWAY_SECRET_BINDINGS = {
     "OPENAI_API_KEY": "OPENAI_API_KEY:latest",
     "ANTHROPIC_API_KEY": "ANTHROPIC_API_KEY:latest",
@@ -621,7 +628,7 @@ def resource_environment(
                 "REDIS_DB_PORT": "6379",
                 **typesense_environment,
             },
-            dict(_ALLOWED_SECRET_BINDINGS),
+            dict(_DESKTOP_SECRET_BINDINGS if profile == "desktop" else _ALLOWED_SECRET_BINDINGS),
         )
     if profile == "gateway":
         return (

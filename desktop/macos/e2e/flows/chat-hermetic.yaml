@@ -5,6 +5,7 @@ description: Hermetic chat in Home tab — send/receive with Rust OMI_LLM_STUB=1
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/Chat/ChatTurnFailureNotice.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatAttachmentOnlySend.swift
   - desktop/macos/Desktop/Sources/Theme/OmiTextEditor.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimePayload.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContinuityInvariants.swift
@@ -89,6 +90,12 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeJournalContracts.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeMessageKind.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentControlService.swift
+  # Area ownership: every chat turn resolves its harness through
+  # AgentRuntimeRouting (startup preferred-harness validation), and this flow
+  # sends a real chat turn. The persisted-preference spellings are covered
+  # behaviorally in AgentControlServiceTests.
+  - desktop/macos/Desktop/Sources/Providers/AgentRuntimeRouting.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+BackendRouting.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+JITKnowledgeToolsGate.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
@@ -110,7 +117,7 @@ steps:
       target: dashboard
       activateApp: false
     wait:
-      state.selectedTabIndex: 0
+      state.chatFirstRoute: chat
 
   - id: S3
     name: Send marker chat query

@@ -12,7 +12,6 @@ import asyncio
 import re
 import time
 from typing import Any, Optional
-from urllib.parse import quote_plus
 import xml.etree.ElementTree as ET
 
 import httpx
@@ -24,7 +23,8 @@ from pydantic import BaseModel
 ARXIV_API_URL = "https://export.arxiv.org/api/query"
 REQUEST_TIMEOUT_SECONDS = 12
 MAX_LIMIT = 10
-MIN_REQUEST_INTERVAL_SECONDS = 0.35
+# arXiv API Terms of Use require clients to wait at least three seconds between requests.
+MIN_REQUEST_INTERVAL_SECONDS = 3.0
 USER_AGENT = "omi-arxiv-app/1.0 (https://omi.me)"
 ATOM_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
 
@@ -213,20 +213,24 @@ async def _request_arxiv(params: dict[str, Any]) -> str:
 
 
 def _build_search_query(payload: dict[str, Any]) -> Optional[str]:
+    # httpx form-encodes request params itself, so this must return an
+    # unencoded string. Pre-encoding here (e.g. with quote_plus) makes httpx
+    # encode it a second time, turning "+" separators into a literal "%2B"
+    # that arXiv does not treat as AND/space.
     query = _clean_text(payload.get("query"))
     title = _clean_text(payload.get("title"))
     author = _clean_text(payload.get("author"))
     category = _safe_category(payload.get("category"))
     parts = []
     if query:
-        parts.append(f"all:{quote_plus(query)}")
+        parts.append(f"all:{query}")
     if title:
-        parts.append(f"ti:{quote_plus(title)}")
+        parts.append(f"ti:{title}")
     if author:
-        parts.append(f"au:{quote_plus(author)}")
+        parts.append(f"au:{author}")
     if category:
         parts.append(f"cat:{category}")
-    return "+AND+".join(parts) if parts else None
+    return " AND ".join(parts) if parts else None
 
 
 @app.get("/")
@@ -403,7 +407,7 @@ async def search_author(payload: dict[str, Any]):
         entries = _parse_entries(
             await _request_arxiv(
                 {
-                    "search_query": f"au:{quote_plus(author)}",
+                    "search_query": f"au:{author}",
                     "start": 0,
                     "max_results": limit,
                     "sortBy": "submittedDate",

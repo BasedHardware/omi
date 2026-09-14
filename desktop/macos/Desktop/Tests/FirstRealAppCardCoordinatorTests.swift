@@ -425,13 +425,13 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
   /// contract is that the draft is there to be taken exactly once.
   func testThePrefilledDraftIsHandedOverExactlyOnceAndUnsent() {
     let store = MainChatNavigationRequestStore.shared
-    _ = store.consumeDraft()
+    _ = store.consumeDraft(existingDraft: "")
 
     store.request(draft: FirstRealAppCardPolicy.prompt)
 
     XCTAssertTrue(store.isPending)
-    XCTAssertEqual(store.consumeDraft(), "Summarize what's on my screen")
-    XCTAssertNil(store.consumeDraft(), "a second composer must not re-take the draft")
+    XCTAssertEqual(store.consumeDraft(existingDraft: ""), "Summarize what's on my screen")
+    XCTAssertNil(store.consumeDraft(existingDraft: ""), "a second composer must not re-take the draft")
     XCTAssertTrue(store.consume())
   }
 
@@ -450,5 +450,61 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
     ownerID = "owner-1"
     activateRealApp(on: coordinator)
     XCTAssertEqual(presented.count, 1)
+  }
+
+  // MARK: - Attachment handoff contract
+
+  /// The card's handoff is one unit: the composer that takes the draft is the
+  /// one that stages the frame, and a request without an attachment clears any
+  /// stale one — the same slot ownership the draft has always had.
+  func testRequestCarriesDraftAndAttachmentTogetherAndIsConsumedOnce() {
+    let store = MainChatNavigationRequestStore.shared
+    _ = store.consumeDraft()
+    _ = store.consumeAttachment()
+
+    let attachment = ChatAttachment(fileName: "Screen frame (ChatGPT).jpg", mimeType: "image/jpeg")
+    store.request(draft: FirstRealAppCardPolicy.prompt, attachment: attachment)
+
+    XCTAssertTrue(store.isPending)
+    XCTAssertEqual(store.consumeDraft(), "Summarize what's on my screen")
+    XCTAssertEqual(store.consumeAttachment()?.id, attachment.id)
+    XCTAssertNil(store.consumeAttachment(), "a second composer must not re-take the frame")
+
+    // A plain request owns the slot: no attachment may survive from before.
+    store.request(draft: "Continue in Omi")
+    XCTAssertNil(store.consumeAttachment())
+    XCTAssertEqual(store.consumeDraft(), "Continue in Omi")
+  }
+
+  /// A requester that must suspend before committing (the card's frame
+  /// decode) reserves a generation; if any other request lands while it is
+  /// suspended, the stale reservation's commit is dropped — a slow card
+  /// handoff can never overwrite a newer request's draft and attachment.
+  func testStaleReservationCannotOverwriteANewerRequest() {
+    let store = MainChatNavigationRequestStore.shared
+    _ = store.consumeDraft()
+    _ = store.consumeAttachment()
+
+    let generation = store.reserve()
+    // A newer request overtakes the suspended card handoff.
+    store.request(draft: "Continue in Omi")
+
+    // The stale reservation sees it lost and drops its commit.
+    XCTAssertTrue(generation < store.currentGeneration)
+    XCTAssertEqual(store.consumeDraft(), "Continue in Omi")
+    XCTAssertNil(store.consumeAttachment())
+  }
+
+  /// An un-overtaken reservation remains current, so its commit lands.
+  func testCurrentReservationStillCommits() {
+    let store = MainChatNavigationRequestStore.shared
+    _ = store.consumeDraft()
+
+    let generation = store.reserve()
+    XCTAssertEqual(generation, store.currentGeneration)
+    // The card's seam (`openMainAppChat`) commits through `request`, which is
+    // legitimate while the reservation is still current.
+    store.request(draft: "Summarize what's on my screen")
+    XCTAssertEqual(store.consumeDraft(), "Summarize what's on my screen")
   }
 }

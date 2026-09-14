@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 
 /// Handler for freemium transcription switching
@@ -20,7 +21,11 @@ class FreemiumSwitchHandler {
 
     if (!context.read<UsageProvider>().showSubscriptionUI) return false;
 
-    if (captureProvider.freemiumThresholdReached && captureProvider.freemiumRequiresUserAction) {
+    if (FreemiumThresholdTracker.shouldShowPlusMeterPaywall(
+      reached: captureProvider.freemiumThresholdReached,
+      requiresUserAction: captureProvider.freemiumRequiresUserAction,
+      plan: context.read<UsageProvider>().subscription?.subscription.plan,
+    )) {
       _freemiumService.markDialogShown();
 
       if (!context.mounted) return false;

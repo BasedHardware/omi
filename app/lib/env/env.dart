@@ -151,8 +151,6 @@ abstract class Env {
         (first == 127);
   }
 
-  static String? get googleMapsApiKey => _instance.googleMapsApiKey;
-
   static String? get intercomAppId => _instance.intercomAppId;
 
   static String? get intercomIOSApiKey => _instance.intercomIOSApiKey;
@@ -172,8 +170,6 @@ abstract class EnvFields {
   String? get posthogApiKey;
 
   String? get apiBaseUrl;
-
-  String? get googleMapsApiKey;
 
   String? get intercomAppId;
 

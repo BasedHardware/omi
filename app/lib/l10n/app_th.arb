@@ -3246,5 +3246,16 @@
     "chatBlockUnavailable": "ไม่พร้อมใช้งานอีกต่อไป",
     "chatBlockRecommendedNextSteps": "ขั้นตอนถัดไปที่แนะนำ",
     "couldNotLoadMemories": "ไม่สามารถโหลดความทรงจำได้",
-    "couldNotLoadKnowledgeGraph": "ไม่สามารถโหลดกราฟความรู้ได้"
+    "couldNotLoadKnowledgeGraph": "ไม่สามารถโหลดกราฟความรู้ได้",
+    "speechProfileOwnerTitle": "โปรไฟล์เสียงของ {name}",
+    "play": "เล่น",
+    "redo": "บันทึกใหม่",
+    "answerWithYourVoice": "ตอบด้วยเสียงของคุณ:",
+    "speechProfileTopicLocation": "คุณอาศัยอยู่ที่ไหน?",
+    "speechProfileTopicWork": "คุณทำงานอะไร?",
+    "speechProfileTopicGoal": "เป้าหมายระยะยาวของคุณคืออะไร?",
+    "speechToTextUnavailableDesc": "ขณะนี้ไม่สามารถแปลงเสียงเป็นข้อความได้ โปรดตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและการตั้งค่าการรู้จำเสียงของอุปกรณ์ แล้วลองอีกครั้ง",
+    "memoryHistoryPartial": "ประวัติความทรงจำบางส่วนไม่พร้อมใช้งาน กำลังแสดงประวัติที่ได้รับจนถึงตอนนี้",
+    "tapPlusToStartRecording": "แตะ + เพื่อเริ่มบันทึก",
+    "processingTakingLonger": "ยังทำงานอยู่ — ใช้เวลานานกว่าปกติ"
 }

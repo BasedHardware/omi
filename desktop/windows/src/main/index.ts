@@ -12,6 +12,7 @@ import { join } from 'path'
 import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { supportsMica } from './windowsVersion'
+import { defaultOzonePlatform } from './linuxCompositor'
 import { APP_BG_HEX, HOME_BG_HEX, WCO_SYMBOL_HEX } from '../shared/chrome'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
@@ -425,12 +426,13 @@ if (gotSingleInstanceLock) initCrashSentinel()
 
 // Linux: default to XWayland (x11 ozone). On a native Wayland session Electron
 // cannot register global shortcuts (push-to-talk / overlay summon) and the X11
-// active-window path is blind, so XWayland gives the fullest experience. Set
-// OMI_OZONE=wayland to run natively (accepting those limitations). Also enable
-// the PipeWire capturer (portal screen share) and PulseAudio monitor-source
-// loopback for system-audio capture when pipewire-pulse/Pulse is present.
+// active-window path is blind, so XWayland gives the fullest experience where
+// it's available. On compositors known to lack reliable XWayland support
+// (niri, sway, hyprland — see linuxCompositor.ts) XWayland can instead fail to
+// map the main window at all, so those default to native Wayland despite its
+// own limitations. Set OMI_OZONE=wayland/x11 to override either way.
 if (process.platform === 'linux') {
-  app.commandLine.appendSwitch('ozone-platform', process.env.OMI_OZONE || 'x11')
+  app.commandLine.appendSwitch('ozone-platform', process.env.OMI_OZONE || defaultOzonePlatform())
   app.commandLine.appendSwitch(
     'enable-features',
     'WebRTCPipeWireCapturer,PulseaudioLoopbackForScreenShare'

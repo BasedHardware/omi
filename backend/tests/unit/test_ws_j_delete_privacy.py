@@ -1031,6 +1031,106 @@ def test_reusing_a_row_id_for_different_content_still_fails(monkeypatch, canonic
     assert canonical_db.docs[f"users/{uid}/memory_items/{first_id}"] == before
 
 
+class _LaggingSnapshotDb:
+    """Fake Firestore wrapper that hides one document for the first plain reads.
+
+    Emulates the losing side of the concurrent identical-add race (GH #13505):
+    the apply transaction observed the colliding row inside its own snapshot,
+    but the duplicate-resolution read that follows lands before the winning
+    write is readable. Reads inside a transaction (``transaction=``) always see
+    the row — that is what produced ``invalid_patch`` in the first place.
+    """
+
+    def __init__(self, inner: "_FakeDb", hidden_path: str, misses: int):
+        self._inner = inner
+        self._hidden_path = hidden_path
+        self._misses_left = misses
+
+    def document(self, path):
+        ref = self._inner.document(path)
+        if path != self._hidden_path:
+            return ref
+        wrapper = self
+
+        class _LaggingDocRef:
+            def get(self, transaction=None):
+                if transaction is None and wrapper._misses_left > 0:
+                    wrapper._misses_left -= 1
+                    return _Snapshot(None, exists=False, doc_id=path.rsplit("/", 1)[-1])
+                return ref.get(transaction=transaction)
+
+            def __getattr__(self, name):
+                return getattr(ref, name)
+
+        return _LaggingDocRef()
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+def test_identical_resubmission_resolves_once_the_row_becomes_readable(monkeypatch, canonical_db):
+    """GH #13505 residual: concurrent/retry identical adds must not 500.
+
+    The 2026-09-11 prod family (12x ``canonical write failed: invalid_patch
+    (add patch new_memory_id already exists)`` in one SLI window) is the case
+    #12524's resolver misses: the apply transaction sees the colliding row, but
+    its single follow-up snapshot read still cannot. Without the visibility
+    retry this raises and fails the user-visible chat/extraction write; with it,
+    the resubmission resolves to the existing row once the row is readable.
+    """
+    uid = "uid-canonical-ws-j"
+    _stub_delete_side_effects(monkeypatch)
+    monkeypatch.setattr("utils.memory.canonical_memory_adapter.time.sleep", lambda _seconds: None)
+
+    payload = _sample_memory_payload(uid=uid, conversation_id="conv-race", content="User rows every morning")
+    first_id = write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    # An unrelated write advances the account head so the resubmission cannot
+    # be recognized as a replay of the first operation.
+    write_canonical_external_memory(
+        uid, _external_memory_payload(uid, "Unrelated head-advancing fact"), db_client=canonical_db
+    )
+    before = copy.deepcopy(canonical_db.docs[f"users/{uid}/memory_items/{first_id}"])
+
+    # Same row id and same content, but a distinct idempotency identity: the
+    # winning write came from a converging operation, not a byte-identical
+    # replay, so the apply surfaces the row-id collision instead of a skip.
+    resubmission = dict(payload, subject_entity_id="person-race")
+    lagging_db = _LaggingSnapshotDb(
+        canonical_db,
+        hidden_path=f"users/{uid}/memory_items/{first_id}",
+        misses=1,
+    )
+
+    resubmitted_id = write_canonical_extraction_memory(uid, resubmission, db_client=lagging_db)
+
+    assert resubmitted_id == first_id
+    assert canonical_db.docs[f"users/{uid}/memory_items/{first_id}"] == before
+
+
+def test_row_that_never_becomes_readable_still_fails_closed(monkeypatch, canonical_db):
+    """The visibility retry must stay bounded: a row that never appears is an
+    error, not an idempotent success."""
+    uid = "uid-canonical-ws-j"
+    _stub_delete_side_effects(monkeypatch)
+    monkeypatch.setattr("utils.memory.canonical_memory_adapter.time.sleep", lambda _seconds: None)
+
+    payload = _sample_memory_payload(uid=uid, conversation_id="conv-race", content="User rows every morning")
+    first_id = write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    write_canonical_external_memory(
+        uid, _external_memory_payload(uid, "Unrelated head-advancing fact"), db_client=canonical_db
+    )
+
+    resubmission = dict(payload, subject_entity_id="person-race")
+    never_visible_db = _LaggingSnapshotDb(
+        canonical_db,
+        hidden_path=f"users/{uid}/memory_items/{first_id}",
+        misses=99,  # every plain read misses: the row never becomes readable
+    )
+
+    with pytest.raises(RuntimeError, match="canonical write failed"):
+        write_canonical_extraction_memory(uid, resubmission, db_client=never_visible_db)
+
+
 def test_conversation_sourced_evidence_is_never_reissued_after_delete(monkeypatch, canonical_db):
     uid = "uid-canonical-ws-j"
     conversation_id = "conv-deleted-source"

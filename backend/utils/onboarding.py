@@ -12,13 +12,13 @@ from utils.llm.conversation_processing import _word_count  # type: ignore[report
 
 logger = logging.getLogger(__name__)
 
+# The app shows these three together as "Talk About" topics rather than one at
+# a time, so the user speaks freely; the handler still walks them in order
+# against the accumulated transcript (see _check_answer).
 ONBOARDING_QUESTIONS: List[Dict[str, str]] = [
-    {'question': "How old are you?", 'category': 'age'},
     {'question': "Where do you live?", 'category': 'location'},
     {'question': "What do you do for work?", 'category': 'work'},
     {'question': "What is your long-term goal?", 'category': 'long_term_goal'},
-    {'question': "What are your goals this month?", 'category': 'monthly_goals'},
-    {'question': "What do you have planned for today?", 'category': 'daily_plans'},
 ]
 
 
@@ -51,6 +51,10 @@ class OnboardingHandler:
         self.current_transcript = ''
         self.silence_timer: Optional[asyncio.Task[None]] = None
         self.is_checking_answer = False
+        # Segments that arrive while an AI answer check is awaiting the LLM are
+        # queued here and replayed once the check finishes, so speech covering
+        # later topics is evaluated instead of dropped.
+        self.pending_segments: List[Dict[str, Any]] = []
         self.completed = False
         self.started = False
         self.start_time: Optional[float] = None  # Track when onboarding started
@@ -100,7 +104,13 @@ class OnboardingHandler:
 
     def on_segments_received(self, segments: List[Dict[str, Any]]) -> None:
         """Called when new transcript segments are received"""
-        if self.completed or self.is_checking_answer:
+        if self.completed:
+            return
+        if self.is_checking_answer:
+            # An AI answer check can await up to three LLM calls; speech that
+            # arrives during that window must not be lost. Queue it and replay
+            # it when _check_answer finishes.
+            self.pending_segments.extend(segments)
             return
 
         # Update timing tracking
@@ -193,18 +203,19 @@ class OnboardingHandler:
         self.is_checking_answer = True
 
         try:
-            question = self.current_question['question']
             transcript = self.current_transcript.strip()
 
-            # Check with AI if enough content
-            word_count = _word_count(transcript)
-            answered = False
+            # The topics are shown to the user all at once, so one stretch of
+            # speech may cover several of them. Keep the transcript across
+            # questions and advance through every question it answers.
+            while self.current_question and not self.completed:
+                question = self.current_question['question']
+                answered = False
+                if _word_count(transcript) >= 2:
+                    answered = await self._ai_check_answer(question, transcript)
+                if not answered:
+                    break
 
-            if word_count >= 2:
-                answered = await self._ai_check_answer(question, transcript)
-
-            if answered:
-                # Save answer
                 self.answers.append(
                     {
                         'question': question,
@@ -212,8 +223,6 @@ class OnboardingHandler:
                         'category': self.current_question['category'],
                     }
                 )
-
-                # Send event to app
                 await self._send_event(
                     'question_answered',
                     {
@@ -221,11 +230,7 @@ class OnboardingHandler:
                         'answered': True,
                     },
                 )
-
-                # Move to next question
                 self.current_question_index += 1
-                self.current_transcript = ''
-
                 if self.current_question_index >= len(self.questions):
                     await self._complete_onboarding()
                 else:
@@ -233,6 +238,12 @@ class OnboardingHandler:
 
         finally:
             self.is_checking_answer = False
+            # Replay what was said while the checks were awaiting the LLM so it
+            # accumulates into the transcript and restarts the silence timer
+            # for the next evaluation.
+            pending, self.pending_segments = self.pending_segments, []
+            if pending and not self.completed:
+                self.on_segments_received(pending)
 
     async def _ai_check_answer(self, question: str, transcript: str) -> bool:
         """Use AI to determine if answer is valid"""

@@ -5,6 +5,7 @@ This app gives Omi users no-auth earthquake lookup tools backed by the public
 USGS FDSN event API.
 """
 
+import math
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -119,12 +120,13 @@ async def _read_json_body(request: Request) -> tuple[Optional[Dict[str, Any]], O
 
 def _query_params(body: Dict[str, Any], default_hours: int = 24) -> Dict[str, Any]:
     hours = _safe_int(body.get("hours"), default=default_hours, minimum=1, maximum=168)
+    min_magnitude = _parse_float(body.get("min_magnitude"))
+    if min_magnitude is None or not math.isfinite(min_magnitude):
+        min_magnitude = 2.5
     return {
         "format": "geojson",
         "starttime": _starttime_from_hours(hours),
-        "minmagnitude": _safe_float(
-            body.get("min_magnitude"), default=2.5, minimum=0.0, maximum=10.0
-        ),
+        "minmagnitude": min(10.0, min_magnitude),
         "limit": _safe_int(body.get("limit"), default=5, minimum=1, maximum=10),
         "orderby": _safe_orderby(body.get("orderby")),
     }

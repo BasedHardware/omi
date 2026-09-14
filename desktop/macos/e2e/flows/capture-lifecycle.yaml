@@ -21,6 +21,9 @@ covers:
   - desktop/macos/Desktop/Sources/ConversationReconciliationPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationRepository.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ConversationCapturePlaybackSection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CaptureTranscriptAlignment.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CaptureTranscriptResync.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/StorageFailureDiagnostics.swift
@@ -52,6 +55,12 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift
   - desktop/macos/Desktop/Sources/MeetingDetector.swift
+  # This hermetic flow only reaches the dictation-app mic monitor's teardown call
+  # (stopDictationMicSuppressionMonitor runs with the meeting detector). The policy,
+  # gate, and monitor state machine are unit-tested in DictationMicSuppressionTests;
+  # the live onAudioChunk seam is dogfood-only until a mic-bearing flow exists.
+  - desktop/macos/Desktop/Sources/Audio/DictationMicSuppression.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+DictationMicSuppression.swift
   - desktop/macos/Desktop/Sources/CalendarMeetingContext/SystemCalendarMeetingContextFeature.swift
   - desktop/macos/Desktop/Sources/CalendarMeetingContext/SystemCalendarMeetingContextService.swift
   - desktop/macos/Desktop/Sources/CalendarMeetingContext/DerivedDataEgressPolicy.swift
@@ -156,7 +165,7 @@ steps:
       target: conversations
       activateApp: false
     wait:
-      state.selectedTabIndex: 1
+      state.chatFirstRoute: memories
 
   - id: S9
     name: Reconcile cached list and canonical detail

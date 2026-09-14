@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import Annotated, List, Dict, Any, Union, Optional
+from typing import Annotated, List, Dict, Any, Literal, Union, Optional
+import hashlib
 import os
 import asyncio
 
 import pytz
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from database import (
     conversations as conversations_db,
@@ -56,6 +57,7 @@ from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
 from utils.feedback import record_chat_message_feedback
+from utils.marketplace_reviewers import is_marketplace_reviewer
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
@@ -127,7 +129,7 @@ from utils.other.notifications import (
     local_day_bounds_utc,
 )
 from models.notification_message import NotificationMessage
-from models.daily_summary_payload import LearnedMemoryRef
+from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.other import endpoints as auth
 from utils.other.storage import (
@@ -136,9 +138,10 @@ from utils.other.storage import (
     delete_user_person_speech_samples,
     delete_user_person_speech_sample,
 )
-from utils.webhooks import webhook_first_time_setup
+from utils.webhooks import button_event_webhook, webhook_first_time_setup
 from utils.byok import (
     get_byok_key,
+    has_byok_keys,
     invalidate_byok_state_cache,
     peppered_fingerprint,
 )
@@ -198,6 +201,7 @@ class UserWebhooksStatusResponse(BaseModel):
     memory_created: bool
     realtime_transcript: bool
     day_summary: bool
+    button_event: bool = False
 
 
 class UserWebhookUrlResponse(BaseModel):
@@ -263,79 +267,6 @@ def _location_context_consent_response(consent) -> LocationContextConsentRespons
 class DailySummaryTestResponse(UserStatusResponse):
     summary_id: str
     conversations_count: int
-
-
-class DailySummaryActionItem(BaseModel):
-    description: Optional[str] = None
-    priority: Optional[str] = None
-    source_conversation_id: Optional[str] = None
-    completed: Optional[bool] = None
-
-
-class DailySummaryTopicHighlight(BaseModel):
-    topic: Optional[str] = None
-    emoji: Optional[str] = None
-    summary: Optional[str] = None
-    conversation_ids: Optional[List[str]] = None
-
-
-class DailySummaryUnresolvedQuestion(BaseModel):
-    question: Optional[str] = None
-    conversation_id: Optional[str] = None
-
-
-class DailySummaryDecisionMade(BaseModel):
-    decision: Optional[str] = None
-    conversation_id: Optional[str] = None
-
-
-class DailySummaryKnowledgeNugget(BaseModel):
-    insight: Optional[str] = None
-    conversation_id: Optional[str] = None
-
-
-class DailySummaryDayStats(BaseModel):
-    total_conversations: Optional[int] = None
-    total_duration_minutes: Optional[int] = None
-    action_items_count: Optional[int] = None
-    memories_created: Optional[int] = None
-    action_items_created: Optional[int] = None
-    watching_minutes: Optional[int] = None
-    proactive_moments: Optional[int] = None
-
-
-class DailySummaryLocationPin(BaseModel):
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    address: Optional[str] = None
-    conversation_id: Optional[str] = None
-    time: Optional[str] = None
-
-
-class DailySummaryResponse(BaseModel):
-    model_config = ConfigDict(extra='allow')
-
-    id: Optional[str] = None
-    date: Optional[str] = None
-    created_at: Optional[datetime] = None
-    headline: Optional[str] = None
-    overview: Optional[str] = None
-    day_emoji: Optional[str] = None
-    stats: Optional[DailySummaryDayStats] = None
-    highlights: Optional[List[DailySummaryTopicHighlight]] = None
-    action_items: Optional[List[DailySummaryActionItem]] = None
-    unresolved_questions: Optional[List[DailySummaryUnresolvedQuestion]] = None
-    decisions_made: Optional[List[DailySummaryDecisionMade]] = None
-    knowledge_nuggets: Optional[List[DailySummaryKnowledgeNugget]] = None
-    # Memories the day actually produced, addressed by canonical memory id, so a
-    # shell can render a native review card. Older summaries have no field;
-    # clients prefer this over `knowledge_nuggets` when it is non-empty.
-    memories_learned: List[LearnedMemoryRef] = Field(default_factory=list)
-    locations: Optional[List[DailySummaryLocationPin]] = None
-
-
-class DailySummariesResponse(BaseModel):
-    summaries: List[DailySummaryResponse] = Field(default_factory=list)
 
 
 @router.get('/v1/users/profile', tags=['v1'], response_model=UserProfileResponse)
@@ -523,6 +454,28 @@ def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get
     return {'status': 'ok'}
 
 
+class ButtonEventRequest(BaseModel):
+    button_event: Literal['single_tap', 'double_tap', 'long_tap']
+    device_id: str = Field(min_length=1, max_length=128)
+    event_id: uuid.UUID = Field(description='Stable id for the physical gesture across retries')
+    timestamp: AwareDatetime
+    session_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
+
+
+@router.post('/v1/users/developer/button-event', tags=['v1'], response_model=UserStatusResponse)
+async def post_developer_button_event(body: ButtonEventRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """App → backend forward of an opt-in hardware button gesture (#11719)."""
+    await button_event_webhook(
+        uid,
+        button_event=body.button_event,
+        device_id=body.device_id,
+        event_id=str(body.event_id),
+        timestamp=body.timestamp.isoformat(),
+        session_id=body.session_id,
+    )
+    return {'status': 'ok'}
+
+
 @router.get('/v1/users/developer/webhooks/status', tags=['v1'], response_model=UserWebhooksStatusResponse)
 def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
     # This only happens the first time because the user_webhook_status_db function will return None for existing users
@@ -538,11 +491,15 @@ def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
     day_summary = user_webhook_status_db(uid, WebhookType.day_summary)
     if day_summary is None:
         day_summary = webhook_first_time_setup(uid, WebhookType.day_summary)
+    button_event = user_webhook_status_db(uid, WebhookType.button_event)
+    if button_event is None:
+        button_event = webhook_first_time_setup(uid, WebhookType.button_event)
     return {
         'audio_bytes': audio_bytes,
         'memory_created': memory_created,
         'realtime_transcript': realtime_transcript,
         'day_summary': day_summary,
+        'button_event': button_event,
     }
 
 
@@ -1267,8 +1224,7 @@ def _user_subscription_response(
             phone_call_quota=unlimited_phone_quota,
         )
 
-    marketplace_reviewers = os.getenv('MARKETPLACE_APP_REVIEWERS', '').split(',')
-    if uid in marketplace_reviewers:
+    if is_marketplace_reviewer(uid):
         unlimited_sub = Subscription(
             plan=PlanType.unlimited,
             status=SubscriptionStatus.active,

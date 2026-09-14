@@ -133,6 +133,40 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
             },
         )
 
+    def test_search_handlers_preserve_magnitude_filters(self):
+        cases = [(-1, -1.0), (-0.5, -0.5), ("-2.5", -2.5), (0, 0.0),
+                 (2.5, 2.5), (12, 10.0), (None, 2.5), ("invalid", 2.5),
+                 ("nan", 2.5), ("inf", 2.5), ("-inf", 2.5)]
+        for handler in (main.tool_recent_earthquakes, main.tool_nearby_earthquakes):
+            for requested, expected in cases:
+                with self.subTest(handler=handler.__name__, minimum=requested):
+                    captured = {}
+
+                    async def fake_usgs_get(params):
+                        captured.update(params)
+                        return {"features": [{"id": "negative-event",
+                                              "properties": {"mag": -0.4}}]
+                                if params["minmagnitude"] <= -0.4 else []}
+
+                    original = main._usgs_get
+                    main._usgs_get = fake_usgs_get
+                    try:
+                        body = {"latitude": 37.7, "longitude": -122.4}
+                        if requested is not None:
+                            body["min_magnitude"] = requested
+                        result = asyncio.run(handler(DummyRequest(body)))
+                    finally:
+                        main._usgs_get = original
+
+                    self.assertTrue(result.success)
+                    self.assertEqual(captured["minmagnitude"], expected)
+                    self.assertEqual(result.data["count"], int(expected <= -0.4))
+                    if expected <= -0.4:
+                        self.assertEqual(result.data["earthquakes"][0]["magnitude"], -0.4)
+                    if handler is main.tool_nearby_earthquakes:
+                        self.assertEqual(captured["latitude"], 37.7)
+                        self.assertEqual(captured["maxradiuskm"], 250.0)
+
     def test_nearby_earthquakes_requires_latitude_and_longitude(self):
         result = asyncio.run(
             main.tool_nearby_earthquakes(DummyRequest({"latitude": 37.7}))

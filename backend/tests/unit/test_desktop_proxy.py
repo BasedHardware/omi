@@ -670,6 +670,25 @@ async def test_batch_embedding_uses_studio_and_rejects_credential_override(monke
 
 
 @pytest.mark.asyncio
+async def test_batch_embedding_fails_closed_without_ai_studio_key(monkeypatch):
+    """AI Studio batch embeddings must surface missing QA configuration."""
+
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware-dev")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    with pytest.raises(desktop_proxy.RoutingFailure) as error:
+        await desktop_proxy._upstream(
+            "models/gemini-embedding-001:batchEmbedContents",
+            "gemini-embedding-001",
+            "batchEmbedContents",
+            {},
+        )
+
+    assert error.value.code == "routing_not_configured"
+
+
+@pytest.mark.asyncio
 async def test_vertex_single_embedding_uses_predict_wire_method(monkeypatch):
     async def token():
         return "adc-token"

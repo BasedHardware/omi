@@ -15,6 +15,7 @@ from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEve
 from deepgram.clients.live.v1 import LiveOptions
 
 from config.stt_provider_policy import (
+    DEEPGRAM_PROVIDERS,
     MODULATE_PROVIDER,
     PARAKEET_PROVIDER,
     SONIOX_PROVIDER,
@@ -92,6 +93,8 @@ _deepgram_circuit = ProviderCircuitBreaker(
 _modulate_circuit = ProviderCircuitBreaker(
     failure_threshold=int(os.getenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '3')),
     cooldown_seconds=float(os.getenv('MODULATE_CIRCUIT_COOLDOWN_SECONDS', '30')),
+    serve_error_cooldown_seconds=float(os.getenv('MODULATE_SERVE_ERROR_CIRCUIT_COOLDOWN_SECONDS', '180')),
+    serve_error_successes_to_close=int(os.getenv('MODULATE_SERVE_ERROR_SUCCESSES_TO_CLOSE', '3')),
 )
 _soniox_circuit = ProviderCircuitBreaker(
     failure_threshold=int(os.getenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '3')),
@@ -132,6 +135,49 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str) -> boo
     logger.warning('Opening %s selection circuit after serve-time death reason=%s', provider, reason)
     circuit.record_serve_failure()
     return True
+
+
+def _primary_streaming_service() -> Optional[STTService]:
+    """Return the STT service leading ``STT_SERVICE_MODELS`` for streaming.
+
+    Walks the same policy-owned preference list ``get_stt_service_for_language``
+    selects from, so a provider migration (e.g. Deepgram -> Modulate) that
+    reorders that list is honored here automatically instead of leaving a
+    call site naming a provider that stopped being primary.
+    """
+    for model in (m.strip() for m in stt_service_models):
+        provider = provider_for_model_token(model)
+        if provider is None:
+            continue
+        if provider in DEEPGRAM_PROVIDERS:
+            return STTService.deepgram
+        if provider == MODULATE_PROVIDER:
+            return STTService.modulate
+        if provider == PARAKEET_PROVIDER:
+            return STTService.parakeet
+        if provider == SONIOX_PROVIDER:
+            return STTService.soniox
+    return None
+
+
+def is_stt_available() -> bool:
+    """Best-effort, process-local signal for a client pre-flight check.
+
+    Reuses the existing per-process circuit breaker (a latency optimization,
+    not a fleet-wide coordinator - see provider_resilience.py) for whichever
+    provider is currently configured as the streaming primary, rather than a
+    provider hardcoded at the call site: false only while that provider's
+    breaker is open and its cooldown hasn't elapsed yet after repeated recent
+    failures. Uses ``cooldown_elapsed()`` rather than raw ``state`` because
+    the open->half_open transition otherwise only happens inside
+    ``allow_request()`` — without this, a quiet process with no concurrent
+    listen traffic would stay reporting "unavailable" forever after the
+    provider actually recovered.
+    """
+    primary = _primary_streaming_service()
+    if primary is None:
+        return True
+    return _circuit_for_primary(primary).cooldown_elapsed()
 
 
 def _fallback_failure_reason(error: BaseException) -> str:
@@ -405,6 +451,22 @@ deepgram_nova3_languages = {
 # Compatibility export for callers. Its value is owned by stt_provider_policy.
 DEFAULT_STT_SERVICE_MODELS = default_models_for_surface(STTServingSurface.STREAMING)
 stt_service_models = os.getenv('STT_SERVICE_MODELS', ','.join(DEFAULT_STT_SERVICE_MODELS)).split(',')
+
+
+def validate_streaming_stt_env(env: Any = None) -> None:
+    """Fail listen/pusher startup when soniox is listed without a key.
+
+    Selection already skips an empty key, but the listed slot still looks like
+    a next hop in the documented chain. Do not print secret values.
+    """
+    source = os.environ if env is None else env
+    models = source.get('STT_SERVICE_MODELS', ','.join(DEFAULT_STT_SERVICE_MODELS))
+    listed = [model.strip() for model in models.split(',') if model.strip()]
+    if 'soniox' in listed and not (source.get('SONIOX_API_KEY') or '').strip():
+        raise RuntimeError(
+            'STT_SERVICE_MODELS lists soniox but SONIOX_API_KEY is empty; '
+            'remove soniox from the serving chain or set the key'
+        )
 
 
 def modulate_is_configured_fallback(language: Optional[str]) -> bool:

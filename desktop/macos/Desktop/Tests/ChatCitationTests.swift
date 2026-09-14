@@ -769,6 +769,38 @@ final class ChatCitationTests: XCTestCase {
     XCTAssertFalse(provider.messages.first?.isStreaming ?? true)
   }
 
+  @MainActor
+  func testFinalizationAppliesSentenceSpacingToJoinedAgentHandoffTerminalAnswer() async {
+    // A think_deeper-style handoff: the provider's authoritative answer keeps
+    // the pre-tool sentence and the continuation joined with no space, which
+    // is exactly what the streamed projection was normalizing on every flush.
+    // The terminal overwrite must honor the same contract or the run-on join
+    // reappears the moment the turn settles — and is persisted that way.
+    let joined = "Let me think it through.Capture the context at the card."
+    let provider = ChatProvider()
+    provider.messages = [
+      ChatMessage(
+        id: "ai-terminal",
+        text: joined,
+        sender: .ai,
+        isStreaming: true,
+        contentBlocks: [.text(id: "answer", text: joined)])
+    ]
+
+    let accepted = await provider.finalizeAssistantMessageCitations(
+      messageId: "ai-terminal",
+      queryText: joined,
+      selectedReferences: [],
+      requestedSources: false,
+      terminalCitationReferences: [])
+
+    XCTAssertEqual(accepted, "Let me think it through. Capture the context at the card.")
+    XCTAssertEqual(
+      provider.messages.first?.text,
+      "Let me think it through. Capture the context at the card.")
+    XCTAssertFalse(provider.messages.first?.isStreaming ?? true)
+  }
+
   func testRequestedSourcesRailUsesTurnLedgerNotLookupCorpus() {
     var message = ChatMessage(
       id: "ai-1",

@@ -45,14 +45,18 @@ async function handleRequest(request: Request) {
       Authorization: authHeader,
     };
 
-    // Forward custom headers for FCM token registration
+    // Forward custom headers for FCM token registration and create retries
     const appPlatform = request.headers.get('X-App-Platform');
     const deviceIdHash = request.headers.get('X-Device-Id-Hash');
+    const idempotencyKey = request.headers.get('Idempotency-Key');
     if (appPlatform) {
       headers['X-App-Platform'] = appPlatform;
     }
     if (deviceIdHash) {
       headers['X-Device-Id-Hash'] = deviceIdHash;
+    }
+    if (idempotencyKey) {
+      headers['Idempotency-Key'] = idempotencyKey;
     }
 
     if (!isMultipart && request.method !== 'GET') {

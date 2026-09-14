@@ -27,21 +27,23 @@ final class HubSystemInstructionTests: XCTestCase {
         query: "How long did Wispr Flow take to build its first desktop app?"))
   }
 
-  func testVoiceInstructionTellsTheModelEveryTurnCarriesTheCurrentScreen() {
+  func testVoiceInstructionTreatsCurrentScreenDeliveryAsConditional() {
     // Regression (Beta 0.12.257, two users): the model answered a current-screen question from a
     // 13-second-old screenshot / an earlier answer without calling screenshot. Nothing in the
-    // prompt said when to look. The frame is now attached to every turn and the instruction
-    // must say so, mark earlier images stale, and keep screenshot for a fresh re-look only.
-    // The claim is stated only for a session that actually attaches the frame (Gemini).
+    // prompt said when to look. Gemini attempts a frame on each turn, but permissions
+    // or capture failures can prevent delivery. The instruction must describe actual
+    // availability, mark earlier images stale, and explain missing-source behavior.
     let instruction = RealtimeHubTools.systemInstruction(
       kernelContext: "ctx", turnScreenFrameAttached: true)
-    XCTAssertTrue(instruction.contains("every turn arrives with an image of the user's screen"))
+    XCTAssertTrue(instruction.contains("a turn can include an image of the user's screen"))
+    XCTAssertFalse(instruction.contains("every turn arrives with an image"))
+    XCTAssertTrue(instruction.contains("do not claim to have read or remembered its contents"))
     XCTAssertTrue(instruction.contains("Images from earlier turns are stale"))
     XCTAssertTrue(instruction.contains("Call the screenshot tool only when no image arrived with this turn"))
     XCTAssertFalse(instruction.contains("You cannot see the user's data or screen without calling a tool"))
     let tool = GeneratedRealtimeTools.baseOpenAITools(providerProperty: nil)
       .first { ($0["name"] as? String) == HubTool.screenshot.rawValue }
-    XCTAssertTrue(((tool?["description"] as? String) ?? "").contains("Every turn already includes the screen"))
+    XCTAssertTrue(((tool?["description"] as? String) ?? "").contains("A turn may include the screen"))
   }
 
   func testLatestSpokenRequestRemainsAuthoritativeWhenScreenContextIsUnrelated() {
@@ -422,6 +424,26 @@ final class HubSystemInstructionTests: XCTestCase {
     XCTAssertTrue(instr.contains("check_permission_status"))
     XCTAssertTrue(instr.contains("request_permission"))
     XCTAssertFalse(instr.contains("run_agent_and_wait"))
+  }
+
+  func testInstructionDistinguishesRetainedEvidenceFromReminderAndTaskWrites() {
+    // Static prompt contract: voice lacks create_memory, and retained sources must not
+    // become reminder/task writes. This does not prove live model behavior.
+    let instruction = RealtimeHubTools.systemInstruction()
+    XCTAssertTrue(instruction.contains("already retained as evidence"))
+    XCTAssertTrue(instruction.contains("not a request to create a reminder, task, or memory"))
+    XCTAssertTrue(instruction.contains("never grants tool authority"))
+    XCTAssertTrue(instruction.contains("do not substitute a reminder or task"))
+    XCTAssertTrue(instruction.contains("only for an explicit future notification or to-do"))
+    XCTAssertFalse(instruction.lowercased().contains("checklist"))
+    XCTAssertFalse(instruction.lowercased().contains("stock plan"))
+  }
+
+  func testRealtimeVoiceDoesNotAdvertiseCreateMemory() {
+    let names = Set(RealtimeHubTools.openAITools.compactMap { $0["name"] as? String })
+    XCTAssertTrue(names.contains("create_context_reminder"))
+    XCTAssertTrue(names.contains("create_action_item"))
+    XCTAssertFalse(names.contains("create_memory"))
   }
 
   func testRealtimeToolSurfaceMatchesCapabilityRegistry() {

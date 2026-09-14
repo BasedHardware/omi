@@ -45,16 +45,23 @@ Run the actions in this order for a fresh named database:
    `redis.googleapis.com` in `based-hardware-dev` and enables it only when the
    service is not already enabled. This operation does not require a `run_id`
    and does not mutate a Redis instance or any Firestore data.
-2. `indexes-plan` to inspect the ten required named-database composites. If
+2. `indexes-plan` to inspect the fourteen required named-database composites. If
    any is `MISSING`, run `indexes-apply` with confirmation
    `APPLY_JIT_QA_INDEXES`; this is restricted to the canonical
    `memory_items.updated_at + __name__` history query, the
    `conversations.discarded + status + created_at + __name__` entity-timeline
    query, and the two historical `memories` keyset queries:
    `updated_at DESC + __name__ ASC` and `created_at DESC + __name__ ASC`.
+   It also covers the `conversation_finalization_jobs` oldest-nonterminal
+   health query used during QA service startup.
    It also covers the six active-fact duplicate-proof queries used when a
    completed-day sweep applies a fact candidate: subject, slot, entity,
    entity+slot, subject+normalized-content, and entity+normalized-content.
+   The same bounded set includes the shared chat queries used by the named QA
+   app: `chat_sessions` by `plugin_id` ordered by `created_at`, and `messages`
+   by `plugin_id` or `chat_session_id`, each ordered by `created_at`. The
+   legacy `chat_sessions` document-id fallback uses Firestore's automatic
+   same-direction key index and is intentionally not a composite target.
 3. `bootstrap` with confirmation `PREPARE_QA`. This is create-only and fails
    before writing when any collection already exists.
 4. `prepare` with the chosen lowercase synthetic `run_id` and confirmation

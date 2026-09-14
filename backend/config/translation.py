@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from math import isfinite
 from os import environ as process_environ
 from typing import Mapping
 
@@ -105,6 +106,8 @@ def _positive_float(raw: str, name: str) -> float:
         value = float(raw)
     except (TypeError, ValueError) as error:
         raise ValueError(f'{name} must be a number') from error
+    if not isfinite(value):
+        raise ValueError(f'{name} must be a finite number greater than zero')
     if value <= 0:
         raise ValueError(f'{name} must be greater than zero')
     return value

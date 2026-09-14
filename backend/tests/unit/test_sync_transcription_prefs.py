@@ -135,6 +135,15 @@ def _build_fakes() -> dict:
     process_conversation.process_conversation = MagicMock()
     fakes['utils.conversations.process_conversation'] = process_conversation
 
+    # Identity passthrough, matching the real resolver on a geocode miss —
+    # never drops a caller-supplied geolocation.
+    async def _passthrough_resolve_geolocation(geolocation):
+        return geolocation
+
+    location = ModuleType('utils.conversations.location')
+    location.async_resolve_geolocation = _passthrough_resolve_geolocation
+    fakes['utils.conversations.location'] = location
+
     vad = ModuleType('utils.stt.vad')
     vad.vad_is_empty = MagicMock(return_value=False)
     fakes['utils.stt.vad'] = vad
@@ -925,6 +934,28 @@ class TestExtractSpeakerClipWav:
 class TestIdentifySpeakersForSegments:
     """Verify identify_speakers_for_segments matches speakers and applies assignments."""
 
+    @pytest.mark.parametrize('second_distances', [(0.40, 0.43), (0.10, 0.40)])
+    def test_assigned_candidate_remains_in_margin_comparison(self, monkeypatch, second_distances):
+        import utils.sync.pipeline as sync_module
+
+        # A fragmented/ambiguous second diarized speaker must not become Alice
+        # merely because the owner was assigned by the first, longer clip.
+        distances = iter([0.10, 0.80, *second_distances])
+        monkeypatch.setattr(sync_module, 'extract_embedding_from_bytes', lambda *args: np.ones((1, 2)))
+        monkeypatch.setattr(sync_module, 'compare_embeddings', lambda *args: next(distances))
+        cache = {
+            'user': {'embedding': np.ones((1, 2)), 'name': 'User'},
+            'p1': {'embedding': np.ones((1, 2)), 'name': 'Alice'},
+        }
+        segments = [
+            _make_transcript_segment(speaker_id=1, start=0.0, end=6.0, text='hello', seg_id='s1'),
+            _make_transcript_segment(speaker_id=2, start=6.0, end=11.0, text='hello', seg_id='s2'),
+        ]
+        sync_module.identify_speakers_for_segments(segments, _make_wav_bytes(duration_sec=12.0), cache, 'uid1')
+        assert segments[0].is_user
+        assert not segments[1].is_user
+        assert segments[1].person_id is None
+
     @patch('utils.sync.pipeline.extract_embedding_from_bytes')
     def test_voice_match_assigns_person(self, mock_extract):
         from utils.sync.pipeline import identify_speakers_for_segments
@@ -1115,8 +1146,7 @@ class TestIdentifySpeakersForSegments:
 
     @patch('utils.sync.pipeline.extract_embedding_from_bytes')
     def test_matched_person_not_reused_across_speakers(self, mock_extract):
-        """Once a person matches a speaker, they are excluded from candidates for other speakers.
-        Leverages diarization speaker count to reduce embedding distance calculations."""
+        """A matched person cannot be assigned twice, but still contributes to ambiguity."""
         from utils.sync.pipeline import identify_speakers_for_segments
 
         alice_emb = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
@@ -1173,8 +1203,8 @@ class TestIdentifySpeakersForSegments:
 
     @patch('utils.sync.pipeline.compare_embeddings')
     @patch('utils.sync.pipeline.extract_embedding_from_bytes')
-    def test_dedup_skips_matched_candidates_in_comparison(self, mock_extract, mock_compare):
-        """Verify compare_embeddings is NOT called for already-matched person IDs."""
+    def test_dedup_keeps_matched_candidates_in_margin_comparison(self, mock_extract, mock_compare):
+        """Dedup must not weaken the measured household ambiguity margin."""
         from utils.sync.pipeline import identify_speakers_for_segments
 
         emb_a = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
@@ -1193,25 +1223,25 @@ class TestIdentifySpeakersForSegments:
         ]
 
         # Speaker 1 compares against p1 (0.1) and p2 (0.9) → matches p1
-        # Speaker 2 should only compare against p2 (p1 already matched)
-        mock_compare.side_effect = [0.1, 0.9, 0.15]
+        # Speaker 2 remains clearly closest to p2 with p1 still in the comparison.
+        mock_compare.side_effect = [0.1, 0.9, 0.8, 0.15]
 
         audio = _make_wav_bytes(duration_sec=7.0)
         identify_speakers_for_segments(segments, audio, cache, 'uid1')
 
-        # 3 calls total: speaker1 vs p1, speaker1 vs p2, speaker2 vs p2 only
-        assert mock_compare.call_count == 3
+        # Both speakers compare against both candidates before dedup.
+        assert mock_compare.call_count == 4
         assert segments[0].person_id == 'p1'
         assert segments[1].person_id == 'p2'
 
     @patch('utils.sync.pipeline.extract_embedding_from_bytes')
-    def test_dedup_falls_back_to_next_candidate(self, mock_extract):
-        """When best candidate is taken, second speaker falls back to next-best match."""
+    def test_dedup_does_not_resolve_an_ambiguous_voice(self, mock_extract):
+        """A voice equidistant from two people has no evidence for choosing either."""
         from utils.sync.pipeline import identify_speakers_for_segments
 
         alice_emb = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
         bob_emb = np.array([[0.0, 1.0] + [0.0] * 510], dtype=np.float32)
-        # Speaker 1 returns embedding close to Alice; Speaker 2 also close to Alice but falls back to Bob
+        # Speaker 1 is Alice; Speaker 2 is equally close to Alice and Bob.
         mixed_emb = np.array([[0.7, 0.7] + [0.0] * 510], dtype=np.float32)
         mock_extract.side_effect = [alice_emb, mixed_emb]
 
@@ -1220,7 +1250,7 @@ class TestIdentifySpeakersForSegments:
             'p2': {'embedding': bob_emb, 'name': 'Bob'},
         }
 
-        # Speaker 1 (3s clip) gets Alice, Speaker 2 (2s clip) should fall back to Bob
+        # Speaker 1 (3s clip) gets Alice; Speaker 2 (2s clip) remains ambiguous.
         segments = [
             _make_transcript_segment(speaker_id=1, start=0.0, end=3.0, text='hello', seg_id='s1'),
             _make_transcript_segment(speaker_id=2, start=4.0, end=6.0, text='world', seg_id='s2'),
@@ -1230,9 +1260,8 @@ class TestIdentifySpeakersForSegments:
         identify_speakers_for_segments(segments, audio, cache, 'uid1')
 
         assert segments[0].person_id == 'p1'
-        # Speaker 2's mixed_emb vs bob_emb cosine distance ≈ 0.293, under threshold 0.45.
-        # Alice (p1) is taken, so Bob (p2) is the only remaining candidate and matches.
-        assert segments[1].person_id == 'p2'
+        # Both distances are ~0.293: neither candidate wins the 0.10 margin.
+        assert segments[1].person_id is None
 
     @patch('utils.sync.pipeline.extract_embedding_from_bytes')
     def test_equal_best_clip_stable_order(self, mock_extract):

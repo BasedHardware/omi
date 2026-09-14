@@ -152,17 +152,19 @@ enum ChatAssistantAnswerText {
 
     // A body that is only the blocks' own degradation has nothing the cards
     // above it do not already say, so it is not answer text at all.
-    let fallbackText =
+    //
+    // Derived only on the paths that return it. It projects every block —
+    // tool outputs included — and whitespace-normalizes both that and the
+    // body, and it used to run unconditionally on every call: the single
+    // largest main-thread cost sampled in a streaming turn, paid several
+    // times per row per flush for rows whose answer never came from here.
+    func fallbackText() -> String {
       ChatStructuredFallbackText.bodyIsBlockProjection(text: fallback, contentBlocks: contentBlocks)
-      ? "" : fallback.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard
-      let lastTool = contentBlocks.lastIndex(where: { block in
-        if case .toolCall = block { return true }
-        return false
-      })
-    else {
+        ? "" : fallback.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    guard let lastTool = lastToolIndex(in: contentBlocks) else {
       let fromBlocks = texts(in: contentBlocks[...]).joined(separator: "\n")
-      return fromBlocks.isEmpty ? fallbackText : fromBlocks
+      return fromBlocks.isEmpty ? fallbackText() : fromBlocks
     }
 
     let afterTools = texts(in: contentBlocks[(lastTool + 1)...])
@@ -176,7 +178,42 @@ enum ChatAssistantAnswerText {
     if !beforeTools.isEmpty {
       return beforeTools.joined(separator: "\n")
     }
-    return fallbackText
+    return fallbackText()
+  }
+
+  /// `!visible(...).isEmpty`, without building the answer to find out.
+  ///
+  /// The transcript asks this of every mounted row on every body pass (a row's
+  /// metadata band decides the gap under it), so it must not cost a copy of
+  /// each row's answer per streamed flush.
+  static func hasVisible(
+    contentBlocks: [ChatContentBlock],
+    fallback: String,
+    isStreaming: Bool
+  ) -> Bool {
+    func anyText(in slice: ArraySlice<ChatContentBlock>) -> Bool {
+      slice.contains { block in
+        guard case .text(_, let text) = block else { return false }
+        return text.contains { !$0.isWhitespace }
+      }
+    }
+    func fallbackHasText() -> Bool {
+      !ChatStructuredFallbackText.bodyIsBlockProjection(text: fallback, contentBlocks: contentBlocks)
+        && fallback.contains { !$0.isWhitespace }
+    }
+    guard let lastTool = lastToolIndex(in: contentBlocks) else {
+      return anyText(in: contentBlocks[...]) || fallbackHasText()
+    }
+    if anyText(in: contentBlocks[(lastTool + 1)...]) { return true }
+    if isStreaming { return false }
+    return anyText(in: contentBlocks[..<lastTool]) || fallbackHasText()
+  }
+
+  private static func lastToolIndex(in contentBlocks: [ChatContentBlock]) -> Int? {
+    contentBlocks.lastIndex { block in
+      if case .toolCall = block { return true }
+      return false
+    }
   }
 }
 
@@ -542,8 +579,13 @@ enum ChatBubbleMetadataBand: Equatable {
   case actions
 
   static func of(_ message: ChatMessage) -> Self {
+    of(message, hasCopyableText: message.hasCopyableText)
+  }
+
+  /// For a caller that already derived the row's copy payload this pass.
+  static func of(_ message: ChatMessage, hasCopyableText: Bool) -> Self {
     guard message.sender == .ai, !message.isStreaming else { return .hidden }
-    guard !message.copyableText.isEmpty else {
+    guard hasCopyableText else {
       // **A row whose whole content is a rich block gets no band.** A memory
       // card carries its own header and time on its face; reserving a strip
       // for a second timestamp underneath it left the card floating in dead

@@ -56,6 +56,7 @@ final class FloatingBarNotificationGroundTests: XCTestCase {
     FloatingControlBarView(
       window: nil,
       onPlayPause: {},
+      onTogglePushToTalk: {},
       onAskAI: {},
       onHide: {},
       onSendQuery: { _ in },

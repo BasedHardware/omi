@@ -3,6 +3,7 @@ package com.friend.ios.batch
 import com.friend.ios.ble.OmiBleManager
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
 import java.io.File
 import java.io.RandomAccessFile
@@ -23,11 +24,25 @@ import java.io.RandomAccessFile
  * Implementations: [OmiBatchAudioWriter] (BLE-notification-driven, wall-clock files)
  * and [LimitlessBatchAudioWriter] (flash-drain-driven, pendant-timestamped files).
  */
-abstract class BaseBatchAudioWriter(
-    protected val context: Context,
-    private val tag: String,
+abstract class BaseBatchAudioWriter internal constructor(
     private val recoveryPrefix: String,
+    private val preferences: () -> SharedPreferences,
+    private val notifyFinalized: (String) -> Unit,
+    private val log: (Int, String) -> Unit,
+    private val openFile: (File) -> RandomAccessFile = { RandomAccessFile(it, "rw") },
 ) {
+    constructor(context: Context, tag: String, recoveryPrefix: String) : this(
+        recoveryPrefix,
+        { context.getSharedPreferences(FLUTTER_PREFS, Context.MODE_PRIVATE) },
+        { fileName ->
+            if (OmiBleManager.isFlutterAlive) {
+                val mgr = OmiBleManager.instance
+                mgr.mainHandler.post { mgr.flutterApi?.onBatchRecordingFinalized(fileName) {} }
+            }
+        },
+        { priority, message -> Log.println(priority, tag, message) },
+    )
+
     companion object {
         const val FLUTTER_PREFS = "FlutterSharedPreferences"
         const val PART_SUFFIX = ".part" // active (still-being-written) files end .bin.part
@@ -37,6 +52,7 @@ abstract class BaseBatchAudioWriter(
 
     protected val lock = Any()
     private var raf: RandomAccessFile? = null
+    private val frameEncoder = BatchFrameEncoder()
     private var currentFile: File? = null
 
     protected var currentStartSec: Long = 0
@@ -50,6 +66,7 @@ abstract class BaseBatchAudioWriter(
     private var storageFull = false
     private var recovered = false
     private var closeSyncFailed = false
+    private var contentsTrusted = true
 
     protected val isOpenLocked: Boolean
         get() = raf != null
@@ -71,7 +88,7 @@ abstract class BaseBatchAudioWriter(
 
         val dir = File(dirPath)
         if (!dir.exists() && !dir.mkdirs()) {
-            Log.e(tag, "cannot create batch dir $dirPath")
+            log(Log.ERROR, "cannot create batch dir $dirPath")
             return false
         }
         // Recover from a previous process that died mid-write: any leftover .bin.part
@@ -82,7 +99,7 @@ abstract class BaseBatchAudioWriter(
         }
         if (dir.usableSpace < MIN_FREE_BYTES) {
             if (!storageFull) {
-                Log.w(tag, "storage low (${dir.usableSpace} bytes free) — pausing batch capture")
+                log(Log.WARN, "storage low (${dir.usableSpace} bytes free) — pausing batch capture")
                 setStorageFullFlag(true)
                 storageFull = true
             }
@@ -95,20 +112,29 @@ abstract class BaseBatchAudioWriter(
 
         val file = File(dir, fileName)
         return try {
-            val out = RandomAccessFile(file, "rw")
-            out.seek(out.length()) // append-safe (same-second restart reuses the file)
+            val out = openFile(file)
+            try {
+                if (out.length() > 0) {
+                    BatchFrameEncoder.recover(out)
+                    out.fd.sync()
+                }
+            } catch (error: Exception) {
+                runCatching { out.close() }
+                throw error
+            }
             raf = out
             currentFile = file
             currentStartSec = startSec
-            currentBytes = file.length()
+            currentBytes = out.length()
+            contentsTrusted = true
             currentFrames = 0
             lastFsyncMs = nowMs
             runCatching { onOpenedLocked(file) }
-                .onFailure { error -> Log.w(tag, "metadata hook failed: ${error.javaClass.simpleName}") }
-            Log.i(tag, "opened batch file $fileName")
+                .onFailure { error -> log(Log.WARN, "metadata hook failed: ${error.javaClass.simpleName}") }
+            log(Log.INFO, "opened batch file $fileName")
             true
         } catch (e: Exception) {
-            Log.e(tag, "open failed for $fileName: ${e.message}")
+            log(Log.ERROR, "open failed for $fileName: ${e.message}")
             raf = null
             currentFile = null
             false
@@ -116,30 +142,18 @@ abstract class BaseBatchAudioWriter(
     }
 
     /** Append frames with the length-prefixed layout. On failure the current file is
-     *  finalized (what was written so far stays durable) and false is returned. */
+     *  finalized after successful rollback, or held for repair if rollback fails. */
     protected fun writeFramesLocked(frames: List<ByteArray>): Boolean {
         val out = raf ?: return false
         return try {
             for (frame in frames) {
-                val len = frame.size
-                val header = byteArrayOf(
-                    (len and 0xFF).toByte(),
-                    ((len shr 8) and 0xFF).toByte(),
-                    ((len shr 16) and 0xFF).toByte(),
-                    ((len shr 24) and 0xFF).toByte(),
-                )
-                out.write(header)
-                out.write(frame)
-                currentBytes += 4 + len
+                currentBytes += frameEncoder.write(out, frame, currentBytes)
                 currentFrames++
             }
             true
         } catch (e: Exception) {
-            Log.e(tag, "write failed: ${e.message}")
-            try {
-                out.setLength(currentBytes) // drop a torn frame tail; keep only complete frames
-            } catch (_: Exception) {
-            }
+            log(Log.ERROR, "write failed: ${e.message}")
+            if (e is BatchFrameRollbackException) contentsTrusted = false
             closeCurrentLocked("write_error")
             false
         }
@@ -157,7 +171,7 @@ abstract class BaseBatchAudioWriter(
             raf?.fd?.sync()
             true
         } catch (e: Exception) {
-            Log.w(tag, "fsync failed: ${e.message}")
+            log(Log.WARN, "fsync failed: ${e.message}")
             false
         }
 
@@ -182,20 +196,23 @@ abstract class BaseBatchAudioWriter(
             } catch (_: Exception) {
             }
             if (partFile != null) {
-                if (currentBytes > 0 && synced) {
+                if (!contentsTrusted) {
+                    closeSyncFailed = true
+                    log(Log.WARN, "rollback failed — leaving ${partFile.name} pending repair")
+                } else if (currentBytes > 0 && synced) {
                     // Atomically promote .bin.part -> .bin so it becomes ingestable.
                     val finalFile = File(partFile.parentFile, partFile.name.removeSuffix(PART_SUFFIX))
                     if (partFile.renameTo(finalFile)) {
-                        Log.i(tag, "finalized ${finalFile.name} ($currentFrames frames, $currentBytes bytes, reason=$reason)")
+                        log(Log.INFO, "finalized ${finalFile.name} ($currentFrames frames, $currentBytes bytes, reason=$reason)")
                         notifyFinalized(finalFile.name)
                     } else {
-                        Log.w(tag, "failed to finalize ${partFile.name}")
+                        log(Log.WARN, "failed to finalize ${partFile.name}")
                     }
                 } else if (currentBytes > 0) {
                     // Durability unconfirmed — hold the ACK barrier and leave the
                     // .part for stale-part recovery instead of publishing it.
                     closeSyncFailed = true
-                    Log.w(tag, "close fsync failed — leaving ${partFile.name} unfinalized")
+                    log(Log.WARN, "close fsync failed — leaving ${partFile.name} unfinalized")
                 } else {
                     partFile.delete() // nothing written — drop the empty placeholder
                     deleteRecordingGeolocationSidecars(partFile)
@@ -206,6 +223,7 @@ abstract class BaseBatchAudioWriter(
             currentStartSec = 0
             currentBytes = 0
             currentFrames = 0
+            contentsTrusted = true
         }
         onClosedLocked()
     }
@@ -216,34 +234,34 @@ abstract class BaseBatchAudioWriter(
     /** Hook for recording-owned metadata that must be copied beside a new file. */
     protected open fun onOpenedLocked(partFile: File) {}
 
-    /** Notify Dart (when the engine is alive) that a file finalized, so the
-     *  recordings list rescans without waiting for a BLE disconnect. */
-    private fun notifyFinalized(fileName: String) {
-        if (!OmiBleManager.isFlutterAlive) return
-        val mgr = OmiBleManager.instance
-        mgr.mainHandler.post { mgr.flutterApi?.onBatchRecordingFinalized(fileName) {} }
-    }
-
     // ── Crash recovery ──
 
-    /** Promote any leftover `*.bin.part` from a previous (crashed) process to `.bin`
-     *  so finalized-by-crash recordings are not lost. Empty placeholders are deleted. */
+    /** Validate and durably repair stale parts before publishing their complete prefix.
+     *  Failed repairs remain pending; empty placeholders are deleted. */
     private fun recoverStalePartFiles(dir: File) {
         try {
             val parts = dir.listFiles { f ->
                 f.isFile && f.name.startsWith(recoveryPrefix) && f.name.endsWith(".bin$PART_SUFFIX")
             } ?: return
             for (p in parts) {
-                if (p.length() > 0L) {
+                val completeBytes = try {
+                    openFile(p).use { out ->
+                        BatchFrameEncoder.recover(out).also { out.fd.sync() }
+                    }
+                } catch (error: Exception) {
+                    log(Log.WARN, "batch recovery failed: ${error.javaClass.simpleName}")
+                    continue
+                }
+                if (completeBytes > 0L) {
                     val finalFile = File(dir, p.name.removeSuffix(PART_SUFFIX))
-                    if (p.renameTo(finalFile)) Log.i(tag, "recovered stale batch file -> ${finalFile.name}")
+                    if (p.renameTo(finalFile)) log(Log.INFO, "recovered stale batch file -> ${finalFile.name}")
                 } else {
                     p.delete()
                     deleteRecordingGeolocationSidecars(p)
                 }
             }
         } catch (e: Exception) {
-            Log.w(tag, "recoverStalePartFiles failed: ${e.message}")
+            log(Log.WARN, "recoverStalePartFiles failed: ${e.message}")
         }
     }
 
@@ -263,21 +281,13 @@ abstract class BaseBatchAudioWriter(
         }
     }
 
-    protected fun prefs() = context.getSharedPreferences(FLUTTER_PREFS, Context.MODE_PRIVATE)
+    protected fun prefs() = preferences()
 
-    private fun prefValue(key: String): Any? = prefs().all["flutter.$key"]
+    private val preferenceValues by lazy { SharedPreferencesValues(prefs()) }
 
     protected fun stringPref(key: String, defaultValue: String = ""): String =
-        when (val value = prefValue(key)) {
-            is String -> value
-            null -> defaultValue
-            else -> value.toString()
-        }
+        preferenceValues.string(key, defaultValue)
 
     protected fun boolPref(key: String, defaultValue: Boolean): Boolean =
-        when (val value = prefValue(key)) {
-            is Boolean -> value
-            is String -> value.toBooleanStrictOrNull() ?: defaultValue
-            else -> defaultValue
-        }
+        preferenceValues.boolean(key, defaultValue)
 }

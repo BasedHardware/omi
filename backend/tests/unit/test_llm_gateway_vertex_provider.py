@@ -721,3 +721,117 @@ def test_vertex_tools_and_tool_config_translate_to_gemini_native():
     assert model_turn['parts'] == [{'functionCall': {'name': 'take_photo', 'args': {'q': 'the park'}}}]
     assert tool_turn['role'] == 'user'
     assert tool_turn['parts'] == [{'functionResponse': {'name': 'take_photo', 'response': {'status': 'ok'}}}]
+
+
+@pytest.mark.asyncio
+async def test_vertex_function_call_only_response_emits_openai_tool_calls(monkeypatch):
+    """#13666: Insight/Task die if Vertex functionCall parts are dropped as empty text."""
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
+    monkeypatch.setenv('GCP_LOCATION', 'us-central1')
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                'responseId': 'vertex-tool-call',
+                'modelVersion': 'gemini-2.5-pro',
+                'candidates': [
+                    {
+                        'content': {
+                            'parts': [
+                                {
+                                    'functionCall': {
+                                        'name': 'extract_task',
+                                        'args': {'title': 'Email Sam the deck', 'confidence': 0.9},
+                                    }
+                                }
+                            ]
+                        },
+                        'finishReason': 'STOP',
+                    }
+                ],
+                'usageMetadata': {
+                    'promptTokenCount': 200,
+                    'candidatesTokenCount': 40,
+                    'totalTokenCount': 240,
+                },
+            },
+        )
+
+    provider = VertexGeminiProvider(
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        access_token_supplier=_access_token,
+    )
+    response = await provider.create_chat_completion(
+        {
+            'model': 'gemini-2.5-pro',
+            'messages': [{'role': 'user', 'content': 'extract'}],
+            'tools': [
+                {
+                    'type': 'function',
+                    'function': {'name': 'extract_task', 'parameters': {'type': 'object'}},
+                }
+            ],
+            'tool_choice': 'required',
+        },
+        provider_ref=ProviderRef(provider='gemini', model='gemini-2.5-pro'),
+        credentials=_omi_credentials(),
+        timeout_ms=8000,
+    )
+
+    choice = response['choices'][0]
+    message = choice['message']
+    assert choice['finish_reason'] == 'tool_calls'
+    assert message.get('content') in (None, '')
+    assert message['tool_calls'][0]['type'] == 'function'
+    assert message['tool_calls'][0]['function']['name'] == 'extract_task'
+    assert json.loads(message['tool_calls'][0]['function']['arguments']) == {
+        'title': 'Email Sam the deck',
+        'confidence': 0.9,
+    }
+
+
+@pytest.mark.asyncio
+async def test_vertex_function_call_sse_emits_openai_tool_call_delta(monkeypatch):
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=(
+                b'data: {"responseId":"tool","candidates":[{"content":{"parts":'
+                b'[{"functionCall":{"name":"no_advice","args":{"context_summary":"idle"}}}]},'
+                b'"finishReason":"STOP"}]}\n\n'
+            ),
+            headers={'content-type': 'text/event-stream'},
+        )
+
+    provider = VertexGeminiProvider(
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        access_token_supplier=_access_token,
+    )
+    chunks = [
+        chunk
+        async for chunk in provider.stream_chat_completion(
+            {
+                'model': 'gemini-2.5-flash-lite',
+                'messages': [{'role': 'user', 'content': 'hello'}],
+                'stream': True,
+                'tools': [
+                    {
+                        'type': 'function',
+                        'function': {'name': 'no_advice', 'parameters': {'type': 'object'}},
+                    }
+                ],
+                'tool_choice': 'required',
+            },
+            provider_ref=ProviderRef(provider='gemini', model='gemini-2.5-flash-lite'),
+            credentials=_omi_credentials(),
+            timeout_ms=8000,
+        )
+    ]
+    streamed = b''.join(chunks)
+    assert b'"finish_reason":"tool_calls"' in streamed
+    assert b'"name":"no_advice"' in streamed
+    assert b'"tool_calls"' in streamed
+    assert streamed.endswith(b'data: [DONE]\n\n')

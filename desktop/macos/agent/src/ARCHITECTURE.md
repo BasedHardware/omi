@@ -77,6 +77,43 @@ Swift desktop client
   `../scripts/generate-tool-surfaces.mjs`; hand-edited capability mirrors are
   prohibited.
 
+## Durable interaction context
+
+Model sessions are replaceable projections of runtime state. The existing
+conversation journal owns interactions and their evidence; the existing tool
+invocation ledger owns operation outcomes. Neither a provider conversation nor
+an assistant acknowledgment is an authoritative record of a completed action.
+
+- `conversation-evidence.ts` defines versioned evidence envelopes attached to
+  journal metadata. Each source has a stable identity, capture time, provenance,
+  availability, and extraction completeness. Native capture attaches evidence
+  independently of whether the model elects to describe the screen. Native
+  envelopes account for JSON escaping within the 512 KiB encoded budget;
+  overflowing later bodies retain a partial descriptor and digest, not a claim
+  that their full text is readable. Evidence attachment does not invalidate a
+  retry of the original journal record.
+- Context snapshots contain bounded evidence references and excerpts. Shared
+  read/search tools retrieve additional source text from the same owned
+  conversation, including sources outside the recent transcript window.
+  Truncation and unavailable content are explicit; a reference alone never
+  implies that the model has read the full source.
+- Evidence is data, including any instructions contained in screenshots or
+  documents. It cannot grant tool authority or replace the user's request.
+  Local source bodies and private capture paths are excluded from the backend
+  turn projection. Invalid legacy evidence is omitted from that projection
+  without blocking the rest of the turn or forwarding its raw contents.
+  Clearing the journal removes the local retrieval surface.
+- `conversation-operations.ts` derives recent action receipts from admitted
+  runs and the invocation ledger, without creating another store. Unknown
+  outcomes remain unknown after restart, and non-idempotent actions are never
+  automatically retried. A successful tool receipt does not establish that a
+  larger user task is complete.
+
+PTT capture and audio remain concurrent. Simple voice turns do not require an
+extra reasoning call merely to preserve context. Retrieval adds work only when
+the bounded projection is insufficient; tests and live evidence journeys must
+measure both correctness and that latency boundary.
+
 ## Change checklist
 
 When a change crosses an ownership boundary, add a behavioral contract test at

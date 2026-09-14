@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import typer
+from rich.markup import escape
 
 from omi_cli import config as cfg
 from omi_cli.errors import UsageError
@@ -88,7 +89,12 @@ def set_value(
     display_value = (
         cfg.Profile(name=profile.name, local_token=value).masked_local_token() if key == "local_token" else value
     )
-    ctx.renderer.success(f"Set [bold]{key}[/bold] = {display_value} on profile [bold]{profile.name}[/bold].")
+    ctx.renderer.success(
+        f"Set [bold]{escape(key)}[/bold] = {escape(display_value)} "
+        f"on profile [bold]{escape(profile.name)}[/bold]."
+    )
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit({"ok": True, "profile": profile.name, "key": key, "value": display_value})
 
 
 @profile_app.command("list", help="List all configured profiles.")
@@ -129,7 +135,9 @@ def profile_use(
         config.profiles[name] = cfg.Profile(name=name)
     config.active_profile = name
     cfg.save(config)
-    ctx.renderer.success(f"Active profile: [bold]{name}[/bold].")
+    ctx.renderer.success(f"Active profile: [bold]{escape(name)}[/bold].")
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit({"ok": True, "active_profile": name})
 
 
 @profile_app.command("delete", help="Delete a profile and its credentials.")
@@ -146,4 +154,6 @@ def profile_delete(
         typer.confirm(f"Delete profile '{name}'?", abort=True)
     config.delete_profile(name)
     cfg.save(config)
-    ctx.renderer.success(f"Deleted profile [bold]{name}[/bold].")
+    ctx.renderer.success(f"Deleted profile [bold]{escape(name)}[/bold].")
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit({"ok": True, "deleted_profile": name})

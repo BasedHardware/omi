@@ -47,6 +47,19 @@ def _l1_system_prompt() -> str:
     )[0][1]
 
 
+def test_l1_prompt_teaches_owner_attribution_gates():
+    prompt = _l1_system_prompt()
+
+    assert "WHO IS WHO: the owner is only the segments the transcript marks as the owner" in prompt
+    assert "When the header says owner identity is untrusted, first-person statements are unattributed" in prompt
+    assert "When the source header says owner identity is untrusted, first-person context" in prompt
+    assert "BYSTANDER: if David said little or nothing, the slice contributes nothing about David" in prompt
+    assert "PARTICIPATING IS NOT A FACT" in prompt
+    assert "a guest introduces themselves as a marine biologist and David asks about funding" in prompt
+    assert "NAME WHOSE FACT: every item names its subject in about" in prompt
+    assert "BASIS: decided only for a commitment or decision on tape by the owner" in prompt
+
+
 def test_l1_prompt_drops_unidentified_non_primary_speakers_but_keeps_named_relationships():
     prompt = _l1_system_prompt()
 
@@ -613,3 +626,20 @@ def test_l1_prompt_includes_belief_instructions_when_flag_on(monkeypatch):
     assert "half_life_days" in prompt
     assert "subject_scope" in prompt
     assert "media_screen" in prompt
+
+
+def test_l1_extraction_receives_untrusted_cluster_render(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        working_observations,
+        'extract_l1_memory_archive_items_from_text',
+        lambda **kwargs: captured.update(kwargs) or [],
+    )
+    segments = [
+        TranscriptSegment(text='I will move to Boston.', speaker_id=i, is_user=True, start=i, end=i + 1)
+        for i in range(2)
+    ]
+    extract_canonical_l1_memory_candidates('u', 'c', segments, user_name='David', language='en')
+    assert 'UNTRUSTED' in captured['text']
+    assert 'Speaker 0:' in captured['text'] and 'Speaker 1:' in captured['text']
+    assert 'David:' not in captured['text']
