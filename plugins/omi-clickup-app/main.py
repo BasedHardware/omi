@@ -786,10 +786,6 @@ async def webhook(
     
     # Log received data
     print(f"📥 Received {len(segments) if segments else 0} segment(s) from OMI", flush=True)
-    if segments:
-        for i, seg in enumerate(segments[:3]):
-            text = seg.get('text', 'NO TEXT') if isinstance(seg, dict) else str(seg)
-            print(f"   Segment {i}: {text[:100]}", flush=True)
     
     if not segments or not isinstance(segments, list):
         return {"status": "ok"}
@@ -837,7 +833,6 @@ async def process_segments(
     session_id = session["session_id"]
     is_test_session = session_id.startswith("test_session")
     
-    print(f"🔍 Received: '{full_text}'", flush=True)
     print(f"📊 Session mode: {session['task_mode']}, Count: {session.get('segments_count', 0)}/5", flush=True)
     
     # Check for trigger phrase (but only if not already recording)
@@ -845,7 +840,7 @@ async def process_segments(
         task_content = task_detector.extract_task_content(full_text)
         
         print(f"🎤 TRIGGER! {'[TEST MODE] Processing immediately...' if is_test_session else 'Starting segment collection...'}", flush=True)
-        print(f"   Content: '{task_content}'", flush=True)
+        print(f"   Content extracted: {'yes' if task_content else 'no'}", flush=True)
         
         # TEST MODE: Process entire text immediately
         if is_test_session and len(task_content) > 5:
@@ -932,8 +927,7 @@ async def process_segments(
         accumulated += " " + full_text
         segments_count += 1
         
-        print(f"📝 Segment {segments_count}/5: '{full_text}'", flush=True)
-        print(f"📚 Full accumulated: '{accumulated[:150]}...'", flush=True)
+        print(f"📝 Segment {segments_count}/5 received", flush=True)
         
         # Update session with new segment
         SimpleSessionStorage.update_session(
