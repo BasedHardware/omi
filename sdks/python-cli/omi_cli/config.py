@@ -221,6 +221,15 @@ def load(path: Optional[Path] = None) -> Config:
 
     # Validate each profile value is a table before constructing Profile objects.
     profiles = {}
+    known_string_fields = (
+        "auth_method",
+        "api_key",
+        "id_token",
+        "refresh_token",
+        "api_base",
+        "local_api_url",
+        "local_token",
+    )
     for name, raw in profiles_data.items():
         if not isinstance(raw, dict):
             return Config(
@@ -229,6 +238,25 @@ def load(path: Optional[Path] = None) -> Config:
                 profiles={},
                 load_error=f"profile '{name}' must be a table, got {type(raw).__name__}",
             )
+        for field_name in known_string_fields:
+            if field_name in raw:
+                val = raw[field_name]
+                if val is not None and not isinstance(val, str):
+                    return Config(
+                        path=p,
+                        active_profile=DEFAULT_PROFILE_NAME,
+                        profiles={},
+                        load_error=f"profile '{name}' field '{field_name}' must be a string, got {type(val).__name__}",
+                    )
+        if "id_token_expires_at" in raw:
+            val = raw["id_token_expires_at"]
+            if val is not None and (isinstance(val, bool) or not isinstance(val, (int, float))):
+                return Config(
+                    path=p,
+                    active_profile=DEFAULT_PROFILE_NAME,
+                    profiles={},
+                    load_error=f"profile '{name}' field 'id_token_expires_at' must be numeric, got {type(val).__name__}",
+                )
         profiles[name] = Profile.from_toml_dict(name, raw)
 
     extra = {key: value for key, value in data.items() if key not in {"active_profile", "profiles"}}
@@ -314,7 +342,8 @@ def _mask_token(token: str) -> str:
     """Render a token as ``prefix…suffix`` (4+4 chars) for safe display."""
     if not token:
         return ""
-    if len(token) <= 12:
+    token_str = str(token)
+    if len(token_str) <= 12:
         # Short token — show only the first 2 and last 2 chars.
-        return f"{token[:2]}…{token[-2:]}"
-    return f"{token[:6]}…{token[-4:]}"
+        return f"{token_str[:2]}…{token_str[-2:]}"
+    return f"{token_str[:6]}…{token_str[-4:]}"
