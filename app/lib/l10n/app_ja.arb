@@ -3233,5 +3233,12 @@
     "speechToTextUnavailableDesc": "現在、音声をテキストに変換できません。インターネット接続とデバイスの音声認識設定を確認してから、もう一度お試しください。",
     "memoryHistoryPartial": "記憶の履歴の一部を取得できません。これまでに取得した履歴を表示しています。",
     "tapPlusToStartRecording": "＋をタップして録音を開始",
-    "processingTakingLonger": "まだ処理中です。通常より時間がかかっています。"
+    "processingTakingLonger": "まだ処理中です。通常より時間がかかっています。",
+    "deviceRenameTitle": "デバイス名を変更",
+    "deviceRenameDescription": "このデバイスのローカル名を設定します。スマートフォンに保存され、アドバタイズ名の代わりに表示されます。デバイス本体の名前は変更されません。",
+    "deviceRenameHint": "デバイス名",
+    "deviceRenameTooShort": "名前は2文字以上である必要があります",
+    "deviceRenameSaved": "デバイス名を更新しました",
+    "deviceRenameReset": "カスタム名を消去し、デフォルト名を表示しています",
+    "deviceRenameResetAction": "デフォルト名に戻す"
 }

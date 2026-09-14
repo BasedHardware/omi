@@ -10031,4 +10031,26 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది.';
+
+  @override
+  String get deviceRenameTitle => 'పరికరానికి పేరు మార్చు';
+
+  @override
+  String get deviceRenameDescription =>
+      'ఈ పరికరానికి స్థానిక పేరును సెట్ చేయండి. ఇది మీ ఫోన్‌లో సేవ్ చేయబడుతుంది మరియు ప్రకటించిన పేరుకు బదులుగా చూపబడుతుంది. పరికరం పేరు మార్చబడదు.';
+
+  @override
+  String get deviceRenameHint => 'పరికర పేరు';
+
+  @override
+  String get deviceRenameTooShort => 'పేరు కనీసం 2 అక్షరాలు ఉండాలి';
+
+  @override
+  String get deviceRenameSaved => 'పరికర పేరు నవీకరించబడింది';
+
+  @override
+  String get deviceRenameReset => 'అనుకూల పేరు తీసివేయబడింది, డిఫాల్ట్ పేరు చూపబడుతోంది';
+
+  @override
+  String get deviceRenameResetAction => 'డిఫాల్ట్ పేరుకు రీసెట్ చేయి';
 }

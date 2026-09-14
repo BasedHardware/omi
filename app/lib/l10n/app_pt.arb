@@ -3293,5 +3293,12 @@
     "speechToTextUnavailableDesc": "A transcrição de voz não está disponível no momento. Verifique sua conexão com a internet e as configurações de reconhecimento de voz do dispositivo e tente novamente.",
     "memoryHistoryPartial": "Parte do histórico de memórias não está disponível. Exibindo o histórico recebido até agora.",
     "tapPlusToStartRecording": "Toque em + para começar a gravar",
-    "processingTakingLonger": "Ainda a trabalhar — isto está a demorar mais do que o habitual."
+    "processingTakingLonger": "Ainda a trabalhar — isto está a demorar mais do que o habitual.",
+    "deviceRenameTitle": "Renomear dispositivo",
+    "deviceRenameDescription": "Defina um nome local para este dispositivo. Ele é salvo no seu telefone e exibido no lugar do nome anunciado. O próprio dispositivo não é renomeado.",
+    "deviceRenameHint": "Nome do dispositivo",
+    "deviceRenameTooShort": "O nome deve ter pelo menos 2 caracteres",
+    "deviceRenameSaved": "Nome do dispositivo atualizado",
+    "deviceRenameReset": "Nome personalizado removido; exibindo o nome padrão",
+    "deviceRenameResetAction": "Restaurar nome padrão"
 }

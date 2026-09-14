@@ -10008,4 +10008,26 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Masih diproses — ini mengambil masa lebih lama daripada biasa.';
+
+  @override
+  String get deviceRenameTitle => 'Namakan Semula Peranti';
+
+  @override
+  String get deviceRenameDescription =>
+      'Tetapkan nama setempat untuk peranti ini. Ia disimpan pada telefon anda dan dipaparkan menggantikan nama yang diiklankan. Peranti itu sendiri tidak dinamakan semula.';
+
+  @override
+  String get deviceRenameHint => 'Nama peranti';
+
+  @override
+  String get deviceRenameTooShort => 'Nama mesti sekurang-kurangnya 2 aksara';
+
+  @override
+  String get deviceRenameSaved => 'Nama peranti dikemas kini';
+
+  @override
+  String get deviceRenameReset => 'Nama tersuai dipadamkan, nama lalai dipaparkan';
+
+  @override
+  String get deviceRenameResetAction => 'Set semula kepada nama lalai';
 }

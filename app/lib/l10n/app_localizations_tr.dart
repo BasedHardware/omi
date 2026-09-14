@@ -9994,4 +9994,26 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor.';
+
+  @override
+  String get deviceRenameTitle => 'Cihazı Yeniden Adlandır';
+
+  @override
+  String get deviceRenameDescription =>
+      'Bu cihaz için yerel bir ad belirleyin. Telefonunuzda saklanır ve yayınlanan adın yerine gösterilir. Cihazın adı değiştirilmez.';
+
+  @override
+  String get deviceRenameHint => 'Cihaz adı';
+
+  @override
+  String get deviceRenameTooShort => 'Ad en az 2 karakter olmalıdır';
+
+  @override
+  String get deviceRenameSaved => 'Cihaz adı güncellendi';
+
+  @override
+  String get deviceRenameReset => 'Özel ad temizlendi, varsayılan ad gösteriliyor';
+
+  @override
+  String get deviceRenameResetAction => 'Varsayılan ada sıfırla';
 }

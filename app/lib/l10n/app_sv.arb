@@ -3257,5 +3257,12 @@
     "speechToTextUnavailableDesc": "Tal till text är inte tillgängligt just nu. Kontrollera internetanslutningen och enhetens inställningar för taligenkänning och försök igen.",
     "memoryHistoryPartial": "En del av minneshistoriken är inte tillgänglig. Visar historiken som har tagits emot hittills.",
     "tapPlusToStartRecording": "Tryck på + för att börja spela in",
-    "processingTakingLonger": "Fortfarande igång — det tar längre tid än vanligt."
+    "processingTakingLonger": "Fortfarande igång — det tar längre tid än vanligt.",
+    "deviceRenameTitle": "Byt namn på enhet",
+    "deviceRenameDescription": "Ange ett lokalt namn för den här enheten. Det sparas på telefonen och visas istället för det annonserade namnet. Enheten själv byter inte namn.",
+    "deviceRenameHint": "Enhetsnamn",
+    "deviceRenameTooShort": "Namnet måste vara minst 2 tecken",
+    "deviceRenameSaved": "Enhetsnamnet har uppdaterats",
+    "deviceRenameReset": "Eget namn borttaget; standardnamn visas",
+    "deviceRenameResetAction": "Återställ till standardnamn"
 }

@@ -10019,4 +10019,26 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Все още работи — отнема повече време от обичайното.';
+
+  @override
+  String get deviceRenameTitle => 'Преименуване на устройство';
+
+  @override
+  String get deviceRenameDescription =>
+      'Задайте локално име за това устройство. То се запазва на телефона ви и се показва вместо рекламираното име. Самото устройство не се преименува.';
+
+  @override
+  String get deviceRenameHint => 'Име на устройството';
+
+  @override
+  String get deviceRenameTooShort => 'Името трябва да съдържа поне 2 знака';
+
+  @override
+  String get deviceRenameSaved => 'Името на устройството е обновено';
+
+  @override
+  String get deviceRenameReset => 'Персонализираното име е изтрито, показва се името по подразбиране';
+
+  @override
+  String get deviceRenameResetAction => 'Връщане към името по подразбиране';
 }

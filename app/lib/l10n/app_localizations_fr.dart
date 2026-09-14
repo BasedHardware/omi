@@ -10069,4 +10069,26 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Toujours en cours — cela prend plus de temps que d’habitude.';
+
+  @override
+  String get deviceRenameTitle => 'Renommer l’appareil';
+
+  @override
+  String get deviceRenameDescription =>
+      'Définissez un nom local pour cet appareil. Il est enregistré sur votre téléphone et affiché à la place du nom diffusé. L’appareil lui-même n’est pas renommé.';
+
+  @override
+  String get deviceRenameHint => 'Nom de l’appareil';
+
+  @override
+  String get deviceRenameTooShort => 'Le nom doit contenir au moins 2 caractères';
+
+  @override
+  String get deviceRenameSaved => 'Nom de l’appareil mis à jour';
+
+  @override
+  String get deviceRenameReset => 'Nom personnalisé effacé, nom par défaut affiché';
+
+  @override
+  String get deviceRenameResetAction => 'Rétablir le nom par défaut';
 }

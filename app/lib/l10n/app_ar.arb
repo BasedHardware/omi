@@ -3233,5 +3233,12 @@
     "speechToTextUnavailableDesc": "تحويل الكلام إلى نص غير متاح الآن. تحقق من اتصالك بالإنترنت وإعدادات التعرف على الكلام في جهازك، ثم حاول مرة أخرى.",
     "memoryHistoryPartial": "بعض سجل الذكريات غير متاح. يتم عرض السجل المستلم حتى الآن.",
     "tapPlusToStartRecording": "اضغط على + لبدء التسجيل",
-    "processingTakingLonger": "ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد."
+    "processingTakingLonger": "ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد.",
+    "deviceRenameTitle": "إعادة تسمية الجهاز",
+    "deviceRenameDescription": "عيّن اسمًا محليًا لهذا الجهاز. يُحفظ على هاتفك ويظهر بدلًا من الاسم المُعلن. لا يتم تغيير اسم الجهاز نفسه.",
+    "deviceRenameHint": "اسم الجهاز",
+    "deviceRenameTooShort": "يجب أن يتكون الاسم من حرفين على الأقل",
+    "deviceRenameSaved": "تم تحديث اسم الجهاز",
+    "deviceRenameReset": "تم مسح الاسم المخصص وإظهار الاسم الافتراضي",
+    "deviceRenameResetAction": "العودة إلى الاسم الافتراضي"
 }

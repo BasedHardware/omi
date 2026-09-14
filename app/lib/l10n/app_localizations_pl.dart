@@ -10012,4 +10012,26 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Nadal działa — trwa to dłużej niż zwykle.';
+
+  @override
+  String get deviceRenameTitle => 'Zmień nazwę urządzenia';
+
+  @override
+  String get deviceRenameDescription =>
+      'Ustaw lokalną nazwę tego urządzenia. Jest zapisywana na telefonie i wyświetlana zamiast nazwy rozgłaszanej. Sama nazwa urządzenia nie jest zmieniana.';
+
+  @override
+  String get deviceRenameHint => 'Nazwa urządzenia';
+
+  @override
+  String get deviceRenameTooShort => 'Nazwa musi mieć co najmniej 2 znaki';
+
+  @override
+  String get deviceRenameSaved => 'Zaktualizowano nazwę urządzenia';
+
+  @override
+  String get deviceRenameReset => 'Nazwa niestandardowa usunięta; wyświetlana jest nazwa domyślna';
+
+  @override
+  String get deviceRenameResetAction => 'Przywróć nazwę domyślną';
 }

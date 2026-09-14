@@ -3262,5 +3262,12 @@
     "speechToTextUnavailableDesc": "Prevod reči na text momentálne nie je dostupný. Skontrolujte internetové pripojenie a nastavenia rozpoznávania reči v zariadení a skúste to znova.",
     "memoryHistoryPartial": "Časť histórie spomienok nie je dostupná. Zobrazuje sa doteraz prijatá história.",
     "tapPlusToStartRecording": "Ťuknutím na + spustíte nahrávanie",
-    "processingTakingLonger": "Stále prebieha — trvá to dlhšie ako zvyčajne."
+    "processingTakingLonger": "Stále prebieha — trvá to dlhšie ako zvyčajne.",
+    "deviceRenameTitle": "Premenovať zariadenie",
+    "deviceRenameDescription": "Nastavte miestny názov tohto zariadenia. Uloží sa do telefónu a zobrazí namiesto vysielaného názvu. Samotné zariadenie sa nepremenuje.",
+    "deviceRenameHint": "Názov zariadenia",
+    "deviceRenameTooShort": "Názov musí mať aspoň 2 znaky",
+    "deviceRenameSaved": "Názov zariadenia bol aktualizovaný",
+    "deviceRenameReset": "Vlastný názov bol vymazaný, zobrazuje sa predvolený názov",
+    "deviceRenameResetAction": "Obnoviť predvolený názov"
 }

@@ -9902,4 +9902,26 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'עדיין בעבודה — זה לוקח יותר זמן מהרגיל.';
+
+  @override
+  String get deviceRenameTitle => 'שינוי שם המכשיר';
+
+  @override
+  String get deviceRenameDescription =>
+      'הגדר שם מקומי למכשיר זה. השם נשמר בטלפון שלך ומוצג במקום השם המשודר. שם המכשיר עצמו אינו משתנה.';
+
+  @override
+  String get deviceRenameHint => 'שם המכשיר';
+
+  @override
+  String get deviceRenameTooShort => 'השם חייב להכיל לפחות 2 תווים';
+
+  @override
+  String get deviceRenameSaved => 'שם המכשיר עודכן';
+
+  @override
+  String get deviceRenameReset => 'השם המותאם אישית נמחק; מוצג שם ברירת המחדל';
+
+  @override
+  String get deviceRenameResetAction => 'איפוס לשם ברירת המחדל';
 }

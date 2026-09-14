@@ -3353,5 +3353,12 @@
     "speechToTextUnavailableDesc": "A beszéd szöveggé alakítása jelenleg nem érhető el. Ellenőrizd az internetkapcsolatot és az eszköz beszédfelismerési beállításait, majd próbáld újra.",
     "memoryHistoryPartial": "Az emlékek előzményeinek egy része nem érhető el. Az eddig megkapott előzmények láthatók.",
     "tapPlusToStartRecording": "Koppints a + jelre a felvétel indításához",
-    "processingTakingLonger": "Még folyamatban — ez tovább tart a szokásosnál."
+    "processingTakingLonger": "Még folyamatban — ez tovább tart a szokásosnál.",
+    "deviceRenameTitle": "Eszköz átnevezése",
+    "deviceRenameDescription": "Állítson be egy helyi nevet ehhez az eszközhöz. A név a telefonon tárolódik, és a hirdetett név helyett jelenik meg. Maga az eszköz nem neveződik át.",
+    "deviceRenameHint": "Eszköz neve",
+    "deviceRenameTooShort": "A név legalább 2 karakter legyen",
+    "deviceRenameSaved": "Az eszköz neve frissült",
+    "deviceRenameReset": "Egyéni név törölve; az alapértelmezett név jelenik meg",
+    "deviceRenameResetAction": "Visszaállítás alapértelmezett névre"
 }

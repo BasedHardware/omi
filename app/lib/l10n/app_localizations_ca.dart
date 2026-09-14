@@ -10039,4 +10039,26 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Encara en curs: això està trigant més del normal.';
+
+  @override
+  String get deviceRenameTitle => 'Canvia el nom del dispositiu';
+
+  @override
+  String get deviceRenameDescription =>
+      'Establiu un nom local per a aquest dispositiu. Es desa al telèfon i es mostra en lloc del nom difós. El dispositiu en si no canvia de nom.';
+
+  @override
+  String get deviceRenameHint => 'Nom del dispositiu';
+
+  @override
+  String get deviceRenameTooShort => 'El nom ha de tenir com a mínim 2 caràcters';
+
+  @override
+  String get deviceRenameSaved => 'S’ha actualitzat el nom del dispositiu';
+
+  @override
+  String get deviceRenameReset => 'S’ha esborrat el nom personalitzat; es mostra el nom per defecte';
+
+  @override
+  String get deviceRenameResetAction => 'Restaura el nom per defecte';
 }

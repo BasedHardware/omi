@@ -10014,4 +10014,26 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ — ಇದು ಸಾಮಾನ್ಯಕ್ಕಿಂತ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ.';
+
+  @override
+  String get deviceRenameTitle => 'ಸಾಧನದ ಹೆಸರನ್ನು ಬದಲಿಸಿ';
+
+  @override
+  String get deviceRenameDescription =>
+      'ಈ ಸಾಧನಕ್ಕೆ ಸ್ಥಳೀಯ ಹೆಸರನ್ನು ಹೊಂದಿಸಿ. ಇದು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಸಲ್ಪಡುತ್ತದೆ ಮತ್ತು ಪ್ರಕಟಿಸಿದ ಹೆಸರಿನ ಬದಲಿಗೆ ತೋರಿಸಲಾಗುತ್ತದೆ. ಸಾಧನದ ಹೆಸರು ಬದಲಾಗುವುದಿಲ್ಲ.';
+
+  @override
+  String get deviceRenameHint => 'ಸಾಧನದ ಹೆಸರು';
+
+  @override
+  String get deviceRenameTooShort => 'ಹೆಸರು ಕನಿಷ್ಠ 2 ಅಕ್ಷರಗಳಿರಬೇಕು';
+
+  @override
+  String get deviceRenameSaved => 'ಸಾಧನದ ಹೆಸರು ನವೀಕರಿಸಲಾಗಿದೆ';
+
+  @override
+  String get deviceRenameReset => 'ಕಸ್ಟಮ್ ಹೆಸರನ್ನು ಅಳಿಸಲಾಗಿದೆ, ಡೀಫಾಲ್ಟ್ ಹೆಸರು ತೋರಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String get deviceRenameResetAction => 'ಡೀಫಾಲ್ಟ್ ಹೆಸರಿಗೆ ಮರುಹೊಂದಿಸಿ';
 }

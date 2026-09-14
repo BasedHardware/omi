@@ -9975,4 +9975,26 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ikka käimas — see võtab kauem aega kui tavaliselt.';
+
+  @override
+  String get deviceRenameTitle => 'Seadme ümbernimetamine';
+
+  @override
+  String get deviceRenameDescription =>
+      'Määrake sellele seadmele kohalik nimi. See salvestatakse telefoni ja kuvatakse reklaamitud nime asemel. Seda seadet ennast ei ümber nimetata.';
+
+  @override
+  String get deviceRenameHint => 'Seadme nimi';
+
+  @override
+  String get deviceRenameTooShort => 'Nimi peab olema vähemalt 2 tähemärki';
+
+  @override
+  String get deviceRenameSaved => 'Seadme nimi on uuendatud';
+
+  @override
+  String get deviceRenameReset => 'Kohandatud nimi on kustutatud, kuvatakse vaikenimi';
+
+  @override
+  String get deviceRenameResetAction => 'Taasta vaikenimi';
 }

@@ -9983,4 +9983,26 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Vielä käynnissä — tämä kestää tavallista kauemmin.';
+
+  @override
+  String get deviceRenameTitle => 'Nimeä laite uudelleen';
+
+  @override
+  String get deviceRenameDescription =>
+      'Aseta paikallinen nimi tälle laitteelle. Se tallennetaan puhelimeen ja näytetään ilmoitetun nimen sijaan. Itse laitetta ei nimetä uudelleen.';
+
+  @override
+  String get deviceRenameHint => 'Laitteen nimi';
+
+  @override
+  String get deviceRenameTooShort => 'Nimen on oltava vähintään 2 merkkiä pitkä';
+
+  @override
+  String get deviceRenameSaved => 'Laitteen nimi päivitetty';
+
+  @override
+  String get deviceRenameReset => 'Mukautettu nimi poistettu; näytetään oletusnimi';
+
+  @override
+  String get deviceRenameResetAction => 'Palauta oletusnimi';
 }

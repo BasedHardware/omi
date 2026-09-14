@@ -9924,4 +9924,26 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'ยังทำงานอยู่ — ใช้เวลานานกว่าปกติ';
+
+  @override
+  String get deviceRenameTitle => 'เปลี่ยนชื่ออุปกรณ์';
+
+  @override
+  String get deviceRenameDescription =>
+      'ตั้งชื่อภายในเครื่องสำหรับอุปกรณ์นี้ ชื่อนี้จะถูกบันทึกไว้ในโทรศัพท์และแสดงแทนชื่อที่อุปกรณ์โฆษณา ตัวอุปกรณ์จะไม่ถูกเปลี่ยนชื่อ';
+
+  @override
+  String get deviceRenameHint => 'ชื่ออุปกรณ์';
+
+  @override
+  String get deviceRenameTooShort => 'ชื่อต้องมีอย่างน้อย 2 ตัวอักษร';
+
+  @override
+  String get deviceRenameSaved => 'อัปเดตชื่ออุปกรณ์แล้ว';
+
+  @override
+  String get deviceRenameReset => 'ล้างชื่อที่กำหนดเองแล้ว กำลังแสดงชื่อเริ่มต้น';
+
+  @override
+  String get deviceRenameResetAction => 'รีเซ็ตเป็นชื่อเริ่มต้น';
 }

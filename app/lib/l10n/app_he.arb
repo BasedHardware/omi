@@ -10823,5 +10823,12 @@
     "speechToTextUnavailableDesc": "המרת דיבור לטקסט אינה זמינה כרגע. בדקו את החיבור לאינטרנט ואת הגדרות זיהוי הדיבור במכשיר, ואז נסו שוב.",
     "memoryHistoryPartial": "חלק מהיסטוריית הזיכרונות אינו זמין. מוצגת ההיסטוריה שהתקבלה עד כה.",
     "tapPlusToStartRecording": "הקישו על + כדי להתחיל להקליט",
-    "processingTakingLonger": "עדיין בעבודה — זה לוקח יותר זמן מהרגיל."
+    "processingTakingLonger": "עדיין בעבודה — זה לוקח יותר זמן מהרגיל.",
+    "deviceRenameTitle": "שינוי שם המכשיר",
+    "deviceRenameDescription": "הגדר שם מקומי למכשיר זה. השם נשמר בטלפון שלך ומוצג במקום השם המשודר. שם המכשיר עצמו אינו משתנה.",
+    "deviceRenameHint": "שם המכשיר",
+    "deviceRenameTooShort": "השם חייב להכיל לפחות 2 תווים",
+    "deviceRenameSaved": "שם המכשיר עודכן",
+    "deviceRenameReset": "השם המותאם אישית נמחק; מוצג שם ברירת המחדל",
+    "deviceRenameResetAction": "איפוס לשם ברירת המחדל"
 }

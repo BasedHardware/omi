@@ -10029,4 +10029,26 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Încă se procesează — durează mai mult decât de obicei.';
+
+  @override
+  String get deviceRenameTitle => 'Redenumește dispozitivul';
+
+  @override
+  String get deviceRenameDescription =>
+      'Setează un nume local pentru acest dispozitiv. Este salvat pe telefon și afișat în locul numelui difuzat. Dispozitivul în sine nu este redenumit.';
+
+  @override
+  String get deviceRenameHint => 'Numele dispozitivului';
+
+  @override
+  String get deviceRenameTooShort => 'Numele trebuie să aibă cel puțin 2 caractere';
+
+  @override
+  String get deviceRenameSaved => 'Numele dispozitivului a fost actualizat';
+
+  @override
+  String get deviceRenameReset => 'Numele personalizat a fost șters; se afișează numele implicit';
+
+  @override
+  String get deviceRenameResetAction => 'Revenire la numele implicit';
 }

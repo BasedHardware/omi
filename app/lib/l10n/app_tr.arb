@@ -3292,5 +3292,12 @@
     "speechToTextUnavailableDesc": "Konuşmayı metne dönüştürme şu anda kullanılamıyor. İnternet bağlantınızı ve cihazınızın konuşma tanıma ayarlarını kontrol edip tekrar deneyin.",
     "memoryHistoryPartial": "Anı geçmişinin bir kısmı kullanılamıyor. Şimdiye kadar alınan geçmiş gösteriliyor.",
     "tapPlusToStartRecording": "Kaydı başlatmak için + simgesine dokunun",
-    "processingTakingLonger": "Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor."
+    "processingTakingLonger": "Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor.",
+    "deviceRenameTitle": "Cihazı Yeniden Adlandır",
+    "deviceRenameDescription": "Bu cihaz için yerel bir ad belirleyin. Telefonunuzda saklanır ve yayınlanan adın yerine gösterilir. Cihazın adı değiştirilmez.",
+    "deviceRenameHint": "Cihaz adı",
+    "deviceRenameTooShort": "Ad en az 2 karakter olmalıdır",
+    "deviceRenameSaved": "Cihaz adı güncellendi",
+    "deviceRenameReset": "Özel ad temizlendi, varsayılan ad gösteriliyor",
+    "deviceRenameResetAction": "Varsayılan ada sıfırla"
 }

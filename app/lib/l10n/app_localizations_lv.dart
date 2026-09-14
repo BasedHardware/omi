@@ -10005,4 +10005,26 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Joprojām notiek — tas aizņem ilgāk nekā parasti.';
+
+  @override
+  String get deviceRenameTitle => 'Pārdēvēt ierīci';
+
+  @override
+  String get deviceRenameDescription =>
+      'Iestatiet lokālu nosaukumu šai ierīcei. Tas tiek saglabāts telefonā un tiek rādīts reklāmētā nosaukuma vietā. Pati ierīce netiek pārdēvēta.';
+
+  @override
+  String get deviceRenameHint => 'Ierīces nosaukums';
+
+  @override
+  String get deviceRenameTooShort => 'Nosaukumam jābūt vismaz 2 rakstzīmēm';
+
+  @override
+  String get deviceRenameSaved => 'Ierīces nosaukums atjaunināts';
+
+  @override
+  String get deviceRenameReset => 'Pielāgotais nosaukums dzēsts; tiek rādīts noklusējuma nosaukums';
+
+  @override
+  String get deviceRenameResetAction => 'Atjaunot noklusējuma nosaukumu';
 }

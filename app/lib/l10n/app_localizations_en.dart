@@ -9972,4 +9972,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Still working — this is taking longer than usual.';
+
+  @override
+  String get deviceRenameTitle => 'Rename Device';
+
+  @override
+  String get deviceRenameDescription =>
+      'Set a local name for this device. It is stored on your phone and shown instead of the advertised name. The device itself is not renamed.';
+
+  @override
+  String get deviceRenameHint => 'Device name';
+
+  @override
+  String get deviceRenameTooShort => 'Name must be at least 2 characters';
+
+  @override
+  String get deviceRenameSaved => 'Device name updated';
+
+  @override
+  String get deviceRenameReset => 'Custom name cleared, showing default name';
+
+  @override
+  String get deviceRenameResetAction => 'Reset to default name';
 }

@@ -3257,5 +3257,12 @@
     "speechToTextUnavailableDesc": "Tale til tekst er ikke tilgjengelig akkurat nå. Kontroller internettforbindelsen og enhetens innstillinger for talegjenkjenning, og prøv igjen.",
     "memoryHistoryPartial": "Deler av minnehistorikken er ikke tilgjengelig. Viser historikken som er mottatt så langt.",
     "tapPlusToStartRecording": "Trykk på + for å starte opptaket",
-    "processingTakingLonger": "Jobber fortsatt — dette tar lengre tid enn vanlig."
+    "processingTakingLonger": "Jobber fortsatt — dette tar lengre tid enn vanlig.",
+    "deviceRenameTitle": "Gi enheten nytt navn",
+    "deviceRenameDescription": "Angi et lokalt navn for denne enheten. Det lagres på telefonen og vises i stedet for det annonserte navnet. Enheten selv får ikke nytt navn.",
+    "deviceRenameHint": "Enhetsnavn",
+    "deviceRenameTooShort": "Navnet må være minst 2 tegn",
+    "deviceRenameSaved": "Enhetsnavnet er oppdatert",
+    "deviceRenameReset": "Egendefinert navn fjernet; standardnavnet vises",
+    "deviceRenameResetAction": "Tilbakestill til standardnavn"
 }

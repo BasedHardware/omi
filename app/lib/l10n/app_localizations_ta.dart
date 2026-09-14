@@ -10052,4 +10052,26 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'இன்னும் செயல்படுகிறது — இது வழக்கத்தை விட அதிக நேரம் எடுக்கிறது.';
+
+  @override
+  String get deviceRenameTitle => 'சாதனத்திற்கு மறுபெயரிடு';
+
+  @override
+  String get deviceRenameDescription =>
+      'இந்தச் சாதனத்திற்கு உள்ளூர் பெயரை அமைக்கவும். இது உங்கள் ஃபோனில் சேமிக்கப்பட்டு, அறிவிக்கப்பட்ட பெயருக்குப் பதிலாகக் காட்டப்படும். சாதனத்தின் பெயரையே மாற்றாது.';
+
+  @override
+  String get deviceRenameHint => 'சாதனப் பெயர்';
+
+  @override
+  String get deviceRenameTooShort => 'பெயர் குறைந்தது 2 எழுத்துகள் இருக்க வேண்டும்';
+
+  @override
+  String get deviceRenameSaved => 'சாதனப் பெயர் புதுப்பிக்கப்பட்டது';
+
+  @override
+  String get deviceRenameReset => 'தனிப்பயன் பெயர் அழிக்கப்பட்டது, இயல்புநிலை பெயர் காட்டப்படுகிறது';
+
+  @override
+  String get deviceRenameResetAction => 'இயல்புநிலை பெயருக்கு மீட்டமை';
 }

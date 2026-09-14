@@ -9923,4 +9923,26 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد.';
+
+  @override
+  String get deviceRenameTitle => 'إعادة تسمية الجهاز';
+
+  @override
+  String get deviceRenameDescription =>
+      'عيّن اسمًا محليًا لهذا الجهاز. يُحفظ على هاتفك ويظهر بدلًا من الاسم المُعلن. لا يتم تغيير اسم الجهاز نفسه.';
+
+  @override
+  String get deviceRenameHint => 'اسم الجهاز';
+
+  @override
+  String get deviceRenameTooShort => 'يجب أن يتكون الاسم من حرفين على الأقل';
+
+  @override
+  String get deviceRenameSaved => 'تم تحديث اسم الجهاز';
+
+  @override
+  String get deviceRenameReset => 'تم مسح الاسم المخصص وإظهار الاسم الافتراضي';
+
+  @override
+  String get deviceRenameResetAction => 'العودة إلى الاسم الافتراضي';
 }

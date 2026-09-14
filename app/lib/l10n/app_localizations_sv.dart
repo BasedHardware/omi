@@ -9986,4 +9986,26 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Fortfarande igång — det tar längre tid än vanligt.';
+
+  @override
+  String get deviceRenameTitle => 'Byt namn på enhet';
+
+  @override
+  String get deviceRenameDescription =>
+      'Ange ett lokalt namn för den här enheten. Det sparas på telefonen och visas istället för det annonserade namnet. Enheten själv byter inte namn.';
+
+  @override
+  String get deviceRenameHint => 'Enhetsnamn';
+
+  @override
+  String get deviceRenameTooShort => 'Namnet måste vara minst 2 tecken';
+
+  @override
+  String get deviceRenameSaved => 'Enhetsnamnet har uppdaterats';
+
+  @override
+  String get deviceRenameReset => 'Eget namn borttaget; standardnamn visas';
+
+  @override
+  String get deviceRenameResetAction => 'Återställ till standardnamn';
 }

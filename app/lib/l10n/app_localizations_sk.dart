@@ -9974,4 +9974,26 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Stále prebieha — trvá to dlhšie ako zvyčajne.';
+
+  @override
+  String get deviceRenameTitle => 'Premenovať zariadenie';
+
+  @override
+  String get deviceRenameDescription =>
+      'Nastavte miestny názov tohto zariadenia. Uloží sa do telefónu a zobrazí namiesto vysielaného názvu. Samotné zariadenie sa nepremenuje.';
+
+  @override
+  String get deviceRenameHint => 'Názov zariadenia';
+
+  @override
+  String get deviceRenameTooShort => 'Názov musí mať aspoň 2 znaky';
+
+  @override
+  String get deviceRenameSaved => 'Názov zariadenia bol aktualizovaný';
+
+  @override
+  String get deviceRenameReset => 'Vlastný názov bol vymazaný, zobrazuje sa predvolený názov';
+
+  @override
+  String get deviceRenameResetAction => 'Obnoviť predvolený názov';
 }

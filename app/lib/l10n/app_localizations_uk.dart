@@ -10003,4 +10003,26 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ще обробляється — це триває довше, ніж зазвичай.';
+
+  @override
+  String get deviceRenameTitle => 'Перейменувати пристрій';
+
+  @override
+  String get deviceRenameDescription =>
+      'Задайте локальне ім’я пристрою. Воно зберігається на телефоні та показується замість заводського. Сам пристрій не перейменовується.';
+
+  @override
+  String get deviceRenameHint => 'Ім’я пристрою';
+
+  @override
+  String get deviceRenameTooShort => 'Ім’я має містити щонайменше 2 символи';
+
+  @override
+  String get deviceRenameSaved => 'Ім’я пристрою оновлено';
+
+  @override
+  String get deviceRenameReset => 'Власне ім’я видалено, показано ім’я за замовчуванням';
+
+  @override
+  String get deviceRenameResetAction => 'Скинути до імені за замовчуванням';
 }

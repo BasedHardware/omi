@@ -10013,4 +10013,26 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.';
+
+  @override
+  String get deviceRenameTitle => 'Перайменаваць прыладу';
+
+  @override
+  String get deviceRenameDescription =>
+      'Задайце лакальную назву для гэтай прылады. Яна захоўваецца на тэлефоне і адлюстроўваецца замест заводскай. Сама прылада не перайменоўваецца.';
+
+  @override
+  String get deviceRenameHint => 'Назва прылады';
+
+  @override
+  String get deviceRenameTooShort => 'Назва павінна змяшчаць не менш за 2 сімвалы';
+
+  @override
+  String get deviceRenameSaved => 'Назва прылады абноўлена';
+
+  @override
+  String get deviceRenameReset => 'Уласная назва выдалена, паказваецца назва па змаўчанні';
+
+  @override
+  String get deviceRenameResetAction => 'Скінуць да назвы па змаўчанні';
 }

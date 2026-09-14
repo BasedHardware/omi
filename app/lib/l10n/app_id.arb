@@ -3299,5 +3299,12 @@
     "speechToTextUnavailableDesc": "Konversi suara ke teks sedang tidak tersedia. Periksa koneksi internet dan pengaturan pengenalan suara perangkat Anda, lalu coba lagi.",
     "memoryHistoryPartial": "Sebagian riwayat memori tidak tersedia. Menampilkan riwayat yang sudah diterima.",
     "tapPlusToStartRecording": "Ketuk + untuk mulai merekam",
-    "processingTakingLonger": "Masih diproses — ini memakan waktu lebih lama dari biasanya."
+    "processingTakingLonger": "Masih diproses — ini memakan waktu lebih lama dari biasanya.",
+    "deviceRenameTitle": "Ganti Nama Perangkat",
+    "deviceRenameDescription": "Tetapkan nama lokal untuk perangkat ini. Nama ini disimpan di ponsel Anda dan ditampilkan menggantikan nama yang diiklankan. Nama perangkat itu sendiri tidak diubah.",
+    "deviceRenameHint": "Nama perangkat",
+    "deviceRenameTooShort": "Nama harus minimal 2 karakter",
+    "deviceRenameSaved": "Nama perangkat diperbarui",
+    "deviceRenameReset": "Nama kustom dihapus, menampilkan nama bawaan",
+    "deviceRenameResetAction": "Kembalikan ke nama bawaan"
 }

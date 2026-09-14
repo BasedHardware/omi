@@ -287,10 +287,10 @@ class _FoundDevicesState extends State<FoundDevices> {
               if (provider.isConnected)
                 Text(
                   () {
+                    final connected = provider.deviceProvider?.connectedDevice;
+                    final displayName = connected != null ? provider.displayNameFor(connected) : provider.deviceName;
                     final sameNameCount = provider.visibleDeviceList.where((d) => d.name == provider.deviceName).length;
-                    return sameNameCount > 1
-                        ? '${provider.deviceName} (${BtDevice.shortId(provider.deviceId)})'
-                        : provider.deviceName;
+                    return sameNameCount > 1 ? '$displayName (${BtDevice.shortId(provider.deviceId)})' : displayName;
                   }(),
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 18, color: Color(0xCCFFFFFF)),
@@ -385,8 +385,9 @@ class _FoundDevicesState extends State<FoundDevices> {
                       Expanded(
                         child: Text(
                           () {
+                            final displayName = provider.displayNameFor(device);
                             final sameNameCount = provider.visibleDeviceList.where((d) => d.name == device.name).length;
-                            return sameNameCount > 1 ? '${device.name} (${device.getShortId()})' : device.name;
+                            return sameNameCount > 1 ? '$displayName (${device.getShortId()})' : displayName;
                           }(),
                           textAlign: TextAlign.left,
                           overflow: TextOverflow.ellipsis,

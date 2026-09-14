@@ -18584,6 +18584,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Still working — this is taking longer than usual.'**
   String get processingTakingLonger;
+
+  /// Title of the device rename dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Rename Device'**
+  String get deviceRenameTitle;
+
+  /// Explains that the new name is stored locally on the phone only
+  ///
+  /// In en, this message translates to:
+  /// **'Set a local name for this device. It is stored on your phone and shown instead of the advertised name. The device itself is not renamed.'**
+  String get deviceRenameDescription;
+
+  /// Hint text of the device rename input field
+  ///
+  /// In en, this message translates to:
+  /// **'Device name'**
+  String get deviceRenameHint;
+
+  /// Validation error when the entered device name is shorter than 2 characters
+  ///
+  /// In en, this message translates to:
+  /// **'Name must be at least 2 characters'**
+  String get deviceRenameTooShort;
+
+  /// Snackbar shown after the device name was updated
+  ///
+  /// In en, this message translates to:
+  /// **'Device name updated'**
+  String get deviceRenameSaved;
+
+  /// Snackbar shown after the custom device name was cleared
+  ///
+  /// In en, this message translates to:
+  /// **'Custom name cleared, showing default name'**
+  String get deviceRenameReset;
+
+  /// Action that clears the custom device name
+  ///
+  /// In en, this message translates to:
+  /// **'Reset to default name'**
+  String get deviceRenameResetAction;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
