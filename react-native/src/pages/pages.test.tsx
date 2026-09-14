@@ -1350,7 +1350,7 @@ test('Settings names GET subscription period quotas without Upgrade', async () =
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
   expect(tree).toContain('Words this month');
-  expect(tree).toContain('12 of 10000 words used this month');
+  expect(tree).toContain('12 of 10,000 words used this month');
   expect(tree).toContain('Insights this month');
   expect(tree).toContain('3 of 500 insights gained this month');
   expect(tree).toContain('Chat this month');

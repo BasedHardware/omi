@@ -1196,6 +1196,37 @@ test('account subscription copy is not a raw wire token', () => {
   expect(dataProtectionCopy('\u0085')).toBe('Data protection unavailable');
 });
 
+test('subscription quota copy names Flutter UsagePage en_US grouping', () => {
+  expect(subscriptionTranscriptionQuotaCopy(74040, 360000)).toBe(
+    '1,234 of 6000 min used this month',
+  );
+  expect(
+    subscriptionPeriodCopy({
+      wordsTranscribedUsed: 12,
+      wordsTranscribedLimit: 10000,
+      insightsGainedUsed: 1234,
+      insightsGainedLimit: 5000,
+      chatQuotaUsed: 1234,
+      chatQuotaUnit: 'messages',
+      chatQuestionsPerMonth: 10000,
+      chatCostUsdPerMonth: null,
+    }),
+  ).toEqual([
+    {
+      title: 'Words this month',
+      copy: '12 of 10,000 words used this month',
+    },
+    {
+      title: 'Insights this month',
+      copy: '1,234 of 5,000 insights gained this month',
+    },
+    {
+      title: 'Chat this month',
+      copy: `1,234 Chat\n${chatQuotaSubtitleCopy()}\n1,234 of 10000 messages used this month`,
+    },
+  ]);
+});
+
 test('usage stats copy names GET today counts without Upgrade', () => {
   expect(usageListeningSubtitleCopy()).toBe(
     'Total time Omi has actively listened.',
@@ -4399,7 +4430,7 @@ test('subscription period copy names GET words insights and chat quotas without 
   ).toEqual([
     {
       title: 'Words this month',
-      copy: '12 of 10000 words used this month',
+      copy: '12 of 10,000 words used this month',
     },
     {
       title: 'Insights this month',

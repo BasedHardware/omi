@@ -2900,7 +2900,7 @@ test('Settings names GET subscription period quotas without Upgrade', async () =
   expect(tree).toContain('Free Plan');
   expect(tree).not.toContain('Basic');
   expect(tree).toContain('Words this month');
-  expect(tree).toContain('12 of 10000 words used this month');
+  expect(tree).toContain('12 of 10,000 words used this month');
   expect(tree).toContain('Insights this month');
   expect(tree).toContain('Chat this month');
   expect(tree).toContain('5 Chat');

@@ -985,6 +985,10 @@ export function subscriptionPlanCopy(plan: string): string {
   return subscriptionPlanFreeCopy();
 }
 
+function usageCountCopy(value: number): string {
+  return value.toLocaleString('en-US');
+}
+
 export function subscriptionTranscriptionQuotaCopy(
   used: number | null | undefined,
   limit: number | null | undefined,
@@ -998,15 +1002,13 @@ export function subscriptionTranscriptionQuotaCopy(
   ) {
     return null;
   }
-  return `${Math.round(used / 60)} of ${Math.round(limit / 60)} min used this month`;
+  return `${usageCountCopy(Math.round(used / 60))} of ${Math.round(
+    limit / 60,
+  )} min used this month`;
 }
 
 export function usageActivityEmptyCopy(): string {
   return 'No Activity Yet';
-}
-
-function usageCountCopy(value: number): string {
-  return value.toLocaleString('en-US');
 }
 
 export function usageListeningCopy(minutes: number): string {
@@ -1199,7 +1201,9 @@ export function subscriptionPeriodCopy(
   ) {
     rows.push({
       title: 'Words this month',
-      copy: `${subscription.wordsTranscribedUsed} of ${subscription.wordsTranscribedLimit} words used this month`,
+      copy: `${usageCountCopy(subscription.wordsTranscribedUsed)} of ${usageCountCopy(
+        subscription.wordsTranscribedLimit,
+      )} words used this month`,
     });
   }
   if (
@@ -1209,7 +1213,9 @@ export function subscriptionPeriodCopy(
   ) {
     rows.push({
       title: 'Insights this month',
-      copy: `${subscription.insightsGainedUsed} of ${subscription.insightsGainedLimit} insights gained this month`,
+      copy: `${usageCountCopy(subscription.insightsGainedUsed)} of ${usageCountCopy(
+        subscription.insightsGainedLimit,
+      )} insights gained this month`,
     });
   }
   const unit = visibleDisplayText(subscription.chatQuotaUnit ?? '');
