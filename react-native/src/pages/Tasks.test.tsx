@@ -7,6 +7,7 @@ import type {TaskMutationProps} from '../ui/TaskEditor';
 import {
   desktopBackendServiceCopy,
   desktopBackendUnavailableCopy,
+  tasksSearchEmptyCopy,
   type TaskProjection,
 } from '../desktopReadClient';
 
@@ -131,6 +132,7 @@ test('task search matches the visible title fallback for empty titles', () => {
     .join(' ');
   expect(copy).toContain('Task title unavailable');
   expect(copy).not.toContain('No loaded tasks match.');
+  expect(copy).not.toContain(tasksSearchEmptyCopy());
   act(() => renderer.unmount());
 });
 
@@ -536,6 +538,34 @@ test('an incomplete empty task search does not claim a complete miss', () => {
     .join(' ');
   expect(copy).toContain('Tasks are incomplete.');
   expect(copy).not.toContain('No loaded tasks match.');
+  expect(copy).not.toContain(tasksSearchEmptyCopy());
+  expect(copy).not.toContain('No tasks yet.');
+});
+
+test('Tasks search empty names Flutter noResultsFound', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage outcome={outcome} loading={false} />,
+    );
+  });
+  expect(taskPageText(renderer)).toContain('Prepare demo');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search loaded tasks')
+      .props.onChangeText('nomatch');
+  });
+  const copy = taskPageText(renderer);
+  expect(copy).toContain(tasksSearchEmptyCopy());
+  expect(copy).toContain(
+    'Search covers task descriptions already loaded on this device.',
+  );
+  expect(copy).not.toContain('No loaded tasks match.');
+  expect(copy).not.toContain('No tasks yet.');
+  expect(copy).not.toContain('No Tasks Yet');
+  expect(copy).not.toContain('Ask Omi for more tasks');
+  expect(copy).not.toContain('Create Action Item');
+  act(() => renderer.unmount());
 });
 
 test('a NEXT LINE-only task search keeps rows instead of claiming a miss', () => {
@@ -566,6 +596,7 @@ test('a NEXT LINE-only task search keeps rows instead of claiming a miss', () =>
     .join(' ');
   expect(copy).toContain('Prepare product demo');
   expect(copy).not.toContain('No loaded tasks match.');
+  expect(copy).not.toContain(tasksSearchEmptyCopy());
   expect(copy).not.toContain('\u0085');
   act(() => renderer.unmount());
 });
@@ -702,7 +733,8 @@ test('nested non-retryable later task pages do not claim more are available in a
       .props.onChangeText('nomatch');
   });
   const copy = taskPageText(renderer);
-  expect(copy).toContain('No loaded tasks match.');
+  expect(copy).toContain(tasksSearchEmptyCopy());
+  expect(copy).not.toContain('No loaded tasks match.');
   expect(copy).toContain(desktopBackendUnavailableCopy);
   expect(copy).not.toContain('More tasks are available.');
   act(() => renderer.unmount());

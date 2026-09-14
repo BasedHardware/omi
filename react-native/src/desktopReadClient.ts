@@ -506,6 +506,10 @@ export function memoriesSearchEmptyCopy(): string {
   return '🔍 No memories found';
 }
 
+export function tasksSearchEmptyCopy(): string {
+  return 'No results found';
+}
+
 export function conversationDetailSummaryCopy(detail: {
   summary: string;
   sections: readonly {heading: string; bodyMarkdown: string}[];
