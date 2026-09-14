@@ -754,6 +754,8 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "ಗುಣ ಟ್ಯಾಪ್ ಕ್ರಿಯೆ",
+    "tripleTap": "ಮೂರು ಬಾರಿ ಟ್ಯಾಪ್",
+    "tripleTapAction": "ಮೂರು ಬಾರಿ ಟ್ಯಾಪ್ ಕ್ರಿಯೆ",
     "singleTapAction": "ಒಂದು ಟ್ಯಾಪ್ ಕ್ರಿಯೆ",
     "@doubleTapAction": {
         "description": "Double tap action setting"

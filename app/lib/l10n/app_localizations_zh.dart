@@ -581,6 +581,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get doubleTapAction => '双击操作';
 
   @override
+  String get tripleTap => '三击';
+
+  @override
+  String get tripleTapAction => '三击操作';
+
+  @override
   String get singleTapAction => '单击操作';
 
   @override

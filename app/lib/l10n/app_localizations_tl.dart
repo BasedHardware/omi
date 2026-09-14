@@ -597,6 +597,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get doubleTapAction => 'Double Tap Action';
 
   @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
+  String get tripleTapAction => 'Triple Tap Action';
+
+  @override
   String get singleTapAction => 'Single Tap Action';
 
   @override

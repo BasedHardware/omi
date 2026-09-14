@@ -188,6 +188,8 @@
     "pauseResume": "Pause/Fortsett",
     "starConversation": "Favorittmerk samtale",
     "doubleTapAction": "Dobbelttrykk-handling",
+    "tripleTap": "Trippeltrykk",
+    "tripleTapAction": "Trippeltrykk-handling",
     "singleTapAction": "Enkelttrykk-handling",
     "endAndProcess": "Avslutt og behandle samtale",
     "pauseResumeRecording": "Pause/Fortsett opptak",

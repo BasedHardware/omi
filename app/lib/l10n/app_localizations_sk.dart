@@ -596,6 +596,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get doubleTapAction => 'Akcia dvojitého ťuknutia';
 
   @override
+  String get tripleTap => 'Trojité ťuknutie';
+
+  @override
+  String get tripleTapAction => 'Akcia trojitého ťuknutia';
+
+  @override
   String get singleTapAction => 'Akcia jedného ťuknutia';
 
   @override

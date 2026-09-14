@@ -595,6 +595,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get doubleTapAction => 'Dubbeltrycksåtgärd';
 
   @override
+  String get tripleTap => 'Trippeltryck';
+
+  @override
+  String get tripleTapAction => 'Trippeltrycksåtgärd';
+
+  @override
   String get singleTapAction => 'Enkeltrycksåtgärd';
 
   @override

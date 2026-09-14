@@ -188,6 +188,8 @@
     "pauseResume": "Keskeytä/Jatka",
     "starConversation": "Merkitse tähdellä",
     "doubleTapAction": "Kaksoisnapaututstoiminto",
+    "tripleTap": "Kolmoisnapautus",
+    "tripleTapAction": "Kolmoisnapautustoiminto",
     "singleTapAction": "Kertanapautustoiminto",
     "endAndProcess": "Lopeta ja käsittele keskustelu",
     "pauseResumeRecording": "Keskeytä/Jatka nauhoitusta",

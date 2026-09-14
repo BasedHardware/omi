@@ -188,6 +188,8 @@
     "pauseResume": "Pausa/Återuppta",
     "starConversation": "Stjärnmärk konversation",
     "doubleTapAction": "Dubbeltrycksåtgärd",
+    "tripleTap": "Trippeltryck",
+    "tripleTapAction": "Trippeltrycksåtgärd",
     "singleTapAction": "Enkeltrycksåtgärd",
     "endAndProcess": "Avsluta och bearbeta konversation",
     "pauseResumeRecording": "Pausa/Återuppta inspelning",

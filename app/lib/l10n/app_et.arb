@@ -188,6 +188,8 @@
     "pauseResume": "Peata/jätka",
     "starConversation": "Märgi vestlus tärniga",
     "doubleTapAction": "Topeltpuudutuse tegevus",
+    "tripleTap": "Kolmikpuudutus",
+    "tripleTapAction": "Kolmikpuudutuse tegevus",
     "singleTapAction": "Ühekordse puudutuse tegevus",
     "endAndProcess": "Lõpeta ja töötle vestlus",
     "pauseResumeRecording": "Peata/jätka salvestamine",

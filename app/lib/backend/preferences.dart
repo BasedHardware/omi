@@ -346,6 +346,10 @@ class SharedPreferencesUtil {
 
   set singleTapAction(int value) => saveInt('singleTapAction', value);
 
+  int get tripleTapAction => getInt('tripleTapAction');
+
+  set tripleTapAction(int value) => saveInt('tripleTapAction', value);
+
   // Keep backward compatibility
   bool get doubleTapPausesMuting => doubleTapAction == 1;
 

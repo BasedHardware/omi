@@ -594,6 +594,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get doubleTapAction => 'Akce dvojitého klepnutí';
 
   @override
+  String get tripleTap => 'Trojité klepnutí';
+
+  @override
+  String get tripleTapAction => 'Akce trojitého klepnutí';
+
+  @override
   String get singleTapAction => 'Akce jednoduchého klepnutí';
 
   @override

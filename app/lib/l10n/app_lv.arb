@@ -188,6 +188,8 @@
     "pauseResume": "Pauze/Atsākt",
     "starConversation": "Atzīmēt sarunu ar zvaigznīti",
     "doubleTapAction": "Dubultklikšķa darbība",
+    "tripleTap": "Trīskāršs klikšķis",
+    "tripleTapAction": "Trīskārša klikšķa darbība",
     "singleTapAction": "Viena klikšķa darbība",
     "endAndProcess": "Beigt un apstrādāt sarunu",
     "pauseResumeRecording": "Apturēt/atsākt ierakstīšanu",

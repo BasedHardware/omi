@@ -188,6 +188,8 @@
     "pauseResume": "Пауза/Възобнови",
     "starConversation": "Отбележи разговор",
     "doubleTapAction": "Действие при двойно докосване",
+    "tripleTap": "Тройно докосване",
+    "tripleTapAction": "Действие при тройно докосване",
     "singleTapAction": "Действие при единично докосване",
     "endAndProcess": "Край и обработка на разговор",
     "pauseResumeRecording": "Пауза/Възобнови записването",

@@ -754,6 +754,8 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "డబల్ ట్యాప్ చర్య",
+    "tripleTap": "ట్రిపుల్ ట్యాప్",
+    "tripleTapAction": "ట్రిపుల్ ట్యాప్ చర్య",
     "singleTapAction": "సింగిల్ ట్యాప్ చర్య",
     "@doubleTapAction": {
         "description": "Double tap action setting"

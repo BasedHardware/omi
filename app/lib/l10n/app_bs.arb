@@ -754,6 +754,8 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "Akcija duplog dodira",
+    "tripleTap": "Trostruki dodir",
+    "tripleTapAction": "Akcija trostrukog dodira",
     "singleTapAction": "Akcija jednog dodira",
     "@doubleTapAction": {
         "description": "Double tap action setting"

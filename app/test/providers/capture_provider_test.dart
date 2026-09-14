@@ -1752,4 +1752,55 @@ void main() {
       });
     });
   });
+
+  group('button tap sequence', () {
+    setUp(() {
+      SharedPreferencesUtil().singleTapAction = 3;
+      SharedPreferencesUtil().doubleTapAction = 3;
+      SharedPreferencesUtil().tripleTapAction = 3;
+    });
+
+    test('a mapped tap runs on the tap itself when no longer tap is mapped', () {
+      final provider = CaptureProvider();
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+
+      expect(provider.isConversationMarkedForStarring, isTrue);
+    });
+
+    test('a mapped tap waits for the sequence end while a longer tap is mapped', () {
+      SharedPreferencesUtil().doubleTapAction = 2;
+      final provider = CaptureProvider();
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+      expect(provider.isConversationMarkedForStarring, isFalse);
+
+      provider.handleButtonTapsForTesting('device', [2, 1]);
+      expect(provider.isConversationMarkedForStarring, isTrue);
+    });
+
+    test('a triple tap runs on the third tap and the sequence end does not repeat it', () {
+      SharedPreferencesUtil().singleTapAction = 1;
+      SharedPreferencesUtil().tripleTapAction = 2;
+      final provider = CaptureProvider();
+
+      provider.handleButtonTapsForTesting('device', [1, 1]);
+      provider.handleButtonTapsForTesting('device', [1, 2]);
+      expect(provider.isConversationMarkedForStarring, isFalse);
+
+      provider.handleButtonTapsForTesting('device', [1, 3]);
+      expect(provider.isConversationMarkedForStarring, isTrue);
+
+      provider.handleButtonTapsForTesting('device', [2, 3]);
+      expect(provider.isConversationMarkedForStarring, isTrue);
+    });
+
+    test('a truncated notification is ignored', () {
+      final provider = CaptureProvider();
+
+      provider.handleButtonTapsForTesting('device', [1]);
+
+      expect(provider.isConversationMarkedForStarring, isFalse);
+    });
+  });
 }

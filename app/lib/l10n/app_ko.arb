@@ -188,6 +188,8 @@
     "pauseResume": "일시정지/재개",
     "starConversation": "대화 즐겨찾기",
     "doubleTapAction": "더블 탭 동작",
+    "tripleTap": "트리플 탭",
+    "tripleTapAction": "트리플 탭 동작",
     "singleTapAction": "싱글 탭 동작",
     "endAndProcess": "대화 종료 및 처리",
     "pauseResumeRecording": "녹음 일시정지/재개",

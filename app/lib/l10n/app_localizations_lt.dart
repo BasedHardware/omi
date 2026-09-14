@@ -595,6 +595,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get doubleTapAction => 'Dvigubo bakstelėjimo veiksmas';
 
   @override
+  String get tripleTap => 'Trigubas bakstelėjimas';
+
+  @override
+  String get tripleTapAction => 'Trigubo bakstelėjimo veiksmas';
+
+  @override
   String get singleTapAction => 'Vieno bakstelėjimo veiksmas';
 
   @override

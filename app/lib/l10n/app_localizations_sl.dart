@@ -593,6 +593,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get doubleTapAction => 'Dejanje dvojnega dotika';
 
   @override
+  String get tripleTap => 'Trojni dotik';
+
+  @override
+  String get tripleTapAction => 'Dejanje trojnega dotika';
+
+  @override
   String get singleTapAction => 'Dejanje enojnega dotika';
 
   @override

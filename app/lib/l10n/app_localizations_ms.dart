@@ -594,6 +594,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get doubleTapAction => 'Tindakan Ketik Dua Kali';
 
   @override
+  String get tripleTap => 'Ketik Tiga Kali';
+
+  @override
+  String get tripleTapAction => 'Tindakan Ketik Tiga Kali';
+
+  @override
   String get singleTapAction => 'Tindakan Ketik Sekali';
 
   @override

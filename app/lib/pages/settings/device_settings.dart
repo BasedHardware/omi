@@ -41,6 +41,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   double _micGain = 5.0;
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
+  bool? _hasButtonTapsFeature;
 
   Timer? _debounce;
   Timer? _micGainDebounce;
@@ -82,11 +83,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         var features = await connection.getFeatures();
         final hasDimming = (features & OmiFeatures.ledDimming) != 0;
         final hasMicGain = (features & OmiFeatures.micGain) != 0;
+        final hasButtonTaps = (features & OmiFeatures.buttonTaps) != 0;
 
         if (!mounted) return;
         setState(() {
           _hasDimmingFeature = hasDimming;
           _hasMicGainFeature = hasMicGain;
+          _hasButtonTapsFeature = hasButtonTaps;
         });
 
         if (!hasDimming) {
@@ -385,6 +388,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         return context.l10n.deviceOnboardingMuteUnmute;
       case 2:
         return context.l10n.starConversation;
+      case 3:
+        return context.l10n.off;
       default:
         return context.l10n.endConversation;
     }
@@ -511,11 +516,69 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       Navigator.pop(sheetContext);
                     },
                   ),
+                  if (_hasButtonTapsFeature == true)
+                    ListTile(
+                      title: Text(
+                        context.l10n.off,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                      ),
+                      trailing: currentAction == 3 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                      onTap: () {
+                        setState(() => SharedPreferencesUtil().doubleTapAction = 3);
+                        Navigator.pop(sheetContext);
+                      },
+                    ),
                   const SizedBox(height: 16),
                 ],
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  void _showTripleTapActionSheet() {
+    int currentAction = SharedPreferencesUtil().tripleTapAction;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        Widget option(String label, int value) {
+          return ListTile(
+            title: Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400)),
+            trailing: currentAction == value ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+            onTap: () {
+              setState(() => SharedPreferencesUtil().tripleTapAction = value);
+              Navigator.pop(sheetContext);
+            },
+          );
+        }
+
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
+              ),
+              Text(
+                context.l10n.tripleTapAction,
+                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 16),
+              option(context.l10n.endAndProcess, 0),
+              option(context.l10n.deviceOnboardingMuteUnmute, 1),
+              option(context.l10n.starOngoing, 2),
+              option(context.l10n.off, 3),
+              const SizedBox(height: 16),
+            ],
+          ),
         );
       },
     );
@@ -837,6 +900,24 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             chipValue: _getDoubleTapActionLabel(doubleTapAction),
             onTap: _showDoubleTapActionSheet,
           ),
+          if (_hasButtonTapsFeature == true) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              key: const Key('triple_tap_row'),
+              icon: FontAwesomeIcons.handPointer,
+              title: context.l10n.tripleTap,
+              chipValue: _getDoubleTapActionLabel(SharedPreferencesUtil().tripleTapAction),
+              onTap: _showTripleTapActionSheet,
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              key: const Key('long_press_row'),
+              icon: FontAwesomeIcons.powerOff,
+              title: context.l10n.deviceOnboardingTurnOffTitle,
+              subtitle: context.l10n.deviceOnboardingTurnOffSubtitle,
+              showChevron: false,
+            ),
+          ],
           // LED Brightness
           if (_isDimRatioLoaded && _hasDimmingFeature == true) ...[
             const Divider(height: 1, color: Color(0xFF3C3C43)),

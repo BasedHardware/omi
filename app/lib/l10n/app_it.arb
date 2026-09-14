@@ -188,6 +188,8 @@
     "pauseResume": "Pausa/Riprendi",
     "starConversation": "Aggiungi ai Preferiti",
     "doubleTapAction": "Azione Doppio Tocco",
+    "tripleTap": "Triplo Tocco",
+    "tripleTapAction": "Azione Triplo Tocco",
     "singleTapAction": "Azione Tocco Singolo",
     "endAndProcess": "Termina ed Elabora Conversazione",
     "pauseResumeRecording": "Pausa/Riprendi Registrazione",

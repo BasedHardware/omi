@@ -754,6 +754,8 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "दुहेरी टॅप क्रिया",
+    "tripleTap": "तिहेरी टॅप",
+    "tripleTapAction": "तिहेरी टॅप क्रिया",
     "singleTapAction": "एकेरी टॅप क्रिया",
     "@doubleTapAction": {
         "description": "Double tap action setting"

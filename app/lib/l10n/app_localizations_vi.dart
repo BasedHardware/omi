@@ -595,6 +595,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get doubleTapAction => 'Hành động nhấn đúp';
 
   @override
+  String get tripleTap => 'Nhấn ba lần';
+
+  @override
+  String get tripleTapAction => 'Hành động nhấn ba lần';
+
+  @override
   String get singleTapAction => 'Hành động nhấn đơn';
 
   @override

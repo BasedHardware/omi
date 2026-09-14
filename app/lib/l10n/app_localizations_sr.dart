@@ -593,6 +593,12 @@ class AppLocalizationsSr extends AppLocalizations {
   String get doubleTapAction => 'Акција дуплог додира';
 
   @override
+  String get tripleTap => 'Троструки додир';
+
+  @override
+  String get tripleTapAction => 'Акција троструког додира';
+
+  @override
   String get singleTapAction => 'Акција једног додира';
 
   @override

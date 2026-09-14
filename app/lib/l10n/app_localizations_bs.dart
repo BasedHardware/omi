@@ -594,6 +594,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get doubleTapAction => 'Akcija duplog dodira';
 
   @override
+  String get tripleTap => 'Trostruki dodir';
+
+  @override
+  String get tripleTapAction => 'Akcija trostrukog dodira';
+
+  @override
   String get singleTapAction => 'Akcija jednog dodira';
 
   @override

@@ -592,6 +592,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get doubleTapAction => 'Ação de toque duplo';
 
   @override
+  String get tripleTap => 'Toque triplo';
+
+  @override
+  String get tripleTapAction => 'Ação de toque triplo';
+
+  @override
   String get singleTapAction => 'Ação de toque único';
 
   @override

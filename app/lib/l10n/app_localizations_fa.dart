@@ -595,6 +595,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get doubleTapAction => 'عمل دو ضربه';
 
   @override
+  String get tripleTap => 'سه ضربه';
+
+  @override
+  String get tripleTapAction => 'عمل سه ضربه';
+
+  @override
   String get singleTapAction => 'عمل تک ضربه';
 
   @override

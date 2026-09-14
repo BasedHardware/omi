@@ -594,6 +594,12 @@ class AppLocalizationsHr extends AppLocalizations {
   String get doubleTapAction => 'Radnja dvostrukog dodira';
 
   @override
+  String get tripleTap => 'Trostruki dodir';
+
+  @override
+  String get tripleTapAction => 'Radnja trostrukog dodira';
+
+  @override
   String get singleTapAction => 'Radnja jednostrukog dodira';
 
   @override

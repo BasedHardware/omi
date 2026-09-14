@@ -190,6 +190,8 @@
     "pauseResume": "Pause/Fortsetzen",
     "starConversation": "Unterhaltung favorisieren",
     "doubleTapAction": "Doppeltippen-Aktion",
+    "tripleTap": "Dreifachtippen",
+    "tripleTapAction": "Dreifachtippen-Aktion",
     "singleTapAction": "Einfachtippen-Aktion",
     "endAndProcess": "Beenden & Verarbeiten",
     "pauseResumeRecording": "Aufnahme pausieren/fortsetzen",

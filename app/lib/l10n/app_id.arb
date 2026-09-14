@@ -188,6 +188,8 @@
     "pauseResume": "Jeda/Lanjutkan",
     "starConversation": "Beri Bintang Percakapan",
     "doubleTapAction": "Aksi Ketuk Ganda",
+    "tripleTap": "Ketuk Tiga Kali",
+    "tripleTapAction": "Aksi Ketuk Tiga Kali",
     "singleTapAction": "Aksi Ketuk Tunggal",
     "endAndProcess": "Akhiri & Proses Percakapan",
     "pauseResumeRecording": "Jeda/Lanjutkan Perekaman",

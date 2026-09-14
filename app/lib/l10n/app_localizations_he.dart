@@ -590,6 +590,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get doubleTapAction => 'פעולת לחיצה כפולה';
 
   @override
+  String get tripleTap => 'לחיצה משולשת';
+
+  @override
+  String get tripleTapAction => 'פעולת לחיצה משולשת';
+
+  @override
   String get singleTapAction => 'פעולת לחיצה בודדת';
 
   @override

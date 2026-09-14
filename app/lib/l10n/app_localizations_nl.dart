@@ -596,6 +596,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get doubleTapAction => 'Dubbel tikken actie';
 
   @override
+  String get tripleTap => 'Drie keer tikken';
+
+  @override
+  String get tripleTapAction => 'Drie keer tikken actie';
+
+  @override
   String get singleTapAction => 'Enkel tikken actie';
 
   @override

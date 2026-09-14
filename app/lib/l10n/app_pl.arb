@@ -188,6 +188,8 @@
     "pauseResume": "Wstrzymaj/Wznów",
     "starConversation": "Oznacz rozmowę gwiazdką",
     "doubleTapAction": "Akcja podwójnego dotknięcia",
+    "tripleTap": "Potrójne dotknięcie",
+    "tripleTapAction": "Akcja potrójnego dotknięcia",
     "singleTapAction": "Akcja pojedynczego dotknięcia",
     "endAndProcess": "Zakończ i przetwórz rozmowę",
     "pauseResumeRecording": "Wstrzymaj/wznów nagrywanie",

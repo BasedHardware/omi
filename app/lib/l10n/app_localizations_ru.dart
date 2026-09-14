@@ -595,6 +595,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get doubleTapAction => 'Действие при двойном нажатии';
 
   @override
+  String get tripleTap => 'Тройное нажатие';
+
+  @override
+  String get tripleTapAction => 'Действие при тройном нажатии';
+
+  @override
   String get singleTapAction => 'Действие при одиночном нажатии';
 
   @override

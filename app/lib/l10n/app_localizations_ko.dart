@@ -581,6 +581,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get doubleTapAction => '더블 탭 동작';
 
   @override
+  String get tripleTap => '트리플 탭';
+
+  @override
+  String get tripleTapAction => '트리플 탭 동작';
+
+  @override
   String get singleTapAction => '싱글 탭 동작';
 
   @override

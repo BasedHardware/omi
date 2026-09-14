@@ -592,6 +592,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get doubleTapAction => 'Kaksoisnapaututstoiminto';
 
   @override
+  String get tripleTap => 'Kolmoisnapautus';
+
+  @override
+  String get tripleTapAction => 'Kolmoisnapautustoiminto';
+
+  @override
   String get singleTapAction => 'Kertanapautustoiminto';
 
   @override

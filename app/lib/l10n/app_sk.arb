@@ -188,6 +188,8 @@
     "pauseResume": "Pozastaviť/Pokračovať",
     "starConversation": "Označiť konverzáciu hviezdičkou",
     "doubleTapAction": "Akcia dvojitého ťuknutia",
+    "tripleTap": "Trojité ťuknutie",
+    "tripleTapAction": "Akcia trojitého ťuknutia",
     "singleTapAction": "Akcia jedného ťuknutia",
     "endAndProcess": "Ukončiť a spracovať konverzáciu",
     "pauseResumeRecording": "Pozastaviť/Pokračovať nahrávanie",

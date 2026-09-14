@@ -188,6 +188,8 @@
     "pauseResume": "Пауза/Возобновить",
     "starConversation": "Добавить разговор в избранное",
     "doubleTapAction": "Действие при двойном нажатии",
+    "tripleTap": "Тройное нажатие",
+    "tripleTapAction": "Действие при тройном нажатии",
     "singleTapAction": "Действие при одиночном нажатии",
     "endAndProcess": "Завершить и обработать разговор",
     "pauseResumeRecording": "Пауза/Возобновить запись",

@@ -754,6 +754,8 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "Double Tap Action",
+    "tripleTap": "Triple Tap",
+    "tripleTapAction": "Triple Tap Action",
     "singleTapAction": "Single Tap Action",
     "@doubleTapAction": {
         "description": "Double tap action setting"

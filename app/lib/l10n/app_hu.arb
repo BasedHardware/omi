@@ -188,6 +188,8 @@
     "pauseResume": "Szünet/folytatás",
     "starConversation": "Beszélgetés csillagozása",
     "doubleTapAction": "Dupla érintés művelet",
+    "tripleTap": "Tripla érintés",
+    "tripleTapAction": "Tripla érintés művelet",
     "singleTapAction": "Egyszeres érintés művelet",
     "endAndProcess": "Beszélgetés befejezése és feldolgozása",
     "pauseResumeRecording": "Felvétel szüneteltetése/folytatása",

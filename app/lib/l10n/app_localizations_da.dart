@@ -594,6 +594,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get doubleTapAction => 'Dobbelttryk-handling';
 
   @override
+  String get tripleTap => 'Tredobbelttryk';
+
+  @override
+  String get tripleTapAction => 'Tredobbelttryk-handling';
+
+  @override
   String get singleTapAction => 'Enkelttryk-handling';
 
   @override

@@ -588,6 +588,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get doubleTapAction => 'إجراء النقر المزدوج';
 
   @override
+  String get tripleTap => 'نقرة ثلاثية';
+
+  @override
+  String get tripleTapAction => 'إجراء النقر الثلاثي';
+
+  @override
   String get singleTapAction => 'إجراء النقر المفرد';
 
   @override

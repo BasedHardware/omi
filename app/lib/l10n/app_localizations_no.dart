@@ -595,6 +595,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String get doubleTapAction => 'Dobbelttrykk-handling';
 
   @override
+  String get tripleTap => 'Trippeltrykk';
+
+  @override
+  String get tripleTapAction => 'Trippeltrykk-handling';
+
+  @override
   String get singleTapAction => 'Enkelttrykk-handling';
 
   @override

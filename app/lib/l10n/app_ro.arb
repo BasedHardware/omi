@@ -188,6 +188,8 @@
     "pauseResume": "Pauză/Reia",
     "starConversation": "Marchează conversația ca favorită",
     "doubleTapAction": "Acțiune dublă apăsare",
+    "tripleTap": "Triplă apăsare",
+    "tripleTapAction": "Acțiune triplă apăsare",
     "singleTapAction": "Acțiune apăsare simplă",
     "endAndProcess": "Încheie și procesează conversația",
     "pauseResumeRecording": "Pauză/Reia înregistrarea",

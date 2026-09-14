@@ -595,6 +595,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get doubleTapAction => 'Çift Dokunma İşlemi';
 
   @override
+  String get tripleTap => 'Üçlü Dokunma';
+
+  @override
+  String get tripleTapAction => 'Üçlü Dokunma İşlemi';
+
+  @override
   String get singleTapAction => 'Tek Dokunma İşlemi';
 
   @override

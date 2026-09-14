@@ -188,6 +188,8 @@
     "pauseResume": "Παύση/Συνέχιση",
     "starConversation": "Αγαπημένη Συνομιλία",
     "doubleTapAction": "Ενέργεια Διπλού Πατήματος",
+    "tripleTap": "Τριπλό Πάτημα",
+    "tripleTapAction": "Ενέργεια Τριπλού Πατήματος",
     "singleTapAction": "Ενέργεια Απλού Πατήματος",
     "endAndProcess": "Τερματισμός & Επεξεργασία Συνομιλίας",
     "pauseResumeRecording": "Παύση/Συνέχιση Εγγραφής",

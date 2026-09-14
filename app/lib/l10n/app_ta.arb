@@ -754,6 +754,8 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "இரட்டை தட்டு நடவடிக்கை",
+    "tripleTap": "மூன்று முறை தட்டு",
+    "tripleTapAction": "மூன்று முறை தட்டு நடவடிக்கை",
     "singleTapAction": "ஒற்றை தட்டு நடவடிக்கை",
     "@doubleTapAction": {
         "description": "Double tap action setting"

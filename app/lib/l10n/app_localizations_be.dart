@@ -594,6 +594,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get doubleTapAction => 'Дзеянне двойнага дотыку';
 
   @override
+  String get tripleTap => 'Трайны дотык';
+
+  @override
+  String get tripleTapAction => 'Дзеянне трайнага дотыку';
+
+  @override
   String get singleTapAction => 'Дзеянне адзінарнага дотыку';
 
   @override

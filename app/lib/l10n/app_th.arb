@@ -188,6 +188,8 @@
     "pauseResume": "หยุดชั่วคราว/ดำเนินการต่อ",
     "starConversation": "ติดดาวบทสนทนา",
     "doubleTapAction": "การดำเนินการแตะสองครั้ง",
+    "tripleTap": "แตะสามครั้ง",
+    "tripleTapAction": "การดำเนินการแตะสามครั้ง",
     "singleTapAction": "การดำเนินการแตะครั้งเดียว",
     "endAndProcess": "จบและประมวลผลบทสนทนา",
     "pauseResumeRecording": "หยุดชั่วคราว/ดำเนินการบันทึกต่อ",

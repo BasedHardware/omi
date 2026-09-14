@@ -595,6 +595,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get doubleTapAction => 'Dubultklikšķa darbība';
 
   @override
+  String get tripleTap => 'Trīskāršs klikšķis';
+
+  @override
+  String get tripleTapAction => 'Trīskārša klikšķa darbība';
+
+  @override
   String get singleTapAction => 'Viena klikšķa darbība';
 
   @override

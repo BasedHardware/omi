@@ -594,6 +594,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get doubleTapAction => 'دوگنا تھپتھپانے کا عمل';
 
   @override
+  String get tripleTap => 'تین بار تھپتھپائیں';
+
+  @override
+  String get tripleTapAction => 'تین بار تھپتھپانے کا عمل';
+
+  @override
   String get singleTapAction => 'ایک بار تھپتھپانے کا عمل';
 
   @override

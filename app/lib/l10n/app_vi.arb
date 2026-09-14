@@ -188,6 +188,8 @@
     "pauseResume": "Tạm dừng/Tiếp tục",
     "starConversation": "Gắn sao cuộc trò chuyện",
     "doubleTapAction": "Hành động nhấn đúp",
+    "tripleTap": "Nhấn ba lần",
+    "tripleTapAction": "Hành động nhấn ba lần",
     "singleTapAction": "Hành động nhấn đơn",
     "endAndProcess": "Kết thúc & Xử lý cuộc trò chuyện",
     "pauseResumeRecording": "Tạm dừng/Tiếp tục ghi âm",

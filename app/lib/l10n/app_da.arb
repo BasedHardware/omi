@@ -188,6 +188,8 @@
     "pauseResume": "Pause/Genoptag",
     "starConversation": "Stjernemarkér samtale",
     "doubleTapAction": "Dobbelttryk-handling",
+    "tripleTap": "Tredobbelttryk",
+    "tripleTapAction": "Tredobbelttryk-handling",
     "singleTapAction": "Enkelttryk-handling",
     "endAndProcess": "Afslut og behandl samtale",
     "pauseResumeRecording": "Pause/Genoptag optagelse",

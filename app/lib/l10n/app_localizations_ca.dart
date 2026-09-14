@@ -597,6 +597,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get doubleTapAction => 'Acció de doble toc';
 
   @override
+  String get tripleTap => 'Triple toc';
+
+  @override
+  String get tripleTapAction => 'Acció de triple toc';
+
+  @override
   String get singleTapAction => 'Acció de toc simple';
 
   @override

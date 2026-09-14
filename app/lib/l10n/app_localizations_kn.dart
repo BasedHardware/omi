@@ -595,6 +595,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get doubleTapAction => 'ಗುಣ ಟ್ಯಾಪ್ ಕ್ರಿಯೆ';
 
   @override
+  String get tripleTap => 'ಮೂರು ಬಾರಿ ಟ್ಯಾಪ್';
+
+  @override
+  String get tripleTapAction => 'ಮೂರು ಬಾರಿ ಟ್ಯಾಪ್ ಕ್ರಿಯೆ';
+
+  @override
   String get singleTapAction => 'ಒಂದು ಟ್ಯಾಪ್ ಕ್ರಿಯೆ';
 
   @override

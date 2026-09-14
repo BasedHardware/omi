@@ -754,6 +754,8 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "Акција при двојно допирање",
+    "tripleTap": "Тројно допирање",
+    "tripleTapAction": "Акција при тројно допирање",
     "singleTapAction": "Акција при единечно допирање",
     "@doubleTapAction": {
         "description": "Double tap action setting"

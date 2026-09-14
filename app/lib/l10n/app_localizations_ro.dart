@@ -597,6 +597,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get doubleTapAction => 'Acțiune dublă apăsare';
 
   @override
+  String get tripleTap => 'Triplă apăsare';
+
+  @override
+  String get tripleTapAction => 'Acțiune triplă apăsare';
+
+  @override
   String get singleTapAction => 'Acțiune apăsare simplă';
 
   @override

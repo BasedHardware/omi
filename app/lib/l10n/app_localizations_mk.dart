@@ -596,6 +596,12 @@ class AppLocalizationsMk extends AppLocalizations {
   String get doubleTapAction => 'Акција при двојно допирање';
 
   @override
+  String get tripleTap => 'Тројно допирање';
+
+  @override
+  String get tripleTapAction => 'Акција при тројно допирање';
+
+  @override
   String get singleTapAction => 'Акција при единечно допирање';
 
   @override

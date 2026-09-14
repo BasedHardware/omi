@@ -188,6 +188,8 @@
     "pauseResume": "Призупинити/Відновити",
     "starConversation": "Позначити розмову",
     "doubleTapAction": "Дія подвійного натискання",
+    "tripleTap": "Потрійне натискання",
+    "tripleTapAction": "Дія потрійного натискання",
     "singleTapAction": "Дія одинарного натискання",
     "endAndProcess": "Завершити та обробити розмову",
     "pauseResumeRecording": "Призупинити/Відновити запис",

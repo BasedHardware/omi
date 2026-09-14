@@ -188,6 +188,8 @@
     "pauseResume": "Pause/Reprendre",
     "starConversation": "Marquer la conversation comme favorite",
     "doubleTapAction": "Action double appui",
+    "tripleTap": "Triple appui",
+    "tripleTapAction": "Action triple appui",
     "singleTapAction": "Action appui simple",
     "endAndProcess": "Terminer et traiter la conversation",
     "pauseResumeRecording": "Pause/Reprendre l'enregistrement",

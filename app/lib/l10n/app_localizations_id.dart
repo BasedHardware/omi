@@ -594,6 +594,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get doubleTapAction => 'Aksi Ketuk Ganda';
 
   @override
+  String get tripleTap => 'Ketuk Tiga Kali';
+
+  @override
+  String get tripleTapAction => 'Aksi Ketuk Tiga Kali';
+
+  @override
   String get singleTapAction => 'Aksi Ketuk Tunggal';
 
   @override

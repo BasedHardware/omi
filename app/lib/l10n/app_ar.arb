@@ -188,6 +188,8 @@
     "pauseResume": "إيقاف مؤقت/استئناف",
     "starConversation": "تمييز المحادثة بنجمة",
     "doubleTapAction": "إجراء النقر المزدوج",
+    "tripleTap": "نقرة ثلاثية",
+    "tripleTapAction": "إجراء النقر الثلاثي",
     "singleTapAction": "إجراء النقر المفرد",
     "endAndProcess": "إنهاء ومعالجة المحادثة",
     "pauseResumeRecording": "إيقاف مؤقت/استئناف التسجيل",

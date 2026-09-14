@@ -596,6 +596,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get doubleTapAction => 'Дія подвійного натискання';
 
   @override
+  String get tripleTap => 'Потрійне натискання';
+
+  @override
+  String get tripleTapAction => 'Дія потрійного натискання';
+
+  @override
   String get singleTapAction => 'Дія одинарного натискання';
 
   @override

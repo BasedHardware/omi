@@ -775,6 +775,8 @@
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },
+    "tripleTap": "Triple Tap",
+    "tripleTapAction": "Triple Tap Action",
     "singleTapAction": "Single Tap Action",
     "@singleTapAction": {
         "description": "Single tap action setting"

@@ -188,6 +188,8 @@
     "pauseResume": "Pauzeren/Hervatten",
     "starConversation": "Gesprek als favoriet markeren",
     "doubleTapAction": "Dubbel tikken actie",
+    "tripleTap": "Drie keer tikken",
+    "tripleTapAction": "Drie keer tikken actie",
     "singleTapAction": "Enkel tikken actie",
     "endAndProcess": "Gesprek beëindigen en verwerken",
     "pauseResumeRecording": "Opname pauzeren/hervatten",

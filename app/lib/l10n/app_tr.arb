@@ -188,6 +188,8 @@
     "pauseResume": "Duraklat/Devam Et",
     "starConversation": "Konuşmayı Favorilere Ekle",
     "doubleTapAction": "Çift Dokunma İşlemi",
+    "tripleTap": "Üçlü Dokunma",
+    "tripleTapAction": "Üçlü Dokunma İşlemi",
     "singleTapAction": "Tek Dokunma İşlemi",
     "endAndProcess": "Konuşmayı Sonlandır ve İşle",
     "pauseResumeRecording": "Kaydı Duraklat/Devam Ettir",

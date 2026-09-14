@@ -1317,6 +1317,18 @@ abstract class AppLocalizations {
   /// **'Double Tap Action'**
   String get doubleTapAction;
 
+  /// No description provided for @tripleTap.
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Tap'**
+  String get tripleTap;
+
+  /// No description provided for @tripleTapAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Tap Action'**
+  String get tripleTapAction;
+
   /// Single tap action setting
   ///
   /// In en, this message translates to:

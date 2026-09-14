@@ -598,6 +598,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get doubleTapAction => 'Ενέργεια Διπλού Πατήματος';
 
   @override
+  String get tripleTap => 'Τριπλό Πάτημα';
+
+  @override
+  String get tripleTapAction => 'Ενέργεια Τριπλού Πατήματος';
+
+  @override
   String get singleTapAction => 'Ενέργεια Απλού Πατήματος';
 
   @override

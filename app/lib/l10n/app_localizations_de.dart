@@ -599,6 +599,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get doubleTapAction => 'Doppeltippen-Aktion';
 
   @override
+  String get tripleTap => 'Dreifachtippen';
+
+  @override
+  String get tripleTapAction => 'Dreifachtippen-Aktion';
+
+  @override
   String get singleTapAction => 'Einfachtippen-Aktion';
 
   @override

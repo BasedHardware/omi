@@ -582,6 +582,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get doubleTapAction => 'ダブルタップアクション';
 
   @override
+  String get tripleTap => 'トリプルタップ';
+
+  @override
+  String get tripleTapAction => 'トリプルタップアクション';
+
+  @override
   String get singleTapAction => 'シングルタップアクション';
 
   @override

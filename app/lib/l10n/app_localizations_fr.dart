@@ -598,6 +598,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get doubleTapAction => 'Action double appui';
 
   @override
+  String get tripleTap => 'Triple appui';
+
+  @override
+  String get tripleTapAction => 'Action triple appui';
+
+  @override
   String get singleTapAction => 'Action appui simple';
 
   @override

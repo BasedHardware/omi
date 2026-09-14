@@ -597,6 +597,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get doubleTapAction => 'இரட்டை தட்டு நடவடிக்கை';
 
   @override
+  String get tripleTap => 'மூன்று முறை தட்டு';
+
+  @override
+  String get tripleTapAction => 'மூன்று முறை தட்டு நடவடிக்கை';
+
+  @override
   String get singleTapAction => 'ஒற்றை தட்டு நடவடிக்கை';
 
   @override

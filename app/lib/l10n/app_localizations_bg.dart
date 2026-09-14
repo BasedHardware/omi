@@ -596,6 +596,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get doubleTapAction => 'Действие при двойно докосване';
 
   @override
+  String get tripleTap => 'Тройно докосване';
+
+  @override
+  String get tripleTapAction => 'Действие при тройно докосване';
+
+  @override
   String get singleTapAction => 'Действие при единично докосване';
 
   @override

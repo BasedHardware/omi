@@ -591,6 +591,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get doubleTapAction => 'การดำเนินการแตะสองครั้ง';
 
   @override
+  String get tripleTap => 'แตะสามครั้ง';
+
+  @override
+  String get tripleTapAction => 'การดำเนินการแตะสามครั้ง';
+
+  @override
   String get singleTapAction => 'การดำเนินการแตะครั้งเดียว';
 
   @override

@@ -190,6 +190,8 @@
     "pauseResume": "Pausar/Reanudar",
     "starConversation": "Marcar conversación",
     "doubleTapAction": "Acción de doble toque",
+    "tripleTap": "Triple toque",
+    "tripleTapAction": "Acción de triple toque",
     "singleTapAction": "Acción de toque simple",
     "endAndProcess": "Terminar y procesar",
     "pauseResumeRecording": "Pausar/Reanudar grabación",

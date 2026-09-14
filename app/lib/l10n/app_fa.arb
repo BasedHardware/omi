@@ -754,6 +754,8 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "عمل دو ضربه",
+    "tripleTap": "سه ضربه",
+    "tripleTapAction": "عمل سه ضربه",
     "singleTapAction": "عمل تک ضربه",
     "@doubleTapAction": {
         "description": "Double tap action setting"

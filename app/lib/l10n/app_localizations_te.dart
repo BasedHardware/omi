@@ -596,6 +596,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get doubleTapAction => 'డబల్ ట్యాప్ చర్య';
 
   @override
+  String get tripleTap => 'ట్రిపుల్ ట్యాప్';
+
+  @override
+  String get tripleTapAction => 'ట్రిపుల్ ట్యాప్ చర్య';
+
+  @override
   String get singleTapAction => 'సింగిల్ ట్యాప్ చర్య';
 
   @override

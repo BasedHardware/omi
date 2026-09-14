@@ -595,6 +595,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get doubleTapAction => 'Topeltpuudutuse tegevus';
 
   @override
+  String get tripleTap => 'Kolmikpuudutus';
+
+  @override
+  String get tripleTapAction => 'Kolmikpuudutuse tegevus';
+
+  @override
   String get singleTapAction => 'Ühekordse puudutuse tegevus';
 
   @override

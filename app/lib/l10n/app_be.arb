@@ -754,6 +754,8 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "Дзеянне двойнага дотыку",
+    "tripleTap": "Трайны дотык",
+    "tripleTapAction": "Дзеянне трайнага дотыку",
     "singleTapAction": "Дзеянне адзінарнага дотыку",
     "@doubleTapAction": {
         "description": "Double tap action setting"

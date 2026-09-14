@@ -740,6 +740,8 @@
     "doubleTap": "Dvigubas bakstelėjimas",
     "singleTap": "Vienas bakstelėjimas",
     "doubleTapAction": "Dvigubo bakstelėjimo veiksmas",
+    "tripleTap": "Trigubas bakstelėjimas",
+    "tripleTapAction": "Trigubo bakstelėjimo veiksmas",
     "singleTapAction": "Vieno bakstelėjimo veiksmas",
     "download": "Atsisiųsti",
     "downloadErrorWithMessage": "Atsisiuntimo klaida: {error}",
