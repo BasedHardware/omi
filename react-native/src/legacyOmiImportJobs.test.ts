@@ -380,6 +380,24 @@ test('keeps GET import jobs when status exceeds 10000', () => {
   ]);
 });
 
+test('keeps GET import jobs when created_at is a non-string', () => {
+  expect(
+    parseOmiImportJobs(
+      JSON.stringify([
+        {job_id: 'job-numeric-clock', status: 'completed', created_at: 1},
+        {
+          job_id: 'job-neighbor',
+          status: 'failed',
+          error: 'Zip could not be read.',
+        },
+      ]),
+    ),
+  ).toEqual([
+    {id: 'job-numeric-clock', status: 'completed'},
+    {id: 'job-neighbor', status: 'failed', error: 'Zip could not be read.'},
+  ]);
+});
+
 test('fails closed for malformed GET import jobs', () => {
   expect(() => parseOmiImportJobs(JSON.stringify({}))).toThrow();
   expect(() =>
@@ -407,13 +425,6 @@ test('fails closed for malformed GET import jobs', () => {
     parseOmiImportJobs(
       JSON.stringify([
         {job_id: 'job-1', status: 'completed', conversations_created: '3.0'},
-      ]),
-    ),
-  ).toThrow();
-  expect(() =>
-    parseOmiImportJobs(
-      JSON.stringify([
-        {job_id: 'job-1', status: 'completed', created_at: 1},
       ]),
     ),
   ).toThrow();

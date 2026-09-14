@@ -47,7 +47,7 @@ function optionalCount(value: unknown): number | undefined {
 }
 
 function createdAtMs(value: unknown): number | undefined {
-  if (value === undefined || value === null) {
+  if (value === undefined || value === null || typeof value !== 'string') {
     return undefined;
   }
   const raw = visibleDisplayText(text(value, 1_000_000));
