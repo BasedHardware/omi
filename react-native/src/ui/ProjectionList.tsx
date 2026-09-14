@@ -149,8 +149,10 @@ export const ProjectionRow = memo(function ProjectionRow({
           </Text>
         )}
         {item.kind === 'conversation' && item.starred && (
-          <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
-            Starred
+          <Text
+            accessibilityLabel="Starred conversation"
+            style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+            ★
           </Text>
         )}
         {lockedCopy !== null ? (

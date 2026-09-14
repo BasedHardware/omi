@@ -267,7 +267,7 @@ const RecapCard = memo(function RecapCard({
         <Text
           accessibilityLabel="Starred conversation"
           style={styles.recapStar}>
-          Starred
+          ★
         </Text>
       ) : null}
       {recap.locked === true ? (

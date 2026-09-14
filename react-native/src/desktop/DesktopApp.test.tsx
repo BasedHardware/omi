@@ -404,7 +404,8 @@ test('Home conversation rows name starred conversations without an empty star to
     })),
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Starred');
+  expect(tree).toContain('★');
+  expect(tree).not.toContain('Starred');
   expect(tree).not.toContain('☆');
   expect(
     renderer.root.findAll(

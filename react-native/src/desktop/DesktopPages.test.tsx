@@ -313,7 +313,8 @@ test('library rows name starred conversations without an empty star toggle', () 
     )
     .filter((part): part is string => typeof part === 'string')
     .join(' ');
-  expect(copy).toContain('Starred');
+  expect(copy).toContain('★');
+  expect(copy).not.toContain('Starred');
   expect(copy).not.toContain('☆');
   expect(
     view.root.findAll(node => node.props.accessibilityLabel === 'Not starred'),

@@ -97,7 +97,7 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
         {[
           newCopy ??
             conversationListTimeCopy(item.startedAt ?? item.createdAt),
-          item.starred ? 'Starred' : '',
+          item.starred ? '★' : '',
         ]
           .filter(part => part !== '')
           .join(' · ')}

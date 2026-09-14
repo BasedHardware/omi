@@ -748,7 +748,7 @@ test('empty Tasks tab keeps incomplete coverage instead of claiming emptiness', 
   expect(renderedText(renderer)).not.toContain("Nothing's waiting on you.");
 });
 
-test('Daily Recaps name starred conversations without an empty star toggle', () => {
+test('Daily Recaps name Flutter ConversationListItem starred icon without a write toggle', () => {
   const starred = render({
     recaps: [
       {
@@ -759,14 +759,20 @@ test('Daily Recaps name starred conversations without an empty star toggle', () 
       },
     ],
   });
-  expect(renderedText(starred)).toContain('Starred');
+  expect(renderedText(starred)).toContain('★');
+  expect(renderedText(starred)).not.toContain('Starred');
   expect(
     starred.root.findAll(
       node =>
         node.props.accessibilityLabel === 'Starred conversation' &&
-        node.props.children === 'Starred',
+        node.props.children === '★',
     ).length,
   ).toBeGreaterThan(0);
+  expect(
+    starred.root.findAll(
+      node => node.props.children === 'Starred',
+    ),
+  ).toHaveLength(0);
   expect(
     starred.root.findAll(
       node => node.props.accessibilityLabel === 'Not starred',
@@ -779,6 +785,7 @@ test('Daily Recaps name starred conversations without an empty star toggle', () 
     ],
   });
   expect(renderedText(unstarred)).not.toContain('Starred');
+  expect(renderedText(unstarred)).not.toContain('★');
   expect(
     unstarred.root.findAll(
       node => node.props.accessibilityLabel === 'Not starred',
