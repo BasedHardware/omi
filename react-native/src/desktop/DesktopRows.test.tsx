@@ -388,14 +388,14 @@ test('Home currents keep GET duration instead of clock-only', () => {
   });
   const copy = textOf(renderer);
   expect(copy).toContain('Quick note');
-  expect(copy).toContain('< 1 min');
+  expect(copy).toContain('20s');
   expect(copy).not.toContain('0 min');
   expect(
     renderer.root.findAll(
       node =>
         node.props.numberOfLines === 1 &&
         typeof node.props.children === 'string' &&
-        node.props.children.includes('< 1 min'),
+        node.props.children.includes('20s'),
     ).length,
   ).toBe(0);
 });
@@ -425,14 +425,14 @@ test('Library rows keep GET duration instead of clock-only', () => {
   });
   const copy = textOf(renderer);
   expect(copy).toContain('Quick note');
-  expect(copy).toContain('< 1 min');
+  expect(copy).toContain('20s');
   expect(copy).not.toContain('0 min');
   expect(
     renderer.root.findAll(
       node =>
         node.props.numberOfLines === 1 &&
         typeof node.props.children === 'string' &&
-        node.props.children.includes('< 1 min'),
+        node.props.children.includes('20s'),
     ).length,
   ).toBe(0);
 });
@@ -495,7 +495,7 @@ test('discarded Home and Library rows name GET transcript span instead of Durati
     library = ReactTestRenderer.create(<ConversationRow item={item} />);
   });
   for (const copy of [textOf(home), textOf(library)]) {
-    expect(copy).toContain('2 min');
+    expect(copy).toContain('2m');
     expect(copy).not.toContain('Duration unavailable');
   }
 });
@@ -527,7 +527,7 @@ test('non-discarded Home and Library rows name GET transcript span instead of Du
     library = ReactTestRenderer.create(<ConversationRow item={item} />);
   });
   for (const copy of [textOf(home), textOf(library)]) {
-    expect(copy).toContain('2 min');
+    expect(copy).toContain('2m');
     expect(copy).not.toContain('Duration unavailable');
   }
 });

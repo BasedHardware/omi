@@ -694,22 +694,32 @@ export function formatConversationDuration(
     : `${hours} hr ${remainingMinutes} min`;
 }
 
-export function formatConversationDurationSeconds(seconds: number): string {
+export function conversationDurationCompactCopy(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) {
-    return 'Duration unavailable';
+    return '';
   }
   if (seconds < 60) {
-    return '< 1 min';
+    return `${seconds}s`;
   }
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) {
-    return `${minutes} min`;
+  if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    if (remainingSeconds === 0 || minutes >= 10) {
+      return `${minutes}m`;
+    }
+    return `${minutes}m ${remainingSeconds}s`;
   }
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return remainingMinutes === 0
-    ? `${hours} hr`
-    : `${hours} hr ${remainingMinutes} min`;
+  const hours = Math.floor(seconds / 3600);
+  const remainingMinutes = Math.floor((seconds % 3600) / 60);
+  if (remainingMinutes === 0 || hours >= 10) {
+    return `${hours}h`;
+  }
+  return `${hours}h ${remainingMinutes}m`;
+}
+
+export function formatConversationDurationSeconds(seconds: number): string {
+  const compact = conversationDurationCompactCopy(Math.trunc(seconds));
+  return compact === '' ? 'Duration unavailable' : compact;
 }
 
 export function conversationListDurationCopy(item: {
@@ -720,7 +730,24 @@ export function conversationListDurationCopy(item: {
   if (typeof item.transcriptEndSeconds === 'number') {
     return formatConversationDurationSeconds(item.transcriptEndSeconds);
   }
-  return formatConversationDuration(item.startedAt, item.finishedAt);
+  if (item.startedAt === null || item.finishedAt === null) {
+    return 'Duration unavailable';
+  }
+  const startedAtMs = Date.parse(item.startedAt);
+  const finishedAtMs = Date.parse(item.finishedAt);
+  if (
+    !Number.isFinite(startedAtMs) ||
+    startedAtMs <= 0 ||
+    !Number.isFinite(finishedAtMs) ||
+    finishedAtMs <= 0
+  ) {
+    return 'Duration unavailable';
+  }
+  const seconds = Math.trunc((finishedAtMs - startedAtMs) / 1000);
+  if (seconds < 0) {
+    return 'Duration unavailable';
+  }
+  return formatConversationDurationSeconds(seconds);
 }
 
 export function conversationTranscriptEndSeconds(

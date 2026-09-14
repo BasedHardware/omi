@@ -733,7 +733,8 @@ test('conversation durations under a minute do not claim 0 min', () => {
       <ConversationsPage outcome={page} loading={false} />,
     );
   });
-  expect(textOf(renderer)).toContain('< 1 min');
+  expect(textOf(renderer)).toContain('20s');
+  expect(textOf(renderer)).not.toContain('< 1 min');
   expect(textOf(renderer)).not.toContain('0 min');
   act(() => {
     renderer.root
@@ -745,6 +746,7 @@ test('conversation durations under a minute do not claim 0 min', () => {
   });
   const copy = textOf(renderer);
   expect(copy).toContain('Duration ·');
+  expect(copy).toContain('20s');
   expect(copy).toContain('< 1 min');
   expect(copy).not.toContain('0 min');
 });
@@ -1277,7 +1279,7 @@ test('discarded list rows name GET transcript span instead of Duration unavailab
     );
   });
   const copy = textOf(renderer);
-  expect(copy).toContain('2 min');
+  expect(copy).toContain('2m');
   expect(copy).not.toContain('Duration unavailable');
 });
 
@@ -1323,7 +1325,7 @@ test('non-discarded list rows name GET transcript span instead of Duration unava
     );
   });
   const copy = textOf(renderer);
-  expect(copy).toContain('2 min');
+  expect(copy).toContain('2m');
   expect(copy).not.toContain('Duration unavailable');
 });
 
@@ -1369,7 +1371,7 @@ test('processing list rows name GET transcript span without a finish clock', () 
     );
   });
   const copy = textOf(renderer);
-  expect(copy).toContain('2 min');
+  expect(copy).toContain('2m');
   expect(copy).not.toContain('Duration unavailable');
 });
 

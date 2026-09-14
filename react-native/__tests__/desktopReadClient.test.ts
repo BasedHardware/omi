@@ -872,13 +872,33 @@ test('conversation list duration prefers GET transcript span over wall clocks', 
       finishedAt: '2026-09-07T00:10:00.000Z',
       transcriptEndSeconds: 120,
     }),
-  ).toBe('2 min');
+  ).toBe('2m');
   expect(
     conversationListDurationCopy({
       startedAt: '2026-09-07T00:00:00.000Z',
       finishedAt: '2026-09-07T00:10:00.000Z',
     }),
-  ).toBe('10 min');
+  ).toBe('10m');
+  expect(
+    conversationListDurationCopy({
+      startedAt: '2026-09-07T12:00:00.000Z',
+      finishedAt: '2026-09-07T12:00:20.000Z',
+    }),
+  ).toBe('20s');
+  expect(
+    conversationListDurationCopy({
+      startedAt: '2026-09-07T00:00:00.000Z',
+      finishedAt: '2026-09-07T00:10:00.000Z',
+      transcriptEndSeconds: 90,
+    }),
+  ).toBe('1m 30s');
+  expect(
+    conversationListDurationCopy({
+      startedAt: '2026-09-07T00:00:00.000Z',
+      finishedAt: '2026-09-07T00:10:00.000Z',
+      transcriptEndSeconds: 3660,
+    }),
+  ).toBe('1h 1m');
 });
 
 test('discarded conversation titles use Flutter transcript excerpt and people names', () => {

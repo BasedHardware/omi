@@ -2699,14 +2699,14 @@ test('wide Home search rows keep GET duration instead of title-only', () => {
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Quick note');
-  expect(tree).toContain('< 1 min');
+  expect(tree).toContain('20s');
   expect(tree).not.toContain('0 min');
   expect(
     renderer.root.findAll(
       node =>
         node.props.numberOfLines === 1 &&
         typeof node.props.children === 'string' &&
-        node.props.children.includes('< 1 min'),
+        node.props.children.includes('20s'),
     ).length,
   ).toBe(0);
 });
