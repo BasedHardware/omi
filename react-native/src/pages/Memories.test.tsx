@@ -807,12 +807,18 @@ test('Memories rows name GET knowledge-ledger History chrome and omit current ro
     );
   });
   try {
-    expect(textOf(view)).toContain('History');
+    expect(textOf(view)).toContain('⟳');
+    expect(textOf(view)).not.toContain('History');
+    expect(
+      view.root.find(
+        node => node.props.accessibilityLabel === 'Historical memory',
+      ),
+    ).toBeTruthy();
     expect(
       view.root.findAll(
         node => node.type === Text && node.props.children === 'History',
       ),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
   } finally {
     act(() => view.unmount());
   }

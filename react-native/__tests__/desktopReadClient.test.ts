@@ -3035,7 +3035,7 @@ test('Omi memory ledger chrome names GET slot, playbook body, baseline, and know
   expect(memoryBaselineCopy({isBaseline: true})).toBe('⚑');
   expect(memoryHistoryCopy({})).toBeNull();
   expect(memoryHistoryCopy({history: false})).toBeNull();
-  expect(memoryHistoryCopy({history: true})).toBe('History');
+  expect(memoryHistoryCopy({history: true})).toBe('⟳');
   expect(memoryHistoryPartialCopy()).toBe(
     'Some memory history is unavailable. Showing the history received so far.',
   );

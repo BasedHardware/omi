@@ -151,7 +151,9 @@ export const ReadRow = memo(function ReadRow({
         ) : null}
         {locked !== null ? <Text style={styles.rowMeta}>{locked}</Text> : null}
         {history !== null ? (
-          <Text style={styles.rowMeta}>{history}</Text>
+          <Text accessibilityLabel="Historical memory" style={styles.rowMeta}>
+            {history}
+          </Text>
         ) : null}
         {ledgerSlot !== null ? (
           <Text style={styles.rowMeta}>{ledgerSlot}</Text>

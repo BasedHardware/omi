@@ -218,7 +218,9 @@ test('Home currents name GET memory History chrome and omit current rows', () =>
       <ReadRow item={{...item, id: 'memory-current', history: false}} />,
     );
   });
-  expect(textOf(named)).toContain('History');
+  expect(textOf(named)).toContain('⟳');
+  expect(textOf(named)).not.toContain('History');
+  expect(textOf(omitted)).not.toContain('⟳');
   expect(textOf(omitted)).not.toContain('History');
 });
 

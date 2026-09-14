@@ -3100,18 +3100,24 @@ test('wide Home search and compact Home current memory rows name GET History chr
     history: true,
   };
   const search = render(<ProjectionRow item={item} />);
-  expect(JSON.stringify(search.toJSON())).toContain('History');
+  const searchTree = JSON.stringify(search.toJSON());
+  expect(searchTree).toContain('⟳');
+  expect(searchTree).not.toContain('"History"');
   const currents = render(
     <ProjectionRow home item={{...item, id: 'memory-history-home-current'}} />,
   );
-  expect(JSON.stringify(currents.toJSON())).toContain('History');
+  const currentTree = JSON.stringify(currents.toJSON());
+  expect(currentTree).toContain('⟳');
+  expect(currentTree).not.toContain('"History"');
   const omitted = render(
     <ProjectionRow
       home
       item={{...item, id: 'memory-history-home-omitted', history: false}}
     />,
   );
-  expect(JSON.stringify(omitted.toJSON())).not.toContain('History');
+  const omittedTree = JSON.stringify(omitted.toJSON());
+  expect(omittedTree).not.toContain('⟳');
+  expect(omittedTree).not.toContain('"History"');
 });
 
 test('a zero wide Home search conversation timestamp says Time unavailable', () => {

@@ -208,7 +208,9 @@ export const ProjectionRow = memo(function ProjectionRow({
         </Text>
       ) : null}
       {history !== null ? (
-        <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+        <Text
+          accessibilityLabel="Historical memory"
+          style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
           {history}
         </Text>
       ) : null}

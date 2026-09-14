@@ -164,7 +164,11 @@ export function MemoriesPage({
         style={styles.memoryCard}>
         <Text style={styles.memoryBody}>{memoryDisplayBody(item)}</Text>
         {history !== null ? (
-          <Text style={styles.memoryProvenance}>{history}</Text>
+          <Text
+            accessibilityLabel="Historical memory"
+            style={styles.memoryProvenance}>
+            {history}
+          </Text>
         ) : null}
         {slot !== null ? (
           <Text style={styles.memoryProvenance}>{slot}</Text>

@@ -2606,7 +2606,7 @@ export function memoryBaselineCopy(item: {
 export function memoryHistoryCopy(item: {
   history?: boolean;
 }): string | null {
-  return item.history === true ? 'History' : null;
+  return item.history === true ? '⟳' : null;
 }
 
 export function memoryHistoryPartialCopy(): string {
