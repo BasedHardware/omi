@@ -43,7 +43,11 @@ async function fetchMemories(view: MemoryReadView): Promise<Memory[]> {
     const header = r.headers?.[CANONICAL_LIFECYCLE_HEADER]
     if (typeof header === 'string') cache.canonicalLifecycleExposed = header === 'true'
     const beliefEnabled = beliefCapabilityFromResponse(r)
-    if (beliefEnabled !== null) writeBeliefCapability(beliefEnabled)
+    // A missing or malformed capability header means this backend cannot safely
+    // serve temporal reads. Clear a previously cached true value immediately so
+    // a beta client never keeps sending view=history/all after a rollback or a
+    // proxy/CORS regression.
+    writeBeliefCapability(beliefEnabled === true)
   }
   // A cached true capability lets the first render request useful-now directly.
   // With no capability yet, probe the stable route first; the caller retries the
@@ -231,16 +235,17 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
   // memory_use state locally.
   const setMemoryUse = async (id: string, action: MemoryUseAction): Promise<void> => {
     if (cache.beliefEnabled !== true) return
+    const feedbackKey = `${id}:${action}`
     const feedbackId =
-      feedbackIds.get(id) ??
+      feedbackIds.get(feedbackKey) ??
       globalThis.crypto?.randomUUID?.() ??
       `memory-use-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    feedbackIds.set(id, feedbackId)
+    feedbackIds.set(feedbackKey, feedbackId)
     const originUid = getCacheUid()
     await omiApi.post(`/v3/memories/${id}/use`, { action, feedback_id: feedbackId })
     const list = await fetchMemories(requestedView)
     if (getCacheUid() === originUid) {
-      feedbackIds.delete(id)
+      feedbackIds.delete(feedbackKey)
       publish(list, requestedView)
     }
   }

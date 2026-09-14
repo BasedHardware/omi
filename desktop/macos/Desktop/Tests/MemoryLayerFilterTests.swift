@@ -8,6 +8,134 @@ final class MemoryLayerFilterTests: XCTestCase {
     XCTAssertFalse(MemoryLayerFilter.defaultAccess.allowedLayers.contains(.archive))
   }
 
+  func testUsefulNowKeepsUnknownAndDropsServerDatedHistory() {
+    let unknown = makeMemory(id: "unknown", tierIsExplicit: true)
+    let history = ServerMemory(
+      id: "history",
+      content: "Old decision",
+      category: .system,
+      tier: .longTerm,
+      tierIsExplicit: true,
+      createdAt: Date(timeIntervalSince1970: 1),
+      updatedAt: Date(timeIntervalSince1970: 2),
+      conversationId: nil,
+      reviewed: false,
+      userReview: nil,
+      visibility: "private",
+      manuallyAdded: false,
+      scoring: nil,
+      source: nil,
+      confidence: nil,
+      sourceApp: nil,
+      contextSummary: nil,
+      isRead: false,
+      isDismissed: false,
+      tags: [],
+      reasoning: nil,
+      currentActivity: nil,
+      inputDeviceName: nil,
+      windowTitle: nil,
+      headline: nil,
+      currencyBand: "history",
+      currencyMetadataIsExplicit: true
+    )
+
+    let useful = MemoryPageProjection.visibleMemories(
+      cachedMemories: [], serverMemories: [unknown, history],
+      source: .authoritativeServer, lifecycleExposed: true,
+      temporalFilter: .usefulNow)
+    let all = MemoryPageProjection.visibleMemories(
+      cachedMemories: [], serverMemories: [unknown, history],
+      source: .authoritativeServer, lifecycleExposed: true,
+      temporalFilter: .all)
+
+    XCTAssertEqual(useful.map(\.id), ["unknown"])
+    XCTAssertEqual(Set(all.map(\.id)), Set(["unknown", "history"]))
+  }
+
+  func testHistoryKeepsSuppressedRowsForReEnable() {
+    let suppressed = ServerMemory(
+      id: "suppressed",
+      content: "A true but currently suppressed memory",
+      category: .system,
+      tier: .longTerm,
+      tierIsExplicit: true,
+      createdAt: Date(timeIntervalSince1970: 1),
+      updatedAt: Date(timeIntervalSince1970: 2),
+      conversationId: nil,
+      reviewed: true,
+      userReview: true,
+      visibility: "private",
+      manuallyAdded: false,
+      scoring: nil,
+      source: nil,
+      confidence: nil,
+      sourceApp: nil,
+      contextSummary: nil,
+      isRead: false,
+      isDismissed: false,
+      tags: [],
+      reasoning: nil,
+      currentActivity: nil,
+      inputDeviceName: nil,
+      windowTitle: nil,
+      headline: nil,
+      ledgerMetadata: [
+        MemoryLedgerMetadata.argumentsJSONKey:
+          "{\"memory_use\":{\"last_action\":\"suppress\",\"suppressed\":true}}"
+      ],
+      currencyBand: "current",
+      currencyMetadataIsExplicit: true
+    )
+    let history = MemoryPageProjection.visibleMemories(
+      cachedMemories: [], serverMemories: [suppressed],
+      source: .authoritativeServer, lifecycleExposed: true,
+      temporalFilter: .history)
+
+    XCTAssertEqual(history.map(\.id), ["suppressed"])
+  }
+
+  func testHistoryKeepsServerRetainedRowsEvenWhenCurrencyBandLooksCurrent() {
+    let invalid = makeMemory(
+      id: "invalid",
+      tierIsExplicit: true,
+      ledgerMetadata: ["invalid_at": "2026-06-21T10:00:00Z"],
+      currencyBand: "current")
+    let superseded = makeMemory(
+      id: "superseded",
+      tierIsExplicit: true,
+      ledgerMetadata: ["superseded_by": "memory-newer"],
+      currencyBand: "current")
+    let suppressed = makeMemory(
+      id: "suppressed-current",
+      tierIsExplicit: true,
+      ledgerMetadata: [
+        MemoryLedgerMetadata.argumentsJSONKey:
+          "{\"memory_use\":{\"last_action\":\"suppress\",\"suppressed\":true}}"
+      ],
+      currencyBand: "current")
+    let values = [invalid, superseded, suppressed]
+
+    XCTAssertTrue(invalid.isHistory)
+    XCTAssertTrue(superseded.isHistory)
+    XCTAssertTrue(suppressed.isHistory)
+    XCTAssertFalse(invalid.isUsefulNow)
+    XCTAssertFalse(superseded.isUsefulNow)
+    XCTAssertFalse(suppressed.isUsefulNow)
+
+    let useful = MemoryPageProjection.visibleMemories(
+      cachedMemories: [], serverMemories: values,
+      source: .authoritativeServer, lifecycleExposed: true,
+      temporalFilter: .usefulNow)
+    let history = MemoryPageProjection.visibleMemories(
+      cachedMemories: [], serverMemories: values,
+      source: .authoritativeServer, lifecycleExposed: true,
+      temporalFilter: .history)
+
+    XCTAssertTrue(useful.isEmpty)
+    XCTAssertEqual(Set(history.map(\.id)), Set(values.map(\.id)))
+  }
+
   func testExplicitArchiveFilterOnlyAllowsArchive() {
     XCTAssertEqual(MemoryLayerFilter.archive.allowedLayers, [.archive])
   }
@@ -168,6 +296,20 @@ final class MemoryLayerFilterTests: XCTestCase {
     XCTAssertTrue(source.contains("hasAuthoritativeServerProjection"))
   }
 
+  func testMemoryUseControlsAndWritesRequireBeliefCapability() throws {
+    let source = try memoriesPageSource()
+
+    // omi-test-quality: source-inspection -- use feedback is beta-gated both at the UI surface and mutation boundary, including stale closures
+    XCTAssertTrue(source.contains("showUseControls: viewModel.beliefCapabilityEnabled == true"))
+    XCTAssertTrue(source.contains("if showUseControls {"))
+    XCTAssertTrue(source.contains("guard beliefCapabilityEnabled == true else { return }"))
+    XCTAssertTrue(source.contains("await waitForMemoryLoadLifecycleToSettle()"))
+    XCTAssertTrue(source.contains("let projectionBeforeRefresh = authoritativeProjectionGeneration"))
+    XCTAssertTrue(source.contains("authoritativeProjectionGeneration > projectionBeforeRefresh"))
+    XCTAssertTrue(source.contains("if confirmed {"))
+    XCTAssertTrue(source.contains("pendingMemoryUseFeedbackIDs.removeAll()"))
+  }
+
   func testEmptyAuthoritativeServerPageDoesNotDisplayNewerCachedMemory() {
     let cached = makeMemory(id: "local_42", tierIsExplicit: true)
 
@@ -230,7 +372,12 @@ final class MemoryLayerFilterTests: XCTestCase {
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
-  private func makeMemory(id: String, tierIsExplicit: Bool) -> ServerMemory {
+  private func makeMemory(
+    id: String,
+    tierIsExplicit: Bool,
+    ledgerMetadata: [String: String] = [:],
+    currencyBand: String? = nil
+  ) -> ServerMemory {
     ServerMemory(
       id: id,
       content: "A cached memory",
@@ -256,7 +403,9 @@ final class MemoryLayerFilterTests: XCTestCase {
       currentActivity: nil,
       inputDeviceName: nil,
       windowTitle: nil,
-      headline: nil
+      headline: nil,
+      ledgerMetadata: ledgerMetadata,
+      currencyBand: currencyBand
     )
   }
 }

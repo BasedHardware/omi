@@ -9,6 +9,7 @@ import {
   displayTags,
   formatMemoryAssessmentDate,
   formatMemoryDate,
+  formatMemoryEvidenceDate,
   isNewMemory,
   isProtectedContent,
   layerLabel,
@@ -85,6 +86,7 @@ function MemoryCardImpl({
   const layer = layerLabel(memory)
   const source = memorySourceLabel(memory)
   const assessmentDate = formatMemoryAssessmentDate(memory)
+  const evidenceDate = formatMemoryEvidenceDate(memory)
   const hasAssessment =
     memory.currency_band !== undefined ||
     memory.currency !== undefined ||
@@ -150,6 +152,11 @@ function MemoryCardImpl({
           </span>
         )}
 
+        {evidenceDate && (
+          <span className="text-text-quaternary" title="Server evidence time">
+            Evidence {evidenceDate}
+          </span>
+        )}
         {assessmentDate && (
           <span className="text-text-quaternary" title="Server evidence assessment time">
             Assessed {assessmentDate}

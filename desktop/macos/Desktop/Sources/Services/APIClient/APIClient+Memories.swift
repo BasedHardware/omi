@@ -266,6 +266,18 @@ struct ServerMemory: Decodable, Identifiable {
   let ledgerMetadata: [String: String]
   /// Optional generated-v3 evidence retained in a bounded local mirror.
   let evidenceState: ServerMemoryEvidenceState
+  /// Server-assessed memory currency. These fields are evidence metadata only;
+  /// the desktop never derives a band from age or applies its own half-life.
+  let asOf: Date?
+  let currency: Double?
+  let currencyBand: String?
+  let beliefClass: String?
+  let halfLifeDays: Double?
+  let beliefComputedAt: Date?
+  /// True when at least one currency/belief field was present on the wire.
+  /// This distinguishes an explicit unknown classification from a legacy
+  /// response that predates the temporal contract.
+  let currencyMetadataIsExplicit: Bool
   var evidence: [ServerMemoryEvidence] {
     guard case .valid(let values) = evidenceState else { return [] }
     return values
@@ -318,6 +330,12 @@ struct ServerMemory: Decodable, Identifiable {
     case ledgerArguments = "arguments"
     case ledgerTriggerCondition = "trigger_condition"
     case ledgerWriteReason = "write_reason"
+    case asOf = "as_of"
+    case currency
+    case currencyBand = "currency_band"
+    case beliefClass = "belief_class"
+    case halfLifeDays = "half_life_days"
+    case beliefComputedAt = "belief_computed_at"
   }
 
   init(from decoder: Decoder) throws {
@@ -366,6 +384,32 @@ struct ServerMemory: Decodable, Identifiable {
     let updatedAtString = wire?.updatedAt ?? (try? container.decode(String.self, forKey: .updatedAt))
     updatedAt = (updatedAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? createdAt
     expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
+
+    func parseMemoryDate(_ key: CodingKeys) -> Date? {
+      guard let raw = try? container.decode(String.self, forKey: key) else { return nil }
+      return f.date(from: raw) ?? std.date(from: raw)
+        ?? {
+          let dateOnly = DateFormatter()
+          dateOnly.calendar = Calendar(identifier: .gregorian)
+          dateOnly.locale = Locale(identifier: "en_US_POSIX")
+          dateOnly.timeZone = TimeZone(secondsFromGMT: 0)
+          dateOnly.dateFormat = "yyyy-MM-dd"
+          return dateOnly.date(from: raw)
+        }()
+    }
+    asOf = parseMemoryDate(.asOf)
+    currency = try container.decodeIfPresent(Double.self, forKey: .currency)
+    currencyBand = try container.decodeIfPresent(String.self, forKey: .currencyBand)
+    beliefClass = try container.decodeIfPresent(String.self, forKey: .beliefClass)
+    halfLifeDays = try container.decodeIfPresent(Double.self, forKey: .halfLifeDays)
+    beliefComputedAt = parseMemoryDate(.beliefComputedAt)
+    currencyMetadataIsExplicit =
+      container.contains(.asOf)
+      || container.contains(.currency)
+      || container.contains(.currencyBand)
+      || container.contains(.beliefClass)
+      || container.contains(.halfLifeDays)
+      || container.contains(.beliefComputedAt)
 
     // layer / tier / memory_tier alias resolution. Prefer wire DTO fields
     // (schema-validated); fall back to container decoding when the wire DTO
@@ -571,6 +615,42 @@ struct ServerMemory: Decodable, Identifiable {
     default: return "lightbulb.fill"
     }
   }
+
+  /// Server-owned temporal classification. Unknown/missing classifications are
+  /// intentionally visible in Useful now until the server makes a decision.
+  private var hasServerRetainedHistoryMarker: Bool {
+    ["invalid_at", "superseded_by"].contains { key in
+      guard let value = ledgerMetadata[key] else { return false }
+      let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      return !normalized.isEmpty && normalized != "null"
+    }
+  }
+
+  var isUsefulNow: Bool {
+    guard memoryUseSuppressed != true, !hasServerRetainedHistoryMarker else { return false }
+    let normalized = currencyBand?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return normalized != "history"
+  }
+
+  var isHistory: Bool {
+    currencyBand?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "history"
+      || hasServerRetainedHistoryMarker
+      || memoryUseSuppressed == true
+  }
+
+  /// Server-owned reversible use state is carried in the existing canonical
+  /// `arguments` bag. Keep it read-only here; mutation remains the explicit
+  /// `/use` route and must not be inferred from truth review fields.
+  var memoryUseSuppressed: Bool? {
+    guard let argumentsJSON = ledgerMetadata[MemoryLedgerMetadata.argumentsJSONKey],
+      let data = argumentsJSON.data(using: .utf8),
+      let object = try? JSONSerialization.jsonObject(with: data),
+      let arguments = object as? [String: Any],
+      let use = arguments["memory_use"] as? [String: Any],
+      let suppressed = use["suppressed"] as? Bool
+    else { return nil }
+    return suppressed
+  }
 }
 
 // MARK: - Force Process Conversation API
@@ -741,6 +821,13 @@ extension APIClient {
   private static let defaultDeleteSupportedHeader = "X-Omi-Memory-Default-Delete-Supported"
   private static let nextCursorHeader = "X-Omi-Memory-Next-Cursor"
   private static let listTruncatedHeader = "X-Omi-List-Truncated"
+  private static let beliefEnabledHeader = "X-Omi-Memory-Belief-Enabled"
+
+  enum MemoryTemporalView: String, Sendable {
+    case usefulNow = "useful_now"
+    case history
+    case all
+  }
 
   enum KnowledgeLedgerPromptAuthority: String, Decodable, Equatable, Sendable {
     case disabled
@@ -780,6 +867,32 @@ extension APIClient {
     let deviceScopeSupported: Bool?
     let defaultMemoryDeleteSupported: Bool
     let truncated: Bool
+    let beliefEnabled: Bool?
+
+    init(
+      memories: [ServerMemory],
+      nextCursor: String?,
+      canonicalLifecycleExposed: Bool,
+      deviceScopeSupported: Bool?,
+      defaultMemoryDeleteSupported: Bool,
+      truncated: Bool,
+      beliefEnabled: Bool? = nil
+    ) {
+      self.memories = memories
+      self.nextCursor = nextCursor
+      self.canonicalLifecycleExposed = canonicalLifecycleExposed
+      self.deviceScopeSupported = deviceScopeSupported
+      self.defaultMemoryDeleteSupported = defaultMemoryDeleteSupported
+      self.truncated = truncated
+      self.beliefEnabled = beliefEnabled
+    }
+  }
+
+  struct MemoryHistoryPage {
+    let memories: [ServerMemory]
+    let nextCursor: String?
+    let truncated: Bool
+    let beliefEnabled: Bool?
   }
 
   /// Fetches memories from the API with optional filtering
@@ -792,7 +905,8 @@ extension APIClient {
     includeDismissed: Bool = false,
     includeArchive: Bool = false,
     deviceScope: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    view: MemoryTemporalView? = nil
   ) async throws -> [ServerMemory] {
     let page = try await getMemoriesPage(
       limit: limit,
@@ -803,7 +917,8 @@ extension APIClient {
       includeDismissed: includeDismissed,
       includeArchive: includeArchive,
       deviceScope: deviceScope,
-      authorizationSnapshot: authorizationSnapshot)
+      authorizationSnapshot: authorizationSnapshot,
+      view: view)
     return page.memories
   }
 
@@ -817,7 +932,8 @@ extension APIClient {
     includeDismissed: Bool = false,
     includeArchive: Bool = false,
     deviceScope: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    view: MemoryTemporalView? = nil
   ) async throws -> MemoryListPage {
     var endpoint = "v3/memories?limit=\(limit)"
     if let cursor, !cursor.isEmpty {
@@ -842,6 +958,9 @@ extension APIClient {
     }
     if let deviceScope = deviceScope {
       endpoint += "&device_scope=\(deviceScope)"
+    }
+    if let view {
+      endpoint += "&view=\(view.rawValue)"
     }
 
     guard let url = URL(string: baseURL + endpoint) else {
@@ -877,14 +996,69 @@ extension APIClient {
       httpResponse.value(forHTTPHeaderField: Self.defaultDeleteSupportedHeader) == "true"
     let nextCursor = httpResponse.value(forHTTPHeaderField: Self.nextCursorHeader)
     let truncated = httpResponse.value(forHTTPHeaderField: Self.listTruncatedHeader) == "true"
+    let beliefHeader = httpResponse.value(forHTTPHeaderField: Self.beliefEnabledHeader)
+    let beliefEnabled = beliefHeader.flatMap { value in
+      switch value.lowercased() {
+      case "true": return true
+      case "false": return false
+      default: return nil
+      }
+    }
     return MemoryListPage(
       memories: memories,
       nextCursor: nextCursor?.isEmpty == false ? nextCursor : nil,
       canonicalLifecycleExposed: canonicalLifecycleExposed,
       deviceScopeSupported: deviceScopeSupported,
       defaultMemoryDeleteSupported: defaultMemoryDeleteSupported,
-      truncated: truncated
+      truncated: truncated,
+      beliefEnabled: beliefEnabled
     )
+  }
+
+  /// Fetch the durable history projection. Explicit history reads always go
+  /// to the authorized server route; callers must not satisfy this from cache.
+  func getMemoryHistoryPage(
+    limit: Int = 100,
+    offset: Int = 0,
+    cursor: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> MemoryHistoryPage {
+    var endpoint = "v3/memories/ledger-history?limit=\(limit)"
+    if let cursor, !cursor.isEmpty {
+      var allowed = CharacterSet.urlQueryAllowed
+      allowed.remove(charactersIn: ":/?#[]@!$&'()*+,;=")
+      endpoint += "&cursor=\(cursor.addingPercentEncoding(withAllowedCharacters: allowed) ?? cursor)"
+    } else {
+      endpoint += "&offset=\(offset)"
+    }
+    guard let url = URL(string: baseURL + endpoint) else { throw APIError.invalidResponse }
+    let authPolicy = try resolvedRequestAuthPolicy(expectedOwnerId: nil, authorizationSnapshot: authorizationSnapshot)
+    try validateExpectedOwner(authPolicy)
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: true, expectedAuthOwnerId: authPolicy.expectedAuthOwnerId)
+    try validateExpectedOwner(authPolicy)
+    let (data, response) = try await performAuthenticatedData(for: request, authPolicy: authPolicy)
+    guard (200...299).contains(response.statusCode) else {
+      throw APIError.httpError(statusCode: response.statusCode, detail: OmiHTTPTransport.extractErrorDetail(from: data))
+    }
+    let memories = try decoder.decode([ServerMemory].self, from: data)
+    try validateExpectedOwner(authPolicy)
+    let beliefHeader = response.value(forHTTPHeaderField: Self.beliefEnabledHeader)
+    let beliefEnabled = beliefHeader.flatMap { value in
+      switch value.lowercased() {
+      case "true": return true
+      case "false": return false
+      default: return nil
+      }
+    }
+    let nextCursor = response.value(forHTTPHeaderField: Self.nextCursorHeader)
+    return MemoryHistoryPage(
+      memories: memories,
+      nextCursor: nextCursor?.isEmpty == false ? nextCursor : nil,
+      truncated: response.value(forHTTPHeaderField: Self.listTruncatedHeader) == "true",
+      beliefEnabled: beliefEnabled)
   }
 
   /// Read the dedicated server-owned snapshot decision. The backend returns
@@ -978,6 +1152,38 @@ extension APIClient {
   }
 
   /// Creates a new memory (manual or extracted)
+  struct MemoryCaptureContext: Encodable, Equatable, Sendable {
+    let sourceType: String
+    let capturedAt: Date?
+    let sourceId: String?
+    let sourceSignal: String?
+    let sourceVersion: String?
+    let attribution: String?
+
+    enum CodingKeys: String, CodingKey {
+      case sourceType = "source_type"
+      case capturedAt = "captured_at"
+      case sourceId = "source_id"
+      case sourceSignal = "source_signal"
+      case sourceVersion = "source_version"
+      case attribution
+    }
+
+    func encode(to encoder: Encoder) throws {
+      var container = encoder.container(keyedBy: CodingKeys.self)
+      try container.encode(sourceType, forKey: .sourceType)
+      if let capturedAt {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        try container.encode(formatter.string(from: capturedAt), forKey: .capturedAt)
+      }
+      try container.encodeIfPresent(sourceId, forKey: .sourceId)
+      try container.encodeIfPresent(sourceSignal, forKey: .sourceSignal)
+      try container.encodeIfPresent(sourceVersion, forKey: .sourceVersion)
+      try container.encodeIfPresent(attribution, forKey: .attribution)
+    }
+  }
+
   func createMemory(
     content: String,
     visibility: String = "private",
@@ -991,6 +1197,7 @@ extension APIClient {
     source: String? = nil,
     windowTitle: String? = nil,
     headline: String? = nil,
+    captureContext: MemoryCaptureContext? = nil,
     expectedOwnerId: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     allowsAuthRetry: Bool = true
@@ -1008,6 +1215,7 @@ extension APIClient {
       let source: String?
       let windowTitle: String?
       let headline: String?
+      let captureContext: MemoryCaptureContext?
 
       enum CodingKeys: String, CodingKey {
         case content, visibility, category, confidence, tags, reasoning, source, headline
@@ -1015,6 +1223,7 @@ extension APIClient {
         case contextSummary = "context_summary"
         case currentActivity = "current_activity"
         case windowTitle = "window_title"
+        case captureContext = "capture_context"
       }
     }
     let body = CreateRequest(
@@ -1029,7 +1238,8 @@ extension APIClient {
       currentActivity: currentActivity,
       source: source,
       windowTitle: windowTitle,
-      headline: headline
+      headline: headline,
+      captureContext: captureContext
     )
     return try await post(
       "v3/memories",
@@ -1151,6 +1361,32 @@ extension APIClient {
       "v3/memories/\(id)/review?value=\(keep)",
       body: EmptyBody()
     )
+  }
+
+  enum MemoryUseAction: String, Encodable, Sendable {
+    case suppress
+    case allow
+    case useful
+  }
+
+  /// Records a reversible owner use preference without deleting the memory.
+  /// The caller owns one feedback id per user action and reuses it on retry.
+  func recordMemoryUse(
+    id: String,
+    action: MemoryUseAction,
+    feedbackId: String
+  ) async throws {
+    struct UseRequest: Encodable {
+      let action: MemoryUseAction
+      let feedbackId: String
+      enum CodingKeys: String, CodingKey {
+        case action
+        case feedbackId = "feedback_id"
+      }
+    }
+    let _: MemoryStatusResponse = try await post(
+      "v3/memories/\(id)/use",
+      body: UseRequest(action: action, feedbackId: feedbackId))
   }
 
   /// Marks all memories as read

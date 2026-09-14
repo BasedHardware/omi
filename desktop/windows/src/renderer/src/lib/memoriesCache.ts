@@ -67,9 +67,9 @@ export function readBeliefCapability(): boolean | null {
 }
 
 export function writeBeliefCapability(enabled: boolean): void {
+  cache.beliefEnabled = enabled
   if (!getCacheUid()) return
   writePersistedValue(capabilitySurface(), { enabled })
-  cache.beliefEnabled = enabled
 }
 
 // Every mounted useMemories subscribes here so a refresh/create in one place

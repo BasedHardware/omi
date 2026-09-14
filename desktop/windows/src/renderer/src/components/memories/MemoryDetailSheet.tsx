@@ -9,6 +9,7 @@ import {
   displayTags,
   formatMemoryAssessmentDate,
   formatMemoryDate,
+  formatMemoryEvidenceDate,
   isProtectedContent,
   layerLabel,
   memoryUseSuppressed
@@ -69,6 +70,7 @@ export function MemoryDetailSheet({
   const tags = displayTags(memory)
   const source = memorySourceLabel(memory)
   const assessmentDate = formatMemoryAssessmentDate(memory)
+  const evidenceDate = formatMemoryEvidenceDate(memory)
   const hasAssessment =
     memory.currency_band !== undefined ||
     memory.currency !== undefined ||
@@ -239,7 +241,8 @@ export function MemoryDetailSheet({
                   <MetaRow label="Device" value={memory.primary_capture_device} />
                 )}
                 <MetaRow label="Created" value={formatMemoryDate(memory.created_at)} />
-                {assessmentDate && <MetaRow label="Evidence assessed" value={assessmentDate} />}
+                {evidenceDate && <MetaRow label="Evidence from" value={evidenceDate} />}
+                {assessmentDate && <MetaRow label="Assessed" value={assessmentDate} />}
                 {memory.belief_class && (
                   <MetaRow label="Belief class" value={memory.belief_class} />
                 )}

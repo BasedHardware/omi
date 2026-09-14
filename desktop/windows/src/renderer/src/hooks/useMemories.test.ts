@@ -292,6 +292,10 @@ describe('useMemories — pagination, capability header, delete', () => {
 
   it('posts beta memory-use feedback and reuses its id when a user retries', async () => {
     memoriesCache.beliefEnabled = true
+    omiApiGet.mockResolvedValue({
+      data: [memory('m1', 'Original content', 'private')],
+      headers: { 'x-omi-memory-belief-enabled': 'true' }
+    })
     const { result } = renderHook(() => useMemories())
     await act(async () => {
       await result.current.refresh()
@@ -302,13 +306,35 @@ describe('useMemories — pagination, capability header, delete', () => {
     await act(async () => {
       await result.current.setMemoryUse('m1', 'suppress')
     })
+    await act(async () => {
+      await result.current.setMemoryUse('m1', 'allow')
+    })
 
-    expect(omiApiPost).toHaveBeenCalledTimes(2)
+    expect(omiApiPost).toHaveBeenCalledTimes(3)
     expect(omiApiPost.mock.calls[0]).toEqual([
       '/v3/memories/m1/use',
       expect.objectContaining({ action: 'suppress', feedback_id: expect.any(String) })
     ])
+    expect(omiApiPost.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ action: 'suppress', feedback_id: expect.any(String) })
+    )
     expect(omiApiPost.mock.calls[1][1].feedback_id).toBe(omiApiPost.mock.calls[0][1].feedback_id)
+    expect(omiApiPost.mock.calls[2][1]).toEqual(
+      expect.objectContaining({ action: 'allow', feedback_id: expect.any(String) })
+    )
+    expect(omiApiPost.mock.calls[2][1].feedback_id).not.toBe(
+      omiApiPost.mock.calls[0][1].feedback_id
+    )
+    resetMemoriesCache()
+  })
+
+  it('clears a cached beta capability when a response omits the capability header', async () => {
+    memoriesCache.beliefEnabled = true
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.beliefEnabled).toBe(false)
     resetMemoriesCache()
   })
 })

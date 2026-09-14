@@ -37,6 +37,28 @@ const EXPECTED_TIMESTAMP = new Date(memory.created_at).toLocaleDateString('en-US
 });
 
 describe('MemoryCard layout', () => {
+  it('offers explicit use feedback without treating suppression as deletion', async () => {
+    const onSetUse = vi.fn().mockResolvedValue(true);
+    render(
+      <MemoryCard
+        memory={{
+          ...memory,
+          arguments: { memory_use: { useful: false } },
+        }}
+        onEdit={vi.fn().mockResolvedValue(true)}
+        onDelete={vi.fn().mockResolvedValue(true)}
+        onToggleVisibility={vi.fn().mockResolvedValue(true)}
+        onSetUse={onSetUse}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: "Don't use" }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark memory useful' }));
+
+    expect(onSetUse).toHaveBeenNthCalledWith(1, 'memory-1', 'suppress');
+    expect(onSetUse).toHaveBeenNthCalledWith(2, 'memory-1', 'useful');
+  });
+
   it('keeps hover actions out of metadata flow', () => {
     const { container } = renderCard();
     const card = container.querySelector('#memory-memory-1');

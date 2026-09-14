@@ -74,6 +74,7 @@ export function memoryCurrencyBand(m: Memory): MemoryCurrencyBand {
       return 'fading'
     case 'stale':
     case 'expired':
+    case 'history':
       return 'stale'
     default:
       return 'unknown'
@@ -98,9 +99,24 @@ export function currencyBandLabel(m: Memory): string {
   }
 }
 
-/** Format an evidence/assessment timestamp without inventing one locally. */
+/** Format the server's belief assessment timestamp without inventing one locally. */
 export function formatMemoryAssessmentDate(m: Memory): string | null {
-  const value = m.as_of ?? m.belief_computed_at
+  const value = m.belief_computed_at
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+}
+
+/** Format the evidence timestamp separately from when the server assessed it. */
+export function formatMemoryEvidenceDate(m: Memory): string | null {
+  const value = m.as_of
   if (!value) return null
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null

@@ -3,6 +3,7 @@ import type { Memory } from '../hooks/useMemories'
 import {
   currencyBandLabel,
   formatMemoryAssessmentDate,
+  formatMemoryEvidenceDate,
   isUsefulNowMemory,
   memoryCurrencyBand,
   memoryUseSuppressed
@@ -23,6 +24,9 @@ describe('memory temporal projection', () => {
     expect(isUsefulNowMemory(memory({ currency_band: 'fading' }))).toBe(true)
     expect(isUsefulNowMemory(memory())).toBe(true)
     expect(isUsefulNowMemory(memory({ currency_band: 'stale' }))).toBe(false)
+    expect(memoryCurrencyBand(memory({ currency_band: 'history' }))).toBe('stale')
+    expect(currencyBandLabel(memory({ currency_band: 'history' }))).toBe('Historical')
+    expect(isUsefulNowMemory(memory({ currency_band: 'history' }))).toBe(false)
   })
 
   it('does not invent currentness from ordinary timestamps', () => {
@@ -32,13 +36,17 @@ describe('memory temporal projection', () => {
     expect(formatMemoryAssessmentDate(legacy)).toBeNull()
   })
 
-  it('shows the evidence date before the computation timestamp', () => {
+  it('keeps evidence and assessment timestamps distinct', () => {
     const assessed = memory({
       currency_band: 'fading',
       as_of: '2026-09-12T10:30:00Z',
       belief_computed_at: '2026-09-13T10:30:00Z'
     })
-    expect(formatMemoryAssessmentDate(assessed)).toContain('2026')
+    const evidenceDate = formatMemoryEvidenceDate(assessed)
+    const assessmentDate = formatMemoryAssessmentDate(assessed)
+    expect(evidenceDate).toContain('12')
+    expect(assessmentDate).toContain('13')
+    expect(assessmentDate).not.toBe(evidenceDate)
     expect(currencyBandLabel(assessed)).toBe('Fading')
   })
 

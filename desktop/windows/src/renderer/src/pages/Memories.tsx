@@ -45,9 +45,15 @@ export function Memories(): React.JSX.Element {
     createMemory,
     editMemory,
     setMemoryVisibility,
+    setMemoryUse,
     deleteMemory,
     refresh
   } = useMemories(memoryView)
+  useEffect(() => {
+    if (beliefEnabled === false && memoryView !== 'useful_now') {
+      setMemoryView('useful_now')
+    }
+  }, [beliefEnabled, memoryView])
   // Pass the live memories so the brain map scopes the server KG to entities
   // that reference a memory you actually have (no account-wide bloat / phantoms),
   // drops the layer when empty, and refetches on add/delete.
