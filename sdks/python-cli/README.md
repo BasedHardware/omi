@@ -63,6 +63,8 @@ Pretty output displays returned text literally, including square brackets and
 emoji-like codes such as `:warning:`. Styling applies to the table layout, not
 to the contents of your memories or conversations.
 
+> Looking for localized guides? See the [कोंकणींत सुरवात (Konkani Quickstart)](examples/quickstart.kok.md).
+
 ## Auth
 
 Two auth methods, both fully wired:
