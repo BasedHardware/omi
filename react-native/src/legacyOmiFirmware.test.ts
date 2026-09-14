@@ -132,21 +132,14 @@ test('keeps GET firmware version when a changelog item exceeds 10000', () => {
   });
 });
 
-test('keeps GET firmware version when min_version is a non-string', () => {
-  expect(
-    parseOmiLatestFirmware(JSON.stringify({version: '1.3.0', min_version: 1})),
-  ).toEqual({
-    version: '1.3.0',
-    draft: false,
-    minVersion: null,
-  });
-});
-
 test('fails closed for malformed GET latest firmware', () => {
   expect(() => parseOmiLatestFirmware(JSON.stringify([]))).toThrow();
   expect(() => parseOmiLatestFirmware(JSON.stringify({version: 1}))).toThrow();
   expect(() =>
     parseOmiLatestFirmware(JSON.stringify({version: '1.3.0', draft: 'yes'})),
+  ).toThrow();
+  expect(() =>
+    parseOmiLatestFirmware(JSON.stringify({version: '1.3.0', min_version: 1})),
   ).toThrow();
 });
 
