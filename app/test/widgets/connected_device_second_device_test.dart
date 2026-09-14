@@ -21,7 +21,7 @@ class _StubDeviceProvider extends DeviceProvider {
     required BtDevice primary,
     BtDevice? savedCompanion,
     BtDevice? connectedCompanion,
-    this.companionBattery = -1,
+    int companionBattery = -1,
   }) {
     isConnected = true;
     connectedDevice = primary;
