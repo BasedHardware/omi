@@ -103,7 +103,11 @@ omi auth refresh
 Ka bax:
 
 ```bash
+# Ka bax astaanta
 omi auth logout
+
+# Haddii furaha API laga dhigay doorsoomaha jawiga, tirtir si aysan u sii shaqeyn
+unset OMI_API_KEY
 ```
 
 ---
@@ -182,8 +186,11 @@ omi --json ask "maxay ahaayeen hawlihii aan ballanqaaday inaan dhammeeyo usbuuca
 Wakiillada AI iyo qoraallada shaqada (scripts), `omi-cli` waxay soo saari kartaa JSON mashiinku akhrisan karo. Calanka `--json` waa mid **caalami ah (global)** waana in la dhigaa **ka hor** amarka hoose.
 
 ```bash
-# Xusuusaha: soo saar id iyo content
+# Xusuusaha: soo saar id iyo content (bogga 1-aad)
 omi --json memory list | jq '.[] | {id, content}'
+
+# Xusuusaha: u gudub bogagga xiga adoo adeegsanaya pagination (--limit iyo --offset)
+omi --json memory list --limit 25 --offset 25 | jq '.[] | {id, content}'
 
 # Cinwaannada wada-hadalladii ugu dambeeyay
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
@@ -214,8 +221,9 @@ Xeerarka ka bixitaanka waxay si adag ugu xiran yihiin qandaraaska lagu qeexay [o
 Tusaalaha maareynta qaladka ee Bash:
 
 ```bash
-if ! omi --json memory list > /dev/null 2>&1; then
-  EXIT_CODE=$?
+omi --json memory list > /dev/null 2>&1
+EXIT_CODE=$?
+if [ "$EXIT_CODE" -ne 0 ]; then
   case $EXIT_CODE in
     1) echo "Khalad: Isticmaal aan sax ahayn ama calan khaldan." ;;
     2) echo "Khalad: Aqoonsigu wuu fashilmay. Fadlan orod 'omi auth login'." ;;
@@ -244,7 +252,7 @@ export OMI_LOCAL_API_URL="http://127.0.0.1:47778"
 export OMI_LOCAL_TOKEN="furahaaga_maxalliga_ah"
 
 # Hubi xaaladda maxalliga ah
-omi auth status
+omi local status
 ```
 
 ### Maareynta Astaamaha Badan (Multi-profile)
@@ -263,4 +271,4 @@ omi --profile staging memory list
 
 ## 7. Soo Koobid
 
-`omi-cli` waxay horumariyeyaasha iyo wakiillada AI siisaa awoodda buuxda ee xogta Omi iyadoo toos looga maamulayo terminal-ka. Faahfaahin dheeraad ah iyo dukumentiyada Python SDK, booqo [docs.omi.me](https://docs.omi.me).\n
+`omi-cli` waxay horumariyeyaasha iyo wakiillada AI siisaa awoodda buuxda ee xogta Omi iyadoo toos looga maamulayo terminal-ka. Faahfaahin dheeraad ah iyo dukumentiyada Python SDK, booqo [docs.omi.me](https://docs.omi.me).

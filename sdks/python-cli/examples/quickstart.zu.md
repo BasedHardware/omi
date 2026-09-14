@@ -103,7 +103,11 @@ omi auth refresh
 Phuma:
 
 ```bash
+# Phuma kuphrofayela
 omi auth logout
+
+# Uma usebenzise i-variable yendawo, yisuse ukuze ingaqhubeki nokugunyaza
+unset OMI_API_KEY
 ```
 
 ---
@@ -182,8 +186,11 @@ omi --json ask "yimiphi imisebenzi engathembisa ukuyiqeda kuleli sonto"
 Kuma-agent e-AI nasezikripthini, i-`omi-cli` ingakhiqiza i-JSON efundeka ngomshini. Ifulegi elithi `--json` liyi-**global** futhi kufanele libekwe **ngaphambi** komyalo omncane.
 
 ```bash
-# Izinkumbulo: khipha i-id ne-content
+# Izinkumbulo: khipha i-id ne-content (ikhasi lokuqala)
 omi --json memory list | jq '.[] | {id, content}'
+
+# Izinkumbulo: finyelela emakhasini alandelayo usebenzisa i-pagination (--limit ne---offset)
+omi --json memory list --limit 25 --offset 25 | jq '.[] | {id, content}'
 
 # Izihloko zezinkulumo zakamuva
 omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
@@ -214,8 +221,9 @@ Amakhodi okuphuma aboshelwe ngokuqinile kusivumelwano esichazwe ku-[omi_cli/erro
 Isibonelo sokuphatha amaphutha ku-Bash:
 
 ```bash
-if ! omi --json memory list > /dev/null 2>&1; then
-  EXIT_CODE=$?
+omi --json memory list > /dev/null 2>&1
+EXIT_CODE=$?
+if [ "$EXIT_CODE" -ne 0 ]; then
   case $EXIT_CODE in
     1) echo "Iphutha: Ukusetshenziswa okungavumelekile noma ifulegi elingalungile." ;;
     2) echo "Iphutha: Ukufakazela ubuqiniso kuhlulekile. Sicela usebenzise i-'omi auth login'." ;;
@@ -244,7 +252,7 @@ export OMI_LOCAL_API_URL="http://127.0.0.1:47778"
 export OMI_LOCAL_TOKEN="ithokheni_lakho_lasendaweni"
 
 # Hlola isimo sasendaweni
-omi auth status
+omi local status
 ```
 
 ### Ukuphathwa Kwamaphrofayela Amaningi (Multi-profile)
@@ -263,4 +271,4 @@ omi --profile staging memory list
 
 ## 7. Isifinyezo
 
-I-`omi-cli` inikeza onjiniyela nama-agent e-AI amandla aphelele edatha yakwa-Omi ngokuyilawula ngqo kusuka kutheminali. Ukuze uthole imininingwane eyengeziwe namadokhumenti e-Python SDK, vakashela ku-[docs.omi.me](https://docs.omi.me).\n
+I-`omi-cli` inikeza onjiniyela nama-agent e-AI amandla aphelele edatha yakwa-Omi ngokuyilawula ngqo kusuka kutheminali. Ukuze uthole imininingwane eyengeziwe namadokhumenti e-Python SDK, vakashela ku-[docs.omi.me](https://docs.omi.me).
