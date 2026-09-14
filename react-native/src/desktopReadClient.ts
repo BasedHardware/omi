@@ -510,6 +510,10 @@ export function tasksSearchEmptyCopy(): string {
   return 'No results found';
 }
 
+export function appsEmptyCopy(): string {
+  return 'No apps found';
+}
+
 export function conversationDetailSummaryCopy(detail: {
   summary: string;
   sections: readonly {heading: string; bodyMarkdown: string}[];

@@ -18,6 +18,7 @@ import {
   desktopBackendUnavailableCopy,
   developerKeyCreatedCopy,
   desktopReadErrorCopy,
+  appsEmptyCopy,
 } from '../desktopReadClient';
 
 jest.mock('../app/useReduceMotion', () => ({
@@ -1800,7 +1801,8 @@ test('Apps is a wrapped gallery that does not invent catalog entries', async () 
     await Promise.resolve();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('No apps are available.');
+  expect(tree).toContain(appsEmptyCopy());
+  expect(tree).not.toContain('No apps are available.');
   expect(tree).not.toContain('Calendar');
   expect(tree).not.toContain('ChatGPT');
 });
@@ -1863,6 +1865,7 @@ test('nested non-retryable Apps enabled failures do not claim an empty catalogue
   });
   expect(renderedText(renderer)).toContain(desktopAppsUnavailableCopy);
   expect(renderedText(renderer)).not.toContain('No apps are available.');
+  expect(renderedText(renderer)).not.toContain(appsEmptyCopy());
 });
 
 test('nested non-retryable Apps enabled failures keep catalogue tiles without claiming install status', async () => {

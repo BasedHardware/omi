@@ -8,6 +8,7 @@ import {
   memoriesEmptyCopy,
   memoriesSearchEmptyCopy,
   tasksSearchEmptyCopy,
+  appsEmptyCopy,
   conversationDisplayTitle,
   conversationListUsesListenOverview,
   conversationRecapTitle,
@@ -2614,6 +2615,10 @@ test('memory empty copy names Flutter noMemoriesYet and noMemoriesFound', () => 
 
 test('task search empty copy names Flutter noResultsFound', () => {
   expect(tasksSearchEmptyCopy()).toBe('No results found');
+});
+
+test('apps empty copy names Flutter noAppsFound', () => {
+  expect(appsEmptyCopy()).toBe('No apps found');
 });
 
 test('groups validated UTC conversation timestamps by local calendar day', () => {

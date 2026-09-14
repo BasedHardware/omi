@@ -29,6 +29,7 @@ import {
   appDisplayName,
   appImageUrl,
   appRatingCopy,
+  appsEmptyCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
@@ -148,7 +149,7 @@ export function ConnectorsPage({
     }
     return [
       {
-        empty: 'No apps were returned by the catalogue.',
+        empty: appsEmptyCopy(),
         items: exploreApps(snapshot),
         key: 'Explore',
         title: 'Explore',

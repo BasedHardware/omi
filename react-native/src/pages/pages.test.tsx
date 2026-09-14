@@ -27,7 +27,7 @@ jest.mock('../omiNative', () => ({
 
 const {ConnectorsPage} = require('./Connectors');
 const {SettingsPage} = require('./Settings');
-const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy} = require('../desktopReadClient');
+const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy} = require('../desktopReadClient');
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -567,6 +567,34 @@ test('omitted Apps 503 retryable still offers Retry', async () => {
     'This saved data could not be loaded. Retry without changing it.',
   );
   expect(labelsOf(renderer)).toContain('Retry apps');
+});
+
+test('Apps names GET empty catalogue Flutter noAppsFound', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain(appsEmptyCopy());
+  expect(tree).not.toContain('No apps were returned by the catalogue.');
+  expect(tree).not.toContain('Unable to fetch apps');
+  expect(tree).not.toContain('try adjusting');
+  expect(tree).toContain('No installed apps.');
+  expect(tree).toContain('No apps owned by this account.');
 });
 
 test('nested non-retryable Apps profile reads do not claim owned apps are still loading', async () => {

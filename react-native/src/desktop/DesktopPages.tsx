@@ -14,6 +14,7 @@ import {
   appDisplayAttribution,
   appImageUrl,
   appRatingCopy,
+  appsEmptyCopy,
   desktopAppsUnavailableCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
@@ -549,7 +550,7 @@ export function AppsPage({session}: {session: DesktopSession}) {
             ) : null}
             {tiles.length === 0 ? (
               enabledError === null ? (
-                <EmptyCopy>No apps are available.</EmptyCopy>
+                <EmptyCopy>{appsEmptyCopy()}</EmptyCopy>
               ) : null
             ) : (
               tiles.map(item => (
