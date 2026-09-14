@@ -27,6 +27,10 @@ function array(value: unknown): unknown[] {
 
 const FOLDER_HEX_COLOR = /^#?[0-9A-Fa-f]{6}$/;
 
+export function folderDefaultColorCopy(): string {
+  return '#6B7280';
+}
+
 export function omiFolderHexColor(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
@@ -36,6 +40,16 @@ export function omiFolderHexColor(value: unknown): string | undefined {
     return undefined;
   }
   return (color.startsWith('#') ? color : `#${color}`).toUpperCase();
+}
+
+export function omiFolderColorCopy(value: unknown): string | undefined {
+  if (value === undefined) {
+    return folderDefaultColorCopy();
+  }
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  return omiFolderHexColor(value) ?? folderDefaultColorCopy();
 }
 
 export function omiFolderFill(color: string, alpha: number): string {
@@ -67,7 +81,7 @@ export function parseOmiFolders(body: string): OmiFolder[] {
       continue;
     }
     names.set(id, name);
-    const color = omiFolderHexColor(folder.color);
+    const color = omiFolderColorCopy(folder.color);
     const icon =
       folder.icon === undefined
         ? undefined

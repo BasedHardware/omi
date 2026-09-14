@@ -1470,6 +1470,26 @@ test('names GET folder name when folders resolve and omits otherwise', async () 
   expect(mockRequest).toHaveBeenCalledTimes(1);
 });
 
+test('names GET omitted folder color as Flutter #6B7280', async () => {
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/folders') {
+      return {
+        id: 'folders',
+        status: 200,
+        body: JSON.stringify([{id: 'folder-work', name: 'Work'}]),
+      };
+    }
+    return response({...fixture, folder_id: 'folder-work'});
+  });
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({
+      folderName: 'Work',
+      folderColor: '#6B7280',
+    }),
+  );
+  mockRequest.mockReset().mockResolvedValue(response(fixture));
+});
+
 test('keeps GET external_data text and omits empty or missing integration copy', async () => {
   mockRequest.mockResolvedValue(
     response({

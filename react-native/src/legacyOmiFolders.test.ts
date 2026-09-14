@@ -18,7 +18,7 @@ test('parses GET folder names and omits empty names', () => {
   expect(names.has('folder-empty')).toBe(false);
 });
 
-test('parses GET folder color and omits empty or invalid color', () => {
+test('parses GET omitted folder color as Flutter #6B7280', () => {
   expect(
     parseOmiFolders(
       JSON.stringify([
@@ -29,18 +29,22 @@ test('parses GET folder color and omits empty or invalid color', () => {
           icon: '💼',
           conversation_count: 99,
         },
+        {id: 'folder-omitted', name: 'Omitted'},
         {id: 'folder-plain', name: 'Plain', color: ' \t'},
         {id: 'folder-bad', name: 'Bad', color: 'blue'},
         {id: 'folder-short', name: 'Short', color: '#fff'},
         {id: 'folder-hashless', name: 'Hashless', color: '00AA11'},
+        {id: 'folder-null', name: 'Null', color: null},
       ]),
     ),
   ).toEqual([
     {id: 'folder-work', name: 'Work', color: '#3B82F6', icon: '💼'},
-    {id: 'folder-plain', name: 'Plain'},
-    {id: 'folder-bad', name: 'Bad'},
-    {id: 'folder-short', name: 'Short'},
+    {id: 'folder-omitted', name: 'Omitted', color: '#6B7280'},
+    {id: 'folder-plain', name: 'Plain', color: '#6B7280'},
+    {id: 'folder-bad', name: 'Bad', color: '#6B7280'},
+    {id: 'folder-short', name: 'Short', color: '#6B7280'},
     {id: 'folder-hashless', name: 'Hashless', color: '#00AA11'},
+    {id: 'folder-null', name: 'Null'},
   ]);
   expect(
     parseOmiFolders(
@@ -52,10 +56,10 @@ test('parses GET folder color and omits empty or invalid color', () => {
       ]),
     ),
   ).toEqual([
-    {id: 'folder-emoji', name: 'Home', icon: '🏠'},
-    {id: 'folder-default', name: 'Inbox'},
-    {id: 'folder-blank', name: 'Blank'},
-    {id: 'folder-omitted', name: 'Omitted'},
+    {id: 'folder-emoji', name: 'Home', color: '#6B7280', icon: '🏠'},
+    {id: 'folder-default', name: 'Inbox', color: '#6B7280'},
+    {id: 'folder-blank', name: 'Blank', color: '#6B7280'},
+    {id: 'folder-omitted', name: 'Omitted', color: '#6B7280'},
   ]);
   expect(() =>
     parseOmiFolders(
@@ -73,7 +77,7 @@ test('does not omit a neighboring named folder when stored name cannot project',
         {id: 'folder-object', name: {text: 'Nope'}},
       ]),
     ),
-  ).toEqual([{id: 'folder-work', name: 'Work'}]);
+  ).toEqual([{id: 'folder-work', name: 'Work', color: '#6B7280'}]);
 });
 
 test('keeps GET folders when a folder id exceeds 256', () => {
@@ -86,8 +90,8 @@ test('keeps GET folders when a folder id exceeds 256', () => {
       ]),
     ),
   ).toEqual([
-    {id, name: 'Work'},
-    {id: 'folder-neighbor', name: 'Personal'},
+    {id, name: 'Work', color: '#6B7280'},
+    {id: 'folder-neighbor', name: 'Personal', color: '#6B7280'},
   ]);
 });
 
@@ -101,8 +105,8 @@ test('keeps GET folders when a name exceeds 10000', () => {
       ]),
     ),
   ).toEqual([
-    {id: 'folder-long', name},
-    {id: 'folder-neighbor', name: 'Personal'},
+    {id: 'folder-long', name, color: '#6B7280'},
+    {id: 'folder-neighbor', name: 'Personal', color: '#6B7280'},
   ]);
 });
 
@@ -112,8 +116,16 @@ test('does not omit neighboring GET folders when the catalogue exceeds 1000', ()
     name: `Folder ${index}`,
   }));
   const folders = parseOmiFolders(JSON.stringify(rows));
-  expect(folders[0]).toEqual({id: 'folder-0', name: 'Folder 0'});
-  expect(folders[1000]).toEqual({id: 'folder-1000', name: 'Folder 1000'});
+  expect(folders[0]).toEqual({
+    id: 'folder-0',
+    name: 'Folder 0',
+    color: '#6B7280',
+  });
+  expect(folders[1000]).toEqual({
+    id: 'folder-1000',
+    name: 'Folder 1000',
+    color: '#6B7280',
+  });
   expect(folders).toHaveLength(1001);
 });
 
@@ -142,7 +154,7 @@ test('loadOmiFolderNames names resolved GET folders and omits failures', async (
   }));
   const backend = {request} as unknown as OmiBackend;
   expect(await loadOmiFolderNames(backend)).toEqual([
-    {id: 'folder-work', name: 'Work'},
+    {id: 'folder-work', name: 'Work', color: '#6B7280'},
   ]);
   expect(request).toHaveBeenCalledWith({
     id: expect.any(String),
@@ -160,7 +172,7 @@ test('loadOmiFolderNames names resolved GET folders and omits failures', async (
     ]),
   });
   expect(await loadOmiFolderNames(backend)).toEqual([
-    {id: 'folder-work', name: 'Work'},
+    {id: 'folder-work', name: 'Work', color: '#6B7280'},
   ]);
   request.mockResolvedValueOnce({id: 'folders', status: 404, body: null});
   expect(await loadOmiFolderNames(backend)).toEqual([]);
