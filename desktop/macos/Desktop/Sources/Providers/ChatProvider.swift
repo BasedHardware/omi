@@ -3618,6 +3618,17 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Kernel Journal Refresh
 
+  func stopAgentBridgeIfStarted() async {
+    guard agentBridgeStarted else { return }
+    await resolvedAgentClient().stop()
+    agentBridgeStarted = false
+  }
+
+  func stopAgentBridgeAfterSessionInvalidation() async {
+    log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
+    await stopAgentBridgeIfStarted()
+  }
+
   /// Activation/notification is only a wakeup. Ordered range replay in
   /// KernelTurnProjection is the sole source of new or updated messages.
   func refreshJournalProjection() async {

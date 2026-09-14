@@ -39,7 +39,7 @@ extension AuthService {
   func handleFirebaseNilUserWithoutSavedSignedIn() {
     if preservedReauthOwnerId() != nil {
       log("AUTH_LISTENER: Firebase user nil — preserving needsReauth")
-      if sessionCoordinator.phase != .needsReauth { AuthState.shared.transition(to: .needsReauth) }
+      if AuthState.shared.sessionPhase != .needsReauth { AuthState.shared.transition(to: .needsReauth) }
       return
     }
     log("AUTH_LISTENER: No saved session - setting isSignedIn=false")

@@ -12,17 +12,6 @@ extension ChatProvider {
     await task.value
   }
 
-  func stopAgentBridgeIfStarted() async {
-    guard agentBridgeStarted else { return }
-    await resolvedAgentClient().stop()
-    agentBridgeStarted = false
-  }
-
-  func stopAgentBridgeAfterSessionInvalidation() async {
-    log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
-    await stopAgentBridgeIfStarted()
-  }
-
   func makeAuthSessionNotificationObserver() -> AnyCancellable {
     let invalidate = NotificationCenter.default.publisher(for: .sessionDidInvalidate)
     let authenticate = NotificationCenter.default.publisher(for: .sessionDidAuthenticate)

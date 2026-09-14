@@ -100,10 +100,9 @@ final class AuthSessionCoordinatorTests: XCTestCase {
 
   func testChatProviderStopsBridgeOnSessionInvalidateWithoutFullReset() throws {
     let provider = try sourceFile("Providers/ChatProvider.swift")
-    let authSession = try sourceFile("Providers/ChatProvider+AuthSession.swift")
     XCTAssertTrue(provider.contains("makeAuthSessionNotificationObserver"))
-    XCTAssertTrue(authSession.contains("stopAgentBridgeAfterSessionInvalidation"))
-    let invalidateBlock = try XCTUnwrap(authSession.range(of: "sessionDidInvalidate — stopping agent bridge"))
+    XCTAssertTrue(provider.contains("stopAgentBridgeAfterSessionInvalidation"))
+    let invalidateBlock = try XCTUnwrap(provider.range(of: "sessionDidInvalidate — stopping agent bridge"))
     let snippet = String(provider[invalidateBlock.lowerBound...]).prefix(400)
     XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
   }
