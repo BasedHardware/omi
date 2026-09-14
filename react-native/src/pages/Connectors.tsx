@@ -32,7 +32,6 @@ import {
   appListDescriptionCopy,
   appRatingCopy,
   appsEmptyCopy,
-  visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
@@ -59,10 +58,8 @@ function appRowMeta(
   explore = false,
 ): string {
   const category = appSectionCategoryCopy(app.category, explore);
-  const author = visibleDisplayText(app.author);
   return [
     category,
-    author !== '' ? author : null,
     app.private ? 'Private' : null,
     explore
       ? appExploreRatingCopy(app.ratingAvg, app.ratingCount)

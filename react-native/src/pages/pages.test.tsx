@@ -2632,6 +2632,53 @@ test('Connectors Explore names Flutter CategorySection GET category and Installe
   expect(tree).not.toContain('Official');
 });
 
+test('Connectors list cards omit GET author like Flutter CategorySection and AppListItem', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-explore',
+            name: 'Explore fixture app',
+            author: 'Fixture Author Co',
+          },
+          {
+            id: 'catalog-app-installed',
+            name: 'Owned app',
+            author: 'Fixture Author Co',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify(['catalog-app-installed']),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Explore fixture app');
+  expect(tree).toContain('Owned app');
+  expect(tree).not.toContain('Fixture Author Co');
+  expect(sectionText(renderer, 'Explore')).not.toContain('Fixture Author Co');
+  expect(sectionText(renderer, 'Installed')).not.toContain('Fixture Author Co');
+  expect(tree).not.toContain('Official');
+});
+
 test('Connectors Installed names Flutter AppListItem truncated GET descriptions and Explore omits them', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   const exploreDescription =
