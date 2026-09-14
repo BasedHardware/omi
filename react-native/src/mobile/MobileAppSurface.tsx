@@ -275,13 +275,6 @@ const RecapCard = memo(function RecapCard({
           Locked
         </Text>
       ) : null}
-      {recap.discarded === true ? (
-        <Text
-          accessibilityLabel="Discarded conversation"
-          style={styles.recapStar}>
-          Discarded
-        </Text>
-      ) : null}
       {recap.merging === true ? (
         <Text
           accessibilityLabel="Merging... conversation"

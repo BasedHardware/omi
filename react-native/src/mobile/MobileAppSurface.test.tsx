@@ -799,7 +799,7 @@ test('Daily Recaps name locked and discarded conversations without empty badges'
     ],
   });
   expect(renderedText(flagged)).toContain('Locked');
-  expect(renderedText(flagged)).toContain('Discarded');
+  expect(renderedText(flagged)).not.toContain('Discarded');
   expect(
     flagged.root.findAll(
       node =>
@@ -838,7 +838,7 @@ test('compact Home conversations omit Flutter ConversationListItem mobile photos
       },
     ],
   });
-  expect(renderedText(flagged)).toContain('Discarded');
+  expect(renderedText(flagged)).not.toContain('Discarded');
   expect(renderedText(flagged)).not.toContain('3 photos');
 
   const kept = render({
@@ -864,7 +864,7 @@ test('compact Home conversations omit Flutter ConversationListItem mobile photos
       },
     ],
   });
-  expect(renderedText(empty)).toContain('Discarded');
+  expect(renderedText(empty)).not.toContain('Discarded');
   expect(renderedText(empty)).not.toContain('photos');
 });
 
@@ -881,8 +881,28 @@ test('Daily Recaps name discarded GET transcript excerpt as the title', () => {
     ],
   });
   expect(renderedText(flagged)).toContain(excerpt);
-  expect(renderedText(flagged)).toContain('Discarded');
+  expect(renderedText(flagged)).not.toContain('Discarded');
   expect(renderedText(flagged)).not.toContain('Duration');
+});
+
+test('compact Home conversations omit Flutter ConversationListItem mobile Discarded chip', () => {
+  const flagged = render({
+    recaps: [
+      {
+        id: 'recap-discarded-chip',
+        title: 'Product review',
+        dateLabel: 'Yesterday',
+        discarded: true,
+      },
+    ],
+  });
+  expect(renderedText(flagged)).toContain('Product review');
+  expect(renderedText(flagged)).not.toContain('Discarded');
+  expect(
+    flagged.root.findAll(
+      node => node.props.accessibilityLabel === 'Discarded conversation',
+    ),
+  ).toHaveLength(0);
 });
 
 test('compact Home conversations omit Flutter ConversationListItem Failed chips', () => {
@@ -1017,7 +1037,11 @@ test('compact Home conversations omit Flutter ConversationListItem mobile tags',
       },
     ],
   });
-  expect(renderedText(discarded)).toContain('Discarded');
+  expect(
+    discarded.root.findAll(
+      node => node.props.accessibilityLabel === 'Discarded conversation',
+    ),
+  ).toHaveLength(0);
   expect(renderedText(discarded)).toContain('Discarded talk');
   expect(renderedText(discarded)).not.toContain('Screenpipe');
   expect(renderedText(discarded)).not.toContain('🧠');
