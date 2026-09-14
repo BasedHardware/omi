@@ -51,7 +51,8 @@ def _fetch_conversations(
 
     Requests are split into server-sized pages that advance by the *requested* page size,
     not the rows returned: the API filters locked conversations after paging, so a short
-    page is not exhaustion (same contract as action-item paging). An empty page is.
+    (or even empty) page is not exhaustion (same contract as action-item paging). The
+    whole window is always covered; a trailing empty page costs one cheap request.
     """
     page_max = _SERVER_PAGE_MAX_WITH_TRANSCRIPT if include_transcript else _SERVER_PAGE_MAX
     items: list[Any] = []
@@ -63,9 +64,8 @@ def _fetch_conversations(
             "/v1/dev/user/conversations",
             params={**filters, "limit": page_limit, "offset": cursor, "include_transcript": include_transcript},
         )
-        if not page:
-            break
-        items.extend(page)
+        if page:
+            items.extend(page)
         cursor += page_limit
         remaining -= page_limit
     return items
@@ -75,7 +75,11 @@ def _fetch_conversations(
 def list_conversations(
     typer_ctx: typer.Context,
     limit: int = typer.Option(
-        25, "--limit", min=1, max=200, help="Max items to return (fetched in API-sized pages when above 100)."
+        25,
+        "--limit",
+        min=1,
+        max=200,
+        help="Max items to return (fetched in API-sized pages above 100, or 25 with --include-transcript).",
     ),
     offset: int = typer.Option(0, "--offset", min=0),
     start_date: Optional[datetime] = typer.Option(

@@ -62,13 +62,24 @@ def test_list_pages_preserve_the_requested_offset(authed_profile, respx_mock, cl
     assert calls == [(100, 10), (50, 110)]
 
 
-def test_list_stops_on_an_empty_page(authed_profile, respx_mock, cli_runner) -> None:
-    calls = _paged_api(respx_mock, total=100)
-    result = cli_runner.invoke(app, ["--json", "conversation", "list", "--limit", "200"])
+def test_list_covers_the_window_past_an_empty_page(authed_profile, respx_mock, cli_runner) -> None:
+    # A page can come back empty when every row in it was locked, so emptiness is not
+    # exhaustion either: the requested window is always covered.
+    calls: list[tuple[int, int]] = []
+
+    def respond(request):
+        limit = int(request.url.params["limit"])
+        offset = int(request.url.params["offset"])
+        calls.append((limit, offset))
+        if offset == 100:
+            return httpx.Response(200, json=[])  # an all-locked page
+        return httpx.Response(200, json=[{"id": f"c{i}"} for i in range(offset, offset + limit)])
+
+    respx_mock.get("/v1/dev/user/conversations").mock(side_effect=respond)
+    result = cli_runner.invoke(app, ["--json", "conversation", "list", "--limit", "200", "--offset", "100"])
     assert result.exit_code == 0, result.stderr
-    assert len(json.loads(result.stdout)) == 100
-    # Second page came back empty; no third request for the remaining window.
-    assert calls == [(100, 0), (100, 100)]
+    assert [c["id"] for c in json.loads(result.stdout)] == [f"c{i}" for i in range(200, 300)]
+    assert calls == [(100, 100), (100, 200)]
 
 
 def test_list_continues_past_a_short_page(authed_profile, respx_mock, cli_runner) -> None:
