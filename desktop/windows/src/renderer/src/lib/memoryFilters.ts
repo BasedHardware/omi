@@ -140,6 +140,12 @@ export function memoryUseSuppressed(m: Memory): boolean {
   )
 }
 
+/** Use feedback is only valid for the current, non-superseded ledger row. */
+export function canUseMemory(m: Memory): boolean {
+  if (m.invalid_at || m.superseded_by) return false
+  return m.status === undefined || m.status === 'active'
+}
+
 function matchesLayer(m: Memory, filter: MemoryLayerFilter): boolean {
   if (filter === 'default') return m.layer !== 'archive'
   return m.layer === filter

@@ -4,6 +4,7 @@ import { X, Trash2, Pencil, ArrowUpRight, Loader2, ThumbsUp } from 'lucide-react
 import type { Memory, MemoryUseAction } from '../../hooks/useMemories'
 import {
   CATEGORY_LABEL,
+  canUseMemory,
   categoryOf,
   currencyBandLabel,
   displayTags,
@@ -71,6 +72,7 @@ export function MemoryDetailSheet({
   const source = memorySourceLabel(memory)
   const assessmentDate = formatMemoryAssessmentDate(memory)
   const evidenceDate = formatMemoryEvidenceDate(memory)
+  const useFeedbackAllowed = canUseMemory(memory)
   const hasAssessment =
     memory.currency_band !== undefined ||
     memory.currency !== undefined ||
@@ -129,7 +131,7 @@ export function MemoryDetailSheet({
                     ariaLabel="Toggle public visibility"
                   />
                 </label>
-                {onUseAction && (
+                {onUseAction && useFeedbackAllowed && (
                   <>
                     <button
                       type="button"

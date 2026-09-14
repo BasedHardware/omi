@@ -4,6 +4,7 @@ import { Info, ArrowUpRight, Monitor, ThumbsUp } from 'lucide-react'
 import type { Memory, MemoryUseAction } from '../../hooks/useMemories'
 import {
   CATEGORY_LABEL,
+  canUseMemory,
   categoryOf,
   currencyBandLabel,
   displayTags,
@@ -87,6 +88,7 @@ function MemoryCardImpl({
   const source = memorySourceLabel(memory)
   const assessmentDate = formatMemoryAssessmentDate(memory)
   const evidenceDate = formatMemoryEvidenceDate(memory)
+  const useFeedbackAllowed = canUseMemory(memory)
   const hasAssessment =
     memory.currency_band !== undefined ||
     memory.currency !== undefined ||
@@ -163,7 +165,7 @@ function MemoryCardImpl({
           </span>
         )}
 
-        {onUseAction && (
+        {onUseAction && useFeedbackAllowed && (
           <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"

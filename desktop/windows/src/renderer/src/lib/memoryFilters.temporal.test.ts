@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Memory } from '../hooks/useMemories'
 import {
+  canUseMemory,
   currencyBandLabel,
   formatMemoryAssessmentDate,
   formatMemoryEvidenceDate,
@@ -58,5 +59,20 @@ describe('memory temporal projection', () => {
     expect(memoryUseSuppressed(memory({ arguments: { memory_use: { suppressed: false } } }))).toBe(
       false
     )
+  })
+
+  it('only exposes use feedback for active, non-superseded rows', () => {
+    expect(canUseMemory(memory({ status: 'active', valid_to: '2026-09-01T00:00:00Z' }))).toBe(true)
+    expect(
+      canUseMemory(memory({ status: 'active', arguments: { memory_use: { suppressed: true } } }))
+    ).toBe(true)
+
+    expect(canUseMemory(memory({ status: 'active', invalid_at: '2026-09-02T00:00:00Z' }))).toBe(
+      false
+    )
+    expect(canUseMemory(memory({ status: 'active', superseded_by: 'memory-2' }))).toBe(false)
+    for (const status of ['superseded', 'tombstoned', 'purged', 'unknown'] as const) {
+      expect(canUseMemory(memory({ status }))).toBe(false)
+    }
   })
 })

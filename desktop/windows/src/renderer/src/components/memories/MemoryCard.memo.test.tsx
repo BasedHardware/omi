@@ -93,4 +93,28 @@ describe('MemoryCard memoization (nav-snappiness regression)', () => {
 
     expect(getByText('Conversation')).not.toBeNull()
   })
+
+  it('hides use feedback controls for inactive ledger rows', () => {
+    const onUseAction = vi.fn()
+    const active = { ...makeMemory('active'), status: 'active' as const, valid_to: '2026-09-01' }
+    const inactive = {
+      ...makeMemory('inactive'),
+      status: 'active' as const,
+      invalid_at: '2026-09-02'
+    }
+    const { getByRole, queryByRole, rerender } = render(
+      <ul>
+        <MemoryCard memory={active} onOpen={noopOpen} onUseAction={onUseAction} />
+      </ul>
+    )
+
+    expect(getByRole('button', { name: 'Do not use this memory' })).not.toBeNull()
+    rerender(
+      <ul>
+        <MemoryCard memory={inactive} onOpen={noopOpen} onUseAction={onUseAction} />
+      </ul>
+    )
+    expect(queryByRole('button', { name: 'Do not use this memory' })).toBeNull()
+    expect(queryByRole('button', { name: 'Mark this memory useful' })).toBeNull()
+  })
 })
