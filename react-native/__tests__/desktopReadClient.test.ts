@@ -5,6 +5,8 @@ import {
   conversationDetailSummaryCopy,
   conversationNoSummaryCopy,
   conversationsStarredEmptyCopy,
+  memoriesEmptyCopy,
+  memoriesSearchEmptyCopy,
   conversationDisplayTitle,
   conversationListUsesListenOverview,
   conversationRecapTitle,
@@ -2602,6 +2604,11 @@ test('conversation detail names Flutter noSummaryForConversation when GET has no
 
 test('starred conversation filter names Flutter noStarredConversations', () => {
   expect(conversationsStarredEmptyCopy()).toBe('No starred conversations');
+});
+
+test('memory empty copy names Flutter noMemoriesYet and noMemoriesFound', () => {
+  expect(memoriesEmptyCopy()).toBe('🧠 No memories yet');
+  expect(memoriesSearchEmptyCopy()).toBe('🔍 No memories found');
 });
 
 test('groups validated UTC conversation timestamps by local calendar day', () => {

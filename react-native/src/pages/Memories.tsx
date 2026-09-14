@@ -23,6 +23,8 @@ import {
   memoryHistoryCopy,
   memoryHistoryPartialCopy,
   memoryLockedCopy,
+  memoriesEmptyCopy,
+  memoriesSearchEmptyCopy,
   visibleDisplayText,
   type DesktopReadProjection,
   type DomainReadOutcome,
@@ -276,8 +278,8 @@ export function MemoriesPage({
                   'Memories',
                   page,
                   filtering,
-                  'No loaded memories match.',
-                  'No memories yet.',
+                  memoriesSearchEmptyCopy(),
+                  memoriesEmptyCopy(),
                   loadMoreError === desktopBackendUnavailableCopy,
                 )}
               </Text>

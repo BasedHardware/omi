@@ -23,6 +23,8 @@ import {MemoriesPage} from './Memories';
 import {
   clockLabel,
   desktopBackendUnavailableCopy,
+  memoriesEmptyCopy,
+  memoriesSearchEmptyCopy,
   MemoryCursorExpiredError,
 } from '../desktopReadClient';
 
@@ -206,6 +208,7 @@ test('memory grant denial shows the typed error instead of an empty library', ()
   expect(textOf(view)).toContain(
     'This saved data is not available for this account.',
   );
+  expect(textOf(view)).not.toContain(memoriesEmptyCopy());
   expect(textOf(view)).not.toContain('No memories yet.');
 });
 
@@ -267,6 +270,7 @@ test('incomplete empty memories do not claim a complete library', () => {
     );
   });
   expect(textOf(view)).toContain('Memories are incomplete.');
+  expect(textOf(view)).not.toContain(memoriesEmptyCopy());
   expect(textOf(view)).not.toContain('No memories yet.');
 });
 
@@ -291,7 +295,71 @@ test('degraded empty memories do not claim a complete library', () => {
     );
   });
   expect(textOf(view)).toContain('Memories may be temporarily incomplete.');
+  expect(textOf(view)).not.toContain(memoriesEmptyCopy());
   expect(textOf(view)).not.toContain('No memories yet.');
+});
+
+test('Memories names GET empty Flutter noMemoriesYet', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {items: [], page: page(null)},
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    const tree = textOf(view);
+    expect(tree).toContain(memoriesEmptyCopy());
+    expect(tree).not.toContain('No memories yet.');
+    expect(tree).not.toContain('Add your first memory');
+    expect(tree).not.toContain(memoriesSearchEmptyCopy());
+    expect(tree).not.toContain('No loaded memories match.');
+  } finally {
+    act(() => view.unmount());
+  }
+});
+
+test('Memories search empty names Flutter noMemoriesFound', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {items: [memory('kept-first')], page: page(null)},
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    expect(textOf(view)).toContain('kept-first');
+    act(() => {
+      view.root
+        .find(
+          node => node.props.accessibilityLabel === 'Search loaded memories',
+        )
+        .props.onChangeText('nomatch');
+    });
+    const tree = textOf(view);
+    expect(tree).toContain(memoriesSearchEmptyCopy());
+    expect(tree).toContain(
+      'Search covers the memories loaded on this device.',
+    );
+    expect(tree).not.toContain('No loaded memories match.');
+    expect(tree).not.toContain(memoriesEmptyCopy());
+    expect(tree).not.toContain('No memories yet.');
+    expect(tree).not.toContain('Add your first memory');
+    expect(tree).not.toContain('No manual memories yet');
+    expect(tree).not.toContain('No memories in these categories');
+  } finally {
+    act(() => view.unmount());
+  }
 });
 
 test('an incomplete empty memory search does not claim a complete miss', () => {
@@ -317,6 +385,8 @@ test('an incomplete empty memory search does not claim a complete miss', () => {
     });
     expect(textOf(view)).toContain('Memories are incomplete.');
     expect(textOf(view)).not.toContain('No loaded memories match.');
+    expect(textOf(view)).not.toContain(memoriesSearchEmptyCopy());
+    expect(textOf(view)).not.toContain(memoriesEmptyCopy());
   } finally {
     act(() => {
       view.unmount();
@@ -439,7 +509,8 @@ test('nested non-retryable later memory pages do not claim a load blip', async (
         )
         .props.onChangeText('nomatch');
     });
-    expect(textOf(view)).toContain('No loaded memories match.');
+    expect(textOf(view)).toContain(memoriesSearchEmptyCopy());
+    expect(textOf(view)).not.toContain('No loaded memories match.');
     expect(textOf(view)).not.toContain('More memories are available.');
   } finally {
     await act(async () => view.unmount());
@@ -537,6 +608,7 @@ test('empty memory bodies stay visible instead of a blank card', async () => {
     });
     expect(textOf(view)).toContain('Memory text unavailable');
     expect(textOf(view)).not.toContain('No loaded memories match.');
+    expect(textOf(view)).not.toContain(memoriesSearchEmptyCopy());
   } finally {
     await act(async () => view.unmount());
   }

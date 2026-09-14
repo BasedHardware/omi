@@ -498,6 +498,14 @@ export function conversationsStarredEmptyCopy(): string {
   return 'No starred conversations';
 }
 
+export function memoriesEmptyCopy(): string {
+  return '🧠 No memories yet';
+}
+
+export function memoriesSearchEmptyCopy(): string {
+  return '🔍 No memories found';
+}
+
 export function conversationDetailSummaryCopy(detail: {
   summary: string;
   sections: readonly {heading: string; bodyMarkdown: string}[];
