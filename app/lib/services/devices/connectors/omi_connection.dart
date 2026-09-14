@@ -114,7 +114,8 @@ class OmiDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<StreamSubscription?> performGetBleButtonTapsListener({required void Function(List<int>) onTapsReceived}) async {
+  Future<StreamSubscription?> performGetBleButtonTapsListener(
+      {required void Function(List<int>) onTapsReceived}) async {
     try {
       final stream = transport.getCharacteristicStream(buttonServiceUuid, buttonTapsCharacteristicUuid);
       return stream.listen((value) {

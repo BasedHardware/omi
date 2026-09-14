@@ -329,7 +329,8 @@ abstract class DeviceConnection {
     return null;
   }
 
-  Future<StreamSubscription?> performGetBleButtonTapsListener({required void Function(List<int>) onTapsReceived}) async {
+  Future<StreamSubscription?> performGetBleButtonTapsListener(
+      {required void Function(List<int>) onTapsReceived}) async {
     return null;
   }
 
