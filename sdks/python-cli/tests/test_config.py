@@ -539,6 +539,8 @@ def test_active_profile_non_string_diagnostics_succeed(config_path: Path, cli_ru
         ('[profiles.default]\nlocal_token = 12345\n', "local_token", "int"),
         ('[profiles.default]\napi_base = 8080\n', "api_base", "int"),
         ('[profiles.default]\nid_token_expires_at = "never"\n', "id_token_expires_at", "str"),
+        ('[profiles.default]\nid_token_expires_at = nan\n', "id_token_expires_at", "nan"),
+        ('[profiles.default]\nid_token_expires_at = inf\n', "id_token_expires_at", "inf"),
     ],
 )
 def test_profile_field_invalid_type_records_load_error(
