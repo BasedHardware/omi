@@ -28,6 +28,8 @@ import {
   conversationListDurationCopy,
   conversationTranscriptDurationCopy,
   conversationListNewCopy,
+  conversationListGroupCopy,
+  conversationListTimeCopy,
   conversationGroupLabel,
   conversationCaptureCopy,
   conversationPhotoCountCopy,
@@ -3395,6 +3397,55 @@ test('conversation day labels treat a zero timestamp as Date unavailable', () =>
       now,
     ),
   ).toBe('Date unavailable');
+});
+
+test('conversation list group copy names Flutter DateListItem and omits Today', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  expect(
+    conversationListGroupCopy(
+      new Date(2026, 7, 14, 1, 0).toISOString(),
+      now,
+    ),
+  ).toBeNull();
+  expect(
+    conversationListGroupCopy(
+      new Date(2026, 7, 13, 23, 0).toISOString(),
+      now,
+    ),
+  ).toBe('Yesterday');
+  expect(
+    conversationListGroupCopy(new Date(2026, 7, 10, 12, 0).toISOString(), now),
+  ).toBe(
+    new Date(2026, 7, 10, 12, 0).toLocaleDateString(undefined, {
+      month: 'short',
+      day: '2-digit',
+    }),
+  );
+  expect(
+    conversationListGroupCopy(new Date(2025, 7, 10, 12, 0).toISOString(), now),
+  ).toBe(
+    new Date(2025, 7, 10, 12, 0).toLocaleDateString(undefined, {
+      month: 'short',
+      day: '2-digit',
+    }),
+  );
+  expect(
+    conversationListGroupCopy(new Date(0).toISOString(), now),
+  ).toBe('Date unavailable');
+});
+
+test('conversation list time copy names Flutter ConversationListItem h:mm a', () => {
+  const older = new Date(2025, 7, 10, 12, 0);
+  expect(conversationListTimeCopy(older.toISOString())).toBe(
+    older.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    }),
+  );
+  expect(conversationListTimeCopy(null)).toBe('Time unavailable');
+  expect(conversationListTimeCopy(new Date(0).toISOString())).toBe(
+    'Time unavailable',
+  );
 });
 
 test('conversation recap date labels keep Today as time and date older days', () => {

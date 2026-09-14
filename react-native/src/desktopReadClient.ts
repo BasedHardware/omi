@@ -2695,6 +2695,45 @@ export function conversationDayLabel(
   return conversationGroupLabel(startedAt ?? createdAt, nowEpochMilliseconds);
 }
 
+export function conversationListGroupCopy(
+  value: string,
+  nowEpochMilliseconds: number,
+): string | null {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return 'Date unavailable';
+  }
+  const date = new Date(timestamp);
+  const now = new Date(nowEpochMilliseconds);
+  const localDay = (item: Date) =>
+    Date.UTC(item.getFullYear(), item.getMonth(), item.getDate()) / 86400000;
+  const difference = localDay(now) - localDay(date);
+  if (difference === 0) {
+    return null;
+  }
+  if (difference === 1) {
+    return 'Yesterday';
+  }
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: '2-digit',
+  });
+}
+
+export function conversationListTimeCopy(value: string | null): string {
+  if (value === null) {
+    return 'Time unavailable';
+  }
+  const timestamp = Date.parse(value);
+  if (!isRepresentableTimestampMs(timestamp) || timestamp <= 0) {
+    return 'Time unavailable';
+  }
+  return new Date(timestamp).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export function conversationRecapDateLabel(
   startedAt: string | null,
   createdAt: string,

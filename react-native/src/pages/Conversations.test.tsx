@@ -630,9 +630,17 @@ test('a requested conversation id opens compact conversation detail', () => {
   }
 });
 
-test('conversation list and detail date older days instead of month and day only', () => {
+test('conversation list names Flutter DateListItem time and omits dated row clocks', () => {
   const older = new Date(2025, 7, 10, 12, 0);
-  const expected = clockLabel(older.getTime(), Date.now());
+  const time = older.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  const group = older.toLocaleDateString(undefined, {
+    month: 'short',
+    day: '2-digit',
+  });
+  const dated = clockLabel(older.getTime(), Date.now());
   const item: ConversationProjection = {
     kind: 'conversation',
     id: 'listen:older-one',
@@ -672,7 +680,11 @@ test('conversation list and detail date older days instead of month and day only
       />,
     );
   });
-  expect(textOf(renderer)).toContain(expected);
+  const list = textOf(renderer);
+  expect(list).toContain(time);
+  expect(list).toContain(group);
+  expect(list).not.toContain(dated);
+  expect(list).not.toContain('Today');
   act(() => {
     renderer.root
       .find(
@@ -684,8 +696,8 @@ test('conversation list and detail date older days instead of month and day only
   const copy = textOf(renderer);
   expect(copy).toContain('Started ·');
   expect(copy).toContain('Finished ·');
-  expect(copy).toContain(expected);
-  expect(expected).toContain(
+  expect(copy).toContain(dated);
+  expect(dated).toContain(
     older.toLocaleDateString(undefined, {
       day: 'numeric',
       month: 'short',

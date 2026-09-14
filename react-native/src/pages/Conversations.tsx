@@ -23,8 +23,8 @@ import {
   conversationListTag,
   conversationListUsesListenOverview,
   conversationRecapTitle,
-  conversationDayLabel,
-  conversationGroupLabel,
+  conversationListGroupCopy,
+  conversationListTimeCopy,
   conversationsEmptyCopy,
   conversationsStarredEmptyCopy,
   desktopBackendUnavailableCopy,
@@ -37,10 +37,7 @@ import {
   type MemoryLinkLookup,
 } from '../desktopReadClient';
 import {FocusPressable} from '../ui/Pressable';
-import {
-  ConversationDetail,
-  formatConversationDate,
-} from '../ui/ConversationDetail';
+import {ConversationDetail} from '../ui/ConversationDetail';
 import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 import {goalProgressCopy, loadOmiGoals, type OmiGoal} from '../legacyOmiGoals';
@@ -106,7 +103,8 @@ const ConversationRow = memo(function ConversationRow({
       ]}>
       <View style={styles.conversationRowMeta}>
         <Text style={styles.conversationRowTime}>
-          {newCopy ?? formatConversationDate(item.startedAt ?? item.createdAt)}
+          {newCopy ??
+            conversationListTimeCopy(item.startedAt ?? item.createdAt)}
         </Text>
         {captureCopy !== null ? (
           <Text style={styles.conversationRowTime}>{captureCopy}</Text>
@@ -263,7 +261,7 @@ export function ConversationsPage({
   const [captureGapsError, setCaptureGapsError] = useState<string | null>(null);
   const grouped = useMemo(() => {
     const groups: Array<{
-      label: string;
+      label: string | null;
       day: number;
       items: ConversationProjection[];
       gaps: OmiCalendarCaptureGap[];
@@ -271,16 +269,15 @@ export function ConversationsPage({
     const byDay = new Map<
       number,
       {
-        label: string;
+        label: string | null;
         day: number;
         items: ConversationProjection[];
         gaps: OmiCalendarCaptureGap[];
       }
     >();
     for (const item of filtered) {
-      const label = conversationDayLabel(
-        item.startedAt,
-        item.createdAt,
+      const label = conversationListGroupCopy(
+        item.startedAt ?? item.createdAt,
         nowEpochMilliseconds,
       );
       const day =
@@ -304,7 +301,7 @@ export function ConversationsPage({
         let group = byDay.get(day);
         if (group === undefined) {
           group = {
-            label: conversationGroupLabel(iso, nowEpochMilliseconds),
+            label: conversationListGroupCopy(iso, nowEpochMilliseconds),
             day,
             items: [],
             gaps: [],
@@ -612,10 +609,14 @@ export function ConversationsPage({
                 {grouped.map(group => {
                   const gapHeader = captureGapHeaderCopy(group.gaps.length);
                   return (
-                    <View key={group.label} style={styles.conversationGroup}>
-                      <Text style={styles.conversationGroupTitle}>
-                        {group.label}
-                      </Text>
+                    <View
+                      key={String(group.day)}
+                      style={styles.conversationGroup}>
+                      {group.label !== null ? (
+                        <Text style={styles.conversationGroupTitle}>
+                          {group.label}
+                        </Text>
+                      ) : null}
                       {gapHeader !== '' ? (
                         <Text style={styles.conversationRowTime}>
                           {gapHeader}
