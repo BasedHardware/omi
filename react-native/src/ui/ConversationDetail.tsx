@@ -1,8 +1,8 @@
 import React, {useState} from 'react';
 import {ActivityIndicator, Image, Linking, Text, View} from 'react-native';
 import {
-  clockLabel,
   conversationCaptureCopy,
+  conversationDetailDateChipCopy,
   conversationDetailSpeakerCopy,
   conversationDisplaySummary,
   conversationDetailSummaryForStatusCopy,
@@ -58,11 +58,7 @@ function CatalogAppImage({
 }
 
 export function formatConversationDate(value: string | null): string {
-  if (value === null) {
-    return 'Time unavailable';
-  }
-  const label = clockLabel(Date.parse(value), Date.now());
-  return label === '' ? 'Time unavailable' : label;
+  return conversationDetailDateChipCopy(value, Date.now());
 }
 
 function ConversationClockFields({

@@ -3,6 +3,8 @@ import Renderer, {act} from 'react-test-renderer';
 import {Linking, Text} from 'react-native';
 import type {ConversationProjection} from '../desktopReadClient';
 import {
+  clockLabel,
+  conversationDetailDateChipCopy,
   chatBlockUnavailableCopy,
   chatBlockLoadingCopy,
   chatDiscoveryShowMoreCopy,
@@ -1077,6 +1079,26 @@ test('legacy conversation details keep GET clocks from the list row', () => {
   expect(copy).toContain('Locked');
   expect(copy).toContain('Discarded');
   expect(copy).not.toContain('in_progress');
+});
+
+test('conversation details name Flutter GetSummaryWidgets date and time', () => {
+  const older = new Date(2025, 7, 10, 12, 0);
+  const copy = text(
+    render({
+      conversation: {
+        ...conversation,
+        startedAt: older.toISOString(),
+        createdAt: older.toISOString(),
+        finishedAt: older.toISOString(),
+        status: 'completed',
+      },
+    }),
+  );
+  const chip = conversationDetailDateChipCopy(older.toISOString(), Date.now());
+  const dated = clockLabel(older.getTime(), Date.now());
+  expect(copy).toContain('Started ·');
+  expect(copy).toContain(chip);
+  expect(copy).not.toContain(dated);
 });
 
 test('legacy conversation details name GET started from created_at when started_at is missing', () => {

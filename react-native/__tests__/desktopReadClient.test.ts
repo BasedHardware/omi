@@ -30,6 +30,7 @@ import {
   conversationListNewCopy,
   conversationListGroupCopy,
   conversationListTimeCopy,
+  conversationDetailDateChipCopy,
   conversationGroupLabel,
   conversationCaptureCopy,
   conversationPhotoCountCopy,
@@ -3446,6 +3447,46 @@ test('conversation list time copy names Flutter ConversationListItem h:mm a', ()
   expect(conversationListTimeCopy(new Date(0).toISOString())).toBe(
     'Time unavailable',
   );
+});
+
+test('conversation detail date chip names Flutter GetSummaryWidgets date and time', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  const time = (value: Date) =>
+    value.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  const today = new Date(2026, 7, 14, 15, 4);
+  expect(
+    conversationDetailDateChipCopy(today.toISOString(), now),
+  ).toBe(`Today, ${time(today)}`);
+  const yesterday = new Date(2026, 7, 13, 15, 4);
+  expect(
+    conversationDetailDateChipCopy(yesterday.toISOString(), now),
+  ).toBe(`Yesterday, ${time(yesterday)}`);
+  const sameYear = new Date(2026, 7, 10, 12, 0);
+  expect(
+    conversationDetailDateChipCopy(sameYear.toISOString(), now),
+  ).toBe(
+    `${sameYear.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    })}, ${time(sameYear)}`,
+  );
+  const otherYear = new Date(2025, 7, 10, 12, 0);
+  expect(
+    conversationDetailDateChipCopy(otherYear.toISOString(), now),
+  ).toBe(
+    `${otherYear.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })}, ${time(otherYear)}`,
+  );
+  expect(conversationDetailDateChipCopy(null, now)).toBe('Time unavailable');
+  expect(
+    conversationDetailDateChipCopy(new Date(0).toISOString(), now),
+  ).toBe('Time unavailable');
 });
 
 test('conversation recap date labels keep Today as time and date older days', () => {

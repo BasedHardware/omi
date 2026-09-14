@@ -2734,6 +2734,46 @@ export function conversationListTimeCopy(value: string | null): string {
   });
 }
 
+export function conversationDetailDateChipCopy(
+  value: string | null,
+  nowEpochMilliseconds: number = Date.now(),
+): string {
+  if (value === null) {
+    return 'Time unavailable';
+  }
+  const timestamp = Date.parse(value);
+  if (!isRepresentableTimestampMs(timestamp) || timestamp <= 0) {
+    return 'Time unavailable';
+  }
+  const date = new Date(timestamp);
+  const now = new Date(nowEpochMilliseconds);
+  const localDay = (item: Date) =>
+    Date.UTC(item.getFullYear(), item.getMonth(), item.getDate()) / 86400000;
+  const difference = localDay(now) - localDay(date);
+  const time = date.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  if (difference === 0) {
+    return `Today, ${time}`;
+  }
+  if (difference === 1) {
+    return `Yesterday, ${time}`;
+  }
+  const dateCopy =
+    date.getFullYear() === now.getFullYear()
+      ? date.toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+        })
+      : date.toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
+  return `${dateCopy}, ${time}`;
+}
+
 export function conversationRecapDateLabel(
   startedAt: string | null,
   createdAt: string,
