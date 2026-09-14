@@ -190,6 +190,29 @@ async def _auth_guard(uid: str) -> None:
         raise HTTPException(401, f"Microsoft not connected — {e}")
 
 
+# Envelope fields OMI adds to every tool call; they are not tool parameters.
+_ENVELOPE_KEYS = frozenset({"uid", "app_id", "tool_name", "geolocation", "args"})
+
+
+def _tool_args(body: dict[str, Any]) -> dict[str, Any]:
+    """Pull the tool's own parameters out of an OMI tool-call body.
+
+    OMI posts a tool call as one flat JSON object — the tool's parameters sit
+    next to the envelope fields, see ``_call_tool_endpoint`` in
+    ``backend/utils/retrieval/tools/app_tools.py``::
+
+        payload = {**kwargs, 'uid': uid, 'app_id': app_id, 'tool_name': name}
+
+    It never sends a nested ``args`` object, so read the parameters from the top
+    level and drop the envelope keys. A nested ``args`` is still honoured if some
+    other caller supplies one.
+    """
+    args = body.get("args")
+    if isinstance(args, dict) and args:
+        return args
+    return {k: v for k, v in body.items() if k not in _ENVELOPE_KEYS}
+
+
 @app.post("/tools/{tool_name}")
 async def tool_dispatch(tool_name: str, request: Request) -> Any:
     body: dict[str, Any] = {}
@@ -200,7 +223,7 @@ async def tool_dispatch(tool_name: str, request: Request) -> Any:
     uid: str | None = body.get("uid") or request.query_params.get("uid")
     if not uid:
         raise HTTPException(400, "uid (OMI user id) is required")
-    args: dict[str, Any] = body.get("args", {}) or {}
+    args: dict[str, Any] = _tool_args(body)
 
     await _auth_guard(uid)
 
