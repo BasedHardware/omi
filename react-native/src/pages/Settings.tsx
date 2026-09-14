@@ -834,9 +834,11 @@ export function SettingsPage({
           </>
         )}
         {snapshot.subscription === null ? (
-          <Text style={styles.projectionEmptyCopy}>
-            {snapshot.subscriptionError ?? 'Plan is unavailable.'}
-          </Text>
+          snapshot.subscriptionError !== null ? (
+            <Text style={styles.projectionEmptyCopy}>
+              {snapshot.subscriptionError}
+            </Text>
+          ) : null
         ) : (
           <SettingRow
             copy={[

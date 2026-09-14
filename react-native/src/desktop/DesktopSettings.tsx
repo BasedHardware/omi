@@ -946,18 +946,16 @@ export function DesktopSettings({
             .join(' · ')}
           title="Current plan"
         />
-      ) : (
+      ) : session !== 'ready' ? (
         <Row
-          copy={
-            session !== 'ready'
-              ? 'Sign in to load conversations and memories.'
-              : account === null
-              ? 'Loading plan…'
-              : account.subscriptionError ?? 'Plan is unavailable.'
-          }
+          copy="Sign in to load conversations and memories."
           title="Current plan"
         />
-      )}
+      ) : account === null ? (
+        <Row copy="Loading plan…" title="Current plan" />
+      ) : account.subscriptionError !== null ? (
+        <Row copy={account.subscriptionError} title="Current plan" />
+      ) : null}
       {account != null && account.usageError != null ? (
         <>
           <Row copy={account.usageError} title="Listening" />

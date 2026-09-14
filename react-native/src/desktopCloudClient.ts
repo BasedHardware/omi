@@ -8,6 +8,7 @@ import {
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
   usageLoadErrorCopy,
+  subscriptionLoadErrorCopy,
   visibleDisplayText,
 } from './desktopReadClient';
 
@@ -507,6 +508,35 @@ function settledError(reason: unknown): string {
   return desktopReadErrorCopy(reason);
 }
 
+async function loadCloudSubscription(
+  backend: OmiBackend,
+): Promise<{value: CloudSubscription | null; error: string | null}> {
+  let response: {status: number; body: string | null};
+  try {
+    response = await backend.request({
+      id: 'desktop-subscription-read',
+      method: 'GET',
+      path: '/v1/users/me/subscription',
+    });
+  } catch {
+    return {value: null, error: null};
+  }
+  if (response.status !== 200 || response.body === null) {
+    return {value: null, error: null};
+  }
+  try {
+    return {
+      value: parseCloudSubscription(
+        parseJson(response.body, 'desktop-subscription-read'),
+        'Subscription response',
+      ),
+      error: null,
+    };
+  } catch {
+    return {value: null, error: subscriptionLoadErrorCopy()};
+  }
+}
+
 export async function loadConnectors(
   backend: OmiBackend,
 ): Promise<ConnectorsSnapshot> {
@@ -597,19 +627,7 @@ export async function loadAccountSettings(
         'Profile response',
       ),
     ),
-    readOptional(async () =>
-      parseCloudSubscription(
-        (
-          await cloudRequest(
-            backend,
-            'desktop-subscription-read',
-            'GET',
-            '/v1/users/me/subscription',
-          )
-        ).body,
-        'Subscription response',
-      ),
-    ),
+    loadCloudSubscription(backend),
     readOptional(async () =>
       parseStoreRecordingPermission(
         (

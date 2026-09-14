@@ -27,7 +27,7 @@ jest.mock('../omiNative', () => ({
 
 const {ConnectorsPage} = require('./Connectors');
 const {SettingsPage} = require('./Settings');
-const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy, permissionsTitleCopy, fairUseLoadErrorCopy, usageLoadErrorCopy} = require('../desktopReadClient');
+const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy, permissionsTitleCopy, fairUseLoadErrorCopy, usageLoadErrorCopy, subscriptionLoadErrorCopy} = require('../desktopReadClient');
 const {appChangelogsLoadErrorCopy} = require('../legacyOmiAppChangelogs');
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
@@ -1357,6 +1357,38 @@ test('Settings names GET subscription transcription quota as minutes this month'
   expect(tree).toContain('Free Plan · Active · 2 of 60 min used this month');
   expect(tree).not.toContain('90 / 3600');
   expect(tree).not.toContain('transcribed seconds');
+  expect(tree).not.toContain('Upgrade');
+});
+
+test('Settings names malformed GET subscription Flutter load-error instead of Plan unavailable', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/subscription') {
+      return {id: request.id, status: 200, body: '{'};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain(subscriptionLoadErrorCopy());
+  expect(tree).not.toContain('Plan is unavailable.');
+  expect(tree).not.toContain('Free Plan');
+  expect(tree).not.toContain('Upgrade');
+});
+
+test('Settings omits HTTP 503 subscription GET instead of inventing Plan unavailable', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/subscription') {
+      return {id: request.id, status: 503, body: null};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).not.toContain(subscriptionLoadErrorCopy());
+  expect(tree).not.toContain('Plan is unavailable.');
+  expect(tree).not.toContain('Free Plan');
   expect(tree).not.toContain('Upgrade');
 });
 

@@ -1125,6 +1125,10 @@ export function usageLoadErrorCopy(): string {
   return 'Failed to load usage data. Please try again later.';
 }
 
+export function subscriptionLoadErrorCopy(): string {
+  return 'Failed to load subscription data. Please try again later.';
+}
+
 export function taskIntegrationsTitleCopy(): string {
   return 'Task Integrations';
 }

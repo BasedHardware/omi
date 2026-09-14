@@ -136,6 +136,7 @@ import {
   usageThisYearTitleCopy,
   usageAllTimeTitleCopy,
   usageLoadErrorCopy,
+  subscriptionLoadErrorCopy,
   taskIntegrationsTitleCopy,
   usageActivityEmptyCopy,
   usageListeningSubtitleCopy,
@@ -1272,6 +1273,9 @@ test('usage stats copy names GET today counts without Upgrade', () => {
   expect(usageAllTimeTitleCopy()).toBe('All Time');
   expect(usageLoadErrorCopy()).toBe(
     'Failed to load usage data. Please try again later.',
+  );
+  expect(subscriptionLoadErrorCopy()).toBe(
+    'Failed to load subscription data. Please try again later.',
   );
   expect(taskIntegrationsTitleCopy()).toBe('Task Integrations');
   expect(
@@ -4866,15 +4870,49 @@ test('loadAccountSettings keeps failed slices independent', async () => {
     expect.objectContaining({uid: 'user-1', email: 'ada@example.test'}),
   );
   expect(snapshot.subscription).toBeNull();
-  expect(snapshot.subscriptionError).toBe(
-    'This saved data could not be loaded. Retry without changing it.',
-  );
+  expect(snapshot.subscriptionError).toBeNull();
   expect(snapshot.storeRecordingPermission).toBe(true);
   expect(snapshot.trainingOptedIn).toBe(false);
   expect(snapshot.privateCloudSync).toBe(false);
   expect(snapshot.webhooks).toBeNull();
   expect(snapshot.usage).toBeNull();
   expect(snapshot.usageError).toBe(usageLoadErrorCopy());
+});
+
+test('loadAccountSettings names malformed GET subscription Flutter load-error', async () => {
+  const backend = backendFor(request => {
+    if (request.path === '/v1/users/profile') {
+      return {
+        status: 200,
+        body: JSON.stringify({uid: 'user-1', email: 'ada@example.test'}),
+      };
+    }
+    if (request.path === '/v1/users/me/subscription') {
+      return {status: 200, body: '{'};
+    }
+    if (request.path === '/v1/users/store-recording-permission') {
+      return {
+        status: 200,
+        body: JSON.stringify({store_recording_permission: true}),
+      };
+    }
+    if (request.path === '/v1/users/training-data-opt-in') {
+      return {status: 200, body: JSON.stringify({opted_in: false})};
+    }
+    if (request.path === '/v1/users/private-cloud-sync') {
+      return {
+        status: 200,
+        body: JSON.stringify({private_cloud_sync_enabled: false}),
+      };
+    }
+    return {status: 404, body: null};
+  });
+  const snapshot = await loadAccountSettings(backend);
+  expect(snapshot.subscription).toBeNull();
+  expect(snapshot.subscriptionError).toBe(subscriptionLoadErrorCopy());
+  expect(snapshot.profile).toEqual(
+    expect.objectContaining({uid: 'user-1', email: 'ada@example.test'}),
+  );
 });
 
 test('loadAccountSettings names GET usage today without inventing zeros', async () => {

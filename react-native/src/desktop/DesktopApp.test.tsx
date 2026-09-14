@@ -24,6 +24,7 @@ import {
   signOutTitleCopy,
   fairUseLoadErrorCopy,
   usageLoadErrorCopy,
+  subscriptionLoadErrorCopy,
 } from '../desktopReadClient';
 import {appChangelogsLoadErrorCopy} from '../legacyOmiAppChangelogs';
 
@@ -2756,7 +2757,7 @@ test('Settings reports a subscription read failure as unavailable', async () => 
     profile: null,
     profileError: null,
     subscription: null,
-    subscriptionError: 'Plan is temporarily unavailable.',
+    subscriptionError: subscriptionLoadErrorCopy(),
     storeRecordingPermission: null,
     storeRecordingError: null,
     trainingOptedIn: null,
@@ -2779,7 +2780,7 @@ test('Settings reports a subscription read failure as unavailable', async () => 
       .find(node => node.props.accessibilityLabel === 'Account & Plan')
       .props.onPress();
   });
-  expect(renderedText(renderer)).toContain('Plan is temporarily unavailable.');
+  expect(renderedText(renderer)).toContain(subscriptionLoadErrorCopy());
   expect(renderedText(renderer)).not.toContain(
     'Plan details load after sign-in.',
   );
