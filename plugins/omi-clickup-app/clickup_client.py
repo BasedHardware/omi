@@ -373,7 +373,20 @@ class ClickUpClient:
             
             if priority is not None:
                 try:
-                    p_val = int(priority)
+                    if isinstance(priority, bool):
+                        raise ValueError("Priority cannot be boolean")
+                    if isinstance(priority, float) and not priority.is_integer():
+                        raise ValueError("Priority cannot be fractional float")
+                    if isinstance(priority, str):
+                        s = priority.strip()
+                        if not s.isdigit() and not (s.startswith("-") and s[1:].isdigit()):
+                            raise ValueError("Priority string must be integer")
+                        p_val = int(s)
+                    elif isinstance(priority, (int, float)):
+                        p_val = int(priority)
+                    else:
+                        raise ValueError("Invalid priority type")
+
                     if 1 <= p_val <= 4:
                         task_data["priority"] = p_val
                     else:
@@ -423,12 +436,11 @@ class ClickUpClient:
 
                         # Try parsing as ISO format
                         if has_time:
-                            # Full datetime - parse the time component
-                            dt_naive = datetime.fromisoformat(due_str.replace('Z', ''))
-                            if tz:
-                                dt = tz.localize(dt_naive)
-                            else:
-                                dt = dt_naive
+                            # Full datetime - preserve offset and normalize trailing Z
+                            iso_str = due_str if not due_str.endswith('Z') else due_str[:-1] + '+00:00'
+                            dt = datetime.fromisoformat(iso_str)
+                            if dt.tzinfo is None and tz:
+                                dt = tz.localize(dt)
                         else:
                             # Just date, set time to end of day
                             dt_naive = datetime.fromisoformat(due_str + 'T23:59:59')

@@ -168,9 +168,12 @@ class ClickUpAssigneeCoercionTests(unittest.TestCase):
 class ClickUpCreateTaskTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self._print_patch = patch.object(clickup_client, "print")
+        self._tb_patch = patch("traceback.print_exc")
         self._print_patch.start()
+        self._tb_patch.start()
 
     def tearDown(self):
+        self._tb_patch.stop()
         self._print_patch.stop()
 
     async def test_create_task_coerces_assignees_and_posts(self):
@@ -286,18 +289,70 @@ class ClickUpCreateTaskTests(unittest.IsolatedAsyncioTestCase):
         sent_json = mock_post.call_args.kwargs["json"]
         self.assertEqual(sent_json["priority"], 2)
 
-        # Invalid priority (out of 1-4 range) should be omitted safely
+        # Invalid priority (out of 1-4 range, boolean, or fractional) should be omitted safely
+        for invalid_priority in ["urgent", 4.9, "3.5", True, False, 5, 0]:
+            with patch.object(clickup_client.requests, "post", return_value=success_response) as mock_post:
+                result = await client.create_task(
+                    access_token="test_token",
+                    list_id="list_1",
+                    name="Priority Task",
+                    priority=invalid_priority
+                )
+
+            self.assertTrue(result["success"])
+            sent_json = mock_post.call_args.kwargs["json"]
+            self.assertNotIn("priority", sent_json)
+
+    async def test_create_task_with_invalid_due_date_does_not_crash(self):
+        # Invalid date string should log warning and still create task without due_date
+        client = clickup_client.ClickUpClient()
+        success_response = FakeResponse({"id": "t106", "name": "Task without date"})
+
         with patch.object(clickup_client.requests, "post", return_value=success_response) as mock_post:
             result = await client.create_task(
                 access_token="test_token",
                 list_id="list_1",
-                name="Priority Task",
-                priority="urgent"
+                name="Task without date",
+                due_date="not-a-date"
             )
 
         self.assertTrue(result["success"])
         sent_json = mock_post.call_args.kwargs["json"]
-        self.assertNotIn("priority", sent_json)
+        self.assertNotIn("due_date", sent_json)
+
+    async def test_create_task_due_date_iso_utc_z_preserves_instant(self):
+        # ISO string ending in Z must represent exact UTC instant
+        client = clickup_client.ClickUpClient()
+        success_response = FakeResponse({"id": "t107"})
+
+        with patch.object(clickup_client.requests, "post", return_value=success_response) as mock_post:
+            result = await client.create_task(
+                access_token="test_token",
+                list_id="list_1",
+                name="UTC Task",
+                due_date="2026-09-15T12:00:00Z"
+            )
+
+        self.assertTrue(result["success"])
+        sent_json = mock_post.call_args.kwargs["json"]
+        # 2026-09-15T12:00:00 UTC = 1789473600000 ms
+        self.assertEqual(sent_json["due_date"], 1789473600000)
+        self.assertTrue(sent_json["due_date_time"])
+
+    async def test_create_task_api_failure_response(self):
+        # When ClickUp API returns a non-200 status code
+        client = clickup_client.ClickUpClient()
+        error_response = FakeResponse({"err": "List not found"}, status_code=404)
+
+        with patch.object(clickup_client.requests, "post", return_value=error_response):
+            result = await client.create_task(
+                access_token="test_token",
+                list_id="invalid_list",
+                name="Failing Task"
+            )
+
+        self.assertFalse(result["success"])
+        self.assertIn("404", result["error"])
 
 
 if __name__ == "__main__":
