@@ -7,6 +7,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationStatusBadge.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationProcessingBanner.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailRequestIdentity.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationAppSelectorSheet.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummarySelection.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationSummarySections.swift
@@ -36,7 +37,7 @@ steps:
       target: conversations
       activateApp: false
     wait:
-      state.selectedTabIndex: 1
+      state.chatFirstRoute: memories
 
   - id: S2
     name: Create hermetic capture conversation

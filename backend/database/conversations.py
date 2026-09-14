@@ -23,7 +23,11 @@ from utils.conversations.transcript_hash import (
     transcript_sha256_for_binding,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
-from .firestore_index_registry import MCP_CONVERSATION_CARD_QUERY_SPECS, STALE_IN_PROGRESS_CONVERSATIONS_QUERY
+from .firestore_index_registry import (
+    CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
+    MCP_CONVERSATION_CARD_QUERY_SPECS,
+    STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+)
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
@@ -1483,6 +1487,37 @@ def get_stale_in_progress_conversations(uid: str, *, older_than_seconds: int, li
     )
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
     return select_stale_in_progress((doc.to_dict() for doc in conversations_ref.stream()), cutoff, limit)
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+def get_conversations_finished_after(
+    uid: str,
+    *,
+    status: str,
+    finished_after: datetime,
+    limit: int = 25,
+    firestore_client=None,
+) -> List[Dict[str, Any]]:
+    """Conversations in ``status`` whose last activity is at or after ``finished_after``.
+
+    Duplicate-capture detection (#3244) asks for the captures that were still
+    running when this recording started; ordering by the activity clock keeps
+    the bounded page on the rows nearest that start, which are the only ones
+    that can overlap it. Photos are not loaded — the caller compares windows
+    and transcript words only.
+    """
+    client = firestore_client or get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    conversations_ref = (
+        CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY.build(
+            user_ref.collection(conversations_collection),
+            {'status': status, 'finished_after': finished_after},
+            field_filter_factory=FieldFilter,
+        )
+        .order_by('finished_at', direction=firestore.Query.ASCENDING)
+        .limit(limit)
+    )
+    return [doc.to_dict() for doc in conversations_ref.stream()]
 
 
 def transition_conversation_status(uid: str, conversation_id: str, status: str):
