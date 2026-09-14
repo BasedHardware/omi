@@ -815,6 +815,24 @@ export function subscriptionTranscriptionQuotaCopy(
   return `${Math.round(used / 60)} of ${Math.round(limit / 60)} min used this month`;
 }
 
+export function usageActivityEmptyCopy(): string {
+  return 'No Activity Yet';
+}
+
+function usageStatsAreEmpty(stats: {
+  transcriptionSeconds: number;
+  wordsTranscribed: number;
+  insightsGained: number;
+  memoriesCreated: number;
+}): boolean {
+  return (
+    stats.transcriptionSeconds === 0 &&
+    stats.wordsTranscribed === 0 &&
+    stats.insightsGained === 0 &&
+    stats.memoriesCreated === 0
+  );
+}
+
 export function usageStatsCopy(
   stats:
     | {
@@ -869,6 +887,12 @@ export function usagePeriodStatsCopy(
     | null
     | undefined,
 ): {title: string; copy: string}[] | null {
+  if (stats == null) {
+    return null;
+  }
+  if (usageStatsAreEmpty(stats)) {
+    return [{title: periodTitle, copy: usageActivityEmptyCopy()}];
+  }
   const rows = usageStatsCopy(stats);
   if (rows === null) {
     return null;

@@ -2761,9 +2761,12 @@ test('Settings names GET usage monthly yearly all-time without Upgrade', async (
   expect(tree).toContain('2 memories');
   expect(tree).toContain('All time · Listening');
   expect(tree).toContain('60 minutes');
+  expect(tree).toContain('This year');
+  expect(tree).toContain('No Activity Yet');
   expect(tree).not.toContain('This year ·');
   expect(tree).not.toContain('99');
   expect(tree).not.toContain('Upgrade');
+  expect(tree).not.toContain('Start a conversation');
   expect(mockBackend.request).toHaveBeenCalledWith({
     id: expect.any(String),
     method: 'GET',
@@ -2804,6 +2807,7 @@ test('Settings names a failed usage period GET instead of empty success', async 
   expect(tree).not.toContain('This month · Listening');
   expect(tree).not.toContain('3 minutes');
   expect(tree).not.toContain('Upgrade');
+  expect(tree).not.toContain('No Activity Yet');
 });
 
 test('Settings names malformed usage period GET instead of empty success', async () => {
@@ -2828,4 +2832,5 @@ test('Settings names malformed usage period GET instead of empty success', async
   expect(tree).not.toContain('This month · Listening');
   expect(tree).not.toContain('3 minutes');
   expect(tree).not.toContain('Upgrade');
+  expect(tree).not.toContain('No Activity Yet');
 });

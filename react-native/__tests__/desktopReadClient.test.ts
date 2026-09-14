@@ -106,6 +106,8 @@ import {
   subscriptionStatusCopy,
   subscriptionTranscriptionQuotaCopy,
   usageStatsCopy,
+  usagePeriodStatsCopy,
+  usageActivityEmptyCopy,
   primaryLanguageCopy,
   primaryLanguageNotSetCopy,
   peopleNameRows,
@@ -1118,6 +1120,24 @@ test('usage stats copy names GET today counts without Upgrade', () => {
     }),
   ).toBeNull();
   expect(usageStatsCopy(null)).toBeNull();
+  expect(usageActivityEmptyCopy()).toBe('No Activity Yet');
+  expect(
+    usagePeriodStatsCopy('This year', {
+      transcriptionSeconds: 0,
+      wordsTranscribed: 0,
+      insightsGained: 0,
+      memoriesCreated: 0,
+    }),
+  ).toEqual([{title: 'This year', copy: usageActivityEmptyCopy()}]);
+  expect(
+    usagePeriodStatsCopy('Today', {
+      transcriptionSeconds: 0,
+      wordsTranscribed: 0,
+      insightsGained: 0,
+      memoriesCreated: 0,
+    }),
+  ).toEqual([{title: 'Today', copy: usageActivityEmptyCopy()}]);
+  expect(usagePeriodStatsCopy('This year', null)).toBeNull();
 });
 
 test('primary language copy names Flutter notSet for empty or catalog-miss GET language', () => {
