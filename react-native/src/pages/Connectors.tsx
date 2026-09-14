@@ -53,24 +53,13 @@ function CatalogAppImage({uri}: {uri: string}) {
   );
 }
 
-function appRowMeta(
-  app: CloudApp,
-  installKnown: boolean,
-  explore = false,
-): string {
+function appRowMeta(app: CloudApp, explore = false): string {
   const category = appSectionCategoryCopy(app.category, explore);
   return [
     category,
     explore
       ? appExploreRatingCopy(app.ratingAvg, app.ratingCount)
       : appRatingCopy(app.ratingAvg, app.ratingCount),
-    app.connectedAccounts.length > 0
-      ? 'Connected'
-      : installKnown
-      ? app.enabled
-        ? 'Installed'
-        : 'Not installed'
-      : null,
   ]
     .filter(item => item !== null)
     .join(' · ');
@@ -282,7 +271,7 @@ export function ConnectorsPage({
               ) : (
                 section.items.map(app => {
                   const explore = section.key === 'Explore';
-                  const meta = appRowMeta(app, installKnown, explore);
+                  const meta = appRowMeta(app, explore);
                   const name = appDisplayName(app.name);
                   const title = appListPrivateNameCopy(
                     app.name,

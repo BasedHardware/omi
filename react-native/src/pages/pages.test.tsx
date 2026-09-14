@@ -732,7 +732,7 @@ test('successful empty Apps enabled reads still report catalogue apps as not ins
   });
   const renderer = await renderPage(ConnectorsPage);
   expect(textOf(renderer)).toContain('Owned app');
-  expect(textOf(renderer)).toContain('Not installed');
+  expect(textOf(renderer)).not.toContain('Not installed');
   expect(textOf(renderer)).toContain('No installed apps.');
   expect(labelsOf(renderer)).toContain('Install Owned app');
 });
@@ -763,7 +763,7 @@ test('successful Apps enabled reads do not treat catalogue enabled bits as insta
   });
   const renderer = await renderPage(ConnectorsPage);
   expect(textOf(renderer)).toContain('Owned app');
-  expect(textOf(renderer)).toContain('Not installed');
+  expect(textOf(renderer)).not.toContain('Not installed');
   expect(textOf(renderer)).toContain('No installed apps.');
   expect(labelsOf(renderer)).toContain('Install Owned app');
   expect(labelsOf(renderer)).not.toContain('Remove Owned app');
@@ -800,7 +800,7 @@ test('whitespace-only Apps description does not leave a blank catalogue subtitle
   });
   const renderer = await renderPage(ConnectorsPage);
   expect(textOf(renderer)).toContain('Owned app');
-  expect(textOf(renderer)).toContain('Not installed');
+  expect(textOf(renderer)).not.toContain('Not installed');
   const blankCopy = renderer.root.findAllByType(Text).filter(node => {
     const child = node.props.children;
     return typeof child === 'string' && child.length > 0 && child.trim() === '';
@@ -840,7 +840,7 @@ test('NEXT LINE-only Apps description does not leave a blank catalogue subtitle'
   });
   const renderer = await renderPage(ConnectorsPage);
   expect(textOf(renderer)).toContain('Owned app');
-  expect(textOf(renderer)).toContain('Not installed');
+  expect(textOf(renderer)).not.toContain('Not installed');
   expect(textOf(renderer)).not.toContain('\u0085');
 });
 
@@ -874,7 +874,7 @@ test('whitespace-only Apps name stays visible instead of a blank catalogue title
   });
   const renderer = await renderPage(ConnectorsPage);
   expect(textOf(renderer)).toContain('App name unavailable');
-  expect(textOf(renderer)).toContain('Not installed');
+  expect(textOf(renderer)).not.toContain('Not installed');
   expect(labelsOf(renderer)).toContain('Install App name unavailable');
 });
 
@@ -933,7 +933,7 @@ test('nested non-retryable Apps enable writes latch Install', async () => {
   );
   expect(labelsOf(renderer)).not.toContain('Install Owned app');
   expect(textOf(renderer)).toContain('Owned app');
-  expect(textOf(renderer)).toContain('Not installed');
+  expect(textOf(renderer)).not.toContain('Not installed');
 });
 
 test('nested non-retryable training opt-in writes latch Opt in', async () => {
@@ -2571,7 +2571,7 @@ test('Apps category labels are not raw wire tokens', async () => {
   expect(tree).not.toContain('Productivity and organization');
 });
 
-test('Connectors rows keep GET connected accounts as Connected instead of Installed-only', async () => {
+test('Connectors Explore and Installed omit Flutter unused install-state and Connected meta', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/apps') {
@@ -2583,6 +2583,13 @@ test('Connectors rows keep GET connected accounts as Connected instead of Instal
             id: 'catalog-app-1',
             name: 'Owned app',
             connected_accounts: ['acct-1'],
+            rating_avg: 4.5,
+            rating_count: 12,
+          },
+          {
+            id: 'catalog-app-2',
+            name: 'Catalog fixture app',
+            enabled: false,
           },
         ]),
       };
@@ -2605,10 +2612,22 @@ test('Connectors rows keep GET connected accounts as Connected instead of Instal
   });
   const renderer = await renderPage(ConnectorsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Owned app');
-  expect(tree).toContain('Connected');
+  const explore = sectionText(renderer, 'Explore');
+  const installed = sectionText(renderer, 'Installed');
+  expect(explore).toContain('Owned app');
+  expect(explore).toContain('Catalog fixture app');
+  expect(explore).toContain('4.5 · 12 ratings');
+  expect(explore).not.toContain('Installed');
+  expect(explore).not.toContain('Not installed');
+  expect(explore).not.toContain('Connected');
+  expect(installed).toContain('Owned app');
+  expect(installed).toContain('4.5 (12)');
+  expect(installed).not.toContain('Not installed');
+  expect(installed).not.toContain('Connected');
   expect(tree).not.toContain('acct-1');
   expect(tree).not.toContain('Not installed');
+  expect(labelsOf(renderer)).toContain('Remove Owned app');
+  expect(labelsOf(renderer)).toContain('Install Catalog fixture app');
 });
 
 test('Connectors Explore omits CategorySection private and Installed names AppListItem lock', async () => {
