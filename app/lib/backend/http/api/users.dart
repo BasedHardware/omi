@@ -777,14 +777,15 @@ Future<String?> exportUserDataToFile(String filePath) async {
       Logger.debug('exportUserDataToFile failed: ${response.statusCode}');
       return null;
     }
-    sink = file.openWrite();
+    final downloadSink = file.openWrite();
+    sink = downloadSink;
     var bytesWritten = 0;
     await for (final chunk in response.stream) {
-      sink!.add(chunk);
+      downloadSink.add(chunk);
       bytesWritten += chunk.length;
     }
-    await sink.flush();
-    await sink.close();
+    await downloadSink.flush();
+    await downloadSink.close();
     sink = null;
     if (bytesWritten == 0) {
       Logger.debug('exportUserDataToFile failed: empty response body');
