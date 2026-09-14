@@ -188,6 +188,53 @@ def extract_text_content(blocks: List[dict]) -> str:
     return "\n".join(text_parts)
 
 
+# Notion returns a block's children in pages of at most 100 and signals the
+# rest with has_more/next_cursor. get_page used to read one page of 50 and
+# stop, while the rendered content is capped at CONTENT_LIMIT characters — two
+# unrelated limits, and the block one won on any page with spacer, media or
+# short list blocks (which count toward the page but render to nothing or a
+# few characters). Follow the cursor until Notion runs out or the text budget
+# is met, so the character cap is the only thing that truncates.
+BLOCK_PAGE_SIZE = 100
+CONTENT_LIMIT = 1000
+# Ceiling on pages one read will walk, so a malformed or self-referencing
+# next_cursor cannot turn a page read into an endless loop.
+MAX_BLOCK_PAGES = 20
+
+
+def fetch_page_blocks(uid: str, page_id: str, budget: int = CONTENT_LIMIT) -> Optional[dict]:
+    """Read every page of /blocks/{page_id}/children until has_more is false or
+    the rendered text reaches ``budget``.
+
+    Returns a list-shaped dict with the merged ``results``, or the failing
+    page's error dict — a page that failed halfway must not pass as a shorter
+    page that read fine.
+    """
+    results: List[dict] = []
+    cursor = None
+    seen: set = set()
+    for _ in range(MAX_BLOCK_PAGES):
+        params = {"page_size": BLOCK_PAGE_SIZE}
+        if cursor:
+            params["start_cursor"] = cursor
+        page = notion_api_request(uid, "GET", f"/blocks/{page_id}/children", params=params)
+        if not page or "error" in page:
+            return page
+        if not isinstance(page.get("results"), list):
+            break
+        results.extend(page["results"])
+        if not page.get("has_more") or len(extract_text_content(results)) >= budget:
+            break
+        cursor = page.get("next_cursor")
+        if not cursor or cursor in seen:
+            log("Notion reported has_more without a usable next_cursor; stopping")
+            break
+        seen.add(cursor)
+    else:
+        log(f"Page content exceeded {MAX_BLOCK_PAGES} block pages; returning what was read")
+    return {"object": "list", "results": results}
+
+
 def format_page_info(page: dict, include_content: bool = False) -> str:
     """Format a page for display."""
     title = extract_title(page)
@@ -551,8 +598,8 @@ async def tool_get_page(request: Request):
         if not page or "error" in page:
             return ChatToolResponse(error=f"Page not found: {page.get('error', 'Unknown error')}")
 
-        # Get page content (blocks)
-        blocks = notion_api_request(uid, "GET", f"/blocks/{page_id}/children", params={"page_size": 50})
+        # Get page content (blocks), following next_cursor as far as the content budget needs
+        blocks = fetch_page_blocks(uid, page_id)
 
         title = extract_title(page)
         url = page.get("url", "")
@@ -588,8 +635,8 @@ async def tool_get_page(request: Request):
                 result_parts.append("")
                 result_parts.append("**Content:**")
                 # Limit content length
-                if len(content) > 1000:
-                    content = content[:1000] + "..."
+                if len(content) > CONTENT_LIMIT:
+                    content = content[:CONTENT_LIMIT] + "..."
                 result_parts.append(content)
 
         return ChatToolResponse(result="\n".join(result_parts))

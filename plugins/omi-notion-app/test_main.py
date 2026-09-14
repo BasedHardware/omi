@@ -107,6 +107,74 @@ class PageReadTests(unittest.TestCase):
                 if text:
                     self.assertIn(text, result.result)
 
+
+def block(text):
+    return {"type": "paragraph", "paragraph": {"rich_text": [{"plain_text": text}]}}
+
+
+def block_page(blocks, next_cursor=None):
+    response = Mock(status_code=200)
+    response.json.return_value = {
+        "object": "list", "results": blocks,
+        "has_more": next_cursor is not None, "next_cursor": next_cursor,
+    }
+    return response
+
+
+class PageContentPaginationTests(unittest.TestCase):
+    def read(self, *content_responses):
+        metadata = Mock(status_code=200)
+        metadata.json.return_value = {
+            "properties": {"title": {"type": "title", "title": [{"plain_text": "Known title"}]}},
+            "id": "test-page", "archived": False, "url": "https://www.notion.so/test-page",
+            "created_time": "2026-09-01T00:00:00.000Z", "last_edited_time": "2026-09-08T00:00:00.000Z",
+        }
+        request = Mock(json=AsyncMock(return_value={"uid": "test-user", "page_id": "test-page"}))
+        with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.object(notion.requests, "get", side_effect=[metadata, *content_responses]) as get:
+            result = asyncio.run(notion.tool_get_page(request))
+        content_calls = [c for c in get.call_args_list if c.args[0].endswith("/blocks/test-page/children")]
+        return result, content_calls
+
+    def test_content_past_the_first_block_page_is_read(self):
+        # A page of spacer blocks and short items: 50 blocks rendered well under
+        # the content budget, and the block after them used to be lost.
+        spacers = [{"type": "divider", "divider": {}}] * 30 + [block(f"item {i}") for i in range(20)]
+        result, calls = self.read(block_page(spacers, next_cursor="cursor-2"), block_page([block("the fifty-first block")]))
+        self.assertIsNone(result.error)
+        self.assertIn("the fifty-first block", result.result)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0].kwargs["params"], {"page_size": notion.BLOCK_PAGE_SIZE})
+        self.assertEqual(calls[1].kwargs["params"], {"page_size": notion.BLOCK_PAGE_SIZE, "start_cursor": "cursor-2"})
+
+    def test_stops_once_the_content_budget_is_met(self):
+        # Nothing past the character cap is ever shown, so nothing past it is fetched.
+        result, calls = self.read(block_page([block("x" * notion.CONTENT_LIMIT)], next_cursor="cursor-2"))
+        self.assertIsNone(result.error)
+        self.assertEqual(len(calls), 1)
+
+    def test_later_page_failure_is_not_a_shorter_success(self):
+        for failure in (Mock(status_code=500, text="private upstream response"), RuntimeError("private transport detail")):
+            with self.subTest(failure=type(failure).__name__):
+                result, calls = self.read(block_page([block("first page")], next_cursor="cursor-2"), failure)
+                self.assertIsNone(result.result)
+                self.assertIn("Failed to retrieve page content", result.error)
+                self.assertNotIn("first page", result.error)
+                self.assertNotIn("private", result.error)
+                self.assertEqual(len(calls), 2)
+
+    def test_repeating_cursor_stops_instead_of_looping(self):
+        result, calls = self.read(block_page([block("a")], next_cursor="same"), block_page([block("b")], next_cursor="same"))
+        self.assertIsNone(result.error)
+        self.assertIn("a\nb", result.result)
+        self.assertEqual(len(calls), 2)
+
+    def test_page_ceiling(self):
+        pages = [block_page([block(f"p{i}")], next_cursor=f"c{i}") for i in range(notion.MAX_BLOCK_PAGES + 5)]
+        result, calls = self.read(*pages)
+        self.assertIsNone(result.error)
+        self.assertEqual(len(calls), notion.MAX_BLOCK_PAGES)
+
+
 class PageWriteTests(unittest.TestCase):
     def write(self, content, create=False, fail_at=None, failure=None, **metadata):
         calls = []
