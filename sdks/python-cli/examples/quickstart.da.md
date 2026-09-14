@@ -95,7 +95,7 @@ omi auth status    # lokal kontrol, offline
 omi auth whoami    # kontrol på serveren
 ```
 
-Opdater et udløbende token uden at logge ind igen:
+Opdater et udløbende token uden at logge ind igen (kun relevant for browser-login/OAuth):
 
 ```bash
 omi auth refresh
@@ -209,11 +209,13 @@ Koderne er stabile, så logik i scripts og CI kan forgrene sig på dem.
 | Kode | Betydning | Hvornår |
 | :---: | :--- | :--- |
 | `0` | Succes | Kommandoen blev udført |
-| `1` | Kaldefejl | Ugyldigt flag, manglende argument |
+| `1` | Kaldefejl | omi-clis egen validering (f.eks. både `--browser` og `--api-key` samtidigt, ugyldigt loginvalg, tom stdin) |
 | `2` | Adgangsfejl | Ikke logget ind, ugyldig eller udløbet nøgle |
 | `3` | Serverfejl | 5xx-svar, timeout, ingen forbindelse |
 | `4` | For mange forespørgsler | 429 Too Many Requests |
 | `5` | Ikke fundet | 404, id findes ikke |
+
+> **Bemærk.** Ukendte flag og manglende argumenter fanges af Click og giver kode `2`.
 
 Eksempel på kontrol i Bash:
 
