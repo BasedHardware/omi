@@ -16,6 +16,7 @@ import {
   conversationUnknownAppCopy,
   conversationPhotoUnavailableCopy,
   transcriptSttUnknownCopy,
+  transcriptSttOmiFallbackCopy,
 } from '../desktopReadClient';
 
 const mockRecording = jest.fn(() => ({
@@ -2435,7 +2436,7 @@ test('legacy conversation details name GET transcript translations without a not
   expect(copy).toContain('translated by omi');
 });
 
-test('legacy conversation details name GET stt_provider without inventing Flutter Omi', () => {
+test('legacy conversation details name GET stt_provider unknown as Flutter Omi', () => {
   mockLegacy.mockReturnValue({
     result: {
       status: 'loaded',
@@ -2464,7 +2465,7 @@ test('legacy conversation details name GET stt_provider without inventing Flutte
               isUser: false,
               start: 1,
               end: 2,
-              sttProvider: 'whisper-cloudflare',
+              sttProvider: transcriptSttOmiFallbackCopy(),
             },
           ],
         },
@@ -2479,8 +2480,7 @@ test('legacy conversation details name GET stt_provider without inventing Flutte
     }),
   );
   expect(copy).toContain('Deepgram');
-  expect(copy).toContain('whisper-cloudflare');
-  expect(copy).not.toContain('Omi');
+  expect(copy).toContain(transcriptSttOmiFallbackCopy());
 });
 
 test('legacy conversation details name Flutter Unknown for empty GET stt_provider', () => {

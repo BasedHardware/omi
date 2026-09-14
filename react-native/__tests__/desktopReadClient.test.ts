@@ -85,6 +85,7 @@ import {
   conversationNoFolderCopy,
   transcriptSttProviderCopy,
   transcriptSttUnknownCopy,
+  transcriptSttOmiFallbackCopy,
   conversationStructuredEmojiCopy,
   conversationStructuredEmojiDefaultCopy,
   conversationStructuredCategoryCopy,
@@ -2621,10 +2622,15 @@ test('conversation No Folder copy names Flutter l10n.noFolder', () => {
 
 test('transcript STT copy names Flutter getDisplayName empty as Unknown', () => {
   expect(transcriptSttUnknownCopy()).toBe('Unknown');
+  expect(transcriptSttOmiFallbackCopy()).toBe('Omi');
   expect(transcriptSttProviderCopy('')).toBe(transcriptSttUnknownCopy());
   expect(transcriptSttProviderCopy('deepgram')).toBe('Deepgram');
+  expect(transcriptSttProviderCopy('omi')).toBe(transcriptSttOmiFallbackCopy());
   expect(transcriptSttProviderCopy('whisper-cloudflare')).toBe(
-    'whisper-cloudflare',
+    transcriptSttOmiFallbackCopy(),
+  );
+  expect(transcriptSttProviderCopy('Deepgram')).toBe(
+    transcriptSttOmiFallbackCopy(),
   );
   expect(transcriptSttProviderCopy(' \t\u0085 ')).toBeUndefined();
   expect(transcriptSttProviderCopy(undefined)).toBeUndefined();

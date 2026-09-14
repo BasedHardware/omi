@@ -240,6 +240,10 @@ export function transcriptSttUnknownCopy(): string {
   return 'Unknown';
 }
 
+export function transcriptSttOmiFallbackCopy(): string {
+  return 'Omi';
+}
+
 export function transcriptSttProviderCopy(
   value: string | null | undefined,
 ): string | undefined {
@@ -253,7 +257,7 @@ export function transcriptSttProviderCopy(
   if (token === '') {
     return undefined;
   }
-  return TRANSCRIPT_STT_PROVIDER_COPY[token] ?? token;
+  return TRANSCRIPT_STT_PROVIDER_COPY[token] ?? transcriptSttOmiFallbackCopy();
 }
 
 export function recordingTranscriptSpeakerCopy(segment: {

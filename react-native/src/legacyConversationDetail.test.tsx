@@ -9,6 +9,7 @@ import {
   conversationUnknownAppCopy,
   desktopBackendServiceCopy,
   transcriptSttUnknownCopy,
+  transcriptSttOmiFallbackCopy,
 } from './desktopReadClient';
 import {
   loadLegacyConversationDetail,
@@ -599,7 +600,7 @@ test('keeps GET conversation transcript translation language longer than 32', as
   });
 });
 
-test('names GET transcript stt_provider without inventing Flutter Omi for unknown', async () => {
+test('names GET transcript stt_provider unknown as Flutter Omi', async () => {
   mockRequest.mockResolvedValue(
     response({
       ...fixture,
@@ -648,7 +649,7 @@ test('names GET transcript stt_provider without inventing Flutter Omi for unknow
         isUser: true,
         start: 0.25,
         end: 4.5,
-        sttProvider: 'whisper-cloudflare',
+        sttProvider: transcriptSttOmiFallbackCopy(),
       },
     ],
   });
@@ -759,7 +760,7 @@ test('keeps GET transcript when speaker or stt_provider exceeds 256', async () =
             isUser: true,
             start: 0.25,
             end: 4.5,
-            sttProvider,
+            sttProvider: transcriptSttOmiFallbackCopy(),
           },
         ],
       },
@@ -821,7 +822,7 @@ test('keeps GET conversation detail when speaker or stt_provider exceeds 10000',
             isUser: true,
             start: 0.25,
             end: 4.5,
-            sttProvider,
+            sttProvider: transcriptSttOmiFallbackCopy(),
           },
         ],
       },
