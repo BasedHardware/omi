@@ -8,12 +8,12 @@ load_dotenv()
 
 class ClickUpClient:
     """Handles ClickUp API interactions."""
-    
+
     def __init__(self):
         self.client_id = os.getenv("CLICKUP_CLIENT_ID")
         self.client_secret = os.getenv("CLICKUP_CLIENT_SECRET")
         self.base_url = "https://api.clickup.com/api/v2"
-    
+
     def get_authorization_url(self, redirect_uri: str, state: str) -> str:
         """Generate ClickUp OAuth authorization URL."""
         auth_url = (
@@ -23,7 +23,7 @@ class ClickUpClient:
             f"state={state}"
         )
         return auth_url
-    
+
     def exchange_code_for_token(self, code: str) -> dict:
         """Exchange authorization code for access token."""
         try:
@@ -35,22 +35,22 @@ class ClickUpClient:
                     "code": code
                 }
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 print(f"🔍 OAuth Response: {data}", flush=True)
-                
+
                 return {
                     "access_token": data.get("access_token"),
                     "token_type": data.get("token_type", "Bearer")
                 }
             else:
                 raise Exception(f"Token exchange failed: {response.status_code} - {response.text}")
-                
+
         except Exception as e:
             print(f"❌ Token exchange error: {e}", flush=True)
             raise
-    
+
     def get_authorized_user(self, access_token: str) -> dict:
         """Get the authenticated user's information."""
         try:
@@ -59,7 +59,7 @@ class ClickUpClient:
                 f"{self.base_url}/user",
                 headers=headers
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 user = data.get("user", {})
@@ -71,11 +71,11 @@ class ClickUpClient:
             else:
                 print(f"❌ Error getting user: {response.status_code}", flush=True)
                 return {}
-                
+
         except Exception as e:
             print(f"❌ Error getting user: {e}", flush=True)
             return {}
-    
+
     def get_workspaces(self, access_token: str) -> List[Dict]:
         """Get all teams/workspaces the user has access to."""
         try:
@@ -84,11 +84,11 @@ class ClickUpClient:
                 f"{self.base_url}/team",
                 headers=headers
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 teams = data.get("teams", [])
-                
+
                 workspaces = []
                 for team in teams:
                     workspaces.append({
@@ -97,16 +97,16 @@ class ClickUpClient:
                         "color": team.get("color"),
                         "avatar": team.get("avatar")
                     })
-                
+
                 return workspaces
             else:
                 print(f"❌ Error getting workspaces: {response.status_code}", flush=True)
                 return []
-                
+
         except Exception as e:
             print(f"❌ Error getting workspaces: {e}", flush=True)
             return []
-    
+
     def get_spaces(self, access_token: str, team_id: str) -> List[Dict]:
         """Get all spaces in a workspace."""
         try:
@@ -116,11 +116,11 @@ class ClickUpClient:
                 headers=headers,
                 params={"archived": "false"}
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 spaces = data.get("spaces", [])
-                
+
                 space_list = []
                 for space in spaces:
                     space_list.append({
@@ -129,16 +129,16 @@ class ClickUpClient:
                         "private": space.get("private", False),
                         "color": space.get("color")
                     })
-                
+
                 return space_list
             else:
                 print(f"❌ Error getting spaces: {response.status_code}", flush=True)
                 return []
-                
+
         except Exception as e:
             print(f"❌ Error getting spaces: {e}", flush=True)
             return []
-    
+
     def get_lists(self, access_token: str, space_id: str) -> List[Dict]:
         """Get all lists in a space."""
         try:
@@ -148,11 +148,11 @@ class ClickUpClient:
                 headers=headers,
                 params={"archived": "false"}
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 lists = data.get("lists", [])
-                
+
                 list_data = []
                 for lst in lists:
                     list_data.append({
@@ -161,32 +161,108 @@ class ClickUpClient:
                         "space_id": space_id,
                         "folder_id": lst.get("folder", {}).get("id") if lst.get("folder") else None
                     })
-                
+
                 return list_data
             else:
                 print(f"❌ Error getting lists: {response.status_code}", flush=True)
                 return []
-                
+
         except Exception as e:
             print(f"❌ Error getting lists: {e}", flush=True)
             return []
-    
+
+    def get_folders(self, access_token: str, space_id: str) -> List[Dict]:
+        """Get all folders in a space (including their lists if returned)."""
+        try:
+            headers = {"Authorization": access_token}
+            response = requests.get(
+                f"{self.base_url}/space/{space_id}/folder",
+                headers=headers,
+                params={"archived": "false"}
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("folders", [])
+            else:
+                print(f"❌ Error getting folders: {response.status_code}", flush=True)
+                return []
+        except Exception as e:
+            print(f"❌ Error getting folders: {e}", flush=True)
+            return []
+
+    def get_folder_lists(self, access_token: str, folder_id: str) -> List[Dict]:
+        """Get all lists inside a specific folder."""
+        try:
+            headers = {"Authorization": access_token}
+            response = requests.get(
+                f"{self.base_url}/folder/{folder_id}/list",
+                headers=headers,
+                params={"archived": "false"}
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                lists = data.get("lists", [])
+
+                list_data = []
+                for lst in lists:
+                    list_data.append({
+                        "id": lst.get("id"),
+                        "name": lst.get("name"),
+                        "folder_id": folder_id
+                    })
+                return list_data
+            else:
+                print(f"❌ Error getting folder lists: {response.status_code}", flush=True)
+                return []
+        except Exception as e:
+            print(f"❌ Error getting folder lists: {e}", flush=True)
+            return []
+
     def get_all_lists(self, access_token: str, team_id: str) -> List[Dict]:
-        """Get all lists across all spaces in a workspace."""
+        """Get all lists across all spaces in a workspace, including folderless and folder lists."""
         all_lists = []
-        
+
         # Get all spaces
         spaces = self.get_spaces(access_token, team_id)
-        
+
         # Get lists for each space
         for space in spaces:
-            lists = self.get_lists(access_token, space["id"])
-            for lst in lists:
-                lst["space_name"] = space["name"]
+            space_id = space["id"]
+            space_name = space["name"]
+
+            # 1. Get folderless lists in the space
+            folderless_lists = self.get_lists(access_token, space_id)
+            for lst in folderless_lists:
+                lst["space_name"] = space_name
                 all_lists.append(lst)
-        
+
+            # 2. Get lists organized within folders in the space
+            folders = self.get_folders(access_token, space_id)
+            for folder in folders:
+                folder_id = folder.get("id")
+                folder_name = folder.get("name", "")
+
+                # Check if lists are embedded in the folder response, or fetch them
+                folder_lists = folder.get("lists")
+                if folder_lists is None:
+                    folder_lists = self.get_folder_lists(access_token, folder_id)
+
+                for lst in folder_lists:
+                    list_name = lst.get("name", "")
+                    display_name = f"{folder_name} / {list_name}" if folder_name else list_name
+                    all_lists.append({
+                        "id": lst.get("id"),
+                        "name": display_name,
+                        "space_id": space_id,
+                        "space_name": space_name,
+                        "folder_id": folder_id,
+                        "folder_name": folder_name
+                    })
+
         return all_lists
-    
+
     def get_workspace_members(self, access_token: str, team_id: str) -> List[Dict]:
         """Get all members in a workspace."""
         try:
@@ -195,12 +271,12 @@ class ClickUpClient:
                 f"{self.base_url}/team/{team_id}",
                 headers=headers
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 team = data.get("team", {})
                 members_data = team.get("members", [])
-                
+
                 members = []
                 for member in members_data:
                     user = member.get("user", {})
@@ -212,17 +288,17 @@ class ClickUpClient:
                         "color": user.get("color"),
                         "profilePicture": user.get("profilePicture")
                     })
-                
+
                 print(f"✅ Found {len(members)} workspace members", flush=True)
                 return members
             else:
                 print(f"❌ Error getting members: {response.status_code}", flush=True)
                 return []
-                
+
         except Exception as e:
             print(f"❌ Error getting members: {e}", flush=True)
             return []
-    
+
     async def create_task(
         self,
         access_token: str,
@@ -237,7 +313,7 @@ class ClickUpClient:
     ) -> Optional[dict]:
         """
         Create a task in ClickUp.
-        
+
         Args:
             access_token: User's OAuth token
             list_id: ID of the list to create task in
@@ -246,7 +322,7 @@ class ClickUpClient:
             priority: Priority (1=urgent, 2=high, 3=normal, 4=low)
             status: Optional status name
             due_date: Optional due date in ISO format or Unix timestamp (milliseconds)
-            
+
         Returns:
             Task data if successful, None otherwise
         """
@@ -255,29 +331,29 @@ class ClickUpClient:
                 "Authorization": access_token,
                 "Content-Type": "application/json"
             }
-            
+
             # Build task data
             task_data = {
                 "name": name
             }
-            
+
             # Add description with "Created via Omi" footer
             if description:
                 task_data["description"] = f"{description}\n\n--\nCreated via Omi"
             else:
                 task_data["description"] = "Created via Omi"
-            
+
             if priority:
                 task_data["priority"] = priority
-            
+
             if status:
                 task_data["status"] = status
-            
+
             if assignees and len(assignees) > 0:
                 # ClickUp expects list of user IDs as integers
                 task_data["assignees"] = [int(user_id) for user_id in assignees if user_id]
                 print(f"👥 Assignees: {assignees}", flush=True)
-            
+
             if due_date:
                 # Convert ISO date string to Unix timestamp in milliseconds
                 # ClickUp expects Unix timestamp in milliseconds
@@ -291,10 +367,10 @@ class ClickUpClient:
                     except (ImportError, Exception):
                         # Fallback to no timezone (naive datetime)
                         tz = None
-                    
+
                     # Check if time is included in the date string
                     has_time = 'T' in due_date
-                    
+
                     # Try parsing as ISO format
                     if has_time:
                         # Full datetime - parse the time component
@@ -310,11 +386,11 @@ class ClickUpClient:
                             dt = tz.localize(dt_naive)
                         else:
                             dt = dt_naive
-                    
+
                     # Convert to Unix timestamp in milliseconds
                     due_timestamp = int(dt.timestamp() * 1000)
                     task_data["due_date"] = due_timestamp
-                    
+
                     # CRITICAL: Set due_date_time=true when time component exists
                     # This tells ClickUp to display the time, not just the date
                     if has_time:
@@ -323,26 +399,26 @@ class ClickUpClient:
                     else:
                         task_data["due_date_time"] = False
                         print(f"📅 Due date (no time): {due_date} ({timezone if tz else 'system'}) → {due_timestamp}", flush=True)
-                        
+
                 except Exception as e:
                     print(f"⚠️  Could not parse due date '{due_date}': {e}", flush=True)
                     import traceback
                     traceback.print_exc()
-            
+
             print(f"📤 Creating task: {name} in list {list_id}", flush=True)
-            
+
             response = requests.post(
                 f"{self.base_url}/list/{list_id}/task",
                 headers=headers,
                 json=task_data
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 task = data
-                
+
                 print(f"✅ Task created: {task.get('id')}", flush=True)
-                
+
                 return {
                     "success": True,
                     "task_id": task.get("id"),
@@ -358,7 +434,7 @@ class ClickUpClient:
                     "success": False,
                     "error": error_msg
                 }
-                
+
         except Exception as e:
             print(f"❌ Error creating task: {e}", flush=True)
             import traceback
