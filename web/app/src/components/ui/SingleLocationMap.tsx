@@ -34,10 +34,7 @@ export default function SingleLocationMap({
         width: '100%',
       }}
     >
-      <StaticMapPreview
-        pins={[{ latitude, longitude }]}
-        alt={address || 'Conversation location'}
-      />
+      <StaticMapPreview pins={[{ latitude, longitude }]} alt="" />
       <span className="absolute bottom-3 right-3 flex items-center gap-1 rounded-lg bg-bg-secondary/90 px-2 py-1 text-xs text-text-secondary backdrop-blur-sm transition-colors group-hover:text-text-primary">
         <ExternalLink className="h-3 w-3" />
         <span>Open in maps</span>
