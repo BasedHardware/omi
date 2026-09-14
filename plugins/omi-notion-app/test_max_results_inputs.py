@@ -120,6 +120,11 @@ class MaxResultsInputTests(unittest.TestCase):
     def test_numeric_string_is_coerced(self):
         self.assert_page_size("5", lambda cap: 5, "string")
 
+    def test_booleans_are_not_treated_as_counts(self):
+        # bool is an int subclass; True must not become page_size=1 and False must not become 0.
+        self.assert_page_size(True, lambda cap: 10, "true")
+        self.assert_page_size(False, lambda cap: 10, "false")
+
     def test_non_positive_is_clamped_to_one(self):
         self.assert_page_size(0, lambda cap: 1, "zero")
         self.assert_page_size(-3, lambda cap: 1, "negative")
