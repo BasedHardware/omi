@@ -1407,7 +1407,7 @@ class ChatProvider: ObservableObject {
   private var runtimeOwnerObserver: AnyCancellable?
   private var signOutObserver: AnyCancellable?
   private var sessionInvalidateObserver: AnyCancellable?
-  fileprivate var authSessionNotificationChain: Task<Void, Never>?
+  var authSessionNotificationChain: Task<Void, Never>?
 
   private var refreshAllObserver: AnyCancellable?
   private var userSkillsObserver: AnyCancellable?
@@ -3617,27 +3617,6 @@ class ChatProvider: ObservableObject {
   }
 
   // MARK: - Kernel Journal Refresh
-
-  fileprivate func enqueueAuthSessionNotification(_ handler: @escaping @MainActor () async -> Void) async {
-    let predecessor = authSessionNotificationChain
-    let task = Task { @MainActor in
-      await predecessor?.value
-      await handler()
-    }
-    authSessionNotificationChain = task
-    await task.value
-  }
-
-  func stopAgentBridgeIfStarted() async {
-    guard agentBridgeStarted else { return }
-    await resolvedAgentClient().stop()
-    agentBridgeStarted = false
-  }
-
-  func stopAgentBridgeAfterSessionInvalidation() async {
-    log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
-    await stopAgentBridgeIfStarted()
-  }
 
   /// Activation/notification is only a wakeup. Ordered range replay in
   /// KernelTurnProjection is the sole source of new or updated messages.
