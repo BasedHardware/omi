@@ -1172,6 +1172,89 @@ test('canonical recording details name GET duration from transcript span', () =>
   expect(copy).not.toContain('Duration unavailable');
 });
 
+test('legacy conversation details name GET transcript duration 1 sec', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'Hi',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              start: 0,
+              end: 1,
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {
+        ...conversation,
+        id: 'old-1',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T12:00:20.000Z',
+        status: 'completed',
+      },
+    }),
+  );
+  expect(copy).toContain('Duration ·');
+  expect(copy).toContain('1 sec');
+  expect(copy).not.toContain('1 secs');
+  expect(copy).not.toContain('< 1 min');
+  expect(copy).not.toContain('20s');
+});
+
+test('canonical recording details name GET transcript duration 1 sec', () => {
+  mockRecording.mockReturnValue({
+    result: {
+      status: 'loaded',
+      value: {
+        state: 'completed',
+        text: 'Hi',
+        discardedLeadingPackets: 0,
+        segments: [
+          {
+            text: 'Hi',
+            speaker: 'SPEAKER_00',
+            isUser: false,
+            start: 0,
+            end: 1,
+          },
+        ],
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      conversation: {
+        ...conversation,
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T12:00:20.000Z',
+        status: 'completed',
+      },
+    }),
+  );
+  expect(copy).toContain('Duration ·');
+  expect(copy).toContain('1 sec');
+  expect(copy).not.toContain('1 secs');
+  expect(copy).not.toContain('< 1 min');
+});
+
 test('canonical recording details omit Duration when transcript span is empty', () => {
   mockRecording.mockReturnValue({
     result: {

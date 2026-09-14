@@ -18,6 +18,7 @@ import {
   conversationDayLabel,
   conversationRecapDateLabel,
   conversationListDurationCopy,
+  conversationTranscriptDurationCopy,
   conversationListNewCopy,
   conversationGroupLabel,
   conversationCaptureCopy,
@@ -899,6 +900,19 @@ test('conversation list duration prefers GET transcript span over wall clocks', 
       transcriptEndSeconds: 3660,
     }),
   ).toBe('1h 1m');
+});
+
+test('conversation transcript duration names Flutter secondsToHumanReadable singular second', () => {
+  expect(conversationTranscriptDurationCopy([{end: 1}])).toBe('1 sec');
+  expect(conversationTranscriptDurationCopy([{end: 20}])).toBe('20 secs');
+  expect(conversationTranscriptDurationCopy([{end: 59}])).toBe('59 secs');
+  expect(conversationTranscriptDurationCopy([{end: 60}])).toBe('1 min');
+  expect(conversationTranscriptDurationCopy([{end: 61}])).toBe('1 mins 1 secs');
+  expect(conversationTranscriptDurationCopy([{end: 150}])).toBe(
+    '2 mins 30 secs',
+  );
+  expect(conversationTranscriptDurationCopy([{end: 0}])).toBeNull();
+  expect(conversationTranscriptDurationCopy([])).toBeNull();
 });
 
 test('discarded conversation titles use Flutter transcript excerpt and people names', () => {

@@ -791,7 +791,7 @@ export function conversationTranscriptDurationCopy(
     return null;
   }
   if (seconds < 60) {
-    return `${seconds} secs`;
+    return seconds === 1 ? `${seconds} sec` : `${seconds} secs`;
   }
   if (seconds < 3600) {
     const minutes = Math.floor(seconds / 60);
