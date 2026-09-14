@@ -17,6 +17,7 @@ import {
   tasksSearchEmptyCopy,
   appsEmptyCopy,
   conversationDisplayTitle,
+  processingConversationDetailTitleCopy,
   conversationListUsesListenOverview,
   conversationRecapTitle,
   conversationDiscardedTranscriptCopy,
@@ -760,6 +761,7 @@ test('keeps processing conversations whose title and overview are not ready yet'
 });
 
 test('empty conversation titles stay visible instead of a blank row', () => {
+  expect(processingConversationDetailTitleCopy()).toBe('In progress');
   expect(conversationDisplayTitle({title: '', status: 'processing'})).toBe(
     'Processing conversation…',
   );

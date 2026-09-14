@@ -10,6 +10,7 @@ import {
   conversationHasFinishClock,
   conversationStatusCopy,
   processingConversationNoContentCopy,
+  processingConversationDetailTitleCopy,
   conversationTranscriptDurationCopy,
   conversationVisibilityCopy,
   conversationActionItemsTodoCopy,
@@ -409,10 +410,13 @@ function LegacyConversationBody({
         style={[styles.conversationDetailTitle, ink]}>
         {conversation.discarded
           ? 'Discarded Conversation'
-          : conversationDisplayTitle({
-              title: detail.title,
-              status: conversation.status,
-            })}
+          : conversation.status === 'processing' ||
+              conversation.status === 'merging'
+            ? processingConversationDetailTitleCopy()
+            : conversationDisplayTitle({
+                title: detail.title,
+                status: conversation.status,
+              })}
       </Text>
       {detailSummaryCopy === null ? null : (
         <Text selectable style={[styles.conversationDetailSummary, ink]}>

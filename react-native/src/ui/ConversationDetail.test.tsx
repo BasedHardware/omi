@@ -12,6 +12,7 @@ import {
   processingConversationNoContentCopy,
   processingConversationNoSummaryCopy,
   processingConversationStatusCopy,
+  processingConversationDetailTitleCopy,
   conversationActionItemsTodoCopy,
   conversationActionItemsNoPendingCopy,
   conversationActionItemsCompletedCopy,
@@ -1869,6 +1870,55 @@ test('legacy details name Flutter noSummaryForConversation when GET has no summa
   expect(withApp).toContain('App wrote this recap');
   expect(withApp).not.toContain(conversationNoSummaryCopy());
   expect(withApp).not.toContain('Conversation summary unavailable');
+});
+
+test('legacy processing details name Flutter inProgress instead of GET title', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const processing = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', status: 'processing'},
+    }),
+  );
+  expect(processing).toContain(processingConversationDetailTitleCopy());
+  expect(processing).not.toContain('A real conversation');
+  expect(processing).not.toContain('Processing conversation…');
+  const merging = text(
+    render({
+      apiContract: 'omi',
+      conversation: {
+        ...conversation,
+        id: 'old-1',
+        title: '',
+        status: 'merging',
+      },
+    }),
+  );
+  expect(merging).toContain(processingConversationDetailTitleCopy());
+  expect(merging).not.toContain('Conversation title unavailable');
+  expect(merging).not.toContain('Processing conversation…');
+  const completed = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(completed).toContain('A real conversation');
+  expect(completed).not.toContain(processingConversationDetailTitleCopy());
 });
 
 test('legacy discarded details name Discarded Conversation instead of structured title', () => {

@@ -506,6 +506,10 @@ export function processingConversationStatusCopy(): string {
   return 'Processing';
 }
 
+export function processingConversationDetailTitleCopy(): string {
+  return 'In progress';
+}
+
 export function conversationDetailSummaryForStatusCopy(
   status: string,
   transcriptEmpty: boolean,
