@@ -35,6 +35,8 @@ def _empty_historical_store(monkeypatch):
     monkeypatch.setattr(memories_db, 'get_memories', lambda *args, **kwargs: [])
     monkeypatch.setattr(memories_db, 'list_memory_updated_or_created_index', lambda *args, **kwargs: [])
     monkeypatch.setattr(memories_db, 'get_memories_by_ids', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memories_db, 'scan_memories_updated_at_page', lambda *args, **kwargs: ([], [], True))
+    monkeypatch.setattr(memories_db, 'scan_memories_created_at_page', lambda *args, **kwargs: ([], [], True))
 
 
 def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captured_at=None, content=None, **overrides):
@@ -429,6 +431,7 @@ def test_chat_get_memories_memory_list_decision_matches_search_denied_empty_and_
 
 def test_chat_default_memory_adapter_hedges_with_as_of_when_flag_on(monkeypatch):
     monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
+    monkeypatch.setenv('MEMORY_V3_CURSOR_SECRET', 'test-chat-memory-cursor-secret')
     now = datetime.now(timezone.utc).replace(microsecond=0)
     captured = now - timedelta(days=30)
     memory = _memory_item(
@@ -454,6 +457,7 @@ def test_chat_default_memory_adapter_hedges_with_as_of_when_flag_on(monkeypatch)
 
 def test_chat_default_memory_adapter_supports_explicit_history_view(monkeypatch):
     monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
+    monkeypatch.setenv('MEMORY_V3_CURSOR_SECRET', 'test-chat-memory-cursor-secret')
     now = datetime.now(timezone.utc).replace(microsecond=0)
     memory = _memory_item(
         'historical-state',
