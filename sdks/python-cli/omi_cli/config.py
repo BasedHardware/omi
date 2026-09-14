@@ -14,6 +14,7 @@ holds bearer credentials.
 
 from __future__ import annotations
 
+import math
 import os
 import secrets
 import sys
@@ -250,13 +251,21 @@ def load(path: Optional[Path] = None) -> Config:
                     )
         if "id_token_expires_at" in raw:
             val = raw["id_token_expires_at"]
-            if val is not None and (isinstance(val, bool) or not isinstance(val, (int, float))):
-                return Config(
-                    path=p,
-                    active_profile=DEFAULT_PROFILE_NAME,
-                    profiles={},
-                    load_error=f"profile '{name}' field 'id_token_expires_at' must be numeric, got {type(val).__name__}",
-                )
+            if val is not None:
+                if isinstance(val, bool) or not isinstance(val, (int, float)):
+                    return Config(
+                        path=p,
+                        active_profile=DEFAULT_PROFILE_NAME,
+                        profiles={},
+                        load_error=f"profile '{name}' field 'id_token_expires_at' must be finite numeric, got {type(val).__name__}",
+                    )
+                if not math.isfinite(val):
+                    return Config(
+                        path=p,
+                        active_profile=DEFAULT_PROFILE_NAME,
+                        profiles={},
+                        load_error=f"profile '{name}' field 'id_token_expires_at' must be finite numeric, got non-finite ({val})",
+                    )
         profiles[name] = Profile.from_toml_dict(name, raw)
 
     extra = {key: value for key, value in data.items() if key not in {"active_profile", "profiles"}}
