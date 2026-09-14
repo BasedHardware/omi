@@ -296,6 +296,44 @@ class PublicHolidaysEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("- US: United States", res.result)
         self.assertIn("- DE: Germany", res.result)
 
+    async def test_non_dict_filtering_does_not_consume_limit(self):
+        """Malformed/non-dict items mixed into upstream array must not consume limit or inflate remainder."""
+        raw_holidays = [
+            "corrupted_entry",
+            None,
+            123,
+            {
+                "date": "2026-01-01",
+                "name": "New Year's Day",
+                "localName": "New Year's Day",
+                "global": True,
+                "types": ["Public"],
+            },
+            {
+                "date": "2026-07-04",
+                "name": "Independence Day",
+                "localName": "Independence Day",
+                "global": True,
+                "types": ["Public"],
+            },
+            {
+                "date": "2026-12-25",
+                "name": "Christmas Day",
+                "localName": "Christmas Day",
+                "global": True,
+                "types": ["Public"],
+            },
+        ]
+        req = main.HolidayRequest(country_code="US", year=2026, limit=2)
+        with patch.object(main, "_request_json", new=AsyncMock(return_value=raw_holidays)):
+            res = await main.get_public_holidays(req)
+
+        self.assertIsNone(res.error)
+        self.assertIn("New Year's Day", res.result)
+        self.assertIn("Independence Day", res.result)
+        # Remainder count should be 3 valid holidays - 2 limit = 1 more (not inflated by non-dict items)
+        self.assertIn("... 1 more", res.result)
+
 
 if __name__ == "__main__":
     unittest.main()

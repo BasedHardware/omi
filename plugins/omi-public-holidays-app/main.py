@@ -232,12 +232,13 @@ async def omi_tools() -> dict[str, Any]:
 @app.post("/tools/get_public_holidays", response_model=ChatToolResponse)
 async def get_public_holidays(request: HolidayRequest) -> ChatToolResponse:
     try:
-        holidays = await _request_json(f"/PublicHolidays/{request.year}/{request.country_code}")
-        if not isinstance(holidays, list) or not holidays:
+        raw_holidays = await _request_json(f"/PublicHolidays/{request.year}/{request.country_code}")
+        if not isinstance(raw_holidays, list) or not raw_holidays:
             return ChatToolResponse(error=f"no holidays returned for {request.country_code} in {request.year}")
-        formatted_items = [_format_holiday(item) for item in holidays[: request.limit] if isinstance(item, dict)]
-        if not formatted_items:
+        holidays = [item for item in raw_holidays if isinstance(item, dict)]
+        if not holidays:
             return ChatToolResponse(error=f"no valid holidays returned for {request.country_code} in {request.year}")
+        formatted_items = [_format_holiday(item) for item in holidays[: request.limit]]
         lines = [f"Public holidays for {request.country_code} in {request.year}:"]
         lines.extend(item for item in formatted_items if item)
         if len(holidays) > request.limit:
@@ -250,12 +251,13 @@ async def get_public_holidays(request: HolidayRequest) -> ChatToolResponse:
 @app.post("/tools/get_next_public_holidays", response_model=ChatToolResponse)
 async def get_next_public_holidays(request: NextHolidayRequest) -> ChatToolResponse:
     try:
-        holidays = await _request_json(f"/NextPublicHolidays/{request.country_code}")
-        if not isinstance(holidays, list) or not holidays:
+        raw_holidays = await _request_json(f"/NextPublicHolidays/{request.country_code}")
+        if not isinstance(raw_holidays, list) or not raw_holidays:
             return ChatToolResponse(error=f"no upcoming holidays returned for {request.country_code}")
-        formatted_items = [_format_holiday(item) for item in holidays[: request.limit] if isinstance(item, dict)]
-        if not formatted_items:
+        holidays = [item for item in raw_holidays if isinstance(item, dict)]
+        if not holidays:
             return ChatToolResponse(error=f"no valid upcoming holidays returned for {request.country_code}")
+        formatted_items = [_format_holiday(item) for item in holidays[: request.limit]]
         lines = [f"Upcoming public holidays for {request.country_code}:"]
         lines.extend(item for item in formatted_items if item)
         if len(holidays) > request.limit:
@@ -268,12 +270,13 @@ async def get_next_public_holidays(request: NextHolidayRequest) -> ChatToolRespo
 @app.post("/tools/get_long_weekends", response_model=ChatToolResponse)
 async def get_long_weekends(request: LongWeekendRequest) -> ChatToolResponse:
     try:
-        weekends = await _request_json(f"/LongWeekend/{request.year}/{request.country_code}")
-        if not isinstance(weekends, list) or not weekends:
+        raw_weekends = await _request_json(f"/LongWeekend/{request.year}/{request.country_code}")
+        if not isinstance(raw_weekends, list) or not raw_weekends:
             return ChatToolResponse(error=f"no long weekends returned for {request.country_code} in {request.year}")
-        formatted_items = [_format_long_weekend(item) for item in weekends[: request.limit] if isinstance(item, dict)]
-        if not formatted_items:
+        weekends = [item for item in raw_weekends if isinstance(item, dict)]
+        if not weekends:
             return ChatToolResponse(error=f"no valid long weekends returned for {request.country_code} in {request.year}")
+        formatted_items = [_format_long_weekend(item) for item in weekends[: request.limit]]
         lines = [f"Long weekends for {request.country_code} in {request.year}:"]
         lines.extend(item for item in formatted_items if item)
         if len(weekends) > request.limit:
@@ -286,12 +289,17 @@ async def get_long_weekends(request: LongWeekendRequest) -> ChatToolResponse:
 @app.post("/tools/list_supported_countries", response_model=ChatToolResponse)
 async def list_supported_countries() -> ChatToolResponse:
     try:
-        countries = await _request_json("/AvailableCountries")
-        if not isinstance(countries, list) or not countries:
+        raw_countries = await _request_json("/AvailableCountries")
+        if not isinstance(raw_countries, list) or not raw_countries:
             return ChatToolResponse(error="country list request returned no countries")
+        countries = [item for item in raw_countries if isinstance(item, dict)]
+        if not countries:
+            return ChatToolResponse(error="country list request returned no valid countries")
         lines = ["Supported countries:"]
         for item in countries:
-            lines.append(f"- {item.get('countryCode')}: {item.get('name')}")
+            code = item.get("countryCode", "")
+            name = item.get("name", "")
+            lines.append(f"- {code}: {name}")
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"country list request failed: {exc}")
