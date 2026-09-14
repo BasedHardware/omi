@@ -61,15 +61,12 @@ export function formatConversationDate(value: string | null): string {
 function ConversationClockFields({
   conversation,
   ink,
-  locked,
   durationCopy,
 }: {
   conversation: ConversationProjection;
   ink?: {color: string};
-  locked?: boolean;
   durationCopy?: string | null;
 }) {
-  const showLocked = locked === true || conversation.locked;
   const visibilityCopy = conversationVisibilityCopy(conversation.visibility);
   const duration =
     durationCopy === undefined
@@ -94,9 +91,6 @@ function ConversationClockFields({
           style={[styles.conversationDetailField, ink]}>
           Starred
         </Text>
-      ) : null}
-      {showLocked ? (
-        <Text style={[styles.conversationDetailField, ink]}>Locked</Text>
       ) : null}
       {visibilityCopy === null ? null : (
         <Text style={[styles.conversationDetailField, ink]}>
@@ -427,7 +421,6 @@ function LegacyConversationBody({
       <ConversationClockFields
         conversation={conversation}
         ink={ink}
-        locked={detail.locked}
         durationCopy={
           detail.transcript.status === 'loaded'
             ? conversationTranscriptDurationCopy(detail.transcript.segments)

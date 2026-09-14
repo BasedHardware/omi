@@ -1076,7 +1076,8 @@ test('legacy conversation details keep GET clocks from the list row', () => {
   expect(copy).not.toContain('Duration unavailable');
   expect(copy).not.toContain('Status ·');
   expect(copy).not.toContain('Completed');
-  expect(copy).toContain('Locked');
+  expect(copy).not.toContain('Locked');
+  expect(copy).toContain('This conversation is locked. Transcript unavailable.');
   expect(copy).toContain('Discarded Conversation');
   expect(
     view.root.findAll(node => node.props.children === 'Discarded'),
@@ -2203,6 +2204,16 @@ test('conversation details omit Flutter GetSummaryWidgets unused Discarded chip'
   expect(text(view)).toContain('Discarded Conversation');
   expect(
     view.root.findAll(node => node.props.children === 'Discarded'),
+  ).toHaveLength(0);
+});
+
+test('conversation details omit Flutter GetSummaryWidgets unused Locked chip', () => {
+  const view = render({
+    conversation: {...conversation, locked: true},
+  });
+  expect(text(view)).not.toContain('Locked');
+  expect(
+    view.root.findAll(node => node.props.children === 'Locked'),
   ).toHaveLength(0);
 });
 
