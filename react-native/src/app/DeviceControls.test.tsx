@@ -74,6 +74,49 @@ test('requires reported feature bits and valid observed values before exposing w
   );
 });
 
+test('connected device omits Flutter DeviceSettings unused LED and Mic rows without feature bits', async () => {
+  await render({...device, features: undefined});
+  const missing = JSON.stringify(renderer.toJSON());
+  expect(missing).not.toContain(`"${ledBrightnessCopy()}"`);
+  expect(missing).not.toContain(`"${micGainCopy()}"`);
+  await act(async () => {
+    renderer.update(
+      <DeviceControls device={{...device, features: 0}} busy={false} />,
+    );
+  });
+  const none = JSON.stringify(renderer.toJSON());
+  expect(none).not.toContain(`"${ledBrightnessCopy()}"`);
+  expect(none).not.toContain(`"${micGainCopy()}"`);
+  await act(async () => {
+    renderer.update(
+      <DeviceControls
+        device={{
+          ...device,
+          features: 384,
+          ledBrightness: undefined,
+          microphoneGain: undefined,
+        }}
+        busy={false}
+      />,
+    );
+  });
+  const bitsWithoutValue = JSON.stringify(renderer.toJSON());
+  expect(bitsWithoutValue).toContain(
+    `"${ledBrightnessCopy()}",":"," ","Unavailable"`,
+  );
+  expect(bitsWithoutValue).toContain(
+    `"${micGainCopy()}",":"," ","Unavailable"`,
+  );
+  await act(async () => {
+    renderer.update(<DeviceControls device={device} busy={false} />);
+  });
+  const present = JSON.stringify(renderer.toJSON());
+  expect(present).toContain(`"${ledBrightnessCopy()}",":"," ","50%"`);
+  expect(present).toContain(
+    `"${micGainCopy()}",":"," ","${micGainLevelCopy(8)}"`,
+  );
+});
+
 test('connected device names Flutter DeviceSettings mic gain Mute and dB chips', async () => {
   await render({...device, microphoneGain: 0});
   const muted = JSON.stringify(renderer.toJSON());

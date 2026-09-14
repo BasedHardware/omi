@@ -207,17 +207,22 @@ export function DeviceControls({
       {controls.map(control => {
         const value = device[control.setting];
         const features = device.features;
-        const available =
+        const supported =
           device.connected &&
           features !== undefined &&
           Number.isSafeInteger(features) &&
           features >= 0 &&
           features <= 0xffffffff &&
-          Math.floor(features / 2 ** control.bit) % 2 === 1 &&
+          Math.floor(features / 2 ** control.bit) % 2 === 1;
+        const available =
+          supported &&
           value !== undefined &&
           Number.isInteger(value) &&
           value >= 0 &&
           value <= control.maximum;
+        if (!supported) {
+          return null;
+        }
         return (
           <View key={control.setting} style={local.row}>
             <Text style={[styles.deviceMeta, local.label]}>
