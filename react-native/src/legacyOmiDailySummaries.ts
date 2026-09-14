@@ -122,7 +122,7 @@ export function parseOmiDailySummaries(body: string): OmiDailySummary[] {
       break;
     }
     const summary = object(raw);
-    const id = optionalWireString(summary.id, 10000);
+    const id = optionalWireString(summary.id, 1_000_000);
     if (id === '') {
       continue;
     }

@@ -189,6 +189,36 @@ test('keeps GET daily summaries when a summary id exceeds 256', () => {
   ]);
 });
 
+test('keeps GET daily summaries when a summary id exceeds 10000', () => {
+  const id = 's'.repeat(10001);
+  expect(
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {id, headline: 'Met with the team'},
+          {id: 'sum-kept', headline: 'Shipped the recap'},
+        ],
+      }),
+    ),
+  ).toEqual([
+    {id, date: '', headline: 'Met with the team'},
+    {id: 'sum-kept', date: '', headline: 'Shipped the recap'},
+  ]);
+});
+
+test('fails closed when a summary id exceeds 1000000', () => {
+  expect(() =>
+    parseOmiDailySummaries(
+      JSON.stringify({
+        summaries: [
+          {id: 's'.repeat(1_000_001), headline: 'Met with the team'},
+          {id: 'sum-kept', headline: 'Shipped the recap'},
+        ],
+      }),
+    ),
+  ).toThrow();
+});
+
 test('keeps GET daily summaries when headline or overview exceeds 10000', () => {
   const headline = 'H'.repeat(10001);
   const overview = 'O'.repeat(10001);
