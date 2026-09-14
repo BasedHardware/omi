@@ -441,7 +441,6 @@ export function DeviceSession({
         [
           ['model', deviceModelNumberCopy()],
           ['firmware', 'Firmware'],
-          ['hardware', 'Hardware'],
           ['manufacturer', 'Manufacturer'],
           ['serial', deviceSerialNumberCopy()],
         ] as const

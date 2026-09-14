@@ -131,7 +131,7 @@ test('connected device details show reported values and truthful unavailable fie
   expect(output).toContain(
     `"${deviceSerialNumberCopy()}",": ","${deviceUnknownCopy()}"`,
   );
-  expect(output).toContain(`"Hardware",": ","${deviceUnknownCopy()}"`);
+  expect(output).not.toContain('"Hardware",": "');
   expect(output).toContain(`"Manufacturer",": ","${deviceUnknownCopy()}"`);
   expect(output).not.toContain('"Model"');
   expect(output).not.toContain('Serial number');
@@ -270,7 +270,7 @@ test('connected device details treat empty information fields as Flutter Unknown
     `"${deviceModelNumberCopy()}",": ","${deviceUnknownCopy()}"`,
   );
   expect(output).toContain(`"Firmware",": ","${deviceUnknownCopy()}"`);
-  expect(output).toContain(`"Hardware",": ","${deviceUnknownCopy()}"`);
+  expect(output).not.toContain('"Hardware",": "');
   expect(output).toContain('"Manufacturer",": ","Based"');
   expect(output).toContain(
     `"${deviceSerialNumberCopy()}",": ","${deviceUnknownCopy()}"`,
