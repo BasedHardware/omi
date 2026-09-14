@@ -18,17 +18,6 @@ extension ChatProvider {
       }
   }
 
-  func stopAgentBridgeIfStarted() async {
-    guard agentBridgeStarted else { return }
-    await resolvedAgentClient().stop()
-    agentBridgeStarted = false
-  }
-
-  func stopAgentBridgeAfterSessionInvalidation() async {
-    log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
-    await stopAgentBridgeIfStarted()
-  }
-
   func reloadChatSessionsAfterAuthentication() async {
     guard AuthState.shared.isSignedIn else { return }
     log("ChatProvider: sessionDidAuthenticate — reloading chat sessions")
