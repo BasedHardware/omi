@@ -145,3 +145,13 @@ Screen-session (mic + system audio) recordings sync to the Omi cloud via
 retry, duplicate-safe). Design, outbox semantics, and the live E2E harness
 (`pnpm test:e2e:conv-sync`) are documented in
 [docs/conversation-sync.md](docs/conversation-sync.md).
+
+### Speaker analytics
+
+Open a completed cloud conversation and expand **Speaker analytics** to view each
+speaker's talk time, share of total talk time, and words per minute. The panel
+loads metrics from the conversation analytics API when expanded; the backend
+owns speaker names, grouping, ordering, and calculations. Total talk time sums
+transcript segment durations rather than the elapsed recording time. The panel
+refreshes after speaker naming and offers a retry if loading fails. Local-only,
+locked, and processing conversations do not request analytics.

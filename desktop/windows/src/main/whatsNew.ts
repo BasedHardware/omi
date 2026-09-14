@@ -10,6 +10,7 @@ import { app } from 'electron'
 import { getAppSettings, setAppSettings } from './appSettings'
 import phase8Fragment from '../../changelog/unreleased/2026-07-phase-8-windows-redesign.json'
 import chatRefreshFragment from '../../changelog/unreleased/2026-08-chat-panel-background-refresh.json'
+import speakerAnalyticsFragment from '../../changelog/unreleased/2026-09-speaker-analytics.json'
 import type { WhatsNewPayload } from '../shared/types'
 
 // Fragment schema: { "changes": string[] } or { "change": string }.
@@ -23,6 +24,7 @@ function changesFromFragment(fragment: unknown): string[] {
 const CHANGES: string[] = [
   ...changesFromFragment(phase8Fragment),
   ...changesFromFragment(chatRefreshFragment),
+  ...changesFromFragment(speakerAnalyticsFragment)
 ]
 
 /** Decide whether to show the what's-new toast this launch, advancing the stored

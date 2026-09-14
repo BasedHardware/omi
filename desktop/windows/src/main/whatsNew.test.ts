@@ -53,4 +53,11 @@ describe('maybeGetWhatsNew', () => {
     withStored('1.0.0')
     expect(maybeGetWhatsNew()).toBeNull()
   })
+
+  it('includes speaker analytics in the notes shown after an update', () => {
+    withStored('0.9.0')
+    expect(maybeGetWhatsNew()?.changes).toContain(
+      'Expand Speaker analytics in a completed conversation to see each speaker’s talk time, share of the discussion, and words per minute.'
+    )
+  })
 })
