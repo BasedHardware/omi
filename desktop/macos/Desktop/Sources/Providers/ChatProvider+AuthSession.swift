@@ -10,16 +10,23 @@ extension ChatProvider {
         Task { @MainActor in
           guard let self else { return }
           if notification.name == .sessionDidInvalidate {
-            log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
-            if self.agentBridgeStarted {
-              await self.resolvedAgentClient().stop()
-              self.agentBridgeStarted = false
-            }
+            await self.stopAgentBridgeAfterSessionInvalidation()
             return
           }
           await self.reloadChatSessionsAfterAuthentication()
         }
       }
+  }
+
+  func stopAgentBridgeIfStarted() async {
+    guard agentBridgeStarted else { return }
+    await resolvedAgentClient().stop()
+    agentBridgeStarted = false
+  }
+
+  func stopAgentBridgeAfterSessionInvalidation() async {
+    log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
+    await stopAgentBridgeIfStarted()
   }
 
   func reloadChatSessionsAfterAuthentication() async {

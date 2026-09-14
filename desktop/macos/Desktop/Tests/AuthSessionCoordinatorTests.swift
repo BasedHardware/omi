@@ -102,22 +102,24 @@ final class AuthSessionCoordinatorTests: XCTestCase {
   func testChatProviderStopsBridgeOnSessionInvalidateWithoutFullReset() throws {
     let provider = try sourceFile("Providers/ChatProvider.swift")
     XCTAssertTrue(provider.contains("makeAuthSessionNotificationObserver"))
-    let authExtension = try sourceFile("Providers/ChatProvider+AuthSession.swift")
-    XCTAssertTrue(authExtension.contains("sessionDidInvalidate"))
-    let invalidateBlock = authExtension.range(of: "sessionDidInvalidate — stopping agent bridge")
+    XCTAssertTrue(provider.contains("stopAgentBridgeAfterSessionInvalidation"))
+    let invalidateBlock = provider.range(of: "sessionDidInvalidate — stopping agent bridge")
     XCTAssertNotNil(invalidateBlock)
-    let snippet = String(authExtension[invalidateBlock!.lowerBound...]).prefix(400)
+    let snippet = String(provider[invalidateBlock!.lowerBound...]).prefix(400)
     XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
+    let authExtension = try sourceFile("Providers/ChatProvider+AuthSession.swift")
+    XCTAssertTrue(authExtension.contains("stopAgentBridgeAfterSessionInvalidation"))
   }
 
   func testChatProviderReloadsSessionsAfterAuthentication() throws {
+    let provider = try sourceFile("Providers/ChatProvider.swift")
+    XCTAssertTrue(provider.contains("reloadChatSessionsAfterAuthentication"))
+    let authBlock = provider.range(of: "sessionDidAuthenticate — reloading chat sessions")
+    XCTAssertNotNil(authBlock)
+    let snippet = String(provider[authBlock!.lowerBound...]).prefix(350)
+    XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
     let authExtension = try sourceFile("Providers/ChatProvider+AuthSession.swift")
     XCTAssertTrue(authExtension.contains("sessionDidAuthenticate"))
-    XCTAssertTrue(authExtension.contains("reloadChatSessionsAfterAuthentication"))
-    let authBlock = authExtension.range(of: "sessionDidAuthenticate — reloading chat sessions")
-    XCTAssertNotNil(authBlock)
-    let snippet = String(authExtension[authBlock!.lowerBound...]).prefix(350)
-    XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
   }
 
   func testRefreshIdTokenUsesClassifierNotBlanket400() throws {
