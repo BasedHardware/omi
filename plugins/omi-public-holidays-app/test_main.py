@@ -1,17 +1,20 @@
 from pathlib import Path
+import importlib.util
 import sys
 import types
 import unittest
 from unittest.mock import AsyncMock, patch
 
-# Provide lightweight stubs for third-party runtime dependencies so test_main.py
+# Provide lightweight scoped stubs for third-party runtime dependencies so test_main.py
 # runs hermetically on any clean standard library Python environment without
-# requiring FastAPI, httpx, or Pydantic to be installed.
+# mutating the process-global sys.modules for other test suites.
+stubs = {}
+
 if "httpx" not in sys.modules:
     try:
         import httpx  # type: ignore
     except ImportError:
-        httpx = types.ModuleType("httpx")
+        _httpx = types.ModuleType("httpx")
 
         class HTTPError(Exception):
             pass
@@ -32,10 +35,10 @@ if "httpx" not in sys.modules:
             async def get(self, *args, **kwargs):
                 pass
 
-        httpx.HTTPError = HTTPError
-        httpx.HTTPStatusError = HTTPStatusError
-        httpx.AsyncClient = AsyncClient
-        sys.modules["httpx"] = httpx
+        _httpx.HTTPError = HTTPError
+        _httpx.HTTPStatusError = HTTPStatusError
+        _httpx.AsyncClient = AsyncClient
+        stubs["httpx"] = _httpx
 
 if "fastapi" not in sys.modules:
     try:
@@ -43,7 +46,7 @@ if "fastapi" not in sys.modules:
         import fastapi.exceptions  # type: ignore
         import fastapi.responses  # type: ignore
     except ImportError:
-        fastapi = types.ModuleType("fastapi")
+        _fastapi = types.ModuleType("fastapi")
 
         class FastAPI:
             def __init__(self, *args, **kwargs):
@@ -61,9 +64,9 @@ if "fastapi" not in sys.modules:
         class Request:
             pass
 
-        fastapi.FastAPI = FastAPI
-        fastapi.Request = Request
-        sys.modules["fastapi"] = fastapi
+        _fastapi.FastAPI = FastAPI
+        _fastapi.Request = Request
+        stubs["fastapi"] = _fastapi
 
         exc_mod = types.ModuleType("fastapi.exceptions")
 
@@ -71,8 +74,8 @@ if "fastapi" not in sys.modules:
             pass
 
         exc_mod.RequestValidationError = RequestValidationError
-        sys.modules["fastapi.exceptions"] = exc_mod
-        fastapi.exceptions = exc_mod
+        stubs["fastapi.exceptions"] = exc_mod
+        _fastapi.exceptions = exc_mod
 
         resp_mod = types.ModuleType("fastapi.responses")
 
@@ -86,14 +89,14 @@ if "fastapi" not in sys.modules:
 
         resp_mod.HTMLResponse = HTMLResponse
         resp_mod.JSONResponse = JSONResponse
-        sys.modules["fastapi.responses"] = resp_mod
-        fastapi.responses = resp_mod
+        stubs["fastapi.responses"] = resp_mod
+        _fastapi.responses = resp_mod
 
 if "pydantic" not in sys.modules:
     try:
         import pydantic  # type: ignore
     except ImportError:
-        pydantic = types.ModuleType("pydantic")
+        _pydantic = types.ModuleType("pydantic")
 
         def Field(default=None, **kwargs):
             return default
@@ -113,17 +116,20 @@ if "pydantic" not in sys.modules:
             def model_dump(self):
                 return self.__dict__
 
-        pydantic.BaseModel = BaseModel
-        pydantic.Field = Field
-        pydantic.field_validator = field_validator
-        sys.modules["pydantic"] = pydantic
+        _pydantic.BaseModel = BaseModel
+        _pydantic.Field = Field
+        _pydantic.field_validator = field_validator
+        stubs["pydantic"] = _pydantic
 
-# Add plugin directory to path so main can be loaded hermetically
 PLUGIN_DIR = Path(__file__).resolve().parent
-if str(PLUGIN_DIR) not in sys.path:
-    sys.path.insert(0, str(PLUGIN_DIR))
 
-import main
+# Load main hermetically within an isolated patch.dict context,
+# so process-global sys.modules is never permanently mutated.
+with patch.dict(sys.modules, stubs):
+    main_path = PLUGIN_DIR / "main.py"
+    main_spec = importlib.util.spec_from_file_location("main", main_path)
+    main = importlib.util.module_from_spec(main_spec)
+    main_spec.loader.exec_module(main)
 
 
 class PublicHolidaysHelperTests(unittest.TestCase):

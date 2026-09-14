@@ -53,7 +53,7 @@ checks:
     command: ["python3", "plugins/omi-public-holidays-app/test_main.py"]
     triggers: ["plugins/omi-public-holidays-app/**"]
     lanes: ["local", "ci"]
-    reason: "verify public holidays endpoints against non-list error payloads, dict slicing crashes, and country code validation"
+    reason: "#13928: verify public holidays endpoints against non-list error payloads, dict slicing crashes, and country code validation"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
