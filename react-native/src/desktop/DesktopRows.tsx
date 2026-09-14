@@ -16,7 +16,6 @@ import {
   conversationListTag,
   conversationListUsesListenOverview,
   conversationRecapTitle,
-  formatTaskDue,
   memoryCitationCopy,
   memoryDisplayBody,
   memoryDisplayTitle,
@@ -230,13 +229,9 @@ export const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
         style={[styles.taskCircle, item.completed && styles.taskCircleDone]}
       />
       <View style={styles.rowCopy}>
-        <Text style={[styles.taskText, item.completed && styles.taskTextDone]}>
+        <Text
+          style={[styles.taskText, item.completed && styles.taskTextDone]}>
           {taskDisplayTitle(item)}
-        </Text>
-        <Text style={styles.rowMeta}>
-          {item.completed
-            ? `Completed · ${formatTaskDue(item.dueAt)}`
-            : formatTaskDue(item.dueAt)}
         </Text>
         {item.exportCopy !== undefined ? (
           <Text style={styles.rowMeta}>{item.exportCopy}</Text>

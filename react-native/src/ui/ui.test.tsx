@@ -3236,7 +3236,7 @@ test('wide Home search rows omit whitespace-only memory citations from the count
   expect(tree).not.toContain('"1 citation"');
 });
 
-test('wide Home search rows date task dues instead of a raw epoch', () => {
+test('wide Home search task rows omit Flutter ActionItemsPage due dates', () => {
   const dueAt = 1786000000;
   const expected = `Due ${new Date(dueAt * 1000).toLocaleDateString(undefined, {
     day: 'numeric',
@@ -3268,11 +3268,12 @@ test('wide Home search rows date task dues instead of a raw epoch', () => {
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Prepare launch notes');
-  expect(tree).toContain(expected);
+  expect(tree).not.toContain(expected);
   expect(tree).not.toContain('Due 1786000000');
+  expect(tree).not.toContain('No due date');
 });
 
-test('wide Home search rows with no due date say No due date instead of Pending', () => {
+test('wide Home search task rows omit invented No due date', () => {
   const renderer = render(
     <ProjectionRow
       item={{
@@ -3297,7 +3298,7 @@ test('wide Home search rows with no due date say No due date instead of Pending'
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Prepare launch notes');
-  expect(tree).toContain('No due date');
+  expect(tree).not.toContain('No due date');
   expect(tree).not.toContain('Pending');
   const currents = render(
     <ProjectionRow
@@ -3323,7 +3324,7 @@ test('wide Home search rows with no due date say No due date instead of Pending'
     />,
   );
   const currentsTree = JSON.stringify(currents.toJSON());
-  expect(currentsTree).toContain('No due date');
+  expect(currentsTree).not.toContain('No due date');
   expect(currentsTree).not.toContain('Pending');
 });
 
@@ -3629,7 +3630,7 @@ test('wide Home search rows keep GET processing status instead of title-only', (
   expect(mergingTree).not.toContain('Processing');
 });
 
-test('wide Home search completed tasks keep GET due dates instead of Completed-only', () => {
+test('wide Home search completed tasks omit invented Completed due chrome', () => {
   const dueAt = 1786000000;
   const expected = `Completed · ${new Date(dueAt * 1000).toLocaleDateString(
     undefined,
@@ -3664,8 +3665,8 @@ test('wide Home search completed tasks keep GET due dates instead of Completed-o
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Prepare launch notes');
-  expect(tree).toContain(expected);
-  expect(tree).not.toContain('"Completed"');
+  expect(tree).not.toContain(expected);
+  expect(tree).not.toContain('No due date');
 });
 
 test('wide Home search rows keep GET task indent instead of a flat list', () => {

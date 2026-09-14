@@ -48,7 +48,7 @@ function displayTitle(item: DesktopReadProjection): string {
   return taskDisplayTitle(item);
 }
 
-function displaySummary(item: DesktopReadProjection): string {
+function displaySummary(item: DesktopReadProjection): string | null {
   if (item.kind === 'memory') {
     return memoryCitationCopy(item.citations);
   }
@@ -112,6 +112,7 @@ export const ProjectionRow = memo(function ProjectionRow({
   const indentPad =
     item.kind === 'task' ? taskIndentPadding(item.indentLevel) : 0;
   const rowPad = spine ? 18 : 16;
+  const summary = displaySummary(item);
   return (
     <View
       style={[
@@ -195,7 +196,7 @@ export const ProjectionRow = memo(function ProjectionRow({
         ]}>
         {displayTitle(item)}
       </Text>
-      {listenOverview ? null : (
+      {listenOverview ? null : summary === null || summary === '' ? null : (
         <Text
           numberOfLines={2}
           style={[
@@ -203,7 +204,7 @@ export const ProjectionRow = memo(function ProjectionRow({
             home && styles.homeCurrentSummary,
             spine && styles.homeSpineSummary,
           ]}>
-          {displaySummary(item)}
+          {summary}
         </Text>
       )}
       {item.kind !== 'task' ? (

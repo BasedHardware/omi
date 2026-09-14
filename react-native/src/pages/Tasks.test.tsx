@@ -179,36 +179,37 @@ test('task page edits and toggles only through handlers with pending and error r
   expect(onDismissTaskMutation).toHaveBeenCalledTimes(1);
 });
 
-test('task due dates use canonical epoch milliseconds', () => {
+test('task rows omit Flutter ActionItemsPage due dates', () => {
   const dueAt = Date.UTC(2026, 8, 8);
-  let renderer!: ReactTestRenderer.ReactTestRenderer;
-  act(() => {
-    renderer = ReactTestRenderer.create(
-      <TasksPage
-        loading={false}
-        outcome={{
-          ...outcome,
-          value: {...outcome.value, items: [{...task, dueAt}]},
-        }}
-      />,
-    );
-  });
+  const yearDueAt = Date.UTC(2025, 11, 31);
+  const secondScaleDue = 1786000000;
   const expected = new Date(dueAt).toLocaleDateString(undefined, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
     timeZone: 'UTC',
   });
-  expect(
-    renderer.root.findAll(node => node.props.children === expected).length,
-  ).toBeGreaterThan(0);
-});
-
-test('task due dates include the year so last-year dues do not look like this year', () => {
-  const dueAt = Date.UTC(2025, 11, 31);
-  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  const yearExpected = new Date(yearDueAt).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+  const secondScaleExpected = new Date(secondScaleDue * 1000).toLocaleDateString(
+    undefined,
+    {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    },
+  );
+  let dated!: ReactTestRenderer.ReactTestRenderer;
+  let yearDue!: ReactTestRenderer.ReactTestRenderer;
+  let secondScale!: ReactTestRenderer.ReactTestRenderer;
+  let zero!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
-    renderer = ReactTestRenderer.create(
+    dated = ReactTestRenderer.create(
       <TasksPage
         loading={false}
         outcome={{
@@ -217,73 +218,28 @@ test('task due dates include the year so last-year dues do not look like this ye
         }}
       />,
     );
-  });
-  const expected = new Date(dueAt).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
-  expect(expected).toContain('2025');
-  expect(
-    renderer.root.findAll(node => node.props.children === expected).length,
-  ).toBeGreaterThan(0);
-  expect(
-    renderer.root.findAll(
-      node =>
-        node.props.children ===
-        new Date(dueAt).toLocaleDateString(undefined, {
-          day: 'numeric',
-          month: 'short',
-          timeZone: 'UTC',
-        }),
-    ).length,
-  ).toBe(0);
-});
-
-test('task due dates use second-scale epochs as calendar days not 1970', () => {
-  const dueAt = 1786000000;
-  let renderer!: ReactTestRenderer.ReactTestRenderer;
-  act(() => {
-    renderer = ReactTestRenderer.create(
+    yearDue = ReactTestRenderer.create(
       <TasksPage
         loading={false}
         outcome={{
           ...outcome,
-          value: {...outcome.value, items: [{...task, dueAt}]},
+          value: {...outcome.value, items: [{...task, dueAt: yearDueAt}]},
         }}
       />,
     );
-  });
-  const expected = new Date(dueAt * 1000).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
-  expect(expected).toContain('2026');
-  expect(expected).not.toContain('1970');
-  expect(
-    renderer.root.findAll(node => node.props.children === expected).length,
-  ).toBeGreaterThan(0);
-  expect(
-    renderer.root.findAll(
-      node =>
-        node.props.children ===
-        new Date(dueAt).toLocaleDateString(undefined, {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-          timeZone: 'UTC',
-        }),
-    ).length,
-  ).toBe(0);
-});
-
-test('a zero task due timestamp says Date unavailable instead of 1970', () => {
-  let renderer!: ReactTestRenderer.ReactTestRenderer;
-  act(() => {
-    renderer = ReactTestRenderer.create(
+    secondScale = ReactTestRenderer.create(
+      <TasksPage
+        loading={false}
+        outcome={{
+          ...outcome,
+          value: {
+            ...outcome.value,
+            items: [{...task, dueAt: secondScaleDue}],
+          },
+        }}
+      />,
+    );
+    zero = ReactTestRenderer.create(
       <TasksPage
         loading={false}
         outcome={{
@@ -293,7 +249,21 @@ test('a zero task due timestamp says Date unavailable instead of 1970', () => {
       />,
     );
   });
-  const copy = renderer.root
+  expect(
+    dated.root.findAll(node => node.props.children === expected).length,
+  ).toBe(0);
+  expect(yearExpected).toContain('2025');
+  expect(
+    yearDue.root.findAll(node => node.props.children === yearExpected).length,
+  ).toBe(0);
+  expect(secondScaleExpected).toContain('2026');
+  expect(secondScaleExpected).not.toContain('1970');
+  expect(
+    secondScale.root.findAll(
+      node => node.props.children === secondScaleExpected,
+    ).length,
+  ).toBe(0);
+  const zeroCopy = zero.root
     .findAllByType(Text)
     .flatMap(node =>
       Array.isArray(node.props.children)
@@ -305,9 +275,9 @@ test('a zero task due timestamp says Date unavailable instead of 1970', () => {
         typeof value === 'string' || typeof value === 'number',
     )
     .join(' ');
-  expect(copy).toContain('Date unavailable');
-  expect(copy).not.toContain('1970');
-  expect(copy).not.toContain('No due date');
+  expect(zeroCopy).not.toContain('Date unavailable');
+  expect(zeroCopy).not.toContain('1970');
+  expect(zeroCopy).not.toContain('No due date');
 });
 
 test('task rows keep GET indent instead of a flat list', () => {

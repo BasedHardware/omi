@@ -2587,18 +2587,11 @@ export function formatTaskDue(dueAt: number | null): string {
   });
 }
 
-export function taskDisplaySummary(item: {
+export function taskDisplaySummary(_item: {
   completed: boolean;
   dueAt: number | null;
-}): string {
-  const due = formatTaskDue(item.dueAt);
-  if (item.completed) {
-    return `Completed · ${due}`;
-  }
-  if (due === 'No due date' || due === 'Date unavailable') {
-    return due;
-  }
-  return `Due ${due}`;
+}): string | null {
+  return null;
 }
 
 export function taskDisplayTitle(item: {title: string}): string {
@@ -3583,11 +3576,7 @@ export async function loadTasks(
       kind: 'task' as const,
       id,
       title: description,
-      summary: completed
-        ? 'Completed'
-        : dueAt === null
-        ? 'No due date'
-        : `Due ${dueAt}`,
+      summary: '',
       searchableText: taskDisplayTitle({title: description}),
       completed,
       completedAt,

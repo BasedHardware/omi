@@ -553,46 +553,30 @@ function taskItem(dueAt: number | null, completed = false): TaskProjection {
   };
 }
 
-test('Home and Tasks rows keep GET due dates instead of title-only', () => {
+test('Home and Tasks rows omit Flutter ActionItemsPage due dates', () => {
   const dueAt = 1_767_225_600;
-  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  let dated!: ReactTestRenderer.ReactTestRenderer;
+  let completed!: ReactTestRenderer.ReactTestRenderer;
+  let missing!: ReactTestRenderer.ReactTestRenderer;
+  let zero!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
-    renderer = ReactTestRenderer.create(<TaskRow item={taskItem(dueAt)} />);
-  });
-  const copy = textOf(renderer);
-  expect(copy).toContain('Review notes');
-  expect(copy).toContain(formatTaskDue(dueAt));
-  expect(copy).not.toContain('Completed');
-});
-
-test('completed Home and Tasks rows keep GET due dates', () => {
-  const dueAt = 1_767_225_600;
-  let renderer!: ReactTestRenderer.ReactTestRenderer;
-  act(() => {
-    renderer = ReactTestRenderer.create(
+    dated = ReactTestRenderer.create(<TaskRow item={taskItem(dueAt)} />);
+    completed = ReactTestRenderer.create(
       <TaskRow item={taskItem(dueAt, true)} />,
     );
+    missing = ReactTestRenderer.create(<TaskRow item={taskItem(null)} />);
+    zero = ReactTestRenderer.create(<TaskRow item={taskItem(0)} />);
   });
-  expect(textOf(renderer)).toContain(`Completed · ${formatTaskDue(dueAt)}`);
-});
-
-test('Home and Tasks rows with no due date say No due date', () => {
-  let renderer!: ReactTestRenderer.ReactTestRenderer;
-  act(() => {
-    renderer = ReactTestRenderer.create(<TaskRow item={taskItem(null)} />);
-  });
-  expect(textOf(renderer)).toContain('No due date');
-});
-
-test('a zero task due timestamp on Home and Tasks rows says Date unavailable instead of 1970', () => {
-  let renderer!: ReactTestRenderer.ReactTestRenderer;
-  act(() => {
-    renderer = ReactTestRenderer.create(<TaskRow item={taskItem(0)} />);
-  });
-  const copy = textOf(renderer);
-  expect(copy).toContain('Date unavailable');
-  expect(copy).not.toContain('1970');
-  expect(copy).not.toContain('No due date');
+  const datedCopy = textOf(dated);
+  expect(datedCopy).toContain('Review notes');
+  expect(datedCopy).not.toContain(formatTaskDue(dueAt));
+  expect(datedCopy).not.toContain('No due date');
+  expect(textOf(completed)).not.toContain(`Completed · ${formatTaskDue(dueAt)}`);
+  expect(textOf(missing)).not.toContain('No due date');
+  const zeroCopy = textOf(zero);
+  expect(zeroCopy).not.toContain('Date unavailable');
+  expect(zeroCopy).not.toContain('1970');
+  expect(zeroCopy).not.toContain('No due date');
 });
 
 test('Home and Tasks rows keep GET indent instead of a flat list', () => {

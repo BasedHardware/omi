@@ -1318,35 +1318,28 @@ test('compact Home omits a capture microphone without a start-capture producer',
   act(() => renderer.unmount());
 });
 
-test('compact Tasks tab keeps GET due dates instead of title-only', () => {
+test('compact Tasks tab omits Flutter ActionItemsPage due dates', () => {
   const dueAt = 1_767_225_600;
-  const renderer = render({
+  const dated = render({
     activeRoute: 'tasks',
     tasks: [
       {id: 'task-1', title: 'Prepare product demo', completed: false, dueAt},
     ],
   });
-  const copy = renderedText(renderer);
-  expect(copy).toContain('Prepare product demo');
-  expect(copy).toContain(formatTaskDue(dueAt));
-  expect(copy).not.toContain('Completed');
-});
-
-test('compact Tasks tab keeps GET completed due dates instead of title-only', () => {
-  const dueAt = 1_767_225_600;
-  const renderer = render({
+  const datedCopy = renderedText(dated);
+  expect(datedCopy).toContain('Prepare product demo');
+  expect(datedCopy).not.toContain(formatTaskDue(dueAt));
+  expect(datedCopy).not.toContain('No due date');
+  const completed = render({
     activeRoute: 'tasks',
     tasks: [
       {id: 'task-1', title: 'Prepare product demo', completed: true, dueAt},
     ],
   });
-  expect(renderedText(renderer)).toContain(
+  expect(renderedText(completed)).not.toContain(
     `Completed · ${formatTaskDue(dueAt)}`,
   );
-});
-
-test('compact Tasks tab missing due says No due date', () => {
-  const renderer = render({
+  const missing = render({
     activeRoute: 'tasks',
     tasks: [
       {
@@ -1357,20 +1350,17 @@ test('compact Tasks tab missing due says No due date', () => {
       },
     ],
   });
-  expect(renderedText(renderer)).toContain('No due date');
-});
-
-test('a zero compact Tasks due timestamp says Date unavailable instead of 1970', () => {
-  const renderer = render({
+  expect(renderedText(missing)).not.toContain('No due date');
+  const zero = render({
     activeRoute: 'tasks',
     tasks: [
       {id: 'task-1', title: 'Prepare product demo', completed: false, dueAt: 0},
     ],
   });
-  const copy = renderedText(renderer);
-  expect(copy).toContain('Date unavailable');
-  expect(copy).not.toContain('1970');
-  expect(copy).not.toContain('No due date');
+  const zeroCopy = renderedText(zero);
+  expect(zeroCopy).not.toContain('Date unavailable');
+  expect(zeroCopy).not.toContain('1970');
+  expect(zeroCopy).not.toContain('No due date');
 });
 
 test('compact Home task previews stay title-only', () => {

@@ -12,7 +12,6 @@ import Search from 'lucide-react-native/icons/search';
 import {
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
-  formatTaskDue,
   taskDisplayTitle,
   taskGroup,
   taskIndentPadding,
@@ -296,11 +295,6 @@ export function TasksPage({
                               task.completed && styles.taskDescriptionDone,
                             ]}>
                             {taskDisplayTitle(task)}
-                          </Text>
-                          <Text style={styles.taskDue}>
-                            {task.completed
-                              ? `Completed · ${formatTaskDue(task.dueAt)}`
-                              : formatTaskDue(task.dueAt)}
                           </Text>
                           {task.exportCopy !== undefined ? (
                             <Text style={styles.taskDue}>

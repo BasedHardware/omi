@@ -132,7 +132,6 @@ import {
   parseMemoryText,
   chatClockLabel,
   clockLabel,
-  formatTaskDue,
   projectionClockLabel,
   projectionTimestamp,
   subscriptionPlanCopy,
@@ -746,7 +745,7 @@ test('loads and normalizes all three exact desktop read routes', async () => {
           kind: 'task',
           id: 'task1_abc',
           title: 'Prepare launch notes',
-          summary: 'Due 1786000000',
+          summary: '',
         }),
       ],
       page: expect.objectContaining({completenessStatus: 'complete'}),
@@ -2966,64 +2965,21 @@ test('Omi memory ledger chrome names GET slot, playbook body, baseline, and know
   expect(memoryCaptureDeviceCopy('android_ab12cd34')).toBe('Android');
 });
 
-test('task due copy uses a calendar date instead of a raw epoch', () => {
+test('task display summary omits Flutter ActionItemsPage row due dates', () => {
   const secondScaleDue = 1786000000;
-  const millisecondDue = Date.UTC(2026, 8, 8);
-  const secondScaleCopy = new Date(secondScaleDue * 1000).toLocaleDateString(
-    undefined,
-    {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      timeZone: 'UTC',
-    },
-  );
-  const millisecondCopy = new Date(millisecondDue).toLocaleDateString(
-    undefined,
-    {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      timeZone: 'UTC',
-    },
-  );
-  expect(secondScaleCopy).toContain('2026');
-  expect(secondScaleCopy).not.toContain('1970');
-  expect(formatTaskDue(secondScaleDue)).toBe(secondScaleCopy);
-  expect(formatTaskDue(millisecondDue)).toBe(millisecondCopy);
   expect(taskDisplaySummary({completed: false, dueAt: secondScaleDue})).toBe(
-    `Due ${secondScaleCopy}`,
+    null,
   );
-  expect(
-    taskDisplaySummary({completed: false, dueAt: secondScaleDue}),
-  ).not.toBe('Due 1786000000');
-  expect(taskDisplaySummary({completed: false, dueAt: null})).toBe(
-    'No due date',
-  );
+  expect(taskDisplaySummary({completed: false, dueAt: null})).toBe(null);
   expect(taskDisplaySummary({completed: true, dueAt: secondScaleDue})).toBe(
-    `Completed · ${secondScaleCopy}`,
+    null,
   );
-  expect(taskDisplaySummary({completed: true, dueAt: null})).toBe(
-    'Completed · No due date',
-  );
-  expect(formatTaskDue(null)).toBe('No due date');
-  expect(formatTaskDue(0)).toBe('Date unavailable');
-  expect(formatTaskDue(0)).not.toContain('1970');
-  expect(taskDisplaySummary({completed: false, dueAt: 0})).toBe(
-    'Date unavailable',
-  );
-  expect(taskGroup(0, Date.now())).toBe('Later');
-});
-
-test('an out-of-range task due timestamp says Date unavailable instead of Invalid Date', () => {
-  expect(formatTaskDue(8_640_000_000_000_001)).toBe('Date unavailable');
-  expect(formatTaskDue(8_640_000_000_000_001)).not.toContain('Invalid Date');
+  expect(taskDisplaySummary({completed: true, dueAt: null})).toBe(null);
+  expect(taskDisplaySummary({completed: false, dueAt: 0})).toBe(null);
   expect(
     taskDisplaySummary({completed: false, dueAt: 8_640_000_000_000_001}),
-  ).toBe('Date unavailable');
-  expect(
-    taskDisplaySummary({completed: true, dueAt: 8_640_000_000_000_001}),
-  ).toBe('Completed · Date unavailable');
+  ).toBe(null);
+  expect(taskGroup(0, Date.now())).toBe('Later');
 });
 
 test('empty task titles stay visible instead of a blank row', () => {
