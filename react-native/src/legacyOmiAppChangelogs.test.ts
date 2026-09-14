@@ -405,6 +405,60 @@ test('keeps GET app changelogs when an announcement id exceeds 256', () => {
   ]);
 });
 
+test('keeps GET app changelogs when an announcement id exceeds 10000', () => {
+  const id = 'a'.repeat(10001);
+  expect(
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id,
+          type: 'changelog',
+          app_version: '1.0.0',
+          content: {changes: [{title: 'Faster sync', description: ''}]},
+        },
+        {
+          id: 'ann-good',
+          type: 'changelog',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      key: `${id}:0`,
+      title: "What's New in 1.0.0",
+      copy: '✨ · Faster sync',
+    },
+    {
+      key: 'ann-good:0',
+      title: "What's New in 1.2.0",
+      copy: '✨ · Offline replay',
+    },
+  ]);
+});
+
+test('fails closed when an announcement id exceeds 1000000', () => {
+  expect(() =>
+    parseOmiAppChangelogs(
+      JSON.stringify([
+        {
+          id: 'a'.repeat(1_000_001),
+          type: 'changelog',
+          app_version: '1.0.0',
+          content: {changes: [{title: 'Faster sync', description: ''}]},
+        },
+        {
+          id: 'ann-good',
+          type: 'changelog',
+          app_version: '1.2.0',
+          content: {changes: [{title: 'Offline replay', description: ''}]},
+        },
+      ]),
+    ),
+  ).toThrow();
+});
+
 test('loadOmiAppChangelogs names GET rows and omits failures', async () => {
   const request = jest.fn(async () => ({
     id: 'changelogs',
