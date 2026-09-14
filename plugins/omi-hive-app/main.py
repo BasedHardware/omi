@@ -97,7 +97,7 @@ def hive_graphql_request(
         print(f"🐝 Hive Response: Status {response.status_code}")
         
         if response.status_code != 200:
-            return {"errors": [{"message": f"HTTP {response.status_code}: {response.text}"}]}
+            return {"errors": [{"message": f"HTTP {response.status_code}"}]}
         
         result = response.json()
         return result
@@ -165,7 +165,7 @@ def hive_rest_request(uid: str, method: str, endpoint: str, data: Optional[Dict]
         print(f"🐝 Hive REST Response: Status {response.status_code}")
         
         if response.status_code >= 400:
-            return {"errors": [{"message": f"HTTP {response.status_code}: {response.text}"}]}
+            return {"errors": [{"message": f"HTTP {response.status_code}"}]}
             
         try:
             return response.json()

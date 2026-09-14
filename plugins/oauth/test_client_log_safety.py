@@ -5,13 +5,15 @@ The Notion token-exchange response carries the user's fresh access_token;
 printing it (or any success response body) leaks credentials to stdout logs.
 
 The last test class is a static source check, not behavioral coverage: it
-guards conversation_created.py, whose FastAPI imports are too heavy to stub
-hermetically here.
+scans every plugin file for log calls that name secrets, response bodies,
+or transcript buffers (most plugin modules are too import-heavy to stub
+hermetically).
 """
 
 import contextlib
 import importlib.util
 import io
+import os
 import re
 import sys
 import types
@@ -116,30 +118,11 @@ class TestOAuthClientLogSafety(unittest.TestCase):
 
 
 class TestPluginSourceSafety(unittest.TestCase):
-    """Static tripwire: log statements in the files this fix touched must not
-    name credential variables, provider response bodies, webhook URLs, or raw
-    transcript buffers. Static checker, not behavioral coverage (several of
-    these modules are too import-heavy to stub hermetically)."""
-
-    SCAN_FILES = [
-        "plugins/oauth/client.py",
-        "plugins/oauth/conversation_created.py",
-        "plugins/omi-clickup-app/clickup_client.py",
-        "plugins/omi-clickup-app/main.py",
-        "plugins/omi-github-app/github_client.py",
-        "plugins/omi-hive-app/main.py",
-        "plugins/omi-slack-app/slack_client.py",
-        "plugins/omi-slack-app/main.py",
-        "plugins/omi-twitter-app/main_simple.py",
-        "plugins/omi-twitter-app/twitter_client.py",
-        "plugins/omi-notion-app/main.py",
-        "plugins/omi-whoop-app/main.py",
-        "plugins/omi-google-calendar-app/main.py",
-        "plugins/zapier/conversation_created.py",
-        "plugins/zapier/client.py",
-        "plugins/notifications/hey_omi.py",
-        "plugins/_multion/router.py",
-    ]
+    """Static tripwire: log statements anywhere under plugins/ must not name
+    credential variables, provider response bodies, webhook URLs, raw
+    transcript buffers, or exception strings (which embed request URLs).
+    Static checker, not behavioral coverage (most plugin modules are too
+    import-heavy to stub hermetically)."""
 
     BANNED_TOKENS = [
         "access_token",
@@ -148,15 +131,24 @@ class TestPluginSourceSafety(unittest.TestCase):
         "token_data",
         "target_url",
         "response.text",
+        "resp.text",
         "resp.json()",
         "full_text",
         "accumulated",
+        "question_part",
+        "full_question",
+        "request.dict()",
+        "str(e)",
     ]
 
     def test_no_log_call_emits_secrets_or_response_bodies(self):
+        import glob
+
         log_line = re.compile(r"(?:print|logger\.(?:info|warning|error|debug))\((.*)")
-        for path in self.SCAN_FILES:
-            with open(path) as f:
+        for path in sorted(glob.glob("plugins/**/*.py", recursive=True)):
+            if os.path.basename(path).startswith("test_"):
+                continue
+            with open(path, encoding="utf-8", errors="replace") as f:
                 for lineno, line in enumerate(f, 1):
                     m = log_line.search(line)
                     if not m:

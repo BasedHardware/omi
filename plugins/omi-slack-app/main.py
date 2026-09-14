@@ -113,7 +113,7 @@ async def monitor_session_timeouts():
                                 else:
                                     print(f"⏰ FAILED: {result.get('error') if result else 'Unknown'}", flush=True)
                             else:
-                                print(f"⏰ Insufficient content to send (message: '{message[:50] if message else 'None'}...')", flush=True)
+                                print("⏰ Insufficient content to send", flush=True)
                             
                             # Reset session
                             SimpleSessionStorage.reset_session(session_id)

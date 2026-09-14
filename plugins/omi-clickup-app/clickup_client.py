@@ -351,7 +351,7 @@ class ClickUpClient:
                     "list_id": list_id
                 }
             else:
-                error_msg = f"{response.status_code} - {response.text}"
+                error_msg = f"HTTP {response.status_code}"
                 print(f"❌ Error creating task: {error_msg}", flush=True)
                 return {
                     "success": False,

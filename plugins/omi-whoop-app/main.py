@@ -147,8 +147,8 @@ def whoop_api_request(uid: str, method: str, endpoint: str, params: dict = None)
         if response.status_code == 200:
             return response.json()
         else:
-            log(f"Whoop API error: {response.status_code} - {response.text}")
-            return {"error": response.text, "status_code": response.status_code}
+            log(f"Whoop API error: {response.status_code}")
+            return {"error": f"HTTP {response.status_code}", "status_code": response.status_code}
 
     except Exception as e:
         log(f"Whoop API request error: {e}")

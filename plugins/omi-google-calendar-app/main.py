@@ -155,8 +155,8 @@ def calendar_api_request(uid: str, method: str, endpoint: str, params: dict = No
                 return {"success": True}
             return response.json()
         else:
-            log(f"Calendar API error: {response.status_code} - {response.text}")
-            return {"error": response.text, "status_code": response.status_code}
+            log(f"Calendar API error: {response.status_code}")
+            return {"error": f"HTTP {response.status_code}", "status_code": response.status_code}
 
     except Exception as e:
         log(f"Calendar API request error: {e}")
