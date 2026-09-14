@@ -59,6 +59,7 @@ import {
   appDisplayName,
   appExploreRatingCopy,
   appListDescriptionCopy,
+  appListPrivateNameCopy,
   appRatingCopy,
   appImageUrl,
   deviceDisplayName,
@@ -2240,6 +2241,22 @@ test('app explore rating copy names Flutter CategorySection GET scores', () => {
   expect(appExploreRatingCopy(undefined, undefined)).toBe(null);
   expect(appExploreRatingCopy(Number.NaN, 12)).toBe(null);
   expect(appExploreRatingCopy(4.5, -1)).toBe('4.5 · 0 ratings');
+});
+
+test('app list private name copy names Flutter AppListItem lock and omits CategorySection Private', () => {
+  expect(appListPrivateNameCopy('Owned app', true, true)).toBe('Owned app');
+  expect(appListPrivateNameCopy('Owned app', true, false)).toBe('Owned app 🔒');
+  expect(appListPrivateNameCopy('Owned app', false, false)).toBe('Owned app');
+  expect(appListPrivateNameCopy('Owned app', false, true)).toBe('Owned app');
+  expect(appListPrivateNameCopy('  Owned app  ', true, false)).toBe(
+    'Owned app 🔒',
+  );
+  expect(appListPrivateNameCopy('', true, false)).toBe(
+    'App name unavailable 🔒',
+  );
+  expect(appListPrivateNameCopy(' \t', true, true)).toBe(
+    'App name unavailable',
+  );
 });
 
 test('app list description copy names Flutter AppListItem truncated GET description', () => {

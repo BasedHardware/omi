@@ -2569,7 +2569,7 @@ test('Connectors rows keep GET connected accounts as Connected instead of Instal
   expect(tree).not.toContain('Not installed');
 });
 
-test('Connectors rows keep GET private instead of a public-looking catalogue', async () => {
+test('Connectors Explore omits CategorySection private and Installed names AppListItem lock', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/apps') {
@@ -2594,7 +2594,7 @@ test('Connectors rows keep GET private instead of a public-looking catalogue', a
       return {
         id: request.id,
         status: 200,
-        body: JSON.stringify([]),
+        body: JSON.stringify(['catalog-app-private']),
       };
     }
     if (request.path === '/v1/users/profile') {
@@ -2609,8 +2609,13 @@ test('Connectors rows keep GET private instead of a public-looking catalogue', a
   const renderer = await renderPage(ConnectorsPage);
   const tree = textOf(renderer);
   expect(tree).toContain('Owned app');
-  expect(tree).toContain('Private · Not installed');
+  expect(sectionText(renderer, 'Explore')).toContain('Owned app');
+  expect(sectionText(renderer, 'Explore')).not.toContain('🔒');
+  expect(sectionText(renderer, 'Explore')).not.toContain('Private');
+  expect(sectionText(renderer, 'Installed')).toContain('Owned app 🔒');
+  expect(sectionText(renderer, 'Installed')).not.toContain('Private');
   expect(tree).toContain('Catalog fixture app');
+  expect(tree).not.toContain('Private ·');
   expect(tree).not.toContain('Official');
 });
 

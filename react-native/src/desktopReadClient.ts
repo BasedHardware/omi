@@ -2140,6 +2140,18 @@ export function appListDescriptionCopy(
   return visible.length > 50 ? `${visible.slice(0, 50)}...` : visible;
 }
 
+export function appListPrivateNameCopy(
+  name: string,
+  isPrivate: boolean,
+  explore: boolean,
+): string {
+  const display = appDisplayName(name);
+  if (explore || !isPrivate) {
+    return display;
+  }
+  return `${display} 🔒`;
+}
+
 export function chatAttachmentDisplayName(name: string): string {
   return accountFieldCopy(name, 'Attachment name unavailable');
 }

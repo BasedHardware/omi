@@ -28,6 +28,7 @@ import {
   appSectionCategoryCopy,
   appDisplayName,
   appExploreRatingCopy,
+  appListPrivateNameCopy,
   appImageUrl,
   appListDescriptionCopy,
   appRatingCopy,
@@ -60,7 +61,6 @@ function appRowMeta(
   const category = appSectionCategoryCopy(app.category, explore);
   return [
     category,
-    app.private ? 'Private' : null,
     explore
       ? appExploreRatingCopy(app.ratingAvg, app.ratingCount)
       : appRatingCopy(app.ratingAvg, app.ratingCount),
@@ -281,16 +281,17 @@ export function ConnectorsPage({
                 <Text style={styles.projectionEmptyCopy}>{section.empty}</Text>
               ) : (
                 section.items.map(app => {
-                  const meta = appRowMeta(
-                    app,
-                    installKnown,
-                    section.key === 'Explore',
-                  );
+                  const explore = section.key === 'Explore';
+                  const meta = appRowMeta(app, installKnown, explore);
                   const name = appDisplayName(app.name);
-                  const description =
-                    section.key === 'Explore'
-                      ? ''
-                      : appListDescriptionCopy(app.description) ?? '';
+                  const title = appListPrivateNameCopy(
+                    app.name,
+                    app.private,
+                    explore,
+                  );
+                  const description = explore
+                    ? ''
+                    : appListDescriptionCopy(app.description) ?? '';
                   const imageUrl = appImageUrl(app.image);
                   return (
                     <View
@@ -300,7 +301,7 @@ export function ConnectorsPage({
                         <CatalogAppImage uri={imageUrl} />
                       ) : null}
                       <View style={styles.cloudRowBody}>
-                        <Text style={styles.cloudRowTitle}>{name}</Text>
+                        <Text style={styles.cloudRowTitle}>{title}</Text>
                         {description !== '' && (
                           <Text numberOfLines={2} style={styles.cloudRowMeta}>
                             {description}
