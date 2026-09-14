@@ -1367,7 +1367,9 @@ test('usage stats copy names GET today counts without Upgrade', () => {
     }),
   ).toBeNull();
   expect(usageStatsCopy(null)).toBeNull();
-  expect(usageActivityEmptyCopy()).toBe('No Activity Yet');
+  expect(usageActivityEmptyCopy()).toBe(
+    'No Activity Yet\nStart a conversation with Omi\nto see your usage insights here.',
+  );
   expect(usageThisMonthTitleCopy()).toBe('This Month');
   expect(usageThisYearTitleCopy()).toBe('This Year');
   expect(usageAllTimeTitleCopy()).toBe('All Time');

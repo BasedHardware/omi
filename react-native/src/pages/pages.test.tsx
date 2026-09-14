@@ -3156,10 +3156,11 @@ test('Settings names GET usage monthly yearly all-time without Upgrade', async (
   expect(tree).toContain('Total time Omi has actively listened.');
   expect(tree).toContain('This Year');
   expect(tree).toContain('No Activity Yet');
+  expect(tree).toContain('Start a conversation with Omi');
+  expect(tree).toContain('to see your usage insights here.');
   expect(tree).not.toContain('This Year ·');
   expect(tree).not.toContain('99');
   expect(tree).not.toContain('Upgrade');
-  expect(tree).not.toContain('Start a conversation');
   expect(mockBackend.request).toHaveBeenCalledWith({
     id: expect.any(String),
     method: 'GET',

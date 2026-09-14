@@ -1037,7 +1037,7 @@ export function subscriptionTranscriptionQuotaCopy(
 }
 
 export function usageActivityEmptyCopy(): string {
-  return 'No Activity Yet';
+  return 'No Activity Yet\nStart a conversation with Omi\nto see your usage insights here.';
 }
 
 export function usageListeningCopy(minutes: number): string {
