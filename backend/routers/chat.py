@@ -488,7 +488,6 @@ def send_message(
     app = App(**app) if app else None
 
     app_id_from_app = app.id if app else None
-    chat_tz = notification_db.sync_user_time_zone_from_client(uid, data.time_zone) if data.time_zone else None
 
     # Skip a malformed/legacy stored message rather than 500 the whole chat send.
     messages = list(
@@ -594,6 +593,11 @@ def send_message(
         answered = False
         stream_exhausted = False
         streamed_terminal_error = False
+        chat_tz = None
+        if data.time_zone:
+            chat_tz = await run_blocking(
+                db_executor, notification_db.sync_user_time_zone_from_client, uid, data.time_zone
+            )
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
 

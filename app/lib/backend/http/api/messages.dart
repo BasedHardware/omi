@@ -186,13 +186,16 @@ Stream<ServerMessageChunk> sendMessageStreamServer(
   }
 
   var messageId = "1000"; // Default new message
-  final deviceTimeZone = (await FlutterTimezone.getLocalTimezone()).identifier;
   final body = <String, dynamic>{
     'text': text,
     'file_ids': filesId,
-    'time_zone': deviceTimeZone,
     if (context != null) 'context': context.toJson(),
   };
+  try {
+    body['time_zone'] = (await FlutterTimezone.getLocalTimezone()).identifier;
+  } catch (_) {
+    // Omit time_zone when device timezone is unavailable so chat send is not blocked.
+  }
 
   await for (var line in makeStreamingApiCall(url: url, body: jsonEncode(body))) {
     if (line.startsWith('error:402:')) {

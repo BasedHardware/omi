@@ -91,7 +91,7 @@ def sync_user_time_zone(
     uid: str = Depends(auth.get_current_user_uid),
 ) -> FcmTokenResponse:
     """Persist the device's IANA timezone without requiring push notification registration."""
-    notification_db.set_user_time_zone(uid, data.time_zone)
+    notification_db.sync_user_time_zone_from_client(uid, data.time_zone)
     return FcmTokenResponse(status='Ok')
 
 

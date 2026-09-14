@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
-from ._client import db
+from ._client import db, get_firestore_client
 from .cache import get_memory_cache
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
@@ -96,9 +96,10 @@ def get_user_time_zone(uid: str) -> Optional[str]:
     return None
 
 
-def set_user_time_zone(uid: str, time_zone: str) -> None:
+def set_user_time_zone(uid: str, time_zone: str, *, firestore_client: Any = None) -> None:
     """Persist the client's reported IANA timezone on the user document."""
-    db.collection('users').document(uid).set({'time_zone': time_zone}, merge=True)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    client.collection('users').document(uid).set({'time_zone': time_zone}, merge=True)
 
 
 def resolve_user_timezone(uid: str) -> str:
@@ -124,7 +125,13 @@ def sync_user_time_zone_from_client(uid: str, request_tz: Optional[str]) -> str:
         return resolve_user_timezone(uid)
     stored = get_user_time_zone(uid)
     if stored != request_tz:
-        set_user_time_zone(uid, request_tz)
+        try:
+            set_user_time_zone(uid, request_tz)
+        except Exception:
+            logger.exception(
+                "sync_user_time_zone_from_client - failed to persist time_zone uid=%s",
+                uid,
+            )
     return request_tz
 
 

@@ -203,7 +203,7 @@ class AuthenticationProvider extends BaseProvider {
       NotificationService.instance.saveNotificationToken();
       try {
         final timeZone = (await FlutterTimezone.getLocalTimezone()).identifier;
-        await syncUserTimeZoneServer(timeZone: timeZone);
+        unawaited(syncUserTimeZoneServer(timeZone: timeZone));
       } catch (e) {
         Logger.debug('Failed to sync device timezone: $e');
       }
