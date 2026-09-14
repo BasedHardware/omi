@@ -123,7 +123,6 @@ class NotionClient:
                 },
             }
 
-        print(resp.json())
 
         return {"result": NotionDatabaseModel.from_dict(resp.json())}
 
@@ -161,7 +160,6 @@ class NotionClient:
                 },
             }
 
-        print(resp.json())
 
         return {"result": NotionOAuthModel.from_dict(resp.json())}
 
@@ -191,7 +189,6 @@ class NotionClient:
                 },
             }
 
-        print(resp.json())
 
         return {"result": NotionDatabaseModel.multi_from_dict(resp.json()["results"])}
 

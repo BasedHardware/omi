@@ -84,7 +84,6 @@ def hive_graphql_request(
     
     print(f"🐝 Hive GraphQL Request:")
     print(f"   URL: {HIVE_GRAPHQL_URL}")
-    print(f"   API Key (first 8 chars): {api_key[:8]}...")
     print(f"   Query: {query[:100]}...")
     
     try:

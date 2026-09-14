@@ -89,7 +89,6 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
         return
 
     # Save
-    print({'uid': uid, 'api_key': access_token, 'database_id': database_id})
     store_notion_crm_api_key(uid, access_token)
     store_notion_database_id(uid, database_id)
     return templates.TemplateResponse("okpage.html", {"request": request, "uid": uid})
@@ -182,6 +181,6 @@ def create_notion_row(notion_api_key: str, database_id: str, conversation: Conve
             'Notion-Version': '2022-06-28',
         },
     )
-    print('create_notion_row:', resp.status_code, resp.json())
+    print('create_notion_row:', resp.status_code)
     # TODO: after, write inside the page the transcript and everything else.
     return resp.status_code == 200

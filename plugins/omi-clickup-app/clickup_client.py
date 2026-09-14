@@ -38,7 +38,6 @@ class ClickUpClient:
             
             if response.status_code == 200:
                 data = response.json()
-                print(f"🔍 OAuth Response: {data}", flush=True)
                 
                 return {
                     "access_token": data.get("access_token"),
