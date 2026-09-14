@@ -2031,6 +2031,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get memoryHistoryPartial => 'ประวัติความทรงจำบางส่วนไม่พร้อมใช้งาน กำลังแสดงประวัติที่ได้รับจนถึงตอนนี้';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'เลิกทำ';
 
   @override
@@ -9924,4 +9927,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'ยังทำงานอยู่ — ใช้เวลานานกว่าปกติ';
+
+  @override
+  String get memoryDontUse => 'ไม่ใช้';
+
+  @override
+  String get memoryAllowUse => 'อนุญาตให้ใช้';
 }

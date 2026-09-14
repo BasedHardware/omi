@@ -2055,6 +2055,9 @@ class AppLocalizationsTa extends AppLocalizations {
       'நினைவுகளின் வரலாற்றில் சில பகுதிகள் கிடைக்கவில்லை. இதுவரை பெறப்பட்ட வரலாறு காட்டப்படுகிறது.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'மறுசெய்க';
 
   @override
@@ -10052,4 +10055,10 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'இன்னும் செயல்படுகிறது — இது வழக்கத்தை விட அதிக நேரம் எடுக்கிறது.';
+
+  @override
+  String get memoryDontUse => 'பயன்படுத்த வேண்டாம்';
+
+  @override
+  String get memoryAllowUse => 'பயன்பாட்டை அனுமதிக்கவும்';
 }

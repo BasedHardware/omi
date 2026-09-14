@@ -2051,6 +2051,9 @@ class AppLocalizationsIt extends AppLocalizations {
       'Parte della cronologia dei ricordi non è disponibile. Viene mostrata la cronologia ricevuta finora.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Annulla';
 
   @override
@@ -10039,4 +10042,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ancora in corso: ci sta mettendo più del solito.';
+
+  @override
+  String get memoryDontUse => 'Non usare';
+
+  @override
+  String get memoryAllowUse => 'Consenti l’uso';
 }

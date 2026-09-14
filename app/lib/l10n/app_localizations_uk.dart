@@ -2046,6 +2046,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get memoryHistoryPartial => 'Частина історії спогадів недоступна. Показано історію, отриману на цей момент.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Скасувати';
 
   @override
@@ -10003,4 +10006,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ще обробляється — це триває довше, ніж зазвичай.';
+
+  @override
+  String get memoryDontUse => 'Не використовувати';
+
+  @override
+  String get memoryAllowUse => 'Дозволити використання';
 }

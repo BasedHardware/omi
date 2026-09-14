@@ -2004,6 +2004,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get memoryHistoryPartial => '記憶の履歴の一部を取得できません。これまでに取得した履歴を表示しています。';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => '元に戻す';
 
   @override
@@ -9811,4 +9814,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'まだ処理中です。通常より時間がかかっています。';
+
+  @override
+  String get memoryDontUse => '使用しない';
+
+  @override
+  String get memoryAllowUse => '使用を許可';
 }

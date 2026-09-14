@@ -2056,6 +2056,9 @@ class AppLocalizationsCa extends AppLocalizations {
       'Una part de l\'historial de records no està disponible. Es mostra l\'historial rebut fins ara.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Desfer';
 
   @override
@@ -10039,4 +10042,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Encara en curs: això està trigant més del normal.';
+
+  @override
+  String get memoryDontUse => 'No utilitzis';
+
+  @override
+  String get memoryAllowUse => 'Permet l’ús';
 }

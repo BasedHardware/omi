@@ -2041,6 +2041,9 @@ class AppLocalizationsFi extends AppLocalizations {
       'Osa muistojen historiasta ei ole saatavilla. Näytetään tähän mennessä saatu historia.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Kumoa';
 
   @override
@@ -9983,4 +9986,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Vielä käynnissä — tämä kestää tavallista kauemmin.';
+
+  @override
+  String get memoryDontUse => 'Älä käytä';
+
+  @override
+  String get memoryAllowUse => 'Salli käyttö';
 }

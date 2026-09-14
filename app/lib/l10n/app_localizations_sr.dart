@@ -2041,6 +2041,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get memoryHistoryPartial => 'Део историје сећања није доступан. Приказује се до сада примљена историја.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Врати';
 
   @override
@@ -9997,4 +10000,10 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Još traje — ovo traje duže nego inače.';
+
+  @override
+  String get memoryDontUse => 'Не користи';
+
+  @override
+  String get memoryAllowUse => 'Дозволи коришћење';
 }

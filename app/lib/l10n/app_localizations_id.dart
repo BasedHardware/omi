@@ -2048,6 +2048,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get memoryHistoryPartial => 'Sebagian riwayat memori tidak tersedia. Menampilkan riwayat yang sudah diterima.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Batalkan';
 
   @override
@@ -9992,4 +9995,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Masih diproses — ini memakan waktu lebih lama dari biasanya.';
+
+  @override
+  String get memoryDontUse => 'Jangan gunakan';
+
+  @override
+  String get memoryAllowUse => 'Izinkan penggunaan';
 }

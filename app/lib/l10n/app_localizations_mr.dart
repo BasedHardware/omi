@@ -2043,6 +2043,9 @@ class AppLocalizationsMr extends AppLocalizations {
       'आठवणींच्या इतिहासाचा काही भाग उपलब्ध नाही. आतापर्यंत मिळालेला इतिहास दाखवला जात आहे.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'पूर्ववत् करा';
 
   @override
@@ -9991,4 +9994,10 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'अजूनही काम सुरू आहे — याला नेहमीपेक्षा जास्त वेळ लागत आहे.';
+
+  @override
+  String get memoryDontUse => 'वापरू नका';
+
+  @override
+  String get memoryAllowUse => 'वापरण्यास अनुमती द्या';
 }

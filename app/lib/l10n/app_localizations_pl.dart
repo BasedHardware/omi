@@ -2046,6 +2046,9 @@ class AppLocalizationsPl extends AppLocalizations {
       'Część historii wspomnień jest niedostępna. Wyświetlana jest dotychczas otrzymana historia.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Cofnij';
 
   @override
@@ -10012,4 +10015,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Nadal działa — trwa to dłużej niż zwykle.';
+
+  @override
+  String get memoryDontUse => 'Nie używaj';
+
+  @override
+  String get memoryAllowUse => 'Zezwól na użycie';
 }

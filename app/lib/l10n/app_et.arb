@@ -3256,6 +3256,12 @@
     "speechProfileTopicGoal": "Mis on sinu pikaajaline eesmärk?",
     "speechToTextUnavailableDesc": "Kõne tekstiks teisendamine pole praegu saadaval. Kontrolli internetiühendust ja seadme kõnetuvastuse seadeid ning proovi uuesti.",
     "memoryHistoryPartial": "Osa mälestuste ajaloost pole saadaval. Kuvatakse seni saadud ajalugu.",
+    "memoryHistory": "History",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "Salvestamise alustamiseks puuduta +",
-    "processingTakingLonger": "Ikka käimas — see võtab kauem aega kui tavaliselt."
+    "processingTakingLonger": "Ikka käimas — see võtab kauem aega kui tavaliselt.",
+    "memoryDontUse": "Ära kasuta",
+    "memoryAllowUse": "Luba kasutada"
 }

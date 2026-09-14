@@ -2065,6 +2065,10 @@
     "@memoryHistoryPartial": {
         "description": "Notice shown when the memory history response is truncated"
     },
+    "memoryHistory": "History",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "undo": "Undo",
     "@undo": {
         "description": "Undo button text"
@@ -11829,5 +11833,13 @@
     "processingTakingLonger": "Still working — this is taking longer than usual.",
     "@processingTakingLonger": {
         "description": "Shown on the homepage processing card after ~2 minutes with a Retry action (#5481)."
+    },
+    "memoryDontUse": "Don't use",
+    "@memoryDontUse": {
+        "description": "Owner action to suppress one memory from agent use."
+    },
+    "memoryAllowUse": "Allow use",
+    "@memoryAllowUse": {
+        "description": "Owner action to restore one memory to agent use."
     }
 }

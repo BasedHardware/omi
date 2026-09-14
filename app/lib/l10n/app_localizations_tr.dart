@@ -2048,6 +2048,9 @@ class AppLocalizationsTr extends AppLocalizations {
       'Anı geçmişinin bir kısmı kullanılamıyor. Şimdiye kadar alınan geçmiş gösteriliyor.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Geri Al';
 
   @override
@@ -9994,4 +9997,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor.';
+
+  @override
+  String get memoryDontUse => 'Kullanma';
+
+  @override
+  String get memoryAllowUse => 'Kullanıma izin ver';
 }

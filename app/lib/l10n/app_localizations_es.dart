@@ -2027,6 +2027,9 @@ class AppLocalizationsEs extends AppLocalizations {
       'Parte del historial de recuerdos no está disponible. Se muestra el historial recibido hasta ahora.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Deshacer';
 
   @override
@@ -10006,4 +10009,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Sigue trabajando: esto está tardando más de lo habitual.';
+
+  @override
+  String get memoryDontUse => 'No usar';
+
+  @override
+  String get memoryAllowUse => 'Permitir uso';
 }

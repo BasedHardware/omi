@@ -2052,6 +2052,9 @@ class AppLocalizationsTe extends AppLocalizations {
       'జ్ఞాపకాల చరిత్రలో కొంత భాగం అందుబాటులో లేదు. ఇప్పటివరకు అందిన చరిత్ర చూపబడుతోంది.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'మరలుచేయండి';
 
   @override
@@ -10031,4 +10034,10 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది.';
+
+  @override
+  String get memoryDontUse => 'ఉపయోగించవద్దు';
+
+  @override
+  String get memoryAllowUse => 'వినియోగాన్ని అనుమతించండి';
 }

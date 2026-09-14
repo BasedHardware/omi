@@ -3256,6 +3256,12 @@
     "speechProfileTopicGoal": "เป้าหมายระยะยาวของคุณคืออะไร?",
     "speechToTextUnavailableDesc": "ขณะนี้ไม่สามารถแปลงเสียงเป็นข้อความได้ โปรดตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและการตั้งค่าการรู้จำเสียงของอุปกรณ์ แล้วลองอีกครั้ง",
     "memoryHistoryPartial": "ประวัติความทรงจำบางส่วนไม่พร้อมใช้งาน กำลังแสดงประวัติที่ได้รับจนถึงตอนนี้",
+    "memoryHistory": "History",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "แตะ + เพื่อเริ่มบันทึก",
-    "processingTakingLonger": "ยังทำงานอยู่ — ใช้เวลานานกว่าปกติ"
+    "processingTakingLonger": "ยังทำงานอยู่ — ใช้เวลานานกว่าปกติ",
+    "memoryDontUse": "ไม่ใช้",
+    "memoryAllowUse": "อนุญาตให้ใช้"
 }

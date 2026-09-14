@@ -2019,6 +2019,9 @@ class AppLocalizationsPt extends AppLocalizations {
       'Parte do histórico de memórias não está disponível. Exibindo o histórico recebido até agora.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Desfazer';
 
   @override
@@ -9991,4 +9994,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ainda a trabalhar — isto está a demorar mais do que o habitual.';
+
+  @override
+  String get memoryDontUse => 'Não usar';
+
+  @override
+  String get memoryAllowUse => 'Permitir uso';
 }

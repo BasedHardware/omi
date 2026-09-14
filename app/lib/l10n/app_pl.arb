@@ -3291,6 +3291,12 @@
     "speechProfileTopicGoal": "Jaki jest twój długoterminowy cel?",
     "speechToTextUnavailableDesc": "Zamiana mowy na tekst jest teraz niedostępna. Sprawdź połączenie internetowe i ustawienia rozpoznawania mowy na urządzeniu, a następnie spróbuj ponownie.",
     "memoryHistoryPartial": "Część historii wspomnień jest niedostępna. Wyświetlana jest dotychczas otrzymana historia.",
+    "memoryHistory": "History",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
     "tapPlusToStartRecording": "Dotknij +, aby rozpocząć nagrywanie",
-    "processingTakingLonger": "Nadal działa — trwa to dłużej niż zwykle."
+    "processingTakingLonger": "Nadal działa — trwa to dłużej niż zwykle.",
+    "memoryDontUse": "Nie używaj",
+    "memoryAllowUse": "Zezwól na użycie"
 }

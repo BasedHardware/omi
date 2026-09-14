@@ -2026,6 +2026,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get memoryHistoryPartial => 'بعض سجل الذكريات غير متاح. يتم عرض السجل المستلم حتى الآن.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'تراجع';
 
   @override
@@ -9923,4 +9926,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد.';
+
+  @override
+  String get memoryDontUse => 'لا تستخدم';
+
+  @override
+  String get memoryAllowUse => 'السماح بالاستخدام';
 }

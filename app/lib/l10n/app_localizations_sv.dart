@@ -2045,6 +2045,9 @@ class AppLocalizationsSv extends AppLocalizations {
       'En del av minneshistoriken är inte tillgänglig. Visar historiken som har tagits emot hittills.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Ångra';
 
   @override
@@ -9986,4 +9989,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Fortfarande igång — det tar längre tid än vanligt.';
+
+  @override
+  String get memoryDontUse => 'Använd inte';
+
+  @override
+  String get memoryAllowUse => 'Tillåt användning';
 }

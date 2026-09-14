@@ -2050,6 +2050,9 @@ class AppLocalizationsMs extends AppLocalizations {
       'Sebahagian sejarah ingatan tidak tersedia. Memaparkan sejarah yang telah diterima setakat ini.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Buat Asal';
 
   @override
@@ -10008,4 +10011,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Masih diproses — ini mengambil masa lebih lama daripada biasa.';
+
+  @override
+  String get memoryDontUse => 'Jangan gunakan';
+
+  @override
+  String get memoryAllowUse => 'Benarkan penggunaan';
 }

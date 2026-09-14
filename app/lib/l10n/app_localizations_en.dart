@@ -2039,6 +2039,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Undo';
 
   @override
@@ -9972,4 +9975,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Still working — this is taking longer than usual.';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
 }

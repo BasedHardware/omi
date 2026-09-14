@@ -2046,6 +2046,9 @@ class AppLocalizationsBg extends AppLocalizations {
       'Част от историята на спомените не е налична. Показва се получената досега история.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Отмени';
 
   @override
@@ -10019,4 +10022,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Все още работи — отнема повече време от обичайното.';
+
+  @override
+  String get memoryDontUse => 'Не използвай';
+
+  @override
+  String get memoryAllowUse => 'Разреши използването';
 }

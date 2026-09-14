@@ -2052,6 +2052,9 @@ class AppLocalizationsRo extends AppLocalizations {
       'O parte din istoricul amintirilor nu este disponibilă. Se afișează istoricul primit până acum.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Anulează';
 
   @override
@@ -10029,4 +10032,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Încă se procesează — durează mai mult decât de obicei.';
+
+  @override
+  String get memoryDontUse => 'Nu utiliza';
+
+  @override
+  String get memoryAllowUse => 'Permite utilizarea';
 }

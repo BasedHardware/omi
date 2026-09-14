@@ -2025,6 +2025,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get memoryHistoryPartial => 'חלק מהיסטוריית הזיכרונות אינו זמין. מוצגת ההיסטוריה שהתקבלה עד כה.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'בטל';
 
   @override
@@ -9902,4 +9905,10 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'עדיין בעבודה — זה לוקח יותר זמן מהרגיל.';
+
+  @override
+  String get memoryDontUse => 'אל תשתמש';
+
+  @override
+  String get memoryAllowUse => 'אפשר שימוש';
 }

@@ -2055,6 +2055,9 @@ class AppLocalizationsTl extends AppLocalizations {
       'Hindi available ang ilang bahagi ng kasaysayan ng mga alaala. Ipinapakita ang kasaysayang natanggap sa ngayon.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Undo';
 
   @override
@@ -10073,4 +10076,10 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ginagawa pa — mas matagal ito kaysa karaniwan.';
+
+  @override
+  String get memoryDontUse => 'Huwag gamitin';
+
+  @override
+  String get memoryAllowUse => 'Payagan ang paggamit';
 }

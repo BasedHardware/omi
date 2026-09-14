@@ -2041,6 +2041,9 @@ class AppLocalizationsFa extends AppLocalizations {
       'بخشی از تاریخچهٔ خاطرات در دسترس نیست. تاریخچهٔ دریافت‌شده تا این لحظه نمایش داده می‌شود.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'بازگشت';
 
   @override
@@ -9982,4 +9985,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'هنوز در حال انجام است — بیشتر از حد معمول طول می‌کشد.';
+
+  @override
+  String get memoryDontUse => 'استفاده نکن';
+
+  @override
+  String get memoryAllowUse => 'اجازه استفاده';
 }

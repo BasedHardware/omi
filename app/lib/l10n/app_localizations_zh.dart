@@ -2000,6 +2000,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryHistoryPartial => '部分记忆历史暂不可用。正在显示目前已获取的历史记录。';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => '撤销';
 
   @override
@@ -9792,4 +9795,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
+
+  @override
+  String get memoryDontUse => '不使用';
+
+  @override
+  String get memoryAllowUse => '允许使用';
 }

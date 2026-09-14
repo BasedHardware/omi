@@ -3963,6 +3963,12 @@ abstract class AppLocalizations {
   /// **'Some memory history is unavailable. Showing the history received so far.'**
   String get memoryHistoryPartial;
 
+  /// Filter option for retained memory history
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get memoryHistory;
+
   /// Undo button text
   ///
   /// In en, this message translates to:
@@ -18584,6 +18590,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Still working — this is taking longer than usual.'**
   String get processingTakingLonger;
+
+  /// Owner action to suppress one memory from agent use.
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t use'**
+  String get memoryDontUse;
+
+  /// Owner action to restore one memory to agent use.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow use'**
+  String get memoryAllowUse;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

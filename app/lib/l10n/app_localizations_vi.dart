@@ -2046,6 +2046,9 @@ class AppLocalizationsVi extends AppLocalizations {
       'Một phần lịch sử ký ức không khả dụng. Đang hiển thị lịch sử đã nhận được cho đến nay.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Hoàn tác';
 
   @override
@@ -9977,4 +9980,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
+
+  @override
+  String get memoryDontUse => 'Không sử dụng';
+
+  @override
+  String get memoryAllowUse => 'Cho phép sử dụng';
 }

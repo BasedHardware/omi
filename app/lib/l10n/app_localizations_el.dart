@@ -2059,6 +2059,9 @@ class AppLocalizationsEl extends AppLocalizations {
       'Ένα μέρος του ιστορικού αναμνήσεων δεν είναι διαθέσιμο. Εμφανίζεται το ιστορικό που έχει ληφθεί μέχρι τώρα.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Αναίρεση';
 
   @override
@@ -10052,4 +10055,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ακόμα σε εξέλιξη — χρειάζεται περισσότερο χρόνο από το συνηθισμένο.';
+
+  @override
+  String get memoryDontUse => 'Να μην χρησιμοποιείται';
+
+  @override
+  String get memoryAllowUse => 'Να επιτρέπεται η χρήση';
 }

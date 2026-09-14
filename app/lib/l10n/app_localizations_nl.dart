@@ -2048,6 +2048,9 @@ class AppLocalizationsNl extends AppLocalizations {
       'Een deel van de herinneringsgeschiedenis is niet beschikbaar. De tot nu toe ontvangen geschiedenis wordt getoond.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Ongedaan maken';
 
   @override
@@ -10009,4 +10012,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Nog bezig — dit duurt langer dan normaal.';
+
+  @override
+  String get memoryDontUse => 'Niet gebruiken';
+
+  @override
+  String get memoryAllowUse => 'Gebruik toestaan';
 }

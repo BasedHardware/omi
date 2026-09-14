@@ -2042,6 +2042,9 @@ class AppLocalizationsUr extends AppLocalizations {
       'یادوں کی تاریخ کا کچھ حصہ دستیاب نہیں ہے۔ اب تک موصول ہونے والی تاریخ دکھائی جا رہی ہے۔';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'واپس لیں';
 
   @override
@@ -9994,4 +9997,10 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'ابھی کام جاری ہے — اس میں معمول سے زیادہ وقت لگ رہا ہے۔';
+
+  @override
+  String get memoryDontUse => 'استعمال نہ کریں';
+
+  @override
+  String get memoryAllowUse => 'استعمال کی اجازت دیں';
 }

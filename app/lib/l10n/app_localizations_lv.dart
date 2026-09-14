@@ -2047,6 +2047,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get memoryHistoryPartial => 'Daļa atmiņu vēstures nav pieejama. Tiek rādīta līdz šim saņemtā vēsture.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Atsaukt';
 
   @override
@@ -10005,4 +10008,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Joprojām notiek — tas aizņem ilgāk nekā parasti.';
+
+  @override
+  String get memoryDontUse => 'Neizmantot';
+
+  @override
+  String get memoryAllowUse => 'Atļaut lietošanu';
 }

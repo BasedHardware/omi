@@ -2044,6 +2044,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get memoryHistoryPartial => 'Část historie vzpomínek není dostupná. Zobrazuje se dosud přijatá historie.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Vrátit zpět';
 
   @override
@@ -9982,4 +9985,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Stále probíhá — trvá to déle než obvykle.';
+
+  @override
+  String get memoryDontUse => 'Nepoužívat';
+
+  @override
+  String get memoryAllowUse => 'Povolit použití';
 }

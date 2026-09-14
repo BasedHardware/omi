@@ -2057,6 +2057,9 @@ class AppLocalizationsHu extends AppLocalizations {
       'Az emlékek előzményeinek egy része nem érhető el. Az eddig megkapott előzmények láthatók.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Visszavonás';
 
   @override
@@ -10023,4 +10026,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Még folyamatban — ez tovább tart a szokásosnál.';
+
+  @override
+  String get memoryDontUse => 'Ne használd';
+
+  @override
+  String get memoryAllowUse => 'Használat engedélyezése';
 }

@@ -2041,6 +2041,9 @@ class AppLocalizationsBn extends AppLocalizations {
       'স্মৃতির ইতিহাসের কিছু অংশ পাওয়া যাচ্ছে না। এখন পর্যন্ত পাওয়া ইতিহাস দেখানো হচ্ছে।';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'পূর্বাবস্থা';
 
   @override
@@ -9987,4 +9990,10 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'এখনও কাজ চলছে — এটি স্বাভাবিকের চেয়ে বেশি সময় নিচ্ছে।';
+
+  @override
+  String get memoryDontUse => 'ব্যবহার করবেন না';
+
+  @override
+  String get memoryAllowUse => 'ব্যবহারের অনুমতি দিন';
 }

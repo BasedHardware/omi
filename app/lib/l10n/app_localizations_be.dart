@@ -2044,6 +2044,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get memoryHistoryPartial => 'Частка гісторыі ўспамінаў недаступная. Паказана гісторыя, атрыманая дагэтуль.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
   String get undo => 'Адмяніць';
 
   @override
@@ -10013,4 +10016,10 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.';
+
+  @override
+  String get memoryDontUse => 'Не выкарыстоўваць';
+
+  @override
+  String get memoryAllowUse => 'Дазволіць выкарыстанне';
 }
