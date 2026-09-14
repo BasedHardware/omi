@@ -64,16 +64,23 @@ function ConversationClockFields({
   conversation,
   ink,
   durationCopy,
+  folderCopy,
+  folderColor,
+  folderIcon,
 }: {
   conversation: ConversationProjection;
   ink?: {color: string};
   durationCopy?: string | null;
+  folderCopy?: string;
+  folderColor?: string;
+  folderIcon?: string;
 }) {
   const visibilityCopy = conversationVisibilityCopy(conversation.visibility);
   const duration =
     durationCopy === undefined
       ? conversationDetailDurationCopy(conversation)
       : durationCopy;
+  const folder = folderCopy ?? conversationNoFolderCopy();
   return (
     <View style={styles.conversationDetailFields}>
       <Text style={[styles.conversationDetailField, ink]}>
@@ -84,6 +91,17 @@ function ConversationClockFields({
       {duration !== null ? (
         <Text style={[styles.conversationDetailField, ink]}>{duration}</Text>
       ) : null}
+      {folder === '' ? null : (
+        <Text
+          style={[
+            styles.conversationDetailField,
+            ink,
+            folderColor ? {color: folderColor} : null,
+          ]}>
+          {folderIcon ? `${folderIcon} ` : null}
+          {folder}
+        </Text>
+      )}
       {visibilityCopy === null ? null : (
         <Text style={[styles.conversationDetailField, ink]}>
           {visibilityCopy}
@@ -418,6 +436,9 @@ function LegacyConversationBody({
             ? conversationTranscriptDurationCopy(detail.transcript.segments)
             : null
         }
+        folderCopy={folderLabel}
+        folderColor={folderColor === '' ? undefined : folderColor}
+        folderIcon={folderIcon === '' ? undefined : folderIcon}
       />
       {address === '' ? null : /^https?:\/\//i.test(locationMapsUrl) ? (
         <FocusPressable
@@ -517,17 +538,6 @@ function LegacyConversationBody({
         }
         return nodes;
       })}
-      {folderLabel === '' ? null : (
-        <Text
-          style={[
-            styles.conversationDetailField,
-            ink,
-            folderColor === '' ? null : {color: folderColor},
-          ]}>
-          {folderIcon === '' ? null : `${folderIcon} `}
-          {folderLabel}
-        </Text>
-      )}
       {conversation.discarded
         ? null
         : detail.sections.flatMap((section, index) => {

@@ -2265,6 +2265,31 @@ test('conversation details omit Flutter GetSummaryWidgets unused Started and Dur
   );
 });
 
+test('conversation details name Flutter GetSummaryWidgets No Folder chip', () => {
+  const recording = render({
+    conversation: {...conversation, folderId: null},
+  });
+  expect(text(recording)).toContain(conversationNoFolderCopy());
+  const chat = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:named-session',
+      source: 'chat',
+      folderId: null,
+    },
+  });
+  expect(text(chat)).toContain(conversationNoFolderCopy());
+  const listen = render({
+    conversation: {
+      ...conversation,
+      id: 'c1',
+      source: 'omi',
+      folderId: null,
+    },
+  });
+  expect(text(listen)).toContain(conversationNoFolderCopy());
+});
+
 test('conversation details name GET private and shared visibility', () => {
   mockLegacy.mockReturnValue({
     result: {
