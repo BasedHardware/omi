@@ -50,6 +50,8 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 import {
+  conversationListTimeCopy,
+  conversationRecapDateLabel,
   dailySummaryDefaultHeadlineCopy,
   desktopBackendServiceCopy,
   deviceBatteryPercentCopy,
@@ -1107,6 +1109,28 @@ test('Daily Recaps name Flutter New chrome instead of the day clock', () => {
   });
   expect(renderedText(plain)).toContain('Yesterday');
   expect(renderedText(plain)).not.toContain('New 🚀');
+});
+
+test('compact Home conversations name Flutter ConversationListItem h:mm a', () => {
+  const older = new Date(2025, 7, 10, 12, 0);
+  const time = conversationListTimeCopy(older.toISOString());
+  const dated = conversationRecapDateLabel(
+    older.toISOString(),
+    older.toISOString(),
+    Date.now(),
+  );
+  const renderer = render({
+    recaps: [
+      {
+        id: 'recap-older-clock',
+        title: 'Product review',
+        dateLabel: time,
+      },
+    ],
+  });
+  expect(renderedText(renderer)).toContain('Product review');
+  expect(renderedText(renderer)).toContain(time);
+  expect(renderedText(renderer)).not.toContain(dated);
 });
 
 test('untitled processing recaps stay visible instead of rendering a blank card', () => {

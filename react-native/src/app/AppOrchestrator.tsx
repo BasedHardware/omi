@@ -42,7 +42,7 @@ import {
   conversationListEmoji,
   conversationListNewCopy,
   conversationListTag,
-  conversationRecapDateLabel,
+  conversationListTimeCopy,
   conversationRecapTitle,
   compactHomeDeviceLabelCopy,
   deviceBatteryPercentCopy,
@@ -1148,10 +1148,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               recapNow,
             );
             return {
-              dateLabel: conversationRecapDateLabel(
-                item.startedAt,
-                item.createdAt,
-                recapNow,
+              dateLabel: conversationListTimeCopy(
+                item.startedAt ?? item.createdAt,
               ),
               id: item.id,
               starred: item.starred,

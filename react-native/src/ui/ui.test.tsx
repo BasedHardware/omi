@@ -926,7 +926,8 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(orchestrator).toContain('conversationHasFinishClock(item)');
   expect(orchestrator).toContain('conversationListDurationCopy(item)');
   expect(orchestrator).not.toContain('onOpenCalls=');
-  expect(orchestrator).toContain('conversationRecapDateLabel(');
+  expect(orchestrator).toContain('conversationListTimeCopy(');
+  expect(orchestrator).not.toContain('conversationRecapDateLabel(');
   expect(orchestrator).not.toContain("weekday: 'long'");
   expect(orchestrator).toContain(
     'requestedConversationId={requestedConversationId}',
