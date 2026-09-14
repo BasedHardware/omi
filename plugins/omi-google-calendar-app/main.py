@@ -531,7 +531,7 @@ async def tool_list_events(request: Request):
             line = f"- **{summary}**\n  {time_str}"
             if location:
                 line += f"\n  Location: {location}"
-            line += f"\n  ID: `{event_id[:20]}...`"
+            line += f"\n  ID: `{event_id}`"
             result_parts.append(line)
 
         return ChatToolResponse(result="\n".join(result_parts))
