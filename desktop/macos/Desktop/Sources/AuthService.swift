@@ -271,6 +271,16 @@ class AuthService {
     try? auth.signOut()
   }
 
+  /// Owner uid preserved after light invalidation: signed-out boolean cleared but
+  /// `auth_userId` remains until the user completes re-authentication.
+  private func preservedReauthOwnerId(from defaults: UserDefaults = .standard) -> String? {
+    guard !defaults.bool(forKey: .authIsSignedIn) else { return nil }
+    let trimmed =
+      defaults.string(forKey: .authUserId)?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
   // MARK: - Session invalidation (light — not nuclear signOut)
 
   /// Clears tokens and signed-in UI state without onboarding wipe, capture stop,
@@ -546,6 +556,10 @@ class AuthService {
       // never proof of a usable session. Keep every authenticated surface gated
       // until a forced refresh succeeds.
       validateRestoredSession(attempt: attempt)
+    } else if preservedReauthOwnerId() != nil {
+      NSLog("OMI AUTH: Restoring preserved re-auth owner without clearing auth_userId")
+      AuthState.shared.userEmail = savedEmail
+      AuthState.shared.transition(to: .needsReauth)
     } else {
       NSLog("OMI AUTH: No saved auth state found")
       guard
@@ -662,10 +676,17 @@ class AuthService {
           let savedSignedIn = UserDefaults.standard.bool(forKey: .authIsSignedIn)
           log("AUTH_LISTENER: Firebase user nil, savedSignedIn=\(savedSignedIn), currentIsSignedIn=\(self.isSignedIn)")
           if !savedSignedIn {
-            // No saved session either - user is truly signed out
-            log("AUTH_LISTENER: No saved session - setting isSignedIn=false")
-            AuthState.shared.transition(to: .signedOut)
-            AuthState.shared.userEmail = nil
+            if preservedReauthOwnerId() != nil {
+              log("AUTH_LISTENER: Firebase user nil — preserving needsReauth for bound owner")
+              if self.sessionCoordinator.phase != .needsReauth {
+                AuthState.shared.transition(to: .needsReauth)
+              }
+            } else {
+              // No saved session either - user is truly signed out
+              log("AUTH_LISTENER: No saved session - setting isSignedIn=false")
+              AuthState.shared.transition(to: .signedOut)
+              AuthState.shared.userEmail = nil
+            }
           } else {
             log("AUTH_LISTENER: Firebase user nil with saved session — validating REST tokens")
             await self.validateSavedSessionAfterFirebaseNil()

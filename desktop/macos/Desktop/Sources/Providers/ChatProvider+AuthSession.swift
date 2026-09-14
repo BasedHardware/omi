@@ -9,11 +9,13 @@ extension ChatProvider {
       .sink { [weak self] notification in
         Task { @MainActor in
           guard let self else { return }
-          if notification.name == .sessionDidInvalidate {
-            await self.stopAgentBridgeAfterSessionInvalidation()
-            return
+          await self.enqueueAuthSessionNotification {
+            if notification.name == .sessionDidInvalidate {
+              await self.stopAgentBridgeAfterSessionInvalidation()
+              return
+            }
+            await self.reloadChatSessionsAfterAuthentication()
           }
-          await self.reloadChatSessionsAfterAuthentication()
         }
       }
   }
@@ -21,7 +23,15 @@ extension ChatProvider {
   func reloadChatSessionsAfterAuthentication() async {
     guard AuthState.shared.isSignedIn else { return }
     log("ChatProvider: sessionDidAuthenticate — reloading chat sessions")
-    await initializeVisibleMessages()
+    let resumeSessionId = currentSession?.id
+    if multiChatEnabled {
+      await fetchSessions()
+      if let resumeSessionId, let session = sessions.first(where: { $0.id == resumeSessionId }) {
+        await selectSession(session)
+      }
+    } else {
+      await loadDefaultChatMessages()
+    }
     await refreshJournalProjection()
   }
 }

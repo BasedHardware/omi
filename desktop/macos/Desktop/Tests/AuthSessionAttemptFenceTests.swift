@@ -202,6 +202,7 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
     XCTAssertNil(UserDefaults.standard.string(forKey: .authIdToken))
     XCTAssertFalse(UserDefaults.standard.bool(forKey: .authIsSignedIn))
     XCTAssertEqual(AuthState.shared.sessionPhase, .needsReauth)
+    XCTAssertEqual(RuntimeOwnerIdentity.currentOwnerId(), ownerA)
   }
 
   func testStoragePreparationFailureLeavesPreviousCredentialGenerationIntact() async throws {

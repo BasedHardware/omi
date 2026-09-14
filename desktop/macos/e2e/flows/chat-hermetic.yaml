@@ -74,7 +74,6 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentQueryResult.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+MemoryCreation.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+JournalProjection.swift
-  - desktop/macos/Desktop/Sources/Providers/ChatProvider+AuthSession.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+OrphanRepair.swift
   - desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeCredentialPolicy.swift

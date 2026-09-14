@@ -116,6 +116,18 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
   }
 
+  func testRestoreAuthStatePreservesReauthOwnerWithoutSignedInBoolean() throws {
+    let source = try sourceFile("AuthService.swift")
+    let restoreRange = try XCTUnwrap(source.range(of: "private func restoreAuthState(attempt:"))
+    let restoreSnippet = String(source[restoreRange.lowerBound...]).prefix(2200)
+    XCTAssertTrue(restoreSnippet.contains("preservedReauthOwnerId()"))
+    XCTAssertTrue(restoreSnippet.contains("transition(to: .needsReauth)"))
+    let listenerRange = try XCTUnwrap(source.range(of: "private func setupAuthStateListener()"))
+    let listenerSnippet = String(source[listenerRange.lowerBound...]).prefix(3200)
+    XCTAssertTrue(listenerSnippet.contains("preservedReauthOwnerId()"))
+    XCTAssertTrue(listenerSnippet.contains("preserving needsReauth"))
+  }
+
   func testRefreshIdTokenUsesClassifierNotBlanket400() throws {
     let source = try sourceFile("AuthService.swift")
     XCTAssertTrue(source.contains("AuthDefinitiveDeathClassifier.isDefinitiveRefreshFailure"))
