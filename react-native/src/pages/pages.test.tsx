@@ -28,6 +28,7 @@ jest.mock('../omiNative', () => ({
 const {ConnectorsPage} = require('./Connectors');
 const {SettingsPage} = require('./Settings');
 const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy, permissionsTitleCopy, fairUseLoadErrorCopy, usageLoadErrorCopy} = require('../desktopReadClient');
+const {appChangelogsLoadErrorCopy} = require('../legacyOmiAppChangelogs');
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -2780,7 +2781,8 @@ test('Settings names a failed app changelogs GET instead of empty success', asyn
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
   expect(tree).toContain("What's New");
-  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).toContain(appChangelogsLoadErrorCopy());
+  expect(tree).not.toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain("What's New in 1.2.0");
   expect(tree).not.toContain('Dismiss');
   expect(tree).not.toContain('✨');
@@ -2801,9 +2803,7 @@ test('Settings names malformed app changelogs GET instead of empty success', asy
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
   expect(tree).toContain("What's New");
-  expect(tree).toContain(
-    desktopReadErrorCopy(new Error('Omi app changelogs are malformed')),
-  );
+  expect(tree).toContain(appChangelogsLoadErrorCopy());
   expect(tree).not.toContain("What's New in 1.2.0");
   expect(tree).not.toContain('Dismiss');
   expect(tree).not.toContain('✨');

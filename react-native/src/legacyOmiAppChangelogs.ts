@@ -41,6 +41,10 @@ export function appChangelogHeading(version: string): string {
   return copy === '' ? "What's New" : `What's New in ${copy}`;
 }
 
+export function appChangelogsLoadErrorCopy(): string {
+  return 'Failed to load changelogs';
+}
+
 export function appChangelogRowCopy(
   title: string,
   description: string,

@@ -1,5 +1,6 @@
 import {
   appChangelogHeading,
+  appChangelogsLoadErrorCopy,
   loadOmiAppChangelogs,
   parseOmiAppChangelogs,
 } from './legacyOmiAppChangelogs';
@@ -63,6 +64,7 @@ test('parses GET app changelogs with Flutter omitted-icon ✨', () => {
   ]);
   expect(appChangelogHeading('')).toBe("What's New");
   expect(appChangelogHeading('  ')).toBe("What's New");
+  expect(appChangelogsLoadErrorCopy()).toBe('Failed to load changelogs');
 });
 
 test('fails closed for malformed GET app changelogs', () => {

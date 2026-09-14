@@ -25,6 +25,7 @@ import {
   fairUseLoadErrorCopy,
   usageLoadErrorCopy,
 } from '../desktopReadClient';
+import {appChangelogsLoadErrorCopy} from '../legacyOmiAppChangelogs';
 
 jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => true,
@@ -4176,7 +4177,8 @@ test('Settings names a failed app changelogs GET instead of empty success', asyn
   const tree = renderedText(renderer);
   expect(tree).toContain('Ada');
   expect(tree).toContain("What's New");
-  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).toContain(appChangelogsLoadErrorCopy());
+  expect(tree).not.toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain("What's New in 1.2.0");
   expect(tree).not.toContain('Dismiss');
   expect(tree).not.toContain('✨');
@@ -4247,9 +4249,7 @@ test('Settings names malformed app changelogs GET instead of empty success', asy
   const tree = renderedText(renderer);
   expect(tree).toContain('Ada');
   expect(tree).toContain("What's New");
-  expect(tree).toContain(
-    desktopReadErrorCopy(new Error('Omi app changelogs are malformed')),
-  );
+  expect(tree).toContain(appChangelogsLoadErrorCopy());
   expect(tree).not.toContain("What's New in 1.2.0");
   expect(tree).not.toContain('Dismiss');
   expect(tree).not.toContain('✨');

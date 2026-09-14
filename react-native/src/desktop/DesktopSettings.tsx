@@ -77,6 +77,7 @@ import {
 } from '../legacyOmiIntegrations';
 import {
   appChangelogHeading,
+  appChangelogsLoadErrorCopy,
   loadOmiAppChangelogs,
   type OmiAppChangelogRow,
 } from '../legacyOmiAppChangelogs';
@@ -458,7 +459,7 @@ export function DesktopSettings({
         rows => ({rows, error: null as string | null}),
         reason => ({
           rows: [] as OmiAppChangelogRow[],
-          error: desktopReadErrorCopy(reason),
+          error: appChangelogsLoadErrorCopy(),
         }),
       );
       const usageMonthlyTask = loadOmiUsagePeriod(backend, 'monthly').then(
