@@ -1143,6 +1143,10 @@ export function primaryLanguageNotSetCopy(): string {
   return 'Not set';
 }
 
+export function primaryLanguageTitleCopy(): string {
+  return 'Primary Language';
+}
+
 export function primaryLanguageCopy(
   code: string | null | undefined,
   names:
@@ -1375,6 +1379,14 @@ export function mentorNotificationFrequencyCopy(
   ];
 }
 
+export function automaticTranslationTitleCopy(): string {
+  return 'Automatic Translation';
+}
+
+export function detectLanguagesCopy(): string {
+  return 'Detect 10+ languages';
+}
+
 export function automaticTranslationCopy(
   singleLanguageMode: boolean | null | undefined,
 ): {title: string; copy: string}[] {
@@ -1383,10 +1395,14 @@ export function automaticTranslationCopy(
   }
   return [
     {
-      title: 'Automatic translation',
-      copy: singleLanguageMode ? 'Off' : 'Enabled',
+      title: automaticTranslationTitleCopy(),
+      copy: `${singleLanguageMode ? 'Off' : 'Enabled'}\n${detectLanguagesCopy()}`,
     },
   ];
+}
+
+export function customVocabularyTitleCopy(): string {
+  return 'Custom Vocabulary';
 }
 
 export function customVocabularyCopy(
@@ -1400,7 +1416,7 @@ export function customVocabularyCopy(
     if (visible === '') {
       return [];
     }
-    return [{title: 'Custom vocabulary', copy: visible}];
+    return [{title: customVocabularyTitleCopy(), copy: visible}];
   });
 }
 

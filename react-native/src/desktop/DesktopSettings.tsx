@@ -26,6 +26,7 @@ import {
   subscriptionTranscriptionQuotaCopy,
   primaryLanguageCopy,
   primaryLanguageNotSetCopy,
+  primaryLanguageTitleCopy,
   peopleNameRows,
   fairUseCopy,
   dailySummaryCopy,
@@ -34,7 +35,9 @@ import {
   mentorNotificationFrequencyCopy,
   notificationFrequencyTitleCopy,
   automaticTranslationCopy,
+  automaticTranslationTitleCopy,
   customVocabularyCopy,
+  customVocabularyTitleCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {
@@ -977,23 +980,26 @@ export function DesktopSettings({
         <Row copy={row.copy} key={row.title} title={row.title} />
       ))}
       {account != null && account.languageError != null ? (
-        <Row copy={account.languageError} title="Primary language" />
+        <Row copy={account.languageError} title={primaryLanguageTitleCopy()} />
       ) : account != null ? (
         <Row
           copy={
             primaryLanguageCopy(account.language, account.languageNames) ??
             primaryLanguageNotSetCopy()
           }
-          title="Primary language"
+          title={primaryLanguageTitleCopy()}
         />
       ) : null}
       {transcriptionPreferencesError !== null ? (
         <>
           <Row
             copy={transcriptionPreferencesError}
-            title="Automatic translation"
+            title={automaticTranslationTitleCopy()}
           />
-          <Row copy={transcriptionPreferencesError} title="Custom vocabulary" />
+          <Row
+            copy={transcriptionPreferencesError}
+            title={customVocabularyTitleCopy()}
+          />
         </>
       ) : (
         <>

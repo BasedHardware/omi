@@ -39,6 +39,7 @@ import {
   subscriptionTranscriptionQuotaCopy,
   primaryLanguageCopy,
   primaryLanguageNotSetCopy,
+  primaryLanguageTitleCopy,
   peopleNameRows,
   fairUseCopy,
   dailySummaryCopy,
@@ -47,7 +48,9 @@ import {
   mentorNotificationFrequencyCopy,
   notificationFrequencyTitleCopy,
   automaticTranslationCopy,
+  automaticTranslationTitleCopy,
   customVocabularyCopy,
+  customVocabularyTitleCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
@@ -868,25 +871,28 @@ export function SettingsPage({
           <SettingRow copy={row.copy} key={row.title} title={row.title} />
         ))}
         {snapshot.languageError != null ? (
-          <SettingRow copy={snapshot.languageError} title="Primary language" />
+          <SettingRow
+            copy={snapshot.languageError}
+            title={primaryLanguageTitleCopy()}
+          />
         ) : (
           <SettingRow
             copy={
               primaryLanguageCopy(snapshot.language, snapshot.languageNames) ??
               primaryLanguageNotSetCopy()
             }
-            title="Primary language"
+            title={primaryLanguageTitleCopy()}
           />
         )}
         {transcriptionPreferencesError !== null ? (
           <>
             <SettingRow
               copy={transcriptionPreferencesError}
-              title="Automatic translation"
+              title={automaticTranslationTitleCopy()}
             />
             <SettingRow
               copy={transcriptionPreferencesError}
-              title="Custom vocabulary"
+              title={customVocabularyTitleCopy()}
             />
           </>
         ) : (

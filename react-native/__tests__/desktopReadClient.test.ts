@@ -144,7 +144,11 @@ import {
   notificationFrequencyTitleCopy,
   notificationFrequencyDescriptionCopy,
   automaticTranslationCopy,
+  automaticTranslationTitleCopy,
+  detectLanguagesCopy,
   customVocabularyCopy,
+  customVocabularyTitleCopy,
+  primaryLanguageTitleCopy,
   subscriptionPeriodCopy,
   chatQuotaSubtitleCopy,
   taskDisplaySummary,
@@ -1555,17 +1559,27 @@ test('names GET mentor notification frequency outside 0-5 as Balanced', () => {
 });
 
 test('transcription preference copy names GET vocabulary without Flutter false defaults', () => {
+  expect(primaryLanguageTitleCopy()).toBe('Primary Language');
+  expect(automaticTranslationTitleCopy()).toBe('Automatic Translation');
+  expect(detectLanguagesCopy()).toBe('Detect 10+ languages');
+  expect(customVocabularyTitleCopy()).toBe('Custom Vocabulary');
   expect(automaticTranslationCopy(true)).toEqual([
-    {title: 'Automatic translation', copy: 'Off'},
+    {
+      title: automaticTranslationTitleCopy(),
+      copy: `Off\n${detectLanguagesCopy()}`,
+    },
   ]);
   expect(automaticTranslationCopy(false)).toEqual([
-    {title: 'Automatic translation', copy: 'Enabled'},
+    {
+      title: automaticTranslationTitleCopy(),
+      copy: `Enabled\n${detectLanguagesCopy()}`,
+    },
   ]);
   expect(automaticTranslationCopy(undefined)).toEqual([]);
   expect(automaticTranslationCopy(null)).toEqual([]);
   expect(customVocabularyCopy(['Omi', ' \t', 'Based Hardware'])).toEqual([
-    {title: 'Custom vocabulary', copy: 'Omi'},
-    {title: 'Custom vocabulary', copy: 'Based Hardware'},
+    {title: customVocabularyTitleCopy(), copy: 'Omi'},
+    {title: customVocabularyTitleCopy(), copy: 'Based Hardware'},
   ]);
   expect(customVocabularyCopy([])).toEqual([]);
   expect(customVocabularyCopy(null)).toEqual([]);

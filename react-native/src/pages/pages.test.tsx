@@ -1351,7 +1351,7 @@ test('Settings names GET primary language without a write sheet', async () => {
   });
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Primary language');
+  expect(tree).toContain('Primary Language');
   expect(tree).toContain('English');
   expect(tree).not.toContain('Not set');
 });
@@ -1366,7 +1366,7 @@ test('Settings names a failed language GET instead of empty success', async () =
   });
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Primary language');
+  expect(tree).toContain('Primary Language');
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('English');
   expect(tree).not.toContain('Not set');
@@ -1386,7 +1386,7 @@ test('Settings names Flutter notSet for empty GET language', async () => {
   });
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Primary language');
+  expect(tree).toContain('Primary Language');
   expect(tree).toContain('Not set');
 });
 
@@ -1413,7 +1413,7 @@ test('Settings names Flutter notSet for catalog-miss GET language', async () => 
   });
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Primary language');
+  expect(tree).toContain('Primary Language');
   expect(tree).toContain('Not set');
   expect(tree).not.toContain('xx');
   expect(tree).not.toContain('English');
@@ -1595,8 +1595,8 @@ test('Settings names GET daily summaries without regenerate or a write sheet', a
   expect(tree).not.toContain('Delivery Time');
   expect(tree).not.toContain('10:00 PM');
   expect(tree).not.toContain('Notification Frequency');
-  expect(tree).not.toContain('Custom vocabulary');
-  expect(tree).not.toContain('Automatic translation');
+  expect(tree).not.toContain('Custom Vocabulary');
+  expect(tree).not.toContain('Automatic Translation');
 });
 
 test('Settings names Flutter DailySummaryCard omitted GET headlines as Your Day in Review', async () => {
@@ -1764,12 +1764,12 @@ test('Settings names GET custom vocabulary without add/delete or Flutter false d
   });
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Custom vocabulary');
+  expect(tree).toContain('Custom Vocabulary');
   expect(tree).toContain('Omi');
   expect(tree).toContain('Based Hardware');
-  expect(tree).toContain('Automatic translation');
+  expect(tree).toContain('Automatic Translation');
   expect(tree).toContain('Off');
-  expect(tree).not.toContain('Detect 10+ languages');
+  expect(tree).toContain('Detect 10+ languages');
   expect(tree).not.toContain('Add Words');
   expect(mockBackend.request).toHaveBeenCalledWith({
     id: expect.any(String),
@@ -1792,8 +1792,8 @@ test('Settings names a failed transcription-preferences GET instead of empty suc
   });
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Automatic translation');
-  expect(tree).toContain('Custom vocabulary');
+  expect(tree).toContain('Automatic Translation');
+  expect(tree).toContain('Custom Vocabulary');
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Based Hardware');
   expect(tree).not.toContain('Add Words');
@@ -1814,9 +1814,9 @@ test('Settings omits Automatic translation when GET single_language_mode is miss
   });
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Custom vocabulary');
+  expect(tree).toContain('Custom Vocabulary');
   expect(tree).toContain('Omi');
-  expect(tree).not.toContain('Automatic translation');
+  expect(tree).not.toContain('Automatic Translation');
 });
 
 test('Settings developer webhook URLs omit empty or whitespace values', async () => {

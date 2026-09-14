@@ -3334,7 +3334,7 @@ test('Settings names GET primary language without a write sheet', async () => {
       .props.onPress();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Primary language');
+  expect(tree).toContain('Primary Language');
   expect(tree).toContain('English');
   expect(tree).not.toContain('Not set');
 });
@@ -3389,7 +3389,7 @@ test('Settings names a failed language GET instead of empty success', async () =
       .props.onPress();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Primary language');
+  expect(tree).toContain('Primary Language');
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('English');
   expect(tree).not.toContain('Not set');
@@ -3445,7 +3445,7 @@ test('Settings names Flutter notSet for empty GET language', async () => {
       .props.onPress();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Primary language');
+  expect(tree).toContain('Primary Language');
   expect(tree).toContain('Not set');
   expect(tree).not.toContain('English');
 });
@@ -4493,8 +4493,8 @@ test('Settings names GET daily summaries without regenerate or a write sheet', a
   expect(tree).not.toContain('Delivery Time');
   expect(tree).not.toContain('10:00 PM');
   expect(tree).not.toContain('Notification Frequency');
-  expect(tree).not.toContain('Custom vocabulary');
-  expect(tree).not.toContain('Automatic translation');
+  expect(tree).not.toContain('Custom Vocabulary');
+  expect(tree).not.toContain('Automatic Translation');
 });
 
 test('Settings names Flutter DailySummaryCard omitted GET headlines as Your Day in Review', async () => {
@@ -4995,10 +4995,11 @@ test('Settings names GET custom vocabulary without add/delete or Flutter false d
       .props.onPress();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Custom vocabulary');
+  expect(tree).toContain('Custom Vocabulary');
   expect(tree).toContain('Omi');
-  expect(tree).toContain('Automatic translation');
+  expect(tree).toContain('Automatic Translation');
   expect(tree).toContain('Enabled');
+  expect(tree).toContain('Detect 10+ languages');
   expect(tree).not.toContain('Add Words');
   expect(
     omiBackend.request.mock.calls.some(call => call[0].method === 'PATCH'),
@@ -5065,11 +5066,12 @@ test('Settings names a failed transcription-preferences GET instead of empty suc
   });
   const tree = renderedText(renderer);
   expect(tree).toContain('Ada');
-  expect(tree).toContain('Automatic translation');
-  expect(tree).toContain('Custom vocabulary');
+  expect(tree).toContain('Automatic Translation');
+  expect(tree).toContain('Custom Vocabulary');
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Based Hardware');
   expect(tree).not.toContain('Add Words');
+  expect(tree).not.toContain('Detect 10+ languages');
 });
 
 test('Settings shows already-loaded company, job, and data protection', async () => {
