@@ -20,6 +20,7 @@ from models import (
     GetArticleSummaryRequest,
     GetRandomArticleRequest,
     SearchArticlesRequest,
+    normalize_language,
 )
 
 REQUEST_TIMEOUT_SECONDS = 10.0
@@ -65,20 +66,20 @@ def _safe_limit(limit: Any) -> int:
 
 
 def _safe_language(language: Optional[str]) -> str:
-    lang = (language or DEFAULT_LANGUAGE).strip().lower()
-    if not lang.replace("-", "").isalpha() or len(lang) > 12:
-        return DEFAULT_LANGUAGE
-    return lang
+    return normalize_language(language)
 
 
-async def _request_json(url: str, params: Optional[Dict[str, Any]] = None) -> Any:
+async def _request_json(url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Execute asynchronous GET request with persistent client reuse and fallback."""
     client = getattr(app.state, "http_client", None)
 
-    async def _do_get(cli: httpx.AsyncClient) -> Any:
+    async def _do_get(cli: httpx.AsyncClient) -> Dict[str, Any]:
         response = await cli.get(url, params=params)
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        if not isinstance(data, dict):
+            raise ValueError("Invalid response received from Wikipedia API.")
+        return data
 
     if client is not None and getattr(client, "is_closed", False) is not True:
         return await _do_get(client)
@@ -263,6 +264,8 @@ async def search_articles(req: SearchArticlesRequest) -> ChatToolResponse:
             lines.append(f"   {_article_url(language, title)}")
 
         return ChatToolResponse(result="\n".join(lines))
+    except ValueError as exc:
+        return ChatToolResponse(error=str(exc))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Wikipedia search failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:
@@ -291,6 +294,8 @@ async def get_article_summary(req: GetArticleSummaryRequest) -> ChatToolResponse
                 + "\n\nThis is a disambiguation page. Use search_articles for more specific matches."
             )
         return ChatToolResponse(result=_format_summary(data, language))
+    except ValueError as exc:
+        return ChatToolResponse(error=str(exc))
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 404:
             return ChatToolResponse(error=f"No Wikipedia article found for '{title}'. Try search_articles first.")
@@ -336,7 +341,11 @@ async def get_random_article(req: Optional[GetRandomArticleRequest] = None) -> C
         title = first_item["title"]
         summary_url = f"https://{language}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}"
         summary = await _request_json(summary_url)
+        if not isinstance(summary, dict):
+            return ChatToolResponse(error="Invalid response received from Wikipedia API.")
         return ChatToolResponse(result="Random Wikipedia article:\n\n" + _format_summary(summary, language))
+    except ValueError as exc:
+        return ChatToolResponse(error=str(exc))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Wikipedia random article request failed with status {exc.response.status_code}.")
     except httpx.HTTPError as exc:

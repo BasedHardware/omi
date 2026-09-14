@@ -53,7 +53,7 @@ checks:
     command: ["python3", "plugins/omi-wikipedia-app/test_main.py"]
     triggers: ["plugins/omi-wikipedia-app/**"]
     lanes: ["local", "ci"]
-    reason: "verify wikipedia endpoints against non-dict payloads, null nested fields, disambiguation pages, and lifespan fallback"
+    reason: "#13948: verify wikipedia endpoints against non-dict payloads, null nested fields, disambiguation pages, and lifespan fallback"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]

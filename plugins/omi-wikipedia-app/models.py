@@ -4,6 +4,26 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
+DEFAULT_LANGUAGE = "en"
+MAX_LANGUAGE_LENGTH = 12
+
+
+def normalize_language(v: Any) -> str:
+    """Normalize language code and provide fallback.
+
+    Accepts ISO language codes (e.g., 'en', 'es', 'zh-cn').
+    Falls back to 'en' if invalid, empty, or None.
+    """
+    if v is None or v == "":
+        return DEFAULT_LANGUAGE
+    if not isinstance(v, str):
+        raise ValueError("language must be a string.")
+    cleaned = v.strip().lower()
+    if not cleaned.replace("-", "").isalpha() or len(cleaned) > MAX_LANGUAGE_LENGTH:
+        return DEFAULT_LANGUAGE
+    return cleaned
+
+
 class ChatToolResponse(BaseModel):
     """Response model for Omi chat tool endpoints."""
 
@@ -21,7 +41,7 @@ class SearchArticlesRequest(BaseModel):
     """Request model for searching Wikipedia articles."""
 
     query: str = Field(..., min_length=1, max_length=200, description="Search query string.")
-    language: Optional[str] = Field(default="en", max_length=12, description="Wikipedia language code.")
+    language: Optional[str] = Field(default=DEFAULT_LANGUAGE, max_length=MAX_LANGUAGE_LENGTH, description="Wikipedia language code.")
     limit: int = Field(default=5, ge=1, le=10, description="Maximum number of results (1-10).")
 
     @field_validator("query", mode="before")
@@ -36,22 +56,15 @@ class SearchArticlesRequest(BaseModel):
 
     @field_validator("language", mode="before")
     @classmethod
-    def normalize_language(cls, v: Any) -> str:
-        if v is None or v == "":
-            return "en"
-        if not isinstance(v, str):
-            raise ValueError("language must be a string.")
-        cleaned = v.strip().lower()
-        if not cleaned.replace("-", "").isalpha() or len(cleaned) > 12:
-            return "en"
-        return cleaned
+    def validate_language(cls, v: Any) -> str:
+        return normalize_language(v)
 
 
 class GetArticleSummaryRequest(BaseModel):
     """Request model for fetching article summary."""
 
     title: str = Field(..., min_length=1, max_length=250, description="Article title.")
-    language: Optional[str] = Field(default="en", max_length=12, description="Wikipedia language code.")
+    language: Optional[str] = Field(default=DEFAULT_LANGUAGE, max_length=MAX_LANGUAGE_LENGTH, description="Wikipedia language code.")
 
     @field_validator("title", mode="before")
     @classmethod
@@ -65,30 +78,16 @@ class GetArticleSummaryRequest(BaseModel):
 
     @field_validator("language", mode="before")
     @classmethod
-    def normalize_language(cls, v: Any) -> str:
-        if v is None or v == "":
-            return "en"
-        if not isinstance(v, str):
-            raise ValueError("language must be a string.")
-        cleaned = v.strip().lower()
-        if not cleaned.replace("-", "").isalpha() or len(cleaned) > 12:
-            return "en"
-        return cleaned
+    def validate_language(cls, v: Any) -> str:
+        return normalize_language(v)
 
 
 class GetRandomArticleRequest(BaseModel):
     """Request model for random article discovery."""
 
-    language: Optional[str] = Field(default="en", max_length=12, description="Wikipedia language code.")
+    language: Optional[str] = Field(default=DEFAULT_LANGUAGE, max_length=MAX_LANGUAGE_LENGTH, description="Wikipedia language code.")
 
     @field_validator("language", mode="before")
     @classmethod
-    def normalize_language(cls, v: Any) -> str:
-        if v is None or v == "":
-            return "en"
-        if not isinstance(v, str):
-            raise ValueError("language must be a string.")
-        cleaned = v.strip().lower()
-        if not cleaned.replace("-", "").isalpha() or len(cleaned) > 12:
-            return "en"
-        return cleaned
+    def validate_language(cls, v: Any) -> str:
+        return normalize_language(v)

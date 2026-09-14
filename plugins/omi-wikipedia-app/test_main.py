@@ -15,8 +15,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def load_app_modules(force_stubs: bool = False):
-    """Load models and main modules hermetically without contaminating sys.modules."""
+def load_app_modules(force_stubs: bool = True):
+    """Load models and main modules hermetically without contaminating sys.modules.
+
+    When force_stubs is True (the default for reproducible hermetic execution),
+    stubs are installed unconditionally regardless of what packages exist in the environment.
+    Note: BaseModelStub is a lightweight approximation for hermetic test execution,
+    providing field defaults, before-field-validators, and basic range/length validation.
+    Full Pydantic semantics are exercised separately in test_real_pydantic_if_installed.
+    """
     stubs = {}
 
     if not force_stubs:
@@ -255,7 +262,8 @@ class TestWikipediaApp(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.main, cls.models = load_app_modules()
+        # Always run hermetic suite deterministically against isolated stubs
+        cls.main, cls.models = load_app_modules(force_stubs=True)
 
     def setUp(self):
         self.mock_client = AsyncMock()
@@ -570,8 +578,40 @@ class TestWikipediaApp(unittest.TestCase):
         req3 = self.models.GetRandomArticleRequest(language="  JA  ")
         self.assertEqual(req3.language, "ja")
 
+    def test_get_random_article_non_dict_summary(self):
+        """Verify get_random_article reports clean error when summary response is non-dict."""
+        random_resp = MagicMock()
+        random_resp.status_code = 200
+        random_resp.json.return_value = {
+            "query": {
+                "random": [{"id": 42, "title": "Mount Everest", "ns": 0}]
+            }
+        }
+        summary_resp = MagicMock()
+        summary_resp.status_code = 200
+        summary_resp.json.return_value = ["invalid", "list", "summary"]
+
+        self.mock_client.get.side_effect = [random_resp, summary_resp]
+
+        req = self.models.GetRandomArticleRequest(language="en")
+        resp = asyncio.run(self.main.get_random_article(req))
+
+        self.assertIsNotNone(resp.error)
+        self.assertIn("Invalid response received from Wikipedia API.", resp.error)
+
+    def test_request_json_rejects_non_dict(self):
+        """Verify _request_json raises ValueError on non-dict JSON responses."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = ["unexpected", "list"]
+        self.mock_client.get.return_value = mock_resp
+
+        with self.assertRaises(ValueError) as ctx:
+            asyncio.run(self.main._request_json("https://en.wikipedia.org/w/api.php"))
+        self.assertIn("Invalid response received from Wikipedia API.", str(ctx.exception))
+
     def test_hermetic_stubs_enforce_constraints(self):
-        """Verify hermetic fallback stubs enforce constraints identically when pydantic is absent."""
+        """Verify hermetic fallback stubs provide lightweight constraint enforcement approximation."""
         _, stub_models = load_app_modules(force_stubs=True)
 
         req = stub_models.SearchArticlesRequest(query="astronomy", limit=5)
@@ -586,6 +626,18 @@ class TestWikipediaApp(unittest.TestCase):
             stub_models.SearchArticlesRequest(query="test", limit=20)
         with self.assertRaises(ValueError):
             stub_models.GetArticleSummaryRequest(title="   ")
+
+    def test_real_pydantic_if_installed(self):
+        """Exercise real Pydantic dependency path if installed in the environment."""
+        try:
+            import pydantic  # noqa: F401
+        except (ImportError, ModuleNotFoundError):
+            self.skipTest("pydantic not installed in environment")
+        _, real_models = load_app_modules(force_stubs=False)
+        req = real_models.SearchArticlesRequest(query="  astronomy  ", language="  DE  ", limit=5)
+        self.assertEqual(req.query, "astronomy")
+        self.assertEqual(req.language, "de")
+        self.assertEqual(req.limit, 5)
 
 
 if __name__ == "__main__":
