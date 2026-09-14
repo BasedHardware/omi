@@ -210,12 +210,28 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     final companion = provider.pairedCompanionDevice;
     const cardDecoration = BoxDecoration(color: Color(0xFF1C1C1E), borderRadius: BorderRadius.all(Radius.circular(20)));
 
+    Widget sectionWithTitle(Widget card) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 12),
+            child: Text(
+              context.l10n.secondDevice,
+              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+          ),
+          card,
+        ],
+      );
+    }
+
     if (companion == null) {
       final canPairSecond = primary != null &&
           primary.id.isNotEmpty &&
           (primary.type == DeviceType.omi || primary.type == DeviceType.openglass);
       if (!canPairSecond) return null;
-      return Container(
+      return sectionWithTitle(Container(
         decoration: cardDecoration,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -235,7 +251,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             ),
           ],
         ),
-      );
+      ));
     }
 
     final isCompanionConnected = provider.companionDevice?.id == companion.id;
@@ -243,7 +259,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     final statusLabel = isCompanionConnected
         ? (companionBattery > 0 ? '${context.l10n.connected} · $companionBattery%' : context.l10n.connected)
         : context.l10n.offline;
-    return Container(
+    return sectionWithTitle(Container(
       decoration: cardDecoration,
       child: Column(
         children: [
@@ -297,7 +313,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
           ),
         ],
       ),
-    );
+    ));
   }
 
   Future<String>? _rayBanMetaCameraStatusFuture;

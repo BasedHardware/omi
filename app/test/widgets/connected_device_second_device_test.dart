@@ -11,58 +11,31 @@ import 'package:omi/pages/home/device.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/capture/local_segment_store.dart';
 
 final _omi = BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
 final _glass = BtDevice(id: 'glass-1', name: 'OmiGlass', type: DeviceType.openglass, rssi: -50);
 
-class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
-  _StubDeviceProvider(
-      {required this.primary, this.savedCompanion, this.connectedCompanion, this.companionBattery = -1});
+class _StubDeviceProvider extends DeviceProvider {
+  _StubDeviceProvider({
+    required BtDevice primary,
+    BtDevice? savedCompanion,
+    BtDevice? connectedCompanion,
+    this.companionBattery = -1,
+  }) {
+    isConnected = true;
+    connectedDevice = primary;
+    pairedDevice = primary;
+    _savedCompanion = savedCompanion;
+    companionDevice = connectedCompanion;
+    companionBatteryLevel = companionBattery;
+  }
 
-  final BtDevice primary;
-  final BtDevice? savedCompanion;
-  final BtDevice? connectedCompanion;
-  final int companionBattery;
+  BtDevice? _savedCompanion;
   int forgetCompanionCalls = 0;
 
   @override
-  bool get isConnected => true;
-
-  @override
-  BtDevice? get connectedDevice => primary;
-
-  @override
-  BtDevice? get pairedDevice => primary;
-
-  @override
-  BtDevice? get pairedCompanionDevice => savedCompanion;
-
-  @override
-  BtDevice? get companionDevice => connectedCompanion;
-
-  @override
-  int get companionBatteryLevel => companionBattery;
-
-  @override
-  int get batteryLevel => -1;
-
-  @override
-  bool get isCharging => false;
-
-  @override
-  bool get isDeviceStorageSupport => false;
-
-  @override
-  bool get havingNewFirmware => false;
-
-  @override
-  String get latestStableFirmwareVersion => '';
-
-  @override
-  Map<String, dynamic> get latestOmiGlassFirmwareDetails => const {};
-
-  @override
-  Future<void> getDeviceInfo() async {}
+  BtDevice? get pairedCompanionDevice => _savedCompanion;
 
   @override
   Future<void> forgetCompanionDevice() async {
@@ -70,29 +43,15 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  Future getDeviceInfo() async {}
 }
 
-class _StubCaptureProvider extends ChangeNotifier implements CaptureProvider {
-  @override
-  void addMetricsListener() {}
-
-  @override
-  void removeMetricsListener() {}
-
-  @override
-  bool get havingRecordingDevice => false;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+class _StubCaptureProvider extends CaptureProvider {
+  _StubCaptureProvider() : super(localSegmentStore: LocalSegmentStore.disabled());
 }
 
-class _StubSyncProvider extends ChangeNotifier implements SyncProvider {
-  @override
-  int get missingWalsInSeconds => 0;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+class _StubSyncProvider extends SyncProvider {
+  _StubSyncProvider() : super(startBackgroundSync: false);
 }
 
 Widget _app(_StubDeviceProvider device) {
@@ -129,6 +88,7 @@ void main() {
     await tester.pumpWidget(_app(provider));
     await tester.pump();
 
+    expect(find.text('Second device'), findsOneWidget);
     expect(find.byKey(const Key('pair_second_device_button')), findsOneWidget);
     expect(find.text('Pair a second device'), findsOneWidget);
     expect(find.byKey(const Key('forget_second_device_button')), findsNothing);
@@ -146,6 +106,7 @@ void main() {
     await tester.pumpWidget(_app(provider));
     await tester.pump();
 
+    expect(find.text('Second device'), findsOneWidget);
     expect(find.text('OmiGlass'), findsOneWidget);
     expect(find.text('Connected · 64%'), findsOneWidget);
     expect(find.byKey(const Key('pair_second_device_button')), findsNothing);
@@ -163,6 +124,7 @@ void main() {
     await tester.pumpWidget(_app(provider));
     await tester.pump();
 
+    expect(find.text('Second device'), findsOneWidget);
     expect(find.text('OmiGlass'), findsOneWidget);
     expect(find.text('Offline'), findsOneWidget);
   });
@@ -176,6 +138,7 @@ void main() {
     await tester.pumpWidget(_app(provider));
     await tester.pump();
 
+    expect(find.text('Second device'), findsNothing);
     expect(find.byKey(const Key('pair_second_device_button')), findsNothing);
   });
 }
