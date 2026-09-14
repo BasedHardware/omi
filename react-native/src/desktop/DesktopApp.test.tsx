@@ -6280,6 +6280,7 @@ test('Settings names a failed developer and MCP keys GET instead of empty succes
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('omi_sk_abcdef_secret');
   expect(tree).not.toContain('Revoke');
+  expect(tree).not.toContain('No API keys yet');
 });
 
 test('Settings names HTTP 500 developer and MCP keys GET instead of empty success', async () => {
@@ -6347,6 +6348,65 @@ test('Settings names HTTP 500 developer and MCP keys GET instead of empty succes
     desktopReadErrorCopy(new Error('Omi developer keys are malformed')),
   );
   expect(tree).not.toContain('omi_sk_abcdef_secret');
+  expect(tree).not.toContain('Revoke');
+  expect(tree).not.toContain('No API keys yet');
+});
+
+test('Settings names Flutter noApiKeys for empty GET developer and MCP keys', async () => {
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  omiBackend.request.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/dev/keys' || request.path === '/v1/mcp/keys') {
+      return {id: 'keys', status: 200, body: JSON.stringify([])};
+    }
+    return {id: 'other', status: 404, body: null};
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Developer key');
+  expect(tree).toContain('MCP key');
+  expect(tree).toContain('No API keys yet');
+  expect(tree).not.toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('Revoke');
+});
+
+test('Settings omits Worker 404 developer and MCP keys instead of No API keys yet', async () => {
+  const {omiBackend} = jest.requireMock('../omiNative') as {
+    omiBackend: {request: jest.Mock};
+  };
+  omiBackend.request.mockImplementation(async (request: {path?: string}) => ({
+    id: request.id ?? 'other',
+    status: 404,
+    body: null,
+  }));
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).not.toContain('No API keys yet');
   expect(tree).not.toContain('Revoke');
 });
 

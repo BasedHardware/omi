@@ -1462,16 +1462,26 @@ export function developerKeyRowCopy(
   return [labeled, created, scope].filter(copy => copy !== '').join(' · ');
 }
 
+export function developerKeysEmptyCopy(): string {
+  return 'No API keys yet';
+}
+
 export function developerKeysCopy(
   keys: readonly {
     name: string;
     keyPrefix: string;
     createdAtMs?: number;
     scopes?: readonly string[];
-  }[],
+  }[] | null,
   title: string,
   options?: {emptyScopesCopy?: string},
 ): {title: string; copy: string}[] {
+  if (keys === null) {
+    return [];
+  }
+  if (keys.length === 0) {
+    return [{title, copy: developerKeysEmptyCopy()}];
+  }
   return keys.flatMap(key => {
     const copy = developerKeyRowCopy(key, options);
     if (copy === '') {

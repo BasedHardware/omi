@@ -332,7 +332,18 @@ test('loadOmiDevApiKeys and loadOmiMcpApiKeys name resolved GET keys and omit fa
     path: '/v1/mcp/keys',
   });
   request.mockResolvedValueOnce({id: 'dev', status: 404, body: '[]'});
+  expect(await loadOmiDevApiKeys(backend)).toBeNull();
+});
+
+test('loadOmiDevApiKeys and loadOmiMcpApiKeys keep honest GET empty keys', async () => {
+  const request = jest.fn(async () => ({
+    id: 'keys',
+    status: 200,
+    body: '[]',
+  }));
+  const backend = {request} as unknown as OmiBackend;
   expect(await loadOmiDevApiKeys(backend)).toEqual([]);
+  expect(await loadOmiMcpApiKeys(backend)).toEqual([]);
 });
 
 test('loadOmiDevApiKeys names HTTP 500 instead of empty success', async () => {

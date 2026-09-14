@@ -105,7 +105,7 @@ async function loadKeys(
   backend: OmiBackend,
   id: string,
   path: string,
-): Promise<OmiDeveloperKey[]> {
+): Promise<OmiDeveloperKey[] | null> {
   const response = await backend.request({
     id,
     method: 'GET',
@@ -113,7 +113,7 @@ async function loadKeys(
     path,
   });
   if (response.status === 404) {
-    return [];
+    return null;
   }
   if (
     response.status !== 200 ||
@@ -127,12 +127,12 @@ async function loadKeys(
 
 export async function loadOmiDevApiKeys(
   backend: OmiBackend,
-): Promise<OmiDeveloperKey[]> {
+): Promise<OmiDeveloperKey[] | null> {
   return loadKeys(backend, 'omi-dev-keys', '/v1/dev/keys');
 }
 
 export async function loadOmiMcpApiKeys(
   backend: OmiBackend,
-): Promise<OmiDeveloperKey[]> {
+): Promise<OmiDeveloperKey[] | null> {
   return loadKeys(backend, 'omi-mcp-keys', '/v1/mcp/keys');
 }

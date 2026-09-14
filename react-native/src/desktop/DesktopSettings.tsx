@@ -510,14 +510,14 @@ export function DesktopSettings({
       const developerKeysTask = loadOmiDevApiKeys(backend).then(
         keys => ({keys, error: null as string | null}),
         reason => ({
-          keys: [] as Awaited<ReturnType<typeof loadOmiDevApiKeys>>,
+          keys: null as Awaited<ReturnType<typeof loadOmiDevApiKeys>>,
           error: desktopReadErrorCopy(reason),
         }),
       );
       const mcpKeysTask = loadOmiMcpApiKeys(backend).then(
         keys => ({keys, error: null as string | null}),
         reason => ({
-          keys: [] as Awaited<ReturnType<typeof loadOmiMcpApiKeys>>,
+          keys: null as Awaited<ReturnType<typeof loadOmiMcpApiKeys>>,
           error: desktopReadErrorCopy(reason),
         }),
       );
@@ -594,10 +594,12 @@ export function DesktopSettings({
       nextDeveloperKeysError = developerKeysResult.error;
       const mcpKeysResult = await mcpKeysTask;
       nextMcpKeys = developerKeysCopy(
-        mcpKeysResult.keys.map(key => ({
-          name: key.name,
-          keyPrefix: key.keyPrefix,
-        })),
+        mcpKeysResult.keys === null
+          ? null
+          : mcpKeysResult.keys.map(key => ({
+              name: key.name,
+              keyPrefix: key.keyPrefix,
+            })),
         'MCP key',
       );
       nextMcpKeysError = mcpKeysResult.error;

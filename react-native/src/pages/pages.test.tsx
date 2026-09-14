@@ -2075,6 +2075,7 @@ test('Settings names a failed developer and MCP keys GET instead of empty succes
   expect(tree).not.toContain('omi_sk_abcdef_secret');
   expect(tree).not.toContain('Revoke');
   expect(tree).not.toContain('Create');
+  expect(tree).not.toContain('No API keys yet');
 });
 
 test('Settings names HTTP 500 developer and MCP keys GET instead of empty success', async () => {
@@ -2100,6 +2101,49 @@ test('Settings names HTTP 500 developer and MCP keys GET instead of empty succes
   expect(tree).not.toContain('omi_sk_abcdef_secret');
   expect(tree).not.toContain('Revoke');
   expect(tree).not.toContain('Create');
+  expect(tree).not.toContain('No API keys yet');
+});
+
+test('Settings names Flutter noApiKeys for empty GET developer and MCP keys', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/dev/keys' || request.path === '/v1/mcp/keys') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Developer key');
+  expect(tree).toContain('MCP key');
+  expect(tree).toContain('No API keys yet');
+  expect(tree).not.toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('Create');
+  expect(tree).not.toContain('Revoke');
+});
+
+test('Settings omits Worker 404 developer and MCP keys instead of No API keys yet', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => ({
+    id: request.id,
+    status: 404,
+    body: null,
+  }));
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).not.toContain('No API keys yet');
+  expect(tree).not.toContain('Create');
+  expect(tree).not.toContain('Revoke');
 });
 
 test('Settings names GET import jobs without Start import or Limitless', async () => {

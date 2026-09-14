@@ -24,6 +24,7 @@ import {
   developerKeyRowCopy,
   developerKeyScopeCopy,
   developerKeysCopy,
+  developerKeysEmptyCopy,
   appCategoryCopy,
   appDisplaySource,
   appDisplayAttribution,
@@ -1574,6 +1575,21 @@ test('developer key copy names GET empty scopes Read Only without inventing it o
   expect(
     developerKeyScopeCopy(['conversations:write'], {emptyCopy: 'Read Only'}),
   ).toBe('Write');
+});
+
+test('developer key copy names GET empty keys Flutter No API keys yet', () => {
+  expect(developerKeysEmptyCopy()).toBe('No API keys yet');
+  expect(developerKeysCopy([], 'Developer key')).toEqual([
+    {title: 'Developer key', copy: developerKeysEmptyCopy()},
+  ]);
+  expect(
+    developerKeysCopy([], 'Developer key', {emptyScopesCopy: 'Read Only'}),
+  ).toEqual([{title: 'Developer key', copy: developerKeysEmptyCopy()}]);
+  expect(developerKeysCopy([], 'MCP key')).toEqual([
+    {title: 'MCP key', copy: developerKeysEmptyCopy()},
+  ]);
+  expect(developerKeysCopy(null, 'Developer key')).toEqual([]);
+  expect(developerKeysCopy(null, 'MCP key')).toEqual([]);
 });
 
 test('developer webhook status copy does not say unknown for a missing enablement bit', () => {
