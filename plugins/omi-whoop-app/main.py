@@ -171,7 +171,8 @@ def _coerce_int(value: Any, default: int, minimum: int, maximum: int) -> int:
         return default
     try:
         number = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError: JSON numbers like 1e309 parse to float('inf').
         return default
     return max(minimum, min(number, maximum))
 
