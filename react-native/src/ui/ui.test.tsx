@@ -3448,7 +3448,7 @@ test('wide Home search rows keep GET capture time instead of started-only', () =
   );
 });
 
-test('wide Home search rows keep GET locked and discarded flags instead of title-only', () => {
+test('wide Home search rows keep GET locked flags and omit Flutter ConversationListItem Discarded chip', () => {
   const renderer = render(
     <ProjectionRow
       item={{
@@ -3474,7 +3474,7 @@ test('wide Home search rows keep GET locked and discarded flags instead of title
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Kept recording');
   expect(tree).toContain('Locked');
-  expect(tree).toContain('Discarded');
+  expect(tree).not.toContain('Discarded');
   const plain = render(
     <ProjectionRow
       item={{

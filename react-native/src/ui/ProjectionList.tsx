@@ -163,11 +163,6 @@ export const ProjectionRow = memo(function ProjectionRow({
             {lockedCopy}
           </Text>
         ) : null}
-        {item.kind === 'conversation' && item.discarded ? (
-          <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
-            Discarded
-          </Text>
-        ) : null}
         {photosCopy !== null ? (
           <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
             {photosCopy}

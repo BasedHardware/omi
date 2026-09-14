@@ -1217,7 +1217,7 @@ test('conversation list names GET capture time without inventing it on untimed r
   }
 });
 
-test('conversation list names locked and discarded conversations without empty badges', () => {
+test('conversation list keeps GET locked flags and omits Flutter ConversationListItem Discarded chip', () => {
   const base = {
     kind: 'conversation' as const,
     title: 'Kept recording',
@@ -1272,7 +1272,7 @@ test('conversation list names locked and discarded conversations without empty b
   });
   const copy = textOf(renderer);
   expect(copy).toContain('Locked');
-  expect(copy).toContain('Discarded');
+  expect(copy).not.toContain('Discarded');
   expect(
     renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Locked conversation',
@@ -1281,8 +1281,11 @@ test('conversation list names locked and discarded conversations without empty b
   expect(
     renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Discarded conversation',
-    ).length,
-  ).toBeGreaterThan(0);
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(node => node.props.children === 'Discarded'),
+  ).toHaveLength(0);
   expect(
     renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Not locked',
@@ -2093,6 +2096,70 @@ test('compact conversation list omits Flutter ConversationListItem mobile photos
   }
 });
 
+test('compact conversation list omits Flutter ConversationListItem mobile Discarded chip', () => {
+  const native = require('react-native') as typeof import('react-native');
+  const dimensions = jest.spyOn(native, 'useWindowDimensions').mockReturnValue({
+    width: 390,
+    height: 844,
+    scale: 1,
+    fontScale: 1,
+  });
+  try {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <ConversationsPage
+          loading={false}
+          outcome={{
+            status: 'success',
+            value: {
+              items: [
+                {
+                  kind: 'conversation',
+                  id: 'omi-discarded-chip',
+                  title: 'Product review',
+                  summary: 'Notes',
+                  searchableText: 'Product review\nNotes',
+                  createdAt: '2026-09-07T00:00:00.000Z',
+                  updatedAt: '2026-09-07T00:01:00.000Z',
+                  startedAt: '2026-09-07T00:00:00.000Z',
+                  finishedAt: '2026-09-07T00:01:00.000Z',
+                  starred: false,
+                  status: 'completed',
+                  source: 'omi',
+                  visibility: 'private',
+                  folderId: null,
+                  locked: false,
+                  discarded: true,
+                },
+              ],
+              page: {
+                ...incompletePage,
+                windowStatus: 'complete',
+                complete: true,
+                completenessStatus: 'complete',
+                reasons: [],
+              },
+            },
+          }}
+        />,
+      );
+    });
+    expect(textOf(renderer)).toContain('Product review');
+    expect(textOf(renderer)).not.toContain('Discarded');
+    expect(
+      renderer.root.findAll(
+        node => node.props.accessibilityLabel === 'Discarded conversation',
+      ),
+    ).toHaveLength(0);
+    expect(
+      renderer.root.findAll(node => node.props.children === 'Discarded'),
+    ).toHaveLength(0);
+  } finally {
+    dimensions.mockRestore();
+  }
+});
+
 test('conversation list names Flutter ConversationListItem discarded photos only', () => {
   const native = require('react-native') as typeof import('react-native');
   const dimensions = jest.spyOn(native, 'useWindowDimensions').mockReturnValue({
@@ -2210,7 +2277,12 @@ test('conversation list names discarded GET transcript excerpt as the title', ()
   const copy = textOf(renderer);
   expect(copy).toContain(excerpt);
   expect(copy).toContain('Real title');
-  expect(copy).toContain('Discarded');
+  expect(copy).not.toContain('Discarded');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Discarded conversation',
+    ),
+  ).toHaveLength(0);
 });
 
 test('conversation list names GET goals without add or a write sheet', async () => {

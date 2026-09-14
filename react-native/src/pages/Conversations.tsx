@@ -129,13 +129,6 @@ const ConversationRow = memo(function ConversationRow({
             Locked
           </Text>
         ) : null}
-        {item.discarded ? (
-          <Text
-            accessibilityLabel="Discarded conversation"
-            style={styles.conversationRowTime}>
-            Discarded
-          </Text>
-        ) : null}
         {photosCopy !== null ? (
           <Text
             accessibilityLabel={photosCopy}

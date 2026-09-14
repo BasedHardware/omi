@@ -772,7 +772,7 @@ test('Home and Library conversation rows name Flutter ConversationListItem h:mm 
   }
 });
 
-test('Home and Library rows keep GET locked and discarded flags instead of title-only', () => {
+test('Home and Library rows keep GET locked flags and omit Flutter ConversationListItem Discarded chip', () => {
   const item: ConversationProjection = {
     kind: 'conversation',
     id: 'listen:locked-row',
@@ -800,7 +800,7 @@ test('Home and Library rows keep GET locked and discarded flags instead of title
   for (const copy of [textOf(home), textOf(library)]) {
     expect(copy).toContain('Kept recording');
     expect(copy).toContain('Locked');
-    expect(copy).toContain('Discarded');
+    expect(copy).not.toContain('Discarded');
   }
   let plain!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
