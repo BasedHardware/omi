@@ -22,6 +22,9 @@ type MemoryBeliefView = Memory & {
   currency_band?: string | null;
   as_of?: string | null;
   belief_computed_at?: string | null;
+  invalid_at?: string | null;
+  superseded_by?: string | null;
+  ledger_status?: string | null;
   arguments?: Record<string, unknown>;
 };
 
@@ -102,6 +105,11 @@ export const MemoryCard = memo(function MemoryCard({
       : undefined;
   const isSuppressed = memoryUse?.suppressed === true;
   const isUseful = memoryUse?.useful === true;
+  const isInactiveHistorical = Boolean(
+    beliefMemory.invalid_at ||
+      beliefMemory.superseded_by ||
+      (beliefMemory.ledger_status && beliefMemory.ledger_status !== 'active'),
+  );
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -153,6 +161,11 @@ export const MemoryCard = memo(function MemoryCard({
   const handleToggleVisibility = async () => {
     const newVisibility = memory.visibility === 'public' ? 'private' : 'public';
     await onToggleVisibility(memory.id, newVisibility);
+  };
+
+  const handleSetUse = async (action: MemoryUseAction) => {
+    if (!onSetUse || isInactiveHistorical) return false;
+    return onSetUse(memory.id, action);
   };
 
   const formatDate = (dateString: string) => {
@@ -425,10 +438,10 @@ export const MemoryCard = memo(function MemoryCard({
                 : 'opacity-100 sm:pointer-events-none sm:opacity-0 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100',
             )}
           >
-            {onSetUse && (
+            {onSetUse && !isInactiveHistorical && (
               <>
                 <button
-                  onClick={() => onSetUse(memory.id, isSuppressed ? 'allow' : 'suppress')}
+                  onClick={() => handleSetUse(isSuppressed ? 'allow' : 'suppress')}
                   className={cn(
                     'rounded-lg px-2 py-1 text-xs transition-colors',
                     isSuppressed
@@ -445,7 +458,7 @@ export const MemoryCard = memo(function MemoryCard({
                 </button>
                 {!isSuppressed && !needsReview && (
                   <button
-                    onClick={() => onSetUse(memory.id, 'useful')}
+                    onClick={() => handleSetUse('useful')}
                     className={cn(
                       'rounded-lg p-2 transition-colors',
                       isUseful

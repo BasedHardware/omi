@@ -1045,6 +1045,14 @@ class MemoriesViewModel: ObservableObject {
 
   // MARK: - API Actions
 
+  private var selectedMemoryTemporalView: APIClient.MemoryTemporalView {
+    switch selectedTemporalFilter {
+    case .usefulNow: return .usefulNow
+    case .history: return .history
+    case .all: return .all
+    }
+  }
+
   /// Fetch memories from the API, honoring the device-scope filter only when
   /// the backend supports it for this user. Legacy (non-canonical) memory users
   /// get a 400 from device_scope=current; on that we retry without the scope
@@ -1056,14 +1064,13 @@ class MemoriesViewModel: ObservableObject {
     offset: Int,
     cursor: String? = nil,
     includeArchive: Bool,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    viewOverride: APIClient.MemoryTemporalView? = nil
   ) async throws -> MemoryPageFetchResult {
     let scope = (filterThisDeviceOnly && deviceScopeSupported) ? "current" : nil
     let requestedView: APIClient.MemoryTemporalView? =
-      beliefCapabilityEnabled == true
-      ? APIClient.MemoryTemporalView(
-        rawValue: selectedTemporalFilter == .usefulNow ? "useful_now" : selectedTemporalFilter.rawValue)
-      : nil
+      viewOverride
+      ?? (beliefCapabilityEnabled == true ? selectedMemoryTemporalView : nil)
     do {
       let page = try await APIClient.shared.getMemoriesPage(
         limit: limit,
@@ -1177,14 +1184,17 @@ class MemoriesViewModel: ObservableObject {
 
     // Step 2: Fetch from API in background and sync to local cache
     do {
+      let initialRequestedView: APIClient.MemoryTemporalView? =
+        beliefCapabilityEnabled == true ? selectedMemoryTemporalView : nil
       let fetchResult = try await fetchMemoriesPageDeviceScopeAware(
         limit: pageSize,
         offset: 0,
         includeArchive: token.layerFilter.layerScope.includesArchive,
-        authorizationSnapshot: authorizationSnapshot
+        authorizationSnapshot: authorizationSnapshot,
+        viewOverride: initialRequestedView
       )
-      let page = fetchResult.page
-      let fetchedMemories = page.memories
+      var page = fetchResult.page
+      var fetchedMemories = page.memories
       guard isCurrentScope(token) else {
         // Scope changed mid-load; reset loading state so the replacement load
         // (gated by `guard !isLoading`) is not permanently blocked.
@@ -1200,6 +1210,37 @@ class MemoriesViewModel: ObservableObject {
       else {
         isLoading = false
         return
+      }
+
+      // The first request cannot know whether the temporal-view capability is
+      // enabled, so it may have returned the legacy released/default view.
+      // Once the response advertises the capability, restart at offset zero
+      // with the explicit view before retaining its cursor. A cursor issued
+      // for the released view must never feed useful-now/history pagination.
+      if page.beliefEnabled == true && initialRequestedView == nil {
+        let explicitFetchResult = try await fetchMemoriesPageDeviceScopeAware(
+          limit: pageSize,
+          offset: 0,
+          includeArchive: token.layerFilter.layerScope.includesArchive,
+          authorizationSnapshot: authorizationSnapshot,
+          viewOverride: selectedMemoryTemporalView
+        )
+        guard isCurrentScope(token) else {
+          isLoading = false
+          return
+        }
+        guard
+          commitMemoryPageCapabilities(
+            explicitFetchResult.page,
+            for: token,
+            deviceScopeSupportedOverride: explicitFetchResult.deviceScopeSupportedOverride
+          )
+        else {
+          isLoading = false
+          return
+        }
+        page = explicitFetchResult.page
+        fetchedMemories = page.memories
       }
       hasAuthoritativeServerProjection = true
       authoritativeProjectionGeneration += 1
@@ -1622,7 +1663,7 @@ class MemoriesViewModel: ObservableObject {
   func recordMemoryUse(_ memory: ServerMemory, keep: Bool) async {
     // The use route is a beta capability. A stale hover closure must not write
     // after a response has withdrawn that capability for this owner/session.
-    guard beliefCapabilityEnabled == true else { return }
+    guard beliefCapabilityEnabled == true, memory.isUseControlEligible else { return }
 
     let action: APIClient.MemoryUseAction
     if keep {
@@ -2820,10 +2861,10 @@ struct MemoriesPage: View {
                 Task { await viewModel.reviewMemory(memory, keep: keep) }
               },
               onUse: { keep in
-                guard viewModel.beliefCapabilityEnabled == true else { return }
+                guard viewModel.beliefCapabilityEnabled == true, memory.isUseControlEligible else { return }
                 Task { await viewModel.recordMemoryUse(memory, keep: keep) }
               },
-              showUseControls: viewModel.beliefCapabilityEnabled == true,
+              showUseControls: viewModel.beliefCapabilityEnabled == true && memory.isUseControlEligible,
               categoryIcon: categoryIcon,
               categoryColor: categoryColor,
               tagColorFor: tagColorFor,

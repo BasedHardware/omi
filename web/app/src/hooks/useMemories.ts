@@ -61,7 +61,8 @@ export interface UseMemoriesReturn {
   setMemoryView: (view: MemoryView) => void;
   setMemoryUse: (id: string, action: MemoryUseAction) => Promise<boolean>;
   loadMore: () => Promise<void>;
-  refresh: (throwOnError?: boolean) => Promise<void>;
+  /** Returns true only after a canonical network refresh completed. */
+  refresh: (throwOnError?: boolean) => Promise<boolean>;
   addMemory: (content: string, visibility?: MemoryVisibility) => Promise<Memory | null>;
   editMemory: (id: string, content: string) => Promise<boolean>;
   removeMemory: (id: string) => Promise<boolean>;
@@ -646,7 +647,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     async (throwOnError = false) => {
       const scope = currentScopeRef.current;
       const requestedScopeKey = scopeKeyRef.current;
-      if (!scope || !requestedScopeKey || fetchingRef.current) return;
+      if (!scope || !requestedScopeKey || fetchingRef.current) return false;
       fetchingRef.current = true;
       setLoading(true);
       setError(null);
@@ -655,7 +656,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       if (!key) {
         fetchingRef.current = false;
         setLoading(false);
-        return;
+        return false;
       }
       const requestGeneration = scopeGenerationRef.current;
       const isCurrentRequest = () =>
@@ -664,7 +665,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
 
       try {
         const page = await doFetch(activeCategories, 0);
-        if (!isCurrentRequest()) return;
+        if (!isCurrentRequest()) return false;
         const pageHasMore =
           Boolean(page.nextCursor) || (!page.truncated && page.memories.length >= limit);
         setMemories(page.memories);
@@ -683,11 +684,13 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
           page.truncated,
           page.beliefEnabled,
         );
+        return true;
       } catch (err) {
         if (isCurrentRequest()) {
           setError(err instanceof Error ? err.message : 'Failed to refresh memories');
           if (throwOnError) throw err;
         }
+        return false;
       } finally {
         if (isCurrentRequest()) {
           setLoading(false);
@@ -732,8 +735,8 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         // Re-read the canonical row before changing the visible list. A suppress
         // action must remain inspectable in history and must never be simulated
         // by deleting the row from this client cache.
-        await refresh(true);
-        if (!isCurrentRequest()) return false;
+        const refreshed = await refresh(true);
+        if (!isCurrentRequest() || !refreshed) return false;
         feedbackIdsRef.current.delete(key);
         return true;
       } catch (err) {

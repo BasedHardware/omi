@@ -638,6 +638,19 @@ struct ServerMemory: Decodable, Identifiable {
       || memoryUseSuppressed == true
   }
 
+  /// Use feedback is meaningful for active memories and reversible suppression
+  /// state. Closed/superseded ledger rows are retained for history but cannot
+  /// be re-enabled through the current-memory preference surface.
+  private var hasInactiveLedgerStatus: Bool {
+    guard let value = ledgerMetadata["status"] else { return false }
+    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return !normalized.isEmpty && normalized != "null" && normalized != "active"
+  }
+
+  var isUseControlEligible: Bool {
+    !hasServerRetainedHistoryMarker && !hasInactiveLedgerStatus
+  }
+
   /// Server-owned reversible use state is carried in the existing canonical
   /// `arguments` bag. Keep it read-only here; mutation remains the explicit
   /// `/use` route and must not be inferred from truth review fields.

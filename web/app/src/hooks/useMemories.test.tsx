@@ -4,6 +4,7 @@ import { useMemories } from './useMemories';
 
 const mocks = vi.hoisted(() => ({
   getMemoriesPage: vi.fn(),
+  setMemoryUseRequest: vi.fn(),
   getCache: vi.fn(),
   setCache: vi.fn(),
   updateCache: vi.fn(),
@@ -26,7 +27,7 @@ vi.mock('@/lib/api', () => ({
   createMemory: vi.fn(),
   updateMemoryContent: vi.fn(),
   updateMemoryVisibility: vi.fn(),
-  setMemoryUse: vi.fn(),
+  setMemoryUse: mocks.setMemoryUseRequest,
   deleteMemory: vi.fn(),
   deleteMemoriesBatch: vi.fn(),
   reviewMemory: vi.fn(),
@@ -96,6 +97,8 @@ describe('useMemories beta capability negotiation and cache scope', () => {
     mocks.cacheMemories.mockReset();
     mocks.cacheMemories.mockResolvedValue(undefined);
     mocks.getMemoriesPage.mockReset();
+    mocks.setMemoryUseRequest.mockReset();
+    mocks.setMemoryUseRequest.mockResolvedValue(undefined);
   });
 
   it('discovers capability without a view query, then refreshes the default Useful now view', async () => {
@@ -214,5 +217,42 @@ describe('useMemories beta capability negotiation and cache scope', () => {
     expect(cacheKeys.some((key) => key.includes('https://backend-a'))).toBe(true);
     expect(cacheKeys.some((key) => key.includes('https://backend-b'))).toBe(true);
     expect(mocks.getMemoriesPage.mock.calls[2][0].view).toBeUndefined();
+  });
+
+  it('reuses feedback id when canonical refresh is still in flight', async () => {
+    let resolveRefresh: (value: ReturnType<typeof page>) => void = () => {};
+    const pendingRefresh = new Promise<ReturnType<typeof page>>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    mocks.getMemoriesPage
+      .mockResolvedValueOnce(page(true))
+      .mockResolvedValueOnce(page(true))
+      .mockReturnValueOnce(pendingRefresh)
+      .mockResolvedValueOnce(page(true));
+
+    const { result } = renderHook(() => useMemories({ limit: 25 }));
+    await waitFor(() => expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(2));
+
+    const refreshPromise = result.current.refresh();
+    await waitFor(() => expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(3));
+
+    let firstResult = true;
+    await act(async () => {
+      firstResult = await result.current.setMemoryUse('memory-owner-a', 'useful');
+    });
+    expect(firstResult).toBe(false);
+    const firstFeedbackId = mocks.setMemoryUseRequest.mock.calls[0][2];
+
+    resolveRefresh(page(true));
+    await act(async () => {
+      await refreshPromise;
+    });
+
+    let secondResult = false;
+    await act(async () => {
+      secondResult = await result.current.setMemoryUse('memory-owner-a', 'useful');
+    });
+    expect(secondResult).toBe(true);
+    expect(mocks.setMemoryUseRequest.mock.calls[1][2]).toBe(firstFeedbackId);
   });
 });

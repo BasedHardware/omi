@@ -136,6 +136,42 @@ final class MemoryLayerFilterTests: XCTestCase {
     XCTAssertEqual(Set(history.map(\.id)), Set(values.map(\.id)))
   }
 
+  func testUseControlsHideInactiveHistoryButRemainForActiveDatedAndSuppressedRows() {
+    let activeDated = makeMemory(
+      id: "active-dated",
+      tierIsExplicit: true,
+      currencyBand: "history")
+    let suppressed = makeMemory(
+      id: "suppressed",
+      tierIsExplicit: true,
+      ledgerMetadata: [
+        MemoryLedgerMetadata.argumentsJSONKey:
+          "{\"memory_use\":{\"last_action\":\"suppress\",\"suppressed\":true}}"
+      ],
+      currencyBand: "current")
+    let invalid = makeMemory(
+      id: "invalid",
+      tierIsExplicit: true,
+      ledgerMetadata: ["invalid_at": "2026-06-21T10:00:00Z"],
+      currencyBand: "current")
+    let superseded = makeMemory(
+      id: "superseded",
+      tierIsExplicit: true,
+      ledgerMetadata: ["superseded_by": "memory-newer"],
+      currencyBand: "current")
+    let inactive = makeMemory(
+      id: "inactive",
+      tierIsExplicit: true,
+      ledgerMetadata: ["status": "inactive"],
+      currencyBand: "current")
+
+    XCTAssertTrue(activeDated.isUseControlEligible)
+    XCTAssertTrue(suppressed.isUseControlEligible)
+    XCTAssertFalse(invalid.isUseControlEligible)
+    XCTAssertFalse(superseded.isUseControlEligible)
+    XCTAssertFalse(inactive.isUseControlEligible)
+  }
+
   func testExplicitArchiveFilterOnlyAllowsArchive() {
     XCTAssertEqual(MemoryLayerFilter.archive.allowedLayers, [.archive])
   }
@@ -300,14 +336,27 @@ final class MemoryLayerFilterTests: XCTestCase {
     let source = try memoriesPageSource()
 
     // omi-test-quality: source-inspection -- use feedback is beta-gated both at the UI surface and mutation boundary, including stale closures
-    XCTAssertTrue(source.contains("showUseControls: viewModel.beliefCapabilityEnabled == true"))
+    XCTAssertTrue(
+      source.contains("showUseControls: viewModel.beliefCapabilityEnabled == true && memory.isUseControlEligible"))
     XCTAssertTrue(source.contains("if showUseControls {"))
-    XCTAssertTrue(source.contains("guard beliefCapabilityEnabled == true else { return }"))
+    XCTAssertTrue(source.contains("guard beliefCapabilityEnabled == true, memory.isUseControlEligible else { return }"))
+    XCTAssertTrue(source.contains("memory.isUseControlEligible"))
     XCTAssertTrue(source.contains("await waitForMemoryLoadLifecycleToSettle()"))
     XCTAssertTrue(source.contains("let projectionBeforeRefresh = authoritativeProjectionGeneration"))
     XCTAssertTrue(source.contains("authoritativeProjectionGeneration > projectionBeforeRefresh"))
     XCTAssertTrue(source.contains("if confirmed {"))
     XCTAssertTrue(source.contains("pendingMemoryUseFeedbackIDs.removeAll()"))
+  }
+
+  func testInitialMemoryHandshakeRestartsExplicitTemporalViewBeforeRetainingCursor() throws {
+    let source = try memoriesPageSource()
+
+    // omi-test-quality: source-inspection -- a capability-discovering first page cannot donate its released-view cursor to temporal pagination
+    XCTAssertTrue(source.contains("let initialRequestedView: APIClient.MemoryTemporalView?"))
+    XCTAssertTrue(source.contains("if page.beliefEnabled == true && initialRequestedView == nil"))
+    XCTAssertTrue(source.contains("offset: 0"))
+    XCTAssertTrue(source.contains("viewOverride: selectedMemoryTemporalView"))
+    XCTAssertTrue(source.contains("before retaining its cursor"))
   }
 
   func testEmptyAuthoritativeServerPageDoesNotDisplayNewerCachedMemory() {
