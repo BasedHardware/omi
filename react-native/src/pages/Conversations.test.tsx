@@ -198,6 +198,81 @@ test('starred filter names Flutter noStarredConversations instead of generic mat
   );
 });
 
+test('folder filter names Flutter EmptyConversationsWidget instead of generic match copy', async () => {
+  const request = jest.fn(async request => {
+    if (request.path === '/v1/folders') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([{id: 'folder-work', name: 'Work'}]),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'chat:inbox',
+    title: 'Inbox chat',
+    summary: 'Notes',
+    searchableText: 'Inbox chat\nNotes',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:01:00.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: 'completed',
+    source: 'chat',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        backend={{request} as never}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(textOf(renderer)).toContain('Inbox chat');
+  await act(async () => {
+    renderer.root
+      .find(
+        node => node.props.accessibilityLabel === 'Show Work conversations',
+      )
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('No conversations yet');
+  expect(tree).not.toContain('Inbox chat');
+  expect(tree).not.toContain('No loaded conversations match.');
+  expect(tree).not.toContain(conversationsEmptyCopy());
+  expect(tree).not.toContain(
+    'Conversations you record show up here. Tap a tile on the home tab to start your first one.',
+  );
+  expect(tree).not.toContain(conversationsStarredEmptyCopy());
+  expect(tree).not.toContain(
+    'Search and filters cover conversations already loaded on this device.',
+  );
+});
+
 test('untitled processing conversations stay visible instead of a blank row', () => {
   const item: ConversationProjection = {
     kind: 'conversation',

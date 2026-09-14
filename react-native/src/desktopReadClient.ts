@@ -569,6 +569,10 @@ export function conversationsStarredEmptyCopy(): string {
   return 'No starred conversations\nTo star a conversation, open it and tap the star icon in the header.';
 }
 
+export function conversationsEmptyHeadingCopy(): string {
+  return 'No conversations yet';
+}
+
 export function conversationsEmptyCopy(): string {
   return 'No conversations yet\nConversations you record show up here. Tap a tile on the home tab to start your first one.';
 }

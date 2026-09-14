@@ -25,6 +25,7 @@ import {
   conversationListGroupCopy,
   conversationListTimeCopy,
   conversationsEmptyCopy,
+  conversationsEmptyHeadingCopy,
   conversationsStarredEmptyCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
@@ -572,12 +573,14 @@ export function ConversationsPage({
                     filtering,
                     starredOnly
                       ? conversationsStarredEmptyCopy()
-                      : 'No loaded conversations match.',
+                      : searching
+                        ? 'No loaded conversations match.'
+                        : conversationsEmptyHeadingCopy(),
                     conversationsEmptyCopy(),
                     notice === desktopBackendUnavailableCopy,
                   )}
                 </Text>
-                {filtering && !starredOnly && (
+                {searching && (
                   <Text style={styles.projectionEmptyCopy}>
                     Search and filters cover conversations already loaded on
                     this device.
