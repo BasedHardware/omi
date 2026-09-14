@@ -36,6 +36,22 @@ class ChatToolResponse(BaseModel):
     error: Optional[str] = None
 
 
+def _safe_get(data, *keys, default=None):
+    """Safely traverse nested dict keys.
+
+    Returns ``default`` if any intermediate value is not a dict or if any key
+    is missing. Handles ``None`` values at any level.
+    """
+    for key in keys:
+        if not isinstance(data, dict):
+            return default
+        if key not in data:
+            return default
+        data = data.get(key)
+        if data is None:
+            return default
+    return data if data is not None else default
+
 def _safe_limit(limit: Any) -> int:
     if limit is None or limit == "":
         return 5
@@ -58,7 +74,10 @@ async def _request_json(url: str, params: Optional[dict[str, Any]] = None) -> di
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as client:
         response = await client.get(url, params=params)
     response.raise_for_status()
-    return response.json()
+    data = response.json()
+    if not isinstance(data, dict):
+        raise ValueError(f"Wikipedia returned non-dict JSON payload of type {type(data).__name__}")
+    return data
 
 
 def _article_url(language: str, title: str) -> str:
@@ -76,10 +95,10 @@ def _clean_snippet(value: Optional[str]) -> str:
 
 
 def _format_summary(data: dict[str, Any], language: str) -> str:
-    title = data.get("title") or "Untitled"
-    extract = data.get("extract") or "No summary was returned for this article."
-    description = data.get("description")
-    page_url = data.get("content_urls", {}).get("desktop", {}).get("page") or _article_url(language, title)
+    title = _safe_get(data, "title", default="Untitled")
+    extract = _safe_get(data, "extract", default="No summary was returned for this article.")
+    description = _safe_get(data, "description")
+    page_url = _safe_get(data, "content_urls", "desktop", "page") or _article_url(language, title)
 
     lines = [title]
     if description:
@@ -205,12 +224,14 @@ async def search_articles(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        results = data.get("query", {}).get("search", [])[:limit]
+        results = _safe_get(data, "query", "search", default=[])[:limit]
         if not results:
             return ChatToolResponse(result=f"No Wikipedia articles found for '{query}'.")
 
         lines = [f"Wikipedia search results for '{query}':"]
         for index, item in enumerate(results, start=1):
+            if not isinstance(item, dict):
+                continue
             title = item.get("title") or "Untitled"
             snippet = _clean_snippet(item.get("snippet"))
             lines.append(f"\n{index}. {title}")
@@ -236,7 +257,7 @@ async def get_article_summary(payload: dict[str, Any]):
 
     try:
         data = await _request_json(url)
-        if data.get("type") == "disambiguation":
+        if _safe_get(data, "type") == "disambiguation":
             return ChatToolResponse(
                 result=_format_summary(data, language)
                 + "\n\nThis is a disambiguation page. Use search_articles for more specific matches."
@@ -267,11 +288,11 @@ async def get_random_article(payload: dict[str, Any]):
                 "utf8": "1",
             },
         )
-        random_items = data.get("query", {}).get("random", [])
+        random_items = _safe_get(data, "query", "random", default=[])
         if not random_items:
             return ChatToolResponse(result="No random Wikipedia article was returned.")
 
-        title = random_items[0].get("title")
+        title = _safe_get(random_items[0], "title")
         if not title:
             return ChatToolResponse(result="Wikipedia returned a random article without a title.")
 
