@@ -88,9 +88,8 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(signOutSnippet.contains("OnboardingFlow.clearPersistedState()"))
     XCTAssertTrue(signOutSnippet.contains("userDidSignOut"))
 
-    let invalidateRange = authSource.range(of: "func performLightSessionInvalidation()")
-    XCTAssertNotNil(invalidateRange)
-    let invalidateSnippet = String(authSource[invalidateRange!.lowerBound...]).prefix(900)
+    let invalidateRange = try XCTUnwrap(authSource.range(of: "func performLightSessionInvalidation()"))
+    let invalidateSnippet = String(authSource[invalidateRange.lowerBound...]).prefix(900)
     XCTAssertFalse(invalidateSnippet.contains("clearPersistedState"))
     XCTAssertFalse(invalidateSnippet.contains("onboardingStep"))
     XCTAssertFalse(invalidateSnippet.contains("userDidSignOut"))
