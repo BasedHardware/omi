@@ -2212,6 +2212,20 @@ export function deviceFoundNameCopy(
     : display;
 }
 
+export function deviceFoundSavedCopy(): string {
+  return 'Saved';
+}
+
+export function deviceFoundSavedChipCopy(
+  deviceId: string,
+  rememberedId: string | null | undefined,
+): string | null {
+  const remembered = visibleDisplayText(rememberedId ?? '');
+  return remembered !== '' && remembered === deviceId
+    ? deviceFoundSavedCopy()
+    : null;
+}
+
 export function appDisplaySource(app: {
   author: string;
   category: string;

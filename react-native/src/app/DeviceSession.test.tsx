@@ -189,6 +189,120 @@ test.each(['compact', 'overview'] as const)(
   },
 );
 
+test.each(['compact', 'overview'] as const)(
+  '%s names Flutter FoundDevices saved chip on remembered scan rows',
+  async variant => {
+    const snapshot = {
+      bluetooth: 'poweredOn',
+      devices: [
+        {id: 'saved-id', name: 'My Omi', connected: false, rssi: -40},
+        {id: 'other-id', name: 'Other', connected: false, rssi: -50},
+      ],
+      connectedDeviceId: null,
+      capture: 'idle',
+    } as PlatformNativeSnapshot;
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = ReactTestRenderer.create(
+        <DeviceSession
+          nativeSnapshot={snapshot}
+          deviceBusy={false}
+          deviceScanMessage={null}
+          rememberedDevice={{id: 'saved-id', name: 'My Omi'}}
+          variant={variant}
+          onScan={() => {}}
+          onToggle={() => {}}
+        />,
+      );
+    });
+    const tree = JSON.stringify(renderer.toJSON());
+    expect(tree).toContain('Saved');
+    expect(tree).not.toContain('Offline');
+    await act(async () => renderer.unmount());
+  },
+);
+
+test('affordance scan chips omit Flutter FoundDevices saved chip', async () => {
+  const snapshot = {
+    bluetooth: 'poweredOn',
+    devices: [{id: 'saved-id', name: 'My Omi', connected: false, rssi: -40}],
+    connectedDeviceId: null,
+    capture: 'idle',
+  } as PlatformNativeSnapshot;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        rememberedDevice={{id: 'saved-id', name: 'My Omi'}}
+        variant="affordance"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('Saved');
+  await act(async () => renderer.unmount());
+});
+
+test.each(['compact', 'overview'] as const)(
+  '%s omits Flutter FoundDevices saved chip on unmatched scan rows',
+  async variant => {
+    const snapshot = {
+      bluetooth: 'poweredOn',
+      devices: [{id: 'other-id', name: 'Other', connected: false, rssi: -50}],
+      connectedDeviceId: null,
+      capture: 'idle',
+    } as PlatformNativeSnapshot;
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = ReactTestRenderer.create(
+        <DeviceSession
+          nativeSnapshot={snapshot}
+          deviceBusy={false}
+          deviceScanMessage={null}
+          rememberedDevice={{id: 'saved-id', name: 'My Omi'}}
+          variant={variant}
+          onScan={() => {}}
+          onToggle={() => {}}
+        />,
+      );
+    });
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('Saved');
+    await act(async () => renderer.unmount());
+  },
+);
+
+test.each(['compact', 'overview'] as const)(
+  '%s omits Flutter FoundDevices saved chip on connected remembered scan rows',
+  async variant => {
+    const snapshot = {
+      bluetooth: 'poweredOn',
+      devices: [{id: 'saved-id', name: 'My Omi', connected: true, rssi: -40}],
+      connectedDeviceId: 'saved-id',
+      capture: 'idle',
+    } as PlatformNativeSnapshot;
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = ReactTestRenderer.create(
+        <DeviceSession
+          nativeSnapshot={snapshot}
+          deviceBusy={false}
+          deviceScanMessage={null}
+          rememberedDevice={{id: 'saved-id', name: 'My Omi'}}
+          variant={variant}
+          onScan={() => {}}
+          onToggle={() => {}}
+        />,
+      );
+    });
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('Saved');
+    await act(async () => renderer.unmount());
+  },
+);
+
 test('affordance scan chips omit Flutter FoundDevices same-name getShortId', async () => {
   const snapshot = {
     bluetooth: 'poweredOn',

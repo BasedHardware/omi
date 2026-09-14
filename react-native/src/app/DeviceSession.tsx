@@ -14,6 +14,7 @@ import {
   accountFieldCopy,
   deviceDisplayName,
   deviceFoundNameCopy,
+  deviceFoundSavedChipCopy,
   deviceModelNumberCopy,
   deviceProductNameCopy,
   deviceSerialNumberCopy,
@@ -357,6 +358,10 @@ export function DeviceSession({
 
   const rows = devices.map(device => {
     const foundName = deviceFoundNameCopy(device.name, device.id, devices);
+    const savedChip =
+      device.connected
+        ? null
+        : deviceFoundSavedChipCopy(device.id, rememberedDevice?.id);
     const rowStatus = device.connecting
       ? 'Connecting…'
       : device.connected
@@ -397,6 +402,9 @@ export function DeviceSession({
             <Text style={styles.deviceName}>
               {foundName}
             </Text>
+            {savedChip !== null ? (
+              <Text style={styles.deviceMeta}>{savedChip}</Text>
+            ) : null}
             {rowStatus !== null ? (
               <Text style={styles.deviceMeta}>{rowStatus}</Text>
             ) : null}
@@ -407,6 +415,9 @@ export function DeviceSession({
           <Text style={styles.deviceName}>
             {foundName}
           </Text>
+          {savedChip !== null ? (
+            <Text style={styles.deviceMeta}>{savedChip}</Text>
+          ) : null}
           {rowStatus !== null ? (
             <Text style={styles.deviceMeta}>{rowStatus}</Text>
           ) : null}
