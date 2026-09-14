@@ -991,6 +991,11 @@ checks:
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13545: repository labels silently truncated at 100 because fetchers never followed next links; the suite asserts pagination and fail-closed item handling and must run in CI to catch a regression"
+  - id: dropbox-app-client-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_dropbox_client.py"]
+    triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Dropbox folder listing truncated at page 1 without following cursor; suite asserts pagination continuation and limit enforcement"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
