@@ -221,6 +221,15 @@ def load(path: Optional[Path] = None) -> Config:
 
     # Validate each profile value is a table before constructing Profile objects.
     profiles = {}
+    string_fields = (
+        "auth_method",
+        "api_key",
+        "id_token",
+        "refresh_token",
+        "api_base",
+        "local_api_url",
+        "local_token",
+    )
     for name, raw in profiles_data.items():
         if not isinstance(raw, dict):
             return Config(
@@ -229,6 +238,23 @@ def load(path: Optional[Path] = None) -> Config:
                 profiles={},
                 load_error=f"profile '{name}' must be a table, got {type(raw).__name__}",
             )
+        for key in string_fields:
+            if key in raw and raw[key] is not None and not isinstance(raw[key], str):
+                return Config(
+                    path=p,
+                    active_profile=DEFAULT_PROFILE_NAME,
+                    profiles={},
+                    load_error=f"profile '{name}' field '{key}' must be a string, got {type(raw[key]).__name__}",
+                )
+        if "id_token_expires_at" in raw and raw["id_token_expires_at"] is not None:
+            expires_at = raw["id_token_expires_at"]
+            if isinstance(expires_at, bool) or not isinstance(expires_at, (int, float)):
+                return Config(
+                    path=p,
+                    active_profile=DEFAULT_PROFILE_NAME,
+                    profiles={},
+                    load_error=f"profile '{name}' field 'id_token_expires_at' must be a number, got {type(expires_at).__name__}",
+                )
         profiles[name] = Profile.from_toml_dict(name, raw)
 
     extra = {key: value for key, value in data.items() if key not in {"active_profile", "profiles"}}
@@ -318,6 +344,8 @@ def _mask_token(token: str) -> str:
     """Render a token as ``prefix…suffix`` (4+4 chars) for safe display."""
     if not token:
         return ""
+    if not isinstance(token, str):
+        token = str(token)
     if len(token) <= 12:
         # Short token — show only the first 2 and last 2 chars.
         return f"{token[:2]}…{token[-2:]}"
