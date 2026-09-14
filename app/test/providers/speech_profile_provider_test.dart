@@ -18,6 +18,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/constants.dart';
+import 'package:omi/utils/audio/wav_bytes.dart';
 
 /// Minimal EnvFields stub so Env-backed code paths don't hit a
 /// LateInitializationError (mirrors capture_provider_test.dart's fixture).
@@ -124,6 +125,12 @@ class _FinalizeCountingProvider extends SpeechProfileProvider {
   Future finalize() async {
     finalizeCalls++;
   }
+}
+
+class _BrokenWavStorage extends Fake implements WavBytesUtil {
+  @override
+  Future<Never> createWavFile({String? filename, int removeLastNSeconds = 0}) async =>
+      throw const FileSystemException('disk full');
 }
 
 /// Fails [failTimes] upload attempts, then succeeds. [tooShort] throws the
@@ -558,6 +565,16 @@ void main() {
 
       provider.dispose();
     });
+  });
+
+  test('WAV creation failure restores the escape path instead of leaving uploading stuck', () async {
+    final provider = SpeechProfileProvider()..audioStorage = _BrokenWavStorage();
+    provider.updateStartedRecording(true);
+    await provider.finalize();
+    expect(provider.uploadingProfile, isFalse);
+    expect(provider.profileCompleted, isFalse);
+    expect(provider.error, 'UPLOAD_FAILED');
+    provider.dispose();
   });
 
   group('speech-profile upload retries transient failures', () {

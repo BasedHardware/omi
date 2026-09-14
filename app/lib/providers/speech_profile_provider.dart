@@ -530,10 +530,17 @@ class SpeechProfileProvider extends ChangeNotifier
 
       updateLoadingState(SpeechProfileLoadingState.memorizing);
       Logger.debug('Creating WAV file...');
-      var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
+      File file;
+      try {
+        file = (await audioStorage.createWavFile(filename: 'speaker_profile.wav')).item1;
+      } catch (_) {
+        Logger.debug('Speech profile WAV creation failed');
+        completeAfterUploadFailure(tooShort: false);
+        return;
+      }
       Logger.debug('WAV file created, uploading profile...');
 
-      final upload = await uploadProfileWithRetry(data.item1);
+      final upload = await uploadProfileWithRetry(file);
       Logger.debug('Profile upload completed: success=${upload.success} tooShort=${upload.tooShort}');
 
       if (!upload.success) {
