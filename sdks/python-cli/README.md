@@ -1,5 +1,7 @@
 # omi-cli
 
+[Русский: быстрый старт](README.ru.md)
+
 > Talk to Omi from your terminal. Designed for humans **and** agents.
 
 `omi-cli` is the command-line interface to the [Omi](https://omi.me) developer
