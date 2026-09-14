@@ -3209,7 +3209,9 @@ test('memory load error copy names Flutter couldNotLoadMemories', () => {
 });
 
 test('task empty copy names Flutter noTasksYet', () => {
-  expect(tasksEmptyCopy()).toBe('No Tasks Yet');
+  expect(tasksEmptyCopy()).toBe(
+    'No Tasks Yet\nTasks from your conversations will appear here.\nTap + to create one manually.',
+  );
 });
 
 test('task search empty copy names Flutter noResultsFound', () => {

@@ -542,6 +542,10 @@ test('complete empty tasks names Flutter noTasksYet', () => {
   expect(copy).toContain(tasksEmptyCopy());
   expect(copy).not.toContain('No tasks yet.');
   expect(copy).not.toContain('Tasks are incomplete.');
+  expect(copy).toContain(
+    'Tasks from your conversations will appear here.',
+  );
+  expect(copy).toContain('Tap + to create one manually.');
   expect(copy).not.toContain('Create Action Item');
   expect(copy).not.toContain('Ask Omi for more tasks');
   act(() => renderer.unmount());

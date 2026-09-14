@@ -586,7 +586,7 @@ export function memoriesLoadErrorCopy(): string {
 }
 
 export function tasksEmptyCopy(): string {
-  return 'No Tasks Yet';
+  return 'No Tasks Yet\nTasks from your conversations will appear here.\nTap + to create one manually.';
 }
 
 export function tasksSearchEmptyCopy(): string {
