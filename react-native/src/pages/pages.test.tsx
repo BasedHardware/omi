@@ -1174,6 +1174,10 @@ test('Settings developer webhook titles are not raw API keys', async () => {
   expect(tree).toContain('Real-time Transcript');
   expect(tree).toContain('Audio Bytes');
   expect(tree).toContain('Day Summary');
+  expect(tree).toContain('New conversation created');
+  expect(tree).toContain('Transcript received');
+  expect(tree).toContain('Audio data received');
+  expect(tree).toContain('Summary generated');
   expect(tree).not.toContain('memory_created');
   expect(tree).not.toContain('realtime_transcript');
   expect(tree).not.toContain('audio_bytes');
@@ -2009,6 +2013,10 @@ test('Settings names GET developer webhook URLs without enable writes', async ()
   expect(tree).toContain('https://example.test/transcript');
   expect(tree).toContain('https://example.test/audio');
   expect(tree).toContain('5s');
+  expect(tree).toContain('New conversation created');
+  expect(tree).toContain('Transcript received');
+  expect(tree).toContain('Audio data received');
+  expect(tree).toContain('Summary generated');
   expect(tree).not.toContain('https://example.test/audio,5');
   expect(mockBackend.request.mock.calls.some(call => call[0].method === 'POST')).toBe(
     false,

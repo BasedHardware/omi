@@ -5954,6 +5954,8 @@ test('Settings keeps an honest empty developer webhook catalogue', async () => {
   expect(renderedText(renderer)).toContain(
     'No developer webhooks were returned.',
   );
+  expect(renderedText(renderer)).not.toContain('New conversation created');
+  expect(renderedText(renderer)).not.toContain('Transcript received');
   expect(renderedText(renderer)).not.toContain(
     'Developer webhook status is unavailable.',
   );
@@ -6019,6 +6021,8 @@ test('Settings developer webhook titles are not raw API keys', async () => {
   expect(tree).toContain('Disabled');
   expect(tree).toContain('Status unavailable');
   expect(tree).not.toContain('Status unknown');
+  expect(tree).toContain('New conversation created');
+  expect(tree).toContain('Transcript received');
   expect(tree).not.toContain('memory_created');
   expect(tree).not.toContain('realtime_transcript');
 });
@@ -6150,6 +6154,10 @@ test('Settings names GET developer webhook URLs without enable writes', async ()
   expect(tree).toContain('https://example.test/transcript');
   expect(tree).toContain('https://example.test/audio');
   expect(tree).toContain('5s');
+  expect(tree).toContain('New conversation created');
+  expect(tree).toContain('Transcript received');
+  expect(tree).toContain('Audio data received');
+  expect(tree).toContain('Summary generated');
   expect(tree).not.toContain('https://example.test/audio,5');
   expect(
     omiBackend.request.mock.calls.some(call => call[0].method === 'POST'),

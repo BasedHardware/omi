@@ -34,6 +34,7 @@ import {
   conversationStatusCopy,
   conversationListStatusCopy,
   dataProtectionCopy,
+  developerWebhookDescriptionCopy,
   developerWebhookRowCopy,
   developerWebhookStatusCopy,
   developerWebhookTypeCopy,
@@ -1895,6 +1896,61 @@ test('developer webhook status copy does not say unknown for a missing enablemen
   expect(developerWebhookStatusCopy(true)).toBe('Enabled');
   expect(developerWebhookStatusCopy(false)).toBe('Disabled');
   expect(developerWebhookStatusCopy(null)).toBe('Status unavailable');
+});
+
+test('developer webhook rows name Flutter webhook descriptions', () => {
+  expect(developerWebhookDescriptionCopy('memory_created')).toBe(
+    'New conversation created',
+  );
+  expect(developerWebhookDescriptionCopy('realtime_transcript')).toBe(
+    'Transcript received',
+  );
+  expect(developerWebhookDescriptionCopy('audio_bytes')).toBe(
+    'Audio data received',
+  );
+  expect(developerWebhookDescriptionCopy('day_summary')).toBe(
+    'Summary generated',
+  );
+  expect(developerWebhookDescriptionCopy('button_event')).toBe(null);
+  expect(developerWebhookDescriptionCopy('')).toBe(null);
+  expect(
+    developerWebhookRowCopy({
+      type: 'memory_created',
+      enabled: true,
+      url: 'https://example.test/conversation',
+    }),
+  ).toBe(
+    'Enabled · https://example.test/conversation\nNew conversation created',
+  );
+  expect(
+    developerWebhookRowCopy({
+      type: 'realtime_transcript',
+      enabled: false,
+      url: null,
+    }),
+  ).toBe('Disabled\nTranscript received');
+  expect(
+    developerWebhookRowCopy({
+      type: 'audio_bytes',
+      enabled: true,
+      url: 'https://example.test/audio',
+      intervalSeconds: '5',
+    }),
+  ).toBe('Enabled · https://example.test/audio · 5s\nAudio data received');
+  expect(
+    developerWebhookRowCopy({
+      type: 'day_summary',
+      enabled: true,
+      url: null,
+    }),
+  ).toBe('Enabled\nSummary generated');
+  expect(
+    developerWebhookRowCopy({
+      type: 'button_event',
+      enabled: null,
+      url: 'https://example.test/button',
+    }),
+  ).toBe('Status unavailable · https://example.test/button');
 });
 
 test('developer webhook rows omit empty or whitespace URLs', () => {

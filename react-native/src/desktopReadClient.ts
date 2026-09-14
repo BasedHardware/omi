@@ -1791,6 +1791,22 @@ export function developerWebhookTypeCopy(type: string): string {
   return accountWireCopy(type, 'Webhook unavailable');
 }
 
+export function developerWebhookDescriptionCopy(type: string): string | null {
+  if (type === 'memory_created') {
+    return 'New conversation created';
+  }
+  if (type === 'realtime_transcript') {
+    return 'Transcript received';
+  }
+  if (type === 'audio_bytes') {
+    return 'Audio data received';
+  }
+  if (type === 'day_summary') {
+    return 'Summary generated';
+  }
+  return null;
+}
+
 export function developerWebhookStatusCopy(enabled: boolean | null): string {
   if (enabled === null) {
     return 'Status unavailable';
@@ -1799,19 +1815,22 @@ export function developerWebhookStatusCopy(enabled: boolean | null): string {
 }
 
 export function developerWebhookRowCopy(webhook: {
+  type?: string;
   enabled: boolean | null;
   url: string | null;
   intervalSeconds?: string | null;
 }): string {
   const url = visibleDisplayText(webhook.url ?? '');
   const interval = visibleDisplayText(webhook.intervalSeconds ?? '');
-  return [
+  const status = [
     developerWebhookStatusCopy(webhook.enabled),
     url !== '' ? url : null,
     interval !== '' ? `${interval}s` : null,
   ]
     .filter(item => item !== null)
     .join(' · ');
+  const description = developerWebhookDescriptionCopy(webhook.type ?? '');
+  return description === null ? status : `${status}\n${description}`;
 }
 
 export function developerKeyCreatedCopy(createdAtMs: number): string {

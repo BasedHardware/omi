@@ -1182,9 +1182,10 @@ export function SettingsPage({
         ) : (
           snapshot.webhooks.map(webhook => (
             <SettingRow
-              copy={developerWebhookRowCopy(
-                mergeWebhookUrl(webhook, webhookUrls),
-              )}
+              copy={developerWebhookRowCopy({
+                type: webhook.type,
+                ...mergeWebhookUrl(webhook, webhookUrls),
+              })}
               key={webhook.type}
               title={developerWebhookTypeCopy(webhook.type)}
             />
