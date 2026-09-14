@@ -3,6 +3,8 @@ import {
   parseStoredTranscriptSegments,
   projectDeviceTranscription,
   recordingListSpeech,
+  recordingListTranscriptProjection,
+  type RecordingListTranscriptSegment,
 } from "./device-transcriptions";
 import {
   recoveredPayloadTextKeySql,
@@ -47,6 +49,8 @@ export type ConversationProjection = {
   isLocked: boolean;
   folderId: string | null;
   revision: string | null;
+  transcriptEndSeconds?: number;
+  transcriptSegments?: RecordingListTranscriptSegment[];
 };
 
 /** Legacy list record the desktop client already parses. */
@@ -65,6 +69,7 @@ export type LegacyConversationRecord = {
   visibility: "public" | "private" | "shared";
   is_locked: boolean;
   folder_id: string | null;
+  transcript_segments?: RecordingListTranscriptSegment[];
 };
 
 export type ConversationPage = {
@@ -227,6 +232,7 @@ export async function readConversations(
       isLocked: false,
       folderId: null,
       revision: null,
+      ...recordingListTranscriptProjection(parsed),
     });
   }
   conversations.sort((left, right) => {
@@ -306,6 +312,9 @@ export function toLegacyConversation(
     visibility: item.visibility,
     is_locked: item.isLocked,
     folder_id: item.folderId,
+    ...(item.transcriptSegments === undefined
+      ? {}
+      : { transcript_segments: item.transcriptSegments }),
   };
 }
 

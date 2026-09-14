@@ -323,6 +323,52 @@ export function recordingListSpeech(
   return visibleTranscriptText(joined) !== "" ? joined : "";
 }
 
+export type RecordingListTranscriptSegment = {
+  start: number;
+  end: number;
+  text: string;
+};
+
+export function recordingListTranscriptProjection(
+  segments: unknown[] | null
+): {
+  transcriptEndSeconds?: number;
+  transcriptSegments?: RecordingListTranscriptSegment[];
+} {
+  if (segments === null) return {};
+  const transcriptSegments: RecordingListTranscriptSegment[] = [];
+  let lastEnd = 0;
+  for (const segment of segments) {
+    if (
+      segment === null ||
+      typeof segment !== "object" ||
+      Array.isArray(segment)
+    ) {
+      continue;
+    }
+    const start = (segment as { start?: unknown }).start;
+    const end = (segment as { end?: unknown }).end;
+    const text = (segment as { text?: unknown }).text;
+    if (
+      typeof start !== "number" ||
+      !Number.isFinite(start) ||
+      typeof end !== "number" ||
+      !Number.isFinite(end) ||
+      typeof text !== "string"
+    ) {
+      continue;
+    }
+    transcriptSegments.push({ start, end, text });
+    if (end > lastEnd) lastEnd = end;
+  }
+  if (transcriptSegments.length === 0) return {};
+  const seconds = Math.trunc(lastEnd);
+  return {
+    transcriptSegments,
+    ...(seconds > 0 ? { transcriptEndSeconds: seconds } : {}),
+  };
+}
+
 export function parseStoredTranscriptSegments(
   value: string | null
 ): unknown[] | null {

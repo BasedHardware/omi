@@ -115,6 +115,10 @@ test("queued recordings stay visible without inventing a Recording title", async
     source: "omi",
     status: "processing",
   });
+  expect(rows[0]).not.toHaveProperty("transcriptEndSeconds");
+  expect(toLegacyConversation(rows[0]!)).not.toHaveProperty(
+    "transcript_segments"
+  );
 });
 
 test("NEXT LINE-only recording text stays visible without inventing a Recording title", async () => {
@@ -251,6 +255,16 @@ test("recording titles skip empty-after-trim segment windows that would hide lat
     overview: "First words Later speech",
     source: "omi",
     status: "completed",
+    transcriptEndSeconds: 201,
+  });
+  expect(toLegacyConversation(rows[0]!)).toMatchObject({
+    transcript_segments: expect.arrayContaining([
+      expect.objectContaining({
+        start: 200,
+        end: 201,
+        text: "Later speech",
+      }),
+    ]),
   });
 });
 

@@ -3016,6 +3016,19 @@ function finite(value: unknown, label: string): number {
   return value;
 }
 
+function optionalPositiveInteger(
+  value: unknown,
+  label: string,
+): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${label} is malformed`);
+  }
+  return value;
+}
+
 function integer(value: unknown, label: string): number {
   const result = finite(value, label);
   if (!Number.isSafeInteger(result)) {
@@ -3299,11 +3312,16 @@ export async function loadConversations(
     if (record.folderId !== null && typeof record.folderId !== 'string') {
       throw new Error(`Conversation ${index} folderId is malformed`);
     }
+    const transcriptEndSeconds = optionalPositiveInteger(
+      record.transcriptEndSeconds,
+      `Conversation ${index} transcriptEndSeconds`,
+    );
     return {
       kind: 'conversation' as const,
       ...(record.capturedAtMs === undefined
         ? {}
         : {capturedAtMs: record.capturedAtMs}),
+      ...(transcriptEndSeconds === undefined ? {} : {transcriptEndSeconds}),
       id,
       title,
       summary,

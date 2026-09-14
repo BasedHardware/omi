@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   projectDeviceTranscription,
   recordingListSpeech,
+  recordingListTranscriptProjection,
   recordingTranscriptSpeech,
 } from "../src/device-transcriptions";
 
@@ -246,6 +247,10 @@ describe("device transcription client projection", () => {
     expect(recordingListSpeech("Stored speech", segments)).not.toBe(
       "Stored speech"
     );
+    expect(recordingListTranscriptProjection(segments)).toEqual({
+      transcriptEndSeconds: 201,
+      transcriptSegments: segments,
+    });
     expect(recordingTranscriptSpeech("Stored speech", segments)).not.toBe(
       "Stored speech"
     );
@@ -259,6 +264,15 @@ describe("device transcription client projection", () => {
       ])
     ).toBe("");
     expect(recordingListSpeech("Stored speech", null)).toBe("Stored speech");
+    expect(recordingListTranscriptProjection(null)).toEqual({});
+    expect(recordingListTranscriptProjection([])).toEqual({});
+    expect(
+      recordingListTranscriptProjection([
+        { start: 0, end: 0.1, text: "\u0085" },
+      ])
+    ).toEqual({
+      transcriptSegments: [{ start: 0, end: 0.1, text: "\u0085" }],
+    });
   });
 
   test("list titles skip malformed segment windows like production Listen 0065", () => {
@@ -274,6 +288,11 @@ describe("device transcription client projection", () => {
       "Stored speech"
     );
     expect(recordingTranscriptSpeech("", segments)).toBe("");
+    expect(recordingListTranscriptProjection(segments)).toEqual({
+      transcriptSegments: [
+        { start: 0.2, end: 0.4, text: "Recorded speech" },
+      ],
+    });
   });
 
   test("list titles visible-trim kept Whisper segments before join", () => {

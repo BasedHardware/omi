@@ -4096,6 +4096,36 @@ test('canonical conversations omit Omi category chrome even when extra keys are 
   expect(result.items[0]).not.toHaveProperty('category');
 });
 
+test('canonical conversations name GET transcriptEndSeconds as list duration span', async () => {
+  const result = await loadConversations(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify(
+        conversationPage([{...conversation, transcriptEndSeconds: 201}]),
+      ),
+    })),
+  );
+  expect(result.items[0]).toMatchObject({transcriptEndSeconds: 201});
+  expect(result.items[0]).not.toHaveProperty('transcriptSegments');
+  const omitted = await loadConversations(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify(conversationPage([conversation])),
+    })),
+  );
+  expect(omitted.items[0]).not.toHaveProperty('transcriptEndSeconds');
+  await expect(
+    loadConversations(
+      backendFor(() => ({
+        status: 200,
+        body: JSON.stringify(
+          conversationPage([{...conversation, transcriptEndSeconds: 0}]),
+        ),
+      })),
+    ),
+  ).rejects.toThrow('transcriptEndSeconds');
+});
+
 test('still fails closed for empty memory text', async () => {
   await expect(
     loadMemories(
