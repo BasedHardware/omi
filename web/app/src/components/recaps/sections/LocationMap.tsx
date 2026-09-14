@@ -275,6 +275,13 @@ export default function LocationMap({
   // Show controls when hovering, playing, or in playback mode
   const showControls = isHovering || isPlaying || currentIndex >= 0;
 
+  // A single stop has no playback or title card, so the map itself opens its conversation.
+  const singleStopConversationId =
+    sortedLocations.length === 1 ? sortedLocations[0]?.conversation_id : undefined;
+  const mapAlt = `Map of ${sortedLocations.length} recap ${
+    sortedLocations.length === 1 ? 'location' : 'locations'
+  }`;
+
   return (
     <div
       className="relative"
@@ -282,12 +289,18 @@ export default function LocationMap({
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
-      <StaticMapPreview
-        pins={sortedLocations}
-        alt={`Map of ${sortedLocations.length} recap ${
-          sortedLocations.length === 1 ? 'location' : 'locations'
-        }`}
-      />
+      {singleStopConversationId && onConversationClick ? (
+        <button
+          type="button"
+          onClick={() => onConversationClick(singleStopConversationId)}
+          aria-label="View conversation for this location"
+          className="block h-full w-full"
+        >
+          <StaticMapPreview pins={sortedLocations} alt="" />
+        </button>
+      ) : (
+        <StaticMapPreview pins={sortedLocations} alt={mapAlt} />
+      )}
 
       {/* Title card overlay */}
       <AnimatePresence>
