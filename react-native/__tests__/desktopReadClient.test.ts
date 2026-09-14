@@ -4,6 +4,7 @@ import {
   conversationDisplaySummary,
   conversationDetailSummaryCopy,
   conversationNoSummaryCopy,
+  conversationsStarredEmptyCopy,
   conversationDisplayTitle,
   conversationListUsesListenOverview,
   conversationRecapTitle,
@@ -2597,6 +2598,10 @@ test('conversation detail names Flutter noSummaryForConversation when GET has no
       appSummary: 'App wrote this recap',
     }),
   ).toBeNull();
+});
+
+test('starred conversation filter names Flutter noStarredConversations', () => {
+  expect(conversationsStarredEmptyCopy()).toBe('No starred conversations');
 });
 
 test('groups validated UTC conversation timestamps by local calendar day', () => {

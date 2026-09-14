@@ -494,6 +494,10 @@ export function conversationNoSummaryCopy(): string {
   return 'No summary available\nfor this conversation.';
 }
 
+export function conversationsStarredEmptyCopy(): string {
+  return 'No starred conversations';
+}
+
 export function conversationDetailSummaryCopy(detail: {
   summary: string;
   sections: readonly {heading: string; bodyMarkdown: string}[];

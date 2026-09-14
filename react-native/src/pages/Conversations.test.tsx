@@ -6,6 +6,7 @@ import {
   clockLabel,
   conversationStatusCopy,
   conversationStructuredEmojiDefaultCopy,
+  conversationsStarredEmptyCopy,
   desktopBackendServiceCopy,
   desktopBackendUnavailableCopy,
   type ConversationProjection,
@@ -124,6 +125,65 @@ test('complete empty conversations may claim emptiness', () => {
   });
   expect(textOf(renderer)).toContain('No conversations yet.');
   expect(textOf(renderer)).not.toContain('Conversations are incomplete.');
+});
+
+test('starred filter names Flutter noStarredConversations instead of generic match copy', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'chat:work',
+    title: 'Work chat',
+    summary: 'Notes',
+    searchableText: 'Work chat\nNotes',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:01:00.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: 'completed',
+    source: 'chat',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(textOf(renderer)).toContain('Work chat');
+  expect(textOf(renderer)).not.toContain(conversationsStarredEmptyCopy());
+  act(() => {
+    renderer.root
+      .find(
+        node => node.props.accessibilityLabel === 'Show starred conversations',
+      )
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain(conversationsStarredEmptyCopy());
+  expect(tree).not.toContain('Work chat');
+  expect(tree).not.toContain('No loaded conversations match.');
+  expect(tree).not.toContain('No conversations yet.');
+  expect(tree).not.toContain(
+    'To star a conversation, open it and tap the star icon in the header.',
+  );
 });
 
 test('untitled processing conversations stay visible instead of a blank row', () => {

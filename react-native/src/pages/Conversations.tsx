@@ -25,6 +25,7 @@ import {
   conversationRecapTitle,
   conversationDayLabel,
   conversationGroupLabel,
+  conversationsStarredEmptyCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
   visibleDisplayText,
@@ -578,7 +579,9 @@ export function ConversationsPage({
                     'Conversations',
                     outcome?.status === 'success' ? outcome.value.page : null,
                     filtering,
-                    'No loaded conversations match.',
+                    starredOnly
+                      ? conversationsStarredEmptyCopy()
+                      : 'No loaded conversations match.',
                     'No conversations yet.',
                     notice === desktopBackendUnavailableCopy,
                   )}
