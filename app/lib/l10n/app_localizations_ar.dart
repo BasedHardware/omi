@@ -496,6 +496,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'محفوظ على هذا الهاتف فقط.';
 
   @override
+  String get deviceNameStoredOnDevice => 'محفوظ على جهاز Omi، لذا يظهر على أي هاتف يتصل به.';
+
+  @override
   String get deviceId => 'معرف الجهاز';
 
   @override

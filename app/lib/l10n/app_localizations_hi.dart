@@ -498,6 +498,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'केवल इस फ़ोन पर सहेजा गया।';
 
   @override
+  String get deviceNameStoredOnDevice => 'आपके Omi पर सहेजा गया, इसलिए जुड़ने वाले हर फ़ोन पर यही नाम दिखेगा।';
+
+  @override
   String get deviceId => 'डिवाइस आईडी';
 
   @override

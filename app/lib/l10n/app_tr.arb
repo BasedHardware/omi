@@ -158,6 +158,7 @@
     "noAppsExternalAccess": "Yüklü hiçbir uygulama verilerinize harici erişime sahip değil.",
     "deviceName": "Cihaz Adı",
     "deviceNameStoredOnPhone": "Yalnızca bu telefonda saklanır.",
+    "deviceNameStoredOnDevice": "Omi'nizde saklanır, bu yüzden bağlanan her telefonda bu ad görünür.",
     "deviceId": "Cihaz Kimliği",
     "firmware": "Ürün Yazılımı",
     "sdCardSync": "SD Kart Senkronizasyonu",

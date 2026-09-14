@@ -491,6 +491,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceNameStoredOnPhone => '이 휴대폰에만 저장됩니다.';
 
   @override
+  String get deviceNameStoredOnDevice => 'Omi에 저장되므로 연결하는 모든 휴대폰에 이 이름이 표시됩니다.';
+
+  @override
   String get deviceId => '기기 ID';
 
   @override

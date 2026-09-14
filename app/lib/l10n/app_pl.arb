@@ -158,6 +158,7 @@
     "noAppsExternalAccess": "Żadne zainstalowane aplikacje nie mają zewnętrznego dostępu do Twoich danych.",
     "deviceName": "Nazwa urządzenia",
     "deviceNameStoredOnPhone": "Zapisano tylko na tym telefonie.",
+    "deviceNameStoredOnDevice": "Zapisano w Twoim Omi, więc wyświetla się na każdym połączonym telefonie.",
     "deviceId": "ID urządzenia",
     "firmware": "Oprogramowanie sprzętowe",
     "sdCardSync": "Synchronizacja karty SD",

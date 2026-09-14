@@ -634,6 +634,7 @@
     },
     "deviceName": "ڈیوائس کا نام",
     "deviceNameStoredOnPhone": "صرف اس فون پر محفوظ ہے۔",
+    "deviceNameStoredOnDevice": "آپ کے Omi پر محفوظ ہے، اس لیے جڑنے والے ہر فون پر یہی نام دکھائی دیتا ہے۔",
     "@deviceName": {
         "description": "Device name label"
     },

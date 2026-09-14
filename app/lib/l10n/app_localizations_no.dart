@@ -501,6 +501,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'Lagret bare på denne telefonen.';
 
   @override
+  String get deviceNameStoredOnDevice => 'Lagret på din Omi, så den vises på alle telefoner som kobler til.';
+
+  @override
   String get deviceId => 'Enhets-ID';
 
   @override

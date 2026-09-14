@@ -502,6 +502,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ ಮಾತ್ರ ಉಳಿಸಲಾಗಿದೆ.';
 
   @override
+  String get deviceNameStoredOnDevice =>
+      'ನಿಮ್ಮ Omi ನಲ್ಲಿ ಉಳಿಸಲಾಗಿದೆ, ಆದ್ದರಿಂದ ಸಂಪರ್ಕಿಸುವ ಯಾವುದೇ ಫೋನ್‌ನಲ್ಲಿ ಇದೇ ಹೆಸರು ಕಾಣುತ್ತದೆ.';
+
+  @override
   String get deviceId => 'ಸಾಧನ ID';
 
   @override

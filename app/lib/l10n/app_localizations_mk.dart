@@ -503,6 +503,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'Зачувано само на овој телефон.';
 
   @override
+  String get deviceNameStoredOnDevice => 'Зачувано на вашиот Omi, па се прикажува на секој поврзан телефон.';
+
+  @override
   String get deviceId => 'ID на уред';
 
   @override

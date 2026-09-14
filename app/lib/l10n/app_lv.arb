@@ -158,6 +158,7 @@
     "noAppsExternalAccess": "Nevienai instalētajai lietotnei nav ārējas piekļuves jūsu datiem.",
     "deviceName": "Ierīces nosaukums",
     "deviceNameStoredOnPhone": "Saglabāts tikai šajā tālrunī.",
+    "deviceNameStoredOnDevice": "Saglabāts jūsu Omi, tāpēc tiek rādīts jebkurā savienotajā tālrunī.",
     "deviceId": "Ierīces ID",
     "firmware": "Programmaparatūra",
     "sdCardSync": "SD kartes sinhronizācija",

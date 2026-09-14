@@ -158,6 +158,7 @@
     "noAppsExternalAccess": "Geen geïnstalleerde apps hebben externe toegang tot je gegevens.",
     "deviceName": "Apparaatnaam",
     "deviceNameStoredOnPhone": "Alleen op deze telefoon opgeslagen.",
+    "deviceNameStoredOnDevice": "Opgeslagen op je Omi, dus elke telefoon die verbindt toont deze naam.",
     "deviceId": "Apparaat-ID",
     "firmware": "Firmware",
     "sdCardSync": "SD-kaart synchronisatie",

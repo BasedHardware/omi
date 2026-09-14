@@ -158,6 +158,7 @@
     "noAppsExternalAccess": "ไม่มีแอปที่ติดตั้งซึ่งมีการเข้าถึงข้อมูลของคุณจากภายนอก",
     "deviceName": "ชื่ออุปกรณ์",
     "deviceNameStoredOnPhone": "บันทึกไว้ในโทรศัพท์เครื่องนี้เท่านั้น",
+    "deviceNameStoredOnDevice": "บันทึกไว้ใน Omi ของคุณ จึงแสดงบนโทรศัพท์ทุกเครื่องที่เชื่อมต่อ",
     "deviceId": "ID อุปกรณ์",
     "firmware": "เฟิร์มแวร์",
     "sdCardSync": "ซิงค์การ์ด SD",

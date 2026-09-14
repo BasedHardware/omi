@@ -319,6 +319,11 @@ class SharedPreferencesUtil {
 
   Future<void> clearDeviceCustomName(String deviceId) => setDeviceCustomName(deviceId, '');
 
+  Future<void> adoptStoredDeviceName(String deviceId, String? storedName) async {
+    if (storedName == null) return;
+    await setDeviceCustomName(deviceId, storedName);
+  }
+
   bool get deviceIsV2 => getBool('deviceIsV2');
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);

@@ -634,6 +634,7 @@
     },
     "deviceName": "డివైస్ పేరు",
     "deviceNameStoredOnPhone": "ఈ ఫోన్‌లో మాత్రమే సేవ్ చేయబడింది.",
+    "deviceNameStoredOnDevice": "మీ Omi లో సేవ్ చేయబడింది, కాబట్టి కనెక్ట్ అయ్యే ఏ ఫోన్‌లోనైనా ఈ పేరు కనిపిస్తుంది.",
     "@deviceName": {
         "description": "Device name label"
     },

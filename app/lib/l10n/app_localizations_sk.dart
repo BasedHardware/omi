@@ -502,6 +502,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'Uložené iba v tomto telefóne.';
 
   @override
+  String get deviceNameStoredOnDevice => 'Uložené vo vašom Omi, takže sa zobrazí na každom pripojenom telefóne.';
+
+  @override
   String get deviceId => 'ID zariadenia';
 
   @override

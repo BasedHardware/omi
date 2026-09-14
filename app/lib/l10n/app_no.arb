@@ -158,6 +158,7 @@
     "noAppsExternalAccess": "Ingen installerte apper har ekstern tilgang til dataene dine.",
     "deviceName": "Enhetsnavn",
     "deviceNameStoredOnPhone": "Lagret bare på denne telefonen.",
+    "deviceNameStoredOnDevice": "Lagret på din Omi, så den vises på alle telefoner som kobler til.",
     "deviceId": "Enhets-ID",
     "firmware": "Fastvare",
     "sdCardSync": "SD-kort synkronisering",

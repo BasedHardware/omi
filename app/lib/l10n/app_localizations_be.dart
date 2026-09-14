@@ -500,6 +500,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'Захоўваецца толькі на гэтым тэлефоне.';
 
   @override
+  String get deviceNameStoredOnDevice => 'Захоўваецца на вашым Omi, таму бачны на любым падлучаным тэлефоне.';
+
+  @override
   String get deviceId => 'ID прылады';
 
   @override

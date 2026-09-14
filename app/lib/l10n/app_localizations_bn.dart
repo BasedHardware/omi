@@ -500,6 +500,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'শুধুমাত্র এই ফোনে সংরক্ষিত।';
 
   @override
+  String get deviceNameStoredOnDevice => 'আপনার Omi-তে সংরক্ষিত, তাই যেকোনো সংযুক্ত ফোনে দেখা যায়।';
+
+  @override
   String get deviceId => 'ডিভাইস ID';
 
   @override

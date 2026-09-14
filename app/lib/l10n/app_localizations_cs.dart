@@ -501,6 +501,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'Uloženo pouze v tomto telefonu.';
 
   @override
+  String get deviceNameStoredOnDevice => 'Uloženo ve vašem Omi, takže se zobrazí na každém připojeném telefonu.';
+
+  @override
   String get deviceId => 'ID zařízení';
 
   @override

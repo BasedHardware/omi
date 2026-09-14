@@ -502,6 +502,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'Saglabāts tikai šajā tālrunī.';
 
   @override
+  String get deviceNameStoredOnDevice => 'Saglabāts jūsu Omi, tāpēc tiek rādīts jebkurā savienotajā tālrunī.';
+
+  @override
   String get deviceId => 'Ierīces ID';
 
   @override

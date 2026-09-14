@@ -158,6 +158,7 @@
     "noAppsExternalAccess": "Yhdelläkään asennetulla sovelluksella ei ole ulkoista pääsyä tietoihisi.",
     "deviceName": "Laitteen nimi",
     "deviceNameStoredOnPhone": "Tallennettu vain tähän puhelimeen.",
+    "deviceNameStoredOnDevice": "Tallennettu Omiisi, joten se näkyy jokaisessa yhdistetyssä puhelimessa.",
     "deviceId": "Laitteen tunnus",
     "firmware": "Laiteohjelmisto",
     "sdCardSync": "SD-kortin synkronointi",

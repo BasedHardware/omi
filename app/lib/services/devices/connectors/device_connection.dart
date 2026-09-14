@@ -624,6 +624,24 @@ abstract class DeviceConnection {
 
   Future<int?> performGetLedDimRatio();
 
+  Future<String?> getStoredDeviceName() async {
+    if (await isConnected()) {
+      return await performGetStoredDeviceName();
+    }
+    return null;
+  }
+
+  Future<String?> performGetStoredDeviceName() async => null;
+
+  Future<bool> setStoredDeviceName(String name) async {
+    if (await isConnected()) {
+      return await performSetStoredDeviceName(name);
+    }
+    return false;
+  }
+
+  Future<bool> performSetStoredDeviceName(String name) async => false;
+
   Future<void> setMicGain(int gain) async {
     if (await isConnected()) {
       return await performSetMicGain(gain);

@@ -158,6 +158,7 @@
     "noAppsExternalAccess": "Nessuna app installata ha accesso esterno ai tuoi dati.",
     "deviceName": "Nome Dispositivo",
     "deviceNameStoredOnPhone": "Salvato solo su questo telefono.",
+    "deviceNameStoredOnDevice": "Salvato sul tuo Omi, quindi appare su qualsiasi telefono che si connette.",
     "deviceId": "ID dispositivo",
     "firmware": "Firmware",
     "sdCardSync": "Sincronizzazione scheda SD",

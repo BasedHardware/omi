@@ -42,6 +42,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   double _micGain = 5.0;
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
+  bool? _hasDeviceNameStorageFeature;
 
   Timer? _debounce;
   Timer? _micGainDebounce;
@@ -83,11 +84,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         var features = await connection.getFeatures();
         final hasDimming = (features & OmiFeatures.ledDimming) != 0;
         final hasMicGain = (features & OmiFeatures.micGain) != 0;
+        final hasDeviceNameStorage = (features & OmiFeatures.deviceNameStorage) != 0;
 
         if (!mounted) return;
         setState(() {
           _hasDimmingFeature = hasDimming;
           _hasMicGainFeature = hasMicGain;
+          _hasDeviceNameStorageFeature = hasDeviceNameStorage;
         });
 
         if (!hasDimming) {
@@ -244,10 +247,19 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     return KeyedSubtree(key: key, child: content);
   }
 
+  Future<bool> _saveStoredDeviceName(String deviceId, String name) async {
+    final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    return await connection?.setStoredDeviceName(name) ?? false;
+  }
+
   Future<void> _renameDevice(BtDevice device) async {
     final renamed = await showDialog<bool>(
       context: context,
-      builder: (_) => RenameDeviceWidget(deviceId: device.id, advertisedName: device.name),
+      builder: (_) => RenameDeviceWidget(
+        deviceId: device.id,
+        advertisedName: device.name,
+        saveToDevice: _hasDeviceNameStorageFeature == true ? (name) => _saveStoredDeviceName(device.id, name) : null,
+      ),
     );
     if (renamed == true && mounted) {
       setState(() {});

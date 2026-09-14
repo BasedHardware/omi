@@ -8,8 +8,9 @@ import 'package:omi/utils/logger.dart';
 class RenameDeviceWidget extends StatefulWidget {
   final String deviceId;
   final String advertisedName;
+  final Future<bool> Function(String name)? saveToDevice;
 
-  const RenameDeviceWidget({super.key, required this.deviceId, required this.advertisedName});
+  const RenameDeviceWidget({super.key, required this.deviceId, required this.advertisedName, this.saveToDevice});
 
   @override
   State<RenameDeviceWidget> createState() => _RenameDeviceWidgetState();
@@ -18,6 +19,7 @@ class RenameDeviceWidget extends StatefulWidget {
 class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
   late TextEditingController nameController;
   bool isSaving = false;
+  bool saveFailed = false;
 
   @override
   void initState() {
@@ -31,28 +33,29 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
     super.dispose();
   }
 
-  Future<void> _save() async {
-    setState(() => isSaving = true);
+  Future<void> _save() => _store(nameController.text);
+
+  Future<void> _reset() => _store('');
+
+  Future<void> _store(String name) async {
+    setState(() {
+      isSaving = true;
+      saveFailed = false;
+    });
     try {
-      await SharedPreferencesUtil().setDeviceCustomName(widget.deviceId, nameController.text);
+      final saveToDevice = widget.saveToDevice;
+      if (saveToDevice != null && !await saveToDevice(name.trim())) {
+        if (mounted) {
+          setState(() {
+            isSaving = false;
+            saveFailed = true;
+          });
+        }
+        return;
+      }
+      await SharedPreferencesUtil().setDeviceCustomName(widget.deviceId, name);
     } catch (e) {
       Logger.debug('Error saving device name: $e');
-      if (mounted) {
-        setState(() => isSaving = false);
-      }
-      return;
-    }
-    if (mounted) {
-      Navigator.of(context).pop(true);
-    }
-  }
-
-  Future<void> _reset() async {
-    setState(() => isSaving = true);
-    try {
-      await SharedPreferencesUtil().clearDeviceCustomName(widget.deviceId);
-    } catch (e) {
-      Logger.debug('Error resetting device name: $e');
       if (mounted) {
         setState(() => isSaving = false);
       }
@@ -83,7 +86,9 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
               ),
               const SizedBox(height: 8),
               Text(
-                context.l10n.deviceNameStoredOnPhone,
+                widget.saveToDevice != null
+                    ? context.l10n.deviceNameStoredOnDevice
+                    : context.l10n.deviceNameStoredOnPhone,
                 style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
               ),
               const SizedBox(height: 20),
@@ -110,6 +115,14 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
                   ),
                 ),
               ),
+              if (saveFailed) ...[
+                const SizedBox(height: 12),
+                Text(
+                  context.l10n.anErrorOccurredTryAgain,
+                  key: const Key('rename_device_error'),
+                  style: TextStyle(color: Colors.red.shade300, fontSize: 14),
+                ),
+              ],
               const SizedBox(height: 24),
               Row(
                 children: [

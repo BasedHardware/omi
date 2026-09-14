@@ -98,6 +98,30 @@ void main() {
       expect(DeviceUtils.listLabel(devices.first, devices), contains('Omi ('));
     });
 
+    test('a name read from the device replaces the one on this phone', () async {
+      await SharedPreferencesUtil().setDeviceCustomName('AA:BB:CC:DD:EE:FF', 'Old name');
+
+      await SharedPreferencesUtil().adoptStoredDeviceName('AA:BB:CC:DD:EE:FF', 'Kitchen Omi');
+
+      expect(SharedPreferencesUtil().getDeviceCustomName('AA:BB:CC:DD:EE:FF'), 'Kitchen Omi');
+    });
+
+    test('a device with no stored name clears the one on this phone', () async {
+      await SharedPreferencesUtil().setDeviceCustomName('AA:BB:CC:DD:EE:FF', 'Renamed on another phone');
+
+      await SharedPreferencesUtil().adoptStoredDeviceName('AA:BB:CC:DD:EE:FF', '');
+
+      expect(SharedPreferencesUtil().getDeviceCustomName('AA:BB:CC:DD:EE:FF'), isNull);
+    });
+
+    test('a failed device read keeps the name on this phone', () async {
+      await SharedPreferencesUtil().setDeviceCustomName('AA:BB:CC:DD:EE:FF', 'Kitchen Omi');
+
+      await SharedPreferencesUtil().adoptStoredDeviceName('AA:BB:CC:DD:EE:FF', null);
+
+      expect(SharedPreferencesUtil().getDeviceCustomName('AA:BB:CC:DD:EE:FF'), 'Kitchen Omi');
+    });
+
     test('falls back to the advertised name when stored json is corrupt', () async {
       SharedPreferences.setMockInitialValues({'deviceCustomNames': 'not-json'});
       await SharedPreferencesUtil.init();

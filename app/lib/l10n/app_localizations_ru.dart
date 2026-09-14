@@ -502,6 +502,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'Хранится только на этом телефоне.';
 
   @override
+  String get deviceNameStoredOnDevice => 'Хранится на вашем Omi, поэтому отображается на любом подключённом телефоне.';
+
+  @override
   String get deviceId => 'ID устройства';
 
   @override

@@ -158,6 +158,7 @@
     "noAppsExternalAccess": "Tiada aplikasi yang dipasang mempunyai akses luaran ke data anda.",
     "deviceName": "Nama Peranti",
     "deviceNameStoredOnPhone": "Disimpan pada telefon ini sahaja.",
+    "deviceNameStoredOnDevice": "Disimpan pada Omi anda, jadi dipaparkan pada mana-mana telefon yang disambungkan.",
     "deviceId": "ID Peranti",
     "firmware": "Perisian Tegar",
     "sdCardSync": "Sinkronisasi Kad SD",

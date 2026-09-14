@@ -503,6 +503,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'Naka-save lang sa teleponong ito.';
 
   @override
+  String get deviceNameStoredOnDevice => 'Naka-save sa iyong Omi, kaya ipinapakita sa anumang teleponong kumokonekta.';
+
+  @override
   String get deviceId => 'Device ID';
 
   @override

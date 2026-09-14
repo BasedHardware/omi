@@ -491,6 +491,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'この電話にのみ保存されます。';
 
   @override
+  String get deviceNameStoredOnDevice => 'Omi本体に保存されるため、接続するどのスマートフォンにもこの名前が表示されます。';
+
+  @override
   String get deviceId => 'デバイスID';
 
   @override

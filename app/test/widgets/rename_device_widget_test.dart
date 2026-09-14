@@ -17,7 +17,7 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  Future<List<bool?>> openDialog(WidgetTester tester) async {
+  Future<List<bool?>> openDialog(WidgetTester tester, {Future<bool> Function(String name)? saveToDevice}) async {
     final results = <bool?>[];
     await tester.pumpWidget(
       MaterialApp(
@@ -36,7 +36,8 @@ void main() {
                   results.add(
                     await showDialog<bool>(
                       context: context,
-                      builder: (_) => const RenameDeviceWidget(deviceId: _deviceId, advertisedName: 'Omi'),
+                      builder: (_) =>
+                          RenameDeviceWidget(deviceId: _deviceId, advertisedName: 'Omi', saveToDevice: saveToDevice),
                     ),
                   );
                 },
@@ -138,5 +139,56 @@ void main() {
 
     expect(SharedPreferencesUtil().getDeviceCustomName(_deviceId), isNull);
     expect(results.single, isTrue);
+  });
+
+  testWidgets('with device storage the name is written to the device before it is kept here', (tester) async {
+    final written = <String>[];
+    final results = await openDialog(tester, saveToDevice: (name) async {
+      written.add(name);
+      return true;
+    });
+
+    await tester.enterText(find.byKey(const Key('rename_device_field')), '  Kitchen Omi ');
+    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.pumpAndSettle();
+
+    expect(written, ['Kitchen Omi']);
+    expect(SharedPreferencesUtil().getDeviceCustomName(_deviceId), 'Kitchen Omi');
+    expect(results, [true]);
+  });
+
+  testWidgets('a failed device write keeps the old name and shows an error', (tester) async {
+    await SharedPreferencesUtil().setDeviceCustomName(_deviceId, 'Old name');
+    final results = await openDialog(tester, saveToDevice: (name) async => false);
+
+    await tester.enterText(find.byKey(const Key('rename_device_field')), 'Kitchen Omi');
+    await tester.tap(find.byKey(const Key('rename_device_save')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('rename_device_error')), findsOneWidget);
+    expect(SharedPreferencesUtil().getDeviceCustomName(_deviceId), 'Old name');
+    expect(results, isEmpty);
+  });
+
+  testWidgets('reset with device storage clears the name on the device too', (tester) async {
+    await SharedPreferencesUtil().setDeviceCustomName(_deviceId, 'Kitchen Omi');
+    final written = <String>[];
+    await openDialog(tester, saveToDevice: (name) async {
+      written.add(name);
+      return true;
+    });
+
+    await tester.tap(find.byKey(const Key('rename_device_reset')));
+    await tester.pumpAndSettle();
+
+    expect(written, ['']);
+    expect(SharedPreferencesUtil().getDeviceCustomName(_deviceId), isNull);
+  });
+
+  testWidgets('says the name lives on the Omi when the device stores it', (tester) async {
+    await openDialog(tester, saveToDevice: (name) async => true);
+
+    expect(find.text('Saved on your Omi, so any phone that connects to it shows this name.'), findsOneWidget);
+    expect(find.text('Stored on this phone only.'), findsNothing);
   });
 }

@@ -158,6 +158,7 @@
     "noAppsExternalAccess": "किसी भी इंस्टॉल किए गए ऐप के पास आपके डेटा तक बाहरी पहुंच नहीं है।",
     "deviceName": "डिवाइस का नाम",
     "deviceNameStoredOnPhone": "केवल इस फ़ोन पर सहेजा गया।",
+    "deviceNameStoredOnDevice": "आपके Omi पर सहेजा गया, इसलिए जुड़ने वाले हर फ़ोन पर यही नाम दिखेगा।",
     "deviceId": "डिवाइस आईडी",
     "firmware": "फर्मवेयर",
     "sdCardSync": "SD कार्ड सिंक",

@@ -500,6 +500,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'Hanya disimpan di ponsel ini.';
 
   @override
+  String get deviceNameStoredOnDevice => 'Disimpan di Omi Anda, jadi tampil di ponsel mana pun yang terhubung.';
+
+  @override
   String get deviceId => 'ID Perangkat';
 
   @override

@@ -157,6 +157,7 @@
     "noAppsExternalAccess": "インストールされたアプリは外部からデータにアクセスしていません。",
     "deviceName": "デバイス名",
     "deviceNameStoredOnPhone": "この電話にのみ保存されます。",
+    "deviceNameStoredOnDevice": "Omi本体に保存されるため、接続するどのスマートフォンにもこの名前が表示されます。",
     "deviceId": "デバイスID",
     "firmware": "ファームウェア",
     "sdCardSync": "SDカード同期",

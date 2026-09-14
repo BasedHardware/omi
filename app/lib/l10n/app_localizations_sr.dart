@@ -500,6 +500,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'Сачувано само на овом телефону.';
 
   @override
+  String get deviceNameStoredOnDevice => 'Сачувано на вашем Omi уређају, па се приказује на сваком повезаном телефону.';
+
+  @override
   String get deviceId => 'Уређај ID';
 
   @override

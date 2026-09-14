@@ -503,6 +503,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'Salvat doar pe acest telefon.';
 
   @override
+  String get deviceNameStoredOnDevice => 'Salvat pe Omi, așa că apare pe orice telefon care se conectează.';
+
+  @override
   String get deviceId => 'ID dispozitiv';
 
   @override

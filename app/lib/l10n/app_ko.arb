@@ -158,6 +158,7 @@
     "noAppsExternalAccess": "설치된 앱 중 귀하의 데이터에 외부 접근 권한이 있는 앱이 없습니다.",
     "deviceName": "기기 이름",
     "deviceNameStoredOnPhone": "이 휴대폰에만 저장됩니다.",
+    "deviceNameStoredOnDevice": "Omi에 저장되므로 연결하는 모든 휴대폰에 이 이름이 표시됩니다.",
     "deviceId": "기기 ID",
     "firmware": "펌웨어",
     "sdCardSync": "SD 카드 동기화",

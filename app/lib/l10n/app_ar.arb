@@ -158,6 +158,7 @@
     "noAppsExternalAccess": "لا توجد تطبيقات مثبتة لها وصول خارجي إلى بياناتك.",
     "deviceName": "اسم الجهاز",
     "deviceNameStoredOnPhone": "محفوظ على هذا الهاتف فقط.",
+    "deviceNameStoredOnDevice": "محفوظ على جهاز Omi، لذا يظهر على أي هاتف يتصل به.",
     "deviceId": "معرف الجهاز",
     "firmware": "البرنامج الثابت",
     "sdCardSync": "مزامنة بطاقة SD",

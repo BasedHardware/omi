@@ -11,6 +11,7 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
+import 'package:omi/services/devices/stored_device_name.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -19,6 +20,7 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String settingsDimRatioCharacteristicUuid = '19b10011-e8f2-537e-4f6c-d104768a1214';
   static const String settingsMicGainCharacteristicUuid = '19b10012-e8f2-537e-4f6c-d104768a1214';
   static const String settingsChargingStatusCharacteristicUuid = '19b10013-e8f2-537e-4f6c-d104768a1214';
+  static const String settingsDeviceNameCharacteristicUuid = '19b10015-e8f2-537e-4f6c-d104768a1214';
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
@@ -839,6 +841,30 @@ class OmiDeviceConnection extends DeviceConnection {
       Logger.debug('OmiDeviceConnection: Error getting LED dim ratio: $e');
       return null;
     }
+  }
+
+  @override
+  Future<String?> performGetStoredDeviceName() async {
+    try {
+      final value = await transport.readCharacteristic(settingsServiceUuid, settingsDeviceNameCharacteristicUuid);
+      return decodeStoredDeviceName(value);
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error reading stored device name: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<bool> performSetStoredDeviceName(String name) async {
+    final payload = encodeStoredDeviceName(name);
+    if (payload == null) return false;
+    try {
+      await transport.writeCharacteristic(settingsServiceUuid, settingsDeviceNameCharacteristicUuid, payload);
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error writing stored device name: $e');
+      return false;
+    }
+    return await performGetStoredDeviceName() == name.trim();
   }
 
   @override

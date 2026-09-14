@@ -500,6 +500,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deviceNameStoredOnPhone => 'صرف اس فون پر محفوظ ہے۔';
 
   @override
+  String get deviceNameStoredOnDevice => 'آپ کے Omi پر محفوظ ہے، اس لیے جڑنے والے ہر فون پر یہی نام دکھائی دیتا ہے۔';
+
+  @override
   String get deviceId => 'ڈیوائس کی نشانی';
 
   @override

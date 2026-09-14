@@ -158,6 +158,7 @@
     "noAppsExternalAccess": "Cap aplicació instal·lada té accés extern a les vostres dades.",
     "deviceName": "Nom del dispositiu",
     "deviceNameStoredOnPhone": "Desat només en aquest telèfon.",
+    "deviceNameStoredOnDevice": "Desat al teu Omi, així que es mostra a qualsevol telèfon que s'hi connecti.",
     "deviceId": "ID del dispositiu",
     "firmware": "Microprogramari",
     "sdCardSync": "Sincronització de targeta SD",

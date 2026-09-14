@@ -1137,6 +1137,12 @@ abstract class AppLocalizations {
   /// **'Stored on this phone only.'**
   String get deviceNameStoredOnPhone;
 
+  /// Note in the rename dialog when the name is stored on the Omi device itself
+  ///
+  /// In en, this message translates to:
+  /// **'Saved on your Omi, so any phone that connects to it shows this name.'**
+  String get deviceNameStoredOnDevice;
+
   /// Label for device ID field
   ///
   /// In en, this message translates to:

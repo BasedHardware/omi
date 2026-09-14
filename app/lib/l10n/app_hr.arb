@@ -634,6 +634,7 @@
     },
     "deviceName": "Ime uređaja",
     "deviceNameStoredOnPhone": "Spremljeno samo na ovom telefonu.",
+    "deviceNameStoredOnDevice": "Spremljeno na vašem Omi uređaju, pa se prikazuje na svakom povezanom telefonu.",
     "@deviceName": {
         "description": "Device name label"
     },

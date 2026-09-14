@@ -158,6 +158,7 @@
     "noAppsExternalAccess": "Ühelgi paigaldatud rakendusel pole välise juurdepääsu teie andmetele.",
     "deviceName": "Seadme nimi",
     "deviceNameStoredOnPhone": "Salvestatud ainult selles telefonis.",
+    "deviceNameStoredOnDevice": "Salvestatud teie Omis, nii et see kuvatakse igas ühendatud telefonis.",
     "deviceId": "Seadme ID",
     "firmware": "Püsivara",
     "sdCardSync": "SD-kaardi sünkroonimine",
