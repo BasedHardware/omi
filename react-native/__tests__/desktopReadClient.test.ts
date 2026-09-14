@@ -163,6 +163,7 @@ import {
   findDeviceCopy,
   chargingCopy,
   batteryLevelCopy,
+  deviceBatteryPercentCopy,
   fairUseCopy,
   fairUseBudgetResetCopy,
   fairUseDailyTranscriptionCopy,
@@ -1699,6 +1700,8 @@ test('firmware update copy names GET latest without Available on current or draf
   expect(findDeviceCopy()).toBe('Find');
   expect(chargingCopy()).toBe('Charging');
   expect(batteryLevelCopy()).toBe('Battery Level');
+  expect(deviceBatteryPercentCopy(87)).toBe('87%');
+  expect(deviceBatteryPercentCopy(87)).not.toContain('battery');
   expect(
     firmwareUpdateCopy('1.2.3', {
       version: '1.3.0',

@@ -100,6 +100,44 @@ test('compact Home does not claim Omi disconnected when nothing is connected', a
   expect(tree).not.toContain('Omi disconnected');
 });
 
+test('compact Home names Flutter BatteryInfoWidget percent without inventing battery', async () => {
+  mockNative.getSnapshot.mockResolvedValue({
+    bluetooth: 'poweredOn',
+    devices: [
+      {
+        id: 'omi-1',
+        name: 'Test Omi',
+        rssi: -50,
+        connected: true,
+        battery: 87,
+      },
+    ],
+    connectedDeviceId: 'omi-1',
+    phase: 'disconnected',
+    capture: 'idle',
+    lastEvent: '',
+    microphone: 'unknown',
+    notifications: 'unknown',
+  });
+  try {
+    const renderer = await renderApp();
+    const tree = JSON.stringify(renderer.toJSON());
+    expect(tree).toContain('"87%"');
+    expect(tree).not.toContain('87% battery');
+  } finally {
+    mockNative.getSnapshot.mockResolvedValue({
+      bluetooth: 'poweredOn',
+      devices: [mockDevice],
+      connectedDeviceId: null,
+      phase: 'disconnected',
+      capture: 'idle',
+      lastEvent: '',
+      microphone: 'unknown',
+      notifications: 'unknown',
+    });
+  }
+});
+
 test('mobile device panel exposes the existing scan and connection controls', async () => {
   mockNative.startScan.mockClear();
   mockNative.connectDevice.mockClear();

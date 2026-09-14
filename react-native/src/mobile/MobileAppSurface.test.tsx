@@ -52,6 +52,7 @@ jest.mock('react-native-safe-area-context', () => ({
 import {
   dailySummaryDefaultHeadlineCopy,
   desktopBackendServiceCopy,
+  deviceBatteryPercentCopy,
   formatTaskDue,
 } from '../desktopReadClient';
 import {MobileAppSurface, type MobileAppSurfaceProps} from './MobileAppSurface';
@@ -431,6 +432,19 @@ test('compact Home keeps Open calls when a calls handler is mounted', () => {
       .props.onPress();
   });
   expect(onOpenCalls).toHaveBeenCalledTimes(1);
+});
+
+test('compact Home names Flutter BatteryInfoWidget percent without inventing battery', () => {
+  const renderer = render({
+    device: {
+      connected: true,
+      label: 'Connected · Ready',
+      batteryPercent: deviceBatteryPercentCopy(87),
+    },
+  });
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('"87%"');
+  expect(tree).not.toContain('87% battery');
 });
 
 test('loaded Home tasks keep more-available coverage instead of looking complete', () => {

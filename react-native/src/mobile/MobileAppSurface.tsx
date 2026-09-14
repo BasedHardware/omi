@@ -82,6 +82,7 @@ export type MobileRecap = {
 export type MobileDeviceState = {
   connected: boolean;
   label: string;
+  batteryPercent?: string;
 };
 
 export type MobileCaptureState = {
@@ -931,6 +932,11 @@ export function MobileAppSurface({
               <Text numberOfLines={1} style={styles.deviceLabel}>
                 {device.label}
               </Text>
+              {device.batteryPercent ? (
+                <Text style={styles.deviceBatteryPercent}>
+                  {device.batteryPercent}
+                </Text>
+              ) : null}
             </Pressable>
             {onOpenCalls ? (
               <Pressable
@@ -1083,6 +1089,11 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: mobileColor.text,
     fontWeight: '600',
+  },
+  deviceBatteryPercent: {
+    ...mobileType.body,
+    color: mobileColor.text,
+    fontWeight: '700',
   },
   deviceMessage: {
     ...mobileType.body,

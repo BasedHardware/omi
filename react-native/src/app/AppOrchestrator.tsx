@@ -44,6 +44,7 @@ import {
   conversationListTag,
   conversationRecapDateLabel,
   conversationRecapTitle,
+  deviceBatteryPercentCopy,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopBackendUnavailableCopy,
@@ -965,7 +966,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         {deviceHasReportedBattery(connectedDevice?.battery) && (
           <View style={styles.pendantBatteryPill}>
             <Text style={styles.pendantBattery}>
-              {`${connectedDevice.battery}% battery`}
+              {deviceBatteryPercentCopy(connectedDevice.battery)}
             </Text>
           </View>
         )}
@@ -1243,7 +1244,17 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           waitingForAudio: nativeSnapshot?.audioStatus === 'waiting',
           transcript: '',
         }}
-        device={{connected: connectedDevice !== null, label: homeStatus}}
+        device={{
+          connected: connectedDevice !== null,
+          label: homeStatus,
+          ...(deviceHasReportedBattery(connectedDevice?.battery)
+            ? {
+                batteryPercent: deviceBatteryPercentCopy(
+                  connectedDevice.battery,
+                ),
+              }
+            : {}),
+        }}
         deviceMessage={devicePanelOpen ? null : deviceScanMessage}
         devicePanel={
           devicePanelOpen ? (

@@ -1743,6 +1743,10 @@ export function batteryLevelCopy(): string {
   return 'Battery Level';
 }
 
+export function deviceBatteryPercentCopy(level: number): string {
+  return `${level}%`;
+}
+
 export function firmwareUpdateCopy(
   currentFirmware: string,
   details: {
