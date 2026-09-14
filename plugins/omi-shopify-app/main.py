@@ -87,7 +87,7 @@ def get_auth_header(access_token: str) -> Dict[str, str]:
     }
 
 
-def shopify_api_request(
+def _coerce_int(value, default, minimum, maximum) -> int:    """Return a bounded integer for optional values supplied by chat tools.    The retrieval layer includes optional manifest fields in the JSON body with    a null value when the caller omits them. Treat null, booleans,    non-integral types, malformed strings, and non-finite values as the    documented default before applying the API-safe bounds.    """    if value is None or isinstance(value, bool):        return default    if isinstance(value, int):        number = value    elif isinstance(value, str):        value = value.strip()        if not value:            return default        try:            number = int(value, 10)        except (TypeError, ValueError, OverflowError):            return default    else:        return default    return max(minimum, min(number, maximum))def shopify_api_request(
     uid: str,
     method: str,
     endpoint: str,
