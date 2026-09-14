@@ -3732,6 +3732,7 @@ export interface SendMessageRequest {
   context?: PageContext | null;
   file_ids?: Array<string> | null;
   text: string;
+  time_zone?: string | null;
 }
 
 export interface SendShareEmailRequest {
@@ -4142,6 +4143,10 @@ export interface SyncRecoveryWindowExceededResponse {
 
 export interface SyncRequestValidationErrorResponse {
   detail: Array<Record<string, unknown>>;
+}
+
+export interface SyncUserTimeZoneRequest {
+  time_zone: string;
 }
 
 export interface SynthesizeAIUserProfileRequest {
@@ -5446,6 +5451,7 @@ export interface OmiApiSchemas {
   "SyncLocalFilesResultResponse": SyncLocalFilesResultResponse;
   "SyncRecoveryWindowExceededResponse": SyncRecoveryWindowExceededResponse;
   "SyncRequestValidationErrorResponse": SyncRequestValidationErrorResponse;
+  "SyncUserTimeZoneRequest": SyncUserTimeZoneRequest;
   "SynthesizeAIUserProfileRequest": SynthesizeAIUserProfileRequest;
   "SynthesizeAIUserProfileResponse": SynthesizeAIUserProfileResponse;
   "Targeting": Targeting;
@@ -9340,6 +9346,16 @@ export interface OmiApiPaths {
       operationId: "delete_permission_and_recordings_v1_users_store_recording_permission_delete";
       responses: {
         "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/time-zone": {
+    put: {
+      operationId: "sync_user_time_zone_v1_users_time_zone_put";
+      responses: {
+        "200": FcmTokenResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -17424,6 +17440,27 @@ export async function delete_permission_and_recordings_v1_users_store_recording_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function sync_user_time_zone_v1_users_time_zone_put(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SyncUserTimeZoneRequest, init?: OmiApiClientInit): Promise<FcmTokenResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/time-zone`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PUT",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_training_data_opt_in_status_v1_users_training_data_opt_in_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<TrainingDataOptInResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/training-data-opt-in`;
@@ -18715,4 +18752,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 440 client methods generated.
+// Total: 441 client methods generated.
