@@ -116,6 +116,62 @@ test('keeps GET capture gaps when event_id exceeds 256', () => {
   ]);
 });
 
+test('keeps GET capture gaps when event_id exceeds 10000', () => {
+  const eventId = 'e'.repeat(10001);
+  expect(
+    parseOmiCalendarCaptureGaps(
+      JSON.stringify([
+        {
+          event_id: eventId,
+          title: 'Standup',
+          start_time: '2026-09-07T15:00:00.000Z',
+          end_time: '2026-09-07T15:30:00.000Z',
+        },
+        {
+          event_id: 'event-neighbor',
+          title: 'Retro',
+          start_time: '2026-09-07T16:00:00.000Z',
+          end_time: '2026-09-07T17:00:00.000Z',
+        },
+      ]),
+    ),
+  ).toEqual([
+    {
+      eventId,
+      title: 'Standup',
+      startMs: Date.parse('2026-09-07T15:00:00.000Z'),
+      endMs: Date.parse('2026-09-07T15:30:00.000Z'),
+    },
+    {
+      eventId: 'event-neighbor',
+      title: 'Retro',
+      startMs: Date.parse('2026-09-07T16:00:00.000Z'),
+      endMs: Date.parse('2026-09-07T17:00:00.000Z'),
+    },
+  ]);
+});
+
+test('fails closed when an event_id exceeds 1000000', () => {
+  expect(() =>
+    parseOmiCalendarCaptureGaps(
+      JSON.stringify([
+        {
+          event_id: 'e'.repeat(1_000_001),
+          title: 'Standup',
+          start_time: '2026-09-07T15:00:00.000Z',
+          end_time: '2026-09-07T15:30:00.000Z',
+        },
+        {
+          event_id: 'event-neighbor',
+          title: 'Retro',
+          start_time: '2026-09-07T16:00:00.000Z',
+          end_time: '2026-09-07T17:00:00.000Z',
+        },
+      ]),
+    ),
+  ).toThrow();
+});
+
 test('keeps GET capture gaps when title exceeds 10000', () => {
   const title = 'S'.repeat(10001);
   expect(
