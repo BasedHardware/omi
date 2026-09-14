@@ -35,6 +35,10 @@ import {
   developerKeyScopeCopy,
   developerKeysCopy,
   developerKeysEmptyCopy,
+  developerApiTitleCopy,
+  mcpTitleCopy,
+  webhooksTitleCopy,
+  userIdTitleCopy,
   appCategoryCopy,
   appDisplaySource,
   appDisplayAttribution,
@@ -1690,13 +1694,13 @@ test('developer key copy names GET name and prefix without a full secret', () =>
           ],
         },
       ],
-      'Developer key',
+      developerApiTitleCopy(),
     ),
   ).toEqual([
-    {title: 'Developer key', copy: `Local · omi_sk_ab · ${created}`},
-    {title: 'Developer key', copy: 'Cursor'},
+    {title: developerApiTitleCopy(), copy: `Local · omi_sk_ab · ${created}`},
+    {title: developerApiTitleCopy(), copy: 'Cursor'},
     {
-      title: 'Developer key',
+      title: developerApiTitleCopy(),
       copy: `Scoped · omi_sk_gh · ${created} · Full Access`,
     },
   ]);
@@ -1739,25 +1743,25 @@ test('developer key copy names GET empty scopes Read Only without inventing it o
         {name: 'Local', keyPrefix: 'omi_sk_ab', createdAtMs, scopes: []},
         {name: 'Omitted', keyPrefix: 'omi_sk_om', createdAtMs},
       ],
-      'Developer key',
+      developerApiTitleCopy(),
       {emptyScopesCopy: 'Read Only'},
     ),
   ).toEqual([
     {
-      title: 'Developer key',
+      title: developerApiTitleCopy(),
       copy: `Local · omi_sk_ab · ${created} · Read Only`,
     },
     {
-      title: 'Developer key',
+      title: developerApiTitleCopy(),
       copy: `Omitted · omi_sk_om · ${created} · Read Only`,
     },
   ]);
   expect(
     developerKeysCopy(
       [{name: 'Cursor', keyPrefix: 'omi_mcp_cd', createdAtMs}],
-      'MCP key',
+      mcpTitleCopy(),
     ),
-  ).toEqual([{title: 'MCP key', copy: `Cursor · omi_mcp_cd · ${created}`}]);
+  ).toEqual([{title: mcpTitleCopy(), copy: `Cursor · omi_mcp_cd · ${created}`}]);
   expect(developerKeyScopeCopy([])).toBe('');
   expect(developerKeyScopeCopy(undefined)).toBe('');
   expect(developerKeyScopeCopy([], {emptyCopy: 'Read Only'})).toBe('Read Only');
@@ -1770,18 +1774,24 @@ test('developer key copy names GET empty scopes Read Only without inventing it o
 });
 
 test('developer key copy names GET empty keys Flutter No API keys yet', () => {
+  expect(developerApiTitleCopy()).toBe('Developer API');
+  expect(mcpTitleCopy()).toBe('MCP');
+  expect(webhooksTitleCopy()).toBe('Webhooks');
+  expect(userIdTitleCopy()).toBe('User ID');
   expect(developerKeysEmptyCopy()).toBe('No API keys yet');
-  expect(developerKeysCopy([], 'Developer key')).toEqual([
-    {title: 'Developer key', copy: developerKeysEmptyCopy()},
+  expect(developerKeysCopy([], developerApiTitleCopy())).toEqual([
+    {title: developerApiTitleCopy(), copy: developerKeysEmptyCopy()},
   ]);
   expect(
-    developerKeysCopy([], 'Developer key', {emptyScopesCopy: 'Read Only'}),
-  ).toEqual([{title: 'Developer key', copy: developerKeysEmptyCopy()}]);
-  expect(developerKeysCopy([], 'MCP key')).toEqual([
-    {title: 'MCP key', copy: developerKeysEmptyCopy()},
+    developerKeysCopy([], developerApiTitleCopy(), {
+      emptyScopesCopy: 'Read Only',
+    }),
+  ).toEqual([{title: developerApiTitleCopy(), copy: developerKeysEmptyCopy()}]);
+  expect(developerKeysCopy([], mcpTitleCopy())).toEqual([
+    {title: mcpTitleCopy(), copy: developerKeysEmptyCopy()},
   ]);
-  expect(developerKeysCopy(null, 'Developer key')).toEqual([]);
-  expect(developerKeysCopy(null, 'MCP key')).toEqual([]);
+  expect(developerKeysCopy(null, developerApiTitleCopy())).toEqual([]);
+  expect(developerKeysCopy(null, mcpTitleCopy())).toEqual([]);
 });
 
 test('developer webhook status copy does not say unknown for a missing enablement bit', () => {

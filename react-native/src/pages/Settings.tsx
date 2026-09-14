@@ -30,6 +30,10 @@ import {
   developerWebhookRowCopy,
   developerWebhookTypeCopy,
   developerKeysCopy,
+  developerApiTitleCopy,
+  mcpTitleCopy,
+  webhooksTitleCopy,
+  userIdTitleCopy,
   accountFieldCopy,
   connectionIdentityCopy,
   subscriptionPlanCopy,
@@ -676,7 +680,7 @@ export function SettingsPage({
     );
     setTranscriptionPreferencesError(transcriptionPreferencesResult.error);
     setDeveloperKeys(
-      developerKeysCopy(developerKeysResult.keys, 'Developer key', {
+      developerKeysCopy(developerKeysResult.keys, developerApiTitleCopy(), {
         emptyScopesCopy: 'Read Only',
       }),
     );
@@ -689,7 +693,7 @@ export function SettingsPage({
               name: key.name,
               keyPrefix: key.keyPrefix,
             })),
-        'MCP key',
+        mcpTitleCopy(),
       ),
     );
     setMcpKeysError(mcpKeysResult.error);
@@ -797,7 +801,7 @@ export function SettingsPage({
                 snapshot.profile.uid,
                 'Account id unavailable',
               )}
-              title="Account id"
+              title={userIdTitleCopy()}
             />
             {visibleDisplayText(snapshot.profile.company ?? '') !== '' && (
               <SettingRow
@@ -1158,7 +1162,7 @@ export function SettingsPage({
               'Developer webhook status is unavailable.'}
           </Text>
         ) : webhookUrlsError !== null ? (
-          <SettingRow copy={webhookUrlsError} title="Developer Webhooks" />
+          <SettingRow copy={webhookUrlsError} title={webhooksTitleCopy()} />
         ) : snapshot.webhooks.length === 0 ? (
           <Text style={styles.projectionEmptyCopy}>
             No developer webhooks were returned.
@@ -1175,7 +1179,7 @@ export function SettingsPage({
           ))
         )}
         {developerKeysError !== null ? (
-          <SettingRow copy={developerKeysError} title="Developer key" />
+          <SettingRow copy={developerKeysError} title={developerApiTitleCopy()} />
         ) : (
           developerKeys.map((row, index) => (
             <SettingRow
@@ -1186,7 +1190,7 @@ export function SettingsPage({
           ))
         )}
         {mcpKeysError !== null ? (
-          <SettingRow copy={mcpKeysError} title="MCP key" />
+          <SettingRow copy={mcpKeysError} title={mcpTitleCopy()} />
         ) : (
           mcpKeys.map((row, index) => (
             <SettingRow

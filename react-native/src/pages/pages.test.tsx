@@ -1201,6 +1201,9 @@ test('Settings omits NEXT LINE-only company and job instead of blank rows', asyn
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
   expect(tree).toContain('Ada');
+  expect(tree).toContain('User ID');
+  expect(tree).toContain('user-1');
+  expect(tree).not.toContain('Account id');
   expect(tree).not.toContain('Company');
   expect(tree).not.toContain('Job');
   expect(tree).not.toContain('\u0085');
@@ -1942,7 +1945,7 @@ test('Settings names a failed developer webhook URLs GET instead of empty succes
       .props.onPress();
   });
   const tree = textOf(renderer);
-  expect(tree).toContain('Developer Webhooks');
+  expect(tree).toContain('Webhooks');
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('https://example.test/conversation');
   expect(mockBackend.request.mock.calls.some(call => call[0].method === 'POST')).toBe(
@@ -2019,9 +2022,11 @@ test('Settings names GET developer and MCP keys without revoke or a full secret'
   const created = developerKeyCreatedCopy(
     Date.parse('2026-09-09T12:00:00.000Z'),
   );
-  expect(tree).toContain('Developer key');
+  expect(tree).toContain('Developer API');
+  expect(tree).not.toContain('Developer key');
   expect(tree).toContain(`Local · omi_sk_ab · ${created} · Full Access`);
-  expect(tree).toContain('MCP key');
+  expect(tree).toContain('MCP');
+  expect(tree).not.toContain('MCP key');
   expect(tree).toContain('Cursor · omi_mcp_cd');
   expect(tree).not.toContain(`Cursor · omi_mcp_cd · ${created}`);
   expect(tree).not.toContain('Cursor · omi_mcp_cd · Full Access');
@@ -2121,8 +2126,10 @@ test('Settings names a failed developer and MCP keys GET instead of empty succes
       .props.onPress();
   });
   const tree = textOf(renderer);
-  expect(tree).toContain('Developer key');
-  expect(tree).toContain('MCP key');
+  expect(tree).toContain('Developer API');
+  expect(tree).not.toContain('Developer key');
+  expect(tree).toContain('MCP');
+  expect(tree).not.toContain('MCP key');
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('omi_sk_abcdef_secret');
   expect(tree).not.toContain('Revoke');
@@ -2145,8 +2152,10 @@ test('Settings names HTTP 500 developer and MCP keys GET instead of empty succes
       .props.onPress();
   });
   const tree = textOf(renderer);
-  expect(tree).toContain('Developer key');
-  expect(tree).toContain('MCP key');
+  expect(tree).toContain('Developer API');
+  expect(tree).not.toContain('Developer key');
+  expect(tree).toContain('MCP');
+  expect(tree).not.toContain('MCP key');
   expect(tree).toContain(
     desktopReadErrorCopy(new Error('Omi developer keys are malformed')),
   );
@@ -2171,8 +2180,10 @@ test('Settings names Flutter noApiKeys for empty GET developer and MCP keys', as
       .props.onPress();
   });
   const tree = textOf(renderer);
-  expect(tree).toContain('Developer key');
-  expect(tree).toContain('MCP key');
+  expect(tree).toContain('Developer API');
+  expect(tree).not.toContain('Developer key');
+  expect(tree).toContain('MCP');
+  expect(tree).not.toContain('MCP key');
   expect(tree).toContain('No API keys yet');
   expect(tree).not.toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Create');

@@ -840,6 +840,10 @@ export function accountWireCopy(value: string, unavailable: string): string {
     .join(' ');
 }
 
+export function userIdTitleCopy(): string {
+  return 'User ID';
+}
+
 export function accountFieldCopy(
   value: string | null | undefined,
   unset: string,
@@ -1722,6 +1726,18 @@ export function developerKeyRowCopy(
       : {emptyCopy: options.emptyScopesCopy},
   );
   return [labeled, created, scope].filter(copy => copy !== '').join(' · ');
+}
+
+export function developerApiTitleCopy(): string {
+  return 'Developer API';
+}
+
+export function mcpTitleCopy(): string {
+  return 'MCP';
+}
+
+export function webhooksTitleCopy(): string {
+  return 'Webhooks';
 }
 
 export function developerKeysEmptyCopy(): string {

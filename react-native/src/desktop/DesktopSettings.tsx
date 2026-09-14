@@ -18,6 +18,10 @@ import {
   developerWebhookRowCopy,
   developerWebhookTypeCopy,
   developerKeysCopy,
+  developerApiTitleCopy,
+  mcpTitleCopy,
+  webhooksTitleCopy,
+  userIdTitleCopy,
   accountFieldCopy,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
@@ -597,7 +601,7 @@ export function DesktopSettings({
       const developerKeysResult = await developerKeysTask;
       nextDeveloperKeys = developerKeysCopy(
         developerKeysResult.keys,
-        'Developer key',
+        developerApiTitleCopy(),
         {emptyScopesCopy: 'Read Only'},
       );
       nextDeveloperKeysError = developerKeysResult.error;
@@ -609,7 +613,7 @@ export function DesktopSettings({
               name: key.name,
               keyPrefix: key.keyPrefix,
             })),
-        'MCP key',
+        mcpTitleCopy(),
       );
       nextMcpKeysError = mcpKeysResult.error;
       const importJobsResult = await importJobsTask;
@@ -901,7 +905,7 @@ export function DesktopSettings({
       {account?.profile != null ? (
         <Row
           copy={accountFieldCopy(account.profile.uid, 'Account id unavailable')}
-          title="Account id"
+          title={userIdTitleCopy()}
         />
       ) : null}
       {account?.profile != null &&
@@ -1294,23 +1298,23 @@ export function DesktopSettings({
       {session !== 'ready' ? (
         <Row
           copy="Sign in to load this account setting."
-          title="Developer Webhooks"
+          title={webhooksTitleCopy()}
         />
       ) : account === null ? (
-        <Row copy="Loading developer webhooks…" title="Developer Webhooks" />
+        <Row copy="Loading developer webhooks…" title={webhooksTitleCopy()} />
       ) : account.webhooks === null ? (
         <Row
           copy={
             account.webhooksError ?? 'Developer webhook status is unavailable.'
           }
-          title="Developer Webhooks"
+          title={webhooksTitleCopy()}
         />
       ) : webhookUrlsError !== null ? (
-        <Row copy={webhookUrlsError} title="Developer Webhooks" />
+        <Row copy={webhookUrlsError} title={webhooksTitleCopy()} />
       ) : account.webhooks.length === 0 ? (
         <Row
           copy="No developer webhooks were returned."
-          title="Developer Webhooks"
+          title={webhooksTitleCopy()}
         />
       ) : (
         account.webhooks.map(webhook => (
@@ -1324,14 +1328,14 @@ export function DesktopSettings({
         ))
       )}
       {developerKeysError !== null ? (
-        <Row copy={developerKeysError} title="Developer key" />
+        <Row copy={developerKeysError} title={developerApiTitleCopy()} />
       ) : (
         developerKeys.map((row, index) => (
           <Row copy={row.copy} key={`dev-key-${index}`} title={row.title} />
         ))
       )}
       {mcpKeysError !== null ? (
-        <Row copy={mcpKeysError} title="MCP key" />
+        <Row copy={mcpKeysError} title={mcpTitleCopy()} />
       ) : (
         mcpKeys.map((row, index) => (
           <Row copy={row.copy} key={`mcp-key-${index}`} title={row.title} />
