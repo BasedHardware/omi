@@ -5,6 +5,9 @@ import {
   conversationDetailSummaryCopy,
   conversationNoSummaryCopy,
   processingConversationNoContentCopy,
+  processingConversationNoSummaryCopy,
+  processingConversationStatusCopy,
+  conversationDetailSummaryForStatusCopy,
   conversationsEmptyCopy,
   conversationsStarredEmptyCopy,
   memoriesEmptyCopy,
@@ -2774,6 +2777,32 @@ test('conversation detail names Flutter noSummaryForConversation when GET has no
     'No summary available\nfor this conversation.',
   );
   expect(processingConversationNoContentCopy()).toBe('No content to display');
+  expect(processingConversationNoSummaryCopy()).toBe('No summary');
+  expect(processingConversationStatusCopy()).toBe('Processing');
+  expect(
+    conversationDetailSummaryForStatusCopy('completed', true, {
+      summary: '',
+      sections: [],
+    }),
+  ).toBe(conversationNoSummaryCopy());
+  expect(
+    conversationDetailSummaryForStatusCopy('processing', true, {
+      summary: '',
+      sections: [],
+    }),
+  ).toBe(processingConversationNoSummaryCopy());
+  expect(
+    conversationDetailSummaryForStatusCopy('merging', false, {
+      summary: '',
+      sections: [],
+    }),
+  ).toBe(processingConversationStatusCopy());
+  expect(
+    conversationDetailSummaryForStatusCopy('processing', true, {
+      summary: 'Still writing',
+      sections: [],
+    }),
+  ).toBe('Still writing');
   expect(
     conversationDetailSummaryCopy({
       summary: '',

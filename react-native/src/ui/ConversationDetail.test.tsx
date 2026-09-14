@@ -10,6 +10,8 @@ import {
   conversationFirstPartySummaryCopy,
   conversationNoSummaryCopy,
   processingConversationNoContentCopy,
+  processingConversationNoSummaryCopy,
+  processingConversationStatusCopy,
   conversationActionItemsTodoCopy,
   conversationActionItemsNoPendingCopy,
   conversationActionItemsCompletedCopy,
@@ -1772,8 +1774,49 @@ test('legacy details name Flutter noSummaryForConversation when GET has no summa
       conversation: {...conversation, id: 'old-1', status: 'processing'},
     }),
   );
-  expect(processing).toContain(conversationNoSummaryCopy());
+  expect(processing).toContain(processingConversationNoSummaryCopy());
+  expect(processing).not.toContain(conversationNoSummaryCopy());
   expect(processing).not.toContain('Conversation summary is not ready yet.');
+  expect(processing).not.toContain('Generate Summary');
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: '',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: 'Recorded words',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              start: 0,
+              end: 1,
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const processingWithTranscript = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', status: 'processing'},
+    }),
+  );
+  expect(processingWithTranscript).toContain('Recorded words');
+  expect(processingWithTranscript).not.toContain(conversationNoSummaryCopy());
+  expect(processingWithTranscript).not.toContain(
+    processingConversationNoSummaryCopy(),
+  );
+  expect(processingWithTranscript).not.toContain('Generate Summary');
   mockLegacy.mockReturnValue({
     result: {
       status: 'loaded',

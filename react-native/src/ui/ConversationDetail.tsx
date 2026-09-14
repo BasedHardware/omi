@@ -5,7 +5,7 @@ import {
   conversationCaptureCopy,
   conversationDetailSpeakerCopy,
   conversationDisplaySummary,
-  conversationDetailSummaryCopy,
+  conversationDetailSummaryForStatusCopy,
   conversationDisplayTitle,
   conversationHasFinishClock,
   conversationStatusCopy,
@@ -379,11 +379,15 @@ function LegacyConversationBody({
   const externalText = visibleDisplayText(detail.externalText ?? '');
   const detailSummaryCopy = conversation.discarded
     ? null
-    : conversationDetailSummaryCopy({
-        summary: detail.summary,
-        sections: detail.sections,
-        appSummary,
-      });
+    : conversationDetailSummaryForStatusCopy(
+        conversation.status,
+        transcriptSegments.length === 0,
+        {
+          summary: detail.summary,
+          sections: detail.sections,
+          appSummary,
+        },
+      );
   const showExternalTranscript =
     externalText !== '' &&
     (detail.photoCount === undefined || detail.photoCount <= 0) &&

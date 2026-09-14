@@ -498,6 +498,35 @@ export function processingConversationNoContentCopy(): string {
   return 'No content to display';
 }
 
+export function processingConversationNoSummaryCopy(): string {
+  return 'No summary';
+}
+
+export function processingConversationStatusCopy(): string {
+  return 'Processing';
+}
+
+export function conversationDetailSummaryForStatusCopy(
+  status: string,
+  transcriptEmpty: boolean,
+  detail: {
+    summary: string;
+    sections: readonly {heading: string; bodyMarkdown: string}[];
+    appSummary?: string;
+  },
+): string | null {
+  const completed = conversationDetailSummaryCopy(detail);
+  if (status !== 'processing' && status !== 'merging') {
+    return completed;
+  }
+  if (completed !== conversationNoSummaryCopy()) {
+    return completed;
+  }
+  return transcriptEmpty
+    ? processingConversationNoSummaryCopy()
+    : processingConversationStatusCopy();
+}
+
 export function conversationsStarredEmptyCopy(): string {
   return 'No starred conversations';
 }
