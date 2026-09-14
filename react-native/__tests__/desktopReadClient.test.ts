@@ -48,6 +48,8 @@ import {
   mcpTitleCopy,
   webhooksTitleCopy,
   userIdTitleCopy,
+  userIdCopy,
+  accountIdUnavailableCopy,
   signOutTitleCopy,
   privacyPolicyTitleCopy,
   termsOfServiceTitleCopy,
@@ -783,7 +785,9 @@ test('keeps processing conversations whose title and overview are not ready yet'
 test('empty conversation titles stay visible instead of a blank row', () => {
   expect(processingConversationDetailTitleCopy()).toBe('In progress');
   expect(processingConversationDetailContentTabCopy('omi')).toBe('Content');
-  expect(processingConversationDetailContentTabCopy('openglass')).toBe('Photos');
+  expect(processingConversationDetailContentTabCopy('openglass')).toBe(
+    'Photos',
+  );
   expect(processingConversationDetailContentTabCopy('screenpipe')).toBe(
     'Raw Data',
   );
@@ -1035,36 +1039,28 @@ test('discarded conversation titles use Flutter transcript excerpt and people na
     '[00:00:00 - 00:00:01] Speaker 1: A \n\n[00:00:02 - 00:00:03] Speaker 2: B',
   );
   expect(
-    conversationDetailSpeakerCopy(
+    conversationDetailSpeakerCopy({speaker: 'SPEAKER_05', isUser: false}, [
       {speaker: 'SPEAKER_05', isUser: false},
-      [
-        {speaker: 'SPEAKER_05', isUser: false},
-        {speaker: 'SPEAKER_06', isUser: false},
-        {speaker: 'SPEAKER_00', isUser: true},
-      ],
-    ),
+      {speaker: 'SPEAKER_06', isUser: false},
+      {speaker: 'SPEAKER_00', isUser: true},
+    ]),
   ).toBe('Speaker 1');
   expect(
-    conversationDetailSpeakerCopy(
+    conversationDetailSpeakerCopy({speaker: 'SPEAKER_06', isUser: false}, [
+      {speaker: 'SPEAKER_05', isUser: false},
       {speaker: 'SPEAKER_06', isUser: false},
-      [
-        {speaker: 'SPEAKER_05', isUser: false},
-        {speaker: 'SPEAKER_06', isUser: false},
-        {speaker: 'SPEAKER_00', isUser: true},
-      ],
-    ),
+      {speaker: 'SPEAKER_00', isUser: true},
+    ]),
   ).toBe('Speaker 2');
   expect(
-    conversationDetailSpeakerCopy(
+    conversationDetailSpeakerCopy({speaker: 'SPEAKER_00', isUser: true}, [
       {speaker: 'SPEAKER_00', isUser: true},
-      [{speaker: 'SPEAKER_00', isUser: true}],
-    ),
+    ]),
   ).toBe('You');
   expect(
-    conversationDetailSpeakerCopy(
+    conversationDetailSpeakerCopy({speaker: 'SPEAKER_01', isUser: false}, [
       {speaker: 'SPEAKER_01', isUser: false},
-      [{speaker: 'SPEAKER_01', isUser: false}],
-    ),
+    ]),
   ).toBe('Speaker 1');
   expect(
     conversationDetailSpeakerCopy(
@@ -1073,10 +1069,9 @@ test('discarded conversation titles use Flutter transcript excerpt and people na
     ),
   ).toBe('Alex Chen');
   expect(
-    conversationDetailSpeakerCopy(
+    conversationDetailSpeakerCopy({speaker: 'SPEAKER_99', isUser: false}, [
       {speaker: 'SPEAKER_99', isUser: false},
-      [{speaker: 'SPEAKER_99', isUser: false}],
-    ),
+    ]),
   ).toBe('omi');
   expect(
     conversationDetailSpeakerCopy(
@@ -1085,22 +1080,16 @@ test('discarded conversation titles use Flutter transcript excerpt and people na
     ),
   ).toBe('omi');
   expect(
-    conversationDetailSpeakerCopy(
+    conversationDetailSpeakerCopy({speaker: 'SPEAKER_100', isUser: false}, [
+      {speaker: 'SPEAKER_99', isUser: false},
       {speaker: 'SPEAKER_100', isUser: false},
-      [
-        {speaker: 'SPEAKER_99', isUser: false},
-        {speaker: 'SPEAKER_100', isUser: false},
-      ],
-    ),
+    ]),
   ).toBe('Speaker 2');
   expect(
-    conversationDetailSpeakerCopy(
+    conversationDetailSpeakerCopy({speaker: 'SPEAKER_00', isUser: false}, [
       {speaker: 'SPEAKER_00', isUser: false},
-      [
-        {speaker: 'SPEAKER_00', isUser: false},
-        {speaker: 'SPEAKER_99', isUser: false},
-      ],
-    ),
+      {speaker: 'SPEAKER_99', isUser: false},
+    ]),
   ).toBe('Speaker 1');
   expect(
     conversationDiscardedTranscriptCopy([
@@ -1334,7 +1323,9 @@ test('usage stats copy names GET today counts without Upgrade', () => {
       insightsGained: 0,
       memoriesCreated: 0,
     }),
-  ).toEqual([{title: usageThisYearTitleCopy(), copy: usageActivityEmptyCopy()}]);
+  ).toEqual([
+    {title: usageThisYearTitleCopy(), copy: usageActivityEmptyCopy()},
+  ]);
   expect(
     usagePeriodStatsCopy('Today', {
       transcriptionSeconds: 0,
@@ -1357,7 +1348,9 @@ test('primary language copy names Flutter notSet for empty or catalog-miss GET l
   expect(primaryLanguageCopy('en', null)).toBe('en');
   expect(primaryLanguageCopy('', [{code: 'en', name: 'English'}])).toBeNull();
   expect(primaryLanguageCopy(null, [{code: 'en', name: 'English'}])).toBeNull();
-  expect(primaryLanguageCopy('\u0085', [{code: 'en', name: 'English'}])).toBeNull();
+  expect(
+    primaryLanguageCopy('\u0085', [{code: 'en', name: 'English'}]),
+  ).toBeNull();
   expect(
     primaryLanguageCopy('xx', [
       {code: 'en', name: 'English'},
@@ -1391,22 +1384,23 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
     'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.',
   );
   expect(
-    fairUseCopy({
-      stage: 'restrict',
-      caseRef: 'FU-1',
-      message: 'Usage is restricted.',
-      speechHoursToday: 2.4,
-      speechHours3day: 8.1,
-      speechHoursWeekly: 11,
-      dailyHours: 2,
-      threeDayHours: 8,
-      weeklyHours: 10,
-      dailyLimitMs: 1_800_000,
-      usedMs: 1_800_000,
-      exhausted: true,
-      resetsAtMs: Date.parse('2026-09-11T05:00:00Z'),
-    },
-    new Date('2026-09-11T00:00:00Z'),
+    fairUseCopy(
+      {
+        stage: 'restrict',
+        caseRef: 'FU-1',
+        message: 'Usage is restricted.',
+        speechHoursToday: 2.4,
+        speechHours3day: 8.1,
+        speechHoursWeekly: 11,
+        dailyHours: 2,
+        threeDayHours: 8,
+        weeklyHours: 10,
+        dailyLimitMs: 1_800_000,
+        usedMs: 1_800_000,
+        exhausted: true,
+        resetsAtMs: Date.parse('2026-09-11T05:00:00Z'),
+      },
+      new Date('2026-09-11T00:00:00Z'),
     ),
   ).toEqual([
     {title: 'Fair Use', copy: 'Restricted · FU-1'},
@@ -1706,9 +1700,9 @@ test('firmware update copy names GET latest without Available on current or draf
   expect(deviceBatteryPercentCopy(87)).not.toContain('battery');
   expect(deviceDisconnectedCopy()).toBe('Disconnected');
   expect(deviceDisconnectedCopy()).not.toContain('Omi');
-  expect(
-    compactHomeDeviceLabelCopy('Omi not connected', true),
-  ).toBe(deviceDisconnectedCopy());
+  expect(compactHomeDeviceLabelCopy('Omi not connected', true)).toBe(
+    deviceDisconnectedCopy(),
+  );
   expect(compactHomeDeviceLabelCopy('Omi not connected', false)).toBe(
     'Omi not connected',
   );
@@ -1894,7 +1888,9 @@ test('developer key copy names GET empty scopes Read Only without inventing it o
       [{name: 'Cursor', keyPrefix: 'omi_mcp_cd', createdAtMs}],
       mcpTitleCopy(),
     ),
-  ).toEqual([{title: mcpTitleCopy(), copy: `Cursor · omi_mcp_cd · ${created}`}]);
+  ).toEqual([
+    {title: mcpTitleCopy(), copy: `Cursor · omi_mcp_cd · ${created}`},
+  ]);
   expect(developerKeyScopeCopy([])).toBe('');
   expect(developerKeyScopeCopy(undefined)).toBe('');
   expect(developerKeyScopeCopy([], {emptyCopy: 'Read Only'})).toBe('Read Only');
@@ -1909,7 +1905,9 @@ test('developer key copy names GET empty scopes Read Only without inventing it o
 test('developer key copy names GET prefix Flutter *** mask without inventing it on MCP keys', () => {
   const createdAtMs = Date.parse('2026-09-09T12:00:00.000Z');
   const created = developerKeyCreatedCopy(createdAtMs);
-  expect(developerKeyPrefixCopy('omi_sk_ab', {mask: true})).toBe('omi_sk_ab***');
+  expect(developerKeyPrefixCopy('omi_sk_ab', {mask: true})).toBe(
+    'omi_sk_ab***',
+  );
   expect(developerKeyPrefixCopy('omi_sk_ab')).toBe('omi_sk_ab');
   expect(developerKeyPrefixCopy('', {mask: true})).toBe('***');
   expect(developerKeyPrefixCopy('')).toBe('');
@@ -1937,7 +1935,9 @@ test('developer key copy names GET prefix Flutter *** mask without inventing it 
       [{name: 'Cursor', keyPrefix: 'omi_mcp_cd', createdAtMs}],
       mcpTitleCopy(),
     ),
-  ).toEqual([{title: mcpTitleCopy(), copy: `Cursor · omi_mcp_cd · ${created}`}]);
+  ).toEqual([
+    {title: mcpTitleCopy(), copy: `Cursor · omi_mcp_cd · ${created}`},
+  ]);
   expect(
     developerKeyRowCopy(
       {name: 'Local', keyPrefix: 'omi_sk_ab', createdAtMs},
@@ -2070,6 +2070,17 @@ test('developer webhook rows omit empty or whitespace URLs', () => {
       intervalSeconds: '12',
     }),
   ).toBe('Enabled · 12s');
+});
+
+test('Settings User ID copy names Flutter ProfilePage first-3 ••••• last-3 when longer than 6', () => {
+  expect(userIdCopy(null)).toBe(accountIdUnavailableCopy());
+  expect(userIdCopy('')).toBe(accountIdUnavailableCopy());
+  expect(userIdCopy(' \t\n')).toBe(accountIdUnavailableCopy());
+  expect(userIdCopy('user-1')).toBe('user-1');
+  expect(userIdCopy('123456')).toBe('123456');
+  expect(userIdCopy('user-42')).toBe('use•••••-42');
+  expect(userIdCopy('user-42')).not.toBe('user-42');
+  expect(userIdCopy('  abcdefg  ')).toBe('abc•••••efg');
 });
 
 test('whitespace-only account fields stay unset instead of a blank row', () => {
@@ -2385,18 +2396,17 @@ test('task card chrome names loaded GET task description and omits ids', () => {
   expect(
     paintedChatContentBlock({eyebrow: 'Task', taskId: 'missing'}, tasks),
   ).toEqual({eyebrow: 'Task', title: chatBlockUnavailableCopy()});
-  expect(
-    paintedChatContentBlock({eyebrow: 'Task', taskId: 'missing'}),
-  ).toEqual({eyebrow: 'Task', title: chatBlockLoadingCopy()});
+  expect(paintedChatContentBlock({eyebrow: 'Task', taskId: 'missing'})).toEqual(
+    {eyebrow: 'Task', title: chatBlockLoadingCopy()},
+  );
   expect(chatBlockLoadingCopy()).toBe('Loading...');
   expect(
     paintedChatContentBlock({eyebrow: 'Task', taskId: 'missing'}, []),
   ).toEqual({eyebrow: 'Task', title: chatBlockUnavailableCopy()});
   expect(
-    paintedChatContentBlock(
-      {eyebrow: 'Task', taskId: 'task-join'},
-      [{id: 'task-join', title: ' \t'}],
-    ),
+    paintedChatContentBlock({eyebrow: 'Task', taskId: 'task-join'}, [
+      {id: 'task-join', title: ' \t'},
+    ]),
   ).toEqual({eyebrow: 'Task'});
   expect(
     JSON.stringify(
@@ -2519,7 +2529,11 @@ test('memory link chrome names loaded GET miss No longer available without leaki
   expect(
     JSON.stringify(
       paintedChatContentBlock(
-        {eyebrow: 'Memory', title: 'Prefers concise notes', memoryId: 'missing'},
+        {
+          eyebrow: 'Memory',
+          title: 'Prefers concise notes',
+          memoryId: 'missing',
+        },
         undefined,
         false,
         undefined,
@@ -2754,10 +2768,7 @@ test('chat day_summary GET text splits like Flutter DaySummaryWidget.splitMessag
     'First thing',
     'Second thing',
   ]);
-  expect(chatDaySummaryItems('1. Alpha. 2. Beta.')).toEqual([
-    'Alpha',
-    'Beta.',
-  ]);
+  expect(chatDaySummaryItems('1. Alpha. 2. Beta.')).toEqual(['Alpha', 'Beta.']);
   expect(chatDaySummaryItems('1. Alpha\n2. Beta')).toEqual(['Alpha', 'Beta']);
   expect(chatDaySummaryRowCopy(0, 'Alpha')).toBe('1. Alpha');
   expect(chatDaySummaryRowCopy(1, 'Beta.')).toBe('2. Beta.');
@@ -3307,11 +3318,7 @@ test('conversation recap date labels keep Today as time and date older days', ()
 test('conversation list New copy follows Flutter createdAt/finishedAt age', () => {
   const now = new Date(2026, 7, 14, 12, 0).getTime();
   expect(
-    conversationListNewCopy(
-      new Date(now - 30_000).toISOString(),
-      null,
-      now,
-    ),
+    conversationListNewCopy(new Date(now - 30_000).toISOString(), null, now),
   ).toBe('New 🚀');
   expect(
     conversationListNewCopy(
@@ -3321,21 +3328,13 @@ test('conversation list New copy follows Flutter createdAt/finishedAt age', () =
     ),
   ).toBe('New 🚀');
   expect(
-    conversationListNewCopy(
-      new Date(now - 90_000).toISOString(),
-      null,
-      now,
-    ),
+    conversationListNewCopy(new Date(now - 90_000).toISOString(), null, now),
   ).toBeNull();
   expect(
     conversationListNewCopy(new Date(now).toISOString(), null, now),
   ).toBeNull();
   expect(
-    conversationListNewCopy(
-      new Date(now + 5_000).toISOString(),
-      null,
-      now,
-    ),
+    conversationListNewCopy(new Date(now + 5_000).toISOString(), null, now),
   ).toBeNull();
   expect(
     conversationListNewCopy(new Date(0).toISOString(), null, now),
@@ -3807,9 +3806,7 @@ test('rejects duplicate memory IDs instead of merging an ambiguous page', async 
     loadMemories(
       backendFor(() => ({
         status: 200,
-        body: JSON.stringify(
-          page([memory, memory], 'recall-completeness-v1'),
-        ),
+        body: JSON.stringify(page([memory, memory], 'recall-completeness-v1')),
       })),
     ),
   ).rejects.toThrow('Memory IDs are duplicated');
@@ -4238,10 +4235,7 @@ test('parses catalogue, enabled, owned, and service app records without inventin
     }),
   );
   expect(
-    parseCloudApp(
-      {id: 'catalog-app-2', name: 'Unrated app'},
-      'App 1',
-    ),
+    parseCloudApp({id: 'catalog-app-2', name: 'Unrated app'}, 'App 1'),
   ).toEqual(
     expect.objectContaining({
       ratingAvg: null,
@@ -4349,9 +4343,9 @@ test('keeps empty catalogue names instead of failing the Apps page', () => {
     expect.objectContaining({id: 'catalog-omitted', name: ''}),
     expect.objectContaining({id: 'catalog-named', name: 'Owned app'}),
   ]);
-  expect(() =>
-    parseCloudApp({id: 'catalog-app-1', name: 1}, 'App 0'),
-  ).toThrow('App 0 is malformed');
+  expect(() => parseCloudApp({id: 'catalog-app-1', name: 1}, 'App 0')).toThrow(
+    'App 0 is malformed',
+  );
   expect(() =>
     parseCloudApp({id: 'catalog-app-1', name: null}, 'App 0'),
   ).toThrow('App 0 is malformed');
@@ -4485,7 +4479,10 @@ test('keeps empty subscription plan tokens instead of failing Settings Plan', ()
     }),
   );
   expect(() =>
-    parseCloudSubscription({plan: 1, status: 'active'}, 'Subscription response'),
+    parseCloudSubscription(
+      {plan: 1, status: 'active'},
+      'Subscription response',
+    ),
   ).toThrow('Subscription response is malformed');
   expect(() =>
     parseCloudSubscription(
@@ -5167,10 +5164,7 @@ test('loadAccountSettings names GET usage today without inventing zeros', async 
   expect(parseCloudUsage({today: null}, 'Usage')).toBeNull();
   expect(parseCloudUsage({}, 'Usage')).toBeNull();
   expect(
-    parseCloudUsage(
-      {today: {transcription_seconds: '90'}},
-      'Usage',
-    ),
+    parseCloudUsage({today: {transcription_seconds: '90'}}, 'Usage'),
   ).toEqual({
     transcriptionSeconds: 90,
     wordsTranscribed: 0,
@@ -5178,10 +5172,7 @@ test('loadAccountSettings names GET usage today without inventing zeros', async 
     memoriesCreated: 0,
   });
   expect(() =>
-    parseCloudUsage(
-      {today: {transcription_seconds: '90.5'}},
-      'Usage',
-    ),
+    parseCloudUsage({today: {transcription_seconds: '90.5'}}, 'Usage'),
   ).toThrow('Usage transcription_seconds is malformed');
 });
 
@@ -5260,10 +5251,7 @@ test('names empty GET available-language name as omitted instead of hiding neigh
     ),
   ).toEqual([{code: 'en', name: 'English'}]);
   expect(() =>
-    parseCloudLanguageNames(
-      {languages: [{code: 'en', name: 1}]},
-      'Languages',
-    ),
+    parseCloudLanguageNames({languages: [{code: 'en', name: 1}]}, 'Languages'),
   ).toThrow('Languages languages[0] is malformed');
 });
 

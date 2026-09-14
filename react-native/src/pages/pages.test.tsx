@@ -27,7 +27,19 @@ jest.mock('../omiNative', () => ({
 
 const {ConnectorsPage} = require('./Connectors');
 const {SettingsPage} = require('./Settings');
-const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy, permissionsTitleCopy, fairUseLoadErrorCopy, usageLoadErrorCopy, subscriptionLoadErrorCopy, primaryLanguageNotSetCopy} = require('../desktopReadClient');
+const {
+  developerKeyCreatedCopy,
+  desktopBackendServiceCopy,
+  desktopReadErrorCopy,
+  dailySummaryDefaultHeadlineCopy,
+  appsEmptyCopy,
+  permissionsTitleCopy,
+  fairUseLoadErrorCopy,
+  usageLoadErrorCopy,
+  subscriptionLoadErrorCopy,
+  primaryLanguageNotSetCopy,
+  userIdCopy,
+} = require('../desktopReadClient');
 const {appChangelogsLoadErrorCopy} = require('../legacyOmiAppChangelogs');
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
@@ -1240,6 +1252,29 @@ test('Settings names Flutter notSet for empty GET name and email', async () => {
   expect(tree).toContain('user-1');
 });
 
+test('Settings names Flutter ProfilePage User ID truncation without inventing the full GET uid', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          uid: 'user-42',
+          name: 'Ada',
+          email: 'ada@example.com',
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('User ID');
+  expect(tree).toContain(userIdCopy('user-42'));
+  expect(tree).not.toContain('user-42');
+});
+
 test('Settings names GET usage today without Upgrade', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
@@ -1780,9 +1815,9 @@ test('Settings names GET daily-summary-settings without a picker or Flutter defa
     expectedApiContract: 'omi',
     path: '/v1/users/daily-summary-settings',
   });
-  expect(mockBackend.request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
-    false,
-  );
+  expect(
+    mockBackend.request.mock.calls.some(call => call[0].method === 'PATCH'),
+  ).toBe(false);
 });
 
 test('Settings names a failed daily-summary-settings GET instead of empty success', async () => {
@@ -1832,9 +1867,9 @@ test('Settings names GET mentor notification frequency without a purple slider',
     expectedApiContract: 'omi',
     path: '/v1/users/mentor-notification-settings',
   });
-  expect(mockBackend.request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
-    false,
-  );
+  expect(
+    mockBackend.request.mock.calls.some(call => call[0].method === 'PATCH'),
+  ).toBe(false);
 });
 
 test('Settings names a failed mentor notification GET instead of empty success', async () => {
@@ -1886,9 +1921,9 @@ test('Settings names GET custom vocabulary without add/delete or Flutter false d
     expectedApiContract: 'omi',
     path: '/v1/users/transcription-preferences',
   });
-  expect(mockBackend.request.mock.calls.some(call => call[0].method === 'PATCH')).toBe(
-    false,
-  );
+  expect(
+    mockBackend.request.mock.calls.some(call => call[0].method === 'PATCH'),
+  ).toBe(false);
 });
 
 test('Settings names a failed transcription-preferences GET instead of empty success', async () => {
@@ -2018,9 +2053,9 @@ test('Settings names GET developer webhook URLs without enable writes', async ()
   expect(tree).toContain('Audio data received');
   expect(tree).toContain('Summary generated');
   expect(tree).not.toContain('https://example.test/audio,5');
-  expect(mockBackend.request.mock.calls.some(call => call[0].method === 'POST')).toBe(
-    false,
-  );
+  expect(
+    mockBackend.request.mock.calls.some(call => call[0].method === 'POST'),
+  ).toBe(false);
   expect(
     mockBackend.request.mock.calls.some(
       call => call[0].path === '/v1/users/developer/webhook/button_event',
@@ -2058,9 +2093,9 @@ test('Settings names a failed developer webhook URLs GET instead of empty succes
   expect(tree).toContain('Webhooks');
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('https://example.test/conversation');
-  expect(mockBackend.request.mock.calls.some(call => call[0].method === 'POST')).toBe(
-    false,
-  );
+  expect(
+    mockBackend.request.mock.calls.some(call => call[0].method === 'POST'),
+  ).toBe(false);
   expect(
     mockBackend.request.mock.calls.some(
       call => call[0].path === '/v1/users/developer/webhook/button_event',
@@ -2832,7 +2867,8 @@ test('Settings names GET app changelogs without dismiss', async () => {
   });
   expect(
     mockBackend.request.mock.calls.some(
-      call => call[0].method === 'POST' || String(call[0].path).includes('dismiss'),
+      call =>
+        call[0].method === 'POST' || String(call[0].path).includes('dismiss'),
     ),
   ).toBe(false);
 });
@@ -3026,9 +3062,7 @@ test('Settings names malformed usage period GET instead of empty success', async
   expect(tree).toContain('This Month');
   expect(tree).toContain('This Year');
   expect(tree).toContain('All Time');
-  expect(tree).toContain(
-    usageLoadErrorCopy(),
-  );
+  expect(tree).toContain(usageLoadErrorCopy());
   expect(tree).not.toContain('This Month · Listening');
   expect(tree).not.toContain('3 minutes');
   expect(tree).not.toContain('Upgrade');

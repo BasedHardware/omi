@@ -34,6 +34,7 @@ import {
   mcpTitleCopy,
   webhooksTitleCopy,
   userIdTitleCopy,
+  userIdCopy,
   signOutTitleCopy,
   privacyPolicyTitleCopy,
   termsOfServiceTitleCopy,
@@ -808,10 +809,7 @@ export function SettingsPage({
               title="Email"
             />
             <SettingRow
-              copy={accountFieldCopy(
-                snapshot.profile.uid,
-                'Account id unavailable',
-              )}
+              copy={userIdCopy(snapshot.profile.uid)}
               title={userIdTitleCopy()}
             />
             {visibleDisplayText(snapshot.profile.company ?? '') !== '' && (
@@ -1193,7 +1191,10 @@ export function SettingsPage({
           ))
         )}
         {developerKeysError !== null ? (
-          <SettingRow copy={developerKeysError} title={developerApiTitleCopy()} />
+          <SettingRow
+            copy={developerKeysError}
+            title={developerApiTitleCopy()}
+          />
         ) : (
           developerKeys.map((row, index) => (
             <SettingRow

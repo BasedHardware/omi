@@ -159,12 +159,12 @@ export function conversationDiscardedTranscriptCopy(
       segment.isUser === true
         ? 'User'
         : personName !== undefined && personName !== ''
-          ? personName
-          : `Speaker ${
-              discardedTranscriptSpeakerId(segment.speaker) -
-              (minSpeakerId ?? 0) +
-              1
-            }`;
+        ? personName
+        : `Speaker ${
+            discardedTranscriptSpeakerId(segment.speaker) -
+            (minSpeakerId ?? 0) +
+            1
+          }`;
     transcript += `${timestampStr} ${speakerName}: ${segmentText} \n\n`;
   }
   transcript = transcript.trim();
@@ -902,6 +902,22 @@ export function userIdTitleCopy(): string {
   return 'User ID';
 }
 
+export function accountIdUnavailableCopy(): string {
+  return 'Account id unavailable';
+}
+
+/** Flutter ProfilePage.build User ID chip: first 3 + ••••• + last 3 when length > 6. */
+export function userIdCopy(uid: string | null | undefined): string {
+  const trimmed = visibleDisplayText(uid ?? '');
+  if (trimmed === '') {
+    return accountIdUnavailableCopy();
+  }
+  if (trimmed.length <= 6) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, 3)}•••••${trimmed.slice(-3)}`;
+}
+
 export function signOutTitleCopy(): string {
   return 'Sign Out';
 }
@@ -938,7 +954,8 @@ export function deviceSerialMatchesId(
   if (copy === id) {
     return true;
   }
-  const normalize = (value: string) => value.replace(/[:\-]/g, '').toUpperCase();
+  const normalize = (value: string) =>
+    value.replace(/[:\-]/g, '').toUpperCase();
   return normalize(copy) === normalize(id);
 }
 
@@ -1201,7 +1218,9 @@ export function subscriptionPeriodCopy(
   ) {
     rows.push({
       title: 'Words this month',
-      copy: `${usageCountCopy(subscription.wordsTranscribedUsed)} of ${usageCountCopy(
+      copy: `${usageCountCopy(
+        subscription.wordsTranscribedUsed,
+      )} of ${usageCountCopy(
         subscription.wordsTranscribedLimit,
       )} words used this month`,
     });
@@ -1213,7 +1232,9 @@ export function subscriptionPeriodCopy(
   ) {
     rows.push({
       title: 'Insights this month',
-      copy: `${usageCountCopy(subscription.insightsGainedUsed)} of ${usageCountCopy(
+      copy: `${usageCountCopy(
+        subscription.insightsGainedUsed,
+      )} of ${usageCountCopy(
         subscription.insightsGainedLimit,
       )} insights gained this month`,
     });
@@ -1257,10 +1278,7 @@ export function primaryLanguageTitleCopy(): string {
 
 export function primaryLanguageCopy(
   code: string | null | undefined,
-  names:
-    | ReadonlyArray<{code: string; name: string}>
-    | null
-    | undefined,
+  names: ReadonlyArray<{code: string; name: string}> | null | undefined,
 ): string | null {
   const language = visibleDisplayText(code ?? '');
   if (language === '') {
@@ -1354,7 +1372,11 @@ function dailySummaryCountCopy(
 }
 
 export function dailySummaryDurationCopy(minutes: number | undefined): string {
-  if (typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes <= 0) {
+  if (
+    typeof minutes !== 'number' ||
+    !Number.isInteger(minutes) ||
+    minutes <= 0
+  ) {
     return '';
   }
   if (minutes < 60) {
@@ -1444,7 +1466,9 @@ export function dailySummaryScheduleCopy(
   return [
     {
       title: dailySummaryScheduleTitleCopy(),
-      copy: `${settings.enabled ? 'Enabled' : 'Off'}\n${dailySummaryDescriptionCopy()}`,
+      copy: `${
+        settings.enabled ? 'Enabled' : 'Off'
+      }\n${dailySummaryDescriptionCopy()}`,
     },
     {
       title: deliveryTimeTitleCopy(),
@@ -1482,7 +1506,9 @@ export function mentorNotificationFrequencyCopy(
   return [
     {
       title: notificationFrequencyTitleCopy(),
-      copy: `${chrome.label} · ${chrome.description}\n${notificationFrequencyDescriptionCopy()}`,
+      copy: `${chrome.label} · ${
+        chrome.description
+      }\n${notificationFrequencyDescriptionCopy()}`,
     },
   ];
 }
@@ -1504,7 +1530,9 @@ export function automaticTranslationCopy(
   return [
     {
       title: automaticTranslationTitleCopy(),
-      copy: `${singleLanguageMode ? 'Off' : 'Enabled'}\n${detectLanguagesCopy()}`,
+      copy: `${
+        singleLanguageMode ? 'Off' : 'Enabled'
+      }\n${detectLanguagesCopy()}`,
     },
   ];
 }
@@ -1565,7 +1593,11 @@ export function fairUseBudgetResetCopy(
   resetsAtMs: number | undefined,
   now: Date = new Date(),
 ): string {
-  if (typeof resetsAtMs !== 'number' || !Number.isFinite(resetsAtMs) || resetsAtMs <= 0) {
+  if (
+    typeof resetsAtMs !== 'number' ||
+    !Number.isFinite(resetsAtMs) ||
+    resetsAtMs <= 0
+  ) {
     return '';
   }
   const diffMs = resetsAtMs - now.getTime();
@@ -1661,7 +1693,10 @@ export function fairUseCopy(
 
 function dottedVersionParts(value: string): number[] | null {
   const parts = visibleDisplayText(value).split('.');
-  if (parts.length === 0 || parts.some(part => part === '' || !/^[0-9]+$/.test(part))) {
+  if (
+    parts.length === 0 ||
+    parts.some(part => part === '' || !/^[0-9]+$/.test(part))
+  ) {
     return null;
   }
   return parts.map(part => Number(part));
@@ -1768,7 +1803,12 @@ export function firmwareUpdateCopy(
     minVersion: string | null;
     changelog?: readonly string[];
   } | null,
-): {latest: string; available: boolean; upToDate?: boolean; changelog?: string[]} | null {
+): {
+  latest: string;
+  available: boolean;
+  upToDate?: boolean;
+  changelog?: string[];
+} | null {
   if (details === null || details.draft) {
     return null;
   }
@@ -1956,12 +1996,14 @@ export function developerKeysEmptyCopy(): string {
 }
 
 export function developerKeysCopy(
-  keys: readonly {
-    name: string;
-    keyPrefix: string;
-    createdAtMs?: number;
-    scopes?: readonly string[];
-  }[] | null,
+  keys:
+    | readonly {
+        name: string;
+        keyPrefix: string;
+        createdAtMs?: number;
+        scopes?: readonly string[];
+      }[]
+    | null,
   title: string,
   options?: {emptyScopesCopy?: string; maskPrefix?: boolean},
 ): {title: string; copy: string}[] {
@@ -1988,7 +2030,7 @@ const APP_CATEGORY_COPY: Readonly<Record<string, string>> = {
   'emotional-and-mental-support': 'Emotional Support',
   'productivity-and-organization': 'Productivity',
   'entertainment-and-fun': 'Entertainment',
-  'financial': 'Financial',
+  financial: 'Financial',
   'travel-and-exploration': 'Travel',
   'safety-and-security': 'Safety',
   'shopping-and-commerce': 'Shopping',
@@ -2013,7 +2055,9 @@ export function appCategoryCopy(category: string): string {
   }
   return trimmed
     .split('-')
-    .map(part => (part === '' ? '' : `${part[0].toUpperCase()}${part.slice(1)}`))
+    .map(part =>
+      part === '' ? '' : `${part[0].toUpperCase()}${part.slice(1)}`,
+    )
     .join(' ');
 }
 
@@ -2247,8 +2291,8 @@ export function paintedChatContentBlock(
     expanded && block.more !== undefined
       ? visibleDisplayText(block.more)
       : block.detail === undefined
-        ? ''
-        : visibleDisplayText(block.detail);
+      ? ''
+      : visibleDisplayText(block.detail);
   return {
     eyebrow: block.eyebrow,
     ...(visibleTitle === '' ? {} : {title: visibleTitle}),
@@ -2266,8 +2310,7 @@ export function chatHumanQuotedContextCopy(text: string): {
   }
   const captured = match[1];
   return {
-    context:
-      captured.length > 50 ? `${captured.slice(0, 50)}...` : captured,
+    context: captured.length > 50 ? `${captured.slice(0, 50)}...` : captured,
     remainder: text.slice(match[0].length),
   };
 }
@@ -2386,9 +2429,7 @@ export function chatDaySummaryRowCopy(index: number, item: string): string {
   return `${index + 1}. ${item}`;
 }
 
-export function chatAppAttributionCopy(
-  appName: string | undefined,
-): string {
+export function chatAppAttributionCopy(appName: string | undefined): string {
   return appName === undefined ? '' : visibleDisplayText(appName);
 }
 
@@ -2502,9 +2543,7 @@ export function memoryBaselineCopy(item: {
   return item.isBaseline === true ? 'Baseline Memory' : null;
 }
 
-export function memoryHistoryCopy(item: {
-  history?: boolean;
-}): string | null {
+export function memoryHistoryCopy(item: {history?: boolean}): string | null {
   return item.history === true ? 'History' : null;
 }
 

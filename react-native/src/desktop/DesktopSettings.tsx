@@ -22,6 +22,7 @@ import {
   mcpTitleCopy,
   webhooksTitleCopy,
   userIdTitleCopy,
+  userIdCopy,
   signOutTitleCopy,
   accountFieldCopy,
   subscriptionPlanCopy,
@@ -910,10 +911,7 @@ export function DesktopSettings({
         />
       ) : null}
       {account?.profile != null ? (
-        <Row
-          copy={accountFieldCopy(account.profile.uid, 'Account id unavailable')}
-          title={userIdTitleCopy()}
-        />
+        <Row copy={userIdCopy(account.profile.uid)} title={userIdTitleCopy()} />
       ) : null}
       {account?.profile != null &&
       visibleDisplayText(account.profile.company ?? '') !== '' ? (
@@ -934,14 +932,14 @@ export function DesktopSettings({
       ) : null}
       {account?.subscription != null ? (
         <Row
-            copy={[
-              subscriptionPlanCopy(account.subscription.plan),
-              subscriptionStatusCopy(account.subscription.status),
-              subscriptionTranscriptionQuotaCopy(
-                account.subscription.transcriptionSecondsUsed,
-                account.subscription.transcriptionSecondsLimit,
-              ),
-            ]
+          copy={[
+            subscriptionPlanCopy(account.subscription.plan),
+            subscriptionStatusCopy(account.subscription.status),
+            subscriptionTranscriptionQuotaCopy(
+              account.subscription.transcriptionSecondsUsed,
+              account.subscription.transcriptionSecondsLimit,
+            ),
+          ]
             .filter(item => item !== null)
             .join(' · ')}
           title="Current plan"
@@ -978,16 +976,16 @@ export function DesktopSettings({
       {usageYearlyError !== null ? (
         <Row copy={usageYearlyError} title={usageThisYearTitleCopy()} />
       ) : (
-        usagePeriodStatsCopy(usageThisYearTitleCopy(), usageYearly)?.map(row => (
-          <Row copy={row.copy} key={row.title} title={row.title} />
-        ))
+        usagePeriodStatsCopy(usageThisYearTitleCopy(), usageYearly)?.map(
+          row => <Row copy={row.copy} key={row.title} title={row.title} />,
+        )
       )}
       {usageAllTimeError !== null ? (
         <Row copy={usageAllTimeError} title={usageAllTimeTitleCopy()} />
       ) : (
-        usagePeriodStatsCopy(usageAllTimeTitleCopy(), usageAllTime)?.map(row => (
-          <Row copy={row.copy} key={row.title} title={row.title} />
-        ))
+        usagePeriodStatsCopy(usageAllTimeTitleCopy(), usageAllTime)?.map(
+          row => <Row copy={row.copy} key={row.title} title={row.title} />,
+        )
       )}
       {subscriptionPeriodCopy(account?.subscription)?.map(row => (
         <Row copy={row.copy} key={row.title} title={row.title} />
@@ -1040,10 +1038,7 @@ export function DesktopSettings({
         ))
       )}
       {taskIntegrationsError !== null ? (
-        <Row
-          copy={taskIntegrationsError}
-          title={taskIntegrationsTitleCopy()}
-        />
+        <Row copy={taskIntegrationsError} title={taskIntegrationsTitleCopy()} />
       ) : (
         taskIntegrations.map(row => (
           <Row

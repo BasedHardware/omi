@@ -26,6 +26,7 @@ import {
   usageLoadErrorCopy,
   subscriptionLoadErrorCopy,
   primaryLanguageNotSetCopy,
+  userIdCopy,
 } from '../desktopReadClient';
 import {appChangelogsLoadErrorCopy} from '../legacyOmiAppChangelogs';
 
@@ -698,10 +699,7 @@ test('desktop chat names GET day_summary instead of a normal Omi turn', () => {
   });
   const copy = renderedText(renderer);
   expect(copy).toContain(
-    chatDaySummaryCopy(
-      'day_summary',
-      Date.parse('2026-09-07T12:00:00.000Z'),
-    ),
+    chatDaySummaryCopy('day_summary', Date.parse('2026-09-07T12:00:00.000Z')),
   );
   expect(copy).not.toContain('📅');
   expect(copy).toContain('1. Yesterday you captured two meetings');
@@ -3294,9 +3292,7 @@ test('Settings names malformed usage period GET instead of empty success', async
   expect(tree).toContain('This Month');
   expect(tree).toContain('This Year');
   expect(tree).toContain('All Time');
-  expect(tree).toContain(
-    usageLoadErrorCopy(),
-  );
+  expect(tree).toContain(usageLoadErrorCopy());
   expect(tree).not.toContain('This Month · Listening');
   expect(tree).not.toContain('3 minutes');
   expect(tree).not.toContain('Upgrade');
@@ -3752,9 +3748,7 @@ test('Settings names GET task integrations without Connect or a write sheet', as
   expect(tree).not.toContain('secret-todoist');
   expect(tree).not.toContain('Coming Soon');
   expect(
-    renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Connect',
-    ),
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Connect'),
   ).toHaveLength(0);
   expect(omiBackend.request).toHaveBeenCalledWith({
     id: expect.any(String),
@@ -3832,9 +3826,7 @@ test('Settings names a failed task-integrations GET instead of empty success', a
   expect(tree).not.toContain('Todoist');
   expect(tree).not.toContain('secret-todoist');
   expect(
-    renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Connect',
-    ),
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Connect'),
   ).toHaveLength(0);
 });
 
@@ -3923,9 +3915,7 @@ test('Settings names GET integrations without Connect or a write sheet', async (
   expect(tree).not.toContain('Disconnect');
   expect(tree).not.toContain('Create your own');
   expect(
-    renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Connect',
-    ),
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Connect'),
   ).toHaveLength(0);
   expect(omiBackend.request).toHaveBeenCalledWith({
     id: expect.any(String),
@@ -4013,9 +4003,7 @@ test('Settings names a failed integrations GET instead of empty success', async 
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Gmail');
   expect(
-    renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Connect',
-    ),
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Connect'),
   ).toHaveLength(0);
 });
 
@@ -4113,7 +4101,8 @@ test('Settings names GET app changelogs without dismiss', async () => {
   });
   expect(
     omiBackend.request.mock.calls.some(
-      call => call[0].method === 'POST' || String(call[0].path).includes('dismiss'),
+      call =>
+        call[0].method === 'POST' || String(call[0].path).includes('dismiss'),
     ),
   ).toBe(false);
 });
@@ -5354,7 +5343,9 @@ test('Settings does not claim Signed in to Omi when a loaded profile has no emai
       .props.onPress();
   });
   expect(renderedText(renderer)).toContain(primaryLanguageNotSetCopy());
-  expect(renderedText(renderer)).not.toContain('Email not set on this account.');
+  expect(renderedText(renderer)).not.toContain(
+    'Email not set on this account.',
+  );
   expect(renderedText(renderer)).toContain('Ada');
   expect(renderedText(renderer)).not.toContain('Signed in to Omi');
 });
@@ -5402,7 +5393,8 @@ test('Settings shows already-loaded Account id and Name not set', async () => {
   expect(tree).not.toContain('Name not set on this account.');
   expect(tree).toContain('User ID');
   expect(tree).not.toContain('Account id');
-  expect(tree).toContain('user-42');
+  expect(tree).toContain(userIdCopy('user-42'));
+  expect(tree).not.toContain('user-42');
   expect(tree).not.toContain('Signed in to Omi');
 });
 
