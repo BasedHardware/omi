@@ -1687,6 +1687,10 @@ export function firmwareWhatsNewCopy(): string {
   return "What's New";
 }
 
+export function firmwareDeviceUpToDateCopy(): string {
+  return 'Your device is up to date';
+}
+
 export function deviceProductNameCopy(): string {
   return 'Product Name';
 }
@@ -1747,7 +1751,7 @@ export function firmwareUpdateCopy(
     minVersion: string | null;
     changelog?: readonly string[];
   } | null,
-): {latest: string; available: boolean; changelog?: string[]} | null {
+): {latest: string; available: boolean; upToDate?: boolean; changelog?: string[]} | null {
   if (details === null || details.draft) {
     return null;
   }
@@ -1759,6 +1763,10 @@ export function firmwareUpdateCopy(
   const newest = dottedVersionParts(latest);
   const minimum =
     details.minVersion === null ? null : dottedVersionParts(details.minVersion);
+  const upToDate =
+    current !== null &&
+    newest !== null &&
+    compareDottedVersion(newest, current) === 0;
   const available =
     current !== null &&
     newest !== null &&
@@ -1771,6 +1779,7 @@ export function firmwareUpdateCopy(
   return {
     latest,
     available,
+    ...(upToDate ? {upToDate: true} : {}),
     ...(changelog.length === 0 ? {} : {changelog}),
   };
 }

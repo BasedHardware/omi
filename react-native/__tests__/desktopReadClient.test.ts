@@ -150,6 +150,7 @@ import {
   primaryLanguageNotSetCopy,
   peopleNameRows,
   firmwareUpdateCopy,
+  firmwareDeviceUpToDateCopy,
   firmwareLatestVersionCopy,
   firmwareWhatsNewCopy,
   deviceModelNumberCopy,
@@ -1677,6 +1678,7 @@ test('transcription preference copy names GET vocabulary without Flutter false d
 test('firmware update copy names GET latest without Available on current or draft', () => {
   expect(firmwareLatestVersionCopy()).toBe('Latest Version');
   expect(firmwareWhatsNewCopy()).toBe("What's New");
+  expect(firmwareDeviceUpToDateCopy()).toBe('Your device is up to date');
   expect(deviceProductNameCopy()).toBe('Product Name');
   expect(deviceModelNumberCopy()).toBe('Model Number');
   expect(deviceSerialNumberCopy()).toBe('Serial Number');
@@ -1710,7 +1712,20 @@ test('firmware update copy names GET latest without Available on current or draf
       draft: false,
       minVersion: null,
     }),
-  ).toEqual({latest: '1.3.0', available: false});
+  ).toEqual({latest: '1.3.0', available: false, upToDate: true});
+  expect(
+    firmwareUpdateCopy('1.3.0', {
+      version: '1.3.0',
+      draft: false,
+      minVersion: null,
+      changelog: ['Battery improvements'],
+    }),
+  ).toEqual({
+    latest: '1.3.0',
+    available: false,
+    upToDate: true,
+    changelog: ['Battery improvements'],
+  });
   expect(
     firmwareUpdateCopy('1.2.3', {
       version: '1.3.0',

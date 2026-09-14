@@ -19,6 +19,7 @@ import {
   deviceSerialMatchesId,
   deviceUnknownCopy,
   firmwareUpdateCopy,
+  firmwareDeviceUpToDateCopy,
   firmwareLatestVersionCopy,
   firmwareWhatsNewCopy,
   desktopReadErrorCopy,
@@ -148,6 +149,7 @@ export function DeviceSession({
   const [firmwareCopy, setFirmwareCopy] = useState<{
     latest: string;
     available: boolean;
+    upToDate?: boolean;
     changelog?: string[];
   } | null>(null);
   const [firmwareError, setFirmwareError] = useState<string | null>(null);
@@ -465,6 +467,10 @@ export function DeviceSession({
           {firmwareLatestVersionCopy()}
           {': '}
           {firmwareError}
+        </Text>
+      ) : firmwareCopy?.upToDate === true ? (
+        <Text selectable style={styles.deviceMeta}>
+          {firmwareDeviceUpToDateCopy()}
         </Text>
       ) : firmwareCopy !== null ? (
         <Text selectable style={styles.deviceMeta}>
