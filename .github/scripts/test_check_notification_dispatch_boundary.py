@@ -16,10 +16,39 @@ def _write(root: Path, relative: str, source: str) -> None:
     path.write_text(source, encoding='utf-8')
 
 
+# A minimal transport module: the entry points are derived from which public
+# functions call a primitive, so a fixture needs the module, not a name list.
+_TRANSPORT_MODULE = '''
+def _send_to_user(uid, tag, **kw): ...
+async def _send_to_user_async(uid, tag, **kw): ...
+def _send_messages(messages): ...
+
+def send_notification(uid, title, body):
+    _send_to_user(uid, "t")
+
+async def send_notification_async(uid, title, body):
+    await _send_to_user_async(uid, "t")
+
+def send_client_displayed_notification(uid, title, body):
+    _send_to_user(uid, "t")
+
+async def send_client_displayed_notification_async(uid, title, body):
+    await _send_to_user_async(uid, "t")
+
+def send_credit_limit_notification(uid):
+    send_notification(uid, "Credits", "low")
+'''
+
+
+def _write_transport(root: Path, source: str = _TRANSPORT_MODULE) -> None:
+    _write(root, 'backend/utils/notifications.py', source)
+
+
 class NotificationDispatchBoundaryTests(unittest.TestCase):
     def test_scanner_resolves_direct_alias_and_module_qualified_calls(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            _write_transport(root)
             _write(
                 root,
                 'backend/producer.py',
@@ -41,6 +70,7 @@ delivery = push
         # producer keep owning transport while the ratchet read it as a reduction.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            _write_transport(root)
             _write(
                 root,
                 'backend/producer.py',
@@ -56,6 +86,55 @@ async def stream(uid):
             )
 
             self.assertEqual(guard.scan_direct_transport_calls(root), {'backend/producer.py': 2})
+
+    def test_a_new_transport_entry_point_is_guarded_without_editing_the_checker(self) -> None:
+        # A hand-maintained name list covered 7 of the module's direct senders, and the
+        # first entry point added after it went unguarded until a merge exposed it.
+        # Deriving from the module means a new sender is counted the day it lands.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_transport(
+                root,
+                _TRANSPORT_MODULE
+                + '''
+def send_brand_new_push(uid):
+    _send_to_user(uid, "t")
+''',
+            )
+            _write(
+                root,
+                'backend/producer.py',
+                'from utils.notifications import send_brand_new_push\nsend_brand_new_push("u")\n',
+            )
+
+            self.assertIn('send_brand_new_push', guard.transport_entry_points(root))
+            self.assertEqual(guard.scan_direct_transport_calls(root), {'backend/producer.py': 1})
+
+    def test_only_functions_that_call_a_primitive_are_entry_points(self) -> None:
+        # The stated limit: a wrapper delivering through another public function is not
+        # itself an entry point, so a producer calling only the wrapper is not counted.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_transport(root)
+            _write(
+                root,
+                'backend/producer.py',
+                'from utils.notifications import send_credit_limit_notification\nsend_credit_limit_notification("u")\n',
+            )
+
+            entry_points = guard.transport_entry_points(root)
+            self.assertNotIn('send_credit_limit_notification', entry_points)
+            self.assertNotIn('_build_message', entry_points)
+            self.assertEqual(guard.scan_direct_transport_calls(root), {})
+
+    def test_a_missing_transport_module_fails_closed(self) -> None:
+        # An unreadable module must not derive an empty guard list and pass as zero calls.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(root, 'backend/producer.py', 'from utils.notifications import send_notification\n')
+
+            with self.assertRaises(RuntimeError):
+                guard.scan_direct_transport_calls(root)
 
     def test_scanner_excludes_transport_owner_dispatcher_and_tests(self) -> None:
         source = 'from utils.notifications import send_notification\nsend_notification("u", "t", "b")\n'

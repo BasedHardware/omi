@@ -13,17 +13,12 @@ from typing import Mapping, Optional
 
 BASELINE_PATH = Path('.github/scripts/notification_dispatch_boundary_baseline.json')
 TRANSPORT_MODULE = 'utils.notifications'
-TRANSPORT_CALLS = frozenset(
-    {
-        '_send_to_user',
-        '_send_to_user_async',
-        'send_bulk_notification',
-        'send_client_displayed_notification',
-        'send_client_displayed_notification_async',
-        'send_notification',
-        'send_notification_async',
-    }
-)
+TRANSPORT_MODULE_PATH = Path('backend/utils/notifications.py')
+# The private senders every FCM delivery in the transport module reaches. The
+# public entry points are derived from these rather than listed: a hand list
+# covered 7 of the module's 13 direct senders, and the first new entry point
+# added after it (#13173) went unguarded until a merge happened to expose it.
+TRANSPORT_PRIMITIVES = frozenset({'_send_to_user', '_send_to_user_async', '_send_messages'})
 EXCLUDED_PATHS = frozenset(
     {
         'backend/utils/notification_dispatch.py',
@@ -33,7 +28,8 @@ EXCLUDED_PATHS = frozenset(
 
 
 class _TransportCallVisitor(ast.NodeVisitor):
-    def __init__(self) -> None:
+    def __init__(self, transport_calls: frozenset[str]) -> None:
+        self.transport_calls = transport_calls
         self.direct_names: set[str] = set()
         self.module_names: set[str] = set()
         self.called_name_nodes: set[int] = set()
@@ -42,7 +38,7 @@ class _TransportCallVisitor(ast.NodeVisitor):
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module == TRANSPORT_MODULE:
             for alias in node.names:
-                if alias.name in TRANSPORT_CALLS:
+                if alias.name in self.transport_calls:
                     self.direct_names.add(alias.asname or alias.name)
         self.generic_visit(node)
 
@@ -58,7 +54,7 @@ class _TransportCallVisitor(ast.NodeVisitor):
             self.called_name_nodes.add(id(node.func))
         elif (
             isinstance(node.func, ast.Attribute)
-            and node.func.attr in TRANSPORT_CALLS
+            and node.func.attr in self.transport_calls
             and isinstance(node.func.value, ast.Name)
             and node.func.value.id in self.module_names
         ):
@@ -72,7 +68,38 @@ class _TransportCallVisitor(ast.NodeVisitor):
             self.count += 1
 
 
+def transport_entry_points(root: Path) -> frozenset[str]:
+    """Names a producer must not call: the primitives plus every public function
+    in the transport module whose own body calls one.
+
+    Direct callers only, and that is a stated limit rather than full coverage:
+    a public wrapper that delivers through another public function
+    (send_credit_limit_notification -> send_notification) is not itself counted,
+    so its producers are not either. Those wrappers each send one fixed,
+    already-typed notification; widening to them is a later #9518 slice.
+    """
+    module = root / TRANSPORT_MODULE_PATH
+    try:
+        tree = ast.parse(module.read_text(encoding='utf-8'), filename=TRANSPORT_MODULE_PATH.as_posix())
+    except (OSError, SyntaxError) as exc:
+        raise RuntimeError(f'cannot derive transport entry points from {TRANSPORT_MODULE_PATH}: {exc}') from exc
+
+    names = set(TRANSPORT_PRIMITIVES)
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name.startswith('_'):
+            continue
+        if any(
+            isinstance(inner, ast.Call)
+            and isinstance(inner.func, ast.Name)
+            and inner.func.id in TRANSPORT_PRIMITIVES
+            for inner in ast.walk(node)
+        ):
+            names.add(node.name)
+    return frozenset(names)
+
+
 def scan_direct_transport_calls(root: Path) -> dict[str, int]:
+    transport_calls = transport_entry_points(root)
     observed: dict[str, int] = {}
     for path in sorted((root / 'backend').rglob('*.py')):
         relative = path.relative_to(root).as_posix()
@@ -87,7 +114,7 @@ def scan_direct_transport_calls(root: Path) -> dict[str, int]:
             tree = ast.parse(path.read_text(encoding='utf-8'), filename=relative)
         except (OSError, SyntaxError) as exc:
             raise RuntimeError(f'cannot inspect {relative}: {exc}') from exc
-        visitor = _TransportCallVisitor()
+        visitor = _TransportCallVisitor(transport_calls)
         visitor.visit(tree)
         if visitor.count:
             observed[relative] = visitor.count
