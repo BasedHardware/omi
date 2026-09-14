@@ -14,6 +14,7 @@ holds bearer credentials.
 
 from __future__ import annotations
 
+import math
 import os
 import secrets
 import sys
@@ -170,8 +171,11 @@ class Config:
 # Profile fields that must be strings when present. ``id_token_expires_at`` is
 # numeric (epoch seconds) and validated separately. Anything else lands in
 # ``Profile.extra`` untouched so forward-compatible keys keep working.
+# NOTE: ``name`` is intentionally absent. The profile name comes from the TOML
+# table key (see ``Profile.from_toml_dict``); a ``name`` key inside the payload
+# is forward-compatible ``extra`` and must be preserved, not rejected.
 _STRING_PROFILE_FIELDS = frozenset(
-    {"name", "auth_method", "api_key", "id_token", "refresh_token", "api_base", "local_api_url", "local_token"}
+    {"auth_method", "api_key", "id_token", "refresh_token", "api_base", "local_api_url", "local_token"}
 )
 
 
@@ -189,6 +193,10 @@ def _validate_profile_field_types(name: str, raw: dict[str, Any]) -> Optional[st
     expires_at = raw.get("id_token_expires_at")
     if expires_at is not None and (isinstance(expires_at, bool) or not isinstance(expires_at, (int, float))):
         return f"profile '{name}' field 'id_token_expires_at' must be a number, " f"got {type(expires_at).__name__}"
+    if isinstance(expires_at, float) and not math.isfinite(expires_at):
+        # TOML nan/inf would otherwise pass as numeric and break OAuth refresh
+        # (``time.time() >= nan`` is False, so a refresh is skipped forever).
+        return f"profile '{name}' field 'id_token_expires_at' must be a finite number"
     return None
 
 
