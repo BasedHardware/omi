@@ -862,6 +862,7 @@ export interface ResultMessage extends QueryScopedOutbound {
   jitReceiptAttemptIDs?: string[];
   /// Served model identities observed on this run's completions, deduplicated.
   modelsUsed?: string[];
+  providerTargets?: string[];
   artifacts?: SerializedArtifact[];
   completionDeltaArtifacts?: SerializedArtifact[];
 }

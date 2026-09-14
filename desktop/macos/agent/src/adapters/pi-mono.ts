@@ -9,7 +9,7 @@
 import { ChildProcess, spawn } from "child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
+import { dirname, join, resolve } from "path";
 import { createInterface, Interface as ReadlineInterface } from "readline";
 import { adapterCapabilitiesFor, HarnessFeature } from "./interface.js";
 import type {
@@ -530,6 +530,9 @@ export class PiMonoAdapter implements HarnessAdapter {
   /** Current system prompt baked into the spawned pi process via --system-prompt.
    *  Pi has no set_system_prompt RPC, so changing this requires a subprocess restart. */
   private currentSystemPrompt: string | undefined;
+  /** Kernel-admitted directory bound to this pinned worker process. Pi's
+   * native file tools resolve relative paths from the subprocess cwd. */
+  private currentWorkingDirectory: string | undefined;
   private currentExecutionRole: "coordinator" | "leaf" = "coordinator";
   private currentToolProjection: {
     surfaceKind?: string;
@@ -660,6 +663,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.process = spawn(this.piPath, args, {
       stdio: ["pipe", "pipe", "pipe"],
       env,
+      ...(this.currentWorkingDirectory ? { cwd: this.currentWorkingDirectory } : {}),
     });
 
     if (!this.process.stdout || !this.process.stdin) {
@@ -740,6 +744,18 @@ export class PiMonoAdapter implements HarnessAdapter {
     const mapped = opts.model ? mapModel(opts.model) : undefined;
     await this.setExecutionRole(opts.executionRole ?? "coordinator");
 
+    const admittedWorkingDirectory = resolve(opts.cwd);
+    if (
+      this.currentWorkingDirectory !== undefined
+      && this.currentWorkingDirectory !== admittedWorkingDirectory
+      && this.process
+    ) {
+      // A pinned worker may be reassigned only while idle. Process-local Pi
+      // sessions cannot cross artifact roots, so restart before rebinding it.
+      await this.stop();
+    }
+    this.currentWorkingDirectory = admittedWorkingDirectory;
+
     // Pi bakes the system prompt at spawn time via --system-prompt. If the
     // caller requested a different prompt than the currently-running process,
     // restart the subprocess with the new flag. Callers that want this handled
@@ -751,7 +767,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     const sessionId = `${this.sessionPrefix}-session-${this.nextSessionId++}`;
     this.sessions.set(sessionId, {
-      cwd: opts.cwd,
+      cwd: admittedWorkingDirectory,
       model: mapped,
       systemPrompt: opts.systemPrompt,
     });
@@ -1898,13 +1914,26 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
     sink: AdapterEventSink,
     signal: AbortSignal
   ): Promise<AdapterAttemptResult> {
+    const providerTargets = new Set<string>();
+    const modelsUsed = new Set<string>();
+    const observingSink: AdapterEventSink = (event) => {
+      if (event.type === "model_used") {
+        if (typeof event.provider === "string" && event.provider.length > 0) {
+          providerTargets.add(event.provider);
+        }
+        if (typeof event.model === "string" && event.model.length > 0) {
+          modelsUsed.add(event.model);
+        }
+      }
+      sink(event);
+    };
     try {
       const result = await this.harness.sendPrompt(
         context.binding.adapterNativeSessionId,
         context.prompt,
         context.tools ?? [],
         context.mode,
-        sink,
+        observingSink,
         async () => "",
         signal,
         {
@@ -1927,6 +1956,8 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         jitEstimatedCostUsd: result.jitEstimatedCostUsd,
         jitProviderAttempts: result.jitProviderAttempts,
         jitReceiptAttemptIDs: result.jitReceiptAttemptIDs,
+        providerTargets: [...providerTargets],
+        modelsUsed: [...modelsUsed],
         adapterSessionId: result.sessionId,
         terminalStatus: signal.aborted || this.cancelledAttempts.has(context.attemptId) ? "cancelled" : "succeeded",
       };

@@ -2778,10 +2778,6 @@
           "type": "string",
           "description": "Owner id. Defaults to the active signed-in owner."
         },
-        "adapterId": {
-          "type": "string",
-          "description": "Optional adapter override."
-        },
         "cwd": {
           "type": "string",
           "description": "Optional working directory."
@@ -2852,10 +2848,6 @@
         "ownerId": {
           "type": "string",
           "description": "Owner id. Defaults to the active signed-in owner."
-        },
-        "adapterId": {
-          "type": "string",
-          "description": "Optional adapter override."
         },
         "cwd": {
           "type": "string",
