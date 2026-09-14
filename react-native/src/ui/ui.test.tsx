@@ -861,6 +861,10 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(orchestrator).toContain('conversationListEmoji(item)');
   expect(orchestrator).toContain('conversationListTag(item)');
   expect(orchestrator).toContain('conversationListNewCopy(');
+  expect(orchestrator).toContain("merging: item.status === 'merging'");
+  expect(orchestrator).not.toContain(
+    "item.status === 'processing' || item.status === 'merging'",
+  );
   expect(orchestrator).toContain('homeSearchBannerPhase(');
   expect(orchestrator).toContain("readOutcomes.tasks.status === 'success'");
   expect(orchestrator).toContain(

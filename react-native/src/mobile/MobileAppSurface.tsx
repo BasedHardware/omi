@@ -71,6 +71,7 @@ export type MobileRecap = {
   discarded?: boolean;
   failed?: boolean;
   processing?: boolean;
+  merging?: boolean;
   photoCount?: number;
   emoji?: string | null;
   tag?: string | null;
@@ -296,7 +297,13 @@ const RecapCard = memo(function RecapCard({
           Failed
         </Text>
       ) : null}
-      {recap.processing === true ? (
+      {recap.merging === true ? (
+        <Text
+          accessibilityLabel="Merging... conversation"
+          style={styles.recapStar}>
+          Merging...
+        </Text>
+      ) : recap.processing === true ? (
         <Text
           accessibilityLabel="Processing conversation"
           style={styles.recapStar}>

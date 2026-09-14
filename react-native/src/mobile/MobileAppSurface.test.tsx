@@ -947,6 +947,41 @@ test('Daily Recaps name processing conversations without Status on every card', 
   expect(renderedText(plain)).not.toContain('Processing');
 });
 
+test('compact Home conversations name GET merging as Merging... not Processing', () => {
+  const flagged = render({
+    recaps: [
+      {
+        id: 'recap-merging',
+        title: 'Morning standup',
+        dateLabel: 'Yesterday',
+        merging: true,
+      },
+    ],
+  });
+  expect(renderedText(flagged)).toContain('Merging...');
+  expect(renderedText(flagged)).not.toContain('Processing');
+  expect(
+    flagged.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Merging... conversation' &&
+        node.props.children === 'Merging...',
+    ).length,
+  ).toBeGreaterThan(0);
+
+  const processing = render({
+    recaps: [
+      {
+        id: 'recap-processing-not-merging',
+        title: 'Morning standup',
+        dateLabel: 'Yesterday',
+        processing: true,
+      },
+    ],
+  });
+  expect(renderedText(processing)).toContain('Processing');
+  expect(renderedText(processing)).not.toContain('Merging...');
+});
+
 test('compact Home conversations omit Flutter ConversationListItem mobile tags', () => {
   const flagged = render({
     recaps: [
