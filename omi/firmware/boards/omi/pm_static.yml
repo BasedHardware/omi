@@ -1,8 +1,8 @@
 app:
-  address: 0xf200
+  address: 0x10200
   end_address: 0xf8000
   region: flash_primary
-  size: 0xe8e00
+  size: 0xe7e00
 settings_storage:
   address: 0xf8000
   end_address: 0x100000
