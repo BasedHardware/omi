@@ -658,7 +658,7 @@ async def webhook(
     
     # Only send notifications for final tweet post (success or failure)
     # Silent responses during collection so user doesn't get spammed
-    if response_message and ("✅ Tweet posted:" in response_message or "❌ Failed:" in response_message):
+    if response_message and ("✅ Tweet posted" in response_message or "❌ Failed:" in response_message):
         print(f"✉️  USER NOTIFICATION: {response_message}", flush=True)
         return {
             "message": response_message,
@@ -733,8 +733,9 @@ async def process_segments(
                 
                 if result and result.get("success"):
                     SimpleSessionStorage.reset_session(session_id)
-                    print(f"🎉 SUCCESS! Tweet ID: {result.get('tweet_id')}", flush=True)
-                    return f"✅ Tweet posted: '{cleaned_content}'"
+                    tweet_id = result.get('tweet_id', 'unknown')
+                    print(f"🎉 SUCCESS! Tweet ID: {tweet_id}", flush=True)
+                    return f"✅ Tweet posted (ID: {tweet_id})"
                 else:
                     error = result.get("error", "Unknown") if result else "Failed"
                     SimpleSessionStorage.reset_session(session_id)

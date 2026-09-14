@@ -123,10 +123,10 @@ class ZapierClient:
                     "message": "TooManyRedirects",
                 },
             }
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
             err = {
                 "error": {
-                    "message": "RequestException failed",
+                    "message": f"RequestException {type(e).__name__}",
                 },
             }
         if err is None and resp.status_code != 200:

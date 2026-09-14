@@ -46,6 +46,9 @@ class ClickUpClient:
             else:
                 raise Exception(f"Token exchange failed: HTTP {response.status_code}")
                 
+        except requests.RequestException:
+            print("❌ Token exchange failed", flush=True)
+            raise RuntimeError("Token exchange request failed") from None
         except Exception:
             print("❌ Token exchange failed", flush=True)
             raise

@@ -163,8 +163,11 @@ def send_omi_notification(uid: str, message: str):
         logger.info(f"Successfully sent notification to OMI for uid {uid[:8]}...")
         return True
     except Exception as e:
-        status = getattr(getattr(e, 'response', None), 'status_code', 'error')
-        logger.error(f"Error sending notification to OMI: HTTP {status}")
+        if isinstance(e, requests.exceptions.HTTPError):
+            status = getattr(e.response, 'status_code', 'error')
+            logger.error(f"Error sending notification to OMI: HTTP {status}")
+        else:
+            logger.error(f"Error sending notification to OMI: {type(e).__name__}")
         return False
 
 
