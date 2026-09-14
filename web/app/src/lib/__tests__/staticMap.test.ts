@@ -7,9 +7,11 @@ vi.mock('@/lib/firebase', () => ({ getIdToken }));
 import {
   STATIC_MAP_MAX_PINS,
   fetchStaticMap,
+  normalizeStaticMapPins,
   staticMapAxisPx,
   staticMapPath,
   staticMapPinsParam,
+  type MapPin,
 } from '@/lib/staticMap';
 
 describe('static map request shape', () => {
@@ -23,12 +25,33 @@ describe('static map request shape', () => {
     ).toBe('37.7749,-122.4194|40.7128,-74.0060');
   });
 
+  it('skips pins without real coordinates instead of throwing', () => {
+    // Recap pins are Optional[float] on the wire, so null reaches the client.
+    const pins = [
+      { latitude: null, longitude: -122.4 },
+      { latitude: 37.7749, longitude: undefined },
+      { latitude: Number.NaN, longitude: 1 },
+      { latitude: 91, longitude: 0 },
+      { latitude: 40.7128, longitude: -74.006 },
+    ] as unknown as MapPin[];
+
+    expect(() => staticMapPinsParam(pins)).not.toThrow();
+    expect(staticMapPinsParam(pins)).toBe('40.7128,-74.0060');
+  });
+
   it('caps the request at the backend pin limit', () => {
     const pins = Array.from({ length: 60 }, (_, index) => ({
       latitude: index,
       longitude: index,
     }));
     expect(staticMapPinsParam(pins).split('|')).toHaveLength(STATIC_MAP_MAX_PINS);
+  });
+
+  it('keeps the first original pin of each quantized cell for the fallback render', () => {
+    const first = { latitude: 37.77493, longitude: -122.41942 };
+    expect(
+      normalizeStaticMapPins([first, { latitude: 37.77491, longitude: -122.41939 }]),
+    ).toEqual([first]);
   });
 
   it('steps sizes up to shared buckets inside the backend bounds', () => {

@@ -14,22 +14,43 @@ const MAX_AXIS_PX = 1280;
 // server-cached render instead of requesting a new image per pixel.
 const SIZE_STEP_PX = 40;
 
+function isRenderablePin(pin: MapPin): boolean {
+  return (
+    Number.isFinite(pin.latitude) &&
+    Number.isFinite(pin.longitude) &&
+    Math.abs(pin.latitude) <= 90 &&
+    Math.abs(pin.longitude) <= 180
+  );
+}
+
+function quantizedPinKey(pin: MapPin): string {
+  return `${pin.latitude.toFixed(4)},${pin.longitude.toFixed(4)}`;
+}
+
 /**
- * Serializes pins exactly like the mobile app's `buildOmiStaticMapUrl`:
- * quantized to four decimals (~11m, the server's cache quantization),
- * de-duplicated after quantization, and capped at the backend limit.
+ * The pin set a preview actually renders, shared by the backend request and the
+ * pin-dot fallback so both show the same stops: pins without real coordinates
+ * are dropped (recap pins are nullable on the wire), pins are de-duplicated after
+ * quantizing to four decimals (~11m, the server's cache quantization), and the
+ * list is capped at the backend limit.
  */
-export function staticMapPinsParam(pins: readonly MapPin[]): string {
+export function normalizeStaticMapPins(pins: readonly MapPin[]): MapPin[] {
   const seen = new Set<string>();
-  const parts: string[] = [];
+  const normalized: MapPin[] = [];
   for (const pin of pins) {
-    if (parts.length >= STATIC_MAP_MAX_PINS) break;
-    const value = `${pin.latitude.toFixed(4)},${pin.longitude.toFixed(4)}`;
-    if (seen.has(value)) continue;
-    seen.add(value);
-    parts.push(value);
+    if (normalized.length >= STATIC_MAP_MAX_PINS) break;
+    if (!isRenderablePin(pin)) continue;
+    const key = quantizedPinKey(pin);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(pin);
   }
-  return parts.join('|');
+  return normalized;
+}
+
+/** Serializes pins exactly like the mobile app's `buildOmiStaticMapUrl`. */
+export function staticMapPinsParam(pins: readonly MapPin[]): string {
+  return normalizeStaticMapPins(pins).map(quantizedPinKey).join('|');
 }
 
 export function staticMapAxisPx(px: number): number {
