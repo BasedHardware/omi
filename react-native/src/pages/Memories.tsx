@@ -14,7 +14,6 @@ import {
   MemoryCursorExpiredError,
   memoryDisplayBody,
   memoryDisplayTitle,
-  memorySynthesisCopy,
   memoryLedgerSlotCopy,
   memoryLedgerPlaybookCopy,
   memoryBaselineCopy,
@@ -153,7 +152,6 @@ export function MemoriesPage({
     }
   };
   const renderItem = useCallback(({item}: {item: MemoryProjection}) => {
-    const synthesis = memorySynthesisCopy(item);
     const slot = memoryLedgerSlotCopy(item);
     const playbook = memoryLedgerPlaybookCopy(item);
     const baseline = memoryBaselineCopy(item);
@@ -188,9 +186,6 @@ export function MemoriesPage({
             style={styles.memoryProvenance}>
             {locked}
           </Text>
-        ) : null}
-        {synthesis !== null ? (
-          <Text style={styles.memoryProvenance}>{synthesis}</Text>
         ) : null}
       </View>
     );

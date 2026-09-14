@@ -2904,7 +2904,7 @@ test('wide Home search memory rows omit Flutter MemoryItem unused timestamp and 
   expect(tree).not.toContain('citation-v1:launch');
 });
 
-test('wide Home search memory rows keep GET synthesized-memory chrome instead of citation-only', () => {
+test('wide Home search memory rows omit Flutter MemoryItem unused synthesized-memory chrome', () => {
   const renderer = render(
     <ProjectionRow
       item={{
@@ -2927,7 +2927,7 @@ test('wide Home search memory rows keep GET synthesized-memory chrome instead of
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('A walk.');
   expect(tree).not.toContain('1 citation');
-  expect(tree).toContain('Synthesized memory');
+  expect(tree).not.toContain('Synthesized memory');
 });
 
 test('wide Home search memory rows name GET locked and omit unlocked rows', () => {
@@ -2999,7 +2999,7 @@ test('wide Home search memory rows name GET locked and omit unlocked rows', () =
   expect(JSON.stringify(omitted.toJSON())).not.toContain('Locked');
 });
 
-test('compact Home current memory rows keep GET synthesized-memory chrome', () => {
+test('compact Home current memory rows omit Flutter MemoryItem unused synthesized-memory chrome', () => {
   const renderer = render(
     <ProjectionRow
       home
@@ -3023,7 +3023,7 @@ test('compact Home current memory rows keep GET synthesized-memory chrome', () =
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('A walk.');
   expect(tree).not.toContain('1 citation');
-  expect(tree).toContain('Synthesized memory');
+  expect(tree).not.toContain('Synthesized memory');
 });
 
 test('wide Home search and compact Home current memory rows name GET ledger chrome', () => {

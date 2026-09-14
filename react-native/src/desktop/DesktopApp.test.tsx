@@ -1479,7 +1479,7 @@ test('Home renders real memories alongside conversations', () => {
   expect(tree).toContain('Conversations & memories');
   expect(tree).toContain('Prefers concise release notes');
   expect(tree).not.toContain('0 citations');
-  expect(tree).toContain('Synthesized memory');
+  expect(tree).not.toContain('Synthesized memory');
   expect(tree).not.toMatch(/(^| )Memory( |$)/);
 });
 

@@ -519,7 +519,7 @@ test('nested non-retryable later memory pages do not claim a load blip', async (
   }
 });
 
-test('omitted memory lineage does not claim Synthesized memory', () => {
+test('Memories rows omit Flutter MemoryItem unused synthesized-memory chrome', () => {
   let view!: Renderer.ReactTestRenderer;
   act(() => {
     view = Renderer.create(
@@ -557,14 +557,15 @@ test('omitted memory lineage does not claim Synthesized memory', () => {
   });
   try {
     const copy = textOf(view);
+    expect(copy).toContain('present-lineage');
     expect(copy).not.toContain('0 citations');
-    expect(copy).toContain('Synthesized memory');
+    expect(copy).not.toContain('Synthesized memory');
     expect(
       view.root.findAll(
         node =>
           node.type === Text && node.props.children === 'Synthesized memory',
       ),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
   } finally {
     act(() => view.unmount());
   }

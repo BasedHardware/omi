@@ -19,7 +19,6 @@ import {
   conversationHasFinishClock,
   conversationListDurationCopy,
   memoryDisplayTitle,
-  memorySynthesisCopy,
   memoryLockedCopy,
   memoryLedgerSlotCopy,
   memoryLedgerPlaybookCopy,
@@ -64,7 +63,6 @@ export const ProjectionRow = memo(function ProjectionRow({
   const conversation = item.kind === 'conversation' ? item : null;
   const listenOverview =
     conversation !== null && conversationListUsesListenOverview(conversation);
-  const synthesis = item.kind === 'memory' ? memorySynthesisCopy(item) : null;
   const ledgerSlot = item.kind === 'memory' ? memoryLedgerSlotCopy(item) : null;
   const ledgerPlaybook =
     item.kind === 'memory' ? memoryLedgerPlaybookCopy(item) : null;
@@ -234,11 +232,6 @@ export const ProjectionRow = memo(function ProjectionRow({
       {baseline !== null ? (
         <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
           {baseline}
-        </Text>
-      ) : null}
-      {synthesis !== null ? (
-        <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
-          {synthesis}
         </Text>
       ) : null}
       {item.kind === 'task' && item.exportCopy !== undefined ? (

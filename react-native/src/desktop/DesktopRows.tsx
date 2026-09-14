@@ -22,7 +22,6 @@ import {
   memoryLedgerPlaybookCopy,
   memoryBaselineCopy,
   memoryHistoryCopy,
-  memorySynthesisCopy,
   visibleDisplayText,
   projectionClockLabel,
   taskDisplayTitle,
@@ -125,7 +124,6 @@ export const ReadRow = memo(function ReadRow({
       </View>
     );
   }
-  const synthesis = item.kind === 'memory' ? memorySynthesisCopy(item) : null;
   const locked = item.kind === 'memory' ? memoryLockedCopy(item) : null;
   const ledgerSlot = item.kind === 'memory' ? memoryLedgerSlotCopy(item) : null;
   const ledgerPlaybook =
@@ -168,9 +166,6 @@ export const ReadRow = memo(function ReadRow({
         ) : null}
         {baseline !== null ? (
           <Text style={styles.rowMeta}>{baseline}</Text>
-        ) : null}
-        {synthesis !== null ? (
-          <Text style={styles.rowMeta}>{synthesis}</Text>
         ) : null}
       </View>
     </View>

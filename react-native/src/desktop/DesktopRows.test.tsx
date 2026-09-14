@@ -73,7 +73,7 @@ test('Home currents omit Flutter MemoryItem unused timestamp and citation count'
   expect(copy).not.toMatch(/(^| )Memory( |$)/);
   const citedCopy = textOf(renderer);
   expect(citedCopy).toContain('A walk.');
-  expect(citedCopy).toContain('Synthesized memory');
+  expect(citedCopy).not.toContain('Synthesized memory');
   expect(citedCopy).not.toContain('2 citations');
   expect(citedCopy).not.toContain('1 citation');
   expect(citedCopy).not.toContain('0 citations');
@@ -113,7 +113,7 @@ test('Home currents name GET locked memories and omit unlocked rows', () => {
   expect(textOf(open)).not.toContain('Locked');
 });
 
-test('Home currents omit synthesized-memory chrome when GET synthesisVersion is missing', () => {
+test('Home currents omit Flutter MemoryItem unused synthesized-memory chrome', () => {
   const item: MemoryProjection = {
     kind: 'memory',
     id: 'memory-plain',
@@ -124,9 +124,9 @@ test('Home currents omit synthesized-memory chrome when GET synthesisVersion is 
     timestamp: 1_788_492_408,
     provenance: {
       label: null,
-      synthesisVersion: ' \t\n',
-      inputDigest: null,
-      outputDigest: null,
+      synthesisVersion: 'v1',
+      inputDigest: 'input',
+      outputDigest: 'output',
     },
   };
   let renderer!: ReactTestRenderer.ReactTestRenderer;
@@ -137,6 +137,8 @@ test('Home currents omit synthesized-memory chrome when GET synthesisVersion is 
   expect(copy).toContain('A walk.');
   expect(copy).not.toContain('1 citation');
   expect(copy).not.toContain('Synthesized memory');
+  expect(copy).not.toContain('input');
+  expect(copy).not.toContain('output');
 });
 
 test('Home currents name GET memory ledger chrome and omit empty fields', () => {
