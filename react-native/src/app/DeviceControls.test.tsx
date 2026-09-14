@@ -52,7 +52,7 @@ async function render(value: Device) {
 test('requires reported feature bits and valid observed values before exposing writes', async () => {
   await render({...device, features: undefined});
   expect(renderer.root.findAllByType(FocusPressable)).toHaveLength(0);
-  expect(JSON.stringify(renderer.toJSON())).toContain(
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
     `"${chargingCopy()}",":"," ","Unavailable"`,
   );
   expect(JSON.stringify(renderer.toJSON())).not.toContain('Unknown');
@@ -95,7 +95,7 @@ test('connected device names Flutter DeviceSettings mic gain Mute and dB chips',
 });
 
 test('connected device names Flutter battery section Charging or Battery Level', async () => {
-  await render({...device, charging: true});
+  await render({...device, battery: 87, charging: true});
   const charging = JSON.stringify(renderer.toJSON());
   expect(charging).toContain(`"${chargingCopy()}"`);
   expect(charging).not.toContain('Not charging');
@@ -103,13 +103,79 @@ test('connected device names Flutter battery section Charging or Battery Level',
   expect(charging).not.toContain(`${chargingCopy()}:`);
   await act(async () => {
     renderer.update(
-      <DeviceControls device={{...device, charging: false}} busy={false} />,
+      <DeviceControls
+        device={{...device, battery: 42, charging: false}}
+        busy={false}
+      />,
     );
   });
   const idle = JSON.stringify(renderer.toJSON());
   expect(idle).toContain(`"${batteryLevelCopy()}"`);
   expect(idle).not.toContain('Not charging');
   expect(idle).not.toContain(`${chargingCopy()}:`);
+});
+
+test('connected device names Flutter battery section percent and omits unused Charging Unavailable', async () => {
+  await render(device);
+  const missing = JSON.stringify(renderer.toJSON());
+  expect(missing).not.toContain(
+    `"${chargingCopy()}",":"," ","Unavailable"`,
+  );
+  expect(missing).not.toContain(`"${chargingCopy()}"`);
+  expect(missing).not.toContain(`"${batteryLevelCopy()}"`);
+  await act(async () => {
+    renderer.update(
+      <DeviceControls
+        device={{...device, battery: 87, charging: true}}
+        busy={false}
+      />,
+    );
+  });
+  const charging = JSON.stringify(renderer.toJSON());
+  expect(charging).toContain(`"${chargingCopy()}"`);
+  expect(charging).toContain('"87%"');
+  expect(charging).not.toContain(`"${batteryLevelCopy()}"`);
+  expect(charging).not.toContain(`${chargingCopy()}:`);
+  expect(charging).not.toContain(
+    `"${chargingCopy()}",":"," ","Unavailable"`,
+  );
+  await act(async () => {
+    renderer.update(
+      <DeviceControls
+        device={{...device, battery: 42, charging: false}}
+        busy={false}
+      />,
+    );
+  });
+  const idle = JSON.stringify(renderer.toJSON());
+  expect(idle).toContain(`"${batteryLevelCopy()}"`);
+  expect(idle).toContain('"42%"');
+  expect(idle).not.toContain(`"${chargingCopy()}"`);
+  await act(async () => {
+    renderer.update(
+      <DeviceControls
+        device={{...device, battery: 0, charging: true}}
+        busy={false}
+      />,
+    );
+  });
+  const zero = JSON.stringify(renderer.toJSON());
+  expect(zero).not.toContain(`"${chargingCopy()}"`);
+  expect(zero).not.toContain('"0%"');
+  await act(async () => {
+    renderer.update(
+      <DeviceControls
+        device={{...device, battery: 64, charging: undefined}}
+        busy={false}
+      />,
+    );
+  });
+  const unknown = JSON.stringify(renderer.toJSON());
+  expect(unknown).toContain(`"${batteryLevelCopy()}"`);
+  expect(unknown).toContain('"64%"');
+  expect(unknown).not.toContain(
+    `"${chargingCopy()}",":"," ","Unavailable"`,
+  );
 });
 
 test('serializes writes and waits for matching native read-back without optimistic values', async () => {

@@ -7,6 +7,7 @@ import {styles} from '../ui/styles';
 import {
   batteryLevelCopy,
   chargingCopy,
+  deviceBatteryPercentCopy,
   findDeviceCopy,
   ledBrightnessCopy,
   micGainCopy,
@@ -154,18 +155,12 @@ export function DeviceControls({
 
   return (
     <View accessibilityLabel="Device controls" style={local.container}>
-      <Text style={styles.deviceMeta}>
-        {device.charging === undefined ? (
-          <>
-            {chargingCopy()}:{' '}
-            Unavailable
-          </>
-        ) : device.charging ? (
-          chargingCopy()
-        ) : (
-          batteryLevelCopy()
-        )}
-      </Text>
+      {typeof device.battery === 'number' && device.battery > 0 ? (
+        <Text style={styles.deviceMeta}>
+          {device.charging ? chargingCopy() : batteryLevelCopy()}{' '}
+          {deviceBatteryPercentCopy(device.battery)}
+        </Text>
+      ) : null}
       {device.connected &&
       device.findDeviceSupported &&
       omiNative?.findDevice ? (
