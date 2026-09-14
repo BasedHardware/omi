@@ -1006,6 +1006,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
+  - id: shopify-app-limit-input-tests
+    command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
+    triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "get_orders and get_customers compared the raw optional limit with min(), and the backend forwards omitted optionals as JSON null, so every ordinary orders/customers request crashed with TypeError; the suite executes both handlers and asserts null, string, non-positive and oversized inputs become a limit inside 1..50"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
