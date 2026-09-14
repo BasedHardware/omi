@@ -478,13 +478,6 @@ export function DeviceSession({
           {firmwareCopy.latest}
         </Text>
       ) : null}
-      {firmwareCopy?.available === true ? (
-        <Text
-          accessibilityLabel="Firmware update available"
-          style={styles.deviceMeta}>
-          Available
-        </Text>
-      ) : null}
       {(firmwareCopy?.changelog ?? []).length > 0 ? (
         <Text selectable style={styles.deviceMeta}>
           {firmwareWhatsNewCopy()}

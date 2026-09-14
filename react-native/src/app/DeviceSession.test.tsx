@@ -369,8 +369,8 @@ test('connected device names GET latest firmware without an OTA control', async 
     `"${firmwareLatestVersionCopy()}",": ","1.3.0"`,
   );
   expect(output).not.toContain('"Latest",": "');
-  expect(output).toContain('Firmware update available');
-  expect(output).toContain('Available');
+  expect(output).not.toContain('Firmware update available');
+  expect(output).not.toContain('"Available"');
   expect(output).toContain(`"${firmwareWhatsNewCopy()}"`);
   expect(output).not.toContain(
     `"${firmwareWhatsNewCopy()}",": ","Fixed BLE reconnect"`,
