@@ -4,6 +4,7 @@ import {
   conversationDisplaySummary,
   conversationDetailSummaryCopy,
   conversationNoSummaryCopy,
+  conversationsEmptyCopy,
   conversationsStarredEmptyCopy,
   memoriesEmptyCopy,
   memoriesSearchEmptyCopy,
@@ -2606,6 +2607,10 @@ test('conversation detail names Flutter noSummaryForConversation when GET has no
 
 test('starred conversation filter names Flutter noStarredConversations', () => {
   expect(conversationsStarredEmptyCopy()).toBe('No starred conversations');
+});
+
+test('conversation empty copy names Flutter noConversationsYet', () => {
+  expect(conversationsEmptyCopy()).toBe('No conversations yet');
 });
 
 test('memory empty copy names Flutter noMemoriesYet and noMemoriesFound', () => {

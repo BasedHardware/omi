@@ -6,6 +6,7 @@ import {
   clockLabel,
   conversationStatusCopy,
   conversationStructuredEmojiDefaultCopy,
+  conversationsEmptyCopy,
   conversationsStarredEmptyCopy,
   desktopBackendServiceCopy,
   desktopBackendUnavailableCopy,
@@ -56,6 +57,7 @@ test('conversation grant denial shows the typed error instead of an empty librar
   expect(textOf(renderer)).toContain(
     'This saved data is not available for this account.',
   );
+  expect(textOf(renderer)).not.toContain(conversationsEmptyCopy());
   expect(textOf(renderer)).not.toContain('No conversations yet.');
   expect(textOf(renderer)).not.toContain('Conversations could not be loaded.');
 });
@@ -74,6 +76,7 @@ test('incomplete empty conversations do not claim a complete library', () => {
     );
   });
   expect(textOf(renderer)).toContain('Conversations are incomplete.');
+  expect(textOf(renderer)).not.toContain(conversationsEmptyCopy());
   expect(textOf(renderer)).not.toContain('No conversations yet.');
 });
 
@@ -123,7 +126,8 @@ test('complete empty conversations may claim emptiness', () => {
       />,
     );
   });
-  expect(textOf(renderer)).toContain('No conversations yet.');
+  expect(textOf(renderer)).toContain(conversationsEmptyCopy());
+  expect(textOf(renderer)).not.toContain('No conversations yet.');
   expect(textOf(renderer)).not.toContain('Conversations are incomplete.');
 });
 
@@ -180,6 +184,7 @@ test('starred filter names Flutter noStarredConversations instead of generic mat
   expect(tree).toContain(conversationsStarredEmptyCopy());
   expect(tree).not.toContain('Work chat');
   expect(tree).not.toContain('No loaded conversations match.');
+  expect(tree).not.toContain(conversationsEmptyCopy());
   expect(tree).not.toContain('No conversations yet.');
   expect(tree).not.toContain(
     'To star a conversation, open it and tap the star icon in the header.',
@@ -229,6 +234,7 @@ test('untitled processing conversations stay visible instead of a blank row', ()
   });
   expect(textOf(renderer)).toContain('Processing conversation…');
   expect(textOf(renderer)).toContain('Conversation summary is not ready yet.');
+  expect(textOf(renderer)).not.toContain(conversationsEmptyCopy());
   expect(textOf(renderer)).not.toContain('No conversations yet.');
 });
 
@@ -1982,7 +1988,8 @@ test('conversation list names GET goals without add or a write sheet', async () 
   expect(tree).toContain('Goals');
   expect(tree).toContain('Read 20 books');
   expect(tree).toContain('3/10');
-  expect(tree).toContain('No conversations yet.');
+  expect(tree).toContain(conversationsEmptyCopy());
+  expect(tree).not.toContain('No conversations yet.');
   expect(tree).not.toContain('goal-read');
   expect(tree).not.toContain('No goals');
   expect(tree).not.toContain('🎯');
@@ -2035,7 +2042,8 @@ test('conversation list names a failed GET goals instead of empty success', asyn
   const tree = textOf(renderer);
   expect(tree).toContain('Goals');
   expect(tree).toContain(desktopBackendServiceCopy);
-  expect(tree).toContain('No conversations yet.');
+  expect(tree).toContain(conversationsEmptyCopy());
+  expect(tree).not.toContain('No conversations yet.');
   expect(tree).not.toContain('No goals');
   expect(tree).not.toContain('🎯');
   expect(tree).not.toContain('Add');
@@ -2779,7 +2787,8 @@ test('conversation list omits GET calendar capture gaps on failure and empty lib
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(textOf(renderer)).toContain('No conversations yet.');
+  expect(textOf(renderer)).toContain(conversationsEmptyCopy());
+  expect(textOf(renderer)).not.toContain('No conversations yet.');
   expect(textOf(renderer)).not.toContain('Not captured');
   expect(
     request.mock.calls.some(

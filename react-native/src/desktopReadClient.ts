@@ -498,6 +498,10 @@ export function conversationsStarredEmptyCopy(): string {
   return 'No starred conversations';
 }
 
+export function conversationsEmptyCopy(): string {
+  return 'No conversations yet';
+}
+
 export function memoriesEmptyCopy(): string {
   return '🧠 No memories yet';
 }

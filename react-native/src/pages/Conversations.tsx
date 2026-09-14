@@ -25,6 +25,7 @@ import {
   conversationRecapTitle,
   conversationDayLabel,
   conversationGroupLabel,
+  conversationsEmptyCopy,
   conversationsStarredEmptyCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
@@ -582,7 +583,7 @@ export function ConversationsPage({
                     starredOnly
                       ? conversationsStarredEmptyCopy()
                       : 'No loaded conversations match.',
-                    'No conversations yet.',
+                    conversationsEmptyCopy(),
                     notice === desktopBackendUnavailableCopy,
                   )}
                 </Text>
