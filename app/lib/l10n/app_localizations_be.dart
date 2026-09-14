@@ -10013,4 +10013,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'Каб Omi ведаў, які голас ваш, гаварыце пра што заўгодна каля 5 секунд.';
 }

@@ -9977,4 +9977,8 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây.';
 }

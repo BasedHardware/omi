@@ -10008,4 +10008,8 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Masih diproses — ini mengambil masa lebih lama daripada biasa.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Supaya Omi tahu suara yang mana milik anda — bercakap tentang apa sahaja selama kira-kira 5 saat.';
 }

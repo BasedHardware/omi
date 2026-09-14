@@ -9966,4 +9966,8 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Arbejder stadig — det tager længere end normalt.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Så Omi ved, hvilken stemme der er din — tal om hvad som helst i cirka 5 sekunder.';
 }

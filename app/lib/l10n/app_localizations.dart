@@ -18584,6 +18584,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Still working — this is taking longer than usual.'**
   String get processingTakingLonger;
+
+  /// First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration.
+  ///
+  /// In en, this message translates to:
+  /// **'So Omi knows which voice is yours — talk for about 5 seconds about anything.'**
+  String get speechProfileEnrollmentPrompt;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

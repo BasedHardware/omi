@@ -10006,4 +10006,8 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Sigue trabajando: esto está tardando más de lo habitual.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Para que Omi sepa cuál es tu voz — habla de cualquier cosa durante unos 5 segundos.';
 }
