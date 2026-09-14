@@ -991,6 +991,16 @@ checks:
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13545: repository labels silently truncated at 100 because fetchers never followed next links; the suite asserts pagination and fail-closed item handling and must run in CI to catch a regression"
+  - id: clickup-app-client-tests
+    command: ["python3", "plugins/omi-clickup-app/test_clickup_client.py"]
+    triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13808: get_all_lists read only /space/{id}/list, which ClickUp v2 limits to folderless lists, so every list inside a folder was invisible to the picker and to task routing; the suite asserts folder discovery and that a failed folder request does not pass as a workspace with no folders"
+  - id: clickup-app-settings-page-tests
+    command: ["python3", "plugins/omi-clickup-app/test_settings_page.py"]
+    triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13808: the settings picker labels folder lists as Folder / List and escapes ClickUp-supplied names at the HTML boundary"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
