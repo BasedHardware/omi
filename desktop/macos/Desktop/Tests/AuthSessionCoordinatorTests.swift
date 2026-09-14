@@ -90,7 +90,7 @@ final class AuthSessionCoordinatorTests: XCTestCase {
 
     let invalidateRange = authSource.range(of: "func performLightSessionInvalidation()")
     XCTAssertNotNil(invalidateRange)
-    let invalidateSnippet = String(authSource[invalidateRange!.lowerBound...]).prefix(500)
+    let invalidateSnippet = String(authSource[invalidateRange!.lowerBound...]).prefix(900)
     XCTAssertFalse(invalidateSnippet.contains("clearPersistedState"))
     XCTAssertFalse(invalidateSnippet.contains("onboardingStep"))
     XCTAssertFalse(invalidateSnippet.contains("userDidSignOut"))
@@ -103,9 +103,8 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     let provider = try sourceFile("Providers/ChatProvider.swift")
     XCTAssertTrue(provider.contains("makeAuthSessionNotificationObserver"))
     XCTAssertTrue(provider.contains("stopAgentBridgeAfterSessionInvalidation"))
-    let invalidateBlock = provider.range(of: "sessionDidInvalidate — stopping agent bridge")
-    XCTAssertNotNil(invalidateBlock)
-    let snippet = String(provider[invalidateBlock!.lowerBound...]).prefix(400)
+    let invalidateBlock = try XCTUnwrap(provider.range(of: "sessionDidInvalidate — stopping agent bridge"))
+    let snippet = String(provider[invalidateBlock.lowerBound...]).prefix(400)
     XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
   }
 
@@ -113,9 +112,8 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     let authExtension = try sourceFile("Providers/ChatProvider+AuthSession.swift")
     XCTAssertTrue(authExtension.contains("reloadChatSessionsAfterAuthentication"))
     XCTAssertTrue(authExtension.contains("sessionDidAuthenticate"))
-    let authBlock = authExtension.range(of: "sessionDidAuthenticate — reloading chat sessions")
-    XCTAssertNotNil(authBlock)
-    let snippet = String(authExtension[authBlock!.lowerBound...]).prefix(350)
+    let authBlock = try XCTUnwrap(authExtension.range(of: "sessionDidAuthenticate — reloading chat sessions"))
+    let snippet = String(authExtension[authBlock.lowerBound...]).prefix(350)
     XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
   }
 
