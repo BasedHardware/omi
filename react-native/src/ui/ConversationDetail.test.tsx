@@ -9,6 +9,7 @@ import {
   desktopBackendServiceCopy,
   conversationFirstPartySummaryCopy,
   conversationNoSummaryCopy,
+  processingConversationNoContentCopy,
   conversationActionItemsTodoCopy,
   conversationActionItemsNoPendingCopy,
   conversationActionItemsCompletedCopy,
@@ -648,7 +649,7 @@ test('legacy details load the old-backend producer instead of claiming no transc
   );
 });
 
-test('legacy empty unlocked transcripts stay empty instead of unavailable', () => {
+test('legacy empty unlocked transcripts omit invented empty chrome instead of unavailable', () => {
   mockLegacy.mockReturnValue({
     result: {
       status: 'loaded',
@@ -664,14 +665,43 @@ test('legacy empty unlocked transcripts stay empty instead of unavailable', () =
     },
     reload: jest.fn(),
   });
-  expect(
-    text(
-      render({
-        apiContract: 'omi',
-        conversation: {...conversation, id: 'old-1'},
-      }),
-    ),
-  ).toContain('The transcript is empty.');
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('A real conversation');
+  expect(copy).not.toContain('The transcript is empty.');
+  expect(copy).not.toContain(processingConversationNoContentCopy());
+  expect(copy).not.toContain('Transcript unavailable');
+});
+
+test('legacy processing empty transcript names Flutter noContentToDisplay without photos', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', status: 'processing'},
+    }),
+  );
+  expect(copy).toContain(processingConversationNoContentCopy());
+  expect(copy).not.toContain('The transcript is empty.');
+  expect(copy).not.toContain('Transcript unavailable');
 });
 
 test('legacy NEXT LINE-only segments stay empty instead of blank speaker lines', () => {
@@ -707,7 +737,8 @@ test('legacy NEXT LINE-only segments stay empty instead of blank speaker lines',
       conversation: {...conversation, id: 'old-1'},
     }),
   );
-  expect(copy).toContain('The transcript is empty.');
+  expect(copy).not.toContain('The transcript is empty.');
+  expect(copy).not.toContain(processingConversationNoContentCopy());
   expect(copy).not.toContain('\u0085');
   expect(copy).not.toContain('Speaker');
 });
@@ -898,7 +929,8 @@ test('legacy NEXT LINE-only sections stay omitted instead of blank notes', () =>
     }),
   );
   expect(copy).not.toContain('\u0085');
-  expect(copy).toContain('The transcript is empty.');
+  expect(copy).not.toContain('The transcript is empty.');
+  expect(copy).not.toContain(processingConversationNoContentCopy());
 });
 
 test('legacy load failure offers retry without inventing an empty transcript', () => {

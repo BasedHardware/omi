@@ -9,6 +9,7 @@ import {
   conversationDisplayTitle,
   conversationHasFinishClock,
   conversationStatusCopy,
+  processingConversationNoContentCopy,
   conversationTranscriptDurationCopy,
   conversationVisibilityCopy,
   conversationActionItemsTodoCopy,
@@ -388,6 +389,15 @@ function LegacyConversationBody({
     (detail.photoCount === undefined || detail.photoCount <= 0) &&
     (detail.transcript.status === 'unavailable' ||
       transcriptSegments.length === 0);
+  const hasPhotos =
+    (detail.photoCount ?? 0) > 0 ||
+    (detail.photoRows ?? []).length > 0 ||
+    (detail.photoCaptions ?? []).length > 0;
+  const showProcessingEmptyContent =
+    transcriptSegments.length === 0 &&
+    !showExternalTranscript &&
+    !hasPhotos &&
+    (conversation.status === 'processing' || conversation.status === 'merging');
   return (
     <>
       <Text
@@ -655,11 +665,11 @@ function LegacyConversationBody({
         <Text selectable style={[styles.conversationTranscriptText, ink]}>
           {externalText}
         </Text>
-      ) : transcriptSegments.length === 0 ? (
+      ) : showProcessingEmptyContent ? (
         <Text style={[styles.conversationDetailSummary, ink]}>
-          The transcript is empty.
+          {processingConversationNoContentCopy()}
         </Text>
-      ) : (
+      ) : transcriptSegments.length === 0 ? null : (
         transcriptSegments.map((segment, index) => {
           const speaker = conversationDetailSpeakerCopy(
             segment,

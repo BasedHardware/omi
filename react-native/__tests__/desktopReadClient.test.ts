@@ -4,6 +4,7 @@ import {
   conversationDisplaySummary,
   conversationDetailSummaryCopy,
   conversationNoSummaryCopy,
+  processingConversationNoContentCopy,
   conversationsEmptyCopy,
   conversationsStarredEmptyCopy,
   memoriesEmptyCopy,
@@ -2772,6 +2773,7 @@ test('conversation detail names Flutter noSummaryForConversation when GET has no
   expect(conversationNoSummaryCopy()).toBe(
     'No summary available\nfor this conversation.',
   );
+  expect(processingConversationNoContentCopy()).toBe('No content to display');
   expect(
     conversationDetailSummaryCopy({
       summary: '',
