@@ -1141,9 +1141,9 @@ test('keeps GET photo counts and captions and omits empty lists', async () => {
     response({
       ...fixture,
       photos: [
-        {description: 'Whiteboard notes'},
-        {description: ' \t'},
-        {id: 'three'},
+        {description: 'Whiteboard notes', base64: ''},
+        {description: ' \t', base64: ''},
+        {id: 'three', base64: ''},
       ],
     }),
   );
@@ -1171,6 +1171,7 @@ test('keeps GET photo counts and captions and omits empty lists', async () => {
 test('keeps GET conversation photos when more than 1000', async () => {
   const photos = Array.from({length: 1001}, (_, index) => ({
     description: `Photo ${index}`,
+    base64: '',
   }));
   mockRequest.mockResolvedValue(response({...fixture, photos}));
   expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
@@ -1273,10 +1274,10 @@ test('names GET discarded photos and photos still analyzing', async () => {
     response({
       ...fixture,
       photos: [
-        {description: 'Whiteboard notes'},
-        {description: 'ignored caption', discarded: true},
-        {id: 'pending'},
-        {description: '   ', discarded: false},
+        {description: 'Whiteboard notes', base64: ''},
+        {description: 'ignored caption', discarded: true, base64: ''},
+        {id: 'pending', base64: ''},
+        {description: '   ', discarded: false, base64: ''},
       ],
     }),
   );
@@ -1311,6 +1312,7 @@ test('names GET invalid inline photo File unavailable and omits storage-only pho
           id: 'stored',
           storage_id: 'storage-1',
           description: 'Stored elsewhere',
+          base64: '',
         },
         {
           description: 'Stored empty',
@@ -1396,6 +1398,24 @@ test('fails closed for malformed GET photos', async () => {
     response({
       ...fixture,
       photos: [{discarded: 1}],
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: [{description: 'Whiteboard notes'}],
+    }),
+  );
+  await expect(
+    loadLegacyConversationDetail(backend, fixture.id),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      photos: [{base64: null}],
     }),
   );
   await expect(
@@ -2115,7 +2135,7 @@ test('keeps GET conversation detail when a section heading, action item, or phot
         sections: [{heading, body_markdown: 'Full notes'}],
         action_items: [{description, completed: false}],
       },
-      photos: [{description: caption}],
+      photos: [{description: caption, base64: ''}],
     }),
   );
   expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(

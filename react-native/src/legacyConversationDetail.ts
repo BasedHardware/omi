@@ -353,24 +353,21 @@ function conversationPhotos(value: unknown):
             discarded,
             description: text(photo.description),
           });
-    const imageUri =
-      photo.base64 === undefined || photo.base64 === null
+    if (photo.base64 === undefined || photo.base64 === null) {
+      throw new DetailError('invalid');
+    }
+    const imageUri = conversationPhotoDataUri(
+      text(photo.base64, 20_000_000),
+      photo.content_type === undefined || photo.content_type === null
         ? undefined
-        : conversationPhotoDataUri(
-            text(photo.base64, 20_000_000),
-            photo.content_type === undefined || photo.content_type === null
-              ? undefined
-              : text(photo.content_type),
-          );
+        : text(photo.content_type),
+    );
     const storageId =
       photo.storage_id === undefined || photo.storage_id === null
         ? ''
         : visibleDisplayText(text(photo.storage_id));
     const unavailableCopy =
-      imageUri !== undefined ||
-      photo.base64 === undefined ||
-      photo.base64 === null ||
-      (photo.base64 === '' && storageId !== '')
+      imageUri !== undefined || (photo.base64 === '' && storageId !== '')
         ? undefined
         : conversationPhotoUnavailableCopy();
     return {
