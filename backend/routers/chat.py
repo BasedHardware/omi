@@ -83,6 +83,7 @@ from utils.multipart import (
     parse_multipart_form,
 )
 from utils.retrieval.graph import execute_chat_stream
+from utils.llm.chat import sync_user_time_zone_from_client
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.users import get_user_display_name
 from utils.log_sanitizer import sanitize_pii
@@ -487,6 +488,7 @@ def send_message(
     app = App(**app) if app else None
 
     app_id_from_app = app.id if app else None
+    chat_tz = sync_user_time_zone_from_client(uid, data.time_zone)
 
     # Skip a malformed/legacy stored message rather than 500 the whole chat send.
     messages = list(
@@ -660,6 +662,7 @@ def send_message(
                 context=data.context,
                 platform=x_app_platform,
                 client_kind=mobile_journey_attempt.client_kind,
+                client_tz=chat_tz,
             ):
                 if chunk:
                     if chunk.startswith('error: '):

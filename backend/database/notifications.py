@@ -94,6 +94,11 @@ def get_user_time_zone(uid: str) -> Optional[str]:
     return None
 
 
+def set_user_time_zone(uid: str, time_zone: str) -> None:
+    """Persist the client's reported IANA timezone on the user document."""
+    db.collection('users').document(uid).set({'time_zone': time_zone}, merge=True)
+
+
 def set_user_time_zone_if_missing(uid: str, time_zone: str) -> bool:
     """Write ``time_zone`` on the user document only when it has none. Returns True when it wrote.
 
