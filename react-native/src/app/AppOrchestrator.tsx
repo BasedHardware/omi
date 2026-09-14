@@ -52,6 +52,7 @@ import {
   desktopReadsCanRetry,
   desktopRecoveryCopy,
   homeSearchItems,
+  tasksEmptyCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
@@ -1366,7 +1367,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             : null,
           false,
           '',
-          "Nothing's waiting on you.",
+          tasksEmptyCopy(),
         )}
         taskCoverageCopy={
           readOutcomes?.tasks.status === 'success'

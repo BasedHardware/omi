@@ -16,6 +16,8 @@ import {
   memoriesLoadErrorCopy,
   tasksEmptyCopy,
   tasksSearchEmptyCopy,
+  compactHomeTodayTasksTitleCopy,
+  compactHomeTodayTasksHidesEmpty,
   appsEmptyCopy,
   appsCreatedByMeCopy,
   conversationDisplayTitle,
@@ -3289,6 +3291,14 @@ test('task empty copy names Flutter noTasksYet', () => {
   expect(tasksEmptyCopy()).toBe(
     'No Tasks Yet\nTasks from your conversations will appear here.\nTap + to create one manually.',
   );
+  expect(compactHomeTodayTasksTitleCopy()).toBe('Today');
+  expect(compactHomeTodayTasksHidesEmpty(undefined)).toBe(true);
+  expect(compactHomeTodayTasksHidesEmpty('')).toBe(true);
+  expect(compactHomeTodayTasksHidesEmpty("Nothing's waiting on you.")).toBe(
+    true,
+  );
+  expect(compactHomeTodayTasksHidesEmpty(tasksEmptyCopy())).toBe(true);
+  expect(compactHomeTodayTasksHidesEmpty('Tasks are incomplete.')).toBe(false);
 });
 
 test('task search empty copy names Flutter noResultsFound', () => {

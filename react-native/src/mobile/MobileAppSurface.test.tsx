@@ -56,6 +56,8 @@ import {
   desktopBackendServiceCopy,
   deviceBatteryPercentCopy,
   formatTaskDue,
+  compactHomeTodayTasksTitleCopy,
+  tasksEmptyCopy,
 } from '../desktopReadClient';
 import {MobileAppSurface, type MobileAppSurfaceProps} from './MobileAppSurface';
 
@@ -719,14 +721,38 @@ test('nested non-retryable mind map errors use unavailable copy instead of a loa
   expect(renderedText(renderer)).not.toContain('Couldn’t load mind map');
 });
 
-test('empty Home tasks keep the complete-library copy by default', () => {
+test('empty Home tasks omit Flutter TodayTasksWidget unused empty copy', () => {
   const renderer = render({tasks: []});
-  expect(renderedText(renderer)).toContain("Nothing's waiting on you.");
+  const tree = renderedText(renderer);
+  expect(tree).not.toContain("Nothing's waiting on you.");
+  expect(tree).not.toContain('No tasks for today');
+  expect(tree).not.toContain(tasksEmptyCopy());
   expect(
-    renderer.root.find(
+    renderer.root.findAll(
       node => node.props.accessibilityLabel === 'tasks empty state',
     ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'View All Today',
+    ),
+  ).toHaveLength(0);
+});
+
+test('Home names Flutter TodayTasksWidget Today heading', () => {
+  const renderer = render();
+  expect(renderedText(renderer)).toContain(compactHomeTodayTasksTitleCopy());
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'View All Today',
+    ),
   ).toBeDefined();
+});
+
+test('empty Tasks tab names Flutter ActionItemsPage unfiltered empty', () => {
+  const renderer = render({activeRoute: 'tasks', tasks: []});
+  expect(renderedText(renderer)).toContain(tasksEmptyCopy());
+  expect(renderedText(renderer)).not.toContain("Nothing's waiting on you.");
 });
 
 test('empty Home tasks keep incomplete coverage instead of claiming emptiness', () => {

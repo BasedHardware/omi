@@ -593,6 +593,21 @@ export function tasksEmptyCopy(): string {
   return 'No Tasks Yet\nTasks from your conversations will appear here.\nTap + to create one manually.';
 }
 
+export function compactHomeTodayTasksTitleCopy(): string {
+  return 'Today';
+}
+
+export function compactHomeTodayTasksHidesEmpty(
+  emptyCopy: string | null | undefined,
+): boolean {
+  if (emptyCopy == null || emptyCopy === '') {
+    return true;
+  }
+  return (
+    emptyCopy === "Nothing's waiting on you." || emptyCopy === tasksEmptyCopy()
+  );
+}
+
 export function tasksSearchEmptyCopy(): string {
   return 'No results found';
 }

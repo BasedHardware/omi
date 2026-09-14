@@ -26,8 +26,11 @@ import {
   dailySummaryDateCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
+  compactHomeTodayTasksHidesEmpty,
+  compactHomeTodayTasksTitleCopy,
   taskDisplayTitle,
   taskIndentPadding,
+  tasksEmptyCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {
@@ -511,10 +514,16 @@ export function MobileAppSurface({
     ],
   );
   const rows = useMemo<DashboardRow[]>(() => {
-    const items: DashboardRow[] = [
-      {kind: 'capture', key: 'capture'},
-      {kind: 'tasks', key: 'tasks'},
-    ];
+    const items: DashboardRow[] = [{kind: 'capture', key: 'capture'}];
+    if (
+      !(
+        taskStatus === 'ready' &&
+        tasks.length === 0 &&
+        compactHomeTodayTasksHidesEmpty(taskEmptyCopy)
+      )
+    ) {
+      items.push({kind: 'tasks', key: 'tasks'});
+    }
     if (dailySummariesError !== null || dailySummaryCards.length > 0) {
       items.push({kind: 'daily-summaries', key: 'daily-summaries'});
     }
@@ -523,7 +532,13 @@ export function MobileAppSurface({
       {kind: 'mind-map', key: 'mind-map'},
     );
     return items;
-  }, [dailySummariesError, dailySummaryCards.length]);
+  }, [
+    dailySummariesError,
+    dailySummaryCards.length,
+    taskEmptyCopy,
+    taskStatus,
+    tasks.length,
+  ]);
 
   const renderRow = useCallback(
     ({item}: {item: DashboardRow}) => {
@@ -559,24 +574,25 @@ export function MobileAppSurface({
         );
       }
       if (item.kind === 'tasks') {
+        if (taskStatus === 'ready' && tasks.length === 0) {
+          if (compactHomeTodayTasksHidesEmpty(taskEmptyCopy)) {
+            return <View />;
+          }
+          return (
+            <View style={styles.section}>
+              <Text style={styles.stateText}>{taskEmptyCopy}</Text>
+            </View>
+          );
+        }
         return (
           <View style={styles.section}>
             <SectionHeader
               action={onViewTasks}
               actionLabel="View All"
-              title="Tasks"
+              title={compactHomeTodayTasksTitleCopy()}
             />
             {taskFeedback}
             {taskStatus === 'ready' ? (
-              tasks.length === 0 ? (
-                <View
-                  accessibilityLabel="tasks empty state"
-                  style={styles.statePanel}>
-                  <Text style={styles.stateText}>
-                    {taskEmptyCopy ?? "Nothing's waiting on you."}
-                  </Text>
-                </View>
-              ) : (
                 <View style={styles.taskCard}>
                   {tasks.slice(0, 3).map(task => (
                     <TaskRow
@@ -595,7 +611,6 @@ export function MobileAppSurface({
                     <Text style={styles.stateText}>{taskCoverageCopy}</Text>
                   ) : null}
                 </View>
-              )
             ) : (
               <StatePanel
                 errorCopy={taskErrorCopy}
@@ -835,7 +850,7 @@ export function MobileAppSurface({
                     accessibilityLabel="tasks empty state"
                     style={styles.statePanel}>
                     <Text style={styles.stateText}>
-                      {taskEmptyCopy ?? "Nothing's waiting on you."}
+                      {taskEmptyCopy ?? tasksEmptyCopy()}
                     </Text>
                   </View>
                 }
