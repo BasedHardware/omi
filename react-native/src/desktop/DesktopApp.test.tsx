@@ -4603,7 +4603,7 @@ test('Settings names HTTP 404 fair use GET Flutter fairUseLoadError instead of o
   expect(tree).not.toContain('Upgrade');
 });
 
-test('Settings names GET daily summaries without regenerate or a write sheet', async () => {
+test('Settings omits Flutter DailySummaryCard unused GET stats emoji and overview', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;
   };
@@ -4685,13 +4685,13 @@ test('Settings names GET daily summaries without regenerate or a write sheet', a
   const tree = renderedText(renderer);
   expect(tree).toContain('Daily summary');
   expect(tree).toContain('Met with the team');
-  expect(tree).toContain('🎯');
-  expect(tree).toContain('3 conversations');
-  expect(tree).toContain('1h 30m');
-  expect(tree).toContain('2 action items');
-  expect(tree).toContain('10m watching');
-  expect(tree).toContain('1 proactive moment');
-  expect(tree).toContain('Shipped the recap body.');
+  expect(tree).not.toContain('🎯');
+  expect(tree).not.toContain('3 conversations');
+  expect(tree).not.toContain('1h 30m');
+  expect(tree).not.toContain('2 action items');
+  expect(tree).not.toContain('10m watching');
+  expect(tree).not.toContain('1 proactive moment');
+  expect(tree).not.toContain('Shipped the recap body.');
   expect(tree).not.toContain('Your Day in Review');
   expect(tree).not.toContain('📅');
   expect(tree).not.toContain('sum-1');

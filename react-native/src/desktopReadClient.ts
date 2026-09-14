@@ -1383,17 +1383,6 @@ export function dailySummaryDateCopy(
   } ${day}`;
 }
 
-function dailySummaryCountCopy(
-  count: number | undefined,
-  singular: string,
-  plural: string,
-): string {
-  if (typeof count !== 'number' || !Number.isInteger(count) || count <= 0) {
-    return '';
-  }
-  return count === 1 ? `1 ${singular}` : `${count} ${plural}`;
-}
-
 export function dailySummaryDurationCopy(minutes: number | undefined): string {
   if (typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes <= 0) {
     return '';
@@ -1432,27 +1421,10 @@ export function dailySummaryCopy(
     }
     const date = dailySummaryDateCopy(row.date, now);
     const dated = date === '' ? headline : `${date} · ${headline}`;
-    const watching = dailySummaryDurationCopy(row.watchingMinutes);
-    const counts = [
-      dailySummaryCountCopy(row.conversations, 'conversation', 'conversations'),
-      dailySummaryDurationCopy(row.durationMinutes),
-      dailySummaryCountCopy(row.actionItems, 'action item', 'action items'),
-      watching === '' ? '' : `${watching} watching`,
-      dailySummaryCountCopy(
-        row.proactiveMoments,
-        'proactive moment',
-        'proactive moments',
-      ),
-    ].filter(copy => copy !== '');
-    const withCounts =
-      counts.length === 0 ? dated : `${dated} · ${counts.join(' · ')}`;
-    const emoji = visibleDisplayText(row.dayEmoji ?? '');
-    const headed = emoji === '' ? withCounts : `${emoji} ${withCounts}`;
-    const overview = visibleDisplayText(row.overview ?? '');
     return [
       {
         title: 'Daily summary',
-        copy: overview === '' ? headed : `${headed}\n${overview}`,
+        copy: dated,
       },
     ];
   });

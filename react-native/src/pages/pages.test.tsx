@@ -1713,7 +1713,7 @@ test('Settings names malformed fair use GET instead of empty success', async () 
   expect(tree).not.toContain('Upgrade');
 });
 
-test('Settings names GET daily summaries without regenerate or a write sheet', async () => {
+test('Settings omits Flutter DailySummaryCard unused GET stats emoji and overview', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/users/daily-summaries?limit=3&offset=0') {
@@ -1747,13 +1747,13 @@ test('Settings names GET daily summaries without regenerate or a write sheet', a
   const tree = textOf(renderer);
   expect(tree).toContain('Daily summary');
   expect(tree).toContain('Met with the team');
-  expect(tree).toContain('🎯');
-  expect(tree).toContain('3 conversations');
-  expect(tree).toContain('1h 30m');
-  expect(tree).toContain('2 action items');
-  expect(tree).toContain('10m watching');
-  expect(tree).toContain('1 proactive moment');
-  expect(tree).toContain('Shipped the recap body.');
+  expect(tree).not.toContain('🎯');
+  expect(tree).not.toContain('3 conversations');
+  expect(tree).not.toContain('1h 30m');
+  expect(tree).not.toContain('2 action items');
+  expect(tree).not.toContain('10m watching');
+  expect(tree).not.toContain('1 proactive moment');
+  expect(tree).not.toContain('Shipped the recap body.');
   expect(tree).not.toContain('Your Day in Review');
   expect(tree).not.toContain('📅');
   expect(tree).not.toContain('sum-1');

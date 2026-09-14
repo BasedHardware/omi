@@ -1556,7 +1556,7 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
   expect(fairUseBudgetResetCopy(undefined, now)).toBe('');
 });
 
-test('daily summary copy names GET headlines and Flutter omitted-headline Your Day in Review', () => {
+test('daily summary copy names GET headlines and omits Flutter DailySummaryCard unused stats', () => {
   const now = new Date(2026, 8, 10);
   expect(dailySummaryDateCopy('2026-09-10', now)).toBe('Today');
   expect(dailySummaryDateCopy('2026-09-09', now)).toBe('Yesterday');
@@ -1597,7 +1597,7 @@ test('daily summary copy names GET headlines and Flutter omitted-headline Your D
     },
     {
       title: 'Daily summary',
-      copy: '🎯 Today · Shipped the recap · 3 conversations · 1h 30m · 1 action item · 10m watching · 1 proactive moment',
+      copy: 'Today · Shipped the recap',
     },
   ]);
   expect(dailySummaryDurationCopy(45)).toBe('45m');
