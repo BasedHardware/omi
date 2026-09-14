@@ -353,7 +353,13 @@ export function DeviceSession({
     </View>
   );
 
-  const rows = devices.map(device => (
+  const rows = devices.map(device => {
+    const rowStatus = device.connecting
+      ? 'Connecting…'
+      : device.connected
+      ? connectedLabel
+      : null;
+    return (
     <FocusPressable
       accessibilityLabel={`${
         device.connecting
@@ -388,15 +394,9 @@ export function DeviceSession({
             <Text style={styles.deviceName}>
               {deviceDisplayName(device.name)}
             </Text>
-            <Text style={styles.deviceMeta}>
-              {device.connecting
-                ? 'Connecting…'
-                : device.connected
-                ? connectedLabel
-                : device.rssi === undefined
-                ? 'Signal unavailable'
-                : `${device.rssi} dBm`}
-            </Text>
+            {rowStatus !== null ? (
+              <Text style={styles.deviceMeta}>{rowStatus}</Text>
+            ) : null}
           </View>
         </View>
       ) : (
@@ -404,22 +404,17 @@ export function DeviceSession({
           <Text style={styles.deviceName}>
             {deviceDisplayName(device.name)}
           </Text>
-          <Text style={styles.deviceMeta}>
-            {device.connecting
-              ? 'Connecting…'
-              : device.connected
-              ? connectedLabel
-              : device.rssi === undefined
-              ? 'Signal unavailable'
-              : `${device.rssi} dBm`}
-          </Text>
+          {rowStatus !== null ? (
+            <Text style={styles.deviceMeta}>{rowStatus}</Text>
+          ) : null}
         </View>
       )}
       {deviceHasReportedBattery(device.battery) && (
         <Text style={styles.deviceBattery}>{`${device.battery}%`}</Text>
       )}
     </FocusPressable>
-  ));
+    );
+  });
 
   const connected = devices.find(
     device => device.connected && !device.connecting,

@@ -736,11 +736,12 @@ test.each(['compact', 'overview'] as const)(
 );
 
 test.each(['compact', 'overview'] as const)(
-  '%s never invents signal strength for a retrieved device',
+  '%s omits Flutter FoundDevices unused signal-unavailable and dBm',
   async variant => {
-    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    let missing!: ReactTestRenderer.ReactTestRenderer;
+    let reported!: ReactTestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = ReactTestRenderer.create(
+      missing = ReactTestRenderer.create(
         <DeviceSession
           variant={variant}
           nativeSnapshot={{
@@ -759,13 +760,43 @@ test.each(['compact', 'overview'] as const)(
           onToggle={() => {}}
         />,
       );
+      reported = ReactTestRenderer.create(
+        <DeviceSession
+          variant={variant}
+          nativeSnapshot={{
+            bluetooth: 'poweredOn',
+            devices: [
+              {id: 'omi', name: 'Omi', connected: false, rssi: -40},
+            ],
+            connectedDeviceId: null,
+            phase: 'disconnected',
+            capture: 'idle',
+            lastEvent: '',
+            microphone: 'unknown',
+            notifications: 'unknown',
+          }}
+          deviceBusy={false}
+          deviceScanMessage={null}
+          onScan={() => {}}
+          onToggle={() => {}}
+        />,
+      );
     });
     try {
-      const output = JSON.stringify(renderer.toJSON());
-      expect(output).toContain('Signal unavailable');
-      expect(output).not.toContain('dBm');
+      const missingCopy = JSON.stringify(missing.toJSON());
+      expect(missingCopy).toContain('My Omi');
+      expect(missingCopy).not.toContain('Signal unavailable');
+      expect(missingCopy).not.toContain('dBm');
+      const reportedCopy = JSON.stringify(reported.toJSON());
+      expect(reportedCopy).toContain('Omi');
+      expect(reportedCopy).not.toContain('Signal unavailable');
+      expect(reportedCopy).not.toContain('dBm');
+      expect(reportedCopy).not.toContain('-40');
     } finally {
-      await act(async () => renderer.unmount());
+      await act(async () => {
+        missing.unmount();
+        reported.unmount();
+      });
     }
   },
 );
