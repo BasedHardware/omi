@@ -62,6 +62,16 @@ class SettingsPageTests(unittest.TestCase):
         self.assertIn('<option value="l1" selected>Inbox (Engineering)</option>', page)
         self.assertIn('<option value="l2" >Sprint 1 / Bugs (Engineering)</option>', page)
 
+    def test_list_names_are_escaped_in_the_picker(self):
+        # ClickUp names are user-controlled; a folder called <b>x</b> must render
+        # as text in the option, not as markup.
+        page = self.render([
+            {"id": "l2", "name": "Bugs", "space_name": "Eng & Co", "folder_id": "f1", "folder_name": "<b>Sprint</b>"},
+        ])
+
+        self.assertIn("&lt;b&gt;Sprint&lt;/b&gt; / Bugs (Eng &amp; Co)", page)
+        self.assertNotIn("<b>Sprint</b>", page)
+
 
 if __name__ == "__main__":
     unittest.main()

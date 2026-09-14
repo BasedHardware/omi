@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+import html
 import os
 import sys
 from dotenv import load_dotenv
@@ -255,7 +256,8 @@ async def root(uid: str = Query(None)):
         # name alone cannot tell them apart in the picker.
         display_name = f"{folder_name} / {lst['name']}" if folder_name else f"{lst['name']}"
         display_name += f" ({space_name})" if space_name else ""
-        list_options += f'<option value="{lst["id"]}" {selected_attr}>{display_name}</option>'
+        # Names come straight from ClickUp; escape at the HTML boundary.
+        list_options += f'<option value="{html.escape(str(lst["id"]))}" {selected_attr}>{html.escape(display_name)}</option>'
     
     return HTMLResponse(content=f"""
     <html>
