@@ -77,15 +77,12 @@ function ConversationClockFields({
   return (
     <View style={styles.conversationDetailFields}>
       <Text style={[styles.conversationDetailField, ink]}>
-        Started ·{' '}
         {formatConversationDate(
           conversation.startedAt ?? conversation.createdAt,
         )}
       </Text>
       {duration !== null ? (
-        <Text style={[styles.conversationDetailField, ink]}>
-          Duration · {duration}
-        </Text>
+        <Text style={[styles.conversationDetailField, ink]}>{duration}</Text>
       ) : null}
       {visibilityCopy === null ? null : (
         <Text style={[styles.conversationDetailField, ink]}>

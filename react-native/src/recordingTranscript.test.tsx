@@ -634,7 +634,7 @@ test('opens a recording row into the full transcript detail and retires it on ba
     expect(textOf(renderer)).not.toContain('Captured (device time)');
     expect(textOf(renderer)).not.toContain('Time unavailable');
     expect(textOf(renderer)).not.toContain('1970');
-    expect(textOf(renderer)).toContain('Started ·');
+    expect(textOf(renderer)).not.toContain('Started ·');
     expect(textOf(renderer)).not.toContain('Finished ·');
     expect(textOf(renderer)).not.toContain('Locked');
     expect(textOf(renderer)).toContain('Discarded');

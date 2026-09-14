@@ -981,7 +981,7 @@ test('an in-progress chat does not invent a Finished clock', () => {
       },
     }),
   );
-  expect(copy).toContain('Started ·');
+  expect(copy).not.toContain('Started ·');
   expect(copy).not.toContain('In progress');
   expect(copy).not.toContain('Status ·');
   expect(copy).not.toContain('Finished ·');
@@ -1067,7 +1067,7 @@ test('legacy conversation details keep GET clocks from the list row', () => {
     },
   });
   const copy = text(view);
-  expect(copy).toContain('Started ·');
+  expect(copy).not.toContain('Started ·');
   expect(copy).not.toContain('Finished ·');
   expect(copy).not.toContain('Duration ·');
   expect(copy).not.toContain('Duration unavailable');
@@ -1097,7 +1097,7 @@ test('conversation details name Flutter GetSummaryWidgets date and time', () => 
   );
   const chip = conversationDetailDateChipCopy(older.toISOString(), Date.now());
   const dated = clockLabel(older.getTime(), Date.now());
-  expect(copy).toContain('Started ·');
+  expect(copy).not.toContain('Started ·');
   expect(copy).toContain(chip);
   expect(copy).not.toContain('Finished ·');
   expect(copy).not.toContain(dated);
@@ -1114,7 +1114,7 @@ test('conversation details omit Flutter GetSummaryWidgets unused finishedAt cloc
       },
     }),
   );
-  expect(copy).toContain('Started ·');
+  expect(copy).not.toContain('Started ·');
   expect(copy).not.toContain('Finished ·');
 });
 
@@ -1128,7 +1128,7 @@ test('conversation details omit Flutter GetSummaryWidgets unused status chip', (
       },
     }),
   );
-  expect(copy).toContain('Started ·');
+  expect(copy).not.toContain('Started ·');
   expect(copy).not.toContain('Status ·');
   expect(copy).not.toContain('Completed');
 });
@@ -1144,7 +1144,7 @@ test('conversation details omit Flutter GetSummaryWidgets unused capturedAt cloc
       },
     }),
   );
-  expect(copy).toContain('Started ·');
+  expect(copy).not.toContain('Started ·');
   expect(copy).not.toContain('Captured (device time)');
 });
 
@@ -1177,7 +1177,7 @@ test('legacy conversation details name GET started from created_at when started_
       },
     }),
   );
-  expect(missingStart).toContain('Started ·');
+  expect(missingStart).not.toContain('Started ·');
   expect(missingStart).not.toContain('Time unavailable');
   expect(missingStart).not.toContain('Duration ·');
 });
@@ -1228,7 +1228,7 @@ test('legacy conversation details name GET duration from transcript span', () =>
       },
     }),
   );
-  expect(copy).toContain('Duration ·');
+  expect(copy).not.toContain('Duration ·');
   expect(copy).toContain('2 mins 30 secs');
   expect(copy).not.toContain('1 hr');
   expect(copy).not.toContain('Duration unavailable');
@@ -1272,7 +1272,7 @@ test('canonical recording details name GET duration from transcript span', () =>
       },
     }),
   );
-  expect(copy).toContain('Duration ·');
+  expect(copy).not.toContain('Duration ·');
   expect(copy).toContain('2 mins 30 secs');
   expect(copy).not.toContain('1 hr');
   expect(copy).not.toContain('Duration unavailable');
@@ -1317,7 +1317,7 @@ test('legacy conversation details name GET transcript duration 1 sec', () => {
       },
     }),
   );
-  expect(copy).toContain('Duration ·');
+  expect(copy).not.toContain('Duration ·');
   expect(copy).toContain('1 sec');
   expect(copy).not.toContain('1 secs');
   expect(copy).not.toContain('< 1 min');
@@ -1355,7 +1355,7 @@ test('canonical recording details name GET transcript duration 1 sec', () => {
       },
     }),
   );
-  expect(copy).toContain('Duration ·');
+  expect(copy).not.toContain('Duration ·');
   expect(copy).toContain('1 sec');
   expect(copy).not.toContain('1 secs');
   expect(copy).not.toContain('< 1 min');
@@ -1394,7 +1394,7 @@ test('listen details name GET transcriptEndSeconds like Flutter GetSummaryWidget
       },
     }),
   );
-  expect(copy).toContain('Duration ·');
+  expect(copy).not.toContain('Duration ·');
   expect(copy).toContain('2 mins 30 secs');
   expect(copy).not.toContain('1 hr');
   expect(copy).not.toContain('< 1 min');
@@ -1458,7 +1458,7 @@ test('legacy in-progress chats omit Finished like canonical detail', () => {
       },
     }),
   );
-  expect(copy).toContain('Started ·');
+  expect(copy).not.toContain('Started ·');
   expect(copy).not.toContain('Status ·');
   expect(copy).not.toContain('In progress');
   expect(copy).not.toContain('Finished ·');
@@ -2247,6 +2247,22 @@ test('conversation details omit Flutter GetSummaryWidgets unused Locked chip', (
   expect(
     view.root.findAll(node => node.props.children === 'Locked'),
   ).toHaveLength(0);
+});
+
+test('conversation details omit Flutter GetSummaryWidgets unused Started and Duration prefixes', () => {
+  const view = render({
+    conversation: {
+      ...conversation,
+      startedAt: '2026-09-07T12:00:00.000Z',
+      transcriptEndSeconds: 20,
+    },
+  });
+  const copy = text(view);
+  expect(copy).not.toContain('Started ·');
+  expect(copy).not.toContain('Duration ·');
+  expect(copy).toContain(
+    conversationDetailDateChipCopy('2026-09-07T12:00:00.000Z'),
+  );
 });
 
 test('conversation details name GET private and shared visibility', () => {
