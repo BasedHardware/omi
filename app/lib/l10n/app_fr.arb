@@ -3292,5 +3292,9 @@
     "speechToTextUnavailableDesc": "La transcription vocale est indisponible pour le moment. Vérifiez votre connexion Internet et les réglages de reconnaissance vocale de votre appareil, puis réessayez.",
     "memoryHistoryPartial": "Une partie de l’historique des souvenirs est indisponible. L’historique reçu jusqu’à présent est affiché.",
     "tapPlusToStartRecording": "Appuyez sur + pour commencer l’enregistrement",
+    "secondDevice": "Deuxième appareil",
+    "pairSecondDevice": "Associer un deuxième appareil",
+    "pairSecondDeviceDescription": "Connectez OmiGlass en plus de votre Omi pour que les photos et l'audio rejoignent la même conversation.",
+    "forgetSecondDevice": "Oublier le deuxième appareil",
     "processingTakingLonger": "Toujours en cours — cela prend plus de temps que d’habitude."
 }

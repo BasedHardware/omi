@@ -9986,5 +9986,18 @@ class AppLocalizationsBn extends AppLocalizations {
       'এই মুহূর্তে কথাকে লেখায় রূপান্তর করা যাচ্ছে না। আপনার ইন্টারনেট সংযোগ এবং ডিভাইসের কথোপকথন শনাক্তকরণের সেটিংস পরীক্ষা করে আবার চেষ্টা করুন।';
 
   @override
+  String get secondDevice => 'দ্বিতীয় ডিভাইস';
+
+  @override
+  String get pairSecondDevice => 'দ্বিতীয় ডিভাইস যুক্ত করুন';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'আপনার Omi-এর পাশে OmiGlass সংযুক্ত করুন, যাতে ছবি ও অডিও একই কথোপকথনে যায়।';
+
+  @override
+  String get forgetSecondDevice => 'দ্বিতীয় ডিভাইস ভুলে যান';
+
+  @override
   String get processingTakingLonger => 'এখনও কাজ চলছে — এটি স্বাভাবিকের চেয়ে বেশি সময় নিচ্ছে।';
 }

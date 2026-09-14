@@ -10011,5 +10011,18 @@ class AppLocalizationsPl extends AppLocalizations {
       'Zamiana mowy na tekst jest teraz niedostępna. Sprawdź połączenie internetowe i ustawienia rozpoznawania mowy na urządzeniu, a następnie spróbuj ponownie.';
 
   @override
+  String get secondDevice => 'Drugie urządzenie';
+
+  @override
+  String get pairSecondDevice => 'Sparuj drugie urządzenie';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Podłącz OmiGlass obok swojego Omi, aby zdjęcia i dźwięk trafiały do tej samej rozmowy.';
+
+  @override
+  String get forgetSecondDevice => 'Zapomnij drugie urządzenie';
+
+  @override
   String get processingTakingLonger => 'Nadal działa — trwa to dłużej niż zwykle.';
 }

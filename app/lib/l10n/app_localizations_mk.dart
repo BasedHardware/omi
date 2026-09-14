@@ -10034,5 +10034,18 @@ class AppLocalizationsMk extends AppLocalizations {
       'Претворањето говор во текст моментално не е достапно. Проверете ги интернет-врската и поставките за препознавање говор на уредот, па обидете се повторно.';
 
   @override
+  String get secondDevice => 'Втор уред';
+
+  @override
+  String get pairSecondDevice => 'Спари втор уред';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Поврзете OmiGlass заедно со вашиот Omi за фотографиите и звукот да одат во истиот разговор.';
+
+  @override
+  String get forgetSecondDevice => 'Заборави го вториот уред';
+
+  @override
   String get processingTakingLonger => 'Сè уште се обработува — ова трае подолго од вообичаеното.';
 }

@@ -9974,5 +9974,18 @@ class AppLocalizationsEt extends AppLocalizations {
       'Kõne tekstiks teisendamine pole praegu saadaval. Kontrolli internetiühendust ja seadme kõnetuvastuse seadeid ning proovi uuesti.';
 
   @override
+  String get secondDevice => 'Teine seade';
+
+  @override
+  String get pairSecondDevice => 'Seo teine seade';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Ühenda OmiGlass oma Omi kõrvale, et fotod ja heli jõuaksid samasse vestlusse.';
+
+  @override
+  String get forgetSecondDevice => 'Unusta teine seade';
+
+  @override
   String get processingTakingLonger => 'Ikka käimas — see võtab kauem aega kui tavaliselt.';
 }

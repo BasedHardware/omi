@@ -3233,5 +3233,9 @@
     "speechToTextUnavailableDesc": "تحويل الكلام إلى نص غير متاح الآن. تحقق من اتصالك بالإنترنت وإعدادات التعرف على الكلام في جهازك، ثم حاول مرة أخرى.",
     "memoryHistoryPartial": "بعض سجل الذكريات غير متاح. يتم عرض السجل المستلم حتى الآن.",
     "tapPlusToStartRecording": "اضغط على + لبدء التسجيل",
+    "secondDevice": "الجهاز الثاني",
+    "pairSecondDevice": "إقران جهاز ثانٍ",
+    "pairSecondDeviceDescription": "اربط OmiGlass بجانب جهاز Omi حتى تذهب الصور والصوت إلى المحادثة نفسها.",
+    "forgetSecondDevice": "نسيان الجهاز الثاني",
     "processingTakingLonger": "ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد."
 }

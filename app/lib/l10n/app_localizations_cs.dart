@@ -9981,5 +9981,18 @@ class AppLocalizationsCs extends AppLocalizations {
       'Převod řeči na text momentálně není dostupný. Zkontrolujte připojení k internetu a nastavení rozpoznávání řeči v zařízení a zkuste to znovu.';
 
   @override
+  String get secondDevice => 'Druhé zařízení';
+
+  @override
+  String get pairSecondDevice => 'Spárovat druhé zařízení';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Připojte OmiGlass k vašemu Omi, aby fotky a zvuk šly do stejné konverzace.';
+
+  @override
+  String get forgetSecondDevice => 'Zapomenout druhé zařízení';
+
+  @override
   String get processingTakingLonger => 'Stále probíhá — trvá to déle než obvykle.';
 }

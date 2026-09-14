@@ -10823,5 +10823,9 @@
     "speechToTextUnavailableDesc": "Pretvorba govora v besedilo trenutno ni na voljo. Preverite internetno povezavo in nastavitve prepoznavanja govora v napravi ter poskusite znova.",
     "memoryHistoryPartial": "Del zgodovine spominov ni na voljo. Prikazana je doslej prejeta zgodovina.",
     "tapPlusToStartRecording": "Tapnite + za začetek snemanja",
+    "secondDevice": "Druga naprava",
+    "pairSecondDevice": "Seznani drugo napravo",
+    "pairSecondDeviceDescription": "Povežite OmiGlass ob svojem Omi, da gredo fotografije in zvok v isti pogovor.",
+    "forgetSecondDevice": "Pozabi drugo napravo",
     "processingTakingLonger": "Še poteka — traja dlje kot običajno."
 }

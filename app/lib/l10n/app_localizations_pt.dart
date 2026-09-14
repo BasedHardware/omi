@@ -9990,5 +9990,18 @@ class AppLocalizationsPt extends AppLocalizations {
       'A transcrição de voz não está disponível no momento. Verifique sua conexão com a internet e as configurações de reconhecimento de voz do dispositivo e tente novamente.';
 
   @override
+  String get secondDevice => 'Segundo dispositivo';
+
+  @override
+  String get pairSecondDevice => 'Emparelhar um segundo dispositivo';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Conecte o OmiGlass junto ao seu Omi para que fotos e áudio entrem na mesma conversa.';
+
+  @override
+  String get forgetSecondDevice => 'Esquecer segundo dispositivo';
+
+  @override
   String get processingTakingLonger => 'Ainda a trabalhar — isto está a demorar mais do que o habitual.';
 }

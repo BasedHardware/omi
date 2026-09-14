@@ -3233,5 +3233,9 @@
     "speechToTextUnavailableDesc": "現在、音声をテキストに変換できません。インターネット接続とデバイスの音声認識設定を確認してから、もう一度お試しください。",
     "memoryHistoryPartial": "記憶の履歴の一部を取得できません。これまでに取得した履歴を表示しています。",
     "tapPlusToStartRecording": "＋をタップして録音を開始",
+    "secondDevice": "2台目のデバイス",
+    "pairSecondDevice": "2台目のデバイスをペアリング",
+    "pairSecondDeviceDescription": "Omi と一緒に OmiGlass を接続すると、写真と音声が同じ会話にまとまります。",
+    "forgetSecondDevice": "2台目のデバイスを忘れる",
     "processingTakingLonger": "まだ処理中です。通常より時間がかかっています。"
 }

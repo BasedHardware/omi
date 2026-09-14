@@ -9991,5 +9991,18 @@ class AppLocalizationsId extends AppLocalizations {
       'Konversi suara ke teks sedang tidak tersedia. Periksa koneksi internet dan pengaturan pengenalan suara perangkat Anda, lalu coba lagi.';
 
   @override
+  String get secondDevice => 'Perangkat kedua';
+
+  @override
+  String get pairSecondDevice => 'Pasangkan perangkat kedua';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Sambungkan OmiGlass bersama Omi Anda agar foto dan audio masuk ke percakapan yang sama.';
+
+  @override
+  String get forgetSecondDevice => 'Lupakan perangkat kedua';
+
+  @override
   String get processingTakingLonger => 'Masih diproses — ini memakan waktu lebih lama dari biasanya.';
 }

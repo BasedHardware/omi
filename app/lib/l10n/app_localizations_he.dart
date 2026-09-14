@@ -9901,5 +9901,17 @@ class AppLocalizationsHe extends AppLocalizations {
       'המרת דיבור לטקסט אינה זמינה כרגע. בדקו את החיבור לאינטרנט ואת הגדרות זיהוי הדיבור במכשיר, ואז נסו שוב.';
 
   @override
+  String get secondDevice => 'מכשיר שני';
+
+  @override
+  String get pairSecondDevice => 'צימוד מכשיר שני';
+
+  @override
+  String get pairSecondDeviceDescription => 'חברו את OmiGlass לצד ה-Omi שלכם כדי שתמונות ואודיו ייכנסו לאותה שיחה.';
+
+  @override
+  String get forgetSecondDevice => 'שכח את המכשיר השני';
+
+  @override
   String get processingTakingLonger => 'עדיין בעבודה — זה לוקח יותר זמן מהרגיל.';
 }

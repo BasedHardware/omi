@@ -10823,5 +10823,9 @@
     "speechToTextUnavailableDesc": "Hindi available ang pag-convert ng boses sa teksto sa ngayon. Suriin ang iyong koneksyon sa internet at ang mga setting ng pagkilala sa boses ng iyong device, pagkatapos ay subukan muli.",
     "memoryHistoryPartial": "Hindi available ang ilang bahagi ng kasaysayan ng mga alaala. Ipinapakita ang kasaysayang natanggap sa ngayon.",
     "tapPlusToStartRecording": "I-tap ang + para magsimulang mag-record",
+    "secondDevice": "Ikalawang device",
+    "pairSecondDevice": "Ipares ang ikalawang device",
+    "pairSecondDeviceDescription": "Ikonekta ang OmiGlass kasama ng iyong Omi para mapunta sa iisang usapan ang mga larawan at audio.",
+    "forgetSecondDevice": "Kalimutan ang ikalawang device",
     "processingTakingLonger": "Ginagawa pa — mas matagal ito kaysa karaniwan."
 }

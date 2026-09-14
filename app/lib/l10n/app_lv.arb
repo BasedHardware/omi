@@ -3257,5 +3257,9 @@
     "speechToTextUnavailableDesc": "Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.",
     "memoryHistoryPartial": "Daļa atmiņu vēstures nav pieejama. Tiek rādīta līdz šim saņemtā vēsture.",
     "tapPlusToStartRecording": "Pieskarieties +, lai sāktu ierakstīšanu",
+    "secondDevice": "Otrā ierīce",
+    "pairSecondDevice": "Savienot pārī otro ierīci",
+    "pairSecondDeviceDescription": "Pievienojiet OmiGlass līdzās savam Omi, lai fotoattēli un audio nonāktu vienā sarunā.",
+    "forgetSecondDevice": "Aizmirst otro ierīci",
     "processingTakingLonger": "Joprojām notiek — tas aizņem ilgāk nekā parasti."
 }

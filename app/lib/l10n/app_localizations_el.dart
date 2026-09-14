@@ -10051,5 +10051,18 @@ class AppLocalizationsEl extends AppLocalizations {
       'Η μετατροπή ομιλίας σε κείμενο δεν είναι διαθέσιμη αυτή τη στιγμή. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο και τις ρυθμίσεις αναγνώρισης ομιλίας της συσκευής σας και δοκιμάστε ξανά.';
 
   @override
+  String get secondDevice => 'Δεύτερη συσκευή';
+
+  @override
+  String get pairSecondDevice => 'Σύζευξη δεύτερης συσκευής';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Συνδέστε τα OmiGlass μαζί με το Omi σας, ώστε φωτογραφίες και ήχος να πηγαίνουν στην ίδια συζήτηση.';
+
+  @override
+  String get forgetSecondDevice => 'Διαγραφή δεύτερης συσκευής';
+
+  @override
   String get processingTakingLonger => 'Ακόμα σε εξέλιξη — χρειάζεται περισσότερο χρόνο από το συνηθισμένο.';
 }

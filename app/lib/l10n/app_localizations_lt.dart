@@ -10000,5 +10000,18 @@ class AppLocalizationsLt extends AppLocalizations {
       'Kalbos vertimas tekstu šiuo metu nepasiekiamas. Patikrinkite interneto ryšį ir įrenginio kalbos atpažinimo nustatymus, tada bandykite dar kartą.';
 
   @override
+  String get secondDevice => 'Antras įrenginys';
+
+  @override
+  String get pairSecondDevice => 'Susieti antrą įrenginį';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Prijunkite OmiGlass kartu su savo Omi, kad nuotraukos ir garsas patektų į tą patį pokalbį.';
+
+  @override
+  String get forgetSecondDevice => 'Pamiršti antrą įrenginį';
+
+  @override
   String get processingTakingLonger => 'Vis dar vyksta — tai užtrunka ilgiau nei įprasta.';
 }

@@ -3257,5 +3257,9 @@
     "speechToTextUnavailableDesc": "Spraak naar tekst is momenteel niet beschikbaar. Controleer je internetverbinding en de instellingen voor spraakherkenning op je apparaat en probeer het opnieuw.",
     "memoryHistoryPartial": "Een deel van de herinneringsgeschiedenis is niet beschikbaar. De tot nu toe ontvangen geschiedenis wordt getoond.",
     "tapPlusToStartRecording": "Tik op + om de opname te starten",
+    "secondDevice": "Tweede apparaat",
+    "pairSecondDevice": "Tweede apparaat koppelen",
+    "pairSecondDeviceDescription": "Verbind OmiGlass naast je Omi zodat foto's en audio in hetzelfde gesprek terechtkomen.",
+    "forgetSecondDevice": "Tweede apparaat vergeten",
     "processingTakingLonger": "Nog bezig — dit duurt langer dan normaal."
 }

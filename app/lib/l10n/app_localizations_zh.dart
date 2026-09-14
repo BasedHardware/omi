@@ -9791,5 +9791,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speechToTextUnavailableDesc => '目前无法将语音转换为文字。请检查网络连接和设备的语音识别设置，然后重试。';
 
   @override
+  String get secondDevice => '第二台设备';
+
+  @override
+  String get pairSecondDevice => '配对第二台设备';
+
+  @override
+  String get pairSecondDeviceDescription => '将 OmiGlass 与你的 Omi 一起连接，让照片和音频进入同一段对话。';
+
+  @override
+  String get forgetSecondDevice => '忘记第二台设备';
+
+  @override
   String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
 }

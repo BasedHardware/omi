@@ -10011,5 +10011,18 @@ class AppLocalizationsSl extends AppLocalizations {
       'Pretvorba govora v besedilo trenutno ni na voljo. Preverite internetno povezavo in nastavitve prepoznavanja govora v napravi ter poskusite znova.';
 
   @override
+  String get secondDevice => 'Druga naprava';
+
+  @override
+  String get pairSecondDevice => 'Seznani drugo napravo';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Povežite OmiGlass ob svojem Omi, da gredo fotografije in zvok v isti pogovor.';
+
+  @override
+  String get forgetSecondDevice => 'Pozabi drugo napravo';
+
+  @override
   String get processingTakingLonger => 'Še poteka — traja dlje kot običajno.';
 }

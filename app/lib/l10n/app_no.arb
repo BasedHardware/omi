@@ -3257,5 +3257,9 @@
     "speechToTextUnavailableDesc": "Tale til tekst er ikke tilgjengelig akkurat nå. Kontroller internettforbindelsen og enhetens innstillinger for talegjenkjenning, og prøv igjen.",
     "memoryHistoryPartial": "Deler av minnehistorikken er ikke tilgjengelig. Viser historikken som er mottatt så langt.",
     "tapPlusToStartRecording": "Trykk på + for å starte opptaket",
+    "secondDevice": "Andre enhet",
+    "pairSecondDevice": "Par en annen enhet",
+    "pairSecondDeviceDescription": "Koble til OmiGlass sammen med Omi slik at bilder og lyd havner i samme samtale.",
+    "forgetSecondDevice": "Glem andre enhet",
     "processingTakingLonger": "Jobber fortsatt — dette tar lengre tid enn vanlig."
 }

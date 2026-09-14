@@ -9993,5 +9993,18 @@ class AppLocalizationsTr extends AppLocalizations {
       'Konuşmayı metne dönüştürme şu anda kullanılamıyor. İnternet bağlantınızı ve cihazınızın konuşma tanıma ayarlarını kontrol edip tekrar deneyin.';
 
   @override
+  String get secondDevice => 'İkinci cihaz';
+
+  @override
+  String get pairSecondDevice => 'İkinci cihazı eşleştir';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Fotoğraflar ve ses aynı sohbete gitsin diye OmiGlass\'ı Omi\'nizin yanına bağlayın.';
+
+  @override
+  String get forgetSecondDevice => 'İkinci cihazı unut';
+
+  @override
   String get processingTakingLonger => 'Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor.';
 }

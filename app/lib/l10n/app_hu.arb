@@ -3353,5 +3353,9 @@
     "speechToTextUnavailableDesc": "A beszéd szöveggé alakítása jelenleg nem érhető el. Ellenőrizd az internetkapcsolatot és az eszköz beszédfelismerési beállításait, majd próbáld újra.",
     "memoryHistoryPartial": "Az emlékek előzményeinek egy része nem érhető el. Az eddig megkapott előzmények láthatók.",
     "tapPlusToStartRecording": "Koppints a + jelre a felvétel indításához",
+    "secondDevice": "Második eszköz",
+    "pairSecondDevice": "Második eszköz párosítása",
+    "pairSecondDeviceDescription": "Csatlakoztasd az OmiGlass-t az Omi mellé, hogy a fotók és a hang ugyanabba a beszélgetésbe kerüljenek.",
+    "forgetSecondDevice": "Második eszköz elfelejtése",
     "processingTakingLonger": "Még folyamatban — ez tovább tart a szokásosnál."
 }

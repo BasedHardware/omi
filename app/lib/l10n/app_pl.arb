@@ -3292,5 +3292,9 @@
     "speechToTextUnavailableDesc": "Zamiana mowy na tekst jest teraz niedostępna. Sprawdź połączenie internetowe i ustawienia rozpoznawania mowy na urządzeniu, a następnie spróbuj ponownie.",
     "memoryHistoryPartial": "Część historii wspomnień jest niedostępna. Wyświetlana jest dotychczas otrzymana historia.",
     "tapPlusToStartRecording": "Dotknij +, aby rozpocząć nagrywanie",
+    "secondDevice": "Drugie urządzenie",
+    "pairSecondDevice": "Sparuj drugie urządzenie",
+    "pairSecondDeviceDescription": "Podłącz OmiGlass obok swojego Omi, aby zdjęcia i dźwięk trafiały do tej samej rozmowy.",
+    "forgetSecondDevice": "Zapomnij drugie urządzenie",
     "processingTakingLonger": "Nadal działa — trwa to dłużej niż zwykle."
 }

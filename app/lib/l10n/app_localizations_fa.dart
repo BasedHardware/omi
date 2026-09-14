@@ -9981,5 +9981,18 @@ class AppLocalizationsFa extends AppLocalizations {
       'تبدیل گفتار به نوشتار در حال حاضر در دسترس نیست. اتصال اینترنت و تنظیمات تشخیص گفتار دستگاه خود را بررسی کنید و دوباره تلاش کنید.';
 
   @override
+  String get secondDevice => 'دستگاه دوم';
+
+  @override
+  String get pairSecondDevice => 'جفت‌کردن دستگاه دوم';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'OmiGlass را در کنار Omi خود متصل کنید تا عکس‌ها و صدا در همان گفتگو قرار بگیرند.';
+
+  @override
+  String get forgetSecondDevice => 'فراموش‌کردن دستگاه دوم';
+
+  @override
   String get processingTakingLonger => 'هنوز در حال انجام است — بیشتر از حد معمول طول می‌کشد.';
 }

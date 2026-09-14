@@ -3257,5 +3257,9 @@
     "speechToTextUnavailableDesc": "Kõne tekstiks teisendamine pole praegu saadaval. Kontrolli internetiühendust ja seadme kõnetuvastuse seadeid ning proovi uuesti.",
     "memoryHistoryPartial": "Osa mälestuste ajaloost pole saadaval. Kuvatakse seni saadud ajalugu.",
     "tapPlusToStartRecording": "Salvestamise alustamiseks puuduta +",
+    "secondDevice": "Teine seade",
+    "pairSecondDevice": "Seo teine seade",
+    "pairSecondDeviceDescription": "Ühenda OmiGlass oma Omi kõrvale, et fotod ja heli jõuaksid samasse vestlusse.",
+    "forgetSecondDevice": "Unusta teine seade",
     "processingTakingLonger": "Ikka käimas — see võtab kauem aega kui tavaliselt."
 }

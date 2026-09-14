@@ -9990,5 +9990,18 @@ class AppLocalizationsMr extends AppLocalizations {
       'सध्या बोलण्याचे मजकुरात रूपांतर उपलब्ध नाही. तुमचे इंटरनेट कनेक्शन आणि डिव्हाइसवरील वाणी ओळख सेटिंग्ज तपासा, नंतर पुन्हा प्रयत्न करा.';
 
   @override
+  String get secondDevice => 'दुसरे डिव्हाइस';
+
+  @override
+  String get pairSecondDevice => 'दुसरे डिव्हाइस जोडा';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'फोटो आणि ऑडिओ एकाच संभाषणात जाण्यासाठी तुमच्या Omi सोबत OmiGlass कनेक्ट करा.';
+
+  @override
+  String get forgetSecondDevice => 'दुसरे डिव्हाइस विसरा';
+
+  @override
   String get processingTakingLonger => 'अजूनही काम सुरू आहे — याला नेहमीपेक्षा जास्त वेळ लागत आहे.';
 }

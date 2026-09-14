@@ -9985,5 +9985,18 @@ class AppLocalizationsSv extends AppLocalizations {
       'Tal till text är inte tillgängligt just nu. Kontrollera internetanslutningen och enhetens inställningar för taligenkänning och försök igen.';
 
   @override
+  String get secondDevice => 'Andra enhet';
+
+  @override
+  String get pairSecondDevice => 'Para ihop en andra enhet';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Anslut OmiGlass tillsammans med din Omi så att bilder och ljud hamnar i samma konversation.';
+
+  @override
+  String get forgetSecondDevice => 'Glöm andra enhet';
+
+  @override
   String get processingTakingLonger => 'Fortfarande igång — det tar längre tid än vanligt.';
 }

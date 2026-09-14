@@ -3257,5 +3257,9 @@
     "speechToTextUnavailableDesc": "Kalbos vertimas tekstu šiuo metu nepasiekiamas. Patikrinkite interneto ryšį ir įrenginio kalbos atpažinimo nustatymus, tada bandykite dar kartą.",
     "memoryHistoryPartial": "Dalis prisiminimų istorijos nepasiekiama. Rodoma iki šiol gauta istorija.",
     "tapPlusToStartRecording": "Norėdami pradėti įrašymą, palieskite +",
+    "secondDevice": "Antras įrenginys",
+    "pairSecondDevice": "Susieti antrą įrenginį",
+    "pairSecondDeviceDescription": "Prijunkite OmiGlass kartu su savo Omi, kad nuotraukos ir garsas patektų į tą patį pokalbį.",
+    "forgetSecondDevice": "Pamiršti antrą įrenginį",
     "processingTakingLonger": "Vis dar vyksta — tai užtrunka ilgiau nei įprasta."
 }

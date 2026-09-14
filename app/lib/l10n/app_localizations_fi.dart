@@ -9982,5 +9982,18 @@ class AppLocalizationsFi extends AppLocalizations {
       'Puheen muuntaminen tekstiksi ei ole juuri nyt käytettävissä. Tarkista internetyhteytesi ja laitteesi puheentunnistusasetukset ja yritä uudelleen.';
 
   @override
+  String get secondDevice => 'Toinen laite';
+
+  @override
+  String get pairSecondDevice => 'Yhdistä toinen laite';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Yhdistä OmiGlass Omi-laitteesi rinnalle, jotta kuvat ja ääni päätyvät samaan keskusteluun.';
+
+  @override
+  String get forgetSecondDevice => 'Unohda toinen laite';
+
+  @override
   String get processingTakingLonger => 'Vielä käynnissä — tämä kestää tavallista kauemmin.';
 }

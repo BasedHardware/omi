@@ -9813,5 +9813,17 @@ class AppLocalizationsKo extends AppLocalizations {
   String get speechToTextUnavailableDesc => '지금은 음성을 텍스트로 변환할 수 없습니다. 인터넷 연결과 기기의 음성 인식 설정을 확인한 후 다시 시도해주세요.';
 
   @override
+  String get secondDevice => '두 번째 기기';
+
+  @override
+  String get pairSecondDevice => '두 번째 기기 페어링';
+
+  @override
+  String get pairSecondDeviceDescription => 'Omi와 함께 OmiGlass를 연결하면 사진과 오디오가 같은 대화에 담깁니다.';
+
+  @override
+  String get forgetSecondDevice => '두 번째 기기 삭제';
+
+  @override
   String get processingTakingLonger => '아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요.';
 }

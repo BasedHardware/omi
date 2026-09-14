@@ -9,7 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -19,6 +19,7 @@ import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/device_widget.dart';
@@ -97,6 +98,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   }
 
   Widget _buildProfileStyleItem({
+    Key? key,
     required FaIconData icon,
     required String title,
     String? chipValue,
@@ -109,6 +111,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     Color? chipTextColor,
   }) {
     final content = Padding(
+      key: key,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       child: Row(
         children: [
@@ -197,6 +200,120 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
         ),
       ),
     );
+  }
+
+  /// Omi + OmiGlass can be connected together (audio from the pendant, photos
+  /// from the glasses). Shows the paired second device with its status, or the
+  /// action to pair one when the primary device is part of that family.
+  Widget? _buildSecondDeviceSection(DeviceProvider provider) {
+    final primary = provider.connectedDevice ?? provider.pairedDevice;
+    final companion = provider.pairedCompanionDevice;
+    const cardDecoration = BoxDecoration(color: Color(0xFF1C1C1E), borderRadius: BorderRadius.all(Radius.circular(20)));
+
+    Widget sectionWithTitle(Widget card) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 12),
+            child: Text(
+              context.l10n.secondDevice,
+              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+          ),
+          card,
+        ],
+      );
+    }
+
+    if (companion == null) {
+      final canPairSecond = primary != null &&
+          primary.id.isNotEmpty &&
+          (primary.type == DeviceType.omi || primary.type == DeviceType.openglass);
+      if (!canPairSecond) return null;
+      return sectionWithTitle(Container(
+        decoration: cardDecoration,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildProfileStyleItem(
+              key: const Key('pair_second_device_button'),
+              icon: FontAwesomeIcons.plus,
+              title: context.l10n.pairSecondDevice,
+              onTap: () => routeToPage(context, const ConnectDevicePage()),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(56, 0, 16, 16),
+              child: Text(
+                context.l10n.pairSecondDeviceDescription,
+                style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      ));
+    }
+
+    final isCompanionConnected = provider.companionDevice?.id == companion.id;
+    final companionBattery = provider.companionBatteryLevel;
+    final statusLabel = isCompanionConnected
+        ? (companionBattery > 0 ? '${context.l10n.connected} · $companionBattery%' : context.l10n.connected)
+        : context.l10n.offline;
+    return sectionWithTitle(Container(
+      decoration: cardDecoration,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Image.asset(DeviceUtils.getDeviceImageFromBtDevice(companion), fit: BoxFit.contain),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    companion.name,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color:
+                        isCompanionConnected ? Colors.green.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: TextStyle(
+                      color: isCompanionConnected ? Colors.green : Colors.grey,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          _buildProfileStyleItem(
+            key: const Key('forget_second_device_button'),
+            icon: FontAwesomeIcons.linkSlash,
+            title: context.l10n.forgetSecondDevice,
+            iconColor: Colors.redAccent,
+            titleColor: Colors.redAccent,
+            showChevron: false,
+            onTap: () async {
+              await provider.forgetCompanionDevice();
+            },
+          ),
+        ],
+      ),
+    ));
   }
 
   Future<String>? _rayBanMetaCameraStatusFuture;
@@ -426,28 +543,10 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           GestureDetector(
             onTap: () async {
-              // Save device ID before clearing prefs
-              final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
-
-              // Clear stored device
-              await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
-              SharedPreferencesUtil().deviceName = '';
-
-              // Fully tear down connection, transport, and native service
-              if (deviceId.isNotEmpty) {
-                await ServiceManager.instance().device.forgetDevice(deviceId);
-                try {
-                  BleHostApi().unmanageDevice(deviceId);
-                } catch (_) {}
-              }
-
-              if (mounted) {
-                context.read<DeviceProvider>().setIsConnected(false);
-                await context.read<DeviceProvider>().setConnectedDevice(null);
-              }
-              if (mounted) {
-                context.read<DeviceProvider>().updateConnectingStatus(false);
-              }
+              final deviceId = provider.connectedDevice?.id ?? provider.pairedDevice?.id ?? '';
+              // Forgets prefs, connection, transport and native registration; a
+              // paired second device (if any) is promoted and stays connected.
+              await provider.forgetDevice(deviceId);
 
               if (mounted && Navigator.of(context).canPop()) {
                 Navigator.of(context).pop();
@@ -723,6 +822,12 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 // Battery Level Section
                 if (provider.connectedDevice != null && provider.batteryLevel > 0) ...[
                   _buildBatterySection(provider),
+                  const SizedBox(height: 16),
+                ],
+
+                // Second device (Omi + OmiGlass) Section
+                if (_buildSecondDeviceSection(provider) case final secondDeviceSection?) ...[
+                  secondDeviceSection,
                   const SizedBox(height: 16),
                 ],
 

@@ -10002,5 +10002,18 @@ class AppLocalizationsUk extends AppLocalizations {
       'Перетворення мовлення на текст зараз недоступне. Перевірте підключення до інтернету та налаштування розпізнавання мовлення на пристрої й спробуйте ще раз.';
 
   @override
+  String get secondDevice => 'Другий пристрій';
+
+  @override
+  String get pairSecondDevice => 'Підключити другий пристрій';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Підключіть OmiGlass разом з Omi, щоб фото та звук потрапляли в одну розмову.';
+
+  @override
+  String get forgetSecondDevice => 'Забути другий пристрій';
+
+  @override
   String get processingTakingLonger => 'Ще обробляється — це триває довше, ніж зазвичай.';
 }

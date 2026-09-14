@@ -9922,5 +9922,17 @@ class AppLocalizationsAr extends AppLocalizations {
       'تحويل الكلام إلى نص غير متاح الآن. تحقق من اتصالك بالإنترنت وإعدادات التعرف على الكلام في جهازك، ثم حاول مرة أخرى.';
 
   @override
+  String get secondDevice => 'الجهاز الثاني';
+
+  @override
+  String get pairSecondDevice => 'إقران جهاز ثانٍ';
+
+  @override
+  String get pairSecondDeviceDescription => 'اربط OmiGlass بجانب جهاز Omi حتى تذهب الصور والصوت إلى المحادثة نفسها.';
+
+  @override
+  String get forgetSecondDevice => 'نسيان الجهاز الثاني';
+
+  @override
   String get processingTakingLonger => 'ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد.';
 }

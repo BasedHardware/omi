@@ -10064,5 +10064,18 @@ class AppLocalizationsDe extends AppLocalizations {
       'Die Spracherkennung ist derzeit nicht verfügbar. Prüfe deine Internetverbindung und die Einstellungen zur Spracherkennung auf deinem Gerät und versuche es erneut.';
 
   @override
+  String get secondDevice => 'Zweites Gerät';
+
+  @override
+  String get pairSecondDevice => 'Zweites Gerät koppeln';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Verbinde OmiGlass zusätzlich zu deinem Omi, damit Fotos und Audio in dieselbe Unterhaltung fließen.';
+
+  @override
+  String get forgetSecondDevice => 'Zweites Gerät vergessen';
+
+  @override
   String get processingTakingLonger => 'Arbeitet noch — das dauert länger als üblich.';
 }
