@@ -5303,7 +5303,7 @@ test('Settings names a failed transcription-preferences GET instead of empty suc
   expect(tree).not.toContain('Detect 10+ languages');
 });
 
-test('Settings shows already-loaded company, job, and data protection', async () => {
+test('Settings omits Flutter Profile.build() GET company, job, and data protection', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;
   };
@@ -5342,13 +5342,14 @@ test('Settings shows already-loaded company, job, and data protection', async ()
       .props.onPress();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Company');
-  expect(tree).toContain('Based Hardware');
-  expect(tree).toContain('Job');
-  expect(tree).toContain('Engineer');
-  expect(tree).toContain('Data protection');
-  expect(tree).toContain('Standard');
-  expect(tree).not.toContain('standard');
+  expect(tree).toContain('Ada');
+  expect(tree).toContain('User ID');
+  expect(tree).not.toContain('Company');
+  expect(tree).not.toContain('Based Hardware');
+  expect(tree).not.toContain('Job');
+  expect(tree).not.toContain('Engineer');
+  expect(tree).not.toContain('Data protection');
+  expect(tree).not.toContain('Standard');
 });
 
 test('Settings reports a nested non-retryable profile read as unavailable', async () => {

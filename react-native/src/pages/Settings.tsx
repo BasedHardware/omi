@@ -26,7 +26,6 @@ import {
   desktopBackendServiceCopy,
   desktopBackendUnauthorizedCopy,
   desktopReadErrorCopy,
-  dataProtectionCopy,
   developerWebhookRowCopy,
   developerWebhookTypeCopy,
   developerKeysCopy,
@@ -65,7 +64,6 @@ import {
   customVocabularyCopy,
   customVocabularyTitleCopy,
   taskIntegrationsTitleCopy,
-  visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {loadOmiPeopleNames} from '../legacyOmiPeople';
@@ -814,24 +812,6 @@ export function SettingsPage({
               )}
               title={userIdTitleCopy()}
             />
-            {visibleDisplayText(snapshot.profile.company ?? '') !== '' && (
-              <SettingRow
-                copy={visibleDisplayText(snapshot.profile.company ?? '')}
-                title="Company"
-              />
-            )}
-            {visibleDisplayText(snapshot.profile.job ?? '') !== '' && (
-              <SettingRow
-                copy={visibleDisplayText(snapshot.profile.job ?? '')}
-                title="Job"
-              />
-            )}
-            {snapshot.profile.dataProtectionLevel !== null && (
-              <SettingRow
-                copy={dataProtectionCopy(snapshot.profile.dataProtectionLevel)}
-                title="Data protection"
-              />
-            )}
           </>
         )}
         {snapshot.subscription === null ? (

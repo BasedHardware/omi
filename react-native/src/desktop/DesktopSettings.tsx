@@ -12,7 +12,6 @@ import {
   type AccountSettingsSnapshot,
 } from '../desktopCloudClient';
 import {
-  dataProtectionCopy,
   desktopBackendConfigurationCopy,
   desktopReadErrorCopy,
   developerWebhookRowCopy,
@@ -49,7 +48,6 @@ import {
   customVocabularyCopy,
   customVocabularyTitleCopy,
   taskIntegrationsTitleCopy,
-  visibleDisplayText,
 } from '../desktopReadClient';
 import {
   audioRecordingModeCopy,
@@ -913,23 +911,6 @@ export function DesktopSettings({
         <Row
           copy={accountFieldCopy(account.profile.uid, 'Account id unavailable')}
           title={userIdTitleCopy()}
-        />
-      ) : null}
-      {account?.profile != null &&
-      visibleDisplayText(account.profile.company ?? '') !== '' ? (
-        <Row
-          copy={visibleDisplayText(account.profile.company ?? '')}
-          title="Company"
-        />
-      ) : null}
-      {account?.profile != null &&
-      visibleDisplayText(account.profile.job ?? '') !== '' ? (
-        <Row copy={visibleDisplayText(account.profile.job ?? '')} title="Job" />
-      ) : null}
-      {account?.profile?.dataProtectionLevel != null ? (
-        <Row
-          copy={dataProtectionCopy(account.profile.dataProtectionLevel)}
-          title="Data protection"
         />
       ) : null}
       {account?.subscription != null ? (

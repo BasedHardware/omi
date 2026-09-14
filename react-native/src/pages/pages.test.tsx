@@ -1211,6 +1211,38 @@ test('Settings developer webhook titles are not raw API keys', async () => {
   expect(tree).not.toContain('Status unknown');
 });
 
+test('Settings omits Flutter Profile.build() GET company, job, and data protection', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          uid: 'user-1',
+          name: 'Ada',
+          email: 'ada@example.com',
+          company: 'Fixture Company Co',
+          job: 'Fixture Job Title',
+          data_protection_level: 'standard',
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Ada');
+  expect(tree).toContain('User ID');
+  expect(tree).toContain('user-1');
+  expect(tree).not.toContain('Company');
+  expect(tree).not.toContain('Fixture Company Co');
+  expect(tree).not.toContain('Job');
+  expect(tree).not.toContain('Fixture Job Title');
+  expect(tree).not.toContain('Data protection');
+  expect(tree).not.toContain('Standard');
+});
+
 test('Settings omits NEXT LINE-only company and job instead of blank rows', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
