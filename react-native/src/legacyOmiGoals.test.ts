@@ -182,6 +182,47 @@ test('keeps GET goals when a goal id exceeds 256', () => {
   ]);
 });
 
+test('keeps GET goals when a goal id exceeds 10000', () => {
+  const id = 'g'.repeat(10001);
+  expect(
+    parseOmiGoals(
+      JSON.stringify([
+        {id, title: 'Read 20 books', current_value: 3, target_value: 10},
+        {
+          id: 'goal-run',
+          title: 'Run weekly',
+          current_value: 1.5,
+          target_value: 4,
+        },
+      ]),
+    ),
+  ).toEqual([
+    {id, title: 'Read 20 books', current: 3, target: 10},
+    {id: 'goal-run', title: 'Run weekly', current: 1.5, target: 4},
+  ]);
+});
+
+test('fails closed when a goal id exceeds 1000000', () => {
+  expect(() =>
+    parseOmiGoals(
+      JSON.stringify([
+        {
+          id: 'g'.repeat(1_000_001),
+          title: 'Read 20 books',
+          current_value: 3,
+          target_value: 10,
+        },
+        {
+          id: 'goal-run',
+          title: 'Run weekly',
+          current_value: 1.5,
+          target_value: 4,
+        },
+      ]),
+    ),
+  ).toThrow();
+});
+
 test('keeps GET goals when a title exceeds 10000', () => {
   const title = 'R'.repeat(10001);
   expect(
