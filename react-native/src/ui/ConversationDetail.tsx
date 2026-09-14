@@ -16,6 +16,8 @@ import {
   conversationActionItemsNoPendingCopy,
   conversationActionItemsCompletedCopy,
   conversationActionItemsNoCompletedCopy,
+  conversationActionItemsEmptyCopy,
+  conversationActionItemsEmptyDescriptionCopy,
   conversationNoFolderCopy,
   legacyTranscriptCanDisplaySeconds,
   legacyTranscriptTimestampCopy,
@@ -615,7 +617,16 @@ function LegacyConversationBody({
             </Text>
           )}
         </>
-      ) : null}
+      ) : (
+        <>
+          <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
+            {conversationActionItemsEmptyCopy()}
+          </Text>
+          <Text style={[styles.conversationDetailField, ink]}>
+            {conversationActionItemsEmptyDescriptionCopy()}
+          </Text>
+        </>
+      )}
       <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
         {conversation.status === 'processing' ||
         conversation.status === 'merging'

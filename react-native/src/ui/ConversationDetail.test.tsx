@@ -21,6 +21,8 @@ import {
   conversationActionItemsNoPendingCopy,
   conversationActionItemsCompletedCopy,
   conversationActionItemsNoCompletedCopy,
+  conversationActionItemsEmptyCopy,
+  conversationActionItemsEmptyDescriptionCopy,
   conversationNoFolderCopy,
   conversationUnknownAppCopy,
   conversationPhotoUnavailableCopy,
@@ -1507,10 +1509,11 @@ test('legacy conversation details name GET action items without a write toggle',
   expect(copy).toContain('Call Alex');
   expect(copy).not.toContain(conversationActionItemsNoPendingCopy());
   expect(copy).not.toContain(conversationActionItemsNoCompletedCopy());
+  expect(copy).not.toContain(conversationActionItemsEmptyCopy());
   expect(copy).not.toContain('in_progress');
 });
 
-test('legacy conversation details omit empty or whitespace action items', () => {
+test('legacy conversation details name Flutter ActionItemsTab empty chrome for whitespace-only GET action items', () => {
   mockLegacy.mockReturnValue({
     result: {
       status: 'loaded',
@@ -1533,11 +1536,45 @@ test('legacy conversation details omit empty or whitespace action items', () => 
       conversation: {...conversation, id: 'old-1'},
     }),
   );
-  expect(copy).not.toContain('Action Items');
   expect(copy).not.toContain(conversationActionItemsTodoCopy());
+  expect(copy).toContain(conversationActionItemsEmptyCopy());
+  expect(copy).toContain(conversationActionItemsEmptyDescriptionCopy());
   expect(copy).not.toContain(conversationActionItemsNoPendingCopy());
   expect(copy).not.toContain(conversationActionItemsNoCompletedCopy());
   expect(copy).not.toContain('\u0085');
+  expect(copy).not.toContain('Create Action Item');
+});
+
+test('legacy conversation details name Flutter ActionItemsTab empty GET chrome', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain(conversationActionItemsEmptyCopy());
+  expect(copy).toContain(conversationActionItemsEmptyDescriptionCopy());
+  expect(copy).not.toContain(conversationActionItemsTodoCopy());
+  expect(copy).not.toContain(conversationActionItemsCompletedCopy());
+  expect(copy).not.toContain(conversationActionItemsNoPendingCopy());
+  expect(copy).not.toContain(conversationActionItemsNoCompletedCopy());
+  expect(copy).not.toContain('Create Action Item');
 });
 
 test('legacy conversation details name GET action-item To-Do empty groups without a write toggle', () => {

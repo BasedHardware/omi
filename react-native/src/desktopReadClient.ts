@@ -637,6 +637,14 @@ export function conversationActionItemsNoCompletedCopy(): string {
   return 'No completed items yet';
 }
 
+export function conversationActionItemsEmptyCopy(): string {
+  return 'No Action Items';
+}
+
+export function conversationActionItemsEmptyDescriptionCopy(): string {
+  return 'Tasks and to-dos from this conversation will appear here once they are created.';
+}
+
 export function chatBlockUnavailableCopy(): string {
   return 'No longer available';
 }

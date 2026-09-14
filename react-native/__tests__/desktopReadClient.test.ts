@@ -136,6 +136,8 @@ import {
   conversationActionItemsNoPendingCopy,
   conversationActionItemsCompletedCopy,
   conversationActionItemsNoCompletedCopy,
+  conversationActionItemsEmptyCopy,
+  conversationActionItemsEmptyDescriptionCopy,
   parseMemoryText,
   chatClockLabel,
   clockLabel,
@@ -3446,6 +3448,10 @@ test('conversation action-item copy names Flutter ActionItemsTab To-Do chrome', 
   expect(conversationActionItemsCompletedCopy()).toBe('Completed');
   expect(conversationActionItemsNoCompletedCopy()).toBe(
     'No completed items yet',
+  );
+  expect(conversationActionItemsEmptyCopy()).toBe('No Action Items');
+  expect(conversationActionItemsEmptyDescriptionCopy()).toBe(
+    'Tasks and to-dos from this conversation will appear here once they are created.',
   );
 });
 
