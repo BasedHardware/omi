@@ -25,6 +25,7 @@ import {
   desktopBackendUnavailableCopy,
   memoriesEmptyCopy,
   memoriesSearchEmptyCopy,
+  memoriesLoadErrorCopy,
   MemoryCursorExpiredError,
 } from '../desktopReadClient';
 
@@ -208,6 +209,8 @@ test('memory grant denial shows the typed error instead of an empty library', ()
   expect(textOf(view)).toContain(
     'This saved data is not available for this account.',
   );
+  expect(textOf(view)).toContain(memoriesLoadErrorCopy());
+  expect(textOf(view)).not.toContain('Memories unavailable');
   expect(textOf(view)).not.toContain(memoriesEmptyCopy());
   expect(textOf(view)).not.toContain('No memories yet.');
 });

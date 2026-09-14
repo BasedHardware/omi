@@ -25,6 +25,7 @@ import {
   memoryLockedCopy,
   memoriesEmptyCopy,
   memoriesSearchEmptyCopy,
+  memoriesLoadErrorCopy,
   visibleDisplayText,
   type DesktopReadProjection,
   type DomainReadOutcome,
@@ -263,7 +264,9 @@ export function MemoriesPage({
         </View>
       ) : error !== null ? (
         <View style={styles.projectionEmpty}>
-          <Text style={styles.projectionEmptyTitle}>Memories unavailable</Text>
+          <Text style={styles.projectionEmptyTitle}>
+            {memoriesLoadErrorCopy()}
+          </Text>
           <Text style={styles.projectionEmptyCopy}>{error}</Text>
         </View>
       ) : (

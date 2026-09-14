@@ -510,6 +510,10 @@ export function memoriesSearchEmptyCopy(): string {
   return '🔍 No memories found';
 }
 
+export function memoriesLoadErrorCopy(): string {
+  return "Couldn't load memories";
+}
+
 export function tasksSearchEmptyCopy(): string {
   return 'No results found';
 }
