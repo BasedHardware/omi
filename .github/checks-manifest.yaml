@@ -14,6 +14,11 @@ checks:
     triggers: ["plugins/omi-hacker-news-app/**"]
     lanes: ["local", "ci"]
     reason: "#13211: escaped literal angle-bracket text must survive Hacker News provider markup cleaning"
+  - id: dropbox-app-client-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_dropbox_client.py"]
+    triggers: ["plugins/omi-dropbox-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13810: list_folder must follow cursor pagination (files/list_folder/continue) instead of truncating at the first page; tests cover multi-page, limit enforcement, continuation failure surfacing, and stale-cursor (HTTP 409 reset) recovery"
   - id: usgs-earthquake-tests
     command: ["python3", "plugins/omi-usgs-earthquake-app/test_main.py"]
     triggers: ["plugins/omi-usgs-earthquake-app/**"]

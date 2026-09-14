@@ -215,41 +215,88 @@ class DropboxClient:
         except Exception as e:
             return None, f"Error searching: {str(e)}"
 
+    @staticmethod
+    def _parse_folder_entries(entries: list) -> list:
+        """Normalize raw Dropbox entries into the project's result shape."""
+        results = []
+        for entry in entries:
+            results.append({
+                "name": entry.get("name", "Unknown"),
+                "path": entry.get("path_display", ""),
+                "type": entry.get(".tag", "file"),
+                "size": entry.get("size", 0),
+                "modified": entry.get("server_modified", ""),
+            })
+        return results
+
     def list_folder(
         self,
         path: str = "",
         limit: int = 20,
     ) -> Tuple[Optional[list], Optional[str]]:
         """
-        List files in a folder.
-        Returns (files_list, error_message).
+        List files in a folder, following cursor pagination when has_more is true.
+
+        Returns (files_list, error_message). Unlike the previous single-page
+        implementation, this keeps fetching via ``/files/list_folder/continue``
+        until ``has_more`` is false or ``limit`` is reached. Pagination failures
+        are surfaced as errors (carrying any partial results) instead of being
+        silently swallowed, and a stale/invalid cursor (HTTP 409 ``reset``) is
+        recovered by restarting the listing once before giving up.
         """
         try:
-            response = requests.post(
-                f"{self.API_BASE}/files/list_folder",
-                headers=self._headers(),
-                json={
-                    "path": path if path else "",
-                    "limit": limit,
-                    "recursive": False,
-                },
-            )
+            per_page = min(limit, 2000) if limit else 2000
+            results: list = []
 
-            if response.status_code == 200:
-                data = response.json()
-                entries = data.get("entries", [])
-                results = []
-                for entry in entries:
-                    results.append({
-                        "name": entry.get("name", "Unknown"),
-                        "path": entry.get("path_display", ""),
-                        "type": entry.get(".tag", "file"),
-                        "size": entry.get("size", 0),
-                        "modified": entry.get("server_modified", ""),
-                    })
-                return results, None
-            else:
-                return None, f"List failed: {response.text}"
+            def _post(url: str, payload: dict):
+                return requests.post(url, headers=self._headers(), json=payload)
+
+            # First page
+            resp = _post(
+                f"{self.API_BASE}/files/list_folder",
+                {"path": path if path else "", "limit": per_page, "recursive": False},
+            )
+            if resp.status_code != 200:
+                return None, f"List failed: {resp.text}"
+
+            data = resp.json()
+            results.extend(self._parse_folder_entries(data.get("entries", [])))
+            cursor = data.get("cursor")
+            has_more = data.get("has_more", False)
+
+            # Continue paging while more data exists and we are under the limit.
+            reset_used = False
+            while has_more and cursor and (limit is None or len(results) < limit):
+                cont = _post(
+                    f"{self.API_BASE}/files/list_folder/continue",
+                    {"cursor": cursor},
+                )
+                if cont.status_code == 409 and not reset_used:
+                    # Cursor invalidated because the folder changed underneath us.
+                    # Restart the listing from scratch once before giving up.
+                    reset_used = True
+                    restart = _post(
+                        f"{self.API_BASE}/files/list_folder",
+                        {"path": path if path else "", "limit": per_page, "recursive": False},
+                    )
+                    if restart.status_code != 200:
+                        return results or None, f"List pagination reset failed: {restart.text}"
+                    rdata = restart.json()
+                    results = self._parse_folder_entries(rdata.get("entries", []))
+                    cursor = rdata.get("cursor")
+                    has_more = rdata.get("has_more", False)
+                    continue
+                if cont.status_code != 200:
+                    # Surface the failure instead of returning partial data silently.
+                    return results or None, f"List pagination failed: {cont.text}"
+                cdata = cont.json()
+                results.extend(self._parse_folder_entries(cdata.get("entries", [])))
+                cursor = cdata.get("cursor")
+                has_more = cdata.get("has_more", False)
+
+            if limit is not None:
+                results = results[:limit]
+            return results, None
 
         except Exception as e:
             return None, f"Error listing: {str(e)}"
