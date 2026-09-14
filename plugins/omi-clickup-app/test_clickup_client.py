@@ -149,5 +149,156 @@ class ClickUpClientTests(unittest.TestCase):
         self.assertEqual([(lst["id"], lst["space_name"]) for lst in lists], [("l1", "Engineering")])
 
 
+class ClickUpAssigneeCoercionTests(unittest.TestCase):
+    def test_coerce_assignee_ids_valid_inputs(self):
+        # Supports ints, string ints, and cleans whitespace while preserving unique order
+        raw = [101, "102", " 103 ", 101, "102"]
+        self.assertEqual(clickup_client.ClickUpClient._coerce_assignee_ids(raw), [101, 102, 103])
+
+    def test_coerce_assignee_ids_filters_invalid_and_sentinels(self):
+        # Must never throw on names, None, sentinels, booleans, negative IDs, or complex objects
+        raw = ["sarah", None, "None", "NONE", "   ", -5, 0, True, False, {"id": 104}, [105]]
+        self.assertEqual(clickup_client.ClickUpClient._coerce_assignee_ids(raw), [])
+
+    def test_coerce_assignee_ids_empty_or_none(self):
+        self.assertEqual(clickup_client.ClickUpClient._coerce_assignee_ids(None), [])
+        self.assertEqual(clickup_client.ClickUpClient._coerce_assignee_ids([]), [])
+
+
+class ClickUpCreateTaskTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self._print_patch = patch.object(clickup_client, "print")
+        self._print_patch.start()
+
+    def tearDown(self):
+        self._print_patch.stop()
+
+    async def test_create_task_coerces_assignees_and_posts(self):
+        client = clickup_client.ClickUpClient()
+        success_response = FakeResponse({
+            "id": "t100",
+            "name": "Refactor auth",
+            "url": "https://app.clickup.com/t/t100",
+            "status": {"status": "open"}
+        })
+
+        with patch.object(clickup_client.requests, "post", return_value=success_response) as mock_post:
+            result = await client.create_task(
+                access_token="test_token",
+                list_id="list_1",
+                name="Refactor auth",
+                assignees=["123", "456", "123", "sarah", None]
+            )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["task_id"], "t100")
+        self.assertTrue(mock_post.called)
+        sent_json = mock_post.call_args.kwargs["json"]
+        self.assertEqual(sent_json["assignees"], [123, 456])
+
+    async def test_create_task_with_only_invalid_assignees_does_not_crash(self):
+        # Prior to fix, non-numeric strings in assignees raised ValueError and aborted task creation
+        client = clickup_client.ClickUpClient()
+        success_response = FakeResponse({
+            "id": "t101",
+            "name": "Design review",
+            "url": "https://app.clickup.com/t/t101",
+            "status": {"status": "open"}
+        })
+
+        with patch.object(clickup_client.requests, "post", return_value=success_response) as mock_post:
+            result = await client.create_task(
+                access_token="test_token",
+                list_id="list_1",
+                name="Design review",
+                assignees=["sarah", "mike", "None"]
+            )
+
+        self.assertTrue(result["success"])
+        sent_json = mock_post.call_args.kwargs["json"]
+        self.assertNotIn("assignees", sent_json)
+
+    async def test_create_task_with_numeric_timestamp_due_date(self):
+        # Docstring promises Unix timestamp in milliseconds support
+        client = clickup_client.ClickUpClient()
+        success_response = FakeResponse({"id": "t102"})
+
+        with patch.object(clickup_client.requests, "post", return_value=success_response) as mock_post:
+            result = await client.create_task(
+                access_token="test_token",
+                list_id="list_1",
+                name="Deadline task",
+                due_date=1726358400000
+            )
+
+        self.assertTrue(result["success"])
+        sent_json = mock_post.call_args.kwargs["json"]
+        self.assertEqual(sent_json["due_date"], 1726358400000)
+        self.assertTrue(sent_json["due_date_time"])
+
+    async def test_create_task_with_numeric_string_timestamp_due_date(self):
+        client = clickup_client.ClickUpClient()
+        success_response = FakeResponse({"id": "t103"})
+
+        with patch.object(clickup_client.requests, "post", return_value=success_response) as mock_post:
+            result = await client.create_task(
+                access_token="test_token",
+                list_id="list_1",
+                name="Deadline task",
+                due_date="1726358400000"
+            )
+
+        self.assertTrue(result["success"])
+        sent_json = mock_post.call_args.kwargs["json"]
+        self.assertEqual(sent_json["due_date"], 1726358400000)
+        self.assertTrue(sent_json["due_date_time"])
+
+    async def test_create_task_with_iso_due_date(self):
+        client = clickup_client.ClickUpClient()
+        success_response = FakeResponse({"id": "t104"})
+
+        with patch.object(clickup_client.requests, "post", return_value=success_response) as mock_post:
+            result = await client.create_task(
+                access_token="test_token",
+                list_id="list_1",
+                name="ISO Task",
+                due_date="2026-09-15"
+            )
+
+        self.assertTrue(result["success"])
+        sent_json = mock_post.call_args.kwargs["json"]
+        self.assertIn("due_date", sent_json)
+        self.assertFalse(sent_json["due_date_time"])
+
+    async def test_create_task_priority_coercion_and_validation(self):
+        client = clickup_client.ClickUpClient()
+        success_response = FakeResponse({"id": "t105"})
+
+        with patch.object(clickup_client.requests, "post", return_value=success_response) as mock_post:
+            result = await client.create_task(
+                access_token="test_token",
+                list_id="list_1",
+                name="Priority Task",
+                priority="2"
+            )
+
+        self.assertTrue(result["success"])
+        sent_json = mock_post.call_args.kwargs["json"]
+        self.assertEqual(sent_json["priority"], 2)
+
+        # Invalid priority (out of 1-4 range) should be omitted safely
+        with patch.object(clickup_client.requests, "post", return_value=success_response) as mock_post:
+            result = await client.create_task(
+                access_token="test_token",
+                list_id="list_1",
+                name="Priority Task",
+                priority="urgent"
+            )
+
+        self.assertTrue(result["success"])
+        sent_json = mock_post.call_args.kwargs["json"]
+        self.assertNotIn("priority", sent_json)
+
+
 if __name__ == "__main__":
     unittest.main()
