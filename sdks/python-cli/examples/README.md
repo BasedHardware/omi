@@ -23,3 +23,7 @@
 * [`quickstart.hr.md`](quickstart.hr.md) — brzi vodič za omi-cli na hrvatskom (Croatian Quickstart).
 * [`quickstart.lt.md`](quickstart.lt.md) — omi-cli sparti pradžia lietuvių kalba (Lithuanian Quickstart).
 * [`quickstart.sk.md`](quickstart.sk.md) — rýchly štart s omi-cli v slovenčine (Slovak Quickstart).
+* [`quickstart.sl.md`](quickstart.sl.md) — hitri začetek z omi-cli v slovenščini (Slovenian Quickstart).
+* [`quickstart.et.md`](quickstart.et.md) — omi-cli kiirjuhend eesti keeles (Estonian Quickstart).
+* [`quickstart.lv.md`](quickstart.lv.md) — omi-cli ātrais sākums latviešu valodā (Latvian Quickstart).
+* [`quickstart.mk.md`](quickstart.mk.md) — брз почеток со omi-cli на македонски (Macedonian Quickstart).
