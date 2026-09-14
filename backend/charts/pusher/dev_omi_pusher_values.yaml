@@ -161,6 +161,8 @@ env:
     value: "true"
   - name: MEMORY_BELIEF_MODEL_ENABLED
     value: "true"
+  - name: MEMORY_BELIEF_AUTOMATION_PAUSED
+    value: "false"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:

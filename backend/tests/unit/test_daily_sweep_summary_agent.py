@@ -560,6 +560,56 @@ def test_daily_sweep_memory_omitted_about_defaults_empty_and_sanitizer_preserves
     assert sanitized.memories[0].duplicate_of == 'mem-existing'
 
 
+def test_daily_sweep_sanitizer_preserves_typed_decision_and_drops_task_controls():
+    from utils.llm.memories import DailySweepAgentMemory, DailySweepAgentPassOutput, _sanitized_daily_sweep_output
+
+    output = DailySweepAgentPassOutput(
+        memories=[
+            DailySweepAgentMemory(
+                content='Dave accepted the Omi launch plan',
+                about='user',
+                conversation_ids=['conversation-1'],
+                basis='decided',
+                arguments={
+                    'object': 'Omi launch plan',
+                    'decision': 'accepted',
+                    'rationale': 'keeps the team focused',
+                    'task_id': 'must-not-become-a-task',
+                },
+            )
+        ]
+    )
+
+    sanitized = _sanitized_daily_sweep_output(output, {'conversation-1'}, 8, lookup_ids=set())
+
+    assert sanitized.memories[0].arguments == {
+        'object': 'Omi launch plan',
+        'decision': 'accepted',
+        'rationale': 'keeps the team focused',
+    }
+
+
+def test_daily_sweep_proposed_decision_survives_without_a_standing_slot():
+    from utils.llm.memories import DailySweepAgentMemory, DailySweepAgentPassOutput, _sanitized_daily_sweep_output
+
+    output = DailySweepAgentPassOutput(
+        memories=[
+            DailySweepAgentMemory(
+                content='Dave proposed moving the launch date',
+                about='user',
+                conversation_ids=['conversation-1'],
+                basis='proposed',
+                slot='launch_date',
+                arguments={'decision': 'proposed', 'object': 'launch date'},
+            )
+        ]
+    )
+
+    sanitized = _sanitized_daily_sweep_output(output, {'conversation-1'}, 8, lookup_ids=set())
+
+    assert sanitized.memories[0].arguments['decision'] == 'proposed'
+
+
 def test_invalid_duplicate_of_is_cleared_so_the_candidate_stays_new():
     from utils.llm.memories import DailySweepAgentMemory, DailySweepAgentPassOutput, _sanitized_daily_sweep_output
 

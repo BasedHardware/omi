@@ -151,6 +151,10 @@ env:
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_ENABLED
     value: "on"
+  - name: MEMORY_BELIEF_MODEL_ENABLED
+    value: "false"
+  - name: MEMORY_BELIEF_AUTOMATION_PAUSED
+    value: "false"
   # Shared process_conversation rollout flags. Must match backend-listen in this
   # environment — pusher hosts the same finalizer after 2026-08-30.
   - name: CONVERSATION_NOTES_V2_ENABLED

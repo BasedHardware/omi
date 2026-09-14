@@ -80,6 +80,7 @@ from utils.free_tier_memory_policy import (
     free_tier_memory_suppression_enabled,
     memory_formation_verdict,
 )
+from utils.memory.belief_model import belief_automation_enabled, belief_model_enabled
 from utils.managed_compute import authorize_managed_compute
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item
 from utils.memory.daily_memory_sweep_queue import ProcessOutcome, drain_sweep_uids
@@ -595,6 +596,7 @@ class DailySweepCandidate(BaseModel):
     slot: Optional[str] = None
     subject_scope: MemorySubjectScope = MemorySubjectScope.primary_user
     subject_entity_id: Optional[str] = None
+    arguments: Dict[str, Any] = Field(default_factory=dict)
     trigger_condition: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("candidate_id", "target_memory_id", "subject_entity_id")
@@ -662,6 +664,19 @@ class DailySweepCandidate(BaseModel):
         if len(value) > MAX_TRIGGER_CONDITION_KEYS:
             raise ValueError("trigger condition exceeds the daily sweep budget")
         return value
+
+    @field_validator("arguments", mode="before")
+    @classmethod
+    def validate_arguments(cls, value: Any, info) -> Dict[str, Any]:
+        # Keep the canonical argument vocabulary shared with conversation
+        # extraction without importing the LLM stack while this scheduler
+        # module is being initialized.
+        from utils.llm.working_observations import normalize_scoped_claim_arguments
+
+        basis = None
+        if info.data:
+            basis = info.data.get("basis")
+        return normalize_scoped_claim_arguments(value, basis=basis)
 
     @model_validator(mode="after")
     def validate_semantics(self) -> "DailySweepCandidate":
@@ -2914,16 +2929,40 @@ def _apply_candidate(
     if effective_operation == "amend":
         assert target is not None
         try:
-            memory_id = amend_fact(
+            if not candidate.arguments:
+                memory_id = amend_fact(
+                    uid,
+                    target.memory_id,
+                    candidate.content,
+                    provenance=provenance,
+                    write_reason=reason,
+                    slot=candidate.slot,
+                    subject_scope=candidate.subject_scope,
+                    subject_entity_id=candidate.subject_entity_id,
+                    valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
+                    db_client=db_client,
+                    required_source_item=target,
+                )
+                return memory_id, None
+            # Use the same canonical append path as a new fact so scoped
+            # object/decision arguments survive an amendment.  ``supersedes``
+            # keeps replacement and validity semantics identical to
+            # ``amend_fact`` while avoiding a second task/action path.
+            memory_id = save_ledger_write(
                 uid,
-                target.memory_id,
-                candidate.content,
-                provenance=provenance,
-                write_reason=reason,
-                slot=candidate.slot,
-                subject_scope=candidate.subject_scope,
-                subject_entity_id=candidate.subject_entity_id,
-                valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
+                LedgerWrite(
+                    kind=MemoryKind.fact,
+                    content=candidate.content,
+                    provenance=provenance,
+                    write_reason=reason,
+                    slot=candidate.slot,
+                    subject_scope=candidate.subject_scope,
+                    subject_entity_id=candidate.subject_entity_id,
+                    arguments=dict(candidate.arguments or {}),
+                    valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
+                    user_asserted=candidate.authority == SweepAuthority.direct_user_statement,
+                    supersedes=[target.memory_id],
+                ),
                 db_client=db_client,
                 required_source_item=target,
             )
@@ -2996,6 +3035,12 @@ def run_daily_memory_sweep(
         qa_run_id = validate_qa_sweep_run_id(qa_run_id)
     if not authority.may_write:
         return _blocked_output(normalized_uid, "authority_closed", status="disabled")
+    # Belief automation is independently pausable once the Beta read/write
+    # contract is enabled. Keep the legacy sweep fully available while the
+    # belief model flag is off: this guard only pauses the new automated
+    # formation path and never changes stable flag-off synthesis semantics.
+    if belief_model_enabled() and not belief_automation_enabled():
+        return _blocked_output(normalized_uid, "belief_automation_paused", status="disabled")
     if max_catch_up_days < 1 or max_catch_up_days > MAX_CATCH_UP_DAYS:
         raise ValueError("max_catch_up_days must be between 1 and the bounded maximum")
     if now.tzinfo is None or now.utcoffset() is None:
@@ -4268,6 +4313,8 @@ def _load_or_stage_daily_summary_candidates(
     )[:96]
 
     def build_candidate_page() -> Tuple[dict[str, Any], ...]:
+        from utils.llm.working_observations import normalize_scoped_claim_arguments
+
         summary_rows = tuple((row.conversation_id, row.summary_text) for row in conversation_rows)
         transcript_lookup = {row.conversation_id: row.transcript_text for row in conversation_rows}
         owner_lookup = {row.conversation_id: row.owner_evidence for row in conversation_rows}
@@ -4324,12 +4371,21 @@ def _load_or_stage_daily_summary_candidates(
                 continue
             about = " ".join(str(getattr(memory, "about", "") or "").split())
             basis = str(getattr(memory, "basis", "") or "").strip().lower()
+            arguments = (
+                normalize_scoped_claim_arguments(getattr(memory, "arguments", {}), basis=basis)
+                if belief_model_enabled()
+                else {}
+            )
             if about.casefold() in {"", "unknown", "unclear", "uncertain"}:
                 dropped_subjectless += 1
                 continue
-            if basis not in {"decided", "observed"}:
-                if basis == "proposed":
-                    dropped_basis_proposed += 1
+            if basis not in {"decided", "proposed", "observed"}:
+                continue
+            # Preserve proposed plans only when the model has explicitly
+            # represented them as proposals.  This keeps legacy model output
+            # conservative while allowing the typed decision contract through.
+            if basis == "proposed" and arguments.get("decision") != "proposed":
+                dropped_basis_proposed += 1
                 continue
             if about.casefold() in owner_aliases:
                 if not any(may_attribute_to_owner(owner_lookup[conversation_id]) for conversation_id in cited):
@@ -4373,8 +4429,10 @@ def _load_or_stage_daily_summary_candidates(
                     subject_entity_id=subject_entity_id,
                     # A slot names a standing attribute; the canonical occupancy
                     # check turns an occupied-slot add into an amend, which is
-                    # how the daily run maintains the rendered profile.
+                    # how the daily run maintains the rendered profile. A
+                    # proposal or passive observation is always unslotted.
                     slot=(str(getattr(memory, "slot", "") or "").strip() or None) if basis == "decided" else None,
+                    arguments=arguments,
                 )
             )
             if len(candidates) >= max_candidates:
@@ -5316,21 +5374,19 @@ def run_daily_memory_sweep_scheduler(
     bounded_uids = tuple(sorted({uid.strip() for uid in uid_inventory if uid.strip()}))[: max(1, min(400, max_users))]
 
     # Crash-recovery cleanup is a privacy lifecycle operation, not a rollout
-    # decision. Run it before authority, kill-switch, and cohort gates so a
-    # disabled/skipped account cannot retain transcript-derived pages forever.
+    # decision. Run it before authority or automation gates so a disabled or
+    # paused account cannot retain transcript-derived pages forever.
     drain_sweep_uids(bounded_uids, lambda uid: (cleanup_expired_daily_memory_sweep_stages(uid, db_client=db_client, now=now), cleanup_expired_memory_deletion_receipts(uid, db_client=db_client, now=now), ProcessOutcome.ack())[-1])  # fmt: skip
     resolved_authority = authority or daily_memory_sweep_authority_from_environment()
     if not resolved_authority.may_write:
         return DailySweepSchedulerSummary()
-    resolved_cohort = cohort_authority or daily_memory_sweep_cohort_authority_from_environment()
-    # A write-enabled scheduler must always have an explicit backend cohort
-    # gate.  A disabled/missing cohort is not an unrestricted all-user mode;
-    # it is a closed rollout.  The flag name is deployment-fixed and supplied
-    # only by the server-owned authority seam.
-    if not resolved_cohort.enabled:
-        return DailySweepSchedulerSummary(errors=("cohort_disabled",))
-    if not resolved_cohort.cohort_name:
-        return DailySweepSchedulerSummary(errors=("cohort_name_missing",))
+    # The product Beta authority is all-user. Keep the old arguments in the
+    # callable for deployment/test compatibility, but do not consult a
+    # per-user flag or fail closed when its resolver/configuration is absent.
+    # ``qa_run_id`` remains the explicit, bounded qualification path.
+    _ = cohort_authority, cohort_authorizer
+    if belief_model_enabled() and not belief_automation_enabled():
+        return DailySweepSchedulerSummary(errors=("belief_automation_paused",))
     attempted = committed_users = blocked_users = 0
     committed = idempotent = skipped = 0
     errors: List[str] = []
@@ -5342,37 +5398,6 @@ def run_daily_memory_sweep_scheduler(
         nonlocal attempted, committed_users, blocked_users, committed, idempotent, skipped
         attempted += 1
         try:
-            # This callback is intentionally read-only.  A PostHog client can
-            # be supplied by the maintenance deployment, but no
-            # identify/flag mutation is performed by this scheduler.
-            if not callable(cohort_authorizer):
-                blocked_users += 1
-                failed_uids.append(uid)
-                errors.append(f"uid={uid}:cohort_unavailable")
-                return ProcessOutcome.reject("cohort_unavailable", reason="cohort_unavailable")
-            try:
-                enrolled = cohort_authorizer(uid, resolved_cohort.cohort_name)
-            except TypeError:
-                enrolled = cohort_authorizer(uid)
-            if isinstance(enrolled, DailySweepCohortDecision):
-                cohort_decision = enrolled
-            elif enrolled is True:
-                cohort_decision = DailySweepCohortDecision.enabled
-            elif enrolled is False:
-                cohort_decision = DailySweepCohortDecision.disabled
-            else:
-                cohort_decision = DailySweepCohortDecision.unavailable
-            if cohort_decision is DailySweepCohortDecision.disabled:
-                # A definite false assignment is a successful bounded
-                # decision and may advance the fair page cursor.
-                blocked_users += 1
-                completed_uids.append(uid)
-                return ProcessOutcome.ack()
-            if cohort_decision is not DailySweepCohortDecision.enabled:
-                blocked_users += 1
-                failed_uids.append(uid)
-                errors.append(f"uid={uid}:cohort_unavailable")
-                return ProcessOutcome.reject("cohort_unavailable", reason="cohort_unavailable")
             control = ensure_canonical_apply_control_state(uid, db_client=db_client)
             if control.writer_mode is not WriterMode.ledger:
                 # An enrolled account that has not completed ledger cutover

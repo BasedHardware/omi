@@ -169,6 +169,8 @@ env:
     value: "on"
   - name: MEMORY_BELIEF_MODEL_ENABLED
     value: "false"
+  - name: MEMORY_BELIEF_AUTOMATION_PAUSED
+    value: "false"
   - name: MEMORY_V3_CURSOR_SECRET
     valueFrom:
       secretKeyRef:
