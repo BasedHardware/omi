@@ -1231,6 +1231,7 @@ class ChatProvider: ObservableObject {
   @Published var selectedAppId: String? {
     didSet { restoreDraftForCurrentContextIfNeeded() }
   }
+  private(set) var selectedChatAppContext: ChatAppContext?
   @Published var hasMoreMessages = false
   @Published var isLoadingMoreMessages = false
   @Published var showStarredOnly = false
@@ -1897,6 +1898,8 @@ class ChatProvider: ObservableObject {
     pendingComposerReferences.removeAll()
     sessions.removeAll()
     currentSession = nil
+    selectedAppId = nil
+    selectedChatAppContext = nil
     cachedMemories = []
     cachedLedgerPromptProjection = nil
     memoriesLoaded = false
@@ -2064,8 +2067,13 @@ class ChatProvider: ObservableObject {
       "presentation": systemPromptStyle == .floating ? "floating" : "main",
       "onboarding": isOnboarding,
     ]
-    if let systemPromptPrefix, !systemPromptPrefix.isEmpty {
-      surfacePayload["experienceContext"] = systemPromptPrefix
+    let scopedExperienceContext = ChatAppContext.scopedExperienceContext(
+      selectedApp: selectedChatAppContext,
+      surfaceKind: surface.surfaceKind,
+      baseContext: systemPromptPrefix
+    )
+    if let scopedExperienceContext, !scopedExperienceContext.isEmpty {
+      surfacePayload["experienceContext"] = scopedExperienceContext
     }
     let responseContext = [
       systemPromptSuffix?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -5617,7 +5625,8 @@ class ChatProvider: ObservableObject {
             toolNames: toolTiming.toolNames,
             sqlRowsReturned: metricsSnapshot.sqlRowsReturned,
             sqlQueryCount: metricsSnapshot.sqlQueryCount,
-            modelsUsed: queryResult.modelsUsed
+            modelsUsed: queryResult.modelsUsed,
+            providerTargets: queryResult.providerTargets
           )
           completeRemainingToolCalls(
             messageId: aiMessageId,
@@ -7092,9 +7101,17 @@ class ChatProvider: ObservableObject {
 
   /// Select a chat app and load its sessions
   func selectApp(_ appId: String?) async {
-    guard selectedAppId != appId else { return }
+    await selectApp(appId, name: nil, chatPrompt: nil)
+  }
+
+  /// Opens an app-owned Main Chat and binds the app's decoded `chat_prompt`
+  /// to that conversation's local kernel context.
+  func selectApp(_ appId: String?, name: String?, chatPrompt: String?) async {
+    let appContext = appId.map { ChatAppContext(appId: $0, appName: name, chatPrompt: chatPrompt) }
+    guard selectedAppId != appId || selectedChatAppContext != appContext else { return }
     revokeActiveTurn(reason: .superseded)
     selectedAppId = appId
+    selectedChatAppContext = appContext
     currentSession = nil
     messages = []
     resetMessagesPagination()
