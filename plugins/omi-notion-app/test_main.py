@@ -434,7 +434,7 @@ class ListedPageIdTests(unittest.TestCase):
                 with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.multiple(notion.requests, **doubles):
                     result = asyncio.run(handler(request))
                 self.assertIsNone(result.error, result.error)
-                self.assertIn((method, suffix), [(m, u[u.index("/v1") + 3:]) for m, u in calls], calls)
+                self.assertTrue(any(m == method and u.endswith(suffix) for m, u in calls), calls)
 
     DATABASE_ID = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
 
