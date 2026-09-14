@@ -826,7 +826,7 @@ test('Daily Recaps name locked and discarded conversations without empty badges'
   expect(renderedText(plain)).not.toContain('Discarded');
 });
 
-test('Daily Recaps name discarded photo counts without a photo viewer', () => {
+test('compact Home conversations omit Flutter ConversationListItem mobile photos', () => {
   const flagged = render({
     recaps: [
       {
@@ -839,7 +839,7 @@ test('Daily Recaps name discarded photo counts without a photo viewer', () => {
     ],
   });
   expect(renderedText(flagged)).toContain('Discarded');
-  expect(renderedText(flagged)).toContain('3 photos');
+  expect(renderedText(flagged)).not.toContain('3 photos');
 
   const kept = render({
     recaps: [

@@ -1047,7 +1047,7 @@ test('library conversation rows omit Flutter getTag source remaps when GET categ
   expect(textOf(empty)).not.toContain('Screenpipe');
 });
 
-test('library conversation rows name GET photo counts', () => {
+test('library conversation rows name Flutter ConversationListItem discarded photos only', () => {
   const item: ConversationProjection = {
     kind: 'conversation',
     id: 'omi-photos',
@@ -1076,6 +1076,6 @@ test('library conversation rows name GET photo counts', () => {
     );
   });
   expect(textOf(shown)).toContain('2 photos');
-  expect(textOf(hidden)).toContain('3 photos');
+  expect(textOf(hidden)).not.toContain('3 photos');
   expect(textOf(hidden)).not.toContain('2 photos');
 });

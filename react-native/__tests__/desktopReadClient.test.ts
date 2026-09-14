@@ -34,6 +34,7 @@ import {
   conversationGroupLabel,
   conversationCaptureCopy,
   conversationPhotoCountCopy,
+  conversationDiscardedPhotoCopy,
   conversationStatusCopy,
   conversationListStatusCopy,
   dataProtectionCopy,
@@ -3183,6 +3184,22 @@ test('conversation photo count copy names GET photos without requiring discarded
   expect(conversationPhotoCountCopy({photoCount: 1})).toBe('1 photos');
   expect(conversationPhotoCountCopy({photoCount: 0})).toBeNull();
   expect(conversationPhotoCountCopy({})).toBeNull();
+});
+
+test('conversation discarded photo copy names Flutter ConversationListItem discarded photos only', () => {
+  expect(
+    conversationDiscardedPhotoCopy({discarded: true, photoCount: 3}),
+  ).toBe('3 photos');
+  expect(
+    conversationDiscardedPhotoCopy({discarded: true, photoCount: 1}),
+  ).toBe('1 photos');
+  expect(
+    conversationDiscardedPhotoCopy({discarded: false, photoCount: 3}),
+  ).toBeNull();
+  expect(
+    conversationDiscardedPhotoCopy({discarded: true, photoCount: 0}),
+  ).toBeNull();
+  expect(conversationDiscardedPhotoCopy({discarded: true})).toBeNull();
 });
 
 test('conversation list category names GET wire values and omits empty or discarded', () => {

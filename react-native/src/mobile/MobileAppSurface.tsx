@@ -23,7 +23,6 @@ import Phone from 'lucide-react-native/icons/phone';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import Settings from 'lucide-react-native/icons/settings';
 import {
-  conversationDiscardedPhotoCopy,
   dailySummaryDateCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
@@ -252,10 +251,6 @@ const RecapCard = memo(function RecapCard({
   recap: MobileRecap;
   onPress?: (id: string) => void;
 }) {
-  const photosCopy = conversationDiscardedPhotoCopy({
-    discarded: recap.discarded === true,
-    photoCount: recap.photoCount,
-  });
   const card = (
     <View style={styles.recapCard}>
       {recap.discarded === true ||
@@ -285,11 +280,6 @@ const RecapCard = memo(function RecapCard({
           accessibilityLabel="Discarded conversation"
           style={styles.recapStar}>
           Discarded
-        </Text>
-      ) : null}
-      {photosCopy !== null ? (
-        <Text accessibilityLabel={photosCopy} style={styles.recapStar}>
-          {photosCopy}
         </Text>
       ) : null}
       {recap.merging === true ? (

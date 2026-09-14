@@ -926,7 +926,7 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(orchestrator).toContain('starred: item.starred');
   expect(orchestrator).toContain('locked: item.locked');
   expect(orchestrator).toContain('discarded: item.discarded');
-  expect(orchestrator).toContain('photoCount: item.photoCount');
+  expect(orchestrator).not.toContain('photoCount: item.photoCount');
   expect(orchestrator).toContain('conversationHasFinishClock(item)');
   expect(orchestrator).toContain('conversationListDurationCopy(item)');
   expect(orchestrator).not.toContain('onOpenCalls=');
@@ -3498,7 +3498,7 @@ test('wide Home search and compact Currents name GET emoji tag and discarded pho
   expect(shownTree).toContain('🚀');
   expect(shownTree).toContain('Work');
   const keptPhotos = render(<ProjectionRow item={{...item, photoCount: 3}} />);
-  expect(JSON.stringify(keptPhotos.toJSON())).toContain('3 photos');
+  expect(JSON.stringify(keptPhotos.toJSON())).not.toContain('3 photos');
   const currents = render(<ProjectionRow home item={item} />);
   const currentsTree = JSON.stringify(currents.toJSON());
   expect(currentsTree).toContain('🚀');

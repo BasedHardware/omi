@@ -12,7 +12,7 @@ import {
 import Search from 'lucide-react-native/icons/search';
 import {
   conversationCaptureCopy,
-  conversationPhotoCountCopy,
+  conversationDiscardedPhotoCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationHasFinishClock,
@@ -82,7 +82,7 @@ const ConversationRow = memo(function ConversationRow({
   const listenOverview = conversationListUsesListenOverview(item);
   const captureCopy = conversationCaptureCopy(item.capturedAtMs);
   const emoji = conversationListEmoji(item);
-  const photosCopy = conversationPhotoCountCopy(item);
+  const photosCopy = showTag ? conversationDiscardedPhotoCopy(item) : null;
   const tag = conversationListTag(item);
   const listStatusCopy = conversationListStatusCopy(item.status);
   const newCopy = conversationListNewCopy(

@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import {
   conversationCaptureCopy,
-  conversationPhotoCountCopy,
+  conversationDiscardedPhotoCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationListEmoji,
@@ -101,7 +101,7 @@ export const ProjectionRow = memo(function ProjectionRow({
     conversation !== null ? conversationListEmoji(conversation) : null;
   const tag = conversation !== null ? conversationListTag(conversation) : null;
   const photosCopy =
-    conversation !== null ? conversationPhotoCountCopy(conversation) : null;
+    conversation !== null ? conversationDiscardedPhotoCopy(conversation) : null;
   const newCopy =
     conversation !== null
       ? conversationListNewCopy(

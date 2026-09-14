@@ -1984,7 +1984,14 @@ test('compact conversation list omits Flutter ConversationListItem mobile tags',
   }
 });
 
-test('conversation list names GET photo counts', () => {
+test('compact conversation list omits Flutter ConversationListItem mobile photos', () => {
+  const native = require('react-native') as typeof import('react-native');
+  const dimensions = jest.spyOn(native, 'useWindowDimensions').mockReturnValue({
+    width: 390,
+    height: 844,
+    scale: 1,
+    fontScale: 1,
+  });
   const base = {
     kind: 'conversation' as const,
     title: 'Morning standup',
@@ -2002,37 +2009,105 @@ test('conversation list names GET photo counts', () => {
     locked: false,
     discarded: false,
   };
-  let renderer!: ReactTestRenderer.ReactTestRenderer;
-  act(() => {
-    renderer = ReactTestRenderer.create(
-      <ConversationsPage
-        loading={false}
-        outcome={{
-          status: 'success',
-          value: {
-            items: [
-              {
-                ...base,
-                id: 'omi-photos',
-                discarded: true,
-                photoCount: 2,
+  try {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <ConversationsPage
+          loading={false}
+          outcome={{
+            status: 'success',
+            value: {
+              items: [
+                {
+                  ...base,
+                  id: 'omi-photos',
+                  discarded: true,
+                  photoCount: 2,
+                },
+                {...base, id: 'omi-kept', photoCount: 3},
+              ],
+              page: {
+                ...incompletePage,
+                windowStatus: 'complete',
+                complete: true,
+                completenessStatus: 'complete',
+                reasons: [],
               },
-              {...base, id: 'omi-kept', photoCount: 3},
-            ],
-            page: {
-              ...incompletePage,
-              windowStatus: 'complete',
-              complete: true,
-              completenessStatus: 'complete',
-              reasons: [],
             },
-          },
-        }}
-      />,
-    );
+          }}
+        />,
+      );
+    });
+    const copy = textOf(renderer);
+    expect(copy).toContain('Morning standup');
+    expect(copy).not.toContain('2 photos');
+    expect(copy).not.toContain('3 photos');
+  } finally {
+    dimensions.mockRestore();
+  }
+});
+
+test('conversation list names Flutter ConversationListItem discarded photos only', () => {
+  const native = require('react-native') as typeof import('react-native');
+  const dimensions = jest.spyOn(native, 'useWindowDimensions').mockReturnValue({
+    width: 1024,
+    height: 768,
+    scale: 1,
+    fontScale: 1,
   });
-  expect(textOf(renderer)).toContain('2 photos');
-  expect(textOf(renderer)).toContain('3 photos');
+  const base = {
+    kind: 'conversation' as const,
+    title: 'Morning standup',
+    summary: 'Notes',
+    searchableText: 'Morning standup\nNotes',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  try {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <ConversationsPage
+          loading={false}
+          outcome={{
+            status: 'success',
+            value: {
+              items: [
+                {
+                  ...base,
+                  id: 'omi-photos',
+                  discarded: true,
+                  photoCount: 2,
+                },
+                {...base, id: 'omi-kept', photoCount: 3},
+              ],
+              page: {
+                ...incompletePage,
+                windowStatus: 'complete',
+                complete: true,
+                completenessStatus: 'complete',
+                reasons: [],
+              },
+            },
+          }}
+        />,
+      );
+    });
+    expect(textOf(renderer)).toContain('2 photos');
+    expect(textOf(renderer)).not.toContain('3 photos');
+  } finally {
+    dimensions.mockRestore();
+  }
 });
 
 test('conversation list names discarded GET transcript excerpt as the title', () => {
