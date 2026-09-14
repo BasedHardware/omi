@@ -2878,6 +2878,8 @@ test('Settings names GET subscription period quotas without Upgrade', async () =
       .props.onPress();
   });
   const tree = renderedText(renderer);
+  expect(tree).toContain('Free Plan');
+  expect(tree).not.toContain('Basic');
   expect(tree).toContain('Words this month');
   expect(tree).toContain('12 of 10000 words used this month');
   expect(tree).toContain('Insights this month');

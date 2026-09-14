@@ -1086,11 +1086,18 @@ test('conversation list status copy names processing without Status on every cha
 
 test('account subscription copy is not a raw wire token', () => {
   expect(subscriptionPlanCopy('plus')).toBe('Plus');
+  expect(subscriptionPlanCopy('basic')).toBe('Free Plan');
+  expect(subscriptionPlanCopy('unlimited')).toBe('Unlimited Plan');
+  expect(subscriptionPlanCopy('unlimited_v2')).toBe('Unlimited Plan');
+  expect(subscriptionPlanCopy('architect')).toBe('Unlimited Plan');
+  expect(subscriptionPlanCopy('operator')).toBe('Unlimited Plan');
+  expect(subscriptionPlanCopy('pro')).toBe('Unlimited Plan');
+  expect(subscriptionPlanCopy('enterprise')).toBe('Free Plan');
   expect(subscriptionStatusCopy('active')).toBe('Active');
   expect(subscriptionStatusCopy('past_due')).toBe('Past due');
-  expect(subscriptionPlanCopy('')).toBe('Plan unavailable');
+  expect(subscriptionPlanCopy('')).toBe('Free Plan');
   expect(subscriptionStatusCopy('')).toBe('Plan unavailable');
-  expect(subscriptionPlanCopy('\u0085')).toBe('Plan unavailable');
+  expect(subscriptionPlanCopy('\u0085')).toBe('Free Plan');
   expect(subscriptionTranscriptionQuotaCopy(90, 3600)).toBe(
     '2 of 60 min used this month',
   );

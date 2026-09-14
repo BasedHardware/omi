@@ -1315,7 +1315,7 @@ test('Settings names GET subscription transcription quota as minutes this month'
   });
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Basic · Active · 2 of 60 min used this month');
+  expect(tree).toContain('Free Plan · Active · 2 of 60 min used this month');
   expect(tree).not.toContain('90 / 3600');
   expect(tree).not.toContain('transcribed seconds');
   expect(tree).not.toContain('Upgrade');

@@ -847,8 +847,33 @@ export function connectionIdentityCopy(
   );
 }
 
+export function subscriptionPlanFreeCopy(): string {
+  return 'Free Plan';
+}
+
+export function subscriptionPlanUnlimitedCopy(): string {
+  return 'Unlimited Plan';
+}
+
+export function subscriptionPlanPlusCopy(): string {
+  return 'Plus';
+}
+
 export function subscriptionPlanCopy(plan: string): string {
-  return accountWireCopy(plan, 'Plan unavailable');
+  const token = visibleDisplayText(plan).toLowerCase();
+  if (token === 'plus') {
+    return subscriptionPlanPlusCopy();
+  }
+  if (
+    token === 'unlimited' ||
+    token === 'unlimited_v2' ||
+    token === 'architect' ||
+    token === 'operator' ||
+    token === 'pro'
+  ) {
+    return subscriptionPlanUnlimitedCopy();
+  }
+  return subscriptionPlanFreeCopy();
 }
 
 export function subscriptionTranscriptionQuotaCopy(
