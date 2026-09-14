@@ -29,6 +29,11 @@ checks:
     triggers: ["plugins/omi-linear-app/**"]
     lanes: ["local", "ci"]
     reason: "linear_graphql_request indexed result['errors'][0] on key presence alone, so an empty/null/non-list errors payload crashed the error path instead of returning a clean error"
+  - id: semantic-scholar-tests
+    command: ["python3", "plugins/omi-semantic-scholar-app/test_main.py"]
+    triggers: ["plugins/omi-semantic-scholar-app/**"]
+    lanes: ["local", "ci"]
+    reason: "verify Semantic Scholar endpoint safety against null payload data, heterogeneous author paper sorting, and DOI normalization"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]

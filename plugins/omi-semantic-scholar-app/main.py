@@ -24,23 +24,66 @@ app = FastAPI(
 )
 
 
-def format_authors(authors: List[Dict[str, Any]]) -> str:
-    names = [a.get("name", "Unknown") for a in authors if a.get("name")]
+def format_authors(authors: Any) -> str:
+    if not authors or not isinstance(authors, list):
+        return "Unknown"
+    names = [
+        str(a.get("name")).strip()
+        for a in authors
+        if isinstance(a, dict) and a.get("name") and str(a.get("name")).strip()
+    ]
     return ", ".join(names[:6]) if names else "Unknown"
 
 
 def format_year(year: Any) -> str:
-    if isinstance(year, int):
+    if isinstance(year, int) and not isinstance(year, bool):
         return str(year)
+    if isinstance(year, str) and year.strip().isdigit():
+        return str(int(year.strip()))
     return "Unknown"
 
 
 def normalize_identifier(raw: str) -> str:
     value = raw.strip()
-    if value.lower().startswith("doi:"):
-        # Preserve DOI namespace expected by Semantic Scholar.
-        value = "DOI:" + value[4:].strip()
+    # Strip common URL prefixes
+    for prefix in ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "http://dx.doi.org/"):
+        if value.lower().startswith(prefix):
+            value = value[len(prefix) :].strip()
+            break
+    for prefix in ("https://arxiv.org/abs/", "http://arxiv.org/abs/", "https://arxiv.org/pdf/", "http://arxiv.org/pdf/"):
+        if value.lower().startswith(prefix):
+            val = value[len(prefix) :].strip()
+            if val.endswith(".pdf"):
+                val = val[:-4].strip()
+            return f"ARXIV:{val}"
+
+    # Standard DOI format starting with 10.xxxx/
+    if value.startswith("10.") and "/" in value:
+        return f"DOI:{value}"
+
+    lower_val = value.lower()
+    for ns in ("doi:", "arxiv:", "acl:", "pmid:", "mag:", "corpusid:"):
+        if lower_val.startswith(ns):
+            return f"{ns.upper()}{value[len(ns) :].strip()}"
+
     return value
+
+
+def _safe_int(val: Any, default: int = 0) -> int:
+    if isinstance(val, int) and not isinstance(val, bool):
+        return val
+    if isinstance(val, str) and val.strip().isdigit():
+        try:
+            return int(val.strip())
+        except (ValueError, OverflowError):
+            return default
+    return default
+
+
+def _paper_sort_key(p: Any) -> tuple[int, int]:
+    if not isinstance(p, dict):
+        return (0, 0)
+    return (_safe_int(p.get("year")), _safe_int(p.get("citationCount")))
 
 
 async def api_get(path: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -48,7 +91,10 @@ async def api_get(path: str, params: Dict[str, Any]) -> Dict[str, Any]:
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         resp = await client.get(url, params=params)
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        if isinstance(data, dict):
+            return data
+        return {}
 
 
 @app.get("/.well-known/omi-tools.json")
@@ -128,7 +174,8 @@ async def search_papers(req: SearchPapersRequest) -> ChatToolResponse:
 
     try:
         data = await api_get("/paper/search", params)
-        papers = data.get("data", [])
+        raw_papers = data.get("data")
+        papers = [p for p in raw_papers if isinstance(p, dict)] if isinstance(raw_papers, list) else []
         if not papers:
             return ChatToolResponse(result="No papers found.")
 
@@ -136,7 +183,7 @@ async def search_papers(req: SearchPapersRequest) -> ChatToolResponse:
         for i, paper in enumerate(papers, start=1):
             title = paper.get("title") or "Untitled"
             year = format_year(paper.get("year"))
-            authors = format_authors(paper.get("authors", []))
+            authors = format_authors(paper.get("authors"))
             venue = paper.get("venue") or "Unknown venue"
             cites = paper.get("citationCount", 0)
             url = paper.get("url") or ""
@@ -147,6 +194,8 @@ async def search_papers(req: SearchPapersRequest) -> ChatToolResponse:
         return ChatToolResponse(result="\n\n".join(lines))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Semantic Scholar API error: {exc.response.status_code}")
+    except httpx.HTTPError as exc:
+        return ChatToolResponse(error=f"Semantic Scholar request failed: {exc}")
     except Exception as exc:
         return ChatToolResponse(error=f"Unexpected error: {exc}")
 
@@ -162,7 +211,7 @@ async def get_paper(req: GetPaperRequest) -> ChatToolResponse:
 
         title = data.get("title") or "Untitled"
         year = format_year(data.get("year"))
-        authors = format_authors(data.get("authors", []))
+        authors = format_authors(data.get("authors"))
         venue = data.get("venue") or "Unknown venue"
         citations = data.get("citationCount", 0)
         references = data.get("referenceCount", 0)
@@ -184,6 +233,8 @@ async def get_paper(req: GetPaperRequest) -> ChatToolResponse:
         if code == 404:
             return ChatToolResponse(error="Paper not found.")
         return ChatToolResponse(error=f"Semantic Scholar API error: {code}")
+    except httpx.HTTPError as exc:
+        return ChatToolResponse(error=f"Semantic Scholar request failed: {exc}")
     except Exception as exc:
         return ChatToolResponse(error=f"Unexpected error: {exc}")
 
@@ -200,15 +251,15 @@ async def get_author_papers(req: GetAuthorPapersRequest) -> ChatToolResponse:
         )
 
         author_name = data.get("name") or req.author_id
-        papers = data.get("papers", [])
-        if not papers:
+        papers = data.get("papers")
+        if not isinstance(papers, list) or not papers:
             return ChatToolResponse(result=f"No papers found for author {author_name}.")
 
-        papers_sorted = sorted(
-            papers,
-            key=lambda p: ((p.get("year") or 0), (p.get("citationCount") or 0)),
-            reverse=True,
-        )[: req.max_results]
+        valid_papers = [p for p in papers if isinstance(p, dict)]
+        if not valid_papers:
+            return ChatToolResponse(result=f"No papers found for author {author_name}.")
+
+        papers_sorted = sorted(valid_papers, key=_paper_sort_key, reverse=True)[: req.max_results]
 
         lines = [f"Recent papers by {author_name}:"]
         for i, paper in enumerate(papers_sorted, start=1):
@@ -226,6 +277,8 @@ async def get_author_papers(req: GetAuthorPapersRequest) -> ChatToolResponse:
         if code == 404:
             return ChatToolResponse(error="Author not found.")
         return ChatToolResponse(error=f"Semantic Scholar API error: {code}")
+    except httpx.HTTPError as exc:
+        return ChatToolResponse(error=f"Semantic Scholar request failed: {exc}")
     except Exception as exc:
         return ChatToolResponse(error=f"Unexpected error: {exc}")
 
