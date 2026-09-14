@@ -2,6 +2,8 @@ import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Platform} from 'react-native';
 
+import {deviceDisconnectedCopy} from '../src/desktopReadClient';
+
 const mockDevice = {id: 'omi-1', name: 'Test Omi', rssi: -50, connected: false};
 const mockNative = {
   getSnapshot: jest.fn(async () => ({
@@ -98,6 +100,27 @@ test('compact Home does not claim Omi disconnected when nothing is connected', a
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Omi not connected');
   expect(tree).not.toContain('Omi disconnected');
+});
+
+test('compact Home names Flutter BatteryInfoWidget Disconnected when a paired device is remembered', async () => {
+  const native = mockNative as typeof mockNative & {
+    getRememberedDevice?: () => Promise<{id: string; name: string} | null>;
+  };
+  native.getRememberedDevice = jest.fn(async () => ({
+    id: 'omi-1',
+    name: 'Test Omi',
+  }));
+  try {
+    const renderer = await renderApp();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const tree = JSON.stringify(renderer.toJSON());
+    expect(tree).toContain(`"${deviceDisconnectedCopy()}"`);
+    expect(tree).not.toContain('Omi not connected');
+  } finally {
+    delete native.getRememberedDevice;
+  }
 });
 
 test('compact Home names Flutter BatteryInfoWidget percent without inventing battery', async () => {

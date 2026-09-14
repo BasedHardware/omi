@@ -1747,6 +1747,19 @@ export function deviceBatteryPercentCopy(level: number): string {
   return `${level}%`;
 }
 
+export function deviceDisconnectedCopy(): string {
+  return 'Disconnected';
+}
+
+export function compactHomeDeviceLabelCopy(
+  homeStatus: string,
+  remembered: boolean,
+): string {
+  return remembered && homeStatus === 'Omi not connected'
+    ? deviceDisconnectedCopy()
+    : homeStatus;
+}
+
 export function firmwareUpdateCopy(
   currentFirmware: string,
   details: {

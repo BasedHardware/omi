@@ -44,6 +44,7 @@ import {
   conversationListTag,
   conversationRecapDateLabel,
   conversationRecapTitle,
+  compactHomeDeviceLabelCopy,
   deviceBatteryPercentCopy,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
@@ -1246,7 +1247,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }}
         device={{
           connected: connectedDevice !== null,
-          label: homeStatus,
+          label: compactHomeDeviceLabelCopy(
+            homeStatus,
+            rememberedDevice !== null,
+          ),
           ...(deviceHasReportedBattery(connectedDevice?.battery)
             ? {
                 batteryPercent: deviceBatteryPercentCopy(
