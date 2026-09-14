@@ -527,3 +527,62 @@ def test_active_profile_non_string_diagnostics_succeed(config_path: Path, cli_ru
 
     result_path = cli_runner.invoke(app, ["config", "path"])
     assert result_path.exit_code == 0, result_path.output
+
+
+# -- Regression tests for malformed profile field types (Issue #13775) --
+
+
+@pytest.mark.parametrize(
+    "invalid_toml,expected_field,expected_type",
+    [
+        ('[profiles.default]\napi_key = 12345\n', "api_key", "int"),
+        ('[profiles.default]\nlocal_token = 12345\n', "local_token", "int"),
+        ('[profiles.default]\napi_base = 8080\n', "api_base", "int"),
+        ('[profiles.default]\nid_token_expires_at = "never"\n', "id_token_expires_at", "str"),
+        ('[profiles.default]\nid_token_expires_at = nan\n', "id_token_expires_at", "nan"),
+        ('[profiles.default]\nid_token_expires_at = inf\n', "id_token_expires_at", "inf"),
+    ],
+)
+def test_profile_field_invalid_type_records_load_error(
+    config_path: Path, invalid_toml: str, expected_field: str, expected_type: str
+) -> None:
+    """Profile fields must have valid types; malformed types should set load_error."""
+    config_path.write_text(invalid_toml, encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert config.profiles == {}
+    assert config.load_error is not None
+    assert f"field '{expected_field}'" in config.load_error
+    assert expected_type in config.load_error
+
+
+def test_profile_field_invalid_type_refuses_save_overwrite(config_path: Path) -> None:
+    """A config with malformed profile field types must not be overwritten by save()."""
+    config_path.write_text('[profiles.default]\nlocal_token = 12345\n', encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
+
+    assert "local_token = 12345" in config_path.read_text(encoding="utf-8")
+
+
+def test_profile_field_invalid_type_config_show_emits_json(config_path: Path, cli_runner) -> None:
+    """config show in --json mode must return exit 0 with empty profiles when config is malformed."""
+    config_path.write_text('[profiles.default]\nlocal_token = 12345\n', encoding="utf-8")
+    result = cli_runner.invoke(app, ["--json", "config", "show"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["profiles"] == []
+    assert data["active_profile"] == cfg.DEFAULT_PROFILE_NAME
+
+
+def test_profile_field_invalid_type_diagnostics_succeed(config_path: Path, cli_runner) -> None:
+    """Read-only diagnostics commands must still succeed when profile fields are malformed."""
+    config_path.write_text('[profiles.default]\nlocal_token = 12345\n', encoding="utf-8")
+    result = cli_runner.invoke(app, ["version"])
+    assert result.exit_code == 0, result.output
+
+    result_path = cli_runner.invoke(app, ["config", "path"])
+    assert result_path.exit_code == 0, result_path.output
