@@ -7,7 +7,6 @@ import {
   conversationDisplaySummary,
   conversationDetailSummaryForStatusCopy,
   conversationDisplayTitle,
-  conversationHasFinishClock,
   conversationStatusCopy,
   processingConversationNoContentCopy,
   processingConversationDetailTitleCopy,
@@ -90,11 +89,6 @@ function ConversationClockFields({
           conversation.startedAt ?? conversation.createdAt,
         )}
       </Text>
-      {conversationHasFinishClock(conversation) ? (
-        <Text style={[styles.conversationDetailField, ink]}>
-          Finished · {formatConversationDate(conversation.finishedAt)}
-        </Text>
-      ) : null}
       {duration !== null ? (
         <Text style={[styles.conversationDetailField, ink]}>
           Duration · {duration}

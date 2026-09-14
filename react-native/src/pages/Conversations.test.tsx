@@ -697,7 +697,7 @@ test('conversation list names Flutter DateListItem time and omits dated row cloc
   });
   const copy = textOf(renderer);
   expect(copy).toContain('Started ·');
-  expect(copy).toContain('Finished ·');
+  expect(copy).not.toContain('Finished ·');
   expect(copy).toContain(chip);
   expect(copy).not.toContain(dated);
 });

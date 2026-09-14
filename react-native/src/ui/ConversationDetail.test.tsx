@@ -1071,7 +1071,7 @@ test('legacy conversation details keep GET clocks from the list row', () => {
     }),
   );
   expect(copy).toContain('Started ·');
-  expect(copy).toContain('Finished ·');
+  expect(copy).not.toContain('Finished ·');
   expect(copy).not.toContain('Duration ·');
   expect(copy).not.toContain('Duration unavailable');
   expect(copy).toContain('Status ·');
@@ -1098,7 +1098,23 @@ test('conversation details name Flutter GetSummaryWidgets date and time', () => 
   const dated = clockLabel(older.getTime(), Date.now());
   expect(copy).toContain('Started ·');
   expect(copy).toContain(chip);
+  expect(copy).not.toContain('Finished ·');
   expect(copy).not.toContain(dated);
+});
+
+test('conversation details omit Flutter GetSummaryWidgets unused finishedAt clock', () => {
+  const copy = text(
+    render({
+      conversation: {
+        ...conversation,
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T12:05:00.000Z',
+        status: 'completed',
+      },
+    }),
+  );
+  expect(copy).toContain('Started ·');
+  expect(copy).not.toContain('Finished ·');
 });
 
 test('legacy conversation details name GET started from created_at when started_at is missing', () => {
@@ -1327,7 +1343,7 @@ test('listen details omit wall-clock Duration when GET transcript span is missin
       },
     }),
   );
-  expect(copy).toContain('Finished ·');
+  expect(copy).not.toContain('Finished ·');
   expect(copy).not.toContain('Duration ·');
   expect(copy).not.toContain('< 1 min');
   expect(copy).not.toContain('Duration unavailable');
@@ -1377,7 +1393,7 @@ test('canonical recording details omit Duration when transcript span is empty', 
       },
     }),
   );
-  expect(copy).toContain('Finished ·');
+  expect(copy).not.toContain('Finished ·');
   expect(copy).not.toContain('Duration ·');
   expect(copy).not.toContain('1 hr');
   expect(copy).not.toContain('Duration unavailable');
