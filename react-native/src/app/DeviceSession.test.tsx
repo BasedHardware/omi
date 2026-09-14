@@ -5,6 +5,7 @@ import type {PlatformNativeSnapshot} from '../omiNative';
 import {
   desktopBackendServiceCopy,
   deviceModelNumberCopy,
+  deviceProductNameCopy,
   deviceSerialNumberCopy,
   deviceUnknownCopy,
   firmwareLatestVersionCopy,
@@ -123,6 +124,7 @@ test('connected device details show reported values and truthful unavailable fie
   expect(output).toContain('Omi Dev Kit');
   expect(output).toContain('1.2.3');
   expect(output).toContain('"Device ID",": ","omi-test"');
+  expect(output).toContain(`"${deviceProductNameCopy()}",": ","Omi"`);
   expect(output).toContain(`"${deviceModelNumberCopy()}",": ","Omi Dev Kit"`);
   expect(output).toContain(
     `"${deviceSerialNumberCopy()}",": ","${deviceUnknownCopy()}"`,
@@ -261,6 +263,7 @@ test('connected device details treat empty information fields as Flutter Unknown
     );
   });
   const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain(`"${deviceProductNameCopy()}",": ","Omi"`);
   expect(output).toContain(
     `"${deviceModelNumberCopy()}",": ","${deviceUnknownCopy()}"`,
   );
@@ -275,6 +278,43 @@ test('connected device details treat empty information fields as Flutter Unknown
   expect(output).not.toContain('Serial number');
   expect(output).not.toContain(' \t\n');
   expect(output).not.toContain(`"${firmwareLatestVersionCopy()}"`);
+  await act(async () => renderer.unmount());
+});
+
+test('connected device details name Flutter Product Name Unknown without renaming the scan identity', async () => {
+  const snapshot = {
+    bluetooth: 'poweredOn',
+    devices: [
+      {
+        id: 'omi-test',
+        name: ' \t',
+        connected: true,
+        rssi: -40,
+        information: {model: 'Omi Dev Kit', firmware: '1.2.3'},
+      },
+    ],
+    connectedDeviceId: 'omi-test',
+    capture: 'idle',
+  } as PlatformNativeSnapshot;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain(
+    `"${deviceProductNameCopy()}",": ","${deviceUnknownCopy()}"`,
+  );
+  expect(output).toContain('Device name unavailable');
+  expect(output).not.toContain('Current Version');
   await act(async () => renderer.unmount());
 });
 

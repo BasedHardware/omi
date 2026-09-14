@@ -14,6 +14,7 @@ import {
   accountFieldCopy,
   deviceDisplayName,
   deviceModelNumberCopy,
+  deviceProductNameCopy,
   deviceSerialNumberCopy,
   deviceSerialMatchesId,
   deviceUnknownCopy,
@@ -423,6 +424,11 @@ export function DeviceSession({
   const information = connected ? (
     <View accessibilityLabel="Device information">
       <DeviceControls key={connected.id} device={connected} busy={deviceBusy} />
+      <Text selectable style={styles.deviceMeta}>
+        {deviceProductNameCopy()}
+        {': '}
+        {accountFieldCopy(connected.name, deviceUnknownCopy())}
+      </Text>
       <Text selectable style={styles.deviceMeta}>
         Device ID
         {': '}

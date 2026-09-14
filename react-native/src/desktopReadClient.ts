@@ -1683,6 +1683,10 @@ export function firmwareLatestVersionCopy(): string {
   return 'Latest Version';
 }
 
+export function deviceProductNameCopy(): string {
+  return 'Product Name';
+}
+
 export function deviceModelNumberCopy(): string {
   return 'Model Number';
 }
