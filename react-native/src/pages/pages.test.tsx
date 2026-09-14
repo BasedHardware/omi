@@ -1236,6 +1236,10 @@ test('Settings names GET usage today without Upgrade', async () => {
   expect(tree).toContain('3 Insights');
   expect(tree).toContain('Today · Remembering');
   expect(tree).toContain('1 Memories');
+  expect(tree).toContain('Total time Omi has actively listened.');
+  expect(tree).toContain('Words understood from your conversations.');
+  expect(tree).toContain('Action items, and notes automatically captured.');
+  expect(tree).toContain('Facts and details remembered for you.');
   expect(tree).not.toContain('Upgrade');
   expect(tree).not.toContain('99');
 });
@@ -1256,6 +1260,7 @@ test('Settings names a failed usage today GET instead of empty success', async (
   expect(tree).toContain('Remembering');
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('2 minutes');
+  expect(tree).not.toContain('Total time Omi has actively listened.');
   expect(tree).not.toContain('Upgrade');
 });
 
@@ -2790,6 +2795,7 @@ test('Settings names GET usage monthly yearly all-time without Upgrade', async (
   expect(tree).toContain('2 Memories');
   expect(tree).toContain('All time · Listening');
   expect(tree).toContain('60 minutes');
+  expect(tree).toContain('Total time Omi has actively listened.');
   expect(tree).toContain('This year');
   expect(tree).toContain('No Activity Yet');
   expect(tree).not.toContain('This year ·');

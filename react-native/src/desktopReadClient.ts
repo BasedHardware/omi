@@ -943,6 +943,26 @@ export function usageRememberingCopy(memories: number): string {
   return `${usageCountCopy(memories)} Memories`;
 }
 
+export function usageListeningSubtitleCopy(): string {
+  return 'Total time Omi has actively listened.';
+}
+
+export function usageUnderstandingSubtitleCopy(): string {
+  return 'Words understood from your conversations.';
+}
+
+export function usageProvidingSubtitleCopy(): string {
+  return 'Action items, and notes automatically captured.';
+}
+
+export function usageRememberingSubtitleCopy(): string {
+  return 'Facts and details remembered for you.';
+}
+
+function usageCardCopy(value: string, subtitle: string): string {
+  return `${value}\n${subtitle}`;
+}
+
 function usageStatsAreEmpty(stats: {
   transcriptionSeconds: number;
   wordsTranscribed: number;
@@ -982,19 +1002,31 @@ export function usageStatsCopy(
   return [
     {
       title: 'Listening',
-      copy: usageListeningCopy(Math.round(stats.transcriptionSeconds / 60)),
+      copy: usageCardCopy(
+        usageListeningCopy(Math.round(stats.transcriptionSeconds / 60)),
+        usageListeningSubtitleCopy(),
+      ),
     },
     {
       title: 'Understanding',
-      copy: usageUnderstandingCopy(stats.wordsTranscribed),
+      copy: usageCardCopy(
+        usageUnderstandingCopy(stats.wordsTranscribed),
+        usageUnderstandingSubtitleCopy(),
+      ),
     },
     {
       title: 'Providing',
-      copy: usageProvidingCopy(stats.insightsGained),
+      copy: usageCardCopy(
+        usageProvidingCopy(stats.insightsGained),
+        usageProvidingSubtitleCopy(),
+      ),
     },
     {
       title: 'Remembering',
-      copy: usageRememberingCopy(stats.memoriesCreated),
+      copy: usageCardCopy(
+        usageRememberingCopy(stats.memoriesCreated),
+        usageRememberingSubtitleCopy(),
+      ),
     },
   ];
 }

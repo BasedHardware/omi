@@ -117,6 +117,10 @@ import {
   usageStatsCopy,
   usagePeriodStatsCopy,
   usageActivityEmptyCopy,
+  usageListeningSubtitleCopy,
+  usageUnderstandingSubtitleCopy,
+  usageProvidingSubtitleCopy,
+  usageRememberingSubtitleCopy,
   primaryLanguageCopy,
   primaryLanguageNotSetCopy,
   peopleNameRows,
@@ -1147,6 +1151,18 @@ test('account subscription copy is not a raw wire token', () => {
 });
 
 test('usage stats copy names GET today counts without Upgrade', () => {
+  expect(usageListeningSubtitleCopy()).toBe(
+    'Total time Omi has actively listened.',
+  );
+  expect(usageUnderstandingSubtitleCopy()).toBe(
+    'Words understood from your conversations.',
+  );
+  expect(usageProvidingSubtitleCopy()).toBe(
+    'Action items, and notes automatically captured.',
+  );
+  expect(usageRememberingSubtitleCopy()).toBe(
+    'Facts and details remembered for you.',
+  );
   expect(
     usageStatsCopy({
       transcriptionSeconds: 90,
@@ -1155,10 +1171,22 @@ test('usage stats copy names GET today counts without Upgrade', () => {
       memoriesCreated: 1,
     }),
   ).toEqual([
-    {title: 'Listening', copy: '2 minutes'},
-    {title: 'Understanding', copy: '12 Understanding (words)'},
-    {title: 'Providing', copy: '3 Insights'},
-    {title: 'Remembering', copy: '1 Memories'},
+    {
+      title: 'Listening',
+      copy: `2 minutes\n${usageListeningSubtitleCopy()}`,
+    },
+    {
+      title: 'Understanding',
+      copy: `12 Understanding (words)\n${usageUnderstandingSubtitleCopy()}`,
+    },
+    {
+      title: 'Providing',
+      copy: `3 Insights\n${usageProvidingSubtitleCopy()}`,
+    },
+    {
+      title: 'Remembering',
+      copy: `1 Memories\n${usageRememberingSubtitleCopy()}`,
+    },
   ]);
   expect(
     usageStatsCopy({
@@ -1168,10 +1196,22 @@ test('usage stats copy names GET today counts without Upgrade', () => {
       memoriesCreated: 1000,
     }),
   ).toEqual([
-    {title: 'Listening', copy: '2 minutes'},
-    {title: 'Understanding', copy: '1,234 Understanding (words)'},
-    {title: 'Providing', copy: '3,000 Insights'},
-    {title: 'Remembering', copy: '1,000 Memories'},
+    {
+      title: 'Listening',
+      copy: `2 minutes\n${usageListeningSubtitleCopy()}`,
+    },
+    {
+      title: 'Understanding',
+      copy: `1,234 Understanding (words)\n${usageUnderstandingSubtitleCopy()}`,
+    },
+    {
+      title: 'Providing',
+      copy: `3,000 Insights\n${usageProvidingSubtitleCopy()}`,
+    },
+    {
+      title: 'Remembering',
+      copy: `1,000 Memories\n${usageRememberingSubtitleCopy()}`,
+    },
   ]);
   expect(
     usageStatsCopy({
