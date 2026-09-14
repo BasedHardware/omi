@@ -1,3 +1,6 @@
+// Platform-interface packages are transitive test seams, not app dependencies.
+// ignore: depend_on_referenced_packages
+import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +15,15 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/services.dart';
+
+class _TestConnectivityPlatform extends ConnectivityPlatform {
+  @override
+  Future<List<ConnectivityResult>> checkConnectivity() async => [ConnectivityResult.none];
+
+  @override
+  Stream<List<ConnectivityResult>> get onConnectivityChanged => const Stream.empty();
+}
 
 final _omi = BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
 final _glass = BtDevice(id: 'glass-1', name: 'OmiGlass', type: DeviceType.openglass, rssi: -50);
@@ -75,6 +87,18 @@ Widget _app(_StubDeviceProvider device) {
 }
 
 void main() {
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    ConnectivityPlatform.instance = _TestConnectivityPlatform();
+    try {
+      await ServiceManager.init();
+    } catch (_) {
+      // Already initialised by another test in this isolate.
+    }
+  });
+
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
