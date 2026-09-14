@@ -47,6 +47,7 @@ omi auth login
 
 # 2. Start using it:
 omi memory list
+omi memory search "food preferences" --limit 5
 omi conversation list --limit 5
 omi action-item list --open
 omi goal list
@@ -66,6 +67,18 @@ Tables without predefined columns include fields from every row, in first-seen o
 > [🇹🇭 คู่มือเริ่มต้นใช้งาน omi-cli (Thai Quickstart)](examples/quickstart.th.md)
 
 > Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md), the [🇪🇸 Primeros pasos con omi-cli (Spanish Quickstart)](examples/quickstart.es.md), the [🇹🇷 Türkçe Hızlı Başlangıç Kılavuzu (Turkish Quickstart)](examples/quickstart.tr.md), the [🇷🇺 Быстрый старт с omi-cli (Russian Quickstart)](examples/quickstart.ru.md), or the [🇧🇬 Българско ръководство за бърз старт (Bulgarian Quickstart)](examples/quickstart.bg.md).
+
+`omi memory search QUERY` uses the developer API's semantic memory search.
+It requires a developer API key with `memories.read` scope and a persisted
+default-memory read grant. Access denials remain errors; the command does not
+fall back to listing other memories. `--limit` defaults to 10 and accepts
+1–100; the server may return fewer results (currently at most 20).
+JSON mode preserves the full response envelope, including `items`,
+`returned_count`, `archive_default_visible`, and `policy`:
+
+```bash
+omi --json memory search "food preferences" | jq '.items[] | {id, content, relevance_score}'
+```
 
 ## Auth
 
@@ -208,6 +221,7 @@ omi
 │       └── delete <name>
 ├── memory
 │   ├── list [--limit N] [--offset N] [--categories ...]
+│   ├── search <query> [--limit N]
 │   ├── get <id>
 │   ├── create <content> [--category ...] [--visibility ...] [--tag ...]
 │   ├── update <id> [--content ...] [--category ...] [--visibility ...] [--tag ...]

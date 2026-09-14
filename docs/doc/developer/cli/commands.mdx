@@ -10,7 +10,7 @@ The full command tree (run `omi --help` for the live version):
 omi
 ├── auth          login [--browser] [--api-key KEY] | logout | status | whoami | refresh
 ├── config        show | set <k> <v> | path | profile {list, use <name>, delete <name>}
-├── memory        list | get | create | update | delete
+├── memory        list | search | get | create | update | delete
 ├── conversation  list | get | create | from-segments | update | delete
 ├── action-item   list | get | create | update | complete | delete
 └── goal          list | get | create | update | progress | history | delete
@@ -70,6 +70,7 @@ hand. The refresh token rotates if Firebase decides to.
 | Command                                        | Endpoint                                              |
 | ---------------------------------------------- | ----------------------------------------------------- |
 | `omi memory list [--limit N --offset N --categories CSV]` | `GET /v1/dev/user/memories`                |
+| `omi memory search QUERY [--limit N]`            | `GET /v1/dev/user/memories/vector/search`             |
 | `omi memory get ID`                            | client-side scan (no direct GET in the dev API)       |
 | `omi memory create CONTENT [--category C --visibility V --tag T...]` | `POST /v1/dev/user/memories`                |
 | `omi memory update ID [--content ... --category ... --visibility ... --tag ...]` | `PATCH /v1/dev/user/memories/{id}` |
@@ -78,6 +79,24 @@ hand. The refresh token rotates if Firebase decides to.
 Categories: `core`, `hobbies`, `lifestyle`, `interests`, `habits`, `work`,
 `skills`, `learnings`, `other`, `system`.
 Visibility: `public` or `private`.
+
+### Search memories
+
+```bash
+omi memory search "food preferences" --limit 5
+omi --json memory search "food preferences" | jq '.items[] | {id, content, relevance_score}'
+```
+
+Search uses the developer API's semantic search and requires a developer API
+key with `memories.read` scope and a persisted default-memory read grant.
+Access denials are reported as errors, without a fallback to other memory
+reads. The API retains authority over which memories are visible.
+
+`--limit` defaults to 10 and accepts 1–100. The server can return fewer
+results and currently caps this search at 20. Pretty mode shows each match's
+ID, category, content, and relevance score. JSON mode emits the full API
+response, preserving `items`, `returned_count`, `archive_default_visible`,
+and `policy`; it is an object rather than the array returned by `memory list`.
 
 ## `omi conversation`
 

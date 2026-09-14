@@ -27,6 +27,27 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
 _LIST_COLUMNS = ["id", "category", "visibility", "content", "tags", "created_at"]
 
 
+@app.command("search", help="Search memories by meaning through the developer API.")
+def search_memories(
+    typer_ctx: typer.Context,
+    query: str = typer.Argument(..., help="Search query."),
+    limit: int = typer.Option(10, "--limit", min=1, max=100, help="Maximum results requested from the API."),
+) -> None:
+    ctx = _ctx(typer_ctx)
+    if not query.strip():
+        raise UsageError(message="Search query must not be empty.")
+    with ctx.make_client() as client:
+        result = client.get("/v1/dev/user/memories/vector/search", params={"query": query, "limit": limit})
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit(result)
+        return
+    ctx.renderer.emit(
+        result["items"],
+        columns=["id", "category", "content", "relevance_score"],
+        title="memory search",
+    )
+
+
 @app.command("list", help="List memories.")
 def list_memories(
     typer_ctx: typer.Context,
