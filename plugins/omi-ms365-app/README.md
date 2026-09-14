@@ -184,3 +184,16 @@ omi-ms365-app/
 ## License
 
 MIT.
+
+## Retry regression tests
+
+Run `python3 plugins/omi-ms365-app/test_graph_retry.py` from the repository root.
+The standard-library suite executes both production retry paths with HTTP/token
+seams and a recording sleep; it does not require credentials or contact Graph.
+A real event-loop scheduling regression immediately cancels pending sleeps,
+without waiting for their timers. JSON requests and file downloads honor
+nonnegative `Retry-After` delay-seconds that fit the event loop’s floating-point
+clock, retaining the upstream minimum exponential delay (2s then 3s)
+without imposing an arbitrary cap on server cooldowns. Missing, malformed, or numerically
+unrepresentable values use exponential backoff; the existing three-attempt cap
+and final Graph errors are preserved.
