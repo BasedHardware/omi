@@ -11,6 +11,7 @@ import {
   conversationStatusCopy,
   processingConversationNoContentCopy,
   processingConversationDetailTitleCopy,
+  processingConversationDetailContentTabCopy,
   conversationTranscriptDurationCopy,
   conversationVisibilityCopy,
   conversationActionItemsTodoCopy,
@@ -654,7 +655,10 @@ function LegacyConversationBody({
         </>
       ) : null}
       <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
-        Transcript
+        {conversation.status === 'processing' ||
+        conversation.status === 'merging'
+          ? processingConversationDetailContentTabCopy(conversation.source)
+          : 'Transcript'}
       </Text>
       {peopleError === '' ? null : (
         <Text style={[styles.conversationDetailField, ink]}>

@@ -510,6 +510,19 @@ export function processingConversationDetailTitleCopy(): string {
   return 'In progress';
 }
 
+export function processingConversationDetailContentTabCopy(
+  source: string,
+): string {
+  const token = visibleDisplayText(source);
+  if (token === 'openglass') {
+    return 'Photos';
+  }
+  if (token === 'screenpipe') {
+    return 'Raw Data';
+  }
+  return 'Content';
+}
+
 export function conversationDetailSummaryForStatusCopy(
   status: string,
   transcriptEmpty: boolean,

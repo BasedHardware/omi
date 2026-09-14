@@ -18,6 +18,7 @@ import {
   appsEmptyCopy,
   conversationDisplayTitle,
   processingConversationDetailTitleCopy,
+  processingConversationDetailContentTabCopy,
   conversationListUsesListenOverview,
   conversationRecapTitle,
   conversationDiscardedTranscriptCopy,
@@ -762,6 +763,13 @@ test('keeps processing conversations whose title and overview are not ready yet'
 
 test('empty conversation titles stay visible instead of a blank row', () => {
   expect(processingConversationDetailTitleCopy()).toBe('In progress');
+  expect(processingConversationDetailContentTabCopy('omi')).toBe('Content');
+  expect(processingConversationDetailContentTabCopy('openglass')).toBe('Photos');
+  expect(processingConversationDetailContentTabCopy('screenpipe')).toBe(
+    'Raw Data',
+  );
+  expect(processingConversationDetailContentTabCopy('')).toBe('Content');
+  expect(processingConversationDetailContentTabCopy('  ')).toBe('Content');
   expect(conversationDisplayTitle({title: '', status: 'processing'})).toBe(
     'Processing conversation…',
   );

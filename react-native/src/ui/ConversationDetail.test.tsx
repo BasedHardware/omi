@@ -13,6 +13,7 @@ import {
   processingConversationNoSummaryCopy,
   processingConversationStatusCopy,
   processingConversationDetailTitleCopy,
+  processingConversationDetailContentTabCopy,
   conversationActionItemsTodoCopy,
   conversationActionItemsNoPendingCopy,
   conversationActionItemsCompletedCopy,
@@ -1919,6 +1920,86 @@ test('legacy processing details name Flutter inProgress instead of GET title', (
   );
   expect(completed).toContain('A real conversation');
   expect(completed).not.toContain(processingConversationDetailTitleCopy());
+});
+
+test('legacy processing details name Flutter Content tab instead of Transcript', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const processing = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', status: 'processing'},
+    }),
+  );
+  expect(processing).toContain(
+    processingConversationDetailContentTabCopy('omi'),
+  );
+  expect(processing).not.toContain('Transcript');
+  expect(processing).not.toContain('🎙️');
+  expect(processing).not.toContain('📸');
+  const photos = text(
+    render({
+      apiContract: 'omi',
+      conversation: {
+        ...conversation,
+        id: 'old-1',
+        status: 'processing',
+        source: 'openglass',
+      },
+    }),
+  );
+  expect(photos).toContain(
+    processingConversationDetailContentTabCopy('openglass'),
+  );
+  expect(photos).not.toContain('Transcript');
+  const rawData = text(
+    render({
+      apiContract: 'omi',
+      conversation: {
+        ...conversation,
+        id: 'old-1',
+        status: 'processing',
+        source: 'screenpipe',
+      },
+    }),
+  );
+  expect(rawData).toContain(
+    processingConversationDetailContentTabCopy('screenpipe'),
+  );
+  expect(rawData).not.toContain('Transcript');
+  const merging = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', status: 'merging'},
+    }),
+  );
+  expect(merging).toContain(
+    processingConversationDetailContentTabCopy('omi'),
+  );
+  expect(merging).not.toContain('Transcript');
+  const completed = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(completed).toContain('Transcript');
+  expect(completed).not.toContain(
+    processingConversationDetailContentTabCopy('omi'),
+  );
 });
 
 test('legacy discarded details name Discarded Conversation instead of structured title', () => {
