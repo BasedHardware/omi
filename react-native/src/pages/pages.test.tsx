@@ -27,7 +27,7 @@ jest.mock('../omiNative', () => ({
 
 const {ConnectorsPage} = require('./Connectors');
 const {SettingsPage} = require('./Settings');
-const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy} = require('../desktopReadClient');
+const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy, permissionsTitleCopy} = require('../desktopReadClient');
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -300,6 +300,7 @@ test('Settings exposes real native app permissions even if cloud account reads f
   const open = jest.spyOn(Linking, 'openSettings').mockResolvedValue();
   try {
     const renderer = await renderPage(SettingsPage);
+    expect(textOf(renderer)).toContain(permissionsTitleCopy());
     await act(async () =>
       renderer.root
         .findAll(

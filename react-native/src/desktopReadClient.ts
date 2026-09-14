@@ -860,6 +860,10 @@ export function termsOfServiceTitleCopy(): string {
   return 'Terms of Service';
 }
 
+export function permissionsTitleCopy(): string {
+  return 'Permissions';
+}
+
 export function accountFieldCopy(
   value: string | null | undefined,
   unset: string,

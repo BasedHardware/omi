@@ -37,6 +37,7 @@ import {
   signOutTitleCopy,
   privacyPolicyTitleCopy,
   termsOfServiceTitleCopy,
+  permissionsTitleCopy,
   accountFieldCopy,
   connectionIdentityCopy,
   subscriptionPlanCopy,
@@ -1368,7 +1369,7 @@ export function SettingsPage({
       <View style={styles.destinationSection}>
         {!browser && (
           <SettingRow
-            title="App permissions"
+            title={permissionsTitleCopy()}
             copy="Review permissions for Omi in your device settings."
             actionLabel="Open app permissions"
             action={() => {

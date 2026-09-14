@@ -43,6 +43,7 @@ import {
   signOutTitleCopy,
   privacyPolicyTitleCopy,
   termsOfServiceTitleCopy,
+  permissionsTitleCopy,
   appCategoryCopy,
   appDisplaySource,
   appDisplayAttribution,
@@ -1785,6 +1786,7 @@ test('developer key copy names GET empty keys Flutter No API keys yet', () => {
   expect(signOutTitleCopy()).toBe('Sign Out');
   expect(privacyPolicyTitleCopy()).toBe('Privacy Policy');
   expect(termsOfServiceTitleCopy()).toBe('Terms of Service');
+  expect(permissionsTitleCopy()).toBe('Permissions');
   expect(developerKeysEmptyCopy()).toBe('No API keys yet');
   expect(developerKeysCopy([], developerApiTitleCopy())).toEqual([
     {title: developerApiTitleCopy(), copy: developerKeysEmptyCopy()},
