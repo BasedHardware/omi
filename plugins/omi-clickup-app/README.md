@@ -158,3 +158,36 @@ requests==2.31.0
 ## License
 
 MIT License
+
+## Offline list-discovery regression
+
+From the repository root, run `python3 plugins/omi-clickup-app/test_clickup_client.py`.
+The stdlib suite imports the production client with fixture-only HTTP and dotenv
+doubles. It covers folder-only and mixed workspaces, multiple spaces, empty folders,
+and failed folder requests while preserving successfully discovered lists.
+The same command runs through the local/CI checks manifest. No credentials or
+provider access are needed. OAuth setup and manual **Refresh Lists** both consume `get_all_lists`,
+which now includes folder-contained lists with their folder and space IDs.
+
+### List-discovery request budget
+
+For one workspace with `S` returned spaces and `F` returned folders across those
+spaces, a successful `get_all_lists` enumeration makes `1 + 2S + F` sequential
+HTTP requests: one to enumerate spaces, two per space (folderless lists and
+folders), and one per folder to fetch its lists, including empty folders.
+For example, 10 spaces containing 100 folders require 121 discovery requests.
+This excludes the callers' workspace/member requests and OAuth token/user requests.
+
+Discovery runs during OAuth setup (`/auth/callback`) and when the user presses
+**Refresh Lists** (`POST /refresh-lists`), not in a background token-refresh job.
+The resulting list selection data is stored for subsequent use; manual refresh
+performs discovery again. Large workspaces can therefore have slow setup/refresh
+and encounter provider rate limits. Discovery currently has no parallel fetching,
+retry/backoff, or explicit HTTP timeout, so its duration is not bounded by the
+client. This change does not improve that performance behavior.
+
+The budget assumes successful space/folder enumeration. Failed enumeration skips
+its descendants, reducing the attempted requests and potentially returning only
+partial results. Failed individual list requests also leave those lists out while
+preserving lists discovered elsewhere; a shorter response is not proof that all
+workspace lists were discovered.
