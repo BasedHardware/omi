@@ -747,7 +747,7 @@ async def tool_get_orders(request: Request):
         uid = body.get("uid")
         status = body.get("status", "any")
         financial_status = body.get("financial_status")
-        limit = min(body.get("limit", 10), 50)
+        limit = _coerce_int(body.get("limit"), default=10, minimum=1, maximum=50)
         
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -1614,7 +1614,7 @@ async def tool_get_customers(request: Request):
         body = await request.json()
         uid = body.get("uid")
         query = body.get("query", "")
-        limit = min(body.get("limit", 10), 50)
+        limit = _coerce_int(body.get("limit"), default=10, minimum=1, maximum=50)
         
         if not uid:
             return ChatToolResponse(error="User ID is required")
