@@ -60,60 +60,83 @@ def _get_currency_symbol(currency_code: str) -> str:
     return symbols.get(code, f"{code.upper()} ")
 
 
-def _format_currency(amount: Optional[float], currency_symbol: str = "$", decimals: int = 2) -> str:
+def _format_currency(amount: Optional[Any], currency_symbol: str = "$", decimals: int = 2) -> str:
     """Format numerical prices cleanly with precision preservation for micro-values."""
     if amount is None:
         return "N/A"
-    if amount == 0:
+    try:
+        val = float(amount)
+    except (ValueError, TypeError):
+        return f"{currency_symbol}{amount}"
+    if val == 0:
         return f"{currency_symbol}0.00"
-    if amount >= 1.0:
-        return f"{currency_symbol}{amount:,.{decimals}f}"
-    if amount >= 0.0001:
-        return f"{currency_symbol}{amount:,.4f}"
-    if amount >= 1e-8:
-        return f"{currency_symbol}{amount:,.8f}"
-    return f"{currency_symbol}{amount:.4e}"
+    if val >= 1.0:
+        return f"{currency_symbol}{val:,.{decimals}f}"
+    if val >= 0.0001:
+        return f"{currency_symbol}{val:,.4f}"
+    if val >= 1e-8:
+        return f"{currency_symbol}{val:,.8f}"
+    return f"{currency_symbol}{val:.4e}"
 
 
-def _format_compact(value: Optional[float], currency_symbol: str = "$") -> str:
+def _format_compact(value: Optional[Any], currency_symbol: str = "$") -> str:
     """Format large numbers into human-readable compact units (e.g. $1.25B, EUR 500M)."""
-    if value is None or value == 0:
+    if value is None:
         return "N/A"
-    abs_v = abs(value)
+    try:
+        val = float(value)
+    except (ValueError, TypeError):
+        return f"{currency_symbol}{value}"
+    if val == 0:
+        return "N/A"
+    abs_v = abs(val)
     if abs_v >= 1e12:
-        return f"{currency_symbol}{value / 1e12:.2f}T"
+        return f"{currency_symbol}{val / 1e12:.2f}T"
     if abs_v >= 1e9:
-        return f"{currency_symbol}{value / 1e9:.2f}B"
+        return f"{currency_symbol}{val / 1e9:.2f}B"
     if abs_v >= 1e6:
-        return f"{currency_symbol}{value / 1e6:.2f}M"
+        return f"{currency_symbol}{val / 1e6:.2f}M"
     if abs_v >= 1e3:
-        return f"{currency_symbol}{value / 1e3:.2f}K"
-    return f"{currency_symbol}{value:,.2f}"
+        return f"{currency_symbol}{val / 1e3:.2f}K"
+    return f"{currency_symbol}{val:,.2f}"
 
 
-def _format_percentage(change: Optional[float]) -> str:
+def _format_percentage(change: Optional[Any]) -> str:
     """Format percentage with +/- sign."""
     if change is None:
         return "N/A"
-    return f"{change:+.2f}%"
+    try:
+        val = float(change)
+        return f"{val:+.2f}%"
+    except (ValueError, TypeError):
+        return f"{change}%"
 
 
 async def _fetch_coingecko(endpoint: str, params: Optional[Dict[str, Any]] = None) -> Any:
-    """Execute asynchronous GET request against CoinGecko with error handling."""
-    client: httpx.AsyncClient = app.state.http_client
+    """Execute asynchronous GET request against CoinGecko with error handling and lifespan fallback."""
     url = f"{COINGECKO_BASE_URL}{endpoint}"
-    try:
-        response = await client.get(url, params=params)
-        if response.status_code == 429:
-            raise ValueError("CoinGecko API rate limit reached. Please wait a moment before trying again.")
-        if response.status_code == 404:
-            raise ValueError(f"Resource not found at {endpoint}.")
-        response.raise_for_status()
-        return response.json()
-    except httpx.TimeoutException:
-        raise ValueError("Request to CoinGecko timed out. Please try again.")
-    except httpx.HTTPError as exc:
-        raise ValueError(f"CoinGecko network error: {exc}")
+    client = getattr(app.state, "http_client", None)
+
+    async def _do_get(cli: httpx.AsyncClient) -> Any:
+        try:
+            response = await cli.get(url, params=params)
+            if response.status_code == 429:
+                raise ValueError("CoinGecko API rate limit reached. Please wait a moment before trying again.")
+            if response.status_code == 404:
+                raise ValueError(f"Resource not found at {endpoint}.")
+            response.raise_for_status()
+            return response.json()
+        except httpx.TimeoutException:
+            raise ValueError("Request to CoinGecko timed out. Please try again.")
+        except httpx.HTTPError as exc:
+            raise ValueError(f"CoinGecko network error: {exc}")
+
+    if client is not None and getattr(client, "is_closed", False) is not True:
+        return await _do_get(client)
+
+    headers = {"User-Agent": DEFAULT_USER_AGENT, "Accept": "application/json"}
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as fallback_client:
+        return await _do_get(fallback_client)
 
 
 @app.exception_handler(RequestValidationError)
@@ -276,7 +299,7 @@ async def get_crypto_price(req: GetCryptoPriceRequest) -> ChatToolResponse:
         }
         data = await _fetch_coingecko("/simple/price", params=params)
 
-        if not data:
+        if not isinstance(data, dict) or not data:
             return ChatToolResponse(
                 error=f"No pricing data found for '{coin_ids_str}'. Please verify the coin IDs using the search tool."
             )
@@ -286,7 +309,7 @@ async def get_crypto_price(req: GetCryptoPriceRequest) -> ChatToolResponse:
 
         for coin_id in req.coin_ids:
             coin_data = data.get(coin_id)
-            if not coin_data:
+            if not isinstance(coin_data, dict):
                 lines.append(f"- {coin_id}: Not found (try searching with search_crypto_coins)")
                 continue
 
@@ -317,17 +340,20 @@ async def get_crypto_price(req: GetCryptoPriceRequest) -> ChatToolResponse:
 async def search_crypto_coins(req: SearchCryptoCoinsRequest) -> ChatToolResponse:
     try:
         data = await _fetch_coingecko("/search", params={"query": req.query})
+        if not isinstance(data, dict):
+            return ChatToolResponse(error=f"Unexpected response searching crypto coins: {data}")
         coins = data.get("coins", [])
-
-        if not coins:
+        if not isinstance(coins, list) or not coins:
             return ChatToolResponse(result=f"No cryptocurrency coins matched query '{req.query}'.")
 
         selected = coins[: req.max_results]
         lines = [f"Cryptocurrency search results for '{req.query}':"]
 
         for idx, coin in enumerate(selected, 1):
+            if not isinstance(coin, dict):
+                continue
             name = coin.get("name", "Unknown")
-            symbol = coin.get("symbol", "").upper()
+            symbol = str(coin.get("symbol", "")).upper()
             coin_id = coin.get("id", "")
             rank = coin.get("market_cap_rank")
             rank_str = f"Rank #{rank}" if rank else "Unranked"
@@ -345,25 +371,38 @@ async def search_crypto_coins(req: SearchCryptoCoinsRequest) -> ChatToolResponse
 async def get_trending_crypto(req: GetTrendingCryptoRequest) -> ChatToolResponse:
     try:
         data = await _fetch_coingecko("/search/trending")
+        if not isinstance(data, dict):
+            return ChatToolResponse(error=f"Unexpected response retrieving trending coins: {data}")
         trending_items = data.get("coins", [])
 
-        if not trending_items:
+        if not isinstance(trending_items, list) or not trending_items:
             return ChatToolResponse(result="No trending coins available right now.")
 
         selected = trending_items[: req.limit]
         lines = ["Top Trending Cryptocurrencies on CoinGecko:"]
 
         for idx, item_wrapper in enumerate(selected, 1):
+            if not isinstance(item_wrapper, dict):
+                continue
             item = item_wrapper.get("item", {})
+            if not isinstance(item, dict):
+                continue
             name = item.get("name", "Unknown")
-            symbol = item.get("symbol", "").upper()
+            symbol = str(item.get("symbol", "")).upper()
             coin_id = item.get("id", "")
             rank = item.get("market_cap_rank")
             rank_str = f"Rank #{rank}" if rank else "Unranked"
 
             # Check price in BTC if available
             price_btc = item.get("price_btc")
-            btc_str = f" | {price_btc:.8f} BTC" if price_btc else ""
+            if price_btc is not None:
+                try:
+                    btc_val = float(price_btc)
+                    btc_str = f" | {btc_val:.8f} BTC"
+                except (ValueError, TypeError):
+                    btc_str = f" | {price_btc} BTC"
+            else:
+                btc_str = ""
 
             lines.append(f"{idx}. {name} ({symbol}) - {rank_str}{btc_str} | ID: {coin_id}")
 
@@ -388,16 +427,28 @@ async def get_crypto_market_overview(req: GetCryptoMarketOverviewRequest) -> Cha
         }
         markets = await _fetch_coingecko("/coins/markets", params=params)
 
+        if not isinstance(markets, list):
+            error_msg = "Failed to retrieve cryptocurrency market rankings."
+            if isinstance(markets, dict):
+                status_dict = markets.get("status")
+                if isinstance(status_dict, dict) and "error_message" in status_dict:
+                    error_msg = f"CoinGecko API error: {status_dict['error_message']}"
+                elif "error" in markets:
+                    error_msg = f"CoinGecko API error: {markets['error']}"
+            return ChatToolResponse(error=error_msg)
+
         if not markets:
-            return ChatToolResponse(error="Failed to retrieve cryptocurrency market rankings.")
+            return ChatToolResponse(result="No market data returned for the requested parameters.")
 
         currency_symbol = _get_currency_symbol(vs)
         lines = [f"Top {len(markets)} Cryptocurrencies by Market Cap ({vs.upper()}):"]
 
         for coin in markets:
+            if not isinstance(coin, dict):
+                continue
             rank = coin.get("market_cap_rank", "-")
             name = coin.get("name", "Unknown")
-            symbol = coin.get("symbol", "").upper()
+            symbol = str(coin.get("symbol", "")).upper()
             price = coin.get("current_price")
             change = coin.get("price_change_percentage_24h")
             mcap = coin.get("market_cap")

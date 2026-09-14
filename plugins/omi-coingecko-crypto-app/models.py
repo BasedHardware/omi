@@ -48,6 +48,8 @@ class GetCryptoPriceRequest(_NullMeansDefault):
     def coerce_vs_currency(cls, v: Optional[str]) -> str:
         if v is None:
             return "usd"
+        if not isinstance(v, str):
+            raise ValueError("vs_currency must be a string.")
         cleaned = str(v).strip().lower()
         if len(cleaned) < 2:
             raise ValueError("vs_currency must contain at least 2 non-whitespace characters (e.g. 'usd').")
@@ -55,13 +57,13 @@ class GetCryptoPriceRequest(_NullMeansDefault):
 
     @field_validator("coin_ids", mode="before")
     @classmethod
-    def normalize_coin_ids(cls, v: Union[List[str], str]) -> List[str]:
+    def normalize_coin_ids(cls, v: Any) -> List[str]:
         if isinstance(v, str):
             ids = [i.strip().lower() for i in v.split(",") if i.strip()]
-        elif isinstance(v, (list, tuple)):
+        elif isinstance(v, (list, tuple, set)):
             ids = [i.strip().lower() for i in v if isinstance(i, str) and i.strip()]
         else:
-            ids = []
+            raise ValueError("coin_ids must be a list of strings or comma-separated string.")
         if not ids:
             raise ValueError("At least one valid coin ID must be provided.")
         # Deduplicate while preserving order, max 10
@@ -87,9 +89,11 @@ class SearchCryptoCoinsRequest(_NullMeansDefault):
             return 5
         return int(v)
 
-    @field_validator("query")
+    @field_validator("query", mode="before")
     @classmethod
-    def normalize_query(cls, v: str) -> str:
+    def normalize_query(cls, v: Any) -> str:
+        if not isinstance(v, str):
+            raise ValueError("query must be a string.")
         cleaned = v.strip()
         if not cleaned:
             raise ValueError("Query string cannot be empty.")
@@ -119,6 +123,7 @@ class GetCryptoMarketOverviewRequest(_NullMeansDefault):
         description="Target currency code, e.g. 'usd'.",
     )
 
+<<<<<<< HEAD
     @field_validator("limit", mode="before")
     @classmethod
     def coerce_limit(cls, v: Optional[int]) -> int:
@@ -131,6 +136,8 @@ class GetCryptoMarketOverviewRequest(_NullMeansDefault):
     def coerce_vs_currency(cls, v: Optional[str]) -> str:
         if v is None:
             return "usd"
+        if not isinstance(v, str):
+            raise ValueError("vs_currency must be a string.")
         cleaned = str(v).strip().lower()
         if len(cleaned) < 2:
             raise ValueError("vs_currency must contain at least 2 non-whitespace characters (e.g. 'usd').")
