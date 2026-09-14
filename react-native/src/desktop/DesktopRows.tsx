@@ -75,6 +75,12 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
     item.finishedAt,
     Date.now(),
   );
+  const durationCopy =
+    newCopy === null &&
+    (conversationHasFinishClock(item) ||
+      typeof item.transcriptEndSeconds === 'number')
+      ? conversationListDurationCopy(item)
+      : '';
   return (
     <View style={styles.rowCopy}>
       {emoji !== null ? <Text style={styles.rowTitle}>{emoji}</Text> : null}
@@ -115,10 +121,8 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
       {photosCopy !== null ? (
         <Text style={styles.rowMeta}>{photosCopy}</Text>
       ) : null}
-      {newCopy === null &&
-      (conversationHasFinishClock(item) ||
-        typeof item.transcriptEndSeconds === 'number') ? (
-        <Text style={styles.rowMeta}>{conversationListDurationCopy(item)}</Text>
+      {durationCopy !== '' ? (
+        <Text style={styles.rowMeta}>{durationCopy}</Text>
       ) : null}
     </View>
   );

@@ -110,6 +110,13 @@ export const ProjectionRow = memo(function ProjectionRow({
           Date.now(),
         )
       : null;
+  const durationCopy =
+    conversation !== null &&
+    newCopy === null &&
+    (conversationHasFinishClock(conversation) ||
+      typeof conversation.transcriptEndSeconds === 'number')
+      ? conversationListDurationCopy(conversation)
+      : '';
   const indentPad =
     item.kind === 'task' ? taskIndentPadding(item.indentLevel) : 0;
   const rowPad = spine ? 18 : 16;
@@ -260,12 +267,9 @@ export const ProjectionRow = memo(function ProjectionRow({
           {item.exportCopy}
         </Text>
       ) : null}
-      {conversation !== null &&
-      newCopy === null &&
-      (conversationHasFinishClock(conversation) ||
-        typeof conversation.transcriptEndSeconds === 'number') ? (
+      {durationCopy !== '' ? (
         <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
-          {conversationListDurationCopy(conversation)}
+          {durationCopy}
         </Text>
       ) : null}
     </View>

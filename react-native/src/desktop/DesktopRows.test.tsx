@@ -438,6 +438,40 @@ test('Library rows keep GET duration instead of clock-only', () => {
   ).toBe(0);
 });
 
+test('same-second conversation clocks omit compact duration on Home and Library', () => {
+  const startedAt = '2026-09-07T12:00:00.000Z';
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:zero-span',
+    title: 'Instant note',
+    summary: 'Finished in the same second.',
+    searchableText: 'Instant note\nFinished in the same second.',
+    createdAt: startedAt,
+    updatedAt: startedAt,
+    startedAt,
+    finishedAt: startedAt,
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  let library!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    home = ReactTestRenderer.create(<ReadRow item={item} />);
+    library = ReactTestRenderer.create(<ConversationRow item={item} />);
+  });
+  for (const renderer of [home, library]) {
+    const copy = textOf(renderer);
+    expect(copy).not.toContain('Duration unavailable');
+    expect(copy).not.toContain('0s');
+    expect(copy).not.toContain('0 min');
+  }
+});
+
 test('a zero conversation start time on Home and Library rows says Duration unavailable', () => {
   const item: ConversationProjection = {
     kind: 'conversation',

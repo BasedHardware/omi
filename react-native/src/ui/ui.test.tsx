@@ -2789,6 +2789,36 @@ test('wide Home search in-progress chats omit Duration unavailable', () => {
   expect(tree).not.toContain('Duration unavailable');
 });
 
+test('wide Home search same-second clocks omit compact duration like Flutter list', () => {
+  const startedAt = '2026-09-07T12:00:00.000Z';
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'listen:zero-span-home-search',
+        title: 'Instant note',
+        summary: 'Finished in the same second.',
+        searchableText: 'Instant note\nFinished in the same second.',
+        createdAt: startedAt,
+        updatedAt: startedAt,
+        startedAt,
+        finishedAt: startedAt,
+        starred: false,
+        status: 'completed',
+        source: 'listen',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).not.toContain('Duration unavailable');
+  expect(tree).not.toContain('0s');
+  expect(tree).not.toContain('0 min');
+});
+
 test('wide Home search rows with a zero start time say Duration unavailable', () => {
   const renderer = render(
     <ProjectionRow

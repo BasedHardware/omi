@@ -981,6 +981,24 @@ test('conversation list duration prefers GET transcript span over wall clocks', 
       transcriptEndSeconds: 3660,
     }),
   ).toBe('1h 1m');
+  expect(
+    conversationListDurationCopy({
+      startedAt: '2026-09-07T12:00:00.000Z',
+      finishedAt: '2026-09-07T12:00:00.000Z',
+    }),
+  ).toBe('');
+  expect(
+    conversationListDurationCopy({
+      startedAt: '2026-09-07T12:00:00.000Z',
+      finishedAt: '2026-09-07T12:00:00.400Z',
+    }),
+  ).toBe('');
+  expect(
+    conversationListDurationCopy({
+      startedAt: new Date(0).toISOString(),
+      finishedAt: '2026-09-07T12:00:00.000Z',
+    }),
+  ).toBe('Duration unavailable');
 });
 
 test('conversation transcript duration names Flutter secondsToHumanReadable singular second', () => {

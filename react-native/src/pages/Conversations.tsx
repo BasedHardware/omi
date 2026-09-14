@@ -90,6 +90,12 @@ const ConversationRow = memo(function ConversationRow({
     item.finishedAt,
     Date.now(),
   );
+  const durationCopy =
+    newCopy === null &&
+    (conversationHasFinishClock(item) ||
+      typeof item.transcriptEndSeconds === 'number')
+      ? conversationListDurationCopy(item)
+      : '';
   return (
     <FocusPressable
       accessibilityLabel={`Open conversation ${conversationRecapTitle(item)}`}
@@ -165,12 +171,8 @@ const ConversationRow = memo(function ConversationRow({
           {conversationDisplaySummary(item)}
         </Text>
       )}
-      {newCopy === null &&
-      (conversationHasFinishClock(item) ||
-        typeof item.transcriptEndSeconds === 'number') ? (
-        <Text style={styles.conversationRowDuration}>
-          {conversationListDurationCopy(item)}
-        </Text>
+      {durationCopy !== '' ? (
+        <Text style={styles.conversationRowDuration}>{durationCopy}</Text>
       ) : null}
     </FocusPressable>
   );

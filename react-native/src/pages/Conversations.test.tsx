@@ -759,6 +759,52 @@ test('conversation durations under a minute do not claim 0 min', () => {
   expect(copy).not.toContain('0 min');
 });
 
+test('same-second conversation clocks omit compact duration like Flutter list', () => {
+  const startedAt = '2026-09-07T12:00:00.000Z';
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:zero-span',
+    title: 'Instant note',
+    summary: 'Finished in the same second.',
+    searchableText: 'Instant note\nFinished in the same second.',
+    createdAt: startedAt,
+    updatedAt: startedAt,
+    startedAt,
+    finishedAt: startedAt,
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  expect(textOf(renderer)).not.toContain('Duration unavailable');
+  expect(textOf(renderer)).not.toContain('0s');
+  expect(textOf(renderer)).not.toContain('0 min');
+});
+
 test('a zero conversation start time does not invent a duration', () => {
   const item: ConversationProjection = {
     kind: 'conversation',

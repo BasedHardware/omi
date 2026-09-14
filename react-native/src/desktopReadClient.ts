@@ -801,8 +801,7 @@ export function conversationDurationCompactCopy(seconds: number): string {
 }
 
 export function formatConversationDurationSeconds(seconds: number): string {
-  const compact = conversationDurationCompactCopy(Math.trunc(seconds));
-  return compact === '' ? 'Duration unavailable' : compact;
+  return conversationDurationCompactCopy(Math.trunc(seconds));
 }
 
 export function conversationListDurationCopy(item: {

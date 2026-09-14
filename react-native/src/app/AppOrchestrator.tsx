@@ -1147,6 +1147,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               item.finishedAt,
               recapNow,
             );
+            const durationCopy =
+              newCopy == null &&
+              (typeof item.transcriptEndSeconds === 'number' ||
+                conversationHasFinishClock(item))
+                ? conversationListDurationCopy(item)
+                : '';
             return {
               dateLabel: conversationListTimeCopy(
                 item.startedAt ?? item.createdAt,
@@ -1159,11 +1165,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               emoji: conversationListEmoji(item),
               tag: conversationListTag(item),
               newCopy,
-              ...(newCopy == null &&
-              (typeof item.transcriptEndSeconds === 'number' ||
-                conversationHasFinishClock(item))
-                ? {duration: conversationListDurationCopy(item)}
-                : {}),
+              ...(durationCopy !== '' ? {duration: durationCopy} : {}),
               title: conversationRecapTitle(item),
             };
           })
