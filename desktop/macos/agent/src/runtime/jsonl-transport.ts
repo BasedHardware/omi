@@ -123,6 +123,7 @@ const QUERY_WIRE_FIELDS = new Set([
   "prompt",
   "mode",
   "imageBase64",
+  "imageIsScreenCapture",
   "attachments",
   "expectedContextSnapshotVersion",
   "expectedContextSnapshotGeneration",
@@ -663,14 +664,35 @@ export class JsonlTransport {
 
   private promptBlocks(message: QueryMessage): PromptBlock[] {
     const blocks: PromptBlock[] = [];
+    let promptText = message.prompt;
     if (message.imageBase64) {
+      const mimeType = detectImageMimeType(message.imageBase64);
       blocks.push({
         type: "image",
         data: message.imageBase64,
-        mimeType: detectImageMimeType(message.imageBase64),
+        mimeType,
       });
+      if (process.env.OMI_PROVIDER === "omi-local") {
+        // Measured 2026-09-10: with an inline image block and no marker, local
+        // models (gemma-4, qwen3-vl) ignored the attached screenshot, called the
+        // screenshot/capture_screen tools instead (which fail), then repeated a
+        // stale "I don't have permission to see your screen" refusal from
+        // retained history. The cloud provider does not exhibit this and stays
+        // untouched.
+        //
+        // imageIsScreenCapture distinguishes a live screen capture from a
+        // user-attached image (paste/drag-and-drop) or a stale notification-time
+        // screenshot: telling the model every image is "the current screen" was
+        // false for those cases and suppressed a legitimate capture when the
+        // user asked about their screen while an unrelated image was attached.
+        // Only the screen-capture wording is empirically tuned (measured
+        // above); the neutral wording for an attached image is not.
+        promptText = message.imageIsScreenCapture
+          ? `${promptText}\n\n[A screenshot of the user's current screen is attached to this message as an image. Look at the attached image and answer from it directly. Do not call screenshot or capture_screen for this request; the attached image is the current screen.]`
+          : `${promptText}\n\n[An image is attached to this message. Look at the attached image and answer from it directly.]`;
+      }
     }
-    blocks.push({ type: "text", text: message.prompt });
+    blocks.push({ type: "text", text: promptText });
     return blocks;
   }
 

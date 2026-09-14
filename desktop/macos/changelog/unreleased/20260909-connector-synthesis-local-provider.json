@@ -1,0 +1,3 @@
+{
+  "change": "Added a Connector synthesis setting under the Local AI provider: Apple Notes, Calendar, and Gmail memory synthesis, and AI-profile synthesis, are off by default while Local is active, and stay off unless you opt in to sending that data to Omi's cloud"
+}

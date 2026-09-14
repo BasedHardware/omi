@@ -82,8 +82,19 @@ struct ChatRunAccountingPolicy: Equatable {
   let usesOmiAccountQuota: Bool
   let recordsPersonalProviderUsage: Bool
 
-  init(pinnedAdapterID: String) {
-    usesOmiAccountQuota = pinnedAdapterID == AgentAdapterId.piMono.rawValue
+  /// `providerMode` must be what the bridge is actually running (the caller
+  /// passes `resolvedAgentClient().providerMode`, a read-through to
+  /// `AgentBridge.providerMode`/`AgentRuntimeProcess.launchedProviderMode`),
+  /// not a fresh re-read of the Settings preference: a provider switch is
+  /// persisted immediately but only takes effect in the running process
+  /// after a restart, so re-deriving from UserDefaults here could bill/meter
+  /// a turn under a provider the subprocess was never actually switched to.
+  init(pinnedAdapterID: String, providerMode: String) {
+    // piMono is shared by the Omi-billed "omi" provider and the free
+    // "omi-local" provider (see AIProvider); only "omi" ever touches the
+    // Omi account's quota or spend accounting.
+    usesOmiAccountQuota =
+      pinnedAdapterID == AgentAdapterId.piMono.rawValue && providerMode == "omi"
     recordsPersonalProviderUsage = pinnedAdapterID == AgentAdapterId.acp.rawValue
   }
 }
@@ -1280,6 +1291,7 @@ class ChatProvider: ObservableObject {
     if let agentClient { return agentClient }
     let harness = resolvedHarnessMode()
     activeBridgeHarness = harness
+    activeProviderMode = AIProvider.providerMode(forBridgeModeRawValue: bridgeMode)
     let session = AgentClient.makeSession(harnessMode: harness)
     agentClient = session
     return session
@@ -1322,6 +1334,40 @@ class ChatProvider: ObservableObject {
   /// @AppStorage("chatBridgeMode") can be updated by other views sharing the same key,
   /// so comparing against it in switchBridgeMode() would always match → no-op.
   private var activeBridgeHarness: String = "piMono"
+  /// Same idea as `activeBridgeHarness`, one layer down: piMono and Local
+  /// share that harness, differing only in which pi provider ("omi" /
+  /// "omi-local") it is actually configured with. Tracks what
+  /// `switchBridgeMode()` last confirmed applied (only written after its
+  /// restart/reconfigure actually succeeds, never optimistically), so a
+  /// failed switch leaves this exactly as it was and a retry is not wrongly
+  /// treated as a no-op by the guard in `switchBridgeMode()`.
+  ///
+  /// This is NOT the source billing/credential gating reads: that needs the
+  /// shared runtime's own truth (`AgentBridge.providerMode`, backed by
+  /// `AgentRuntimeProcess.launchedProviderMode`), reached via
+  /// `resolvedAgentClient().providerMode`, since this per-`ChatProvider`
+  /// property and the shared runtime process are two different things that
+  /// can transiently disagree (e.g. another `ChatProvider` instance, or the
+  /// floating bar, switched the shared process first).
+  private var activeProviderMode: String = AIProvider.currentProviderMode
+  /// True from the moment `switchBridgeMode()` starts awaiting a restart or
+  /// reconfigure until that call returns. See the guard in `switchBridgeMode()`
+  /// for why a second, concurrent call must bypass the no-op check while this
+  /// is true instead of trusting `activeBridgeHarness`/`activeProviderMode`,
+  /// which are still stale until the in-flight call resolves.
+  private var switchApplyInFlight = false
+  /// Test-only peek at the bridge's actual running state (harness + pi
+  /// provider), as opposed to the persisted `bridgeMode` preference. Lets a
+  /// test prove `switchBridgeMode` actually applied a change instead of
+  /// silently no-opping it. Not `#if DEBUG`-gated: the release-compile CI
+  /// lane still compiles this file's tests, which reference this
+  /// unconditionally (see other `testing*` seams in this codebase, e.g.
+  /// `PushToTalkManager.testingTurnScreenEvidenceCapture`), so gating it
+  /// only breaks that lane without ever actually excluding it from a real
+  /// release binary's tests.
+  var testingActiveBridgeState: (harness: String, providerMode: String) {
+    (activeBridgeHarness, activeProviderMode)
+  }
   /// Orders rapid preference changes without treating them as runtime lifecycle.
   /// The kernel applies each preference only when creating future sessions.
   private var profilePreferenceChangeGeneration: UInt64 = 0
@@ -1332,13 +1378,17 @@ class ChatProvider: ObservableObject {
     case piMono = "piMono"
     case hermes = "hermes"
     case openClaw = "openclaw"
+    case local = "local"
   }
   @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.piMono.rawValue
 
   /// Future-session preference hint for startup/UI only. A live send must use
   /// `ChatRunAccountingPolicy` from its resolved immutable session profile.
+  /// "local" shares piMono's Node harness (see AgentRuntimeRouting) but is
+  /// never the Omi-billed account, excluded explicitly since harness alone
+  /// can't tell the two apart.
   var isUsingOmiAccountProvider: Bool {
-    resolvedHarnessMode() == "piMono"
+    resolvedHarnessMode() == "piMono" && bridgeMode != BridgeMode.local.rawValue
   }
 
   nonisolated static func harnessMode(for mode: BridgeMode) -> String {
@@ -2313,19 +2363,82 @@ class ChatProvider: ObservableObject {
   func switchBridgeMode(to mode: BridgeMode) async {
     let resolvedMode: BridgeMode = (mode == .omiAI) ? .piMono : mode
     let newHarness = Self.harnessMode(for: resolvedMode)
+    let newProviderMode = AIProvider.providerMode(forBridgeModeRawValue: resolvedMode.rawValue)
     let previousHarness = activeBridgeHarness
-    guard newHarness != previousHarness else { return }
+    let previousProviderMode = activeProviderMode
+    // piMono and local share the same Node harness ("piMono") but configure
+    // different pi providers via environment variables baked in at process
+    // spawn time (see AgentRuntimeProcess.performStartProcess); compare on
+    // the provider-mode identity too, or switching piMono <-> local computes
+    // the same harness and silently no-ops, leaving the previous provider's
+    // subprocess (and its env vars) running. Comparing against `bridgeMode`
+    // itself (rather than `activeProviderMode`) would not catch this: it is
+    // @AppStorage-backed by the same "chatBridgeMode" key the Settings picker
+    // writes, so by the time this async function reads it, it may already
+    // reflect `resolvedMode` — the exact dead-guard bug `activeBridgeHarness`
+    // exists to avoid one layer up.
+    // `switchApplyInFlight`: a restart/reconfigure this function starts is
+    // awaited across a suspension point, during which a second call (a rapid
+    // re-toggle) can run on this same actor before the first one returns and
+    // updates `activeBridgeHarness`/`activeProviderMode`. If the second call's
+    // destination happens to match those still-stale trackers (e.g. the user
+    // flips back to the original provider before the first switch finished),
+    // comparing only against them would wrongly treat it as no change needed
+    // and silently do nothing. While a switch is in flight, always proceed —
+    // worst case this piggybacks on the in-flight restart/reconfigure (see
+    // AgentBridge.runLifecycleOperation's same-kind flight coalescing), or a
+    // later restart tears the process down under an earlier reconfigure RPC,
+    // whose `.stopped` failure the generation guard below swallows so only
+    // the newest switch reports — either way beats a switch nobody applied.
+    guard
+      newHarness != previousHarness || newProviderMode != previousProviderMode
+        || switchApplyInFlight
+    else { return }
     log("ChatProvider: Updating future-session profile from \(previousHarness) to \(resolvedMode.rawValue)")
     profilePreferenceChangeGeneration &+= 1
     let preferenceChange = profilePreferenceChangeGeneration
-    activeBridgeHarness = newHarness
+    // `bridgeMode` (the persisted preference) is honored immediately: it
+    // drives the Settings UI and is what a fresh launch reads. But
+    // `activeBridgeHarness`/`activeProviderMode` claim to track what is
+    // ACTUALLY running (billing and credential gating depend on that), so
+    // they must not flip until the operation below actually applies the
+    // change — a failed restart (e.g. `requestAlreadyActive` because a chat
+    // request is in flight) must leave them exactly as they were, or a
+    // retry of the same switch would wrongly no-op against the guard above,
+    // and billing would treat a still-old-provider process as switched.
     bridgeMode = resolvedMode.rawValue
     AnalyticsManager.shared.chatBridgeModeChanged(from: previousHarness, to: resolvedMode.rawValue)
 
     if mode == .userClaude {
       checkClaudeConnectionStatus()
     }
-    guard agentBridgeStarted else { return }
+    guard agentBridgeStarted else {
+      // No running process to restart or reconfigure: nothing is "actually
+      // running" yet to disagree with, so the preference alone is authoritative
+      // until the first launch (which reads it fresh in resolvedAgentClient()).
+      activeBridgeHarness = newHarness
+      activeProviderMode = newProviderMode
+      return
+    }
+    switchApplyInFlight = true
+    defer { switchApplyInFlight = false }
+    if newHarness == previousHarness {
+      // Same harness, different provider (piMono <-> local): the running
+      // process's env vars are stale, and no RPC can change them in place;
+      // only a full runtime restart picks up the new provider config.
+      do {
+        try await resolvedAgentClient().restart()
+        guard preferenceChange == profilePreferenceChangeGeneration else { return }
+        activeBridgeHarness = newHarness
+        activeProviderMode = newProviderMode
+        log("ChatProvider: Runtime restarted for provider change: \(resolvedMode.rawValue)")
+      } catch {
+        guard preferenceChange == profilePreferenceChangeGeneration else { return }
+        logError("Failed to restart runtime for provider change", error: error)
+        errorMessage = "Could not switch AI provider. Try again."
+      }
+      return
+    }
     do {
       guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: newHarness) else {
         throw BridgeError.agentError("Unknown AI runtime mode: \(newHarness)")
@@ -2337,6 +2450,8 @@ class ChatProvider: ObservableObject {
         workingDirectory: effectiveAgentWorkingDirectory()
       )
       guard preferenceChange == profilePreferenceChangeGeneration else { return }
+      activeBridgeHarness = newHarness
+      activeProviderMode = newProviderMode
       log(
         "ChatProvider: Future-session profile configured "
           + "generation=\(configured.preferenceGeneration) adapter=\(configured.adapterId)"
@@ -2345,6 +2460,31 @@ class ChatProvider: ObservableObject {
       guard preferenceChange == profilePreferenceChangeGeneration else { return }
       logError("Failed to configure future-session profile", error: error)
       errorMessage = "Could not update AI provider preference. Try again."
+    }
+  }
+
+  /// Restarts the shared runtime process so it picks up an edited local
+  /// provider base URL/model id. The harness bakes `OMI_PROVIDER` and the
+  /// local endpoint/model into its environment at spawn time (see
+  /// AgentRuntimeProcess.performStartProcess), so a plain @AppStorage write
+  /// to those keys is invisible to an already-running process; it needs an
+  /// explicit restart. No-ops if the user isn't currently on Local, or if no
+  /// bridge is running yet (the next start will read the fresh values).
+  func restartLocalBridgeIfActive() async {
+    guard bridgeMode == BridgeMode.local.rawValue, agentBridgeStarted else { return }
+    do {
+      try await resolvedAgentClient().restart()
+      log("ChatProvider: Restarted shared runtime with updated local model/endpoint")
+    } catch BridgeError.restarting {
+      // Another restart for this same config change is already in flight:
+      // e.g. Settings' Base URL commit and its own model-list refetch both
+      // requested one, or the main window and the floating bar's
+      // independent ChatProvider both did. It will pick up the current
+      // config either way; not a failure worth surfacing.
+      log("ChatProvider: Skipped restart request, one for the same runtime is already in flight")
+    } catch {
+      logError("Failed to restart shared runtime for local model change", error: error)
+      errorMessage = "Could not apply local model change. Try again."
     }
   }
 
@@ -4658,7 +4798,8 @@ class ChatProvider: ObservableObject {
       return nil
     }
     let accountingPolicy = ChatRunAccountingPolicy(
-      pinnedAdapterID: pinnedSession.profile.adapterId
+      pinnedAdapterID: pinnedSession.profile.adapterId,
+      providerMode: await resolvedAgentClient().providerMode
     )
     telemetryAttempt.bindSessionAdapter(pinnedSession.profile.adapterId)
     telemetryAttempt.bindBridgeModePreference(bridgeMode)
@@ -5052,6 +5193,15 @@ class ChatProvider: ObservableObject {
       // If the caller didn't provide explicit imageData (e.g. screen-capture
       // assistant), fall back to the first image attached by the user.
       var effectiveImageData = imageData
+      // True only when effectiveImageData ends up being an actual capture of
+      // the user's current screen (this parameter's own callers always pass
+      // a live screenshot; see FloatingControlBarWindow.swift) or the
+      // explicit-screen-request evidence below. The attachment and stale
+      // notification-screenshot fallbacks are deliberately NOT screen
+      // captures, so this stays false for them. Threaded through to the
+      // omi-local prompt marker (jsonl-transport.ts) so it describes the
+      // image accurately instead of assuming every image is the live screen.
+      var imageIsScreenCapture = imageData != nil
       if effectiveImageData == nil {
         effectiveImageData = attachmentsForMessage.first(where: { $0.isImage })?.data
       }
@@ -5107,6 +5257,7 @@ class ChatProvider: ObservableObject {
               turnOwner: turnOwner
             )
             effectiveImageData = evidence.imageData
+            imageIsScreenCapture = true
             screenContextPayload = evidence.payload
           } else {
             let rawScreenContextPayloadBox = await ScreenContextWorkContextBuilder.payloadBox(
@@ -5440,6 +5591,7 @@ class ChatProvider: ObservableObject {
           surface: resolvedSurface,
           mode: chatMode.rawValue,
           imageData: effectiveImageData,
+          imageIsScreenCapture: imageIsScreenCapture,
           attachments: Self.queryAttachments(attachmentsForMessage),
           producingTurnId: aiMessageId,
           expectedContext: kernelContext.snapshot.freshness,

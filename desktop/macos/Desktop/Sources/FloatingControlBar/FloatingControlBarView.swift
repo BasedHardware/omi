@@ -1418,10 +1418,7 @@ struct FloatingControlBarView: View {
         // informational — spawning an agent there made no sense.
         if notification.assistantId == "task" {
           Button {
-            let model =
-              ShortcutSettings.shared.selectedModel.isEmpty
-              ? ModelQoS.Claude.defaultSelection
-              : ShortcutSettings.shared.selectedModel
+            let model = AIProvider.resolveQuickChatModel()
             let query = ProactiveTaskExecute.buildQuery(
               title: notification.title,
               message: notification.message

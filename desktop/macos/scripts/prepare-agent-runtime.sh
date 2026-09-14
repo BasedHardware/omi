@@ -152,7 +152,14 @@ install_agent_deps_and_build() {
   log "Installing agent dependencies with npm ci"
   (
     cd "$AGENT_DIR"
-    npm ci --no-fund --no-audit
+    # --include=dev: this build needs typescript/@types/node (devDependencies)
+    # to compile. Without it, an ambient NODE_ENV=production (e.g. inherited
+    # from a parent process) makes npm ci silently skip devDependencies, and
+    # tsc then falls through to whatever `tsc` is on PATH (or fails to
+    # resolve Node's own type declarations), producing hundreds of spurious
+    # "Cannot find module 'fs'" / "Cannot find name 'process'" errors that
+    # look like a real regression but aren't.
+    npm ci --no-fund --no-audit --include=dev
     npm run build --silent
   )
   stage_production_node_modules "$AGENT_DIR" "$AGENT_PACKAGED_NODE_MODULES"

@@ -541,8 +541,6 @@ async function omiRelayContextRaw(): Promise<string | undefined> {
   }
 }
 
-
-
 // ---------------------------------------------------------------------------
 // Denylist patterns
 // ---------------------------------------------------------------------------
@@ -804,6 +802,10 @@ export function classifyFileWrite(filePath: string): DenyDecision | null {
   }
   return null;
 }
+
+/** The provider name pi-mono-extension registers the main local chat model
+ *  under (see the omi-local registerProvider call below). */
+const LOCAL_PROVIDER_NAME = "omi-local";
 
 /** Classify a whole tool_call event by dispatching on toolName.
  *  When OMI_YOLO_MODE=1, the ordinary interactive denylist is bypassed.
@@ -1080,6 +1082,16 @@ async function omiRelayCapabilityRef(): Promise<string | undefined> {
 export const OMI_TOOL_TIMEOUT_MS = 30_000;
 export const OMI_LONG_CONTROL_TOOL_TIMEOUT_MS = 10 * 60_000;
 export const OMI_CHAT_CONTRACT_VERSION = "1";
+
+/** Whether the currently active model's provider is the self-hosted local
+ *  provider. Omi-internal `x-omi-*` telemetry headers (correlation id,
+ *  reasoning effort, JIT budget) must never reach a user-pointed local/LAN
+ *  server: they're diagnostic plumbing for Omi's own cloud gateway, not
+ *  something a self-hosted OpenAI-compatible endpoint should ever see on
+ *  the wire. */
+export function isLocalProviderName(providerName: string | undefined): boolean {
+  return providerName === LOCAL_PROVIDER_NAME;
+}
 
 export function applyOmiProviderHeaders(
   headers: Record<string, string>,
@@ -1794,6 +1806,158 @@ export function __resetUserMcpForTest(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Local server context-window probe
+// ---------------------------------------------------------------------------
+
+/** Used only when the server can't be probed (the previous hardcoded guess). */
+const DEFAULT_LOCAL_CONTEXT_WINDOW = 32_000;
+const LOCAL_CONTEXT_PROBE_TIMEOUT_MS = 2_000;
+
+export interface LocalContextWindowResult {
+  contextWindow: number;
+  source: string;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+/** Strip a trailing "/v1" (or "/v1/") path segment off an OpenAI-compatible
+ *  base URL to recover the server's origin, e.g. "http://127.0.0.1:1234/v1"
+ *  -> "http://127.0.0.1:1234". */
+function localServerOrigin(baseUrl: string): string {
+  return baseUrl.replace(/\/v1\/?$/, "");
+}
+
+/** GET a JSON endpoint with a short timeout. Any failure (network error,
+ *  abort, or non-2xx) resolves to undefined instead of throwing. */
+async function fetchJsonWithTimeout(url: string, fetchImpl: typeof fetch): Promise<unknown> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LOCAL_CONTEXT_PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetchImpl(url, { signal: controller.signal });
+    if (!response.ok) return undefined;
+    return await response.json();
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function probeLmStudioContextWindow(
+  baseUrl: string,
+  modelId: string,
+  fetchImpl: typeof fetch,
+): Promise<LocalContextWindowResult | undefined> {
+  const body = await fetchJsonWithTimeout(`${localServerOrigin(baseUrl)}/api/v0/models`, fetchImpl);
+  const entries = (body as { data?: unknown[] } | undefined)?.data;
+  if (!Array.isArray(entries)) return undefined;
+  const entry = entries.find((e) => (e as { id?: unknown })?.id === modelId) as
+    | { loaded_context_length?: unknown; max_context_length?: unknown }
+    | undefined;
+  if (!entry) return undefined;
+  if (isPositiveInteger(entry.loaded_context_length)) {
+    return { contextWindow: entry.loaded_context_length, source: "lmstudio loaded_context_length" };
+  }
+  if (isPositiveInteger(entry.max_context_length)) {
+    return { contextWindow: entry.max_context_length, source: "lmstudio max_context_length" };
+  }
+  return undefined;
+}
+
+async function probeOpenAiModelsContextWindow(
+  baseUrl: string,
+  modelId: string,
+  fetchImpl: typeof fetch,
+): Promise<LocalContextWindowResult | undefined> {
+  // Matches the settings model-fetch path (AIProvider.fetchLocalModels):
+  // a trailing slash on baseUrl would otherwise produce "/v1//models".
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+  const body = await fetchJsonWithTimeout(`${normalizedBaseUrl}/models`, fetchImpl);
+  const entries = (body as { data?: unknown[] } | undefined)?.data;
+  if (!Array.isArray(entries)) return undefined;
+  const entry = entries.find((e) => (e as { id?: unknown })?.id === modelId) as
+    | { max_model_len?: unknown }
+    | undefined;
+  if (!entry) return undefined;
+  if (isPositiveInteger(entry.max_model_len)) {
+    return { contextWindow: entry.max_model_len, source: "openai-models max_model_len" };
+  }
+  return undefined;
+}
+
+/** Probe the user's local server for `modelId`'s real context window instead
+ *  of trusting a hardcoded guess. pi derives each request's output budget as
+ *  `contextWindow - estimatedConversationTokens - safety`, clamped to at
+ *  least 1 token: a declared window smaller than what the server actually
+ *  loaded silently collapses that budget to 1 once the conversation outgrows
+ *  it. Tries LM Studio's REST API first (it reports the context length the
+ *  model was actually loaded with), then the OpenAI-compatible `/models`
+ *  endpoint some servers (e.g. vLLM) extend with `max_model_len`. Any
+ *  failure (network error, timeout, non-2xx, missing field, or no matching
+ *  model id) falls back to the previous hardcoded default. Never throws. */
+export async function resolveLocalContextWindow(
+  baseUrl: string,
+  modelId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<LocalContextWindowResult> {
+  const lmStudio = await probeLmStudioContextWindow(baseUrl, modelId, fetchImpl);
+  if (lmStudio) return lmStudio;
+
+  const openaiModels = await probeOpenAiModelsContextWindow(baseUrl, modelId, fetchImpl);
+  if (openaiModels) return openaiModels;
+
+  return { contextWindow: DEFAULT_LOCAL_CONTEXT_WINDOW, source: "default" };
+}
+
+/** Register a local OpenAI-compatible provider (LM Studio, Ollama, etc.),
+ *  probing its context window from the server first. */
+async function registerLocalProvider(
+  pi: ExtensionAPI,
+  { name, baseUrl, modelId, apiKey }: { name: string; baseUrl: string; modelId: string; apiKey: string },
+): Promise<void> {
+  const { contextWindow, source } = await resolveLocalContextWindow(baseUrl, modelId);
+  process.stderr.write(`[omi-provider] ${name} context window=${contextWindow} (${source})\n`);
+  pi.registerProvider(name, {
+    api: "openai-completions",
+    baseUrl,
+    apiKey,
+    models: [
+      {
+        id: modelId,
+        name: modelId,
+        reasoning: false,
+        // pi-ai's openai-completions client strips image content blocks
+        // before sending the request whenever `input` doesn't list "image"
+        // (see providers/openai-completions.js): declaring "text" only
+        // silently dropped screenshots even when the user's chosen model
+        // is actually vision-capable. The user picks this model id
+        // themselves, same trust boundary as the cloud provider, which
+        // already declares both.
+        input: ["text", "image"],
+        // Probed from the server above (resolveLocalContextWindow), not
+        // hardcoded: pi derives each request's output budget as
+        // contextWindow - estimatedConversationTokens - safety, and a
+        // window smaller than what the server actually loaded collapses
+        // that budget to 1 token once the conversation outgrows it.
+        contextWindow,
+        maxTokens: 8_192,
+        // Genuinely free, never tracked anywhere, client or server.
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        // pi-ai auto-detects the max-tokens field name from the base URL and
+        // only recognizes a handful of known hosts as "max_tokens"; every
+        // unknown host (including a local LM Studio/Ollama server) falls
+        // back to "max_completion_tokens", which LM Studio silently ignores
+        // so the request would go out with no effective token cap. Force the
+        // field LM Studio (and most local OpenAI-compatible servers) accept.
+        compat: { maxTokensField: "max_tokens" },
+      },
+    ],
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Extension entry point
 // ---------------------------------------------------------------------------
 
@@ -1826,34 +1990,63 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
     process.stderr.write(`[omi-provider] BYOK active — attaching ${Object.keys(byokHeaders).length} X-BYOK headers\n`);
   }
 
-  pi.registerProvider("omi", {
-    api: "openai-completions",
-    baseUrl,
-    apiKey,
-    ...(byokActive ? { headers: byokHeaders } : {}),
-    models: [
-      {
-        id: "omi-sonnet",
-        name: "Omi Sonnet",
-        reasoning: true,
-        input: ["text", "image"],
-        contextWindow: 200_000,
-        maxTokens: 16_384,
-        // Cost set to 0 client-side — tracked server-side by the backend
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      },
-    ],
-  });
+  // Only register the cloud "omi" provider when an API key is actually
+  // configured: pi's registerProvider validates auth eagerly and throws
+  // if it's missing, which would otherwise crash the extension on every
+  // startup for local-only installs that never set OMI_API_KEY.
+  if (apiKey) {
+    pi.registerProvider("omi", {
+      api: "openai-completions",
+      baseUrl,
+      apiKey,
+      ...(byokActive ? { headers: byokHeaders } : {}),
+      models: [
+        {
+          id: "omi-sonnet",
+          name: "Omi Sonnet",
+          reasoning: true,
+          input: ["text", "image"],
+          contextWindow: 200_000,
+          maxTokens: 16_384,
+          // Cost set to 0 client-side, tracked server-side by the backend
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        },
+      ],
+    });
+  }
 
   // Pi asks for headers once per provider request and keeps them for retries,
   // which preserves one safe correlation id across an upstream retry chain.
-  pi.on("before_provider_headers", async (event) => {
+  pi.on("before_provider_headers", async (event, ctx) => {
+    // Local requests go to the user's own server, not Omi's cloud gateway:
+    // these headers are Omi-internal telemetry and must stay off that wire
+    // entirely, not just unbilled.
+    if (isLocalProviderName(ctx?.model?.provider)) return;
     const raw = await omiRelayContextRaw();
     // Per-turn effort lane: typed chat runs "adaptive" (the model decides its
     // own thinking depth), PTT runs "fast" (thinking off, low effort). The
     // gateway translates this into Anthropic thinking/effort parameters.
     applyOmiProviderHeaders(event.headers, raw);
   });
+
+  // Local provider: a user-configured OpenAI-compatible endpoint (e.g. LM
+  // Studio, Ollama): never routes through api.omi.me, never bills or logs
+  // usage server-side. Only registered when both env vars are present, so
+  // this has no effect on installs that haven't configured a local model.
+  const localBaseUrl = process.env.OMI_LOCAL_BASE_URL;
+  const localModelId = process.env.OMI_LOCAL_MODEL_ID;
+  if (localBaseUrl && localModelId) {
+    await registerLocalProvider(pi, {
+      name: "omi-local",
+      baseUrl: localBaseUrl,
+      modelId: localModelId,
+      // Most local OpenAI-compatible servers (LM Studio, Ollama, etc.) don't
+      // check the key, but pi's openai-completions client requires a
+      // non-empty string or it throws before sending the request. Swift
+      // never sets OMI_LOCAL_API_KEY, so there is nothing to read here.
+      apiKey: "not-needed",
+    });
+  }
 
   pi.on("tool_call", async (event): Promise<ToolCallEventResult | void> => {
     let decision: DenyDecision | null = null;

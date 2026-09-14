@@ -242,8 +242,9 @@ final class ChatQueryTelemetryTests: XCTestCase {
   func testEveryFailureClassCarriesABoundedCodeAndRootCause() {
     let allClasses: [ChatQueryErrorClass] = [
       .agentError, .agentRuntime, .attachmentUpload, .authentication, .bridgeUnavailable,
-      .bridgeStartFailed, .browserExtensionMissing, .concurrentRequest, .encoding, .quota,
-      .resourceExhausted, .sessionSetup, .timeout, .toolStall, .transientNetwork, .unknown,
+      .bridgeStartFailed, .browserExtensionMissing, .concurrentRequest, .encoding,
+      .localConfigMissing, .quota, .resourceExhausted, .sessionSetup, .timeout, .toolStall,
+      .transientNetwork, .unknown,
     ]
     let allowedRootCauses = Set(
       [
@@ -380,6 +381,13 @@ final class ChatQueryTelemetryTests: XCTestCase {
     XCTAssertEqual(
       ChatQueryFailureDisposition.classify(BridgeError.failedToStart(.launchFailed)),
       .failed(.bridgeStartFailed)
+    )
+    // Regression: a missing Local base URL/model id used to be telemetered
+    // identically to a real bridge-process launch failure, inflating
+    // bridge_start_failed churn analytics with user-configuration noise.
+    XCTAssertEqual(
+      ChatQueryFailureDisposition.classify(BridgeError.localConfigMissing),
+      .failed(.localConfigMissing)
     )
   }
 

@@ -232,6 +232,16 @@ actor AIUserProfileService {
 
     log("AIUserProfileService: Starting profile generation")
 
+    // Checked before fetching anything: under Local with Cloud-assisted
+    // features off, this always ends in connectorSynthesisDisabled since no
+    // profile is ever persisted on this path (shouldGenerate() stays true),
+    // so the five backend fetches below would otherwise repeat daily for
+    // nothing.
+    guard !AIProvider.shouldSkipConnectorSynthesis() else {
+      log("Skipping profile synthesis: Local provider, Connector synthesis is Off")
+      throw ProfileError.connectorSynthesisDisabled
+    }
+
     // 1. Fetch all data sources in parallel
     let (memories, tasks, goals, conversations, messages) = await fetchDataSources()
 
@@ -401,6 +411,12 @@ actor AIUserProfileService {
     case alreadyGenerating
     case insufficientData
     case databaseNotAvailable
+    /// Local provider active, Connector synthesis is Off (the default). Not
+    /// a failure the user needs to see: every call site already treats a
+    /// thrown generateProfile() error as a silent no-op (see the caller in
+    /// SettingsContentView+BillingHelpers.swift), so this reuses that path
+    /// instead of adding a new user-facing error state.
+    case connectorSynthesisDisabled
 
     var errorDescription: String? {
       switch self {
@@ -410,6 +426,8 @@ actor AIUserProfileService {
         return "Not enough data to generate a profile"
       case .databaseNotAvailable:
         return "Database is not available"
+      case .connectorSynthesisDisabled:
+        return "Connector synthesis is off under the Local provider"
       }
     }
   }

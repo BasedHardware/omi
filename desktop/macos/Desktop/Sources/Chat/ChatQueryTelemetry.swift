@@ -10,6 +10,7 @@ enum ChatQueryErrorClass: String, Equatable, Sendable {
   case browserExtensionMissing = "browser_extension_missing"
   case concurrentRequest = "concurrent_request"
   case encoding
+  case localConfigMissing = "local_config_missing"
   case quota
   case resourceExhausted = "resource_exhausted"
   case sessionSetup = "session_setup"
@@ -30,7 +31,11 @@ enum ChatQueryErrorClass: String, Equatable, Sendable {
     case .authentication, .quota: return .providerClaude
     case .agentError, .agentRuntime, .timeout, .toolStall: return .agentRuntime
     case .bridgeUnavailable, .bridgeStartFailed: return .bridgeProcess
-    case .sessionSetup, .concurrentRequest: return .localSession
+    // A missing Local base URL/model id is a user-configuration gap, not a
+    // bridge-process defect — grouped with the other local-device/client
+    // preconditions rather than under bridgeProcess, so it stops inflating
+    // bridge_start_failed churn analytics.
+    case .sessionSetup, .concurrentRequest, .localConfigMissing: return .localSession
     case .attachmentUpload: return .attachmentPipeline
     case .browserExtensionMissing: return .browserExtension
     case .encoding: return .requestEncoding
@@ -58,6 +63,7 @@ enum ChatQueryErrorClass: String, Equatable, Sendable {
     case .attachmentUpload: return "attachment_upload_failed"
     case .concurrentRequest: return "request_already_active"
     case .encoding: return "encoding_failed"
+    case .localConfigMissing: return "local_config_missing"
     case .resourceExhausted: return "out_of_memory"
     case .transientNetwork: return "transient_network"
     case .quota: return "quota_exceeded"
@@ -136,6 +142,11 @@ enum ChatQueryFailureDisposition: Equatable, Sendable {
         }
       case .failedToStart:
         return .failed(.bridgeStartFailed)
+      case .localConfigMissing:
+        // A user hasn't configured the Local provider's base URL/model id
+        // yet, not a bridge-process defect (the bridge never even attempted
+        // to start): keep it out of bridge_start_failed churn analytics.
+        return .failed(.localConfigMissing)
       case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
         .processExited, .restarting:
         return .failed(.bridgeUnavailable)

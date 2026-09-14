@@ -1383,8 +1383,8 @@ final class DesktopDiagnosticsManager {
     let allowed: Set<String> = [
       "silent_capture", "tool_stall", "agent_error", "agent_runtime", "attachment_upload",
       "authentication", "bridge_unavailable", "bridge_start_failed", "browser_extension_missing",
-      "concurrent_request", "encoding", "quota", "resource_exhausted", "session_setup",
-      "hotkey_conflict", "timeout", "transient_network", "unknown", "user_report",
+      "concurrent_request", "encoding", "local_config_missing", "quota", "resource_exhausted",
+      "session_setup", "hotkey_conflict", "timeout", "transient_network", "unknown", "user_report",
     ]
     return allowed.contains(label) ? label : "other"
   }

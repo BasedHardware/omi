@@ -32,7 +32,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { createServer as createNetServer, type Socket } from "net";
 import { homedir, tmpdir } from "os";
-import { unlinkSync, appendFileSync } from "fs";
+import { unlinkSync, appendFileSync, mkdirSync, writeFileSync } from "fs";
 import type {
   InboundMessage,
   ControlToolRequestMessage,
@@ -116,6 +116,7 @@ import {
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 import { OmiArtifactStorage, defaultArtifactRoot } from "./runtime/artifact-storage.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
+import { parseContextBudgetPercent } from "./runtime/context-snapshot.js";
 import {
   failureFromError,
   sanitizeProcessDiagnostic,
@@ -1637,6 +1638,22 @@ async function main(): Promise<void> {
   const defaultAdapterId = adapterIdForHarnessMode(defaultHarnessMode);
   logErr(`Default harness mode: ${defaultHarnessMode}`);
 
+  // Provider selection: "omi" (default) routes through the Rust backend and
+  // requires Firebase auth below. "omi-local" talks directly to a
+  // user-configured OpenAI-compatible endpoint (see pi-mono-extension) and
+  // never authenticates to Omi at all.
+  const provider = process.env.OMI_PROVIDER || "omi";
+
+  // Local-provider-only context budget: the Swift host sets this env var only
+  // when the Local provider is active (see contextBudgetPercent on
+  // AgentRuntimeKernelOptions and ContextRenderBudget in context-snapshot.ts).
+  const rawContextBudgetPercent = process.env.OMI_CONTEXT_BUDGET_PERCENT;
+  const contextBudgetPercent = parseContextBudgetPercent(rawContextBudgetPercent);
+  const trimmedContextBudgetPercent = rawContextBudgetPercent?.trim();
+  if (trimmedContextBudgetPercent && Number.isFinite(Number.parseInt(trimmedContextBudgetPercent, 10))) {
+    logErr(`[agent] context budget percent=${contextBudgetPercent}`);
+  }
+
   // 1. Start Unix socket for omi-tools relay
   omiToolsPipePath = await startOmiToolsRelay();
   logErr("omi-tools relay started");
@@ -1676,6 +1693,7 @@ async function main(): Promise<void> {
     registry,
     artifactStorage,
     recoverRunInput,
+    contextBudgetPercent,
     onToolCapabilityRejected: (code) => {
       const count = (capabilityRejectionCounts.get(code) ?? 0) + 1;
       capabilityRejectionCounts.set(code, count);
@@ -1692,7 +1710,11 @@ async function main(): Promise<void> {
     await Promise.all([...localAcpAdapters].map((adapter) => adapter.stop()));
   };
   const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
-    if (!authToken) return false;
+    // SECURITY: the "omi" provider authenticates to api.omi.me with a Firebase
+    // ID token. Never fall back to ANTHROPIC_API_KEY: that would leak the
+    // upstream Anthropic provider secret to the Omi backend. Local providers
+    // never send this token in the first place.
+    if (provider === "omi" && !authToken) return false;
     piMonoAuthToken = authToken;
     piMonoClasses ??= await import("./adapters/pi-mono.js");
     if (!registry.has("pi-mono")) {
@@ -1700,6 +1722,8 @@ async function main(): Promise<void> {
         const harness = new piMonoClasses!.PiMonoAdapter({
           omiApiBaseUrl: process.env.OMI_API_BASE_URL,
           authToken: piMonoAuthToken,
+          provider,
+          model: provider === "omi" ? undefined : process.env.OMI_LOCAL_MODEL_ID,
           onDisposed: () => piMonoAdapters.delete(harness),
         });
         piMonoAdapters.add(harness);
@@ -1728,7 +1752,10 @@ async function main(): Promise<void> {
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
   if (!piMonoAvailable && defaultAdapterId === "pi-mono" && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY !== "1") {
-    const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
+    const msg =
+      provider === "omi"
+        ? "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token) for provider \"omi\"; refusing to start"
+        : "pi-mono mode failed to start local provider; refusing to start";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);

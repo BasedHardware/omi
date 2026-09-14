@@ -567,6 +567,12 @@ class ChatToolExecutor {
     guard NegativeFeedbackRemediationFeature.isEnabled else {
       return "Unknown tool: web_search"
     }
+    // Fail closed before any network call: web search always goes to Omi's
+    // backend, a cloud dependency the Local provider does not cover unless
+    // the user has explicitly opted cloud-assisted features on.
+    guard !AIProvider.isLocalProviderFailingClosed else {
+      return "Web search is off under the Local provider (Settings > AI Provider > Cloud-assisted features)"
+    }
     guard !AppState.isPaywalledEffective else {
       return "Web search is only available on paid Omi plans."
     }

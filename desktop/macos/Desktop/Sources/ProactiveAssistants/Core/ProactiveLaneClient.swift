@@ -141,6 +141,13 @@ enum ProactiveLaneClientError: LocalizedError {
   /// Identified basic + non-BYOK pixel call, or a typed 402 `plan_gated`.
   /// Text-only JIT completions stay open (S14 / S24 narrowing).
   case planGated
+  /// The Local provider is active and the user has not opted cloud-assisted
+  /// features on (`AIProvider.localCloudAssistEnabled`). Thrown before any
+  /// network call: this lane's `complete()` is the context-director
+  /// completion (task/insight/suggestion decisions from screen + transcript
+  /// content), a cloud-model call regardless of whether the payload carries
+  /// pixels, so unlike `planGated` this applies to text-only completions too.
+  case localProviderCloudOff
 
   var errorDescription: String? {
     switch self {
@@ -154,6 +161,8 @@ enum ProactiveLaneClientError: LocalizedError {
       return "proactive_owner_changed"
     case .planGated:
       return "proactive_plan_gated"
+    case .localProviderCloudOff:
+      return "proactive_local_provider_cloud_off"
     }
   }
 }
@@ -191,11 +200,23 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
       return "quota_cooldown status=\(status ?? 0)"
     case "plan_gated":
       return "plan_gated status=\(status ?? 402)"
+    case "local_provider_cloud_off":
+      return "local_provider_cloud_off"
     case "network":
       return "network error_type=\(errorType ?? "unknown")"
     default:
       return failure
     }
+  }
+
+  /// True for a classification that reflects the user's own choice (Local
+  /// active, cloud-assisted features off) rather than a bug or a transient
+  /// error. A terminal sink that records this the same way it records a real
+  /// failure would log a "failed extraction" for every eligible context
+  /// transition while the user is simply opted out — see the pre-model
+  /// paywall gate's own "suppressed" terminal state for the same distinction.
+  var isDeliberateSuppression: Bool {
+    failure == "local_provider_cloud_off"
   }
 
   static func classify(_ error: Error) -> ProactiveLaneFailureClassification {
@@ -215,6 +236,9 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
         return ProactiveLaneFailureClassification(failure: "owner_changed", status: nil, errorType: nil)
       case .planGated:
         return ProactiveLaneFailureClassification(failure: "plan_gated", status: 402, errorType: nil)
+      case .localProviderCloudOff:
+        return ProactiveLaneFailureClassification(
+          failure: "local_provider_cloud_off", status: nil, errorType: nil)
       }
     }
     if error is DecodingError {
@@ -453,6 +477,16 @@ actor ProactiveLaneClient {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     responseObserver: (@Sendable (ProactiveLaneResponseObservation) async -> Void)? = nil
   ) async throws -> ProactiveLaneResult {
+    // Local-provider fail-closed gate, checked first and unconditionally (not
+    // only for pixel payloads like the plan-gate check below): this
+    // completion is the context-director's own model call, deciding
+    // suggest/insight/task_candidate/resurface from screen and transcript
+    // content, so it must not reach Omi's backend for either a text-only or
+    // image-bearing prompt while Local is active and the user has not opted
+    // cloud-assisted features on.
+    if AIProvider.isLocalProviderFailingClosed {
+      throw ProactiveLaneClientError.localProviderCloudOff
+    }
     let currentOwner = authorizationSnapshot?.ownerID
     clearCooldownsIfOwnerChanged(currentOwner)
     try checkQuotaCooldown(operation: operation)
@@ -809,7 +843,7 @@ enum ContextProactivityTelemetry {
       "jit_notification_budget", "jit_full_turn_budget", "jit_suppressed",
       "candidate_graduation", "notification_dropped", "jit_execution",
       "http_error", "invalid_structured_output", "invalid_response", "decode",
-      "network", "quota_cooldown", "plan_gated",
+      "network", "quota_cooldown", "plan_gated", "local_provider_cloud_off",
     ])
     let allowedDecisions = Set(["insight", "task_candidate", "focus_nudge", "silence"])
     await MainActor.run {

@@ -249,6 +249,77 @@ final class ContextProactivityEngineTests: XCTestCase {
     XCTAssertEqual(ContextDeliveryBudget.freeGate(input: rebuilt), .masterDisabled)
   }
 
+  /// Regression: `NotificationService.contextDirectorGateInput()` and
+  /// `ContextProactivityEngine.liveDeliveryGateInput()` used to
+  /// hand-duplicate the master-toggle/frequency/paywall/cooldown formula;
+  /// they now both build from the one
+  /// `ContextDeliveryGateInput.contextDirectorGate()`, so every field they
+  /// share must be identical for the same UserDefaults state — only
+  /// `dailyLimit`/`lastGlobalPresentationAt` are legitimately caller-specific
+  /// (a live delivery attempt needs both; a pre-flight check needs neither).
+  @MainActor
+  func testContextDirectorGateSharedBetweenNotificationServiceAndProactivityEngine() {
+    let defaults = UserDefaults.standard
+    let masterKey = NotificationService.masterEnabledDefaultsKey
+    let frequencyKey = NotificationService.frequencyDefaultsKey
+    let providerKey = AIProvider.selectedProviderRawValueKey
+    let cloudAssistKey = AIProvider.cloudAssistModeKey
+    let previousMaster = defaults.object(forKey: masterKey)
+    let previousFrequency = defaults.object(forKey: frequencyKey)
+    let previousProvider = defaults.string(forKey: providerKey)
+    let previousCloudAssist = defaults.string(forKey: cloudAssistKey)
+    defer {
+      if let previousMaster {
+        defaults.set(previousMaster, forKey: masterKey)
+      } else {
+        defaults.removeObject(forKey: masterKey)
+      }
+      if let previousFrequency {
+        defaults.set(previousFrequency, forKey: frequencyKey)
+      } else {
+        defaults.removeObject(forKey: frequencyKey)
+      }
+      if let previousProvider {
+        defaults.set(previousProvider, forKey: providerKey)
+      } else {
+        defaults.removeObject(forKey: providerKey)
+      }
+      if let previousCloudAssist {
+        defaults.set(previousCloudAssist, forKey: cloudAssistKey)
+      } else {
+        defaults.removeObject(forKey: cloudAssistKey)
+      }
+    }
+
+    for (provider, cloudAssist) in [
+      (ChatProvider.BridgeMode.piMono.rawValue, AIProvider.CloudAssistMode.off.rawValue),
+      (ChatProvider.BridgeMode.local.rawValue, AIProvider.CloudAssistMode.off.rawValue),
+      (ChatProvider.BridgeMode.local.rawValue, AIProvider.CloudAssistMode.cloud.rawValue),
+    ] {
+      defaults.set(true, forKey: masterKey)
+      defaults.set(2, forKey: frequencyKey)
+      defaults.set(provider, forKey: providerKey)
+      defaults.set(cloudAssist, forKey: cloudAssistKey)
+
+      let fromNotificationService = NotificationService.contextDirectorGateInput()
+      let fromProactivityEngine = ContextProactivityEngine.liveDeliveryGateInput(
+        lastGlobalPresentationAt: nil)
+
+      XCTAssertEqual(
+        fromNotificationService.masterEnabled, fromProactivityEngine.masterEnabled,
+        "provider=\(provider) cloudAssist=\(cloudAssist)")
+      XCTAssertEqual(
+        fromNotificationService.frequencyLevel, fromProactivityEngine.frequencyLevel,
+        "provider=\(provider) cloudAssist=\(cloudAssist)")
+      XCTAssertEqual(
+        fromNotificationService.paywalled, fromProactivityEngine.paywalled,
+        "provider=\(provider) cloudAssist=\(cloudAssist)")
+      XCTAssertEqual(
+        fromNotificationService.cooldownSeconds, fromProactivityEngine.cooldownSeconds,
+        "provider=\(provider) cloudAssist=\(cloudAssist)")
+    }
+  }
+
   func testAttemptGateRebuildSuppressesBeforeBudgetReservation() {
     let allowed = ContextDeliveryGateInput(
       masterEnabled: true,
@@ -778,6 +849,30 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
     XCTAssertEqual(provenance["failure"] as? String, "quota_cooldown")
     XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 429)
     XCTAssertNil(provenance["error_type"])
+  }
+
+  /// Regression: Local+cloud-off is the user's own choice, thrown before any
+  /// network call — recording it the same way as a real transport failure
+  /// ("failed") logged a bogus "failed extraction" on every eligible context
+  /// transition for a user who simply opted out. It must land the same way
+  /// the pre-model paywall gate already does for an intentional skip.
+  func testEngineRecordsLocalProviderCloudOffAsSuppressedNotFailed() async throws {
+    let deliveryID = try await seedAttemptedDelivery()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0)
+
+    await engine.recordDirectorFailure(
+      deliveryID: deliveryID,
+      error: ProactiveLaneClientError.localProviderCloudOff)
+
+    let row = try await fetchDelivery(id: deliveryID)
+    XCTAssertEqual(
+      row["lifecycleState"] as String?, "suppressed",
+      "a deliberate Local+cloud-off skip must not be recorded as a failure")
+    let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
+    XCTAssertEqual(provenance["failure"] as? String, "local_provider_cloud_off")
   }
 
   func testEngineRecordsDecodeProvenanceDistinctFromHttpError() async throws {

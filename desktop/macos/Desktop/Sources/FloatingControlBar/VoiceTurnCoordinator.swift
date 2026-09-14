@@ -124,7 +124,10 @@ final class VoiceTurnCoordinator {
       AuthorizedToolExecution.isOwnerCurrent($0)
     }
   ) {
-    domain = VoiceTurnDomain(model: model)
+    // Read on every published fact so a provider switch in Settings applies
+    // to the next hold-to-talk without a relaunch.
+    domain = VoiceTurnDomain(
+      model: model, providerResponseDeadline: { AIProvider.voiceProviderResponseDeadline })
     self.scheduler = scheduler ?? TaskVoiceTurnDeadlineScheduler()
     self.timelineLimit = max(1, timelineLimit)
     self.requiresAuthenticatedOwner = requiresAuthenticatedOwner

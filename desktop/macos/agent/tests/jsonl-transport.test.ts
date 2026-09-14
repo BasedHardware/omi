@@ -2,9 +2,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { OutboundMessageDraft, QueryMessage } from "../src/protocol.js";
+import type { PromptBlock } from "../src/adapters/interface.js";
 import {
   JsonlTransport,
   type McpServerBuilder,
@@ -1234,6 +1235,153 @@ describe("JsonlTransport kernel-owned query contract", () => {
         full: { prompt: "   " },
       },
     }))).rejects.toThrow("jit source projection full prompt is missing");
+    store.close();
+  });
+});
+
+const SCREEN_MARKER =
+  "[A screenshot of the user's current screen is attached to this message as an image. Look at the attached image and answer from it directly. Do not call screenshot or capture_screen for this request; the attached image is the current screen.]";
+const ATTACHED_IMAGE_MARKER =
+  "[An image is attached to this message. Look at the attached image and answer from it directly.]";
+
+// promptBlocks() is private. These tests call it directly to exercise this unit in isolation;
+// see the "end-to-end through the kernel" describe block below for coverage through the public
+// handleQuery entry point, which additionally proves the marker survives kernel-core.ts's
+// prompt-block rebuild (see kernel-core.ts ~line 1340).
+function promptBlocksFor(transport: JsonlTransport, message: QueryMessage): PromptBlock[] {
+  return (transport as unknown as { promptBlocks(message: QueryMessage): PromptBlock[] }).promptBlocks(message);
+}
+
+describe("JsonlTransport promptBlocks screen marker", () => {
+  let originalProvider: string | undefined;
+
+  beforeEach(() => {
+    originalProvider = process.env.OMI_PROVIDER;
+  });
+
+  afterEach(() => {
+    if (originalProvider === undefined) delete process.env.OMI_PROVIDER;
+    else process.env.OMI_PROVIDER = originalProvider;
+  });
+
+  it("local provider, image present and flagged as a screen capture: blocks are [image, text] and text ends with the screen marker paragraph", () => {
+    process.env.OMI_PROVIDER = "omi-local";
+    const { store, session, transport } = fixture();
+    const blocks = promptBlocksFor(
+      transport,
+      query(session.sessionId, { imageBase64: "AAAA", imageIsScreenCapture: true, prompt: "what is on my screen" }),
+    );
+
+    expect(blocks.map((block) => block.type)).toEqual(["image", "text"]);
+    const text = blocks.filter((block) => block.type === "text").map((block) => block.text).join("");
+    expect(text).toBe(`what is on my screen\n\n${SCREEN_MARKER}`);
+    store.close();
+  });
+
+  it("local provider, image present but NOT flagged as a screen capture (a user attachment): text ends with the neutral image marker instead", () => {
+    // Regression: this marker used to be unconditional on OMI_PROVIDER alone,
+    // so a user-attached photo (not a screen capture) was also told to the
+    // model as "the current screen" — a false statement that could also
+    // suppress a legitimate screen capture for an unrelated question.
+    process.env.OMI_PROVIDER = "omi-local";
+    const { store, session, transport } = fixture();
+    const blocks = promptBlocksFor(
+      transport,
+      query(session.sessionId, { imageBase64: "AAAA", prompt: "what does this photo show" }),
+    );
+
+    expect(blocks.map((block) => block.type)).toEqual(["image", "text"]);
+    const text = blocks.filter((block) => block.type === "text").map((block) => block.text).join("");
+    expect(text).toBe(`what does this photo show\n\n${ATTACHED_IMAGE_MARKER}`);
+    store.close();
+  });
+
+  it("cloud provider ('omi' or unset), image present: text is exactly the original prompt regardless of imageIsScreenCapture", () => {
+    for (const provider of ["omi", undefined] as const) {
+      if (provider === undefined) delete process.env.OMI_PROVIDER;
+      else process.env.OMI_PROVIDER = provider;
+      const { store, session, transport } = fixture();
+      const blocks = promptBlocksFor(
+        transport,
+        query(session.sessionId, { imageBase64: "AAAA", imageIsScreenCapture: true, prompt: "what is on my screen" }),
+      );
+
+      expect(blocks.map((block) => block.type)).toEqual(["image", "text"]);
+      const text = blocks.filter((block) => block.type === "text").map((block) => block.text).join("");
+      expect(text).toBe("what is on my screen");
+      store.close();
+    }
+  });
+
+  it("local provider, no image: text is exactly the original prompt", () => {
+    process.env.OMI_PROVIDER = "omi-local";
+    const { store, session, transport } = fixture();
+    const blocks = promptBlocksFor(transport, query(session.sessionId, { prompt: "no screen here" }));
+
+    expect(blocks.map((block) => block.type)).toEqual(["text"]);
+    const text = blocks.filter((block) => block.type === "text").map((block) => block.text).join("");
+    expect(text).toBe("no screen here");
+    store.close();
+  });
+});
+
+function textOf(blocks: PromptBlock[]): string {
+  return blocks
+    .filter((block): block is Extract<PromptBlock, { type: "text" }> => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+}
+
+describe("JsonlTransport promptBlocks screen marker: end-to-end through the kernel", () => {
+  let originalProvider: string | undefined;
+
+  beforeEach(() => {
+    originalProvider = process.env.OMI_PROVIDER;
+  });
+
+  afterEach(() => {
+    if (originalProvider === undefined) delete process.env.OMI_PROVIDER;
+    else process.env.OMI_PROVIDER = originalProvider;
+  });
+
+  it("local provider, image: the adapter receives [image, text] and the text carries the User Message header, the prompt, and the marker", async () => {
+    process.env.OMI_PROVIDER = "omi-local";
+    const { store, adapter, session, transport } = fixture();
+    await transport.handleQuery(
+      query(session.sessionId, { imageBase64: "AAAA", imageIsScreenCapture: true, prompt: "what is on my screen" }),
+    );
+
+    const sentBlocks = adapter.executed.at(-1)!.prompt;
+    expect(sentBlocks.map((block) => block.type)).toEqual(["image", "text"]);
+    const text = textOf(sentBlocks);
+    expect(text).toContain("# User Message");
+    expect(text).toContain("what is on my screen");
+    expect(text).toContain(SCREEN_MARKER);
+    store.close();
+  });
+
+  it("cloud provider, image: the adapter's text carries the original prompt and no marker", async () => {
+    delete process.env.OMI_PROVIDER;
+    const { store, adapter, session, transport } = fixture();
+    await transport.handleQuery(query(session.sessionId, { imageBase64: "AAAA", prompt: "what is on my screen" }));
+
+    const sentBlocks = adapter.executed.at(-1)!.prompt;
+    const text = textOf(sentBlocks);
+    expect(text).toContain("what is on my screen");
+    expect(text).not.toContain(SCREEN_MARKER);
+    store.close();
+  });
+
+  it("no-image query is unchanged: the adapter's text carries the User Message header and the original prompt", async () => {
+    delete process.env.OMI_PROVIDER;
+    const { store, adapter, session, transport } = fixture();
+    await transport.handleQuery(query(session.sessionId, { prompt: "no screen here" }));
+
+    const sentBlocks = adapter.executed.at(-1)!.prompt;
+    expect(sentBlocks.map((block) => block.type)).toEqual(["text"]);
+    const text = textOf(sentBlocks);
+    expect(text).toContain("# User Message");
+    expect(text).toContain("no screen here");
     store.close();
   });
 });

@@ -15,7 +15,8 @@ export type OmiToolCondition =
   | "typedChatCoordinatorOnly"
   | "screenContext"
   | "screenContextOrOnboarding"
-  | "jitKnowledgeToolsEnabled";
+  | "jitKnowledgeToolsEnabled"
+  | "realtimeVoiceOnly";
 export type OmiToolExecutorKind = "swiftTool" | "runtimeControl" | "nodeTool" | "localApiOnly";
 export type OmiToolTimeoutClass = "normal" | "long";
 export type OmiToolSurface = "desktop_chat" | "realtime_voice" | "onboarding" | "task_chat";
@@ -2151,12 +2152,14 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     intendedForAgents: true,
     runtimePreconditions: ["Realtime voice only; requires Screen Recording permission."],
-    // Realtime voice invokes this through the same pi-mono runtime capability
-    // fence as other kernel-authorized tools. The surface still limits the
-    // Swift executor to realtime voice; without this projection the runtime
-    // rejects every provider screenshot call as tool_not_allowed.
+    // The surfaces patch above limits Swift execution to realtime voice; this
+    // condition additionally keeps the tool out of the typed-chat and
+    // push-to-talk batch projections (main_chat, floating_chat), where the
+    // Swift executor always rejects it as unknown_realtime_invocation. Without
+    // realtimeVoiceOnly here, every non-realtime provider run advertised
+    // screenshot and got a guaranteed-failure tool in its list.
     adapters: {
-      "pi-mono": { advertised: true },
+      "pi-mono": { advertised: true, condition: "realtimeVoiceOnly" },
     },
   },
   {
@@ -2641,6 +2644,11 @@ export const OMI_CHAT_FIRST_TOOL_MANIFEST_DIGEST = `sha256:${createHash("sha256"
   .update(canonicalManifestJson(allOmiToolManifest))
   .digest("hex")}` as const;
 
+// Mirrors REALTIME_VOICE_SURFACE_KINDS in run-tool-capability.ts. Not imported
+// from there to avoid a cycle (that module imports this one for the adapter
+// projection helpers below).
+const REALTIME_VOICE_SURFACE_KINDS = new Set(["realtime", "realtime_voice"]);
+
 export function isToolAvailableForContext(
   availability: OmiToolAdapterAvailability | undefined,
   context: OmiToolProjectionContext = {},
@@ -2656,6 +2664,9 @@ export function isToolAvailableForContext(
   if (availability.condition === "screenContext") return context.screenContext === true;
   if (availability.condition === "screenContextOrOnboarding") return context.screenContext === true || context.onboarding === true;
   if (availability.condition === "jitKnowledgeToolsEnabled") return context.jitKnowledgeToolsEnabled === true;
+  if (availability.condition === "realtimeVoiceOnly") {
+    return context.surfaceKind !== undefined && REALTIME_VOICE_SURFACE_KINDS.has(context.surfaceKind);
+  }
   return true;
 }
 

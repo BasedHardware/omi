@@ -761,11 +761,13 @@ class PushToTalkManager: ObservableObject {
 
   // MARK: - Listening Lifecycle
 
-  /// True iff the user is on the Omi account (not BYOK) and has hit the monthly free-tier
-  /// chat-question limit. PTT turns count toward that limit (desktop_chat_realtime), so they
-  /// must be gated by it too — same as typed chat (ChatProvider / floating bar). Without this,
-  /// a free user over 30 questions could keep talking for free. Posts the same usage-limit
-  /// popup and returns true so the caller early-returns.
+  /// True iff the user is not exempt (BYOK, or Local provider active, see
+  /// `isPushToTalkUsageLimitBlocked`) and has
+  /// hit the monthly free-tier chat-question limit. PTT turns count toward
+  /// that limit (desktop_chat_realtime), so they must be gated by it too,
+  /// same as typed chat (ChatProvider / floating bar). Without this, a free
+  /// user over 30 questions could keep talking for free. Posts the same
+  /// usage-limit popup and returns true so the caller early-returns.
   private func isBlockedByUsageLimit() -> Bool {
     guard isPushToTalkUsageLimitBlocked else { return false }
     log("PushToTalkManager: PTT blocked — monthly free-tier chat limit reached")
@@ -922,6 +924,35 @@ class PushToTalkManager: ObservableObject {
       return true
     default:
       return false
+    }
+  }
+
+  /// Classifies a batch-transcription failure into the terminal reason it
+  /// should end the turn with. A plan-limit refusal (HTTP 402) must not read
+  /// as a generic transcription failure: the user-facing hint and the
+  /// usage-limit popup both depend on distinguishing the two.
+  static func transcriptionTerminalReason(for error: Error) -> VoiceTurnTerminalReason {
+    if let transcriptionError = error as? TranscriptionService.TranscriptionError,
+      case .planLimitReached = transcriptionError
+    {
+      return .transcriptionPlanLimit
+    }
+    return .transcriptionFailed
+  }
+
+  /// Ends a turn after a batch-transcription failure: plan-limit refusals
+  /// surface the usage-limit popup, everything else publishes a generic
+  /// transcription-failed terminal. Shared by the three batch-STT catch
+  /// sites that all need this same classify-then-publish sequence.
+  private func publishBatchTranscriptionFailure(turnID: VoiceTurnID, error: Error) {
+    let terminalReason = Self.transcriptionTerminalReason(for: error)
+    if terminalReason == .transcriptionPlanLimit {
+      NotificationCenter.default.post(
+        name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "transcription"])
+      self.voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .transcriptionPlanLimit))
+    } else {
+      self.voiceTurnCoordinator.publish(
+        .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
     }
   }
 
@@ -1689,8 +1720,7 @@ class PushToTalkManager: ObservableObject {
             transcriptLength: nil,
             turnKind: .question,
             audioSeconds: Double(audioData.count / 2) / 16000.0)
-          self.voiceTurnCoordinator.publish(
-            .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
+          self.publishBatchTranscriptionFailure(turnID: turnID, error: error)
           return
         }
         self.sendTranscript(turnID: turnID)
@@ -2505,8 +2535,7 @@ class PushToTalkManager: ObservableObject {
             "stt_model": "unknown",
             "user_visible": true,
           ])
-        self.voiceTurnCoordinator.publish(
-          .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
+        self.publishBatchTranscriptionFailure(turnID: turnID, error: error)
         return
       }
       self.sendTranscript(turnID: turnID)
@@ -3566,12 +3595,16 @@ class PushToTalkManager: ObservableObject {
         let timedOut = (error as? DictationPolisher.PolishError) == .timedOut
         var planGated = false
         if case GeminiClient.GeminiClientError.planGated = error { planGated = true }
+        var localProviderCloudOff = false
+        if case GeminiClient.GeminiClientError.localProviderCloudOff = error { localProviderCloudOff = true }
         log(
           "PushToTalkManager: dictation polish \(timedOut ? "timed out" : "failed") — "
             + "keeping the formatted transcript (\(error.localizedDescription))")
         DesktopDiagnosticsManager.shared.recordFallback(
           area: "voice_typing", from: "llm_polish", to: "local_format",
-          reason: timedOut ? "timeout" : (planGated ? "quota" : "other"), outcome: .degraded)
+          reason: timedOut
+            ? "timeout" : (planGated ? "quota" : (localProviderCloudOff ? "local_provider_cloud_off" : "other")),
+          outcome: .degraded)
       }
       guard isCurrent() else {
         run.abandoned = true
@@ -4152,8 +4185,7 @@ extension PushToTalkManager {
           reason: capturedReason,
           outcome: .exhausted,
           extra: ["stt_provider": "unknown", "stt_model": "unknown", "user_visible": false])
-        self.voiceTurnCoordinator.publish(
-          .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
+        self.publishBatchTranscriptionFailure(turnID: turnID, error: error)
         return
       }
       self.sendTranscript(turnID: turnID)

@@ -667,6 +667,89 @@ describe("PiMonoAdapter prompt correlation", () => {
     );
   });
 
+  it("rejects an empty length-stop completion with an input-token-aware message", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "keep going" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+
+    (adapter as any).handleTurnEnd({
+      type: "turn_end",
+      message: {
+        role: "assistant",
+        content: [],
+        stopReason: "length",
+        usage: { input: 41101, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 41101 },
+      },
+    });
+
+    await expect(prompt).rejects.toThrow("returned no text");
+    await expect(prompt).rejects.toThrow("41,101");
+    // Regression: this message used to unconditionally tell every provider
+    // to "raise the model's context length in your local server", which is
+    // not actionable advice for a cloud (non-omi-local) provider.
+    await expect(prompt).rejects.not.toThrow("local server");
+  });
+
+  it("points to the local server's context length only for omi-local", async () => {
+    const { adapter } = createAdapter({ provider: "omi-local", model: "qwen3.8-27b-mlx" });
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "keep going" }],
+      [],
+      "act",
+      () => {},
+      async () => ""
+    );
+
+    (adapter as any).handleTurnEnd({
+      type: "turn_end",
+      message: {
+        role: "assistant",
+        content: [],
+        stopReason: "length",
+        usage: { input: 41101, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 41101 },
+      },
+    });
+
+    await expect(prompt).rejects.toThrow("raise the model's context length in your local server");
+  });
+
+  it("still resolves a length-stop completion that carries text", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "keep going" }],
+      [],
+      "act",
+      () => {},
+      async () => ""
+    );
+
+    (adapter as any).handleTurnEnd({
+      type: "turn_end",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "here is as much as fit" }],
+        stopReason: "length",
+        usage: { input: 41101, output: 100, cacheRead: 0, cacheWrite: 0, totalTokens: 41201 },
+      },
+    });
+
+    await expect(prompt).resolves.toMatchObject({ text: "here is as much as fit" });
+  });
+
   it("normalizes bare provider HTTP status errors before surfacing them", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1");
@@ -989,6 +1072,17 @@ describe("PiMonoAdapter source-level invariants", () => {
     }).jitKnowledgeToolsEnabled).toBe(false);
   });
 
+  it("preserves realtime_voice as surfaceKind without enabling chat-first UI", () => {
+    // Regression: only "main_chat"/"floating_chat" used to survive this
+    // function; "realtime_voice" (and anything else) came out as surfaceKind
+    // undefined, which fed straight into the tool-manifest projection and
+    // hid every realtimeVoiceOnly-gated tool (e.g. screenshot) from PTT runs.
+    const projection = toolProjectionFromMetadata({ surfaceKind: "realtime_voice" });
+    expect(projection.surfaceKind).toBe("realtime_voice");
+    expect(projection.chatFirstUi).toBe(false);
+    expect(projection.controlGeneration).toBeNull();
+  });
+
   it("derives the bounded proactive projection only from a valid JIT budget", () => {
     const budget = {
       contractVersion: "jit-cloud-qa-v1",
@@ -1156,6 +1250,27 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     expect(legacyOptions.env.OMI_CHAT_FIRST_CONTROL_GENERATION).toBeUndefined();
     await adapter.stop();
   });
+
+  it("still projects OMI_SURFACE_KIND=realtime_voice, with no chat-first UI", async () => {
+    // Regression: setToolProjection used to keep surfaceKind only for
+    // "main_chat"/"floating_chat" and drop everything else (including
+    // "realtime_voice"), so a realtime PTT run's env.OMI_SURFACE_KIND came
+    // through as undefined and omi-tool-manifest.ts's realtimeVoiceOnly gate
+    // (e.g. the screenshot tool) always evaluated false for it.
+    const adapter = new PiMonoAdapter({ authToken: "test-token" }, "/fake/pi", "/fake/ext.ts");
+    await adapter.setToolProjection({
+      surfaceKind: "realtime_voice",
+      chatFirstUi: false,
+      controlGeneration: null,
+    });
+    await adapter.start();
+
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [string, string[], { env: Record<string, string> }];
+    expect(options.env.OMI_SURFACE_KIND).toBe("realtime_voice");
+    expect(options.env.OMI_CHAT_FIRST_UI).toBeUndefined();
+    expect(options.env.OMI_CHAT_FIRST_CONTROL_GENERATION).toBeUndefined();
+    await adapter.stop();
+  });
 });
 
 describe("PiMonoAdapter capabilities", () => {
@@ -1163,6 +1278,129 @@ describe("PiMonoAdapter capabilities", () => {
     const { adapter } = createAdapter();
 
     expect(adapter.supportsFeature(HarnessFeature.SESSION_RESUME)).toBe(false);
+  });
+});
+
+describe("PiMonoAdapter local provider", () => {
+  beforeEach(() => {
+    vi.mocked(spawn).mockClear();
+  });
+
+  it("throws when provider is omi (default) and authToken is missing", async () => {
+    const config: HarnessConfig = {};
+    const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
+    await expect(adapter.start()).rejects.toThrow(
+      'requires config.authToken (Firebase ID token) for provider "omi"'
+    );
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("does not require authToken when provider is omi-local", async () => {
+    const config: HarnessConfig = {
+      provider: "omi-local",
+      model: "qwen3.8-27b-mlx",
+    };
+    const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
+    await expect(adapter.start()).resolves.toBeUndefined();
+
+    const [, args] = vi.mocked(spawn).mock.calls[0];
+    expect(args).toEqual(expect.arrayContaining([
+      "--provider", "omi-local",
+      "--model", "qwen3.8-27b-mlx",
+    ]));
+
+    await adapter.stop();
+  });
+
+  it("throws when provider is omi-local and no model is configured", async () => {
+    // Regression: the adapter used to silently fall back to "omi-sonnet" (a
+    // cloud model id) for a misconfigured omi-local launch instead of
+    // failing fast, which would have asked the user's own server for a
+    // model it was never told to serve.
+    const config: HarnessConfig = { provider: "omi-local" };
+    const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
+    await expect(adapter.start()).rejects.toThrow(
+      'requires config.model for provider "omi-local"'
+    );
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it("does not set OMI_API_KEY in the subprocess env for a local provider", async () => {
+    const config: HarnessConfig = {
+      provider: "omi-local",
+      model: "qwen3.8-27b-mlx",
+    };
+    const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
+    await adapter.start();
+
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [string, string[], { env: Record<string, string> }];
+    expect(options.env.OMI_API_KEY).toBeUndefined();
+    expect(options.env.ANTHROPIC_API_KEY).toBeUndefined();
+
+    await adapter.stop();
+  });
+
+  it("createSession targets the configured local model regardless of the requested model id", async () => {
+    const config: HarnessConfig = {
+      provider: "omi-local",
+      model: "qwen3.8-27b-mlx",
+    };
+    const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
+    const sendCommand = vi.fn();
+    (adapter as any).sendCommand = sendCommand;
+
+    // Swift/ChatProvider still requests a Claude model id, the local
+    // provider must ignore it and target its one configured model.
+    await adapter.createSession({ cwd: "/tmp", model: "claude-sonnet-4-6" });
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "set_model",
+        provider: "omi-local",
+        modelId: "qwen3.8-27b-mlx",
+      })
+    );
+  });
+
+  it("setModel ignores the requested model id for a local provider", async () => {
+    const config: HarnessConfig = {
+      provider: "omi-local",
+      model: "qwen3.8-27b-mlx",
+    };
+    const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
+    const sendCommand = vi.fn();
+    (adapter as any).sendCommand = sendCommand;
+
+    await adapter.setModel("session-1", "claude-opus-4-6");
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "set_model",
+        provider: "omi-local",
+        modelId: "qwen3.8-27b-mlx",
+      })
+    );
+  });
+
+  it("regression: default provider still maps Claude ids to omi-sonnet", async () => {
+    // MODEL_MAP consolidated every claude-* id (including opus variants) to
+    // "omi-sonnet" upstream of this branch; pi-mono-extension's "omi"
+    // provider registers only that one model now. This asserts the local
+    // provider addition didn't disturb that existing mapping.
+    const config: HarnessConfig = { authToken: "test-token" };
+    const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
+    const sendCommand = vi.fn();
+    (adapter as any).sendCommand = sendCommand;
+
+    await adapter.createSession({ cwd: "/tmp", model: "claude-opus-4-6" });
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "set_model",
+        provider: "omi",
+        modelId: "omi-sonnet",
+      })
+    );
   });
 });
 
