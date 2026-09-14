@@ -18,6 +18,8 @@ import {
   tasksSearchEmptyCopy,
   compactHomeTodayTasksTitleCopy,
   compactHomeTodayTasksHidesEmpty,
+  compactHomeConversationsEmptyCopy,
+  compactHomeConversationsHidesEmpty,
   appsEmptyCopy,
   appsCreatedByMeCopy,
   conversationDisplayTitle,
@@ -3299,6 +3301,15 @@ test('task empty copy names Flutter noTasksYet', () => {
   );
   expect(compactHomeTodayTasksHidesEmpty(tasksEmptyCopy())).toBe(true);
   expect(compactHomeTodayTasksHidesEmpty('Tasks are incomplete.')).toBe(false);
+  expect(compactHomeConversationsEmptyCopy()).toBe('No recaps yet');
+  expect(compactHomeConversationsHidesEmpty(undefined)).toBe(true);
+  expect(compactHomeConversationsHidesEmpty('')).toBe(true);
+  expect(
+    compactHomeConversationsHidesEmpty(compactHomeConversationsEmptyCopy()),
+  ).toBe(true);
+  expect(compactHomeConversationsHidesEmpty('Recaps are incomplete.')).toBe(
+    false,
+  );
 });
 
 test('task search empty copy names Flutter noResultsFound', () => {

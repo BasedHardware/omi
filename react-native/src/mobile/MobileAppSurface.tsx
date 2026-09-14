@@ -26,6 +26,7 @@ import {
   dailySummaryDateCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
+  compactHomeConversationsHidesEmpty,
   compactHomeTodayTasksHidesEmpty,
   compactHomeTodayTasksTitleCopy,
   taskDisplayTitle,
@@ -527,14 +528,25 @@ export function MobileAppSurface({
     if (dailySummariesError !== null || dailySummaryCards.length > 0) {
       items.push({kind: 'daily-summaries', key: 'daily-summaries'});
     }
-    items.push(
-      {kind: 'recaps', key: 'recaps'},
-      {kind: 'mind-map', key: 'mind-map'},
-    );
+    if (
+      !(
+        recapStatus === 'ready' &&
+        recaps.length === 0 &&
+        compactHomeConversationsHidesEmpty(recapEmptyCopy)
+      )
+    ) {
+      items.push(
+        {kind: 'recaps', key: 'recaps'},
+        {kind: 'mind-map', key: 'mind-map'},
+      );
+    }
     return items;
   }, [
     dailySummariesError,
     dailySummaryCards.length,
+    recapEmptyCopy,
+    recapStatus,
+    recaps.length,
     taskEmptyCopy,
     taskStatus,
     tasks.length,
@@ -650,6 +662,16 @@ export function MobileAppSurface({
         );
       }
       if (item.kind === 'recaps') {
+        if (recapStatus === 'ready' && recaps.length === 0) {
+          if (compactHomeConversationsHidesEmpty(recapEmptyCopy)) {
+            return <View />;
+          }
+          return (
+            <View style={styles.section}>
+              <Text style={styles.stateText}>{recapEmptyCopy}</Text>
+            </View>
+          );
+        }
         return (
           <View style={styles.section}>
             <SectionHeader
@@ -658,30 +680,20 @@ export function MobileAppSurface({
               title="Conversations"
             />
             {recapStatus === 'ready' ? (
-              recaps.length === 0 ? (
-                <View
-                  accessibilityLabel="recaps empty state"
-                  style={styles.statePanel}>
-                  <Text style={styles.stateText}>
-                    {recapEmptyCopy ?? 'No recaps yet'}
-                  </Text>
-                </View>
-              ) : (
-                <>
-                  <FlatList
-                    data={recaps}
-                    horizontal
-                    keyExtractor={recap => recap.id}
-                    renderItem={({item: recap}) => (
-                      <RecapCard onPress={onOpenRecap} recap={recap} />
-                    )}
-                    showsHorizontalScrollIndicator={false}
-                  />
-                  {recapCoverageCopy ? (
-                    <Text style={styles.stateText}>{recapCoverageCopy}</Text>
-                  ) : null}
-                </>
-              )
+              <>
+                <FlatList
+                  data={recaps}
+                  horizontal
+                  keyExtractor={recap => recap.id}
+                  renderItem={({item: recap}) => (
+                    <RecapCard onPress={onOpenRecap} recap={recap} />
+                  )}
+                  showsHorizontalScrollIndicator={false}
+                />
+                {recapCoverageCopy ? (
+                  <Text style={styles.stateText}>{recapCoverageCopy}</Text>
+                ) : null}
+              </>
             ) : (
               <StatePanel
                 errorCopy={recapErrorCopy}
@@ -692,6 +704,13 @@ export function MobileAppSurface({
             )}
           </View>
         );
+      }
+      if (
+        recapStatus === 'ready' &&
+        recaps.length === 0 &&
+        compactHomeConversationsHidesEmpty(recapEmptyCopy)
+      ) {
+        return <View />;
       }
       return (
         <View style={styles.section}>

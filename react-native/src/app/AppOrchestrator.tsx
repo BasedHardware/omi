@@ -45,6 +45,7 @@ import {
   conversationListTimeCopy,
   conversationRecapTitle,
   compactHomeDeviceLabelCopy,
+  compactHomeConversationsEmptyCopy,
   deviceBatteryPercentCopy,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
@@ -1344,7 +1345,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             : null,
           false,
           '',
-          'No recaps yet',
+          compactHomeConversationsEmptyCopy(),
         )}
         recapCoverageCopy={
           readOutcomes?.conversations.status === 'success'

@@ -608,6 +608,19 @@ export function compactHomeTodayTasksHidesEmpty(
   );
 }
 
+export function compactHomeConversationsEmptyCopy(): string {
+  return 'No recaps yet';
+}
+
+export function compactHomeConversationsHidesEmpty(
+  emptyCopy: string | null | undefined,
+): boolean {
+  if (emptyCopy == null || emptyCopy === '') {
+    return true;
+  }
+  return emptyCopy === compactHomeConversationsEmptyCopy();
+}
+
 export function tasksSearchEmptyCopy(): string {
   return 'No results found';
 }

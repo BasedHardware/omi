@@ -57,6 +57,7 @@ import {
   deviceBatteryPercentCopy,
   formatTaskDue,
   compactHomeTodayTasksTitleCopy,
+  compactHomeConversationsEmptyCopy,
   tasksEmptyCopy,
 } from '../desktopReadClient';
 import {MobileAppSurface, type MobileAppSurfaceProps} from './MobileAppSurface';
@@ -354,14 +355,47 @@ test('mounted apps content is not replaced by an empty catalogue', () => {
   expect(renderedText(renderer)).not.toContain('No apps connected yet');
 });
 
-test('empty Daily Recaps keep the complete-library copy by default', () => {
+test('empty Home conversations omit Flutter HomeContentPage unused empty copy', () => {
   const renderer = render({recaps: []});
-  expect(renderedText(renderer)).toContain('No recaps yet');
+  const tree = renderedText(renderer);
+  expect(tree).not.toContain(compactHomeConversationsEmptyCopy());
+  expect(tree).not.toContain('Tap + to start recording');
+  expect(tree).not.toContain('No memories yet.');
   expect(
-    renderer.root.find(
+    renderer.root.findAll(
       node => node.props.accessibilityLabel === 'recaps empty state',
     ),
-  ).toBeDefined();
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'View All Conversations',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'View All Mind Map',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'mind map empty state',
+    ),
+  ).toHaveLength(0);
+});
+
+test('empty Home conversations omit Flutter unused empty mind map when memories exist', () => {
+  const renderer = render({recaps: [], mindMapHasItems: true});
+  expect(renderedText(renderer)).not.toContain(compactHomeConversationsEmptyCopy());
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Mind map preview',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'View All Mind Map',
+    ),
+  ).toHaveLength(0);
 });
 
 test('empty Daily Recaps keep incomplete conversation coverage instead of claiming emptiness', () => {
