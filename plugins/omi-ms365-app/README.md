@@ -102,10 +102,14 @@ Open `http://localhost:8080/setup/ms365?uid=test-user` to walk the OAuth flow.
 Verify a tool:
 
 ```bash
-curl -X POST http://localhost:8080/tools/get_me \
+curl -X POST http://localhost:8080/tools/search_emails \
   -H "Content-Type: application/json" \
-  -d '{"uid":"test-user","args":{}}'
+  -d '{"uid":"test-user","query":"invoice","limit":5}'
 ```
+
+Tool parameters travel flat at the top level of the body next to `uid`, which is
+how the Omi backend calls every chat tool. Run the hermetic dispatch tests with
+`python3 test_tool_dispatch.py` (no credentials or network).
 
 ## API endpoints
 
