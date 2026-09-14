@@ -709,8 +709,9 @@ final class DictationTranscriberTests: XCTestCase {
 
   func testOnlineTheBackendTranscriptWinsAndTheDeviceIsNotAsked() async {
     let calls = Calls()
-    let result = await makeTranscriber(online: true, calls: calls).transcribe(audio)
-    XCTAssertEqual(result, DictationTranscriber.Result(text: "type hello from the backend", source: .backend))
+    let outcome = await makeTranscriber(online: true, calls: calls).outcome(for: audio)
+    XCTAssertEqual(
+      outcome, .transcribed(DictationTranscriber.Result(text: "type hello from the backend", source: .backend)))
     XCTAssertEqual(calls.backendCalls, 1)
     XCTAssertEqual(calls.onDeviceCalls, 0)
     XCTAssertTrue(calls.fallbacks.isEmpty)
@@ -718,33 +719,36 @@ final class DictationTranscriberTests: XCTestCase {
 
   func testABackendFailureFallsBackToTheDeviceAndSaysWhy() async {
     let calls = Calls()
-    let result = await makeTranscriber(online: true, backendThrows: true, calls: calls).transcribe(audio)
-    XCTAssertEqual(result, DictationTranscriber.Result(text: "type hello from the device", source: .onDevice))
+    let outcome = await makeTranscriber(online: true, backendThrows: true, calls: calls).outcome(for: audio)
+    XCTAssertEqual(
+      outcome, .transcribed(DictationTranscriber.Result(text: "type hello from the device", source: .onDevice)))
     XCTAssertEqual(calls.fallbacks, ["other"])
   }
 
   func testAnEmptyBackendTranscriptFallsBackToTheDevice() async {
     let calls = Calls()
-    let result = await makeTranscriber(online: true, backendText: "  ", calls: calls).transcribe(audio)
-    XCTAssertEqual(result?.source, .onDevice)
+    let outcome = await makeTranscriber(online: true, backendText: "  ", calls: calls).outcome(for: audio)
+    XCTAssertEqual(
+      outcome, .transcribed(DictationTranscriber.Result(text: "type hello from the device", source: .onDevice)))
     XCTAssertEqual(calls.fallbacks, ["empty"])
   }
 
   func testOfflineTheBackendIsNeverTried() async {
     let calls = Calls()
-    let result = await makeTranscriber(online: false, calls: calls).transcribe(audio)
-    XCTAssertEqual(result, DictationTranscriber.Result(text: "type hello from the device", source: .onDevice))
+    let outcome = await makeTranscriber(online: false, calls: calls).outcome(for: audio)
+    XCTAssertEqual(
+      outcome, .transcribed(DictationTranscriber.Result(text: "type hello from the device", source: .onDevice)))
     XCTAssertEqual(calls.backendCalls, 0)
     XCTAssertTrue(calls.fallbacks.isEmpty, "no fallback was taken when there was never a backend to fall from")
   }
 
   func testWhenNeitherRecognizerAnswersTheTurnHasNoTranscript() async {
     let calls = Calls()
-    let result = await makeTranscriber(online: true, backendThrows: true, onDeviceText: nil, calls: calls)
-      .transcribe(audio)
-    XCTAssertNil(result)
-    let empty = await makeTranscriber(online: true, calls: calls).transcribe(Data())
-    XCTAssertNil(empty, "no audio, no transcript")
+    let outcome = await makeTranscriber(online: true, backendThrows: true, onDeviceText: nil, calls: calls)
+      .outcome(for: audio)
+    XCTAssertEqual(outcome, .unavailable(.noTranscript))
+    let empty = await makeTranscriber(online: true, calls: calls).outcome(for: Data())
+    XCTAssertEqual(empty, .unavailable(.emptyAudio), "no audio, no transcript")
   }
 
   /// A request that never completes on its own and only ends when the
@@ -798,12 +802,12 @@ final class DictationTranscriberTests: XCTestCase {
       },
       didFallBack: { calls.fallback($0) })
     let audio = self.audio
-    let task = Task { await transcriber.transcribe(audio) }
+    let task = Task { await transcriber.outcome(for: audio) }
     // The backend has been asked (its call is synchronous up to the stall).
     while calls.backendCalls == 0 { await Task.yield() }
     task.cancel()
-    let result = await task.value
-    XCTAssertNil(result)
+    let outcome = await task.value
+    XCTAssertEqual(outcome, .cancelled)
     XCTAssertEqual(calls.onDeviceCalls, 0)
     XCTAssertTrue(calls.fallbacks.isEmpty)
   }
@@ -823,10 +827,91 @@ final class DictationTranscriberTests: XCTestCase {
       },
       didFallBack: { calls.fallback($0) })
     transcriber.backendTimeout = 0.01
-    let result = await transcriber.transcribe(audio)
-    XCTAssertEqual(result?.source, .onDevice)
+    let outcome = await transcriber.outcome(for: audio)
+    XCTAssertEqual(
+      outcome, .transcribed(DictationTranscriber.Result(text: "type hello from the device", source: .onDevice)))
     XCTAssertEqual(calls.fallbacks, ["timeout"])
     XCTAssertEqual(calls.backendCalls, 1)
+  }
+
+  func testAnOnDeviceDecoderThatNeverAnswersReturnsTypedTimeoutAtTheDeadline() async {
+    let calls = Calls()
+    let stalled = UncooperativeOnDeviceRequest()
+    var transcriber = makeTranscriber(online: false, calls: calls)
+    transcriber.onDevice = { _ in
+      calls.onDevice()
+      return await stalled.run()
+    }
+    transcriber.onDeviceTimeout = 0.02
+
+    let started = Date()
+    let outcome = await transcriber.outcome(for: audio)
+
+    XCTAssertEqual(outcome, .unavailable(.onDeviceTimedOut))
+    XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+    XCTAssertEqual(calls.backendCalls, 0)
+    XCTAssertEqual(calls.onDeviceCalls, 1)
+    stalled.finish("type too late")
+  }
+
+  func testCancellingAnOnDeviceDecodeDoesNotBecomeATimeout() async {
+    let calls = Calls()
+    let stalled = UncooperativeOnDeviceRequest()
+    var transcriber = makeTranscriber(online: false, calls: calls)
+    transcriber.onDevice = { _ in
+      calls.onDevice()
+      return await stalled.run()
+    }
+    transcriber.onDeviceTimeout = 5
+
+    let audio = self.audio
+    let task = Task { await transcriber.outcome(for: audio) }
+    while calls.onDeviceCalls == 0 { await Task.yield() }
+    task.cancel()
+
+    let outcome = await task.value
+    XCTAssertEqual(outcome, .cancelled)
+    stalled.finish("type too late")
+  }
+
+  private final class UncooperativeOnDeviceRequest: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<String?, Never>?
+
+    func run() async -> String? {
+      await withCheckedContinuation { continuation in
+        lock.lock()
+        self.continuation = continuation
+        lock.unlock()
+      }
+    }
+
+    func finish(_ value: String?) {
+      lock.lock()
+      let pending = continuation
+      continuation = nil
+      lock.unlock()
+      pending?.resume(returning: value)
+    }
+  }
+}
+
+final class VoiceTypingAutomationResultTests: XCTestCase {
+  func testOnDeviceTimeoutIsExposedAsTypedUnavailableResult() {
+    var run = PushToTalkManager.DictationRun()
+    run.transcriptionUnavailableReason = .onDeviceTimedOut
+
+    XCTAssertEqual(run.automationTranscriptionFields["transcription_status"], "unavailable")
+    XCTAssertEqual(run.automationTranscriptionFields["error_code"], "on_device_transcription_timeout")
+    XCTAssertEqual(
+      run.automationTranscriptionFields["error"],
+      "on-device transcription did not complete within the 12-second deadline")
+  }
+
+  func testSuccessfulTranscriptionHasNoErrorFields() {
+    let fields = PushToTalkManager.DictationRun().automationTranscriptionFields
+
+    XCTAssertEqual(fields, ["transcription_status": "transcribed"])
   }
 }
 
