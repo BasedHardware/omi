@@ -249,7 +249,12 @@ async def root(uid: str = Query(None)):
     for lst in lists:
         selected_attr = 'selected' if lst['id'] == selected_list else ''
         space_name = lst.get('space_name', '')
-        display_name = f"{lst['name']}" + (f" ({space_name})" if space_name else "")
+        folder_name = lst.get('folder_name', '')
+        # Folder lists show as "Folder / List" — two folders commonly hold a
+        # list with the same name (every sprint has a "Bugs"), and the bare
+        # name alone cannot tell them apart in the picker.
+        display_name = f"{folder_name} / {lst['name']}" if folder_name else f"{lst['name']}"
+        display_name += f" ({space_name})" if space_name else ""
         list_options += f'<option value="{lst["id"]}" {selected_attr}>{display_name}</option>'
     
     return HTMLResponse(content=f"""
