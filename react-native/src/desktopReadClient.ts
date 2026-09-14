@@ -1311,6 +1311,18 @@ export function dailySummaryHourCopy(hour: number): string {
   return `${hour12}:00 ${period}`;
 }
 
+export function dailySummaryScheduleTitleCopy(): string {
+  return 'Daily Summary';
+}
+
+export function dailySummaryDescriptionCopy(): string {
+  return "Get a personalized summary of your day's conversations delivered as a notification.";
+}
+
+export function deliveryTimeTitleCopy(): string {
+  return 'Delivery Time';
+}
+
 export function dailySummaryScheduleCopy(
   settings: {enabled: boolean; hour: number} | null | undefined,
 ): {title: string; copy: string}[] {
@@ -1319,11 +1331,11 @@ export function dailySummaryScheduleCopy(
   }
   return [
     {
-      title: 'Daily summaries',
-      copy: settings.enabled ? 'Enabled' : 'Off',
+      title: dailySummaryScheduleTitleCopy(),
+      copy: `${settings.enabled ? 'Enabled' : 'Off'}\n${dailySummaryDescriptionCopy()}`,
     },
     {
-      title: 'Delivery time',
+      title: deliveryTimeTitleCopy(),
       copy: dailySummaryHourCopy(settings.hour),
     },
   ];
@@ -1338,6 +1350,14 @@ const mentorNotificationFrequencyChrome = [
   {label: 'Maximum', description: 'Stay constantly engaged'},
 ] as const;
 
+export function notificationFrequencyTitleCopy(): string {
+  return 'Notification Frequency';
+}
+
+export function notificationFrequencyDescriptionCopy(): string {
+  return 'Control how often Omi sends you proactive notifications and reminders.';
+}
+
 export function mentorNotificationFrequencyCopy(
   frequency: number | null | undefined,
 ): {title: string; copy: string}[] {
@@ -1349,8 +1369,8 @@ export function mentorNotificationFrequencyCopy(
     mentorNotificationFrequencyChrome[3];
   return [
     {
-      title: 'Notification frequency',
-      copy: `${chrome.label} · ${chrome.description}`,
+      title: notificationFrequencyTitleCopy(),
+      copy: `${chrome.label} · ${chrome.description}\n${notificationFrequencyDescriptionCopy()}`,
     },
   ];
 }

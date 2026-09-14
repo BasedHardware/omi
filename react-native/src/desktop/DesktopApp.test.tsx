@@ -11,6 +11,7 @@ import {
   chatDiscoveryShowMoreCopy,
   chatDiscoveryShowLessCopy,
   dailySummaryDefaultHeadlineCopy,
+  dailySummaryDescriptionCopy,
   desktopAccountSettingUnavailableCopy,
   desktopAppsUnavailableCopy,
   desktopBackendConfigurationCopy,
@@ -4489,9 +4490,9 @@ test('Settings names GET daily summaries without regenerate or a write sheet', a
   expect(tree).not.toContain('📅');
   expect(tree).not.toContain('sum-1');
   expect(tree).not.toContain('Regenerate');
-  expect(tree).not.toContain('Delivery time');
+  expect(tree).not.toContain('Delivery Time');
   expect(tree).not.toContain('10:00 PM');
-  expect(tree).not.toContain('Notification frequency');
+  expect(tree).not.toContain('Notification Frequency');
   expect(tree).not.toContain('Custom vocabulary');
   expect(tree).not.toContain('Automatic translation');
 });
@@ -4702,10 +4703,13 @@ test('Settings names GET daily-summary-settings without a picker or Flutter defa
       .props.onPress();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Daily summaries');
+  expect(tree).toContain('Daily Summary');
   expect(tree).toContain('Off');
-  expect(tree).toContain('Delivery time');
+  expect(tree).toContain('Delivery Time');
   expect(tree).toContain('12:00 AM');
+  expect(tree).toContain(
+    "Get a personalized summary of your day's conversations delivered as a notification.",
+  );
   expect(tree).not.toContain('10:00 PM');
   expect(tree).not.toContain('Your Day in Review');
   expect(
@@ -4773,11 +4777,12 @@ test('Settings names a failed daily-summary-settings GET instead of empty succes
   });
   const tree = renderedText(renderer);
   expect(tree).toContain('Ada');
-  expect(tree).toContain('Daily summaries');
+  expect(tree).toContain('Daily Summary');
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Enabled');
   expect(tree).not.toContain('10:00 PM');
   expect(tree).not.toContain('Your Day in Review');
+  expect(tree).not.toContain(dailySummaryDescriptionCopy());
 });
 
 test('Settings names GET mentor notification frequency without a purple slider', async () => {
@@ -4843,9 +4848,12 @@ test('Settings names GET mentor notification frequency without a purple slider',
       .props.onPress();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Notification frequency');
+  expect(tree).toContain('Notification Frequency');
   expect(tree).toContain('Maximum');
   expect(tree).toContain('Stay constantly engaged');
+  expect(tree).toContain(
+    'Control how often Omi sends you proactive notifications and reminders.',
+  );
   expect(tree).not.toContain('Balanced');
   expect(
     omiBackend.request.mock.calls.some(call => call[0].method === 'PATCH'),
@@ -4912,10 +4920,13 @@ test('Settings names a failed mentor notification GET instead of empty success',
   });
   const tree = renderedText(renderer);
   expect(tree).toContain('Ada');
-  expect(tree).toContain('Notification frequency');
+  expect(tree).toContain('Notification Frequency');
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Maximum');
   expect(tree).not.toContain('Balanced');
+  expect(tree).not.toContain(
+    'Control how often Omi sends you proactive notifications and reminders.',
+  );
 });
 
 test('Settings names GET custom vocabulary without add/delete or Flutter false defaults', async () => {

@@ -30,7 +30,9 @@ import {
   fairUseCopy,
   dailySummaryCopy,
   dailySummaryScheduleCopy,
+  dailySummaryScheduleTitleCopy,
   mentorNotificationFrequencyCopy,
+  notificationFrequencyTitleCopy,
   automaticTranslationCopy,
   customVocabularyCopy,
   visibleDisplayText,
@@ -1048,7 +1050,10 @@ export function DesktopSettings({
         ))
       )}
       {notificationFrequencyError !== null ? (
-        <Row copy={notificationFrequencyError} title="Notification frequency" />
+        <Row
+          copy={notificationFrequencyError}
+          title={notificationFrequencyTitleCopy()}
+        />
       ) : (
         notificationFrequency.map((row, index) => (
           <Row
@@ -1059,7 +1064,10 @@ export function DesktopSettings({
         ))
       )}
       {dailySummaryScheduleError !== null ? (
-        <Row copy={dailySummaryScheduleError} title="Daily summaries" />
+        <Row
+          copy={dailySummaryScheduleError}
+          title={dailySummaryScheduleTitleCopy()}
+        />
       ) : (
         dailySummarySchedule.map((row, index) => (
           <Row

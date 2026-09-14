@@ -137,7 +137,12 @@ import {
   dailySummaryDurationCopy,
   dailySummaryHourCopy,
   dailySummaryScheduleCopy,
+  dailySummaryScheduleTitleCopy,
+  dailySummaryDescriptionCopy,
+  deliveryTimeTitleCopy,
   mentorNotificationFrequencyCopy,
+  notificationFrequencyTitleCopy,
+  notificationFrequencyDescriptionCopy,
   automaticTranslationCopy,
   customVocabularyCopy,
   subscriptionPeriodCopy,
@@ -1447,6 +1452,11 @@ test('daily summary copy names GET headlines and Flutter omitted-headline Your D
 });
 
 test('daily summary schedule copy names GET hour without Flutter 10:00 PM default', () => {
+  expect(dailySummaryScheduleTitleCopy()).toBe('Daily Summary');
+  expect(deliveryTimeTitleCopy()).toBe('Delivery Time');
+  expect(dailySummaryDescriptionCopy()).toBe(
+    "Get a personalized summary of your day's conversations delivered as a notification.",
+  );
   expect(dailySummaryHourCopy(0)).toBe('12:00 AM');
   expect(dailySummaryHourCopy(12)).toBe('12:00 PM');
   expect(dailySummaryHourCopy(22)).toBe('10:00 PM');
@@ -1454,60 +1464,76 @@ test('daily summary schedule copy names GET hour without Flutter 10:00 PM defaul
   expect(dailySummaryHourCopy(24)).toBe('12:00 PM');
   expect(dailySummaryHourCopy(-1)).toBe('-1:00 AM');
   expect(dailySummaryScheduleCopy({enabled: true, hour: 22})).toEqual([
-    {title: 'Daily summaries', copy: 'Enabled'},
-    {title: 'Delivery time', copy: '10:00 PM'},
+    {
+      title: dailySummaryScheduleTitleCopy(),
+      copy: `Enabled\n${dailySummaryDescriptionCopy()}`,
+    },
+    {title: deliveryTimeTitleCopy(), copy: '10:00 PM'},
   ]);
   expect(dailySummaryScheduleCopy({enabled: true, hour: 24})).toEqual([
-    {title: 'Daily summaries', copy: 'Enabled'},
-    {title: 'Delivery time', copy: '12:00 PM'},
+    {
+      title: dailySummaryScheduleTitleCopy(),
+      copy: `Enabled\n${dailySummaryDescriptionCopy()}`,
+    },
+    {title: deliveryTimeTitleCopy(), copy: '12:00 PM'},
   ]);
   expect(dailySummaryScheduleCopy({enabled: true, hour: -1})).toEqual([
-    {title: 'Daily summaries', copy: 'Enabled'},
-    {title: 'Delivery time', copy: '-1:00 AM'},
+    {
+      title: dailySummaryScheduleTitleCopy(),
+      copy: `Enabled\n${dailySummaryDescriptionCopy()}`,
+    },
+    {title: deliveryTimeTitleCopy(), copy: '-1:00 AM'},
   ]);
   expect(dailySummaryScheduleCopy({enabled: false, hour: 0})).toEqual([
-    {title: 'Daily summaries', copy: 'Off'},
-    {title: 'Delivery time', copy: '12:00 AM'},
+    {
+      title: dailySummaryScheduleTitleCopy(),
+      copy: `Off\n${dailySummaryDescriptionCopy()}`,
+    },
+    {title: deliveryTimeTitleCopy(), copy: '12:00 AM'},
   ]);
   expect(dailySummaryScheduleCopy(null)).toEqual([]);
   expect(dailySummaryScheduleCopy(undefined)).toEqual([]);
 });
 
 test('mentor notification copy names GET frequency and Flutter descriptions', () => {
+  expect(notificationFrequencyTitleCopy()).toBe('Notification Frequency');
+  expect(notificationFrequencyDescriptionCopy()).toBe(
+    'Control how often Omi sends you proactive notifications and reminders.',
+  );
   expect(mentorNotificationFrequencyCopy(0)).toEqual([
     {
-      title: 'Notification frequency',
-      copy: 'Off · No proactive notifications',
+      title: notificationFrequencyTitleCopy(),
+      copy: `Off · No proactive notifications\n${notificationFrequencyDescriptionCopy()}`,
     },
   ]);
   expect(mentorNotificationFrequencyCopy(1)).toEqual([
     {
-      title: 'Notification frequency',
-      copy: 'Minimal · Only critical reminders',
+      title: notificationFrequencyTitleCopy(),
+      copy: `Minimal · Only critical reminders\n${notificationFrequencyDescriptionCopy()}`,
     },
   ]);
   expect(mentorNotificationFrequencyCopy(2)).toEqual([
     {
-      title: 'Notification frequency',
-      copy: 'Low · Important updates only',
+      title: notificationFrequencyTitleCopy(),
+      copy: `Low · Important updates only\n${notificationFrequencyDescriptionCopy()}`,
     },
   ]);
   expect(mentorNotificationFrequencyCopy(3)).toEqual([
     {
-      title: 'Notification frequency',
-      copy: 'Balanced · Regular helpful nudges',
+      title: notificationFrequencyTitleCopy(),
+      copy: `Balanced · Regular helpful nudges\n${notificationFrequencyDescriptionCopy()}`,
     },
   ]);
   expect(mentorNotificationFrequencyCopy(4)).toEqual([
     {
-      title: 'Notification frequency',
-      copy: 'High · Frequent check-ins',
+      title: notificationFrequencyTitleCopy(),
+      copy: `High · Frequent check-ins\n${notificationFrequencyDescriptionCopy()}`,
     },
   ]);
   expect(mentorNotificationFrequencyCopy(5)).toEqual([
     {
-      title: 'Notification frequency',
-      copy: 'Maximum · Stay constantly engaged',
+      title: notificationFrequencyTitleCopy(),
+      copy: `Maximum · Stay constantly engaged\n${notificationFrequencyDescriptionCopy()}`,
     },
   ]);
   expect(mentorNotificationFrequencyCopy(null)).toEqual([]);
@@ -1516,14 +1542,14 @@ test('mentor notification copy names GET frequency and Flutter descriptions', ()
 test('names GET mentor notification frequency outside 0-5 as Balanced', () => {
   expect(mentorNotificationFrequencyCopy(6)).toEqual([
     {
-      title: 'Notification frequency',
-      copy: 'Balanced · Regular helpful nudges',
+      title: notificationFrequencyTitleCopy(),
+      copy: `Balanced · Regular helpful nudges\n${notificationFrequencyDescriptionCopy()}`,
     },
   ]);
   expect(mentorNotificationFrequencyCopy(-1)).toEqual([
     {
-      title: 'Notification frequency',
-      copy: 'Balanced · Regular helpful nudges',
+      title: notificationFrequencyTitleCopy(),
+      copy: `Balanced · Regular helpful nudges\n${notificationFrequencyDescriptionCopy()}`,
     },
   ]);
 });

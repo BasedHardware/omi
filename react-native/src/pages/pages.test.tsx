@@ -1592,9 +1592,9 @@ test('Settings names GET daily summaries without regenerate or a write sheet', a
   expect(tree).not.toContain('📅');
   expect(tree).not.toContain('sum-1');
   expect(tree).not.toContain('Regenerate');
-  expect(tree).not.toContain('Delivery time');
+  expect(tree).not.toContain('Delivery Time');
   expect(tree).not.toContain('10:00 PM');
-  expect(tree).not.toContain('Notification frequency');
+  expect(tree).not.toContain('Notification Frequency');
   expect(tree).not.toContain('Custom vocabulary');
   expect(tree).not.toContain('Automatic translation');
 });
@@ -1657,10 +1657,13 @@ test('Settings names GET daily-summary-settings without a picker or Flutter defa
   });
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Daily summaries');
+  expect(tree).toContain('Daily Summary');
   expect(tree).toContain('Enabled');
-  expect(tree).toContain('Delivery time');
+  expect(tree).toContain('Delivery Time');
   expect(tree).toContain('10:00 PM');
+  expect(tree).toContain(
+    "Get a personalized summary of your day's conversations delivered as a notification.",
+  );
   expect(tree).not.toContain('Your Day in Review');
   expect(mockBackend.request).toHaveBeenCalledWith({
     id: expect.any(String),
@@ -1683,11 +1686,14 @@ test('Settings names a failed daily-summary-settings GET instead of empty succes
   });
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Daily summaries');
+  expect(tree).toContain('Daily Summary');
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Enabled');
   expect(tree).not.toContain('10:00 PM');
   expect(tree).not.toContain('Your Day in Review');
+  expect(tree).not.toContain(
+    "Get a personalized summary of your day's conversations delivered as a notification.",
+  );
 });
 
 test('Settings names GET mentor notification frequency without a purple slider', async () => {
@@ -1704,9 +1710,12 @@ test('Settings names GET mentor notification frequency without a purple slider',
   });
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Notification frequency');
+  expect(tree).toContain('Notification Frequency');
   expect(tree).toContain('Minimal');
   expect(tree).toContain('Only critical reminders');
+  expect(tree).toContain(
+    'Control how often Omi sends you proactive notifications and reminders.',
+  );
   expect(tree).not.toContain('Balanced');
   expect(mockBackend.request).toHaveBeenCalledWith({
     id: expect.any(String),
@@ -1729,10 +1738,13 @@ test('Settings names a failed mentor notification GET instead of empty success',
   });
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Notification frequency');
+  expect(tree).toContain('Notification Frequency');
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Minimal');
   expect(tree).not.toContain('Balanced');
+  expect(tree).not.toContain(
+    'Control how often Omi sends you proactive notifications and reminders.',
+  );
 });
 
 test('Settings names GET custom vocabulary without add/delete or Flutter false defaults', async () => {
