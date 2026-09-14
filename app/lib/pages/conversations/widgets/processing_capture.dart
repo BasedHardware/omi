@@ -218,14 +218,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     // Left
     Widget? left;
     if (isUsingPhoneMic || !isHavingDesireDevice) {
-      left = Center(
-        child: getPhoneMicRecordingButton(
-          context,
-          () => _toggleRecording(context, captureProvider),
-          captureProvider.recordingState,
-          isPhoneMicPaused: _isPhoneMicPaused,
-        ),
-      );
+      // Hidden for now: the phone-mic "Continue Recording" button here is redundant
+      // with the bottom recording button, which performs the same action. Keep the
+      // right-side status indicator (Listening/Paused). See getPhoneMicRecordingButton.
+      left = const SizedBox.shrink();
     } else if (!isAnyRecordingActive &&
         !deviceServiceStateOk &&
         !transcriptServiceStateOk &&
