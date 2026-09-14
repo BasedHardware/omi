@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
-
 import json
 import os
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING, Optional
 
 import typer
 
@@ -45,7 +44,7 @@ def list_memories(
 ) -> None:
     """
     List memories for the current user.
-    
+
     Supports pagination via limit and offset, and filtering by memory categories.
     """
     ctx = _ctx(typer_ctx)
@@ -79,8 +78,8 @@ def get_memory(
 ) -> None:
     """
     Fetch a single memory by its unique identifier.
-    
-    Since the dev API lacks a direct get-by-id endpoint, this implements 
+
+    Since the dev API lacks a direct get-by-id endpoint, this implements
     client-side filtering by paging through the user's memories.
     """
     ctx = _ctx(typer_ctx)
@@ -117,7 +116,7 @@ def create_memory(
 ) -> None:
     """
     Create a new memory for the user.
-    
+
     Content is required. Category, visibility, and tags are optional.
     """
     ctx = _ctx(typer_ctx)
@@ -141,7 +140,7 @@ def update_memory(
 ) -> None:
     """
     Update fields of an existing memory.
-    
+
     At least one field must be provided for update.
     """
     ctx = _ctx(typer_ctx)
@@ -172,7 +171,7 @@ def delete_memory(
 ) -> None:
     """
     Delete a specific memory by its ID.
-    
+
     Requires confirmation unless the --yes flag is used.
     """
     ctx = _ctx(typer_ctx)
@@ -188,14 +187,12 @@ def delete_memory(
 @app.command("export", help="Export all memories to a JSON file.")
 def export_memories(
     typer_ctx: typer.Context,
-    output: Path = typer.Option(
-        Path("memories_export.json"), "--output", "-o", help="Output file path."
-    ),
+    output: Path = typer.Option(Path("memories_export.json"), "--output", "-o", help="Output file path."),
 ) -> None:
     """
     Export all user memories to a JSON file.
-    
-    Fetches all memories using pagination and writes them atomically to the 
+
+    Fetches all memories using pagination and writes them atomically to the
     specified output file to prevent partial writes.
     """
     ctx = _ctx(typer_ctx)
@@ -205,26 +202,25 @@ def export_memories(
 
     with ctx.make_client() as client:
         while True:
-            page = client.get(
-                "/v1/dev/user/memories", params={"limit": limit, "offset": offset}
-            )
-            
+            page = client.get("/v1/dev/user/memories", params={"limit": limit, "offset": offset})
+
             # Fail-fast: if API returns None but we expected a page, stop and fail.
             if page is None:
                 if offset == 0:
                     # No memories at all is a valid state.
                     break
-                raise RuntimeError(f"API returned None unexpectedly at offset {offset}. Export aborted to prevent partial write.")
-            
+                raise RuntimeError(
+                    f"API returned None unexpectedly at offset {offset}. Export aborted to prevent partial write."
+                )
+
             all_memories.extend(page)
             if len(page) < limit:
                 break
             offset += limit
 
     # Atomic write: write to temp file first, then rename to target.
-    temp_file = tempfile.NamedTemporaryFile(
-        "w", dir=output.parent, delete=False, encoding="utf-8"
-    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temp_file = tempfile.NamedTemporaryFile("w", dir=output.parent, delete=False, encoding="utf-8")
     try:
         json.dump(all_memories, temp_file, indent=4, ensure_ascii=False)
         temp_file.close()

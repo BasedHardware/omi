@@ -154,3 +154,45 @@ def test_memory_pretty_preserves_markup_like_content(authed_profile, respx_mock,
     result = cli_runner.invoke(app, ["--no-color", *command])
     assert result.exit_code == 0, result.output
     assert "[draft] literal [/bold] :warning:" in result.stdout
+
+
+def test_memory_export_success_multipage(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    page1 = [{"id": f"m{i}", "content": f"val{i}"} for i in range(100)]
+    page2 = [{"id": "m100", "content": "val100"}]
+    import httpx
+
+    respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[httpx.Response(200, json=page1), httpx.Response(200, json=page2)]
+    )
+    out_file = tmp_path / "subdir" / "export.json"
+    result = cli_runner.invoke(app, ["memory", "export", "-o", str(out_file)])
+    assert result.exit_code == 0, result.output
+    assert out_file.exists()
+    data = json.loads(out_file.read_text(encoding="utf-8"))
+    assert len(data) == 101
+    assert data[0]["id"] == "m0"
+    assert data[-1]["id"] == "m100"
+
+
+def test_memory_export_empty(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    respx_mock.get("/v1/dev/user/memories").respond(json=[])
+    out_file = tmp_path / "empty_export.json"
+    result = cli_runner.invoke(app, ["memory", "export", "-o", str(out_file)])
+    assert result.exit_code == 0, result.output
+    assert out_file.exists()
+    data = json.loads(out_file.read_text(encoding="utf-8"))
+    assert data == []
+
+
+def test_memory_export_fail_fast_on_api_error(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    page1 = [{"id": f"m{i}", "content": f"val{i}"} for i in range(100)]
+    import httpx
+
+    respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[httpx.Response(200, json=page1), httpx.Response(500, json={"error": "server error"})]
+    )
+    out_file = tmp_path / "failed_export.json"
+    result = cli_runner.invoke(app, ["memory", "export", "-o", str(out_file)])
+    assert result.exit_code != 0
+    # Crucial: verify that partial write did not leak to output path
+    assert not out_file.exists()
