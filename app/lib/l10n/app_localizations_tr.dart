@@ -9994,4 +9994,8 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Omi\'nin hangi sesin size ait olduğunu bilmesi için yaklaşık 5 saniye boyunca istediğiniz bir konuda konuşun.';
 }

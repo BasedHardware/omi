@@ -10017,4 +10017,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Još traje — ovo traje duže nego inače.';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'Kako bi Omi znao koji je glas vaš — govorite o bilo čemu oko 5 sekundi.';
 }

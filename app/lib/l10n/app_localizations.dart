@@ -18584,6 +18584,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Still working — this is taking longer than usual.'**
   String get processingTakingLonger;
+
+  /// No description provided for @speechProfileEnrollmentPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'So Omi knows which voice is yours — talk for about 5 seconds about anything.'**
+  String get speechProfileEnrollmentPrompt;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

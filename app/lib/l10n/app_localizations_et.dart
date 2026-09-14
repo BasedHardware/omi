@@ -9975,4 +9975,8 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ikka käimas — see võtab kauem aega kui tavaliselt.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Et Omi teaks, milline hääl on sinu oma — räägi ükskõik millest umbes 5 sekundit.';
 }

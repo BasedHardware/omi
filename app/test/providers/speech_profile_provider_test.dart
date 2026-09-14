@@ -127,6 +127,11 @@ class _FinalizeCountingProvider extends SpeechProfileProvider {
   }
 }
 
+class _OnboardingFinalizeProvider extends _FinalizeCountingProvider {
+  @override
+  bool get isOnboardingFlow => true;
+}
+
 class _BrokenWavStorage extends Fake implements WavBytesUtil {
   @override
   Future<Never> createWavFile({String? filename, int removeLastNSeconds = 0}) async =>
@@ -575,6 +580,54 @@ void main() {
     expect(provider.profileCompleted, isFalse);
     expect(provider.error, 'UPLOAD_FAILED');
     provider.dispose();
+  });
+
+  group('first-run enrollment accepts any topic without punctuation', () {
+    test('five seconds of transcribed speech completes after a pause', () {
+      fakeAsync((async) {
+        final provider = _OnboardingFinalizeProvider();
+        provider.updateStartedRecording(true);
+        provider.segments.add(_userSegment('1', 'today I walked my dog and enjoyed the sunshine')..end = 5);
+        provider.updateSpokenText();
+        expect(provider.recordingProgress, 1);
+        expect(provider.spokenSentenceCount, 0);
+        async.elapse(SpeechProfileProvider.minUploadDuration);
+        expect(provider.finalizeCalls, 1);
+        async.elapse(SpeechProfileProvider.completionCap);
+        expect(provider.finalizeCalls, 1);
+        provider.dispose();
+      });
+    });
+
+    test('silence, Omi prompts, and overlapping spans do not inflate progress', () {
+      fakeAsync((async) {
+        final provider = _OnboardingFinalizeProvider();
+        provider.updateStartedRecording(true);
+        provider.segments.addAll([
+          _userSegment('q', 'Where do you live?', speakerId: omiSpeakerId)..end = 20,
+          _userSegment('1', 'one two')
+            ..start = 20
+            ..end = 22,
+          _userSegment('2', 'three four')
+            ..start = 21
+            ..end = 23,
+          _userSegment('empty', ' ')
+            ..start = 23
+            ..end = 40,
+        ]);
+        provider.updateSpokenText();
+        expect(provider.recordingProgress, closeTo(0.6, 0.001));
+        async.elapse(const Duration(seconds: 30));
+        expect(provider.finalizeCalls, 0);
+        provider.segments.add(_userSegment('3', 'a little more')
+          ..start = 40
+          ..end = 42);
+        provider.updateSpokenText();
+        async.elapse(SpeechProfileProvider.completionGrace);
+        expect(provider.finalizeCalls, 1);
+        provider.dispose();
+      });
+    });
   });
 
   group('speech-profile upload retries transient failures', () {

@@ -10003,4 +10003,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ще обробляється — це триває довше, ніж зазвичай.';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'Щоб Omi знав, який голос ваш, говоріть про будь-що приблизно 5 секунд.';
 }

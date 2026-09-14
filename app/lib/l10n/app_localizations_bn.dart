@@ -9987,4 +9987,8 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'এখনও কাজ চলছে — এটি স্বাভাবিকের চেয়ে বেশি সময় নিচ্ছে।';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Omi যেন আপনার কণ্ঠ চিনতে পারে — যেকোনো বিষয়ে প্রায় ৫ সেকেন্ড কথা বলুন।';
 }

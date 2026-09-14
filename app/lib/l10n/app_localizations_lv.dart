@@ -10005,4 +10005,8 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Joprojām notiek — tas aizņem ilgāk nekā parasti.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Lai Omi zinātu, kura balss ir jūsu — runājiet par jebko aptuveni 5 sekundes.';
 }
