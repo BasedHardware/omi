@@ -27,7 +27,7 @@ jest.mock('../omiNative', () => ({
 
 const {ConnectorsPage} = require('./Connectors');
 const {SettingsPage} = require('./Settings');
-const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy, permissionsTitleCopy, fairUseLoadErrorCopy, usageLoadErrorCopy, subscriptionLoadErrorCopy} = require('../desktopReadClient');
+const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy, permissionsTitleCopy, fairUseLoadErrorCopy, usageLoadErrorCopy, subscriptionLoadErrorCopy, primaryLanguageNotSetCopy} = require('../desktopReadClient');
 const {appChangelogsLoadErrorCopy} = require('../legacyOmiAppChangelogs');
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
@@ -1209,6 +1209,31 @@ test('Settings omits NEXT LINE-only company and job instead of blank rows', asyn
   expect(tree).not.toContain('Company');
   expect(tree).not.toContain('Job');
   expect(tree).not.toContain('\u0085');
+});
+
+test('Settings names Flutter notSet for empty GET name and email', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          uid: 'user-1',
+          name: ' \t',
+          email: null,
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain(primaryLanguageNotSetCopy());
+  expect(tree).not.toContain('Name not set on this account.');
+  expect(tree).not.toContain('Email not set on this account.');
+  expect(tree).toContain('User ID');
+  expect(tree).toContain('user-1');
 });
 
 test('Settings names GET usage today without Upgrade', async () => {

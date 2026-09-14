@@ -795,14 +795,14 @@ export function SettingsPage({
             <SettingRow
               copy={accountFieldCopy(
                 snapshot.profile.name,
-                'Name not set on this account.',
+                primaryLanguageNotSetCopy(),
               )}
               title="Name"
             />
             <SettingRow
               copy={accountFieldCopy(
                 snapshot.profile.email,
-                'Email not set on this account.',
+                primaryLanguageNotSetCopy(),
               )}
               title="Email"
             />

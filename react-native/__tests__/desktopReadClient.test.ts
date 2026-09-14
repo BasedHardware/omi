@@ -1876,18 +1876,16 @@ test('developer webhook rows omit empty or whitespace URLs', () => {
 });
 
 test('whitespace-only account fields stay unset instead of a blank row', () => {
-  expect(accountFieldCopy(null, 'Name not set on this account.')).toBe(
-    'Name not set on this account.',
+  expect(accountFieldCopy(null, primaryLanguageNotSetCopy())).toBe(
+    primaryLanguageNotSetCopy(),
   );
-  expect(accountFieldCopy(' \t\n', 'Name not set on this account.')).toBe(
-    'Name not set on this account.',
+  expect(accountFieldCopy(' \t\n', primaryLanguageNotSetCopy())).toBe(
+    primaryLanguageNotSetCopy(),
   );
-  expect(accountFieldCopy('\u00A0', 'Email not set on this account.')).toBe(
-    'Email not set on this account.',
+  expect(accountFieldCopy('\u00A0', primaryLanguageNotSetCopy())).toBe(
+    primaryLanguageNotSetCopy(),
   );
-  expect(accountFieldCopy('  Ada  ', 'Name not set on this account.')).toBe(
-    'Ada',
-  );
+  expect(accountFieldCopy('  Ada  ', primaryLanguageNotSetCopy())).toBe('Ada');
 });
 
 test('whitespace-only connection identity stays unavailable', () => {

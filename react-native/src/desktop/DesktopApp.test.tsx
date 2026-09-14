@@ -25,6 +25,7 @@ import {
   fairUseLoadErrorCopy,
   usageLoadErrorCopy,
   subscriptionLoadErrorCopy,
+  primaryLanguageNotSetCopy,
 } from '../desktopReadClient';
 import {appChangelogsLoadErrorCopy} from '../legacyOmiAppChangelogs';
 
@@ -5352,7 +5353,8 @@ test('Settings does not claim Signed in to Omi when a loaded profile has no emai
       .find(node => node.props.accessibilityLabel === 'Account & Plan')
       .props.onPress();
   });
-  expect(renderedText(renderer)).toContain('Email not set on this account.');
+  expect(renderedText(renderer)).toContain(primaryLanguageNotSetCopy());
+  expect(renderedText(renderer)).not.toContain('Email not set on this account.');
   expect(renderedText(renderer)).toContain('Ada');
   expect(renderedText(renderer)).not.toContain('Signed in to Omi');
 });
@@ -5396,7 +5398,8 @@ test('Settings shows already-loaded Account id and Name not set', async () => {
       .props.onPress();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Name not set on this account.');
+  expect(tree).toContain(primaryLanguageNotSetCopy());
+  expect(tree).not.toContain('Name not set on this account.');
   expect(tree).toContain('User ID');
   expect(tree).not.toContain('Account id');
   expect(tree).toContain('user-42');
@@ -5442,8 +5445,9 @@ test('Settings treats whitespace-only Account name and email as unset', async ()
       .props.onPress();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Name not set on this account.');
-  expect(tree).toContain('Email not set on this account.');
+  expect(tree).toContain(primaryLanguageNotSetCopy());
+  expect(tree).not.toContain('Name not set on this account.');
+  expect(tree).not.toContain('Email not set on this account.');
   expect(tree).not.toContain('Company');
   expect(tree).not.toContain('Job');
 });

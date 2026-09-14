@@ -877,7 +877,7 @@ export function DesktopSettings({
             : account.profile != null
             ? accountFieldCopy(
                 account.profile.email,
-                'Email not set on this account.',
+                primaryLanguageNotSetCopy(),
               )
             : account.profileError ?? 'Account profile is unavailable.'
         }
@@ -904,7 +904,7 @@ export function DesktopSettings({
         <Row
           copy={accountFieldCopy(
             account.profile.name,
-            'Name not set on this account.',
+            primaryLanguageNotSetCopy(),
           )}
           title="Name"
         />
