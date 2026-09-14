@@ -610,7 +610,7 @@ test('Home and Tasks rows keep GET indent instead of a flat list', () => {
   ).toHaveLength(0);
 });
 
-test('Home and Tasks rows name GET exported platforms and omit missing exports', () => {
+test('Home rows omit Flutter TodayTasksWidget export chrome', () => {
   let exported!: ReactTestRenderer.ReactTestRenderer;
   let omitted!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
@@ -625,6 +625,32 @@ test('Home and Tasks rows name GET exported platforms and omit missing exports',
     );
     omitted = ReactTestRenderer.create(
       <TaskRow item={{...taskItem(null), title: 'Write recap'}} />,
+    );
+  });
+  expect(textOf(exported)).toContain('Call Sam');
+  expect(textOf(exported)).not.toContain('Exported to Todoist');
+  expect(textOf(omitted)).not.toContain('Exported to');
+});
+
+test('Tasks rows name GET exported platforms and omit missing exports', () => {
+  let exported!: ReactTestRenderer.ReactTestRenderer;
+  let omitted!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    exported = ReactTestRenderer.create(
+      <TaskRow
+        showExport
+        item={{
+          ...taskItem(null),
+          title: 'Call Sam',
+          exportCopy: 'Exported to Todoist',
+        }}
+      />,
+    );
+    omitted = ReactTestRenderer.create(
+      <TaskRow
+        showExport
+        item={{...taskItem(null), title: 'Write recap'}}
+      />,
     );
   });
   expect(textOf(exported)).toContain('Exported to Todoist');

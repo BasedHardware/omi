@@ -341,6 +341,48 @@ test('renders the shipping search-first desktop hierarchy', () => {
   expect(renderer.root.findAllByType(ScrollView).length).toBeGreaterThan(0);
 });
 
+test('desktop Tasks names GET exported platforms and Home previews omit them', () => {
+  const exportedTask = {
+    ...outcomes.tasks.value.items[0],
+    id: 'task-exported',
+    title: 'Call Sam',
+    searchableText: 'Call Sam',
+    exportCopy: 'Exported to Todoist',
+  };
+  const plainTask = {
+    ...outcomes.tasks.value.items[0],
+    id: 'task-plain',
+    title: 'Write recap',
+    searchableText: 'Write recap',
+  };
+  const renderer = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      tasks: {
+        ...outcomes.tasks,
+        value: {
+          ...outcomes.tasks.value,
+          items: [exportedTask, plainTask],
+        },
+      },
+    },
+    reads: [...outcomes.conversations.value.items, exportedTask, plainTask],
+  });
+  const home = renderedText(renderer);
+  expect(home).toContain('Call Sam');
+  expect(home).toContain('Write recap');
+  expect(home).not.toContain('Exported to Todoist');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress();
+  });
+  const tasks = renderedText(renderer);
+  expect(tasks).toContain('Exported to Todoist');
+  expect(tasks).toContain('Call Sam');
+  expect(tasks).toContain('Write recap');
+});
+
 test('Home conversation rows name starred conversations without an empty star toggle', () => {
   const renderer = renderDesktop({
     outcomes: {

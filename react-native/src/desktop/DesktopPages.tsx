@@ -261,7 +261,7 @@ export function TasksPage({
                     }
                     onPress={() => onTaskToggle?.(item.id)}
                     style={styles.taskToggle}>
-                    <TaskRow item={item} />
+                    <TaskRow item={item} showExport />
                   </FocusPressable>
                   {writesAvailable && onTaskEdit && editable && (
                     <FocusPressable

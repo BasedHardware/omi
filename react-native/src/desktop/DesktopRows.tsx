@@ -217,7 +217,13 @@ export const MemoryRow = memo(function MemoryRow({
   );
 });
 
-export const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
+export const TaskRow = memo(function TaskRow({
+  item,
+  showExport = false,
+}: {
+  item: TaskProjection;
+  showExport?: boolean;
+}) {
   const indentPad = taskIndentPadding(item.indentLevel);
   return (
     <View
@@ -233,7 +239,7 @@ export const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
           style={[styles.taskText, item.completed && styles.taskTextDone]}>
           {taskDisplayTitle(item)}
         </Text>
-        {item.exportCopy !== undefined ? (
+        {showExport && item.exportCopy !== undefined ? (
           <Text style={styles.rowMeta}>{item.exportCopy}</Text>
         ) : null}
       </View>
