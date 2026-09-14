@@ -2,6 +2,8 @@ import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {
   conversationDisplaySummary,
+  conversationDetailSummaryCopy,
+  conversationNoSummaryCopy,
   conversationDisplayTitle,
   conversationListUsesListenOverview,
   conversationRecapTitle,
@@ -2557,6 +2559,44 @@ test('empty conversation summaries stay visible instead of a blank subtitle', ()
       status: 'completed',
     }),
   ).toBe('Walked to the market.');
+});
+
+test('conversation detail names Flutter noSummaryForConversation when GET has no summarized app', () => {
+  expect(conversationNoSummaryCopy()).toBe(
+    'No summary available\nfor this conversation.',
+  );
+  expect(
+    conversationDetailSummaryCopy({
+      summary: '',
+      sections: [],
+    }),
+  ).toBe(conversationNoSummaryCopy());
+  expect(
+    conversationDetailSummaryCopy({
+      summary: ' \t\n',
+      sections: [],
+      appSummary: '',
+    }),
+  ).toBe(conversationNoSummaryCopy());
+  expect(
+    conversationDetailSummaryCopy({
+      summary: 'Day recap notes',
+      sections: [],
+    }),
+  ).toBe('Day recap notes');
+  expect(
+    conversationDetailSummaryCopy({
+      summary: '',
+      sections: [{heading: 'Notes', bodyMarkdown: 'Full notes'}],
+    }),
+  ).toBeNull();
+  expect(
+    conversationDetailSummaryCopy({
+      summary: '',
+      sections: [],
+      appSummary: 'App wrote this recap',
+    }),
+  ).toBeNull();
 });
 
 test('groups validated UTC conversation timestamps by local calendar day', () => {

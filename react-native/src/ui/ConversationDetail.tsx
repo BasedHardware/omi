@@ -5,6 +5,7 @@ import {
   conversationCaptureCopy,
   conversationDetailSpeakerCopy,
   conversationDisplaySummary,
+  conversationDetailSummaryCopy,
   conversationDisplayTitle,
   conversationHasFinishClock,
   conversationStatusCopy,
@@ -375,6 +376,13 @@ function LegacyConversationBody({
   const folderColor = visibleDisplayText(detail.folderColor ?? '');
   const folderIcon = visibleDisplayText(detail.folderIcon ?? '');
   const externalText = visibleDisplayText(detail.externalText ?? '');
+  const detailSummaryCopy = conversation.discarded
+    ? null
+    : conversationDetailSummaryCopy({
+        summary: detail.summary,
+        sections: detail.sections,
+        appSummary,
+      });
   const showExternalTranscript =
     externalText !== '' &&
     (detail.photoCount === undefined || detail.photoCount <= 0) &&
@@ -392,12 +400,9 @@ function LegacyConversationBody({
               status: conversation.status,
             })}
       </Text>
-      {conversation.discarded ? null : (
+      {detailSummaryCopy === null ? null : (
         <Text selectable style={[styles.conversationDetailSummary, ink]}>
-          {conversationDisplaySummary({
-            summary: detail.summary,
-            status: conversation.status,
-          })}
+          {detailSummaryCopy}
         </Text>
       )}
       {appsError === '' ? null : (

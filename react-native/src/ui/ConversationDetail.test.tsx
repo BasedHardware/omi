@@ -8,6 +8,7 @@ import {
   chatDiscoveryShowLessCopy,
   desktopBackendServiceCopy,
   conversationFirstPartySummaryCopy,
+  conversationNoSummaryCopy,
   conversationActionItemsTodoCopy,
   conversationActionItemsNoPendingCopy,
   conversationActionItemsCompletedCopy,
@@ -1621,6 +1622,95 @@ test('legacy conversation details name Flutter first-party Summary when appId is
   expect(discarded).not.toContain('Day recap notes');
   expect(discarded).not.toContain('App wrote this recap');
   expect(discarded).not.toContain(conversationFirstPartySummaryCopy());
+});
+
+test('legacy details name Flutter noSummaryForConversation when GET has no summarized app', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: '',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain(conversationNoSummaryCopy());
+  expect(copy).not.toContain('Conversation summary unavailable');
+  expect(copy).not.toContain('Conversation summary is not ready yet.');
+  expect(copy).not.toContain('Generate Summary');
+  const processing = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1', status: 'processing'},
+    }),
+  );
+  expect(processing).toContain(conversationNoSummaryCopy());
+  expect(processing).not.toContain('Conversation summary is not ready yet.');
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: '',
+        locked: false,
+        sections: [{heading: 'Notes', bodyMarkdown: 'Full notes'}],
+        actionItems: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const withSections = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(withSections).toContain('Notes');
+  expect(withSections).toContain('Full notes');
+  expect(withSections).not.toContain(conversationNoSummaryCopy());
+  expect(withSections).not.toContain('Conversation summary unavailable');
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: '',
+        locked: false,
+        sections: [],
+        actionItems: [],
+        appSummary: 'App wrote this recap',
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const withApp = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(withApp).toContain('App wrote this recap');
+  expect(withApp).not.toContain(conversationNoSummaryCopy());
+  expect(withApp).not.toContain('Conversation summary unavailable');
 });
 
 test('legacy discarded details name Discarded Conversation instead of structured title', () => {

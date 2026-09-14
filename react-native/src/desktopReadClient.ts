@@ -490,6 +490,34 @@ export function conversationFirstPartySummaryCopy(): string {
   return 'Summary';
 }
 
+export function conversationNoSummaryCopy(): string {
+  return 'No summary available\nfor this conversation.';
+}
+
+export function conversationDetailSummaryCopy(detail: {
+  summary: string;
+  sections: readonly {heading: string; bodyMarkdown: string}[];
+  appSummary?: string;
+}): string | null {
+  const overview = visibleDisplayText(detail.summary);
+  if (overview !== '') {
+    return overview;
+  }
+  if (visibleDisplayText(detail.appSummary ?? '') !== '') {
+    return null;
+  }
+  if (
+    detail.sections.some(
+      section =>
+        visibleDisplayText(section.heading) !== '' ||
+        visibleDisplayText(section.bodyMarkdown) !== '',
+    )
+  ) {
+    return null;
+  }
+  return conversationNoSummaryCopy();
+}
+
 export function conversationActionItemsTodoCopy(): string {
   return 'To-Do';
 }
