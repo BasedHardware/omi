@@ -1280,6 +1280,8 @@ class ChatProvider: ObservableObject {
     if let agentClient { return agentClient }
     let harness = resolvedHarnessMode()
     activeBridgeHarness = harness
+    activeBridgeMode =
+      UserDefaults.standard.string(forKey: .chatBridgeMode) ?? BridgeMode.piMono.rawValue
     let session = AgentClient.makeSession(harnessMode: harness)
     agentClient = session
     return session
@@ -1322,6 +1324,8 @@ class ChatProvider: ObservableObject {
   /// @AppStorage("chatBridgeMode") can be updated by other views sharing the same key,
   /// so comparing against it in switchBridgeMode() would always match → no-op.
   private var activeBridgeHarness: String = "piMono"
+  /// Persisted bridge mode the runtime last configured (not only harness).
+  private var activeBridgeMode: String = BridgeMode.piMono.rawValue
   /// Orders rapid preference changes without treating them as runtime lifecycle.
   /// The kernel applies each preference only when creating future sessions.
   private var profilePreferenceChangeGeneration: UInt64 = 0
@@ -1330,6 +1334,8 @@ class ChatProvider: ObservableObject {
     case omiAI = "agentSDK"  // Legacy, auto-migrated to piMono
     case userClaude = "claudeCode"
     case piMono = "piMono"
+    /// Local LM server via pi-mono; adapter owns the configured model id.
+    case local = "local"
     case hermes = "hermes"
     case openClaw = "openclaw"
   }
@@ -1476,8 +1482,10 @@ class ChatProvider: ObservableObject {
         do {
           _ = try await self.resolvedAgentClient().configureDefaultExecutionProfile(
             adapterId: adapterId,
-            modelProfile: self.activeBridgeHarness == "hermes" || self.activeBridgeHarness == "openclaw"
-              ? nil : ModelQoS.Claude.chat,
+            modelProfile: AgentRuntimeRouting.defaultModelProfile(
+              harnessMode: self.activeBridgeHarness,
+              chatBridgeMode: self.bridgeMode
+            ),
             workingDirectory: directory
           )
         } catch {
@@ -1824,13 +1832,15 @@ class ChatProvider: ObservableObject {
     // Preferences are kernel-owned defaults for future sessions. Existing
     // sessions keep their immutable execution profile and the shared
     // daemon stays alive when this preference changes.
-    let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
     guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: activeBridgeHarness) else {
       throw BridgeError.agentError("Unknown AI runtime mode: \(activeBridgeHarness)")
     }
     _ = try await resolvedAgentClient().configureDefaultExecutionProfile(
       adapterId: adapterId,
-      modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
+      modelProfile: AgentRuntimeRouting.defaultModelProfile(
+        harnessMode: activeBridgeHarness,
+        chatBridgeMode: bridgeMode
+      ),
       workingDirectory: effectiveAgentWorkingDirectory()
     )
     // Onboarding can start the shared runtime before the root shell has
@@ -1976,13 +1986,15 @@ class ChatProvider: ObservableObject {
     guard let requestedAdapter = AgentRuntimeProcess.adapterId(forHarnessMode: requestedHarness) else {
       throw BridgeError.agentError("Unknown AI runtime mode: \(requestedHarness)")
     }
-    let usesNativeModelChoice = requestedHarness == "hermes" || requestedHarness == "openclaw"
     return try await resolveAgentSurfaceSession(
       surface,
       creationProfile: AgentSessionCreationProfile(
         adapterId: requestedAdapter,
         modelProfile: requestedModelProfile ?? modelOverride
-          ?? (usesNativeModelChoice ? nil : ModelQoS.Claude.chat),
+          ?? AgentRuntimeRouting.defaultModelProfile(
+            harnessMode: requestedHarness,
+            chatBridgeMode: bridgeMode
+          ),
         workingDirectory: effectiveAgentWorkingDirectory()
       )
     )
@@ -2314,11 +2326,13 @@ class ChatProvider: ObservableObject {
     let resolvedMode: BridgeMode = (mode == .omiAI) ? .piMono : mode
     let newHarness = Self.harnessMode(for: resolvedMode)
     let previousHarness = activeBridgeHarness
-    guard newHarness != previousHarness else { return }
+    let previousBridgeMode = activeBridgeMode
+    guard newHarness != previousHarness || resolvedMode.rawValue != previousBridgeMode else { return }
     log("ChatProvider: Updating future-session profile from \(previousHarness) to \(resolvedMode.rawValue)")
     profilePreferenceChangeGeneration &+= 1
     let preferenceChange = profilePreferenceChangeGeneration
     activeBridgeHarness = newHarness
+    activeBridgeMode = resolvedMode.rawValue
     bridgeMode = resolvedMode.rawValue
     AnalyticsManager.shared.chatBridgeModeChanged(from: previousHarness, to: resolvedMode.rawValue)
 
@@ -2330,10 +2344,12 @@ class ChatProvider: ObservableObject {
       guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: newHarness) else {
         throw BridgeError.agentError("Unknown AI runtime mode: \(newHarness)")
       }
-      let usesNativeModelChoice = newHarness == "hermes" || newHarness == "openclaw"
       let configured = try await resolvedAgentClient().configureDefaultExecutionProfile(
         adapterId: adapterId,
-        modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
+        modelProfile: AgentRuntimeRouting.defaultModelProfile(
+          harnessMode: newHarness,
+          chatBridgeMode: bridgeMode
+        ),
         workingDirectory: effectiveAgentWorkingDirectory()
       )
       guard preferenceChange == profilePreferenceChangeGeneration else { return }
