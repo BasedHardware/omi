@@ -251,7 +251,7 @@ function calendarEvent(
     return undefined;
   }
   const event = object(value);
-  text(event.event_id, 10000);
+  text(event.event_id, 1_000_000);
   const title = visibleDisplayText(text(event.title));
   const startCopy = calendarEventTimeCopy(event.start_time);
   const endCopy = calendarEventTimeCopy(event.end_time);
@@ -501,7 +501,7 @@ export async function loadLegacyConversationDetail(
                 const personId =
                   segment.person_id === undefined || segment.person_id === null
                     ? undefined
-                    : visibleDisplayText(text(segment.person_id, 10000));
+                    : visibleDisplayText(text(segment.person_id, 1_000_000));
                 const translations = segmentTranslations(segment.translations);
                 const sttProvider =
                   segment.stt_provider === undefined ||
@@ -588,7 +588,7 @@ export async function loadLegacyConversationDetail(
   const folderId =
     value.folder_id === undefined || value.folder_id === null
       ? undefined
-      : visibleDisplayText(text(value.folder_id, 10000));
+      : visibleDisplayText(text(value.folder_id, 1_000_000));
   const folder =
     folderId === undefined || folderId === ''
       ? undefined

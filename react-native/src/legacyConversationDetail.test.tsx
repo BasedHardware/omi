@@ -1049,6 +1049,84 @@ test('keeps GET conversation detail when person_id or folder_id exceeds 256', as
   ).rejects.toMatchObject({kind: 'invalid'});
 });
 
+test('keeps GET conversation detail when person_id, folder_id, or event_id exceeds 10000', async () => {
+  const folderId = 'f'.repeat(10001);
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/folders') {
+      return {
+        id: 'folders',
+        status: 200,
+        body: JSON.stringify([{id: folderId, name: 'Work'}]),
+      };
+    }
+    return response({
+      ...fixture,
+      folder_id: folderId,
+    });
+  });
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      title: fixture.structured.title,
+      summary: fixture.structured.overview,
+      folderName: 'Work',
+    },
+  );
+  const personId = 'p'.repeat(10001);
+  mockRequest.mockImplementation(async (request: {path?: string}) => {
+    if (request.path === '/v1/users/people?include_speech_samples=false') {
+      return {
+        id: 'people',
+        status: 200,
+        body: JSON.stringify([{id: personId, name: 'Alex Chen'}]),
+      };
+    }
+    return response({
+      ...fixture,
+      transcript_segments: [
+        {
+          ...fixture.transcript_segments[0],
+          person_id: personId,
+        },
+      ],
+    });
+  });
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject(
+    {
+      title: fixture.structured.title,
+      transcript: {
+        status: 'loaded',
+        segments: [
+          {
+            text: fixture.transcript_segments[0].text,
+            speaker: 'SPEAKER_00',
+            isUser: true,
+            start: 0.25,
+            end: 4.5,
+            personName: 'Alex Chen',
+          },
+        ],
+      },
+    },
+  );
+  const eventId = 'e'.repeat(10001);
+  mockRequest.mockResolvedValue(
+    response({
+      ...fixture,
+      calendar_event: {
+        event_id: eventId,
+        title: 'Standup',
+        attendees: [],
+        start_time: '2026-09-10T15:00:00.000Z',
+        end_time: '2026-09-10T16:00:00.000Z',
+      },
+    }),
+  );
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toMatchObject({
+    title: fixture.structured.title,
+    calendarEvent: {title: 'Standup'},
+  });
+});
+
 test('fails closed for malformed GET calendar_event', async () => {
   mockRequest.mockResolvedValue(
     response({
