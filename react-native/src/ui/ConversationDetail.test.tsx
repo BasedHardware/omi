@@ -2323,7 +2323,7 @@ test('legacy conversation details name GET calendar Share with attendees', () =>
   openURL.mockRestore();
 });
 
-test('legacy conversation details name GET photo counts and captions', () => {
+test('legacy conversation details omit Flutter PhotosGrid photo-count text', () => {
   mockLegacy.mockReturnValue({
     result: {
       status: 'loaded',
@@ -2348,7 +2348,7 @@ test('legacy conversation details name GET photo counts and captions', () => {
       conversation: {...conversation, id: 'old-1'},
     }),
   );
-  expect(copy).toContain('3 photos');
+  expect(copy).not.toContain('3 photos');
   expect(copy).toContain('Whiteboard notes');
 });
 
@@ -2381,7 +2381,7 @@ test('legacy conversation details name GET discarded photos and analyzing captio
       conversation: {...conversation, id: 'old-1'},
     }),
   );
-  expect(copy).toContain('3 photos');
+  expect(copy).not.toContain('3 photos');
   expect(copy).toContain('Whiteboard notes');
   expect(copy).toContain(
     'This photo was discarded as it was not significant.',
@@ -2419,7 +2419,7 @@ test('legacy conversation details paint GET photo base64 without a viewer', () =
     conversation: {...conversation, id: 'old-1'},
   });
   const copy = text(view);
-  expect(copy).toContain('2 photos');
+  expect(copy).not.toContain('2 photos');
   expect(copy).toContain('Whiteboard notes');
   expect(copy).toContain('Stored elsewhere');
   expect(
@@ -2470,7 +2470,7 @@ test('legacy conversation details name GET invalid inline photo File unavailable
     conversation: {...conversation, id: 'old-1'},
   });
   const copy = text(view);
-  expect(copy).toContain('3 photos');
+  expect(copy).not.toContain('3 photos');
   expect(copy).toContain('Whiteboard notes');
   expect(copy).toContain(conversationPhotoUnavailableCopy());
   expect(copy).toContain('Corrupt');
@@ -2509,7 +2509,7 @@ test('legacy conversation details name GET empty inline photo File unavailable',
       conversation: {...conversation, id: 'old-1'},
     }),
   );
-  expect(copy).toContain('2 photos');
+  expect(copy).not.toContain('2 photos');
   expect(copy).toContain('No bytes');
   expect(copy).toContain(conversationPhotoUnavailableCopy());
   expect(copy).toContain('Stored empty');

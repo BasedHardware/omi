@@ -509,11 +509,6 @@ function LegacyConversationBody({
           </Text>
         </FocusPressable>
       )}
-      {detail.photoCount !== undefined && detail.photoCount > 0 ? (
-        <Text style={[styles.conversationDetailField, ink]}>
-          {`${detail.photoCount} photos`}
-        </Text>
-      ) : null}
       {(
         detail.photoRows ??
         (detail.photoCaptions ?? []).map(caption => ({caption}))
