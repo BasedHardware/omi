@@ -27,6 +27,7 @@ import {
   desktopReadErrorCopy,
   appCategoryCopy,
   appDisplayName,
+  appExploreRatingCopy,
   appImageUrl,
   appRatingCopy,
   appsEmptyCopy,
@@ -51,14 +52,20 @@ function CatalogAppImage({uri}: {uri: string}) {
   );
 }
 
-function appRowMeta(app: CloudApp, installKnown: boolean): string {
+function appRowMeta(
+  app: CloudApp,
+  installKnown: boolean,
+  explore = false,
+): string {
   const category = appCategoryCopy(app.category);
   const author = visibleDisplayText(app.author);
   return [
     category !== '' ? category : null,
     author !== '' ? author : null,
     app.private ? 'Private' : null,
-    appRatingCopy(app.ratingAvg, app.ratingCount),
+    explore
+      ? appExploreRatingCopy(app.ratingAvg, app.ratingCount)
+      : appRatingCopy(app.ratingAvg, app.ratingCount),
     app.connectedAccounts.length > 0
       ? 'Connected'
       : installKnown
@@ -276,7 +283,11 @@ export function ConnectorsPage({
                 <Text style={styles.projectionEmptyCopy}>{section.empty}</Text>
               ) : (
                 section.items.map(app => {
-                  const meta = appRowMeta(app, installKnown);
+                  const meta = appRowMeta(
+                    app,
+                    installKnown,
+                    section.key === 'Explore',
+                  );
                   const name = appDisplayName(app.name);
                   const description = visibleDisplayText(app.description);
                   const imageUrl = appImageUrl(app.image);

@@ -2387,8 +2387,10 @@ test('Apps gallery keeps GET ratings instead of a scoreless catalogue', async ()
   const tree = renderedText(renderer);
   expect(tree).toContain('Owned app');
   expect(
-    renderer.root.findAll(node => node.props.children === '4.5 (12)').length,
+    renderer.root.findAll(node => node.props.children === '4.5 · 12 ratings')
+      .length,
   ).toBeGreaterThan(0);
+  expect(tree).not.toContain('4.5 (12)');
   expect(tree).toContain('Catalog fixture app');
   expect(tree).not.toContain('0.0');
   expect(tree).not.toContain('Official');

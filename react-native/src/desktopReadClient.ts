@@ -2085,6 +2085,28 @@ export function appRatingCopy(
   return `${rating} (${ratingCount})`;
 }
 
+export function appExploreRatingCopy(
+  ratingAvg: number | null | undefined,
+  ratingCount: number | null | undefined,
+): string | null {
+  if (
+    ratingAvg === undefined ||
+    ratingAvg === null ||
+    !Number.isFinite(ratingAvg)
+  ) {
+    return null;
+  }
+  const rating = ratingAvg.toFixed(1);
+  const count =
+    ratingCount === undefined ||
+    ratingCount === null ||
+    !Number.isSafeInteger(ratingCount) ||
+    ratingCount < 0
+      ? 0
+      : ratingCount;
+  return `${rating} · ${count} ${count === 1 ? 'rating' : 'ratings'}`;
+}
+
 export function chatAttachmentDisplayName(name: string): string {
   return accountFieldCopy(name, 'Attachment name unavailable');
 }

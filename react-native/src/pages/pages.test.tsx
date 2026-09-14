@@ -2555,7 +2555,7 @@ test('Connectors rows keep GET private instead of a public-looking catalogue', a
   expect(tree).not.toContain('Official');
 });
 
-test('Connectors rows keep GET ratings instead of a scoreless catalogue', async () => {
+test('Connectors Explore names Flutter CategorySection ratings and Installed keeps list (N)', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/apps') {
@@ -2580,7 +2580,7 @@ test('Connectors rows keep GET ratings instead of a scoreless catalogue', async 
       return {
         id: request.id,
         status: 200,
-        body: JSON.stringify([]),
+        body: JSON.stringify(['catalog-app-rated']),
       };
     }
     if (request.path === '/v1/users/profile') {
@@ -2595,6 +2595,7 @@ test('Connectors rows keep GET ratings instead of a scoreless catalogue', async 
   const renderer = await renderPage(ConnectorsPage);
   const tree = textOf(renderer);
   expect(tree).toContain('Owned app');
+  expect(tree).toContain('4.5 · 12 ratings');
   expect(tree).toContain('4.5 (12)');
   expect(tree).toContain('Catalog fixture app');
   expect(tree).not.toContain('0.0');

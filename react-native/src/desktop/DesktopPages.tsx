@@ -12,8 +12,8 @@ import {
   appDisplayName,
   appDisplaySource,
   appDisplayAttribution,
+  appExploreRatingCopy,
   appImageUrl,
-  appRatingCopy,
   appsEmptyCopy,
   desktopAppsUnavailableCopy,
   desktopBackendUnavailableCopy,
@@ -357,7 +357,7 @@ function tilesFromCatalog(
       status: cloudAppStatus(app, installKnown),
       enabled: app.enabled,
       private: app.private,
-      rating: appRatingCopy(app.ratingAvg, app.ratingCount),
+      rating: appExploreRatingCopy(app.ratingAvg, app.ratingCount),
       imageUrl: appImageUrl(app.image),
     };
   });

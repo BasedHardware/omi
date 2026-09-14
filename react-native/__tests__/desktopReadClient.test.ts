@@ -56,6 +56,7 @@ import {
   appDisplaySource,
   appDisplayAttribution,
   appDisplayName,
+  appExploreRatingCopy,
   appRatingCopy,
   appImageUrl,
   deviceDisplayName,
@@ -2203,6 +2204,17 @@ test('app rating copy keeps GET scores instead of inventing zeros', () => {
   expect(appRatingCopy(undefined, undefined)).toBe(null);
   expect(appRatingCopy(Number.NaN, 12)).toBe(null);
   expect(appRatingCopy(4.5, -1)).toBe('4.5');
+});
+
+test('app explore rating copy names Flutter CategorySection GET scores', () => {
+  expect(appExploreRatingCopy(4.5, 12)).toBe('4.5 · 12 ratings');
+  expect(appExploreRatingCopy(4, 0)).toBe('4.0 · 0 ratings');
+  expect(appExploreRatingCopy(4.5, 1)).toBe('4.5 · 1 rating');
+  expect(appExploreRatingCopy(4.5, null)).toBe('4.5 · 0 ratings');
+  expect(appExploreRatingCopy(null, 12)).toBe(null);
+  expect(appExploreRatingCopy(undefined, undefined)).toBe(null);
+  expect(appExploreRatingCopy(Number.NaN, 12)).toBe(null);
+  expect(appExploreRatingCopy(4.5, -1)).toBe('4.5 · 0 ratings');
 });
 
 test('app image URLs keep GET http(s) images instead of inventing a GitHub host', () => {
