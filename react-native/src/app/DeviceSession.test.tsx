@@ -11,6 +11,7 @@ import {
   firmwareDeviceUpToDateCopy,
   firmwareLatestVersionCopy,
   firmwareWhatsNewCopy,
+  deviceFoundConnectedBatteryCopy,
 } from '../desktopReadClient';
 
 jest.mock('../omiNative', () => ({
@@ -464,9 +465,45 @@ test('device rows name battery only when the reported level is greater than zero
     renderer.root.findAll(
       node =>
         typeof node.props.children === 'string' &&
-        node.props.children === '87%',
+        node.props.children === deviceFoundConnectedBatteryCopy(87),
     ).length,
   ).toBeGreaterThan(0);
+  await act(async () => renderer.unmount());
+});
+
+test('disconnected device rows omit Flutter FoundDevices unused scan battery', async () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={
+          {
+            bluetooth: 'poweredOn',
+            devices: [
+              {
+                id: 'omi-test',
+                name: 'Omi',
+                connected: false,
+                rssi: -40,
+                battery: 87,
+              },
+            ],
+            connectedDeviceId: null,
+            capture: 'idle',
+          } as PlatformNativeSnapshot
+        }
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    `"${deviceFoundConnectedBatteryCopy(87)}"`,
+  );
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('"87%"');
   await act(async () => renderer.unmount());
 });
 

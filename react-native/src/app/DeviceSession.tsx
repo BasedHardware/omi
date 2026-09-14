@@ -15,6 +15,7 @@ import {
   deviceDisplayName,
   deviceFoundNameCopy,
   deviceFoundSavedChipCopy,
+  deviceFoundConnectedBatteryCopy,
   deviceModelNumberCopy,
   deviceProductNameCopy,
   deviceSerialNumberCopy,
@@ -423,9 +424,13 @@ export function DeviceSession({
           ) : null}
         </View>
       )}
-      {deviceHasReportedBattery(device.battery) && (
-        <Text style={styles.deviceBattery}>{`${device.battery}%`}</Text>
-      )}
+      {device.connected &&
+      !device.connecting &&
+      deviceHasReportedBattery(device.battery) ? (
+        <Text style={styles.deviceBattery}>
+          {deviceFoundConnectedBatteryCopy(device.battery)}
+        </Text>
+      ) : null}
     </FocusPressable>
     );
   });

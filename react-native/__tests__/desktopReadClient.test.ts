@@ -189,6 +189,7 @@ import {
   deviceFoundNameCopy,
   deviceFoundSavedCopy,
   deviceFoundSavedChipCopy,
+  deviceFoundConnectedBatteryCopy,
   ledBrightnessCopy,
   micGainCopy,
   micGainLevelCopy,
@@ -1827,6 +1828,8 @@ test('firmware update copy names GET latest without Available on current or draf
   expect(deviceFoundSavedChipCopy('scan-id', 'saved-id')).toBeNull();
   expect(deviceFoundSavedChipCopy('saved-id', null)).toBeNull();
   expect(deviceFoundSavedChipCopy('saved-id', ' \t')).toBeNull();
+  expect(deviceFoundConnectedBatteryCopy(87)).toBe('🔋 87%');
+  expect(deviceFoundConnectedBatteryCopy(1)).toBe('🔋 1%');
   expect(ledBrightnessCopy()).toBe('LED Brightness');
   expect(micGainCopy()).toBe('Mic Gain');
   expect(micGainLevelCopy(0)).toBe('Mute');

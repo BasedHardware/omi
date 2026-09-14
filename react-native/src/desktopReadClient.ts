@@ -2245,13 +2245,18 @@ export function deviceFoundSavedCopy(): string {
 }
 
 export function deviceFoundSavedChipCopy(
-  deviceId: string,
+  scanId: string,
   rememberedId: string | null | undefined,
 ): string | null {
-  const remembered = visibleDisplayText(rememberedId ?? '');
-  return remembered !== '' && remembered === deviceId
+  return visibleDisplayText(scanId) !== '' &&
+    visibleDisplayText(rememberedId ?? '') !== '' &&
+    scanId === rememberedId
     ? deviceFoundSavedCopy()
     : null;
+}
+
+export function deviceFoundConnectedBatteryCopy(level: number): string {
+  return `🔋 ${level}%`;
 }
 
 export function appDisplaySource(app: {
