@@ -692,6 +692,7 @@ export function SettingsPage({
     setDeveloperKeys(
       developerKeysCopy(developerKeysResult.keys, developerApiTitleCopy(), {
         emptyScopesCopy: 'Read Only',
+        maskPrefix: true,
       }),
     );
     setDeveloperKeysError(developerKeysResult.error);

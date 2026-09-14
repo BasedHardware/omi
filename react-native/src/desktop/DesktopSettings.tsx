@@ -609,7 +609,7 @@ export function DesktopSettings({
       nextDeveloperKeys = developerKeysCopy(
         developerKeysResult.keys,
         developerApiTitleCopy(),
-        {emptyScopesCopy: 'Read Only'},
+        {emptyScopesCopy: 'Read Only', maskPrefix: true},
       );
       nextDeveloperKeysError = developerKeysResult.error;
       const mcpKeysResult = await mcpKeysTask;

@@ -2134,7 +2134,8 @@ test('Settings names GET developer and MCP keys without revoke or a full secret'
   );
   expect(tree).toContain('Developer API');
   expect(tree).not.toContain('Developer key');
-  expect(tree).toContain(`Local · omi_sk_ab · ${created} · Full Access`);
+  expect(tree).toContain(`Local · omi_sk_ab*** · ${created} · Full Access`);
+  expect(tree).not.toContain('omi_mcp_cd***');
   expect(tree).toContain('MCP');
   expect(tree).not.toContain('MCP key');
   expect(tree).toContain('Cursor · omi_mcp_cd');
@@ -2214,8 +2215,9 @@ test('Settings names GET developer-key empty scopes Read Only without inventing 
   const created = developerKeyCreatedCopy(
     Date.parse('2026-09-09T12:00:00.000Z'),
   );
-  expect(tree).toContain(`Readonly · omi_sk_ro · ${created} · Read Only`);
-  expect(tree).toContain(`Omitted · omi_sk_om · ${created} · Read Only`);
+  expect(tree).toContain(`Readonly · omi_sk_ro*** · ${created} · Read Only`);
+  expect(tree).toContain(`Omitted · omi_sk_om*** · ${created} · Read Only`);
+  expect(tree).not.toContain('omi_mcp_cd***');
   expect(tree).toContain('Cursor · omi_mcp_cd');
   expect(tree).not.toContain('Cursor · omi_mcp_cd · Read Only');
   expect(tree).not.toContain('Revoke');

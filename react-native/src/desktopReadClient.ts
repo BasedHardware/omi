@@ -1846,6 +1846,17 @@ export function developerKeyCreatedCopy(createdAtMs: number): string {
   );
 }
 
+export function developerKeyPrefixCopy(
+  keyPrefix: string,
+  options?: {mask?: boolean},
+): string {
+  const prefix = visibleDisplayText(keyPrefix);
+  if (options?.mask !== true) {
+    return prefix;
+  }
+  return `${prefix}***`;
+}
+
 export function developerKeyScopeCopy(
   scopes: readonly string[] | undefined,
   options?: {emptyCopy?: string},
@@ -1870,13 +1881,16 @@ export function developerKeyRowCopy(
     createdAtMs?: number;
     scopes?: readonly string[];
   },
-  options?: {emptyScopesCopy?: string},
+  options?: {emptyScopesCopy?: string; maskPrefix?: boolean},
 ): string {
   const name = visibleDisplayText(key.name);
   if (name === '') {
     return '';
   }
-  const prefix = visibleDisplayText(key.keyPrefix);
+  const prefix = developerKeyPrefixCopy(
+    key.keyPrefix,
+    options?.maskPrefix === true ? {mask: true} : undefined,
+  );
   const created =
     typeof key.createdAtMs === 'number'
       ? developerKeyCreatedCopy(key.createdAtMs)
@@ -1915,7 +1929,7 @@ export function developerKeysCopy(
     scopes?: readonly string[];
   }[] | null,
   title: string,
-  options?: {emptyScopesCopy?: string},
+  options?: {emptyScopesCopy?: string; maskPrefix?: boolean},
 ): {title: string; copy: string}[] {
   if (keys === null) {
     return [];

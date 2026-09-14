@@ -39,6 +39,7 @@ import {
   developerWebhookStatusCopy,
   developerWebhookTypeCopy,
   developerKeyCreatedCopy,
+  developerKeyPrefixCopy,
   developerKeyRowCopy,
   developerKeyScopeCopy,
   developerKeysCopy,
@@ -1865,6 +1866,49 @@ test('developer key copy names GET empty scopes Read Only without inventing it o
   expect(
     developerKeyScopeCopy(['conversations:write'], {emptyCopy: 'Read Only'}),
   ).toBe('Write');
+});
+
+test('developer key copy names GET prefix Flutter *** mask without inventing it on MCP keys', () => {
+  const createdAtMs = Date.parse('2026-09-09T12:00:00.000Z');
+  const created = developerKeyCreatedCopy(createdAtMs);
+  expect(developerKeyPrefixCopy('omi_sk_ab', {mask: true})).toBe('omi_sk_ab***');
+  expect(developerKeyPrefixCopy('omi_sk_ab')).toBe('omi_sk_ab');
+  expect(developerKeyPrefixCopy('', {mask: true})).toBe('***');
+  expect(developerKeyPrefixCopy('')).toBe('');
+  expect(
+    developerKeysCopy(
+      [
+        {name: 'Local', keyPrefix: 'omi_sk_ab', createdAtMs, scopes: []},
+        {name: 'Blank', keyPrefix: '', createdAtMs},
+      ],
+      developerApiTitleCopy(),
+      {emptyScopesCopy: 'Read Only', maskPrefix: true},
+    ),
+  ).toEqual([
+    {
+      title: developerApiTitleCopy(),
+      copy: `Local · omi_sk_ab*** · ${created} · Read Only`,
+    },
+    {
+      title: developerApiTitleCopy(),
+      copy: `Blank · *** · ${created} · Read Only`,
+    },
+  ]);
+  expect(
+    developerKeysCopy(
+      [{name: 'Cursor', keyPrefix: 'omi_mcp_cd', createdAtMs}],
+      mcpTitleCopy(),
+    ),
+  ).toEqual([{title: mcpTitleCopy(), copy: `Cursor · omi_mcp_cd · ${created}`}]);
+  expect(
+    developerKeyRowCopy(
+      {name: 'Local', keyPrefix: 'omi_sk_ab', createdAtMs},
+      {maskPrefix: true},
+    ),
+  ).toBe(`Local · omi_sk_ab*** · ${created}`);
+  expect(developerKeyRowCopy({name: 'Local', keyPrefix: 'omi_sk_ab'})).toBe(
+    'Local · omi_sk_ab',
+  );
 });
 
 test('developer key copy names GET empty keys Flutter No API keys yet', () => {
