@@ -49,11 +49,11 @@ export function Memories(): React.JSX.Element {
     deleteMemory,
     refresh
   } = useMemories(memoryView)
-  useEffect(() => {
-    if (beliefEnabled === false && memoryView !== 'useful_now') {
-      setMemoryView('useful_now')
-    }
-  }, [beliefEnabled, memoryView])
+  // Keep the view safe during the synchronous render in which a response clears
+  // the beta capability. The state retains the user's prior selection so it can
+  // be restored if the capability is advertised again later.
+  const effectiveMemoryView: MemoryReadView =
+    beliefEnabled === false ? 'useful_now' : memoryView
   // Pass the live memories so the brain map scopes the server KG to entities
   // that reference a memory you actually have (no account-wide bloat / phantoms),
   // drops the layer when empty, and refetches on add/delete.
@@ -473,7 +473,7 @@ export function Memories(): React.JSX.Element {
             layer={layer}
             onLayerChange={setLayer}
             beliefEnabled={beliefEnabled === true}
-            view={memoryView}
+            view={effectiveMemoryView}
             onViewChange={setMemoryView}
           />
         </div>

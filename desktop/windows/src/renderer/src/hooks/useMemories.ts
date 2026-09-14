@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { omiApi } from '../lib/apiClient'
 import {
   beliefCapabilityFromResponse,
@@ -107,8 +107,13 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
   deleteMemory: (id: string) => Promise<void>
   refresh: () => Promise<void>
 } {
-  hydrateFromDisk(requestedView)
-  const feedbackIds = useRef(new Map<string, string>()).current
+  // Only an explicit capability opt-in may select a temporal route. Unknown and
+  // false states use the stable default, which keeps an owner switch or a
+  // capability downgrade from briefly labeling default rows as history.
+  const effectiveRequestedView: MemoryReadView =
+    (cache.beliefEnabled ?? readBeliefCapability()) === true ? requestedView : 'useful_now'
+  hydrateFromDisk(effectiveRequestedView)
+  const [feedbackIds] = useState(() => new Map<string, string>())
   const feedbackOwner = getCacheUid()
   useEffect(() => {
     feedbackIds.clear()
@@ -137,19 +142,19 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
     ;(async () => {
       try {
         const hadBeliefCapability = cache.beliefEnabled
-        let list = await fetchMemories(requestedView)
+        let list = await fetchMemories(effectiveRequestedView)
         // The probe response may be the first time this account has seen the
         // capability header. Reissue the selected view so useful-now/history/all
         // never silently renders the legacy default after beta is enabled.
         if (hadBeliefCapability !== true && cache.beliefEnabled === true) {
-          list = await fetchMemories(requestedView)
+          list = await fetchMemories(effectiveRequestedView)
         }
         // Account-switch guard (belt-and-suspenders alongside `cancelled`): drop the
         // publish if the account changed while the fetch was in flight, so it can't
         // write A's memories under B's uid on a future in-place switch.
         if (!cancelled && getCacheUid() === originUid) {
           cache.error = null
-          publish(list, requestedView)
+          publish(list, effectiveRequestedView)
         }
       } catch (e) {
         if (!cancelled) {
@@ -173,7 +178,7 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
     return () => {
       cancelled = true
     }
-  }, [requestedView])
+  }, [effectiveRequestedView])
 
   // Create a manual memory, then re-fetch so the list reflects whatever the
   // server actually stored (id, timestamps, category) rather than guessing the
@@ -183,10 +188,10 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
     if (!text) return
     const originUid = getCacheUid()
     await omiApi.post('/v3/memories', { content: text, ...extra })
-    const list = await fetchMemories(requestedView)
+    const list = await fetchMemories(effectiveRequestedView)
     // Drop the publish if the account switched while the request was in flight
     // (same guard as the revalidation effect) — never write A's memories under B.
-    if (getCacheUid() === originUid) publish(list, requestedView)
+    if (getCacheUid() === originUid) publish(list, effectiveRequestedView)
   }
 
   // Edit a memory's content.
@@ -243,10 +248,10 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
     feedbackIds.set(feedbackKey, feedbackId)
     const originUid = getCacheUid()
     await omiApi.post(`/v3/memories/${id}/use`, { action, feedback_id: feedbackId })
-    const list = await fetchMemories(requestedView)
+    const list = await fetchMemories(effectiveRequestedView)
     if (getCacheUid() === originUid) {
       feedbackIds.delete(feedbackKey)
-      publish(list, requestedView)
+      publish(list, effectiveRequestedView)
     }
   }
 
@@ -254,8 +259,8 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
   // import so the Memories page and export count reflect the new memories.
   const refresh = async (): Promise<void> => {
     const originUid = getCacheUid()
-    const list = await fetchMemories(requestedView)
-    if (getCacheUid() === originUid) publish(list, requestedView)
+    const list = await fetchMemories(effectiveRequestedView)
+    if (getCacheUid() === originUid) publish(list, effectiveRequestedView)
   }
 
   return {

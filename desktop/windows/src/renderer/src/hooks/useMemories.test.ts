@@ -11,6 +11,7 @@ const omiApiGet = vi.fn()
 const omiApiPost = vi.fn()
 const omiApiPatch = vi.fn()
 const omiApiDelete = vi.fn()
+const LAST_UID_KEY = 'omi.lastSignedInUid'
 
 vi.mock('../lib/apiClient', () => ({
   omiApi: {
@@ -335,6 +336,41 @@ describe('useMemories — pagination, capability header, delete', () => {
       await result.current.refresh()
     })
     expect(result.current.beliefEnabled).toBe(false)
+    resetMemoriesCache()
+  })
+
+  it('uses useful-now while a retained history selection has no explicit capability', async () => {
+    resetMemoriesCache()
+    memoriesCache.beliefEnabled = false
+    const { result } = renderHook(() => useMemories('history'))
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(memoriesCache.view).toBe('useful_now')
+    expect(omiApiGet.mock.calls[0]).toEqual(['/v3/memories', { params: { limit: 500, offset: 0 } }])
+    resetMemoriesCache()
+  })
+
+  it('does not carry a prior owner history capability into a new owner', async () => {
+    localStorage.clear()
+    localStorage.setItem(LAST_UID_KEY, 'owner-a')
+    memoriesCache.beliefEnabled = true
+
+    // Auth teardown performs this reset before the next owner is mounted.
+    resetMemoriesCache()
+    localStorage.setItem(LAST_UID_KEY, 'owner-b')
+    const { result } = renderHook(() => useMemories('history'))
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(memoriesCache.beliefEnabled).toBe(false)
+    expect(memoriesCache.view).toBe('useful_now')
+    expect(omiApiGet.mock.calls[0]).toEqual(['/v3/memories', { params: { limit: 500, offset: 0 } }])
+    localStorage.clear()
     resetMemoriesCache()
   })
 })
