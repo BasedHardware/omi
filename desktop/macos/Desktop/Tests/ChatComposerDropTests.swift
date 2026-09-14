@@ -5,18 +5,18 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// Dropping a file on the chat composer only worked on its border. The interior is an `NSTextView`,
-/// which sits above the composer's SwiftUI `.onDrop` layer and consumes file drags itself — so the
-/// drop highlight lit only over the padding, and a release over the text never staged the file.
-/// `OmiTextEditor` already solves this for the skill editor with `onFileDrop` / `onFileDragTargeted`;
-/// these tests pin the same wiring on the chat composers, driven through the real `NSTextView` each
-/// one puts on screen.
+/// The chat composer's interior is an `NSTextView`, which sits above the composer's SwiftUI
+/// `.onDrop` layer and would otherwise consume file drags itself — AppKit's own handling inserts the
+/// dropped file's *path* into the text. `OmiTextEditor` exists so hosts replace or decline that
+/// fallback; these tests pin the chat composers' end of the contract, driven through the real
+/// `NSTextView` each one puts on screen: files stage as attachments (all of them, up to the host's
+/// cap), and an attachment-less composer declines the drag without inserting anything.
 @MainActor
 final class ChatComposerDropTests: XCTestCase {
 
   // MARK: - ChatInputView
 
-  /// The interior of the main chat input stages a dropped file as an attachment — through the text
+  /// The interior of the chat input stages a dropped file as an attachment — through the text
   /// view itself, the exact surface the reader drops onto, and without the file's path leaking
   /// into the draft the way AppKit's own drag handling inserts it.
   func testAFileDroppedOnTheChatInputsTextStagesAnAttachment() throws {
@@ -26,8 +26,11 @@ final class ChatComposerDropTests: XCTestCase {
     let url = try Self.composerDropProbeFile()
     defer { try? FileManager.default.removeItem(at: url) }
 
+    XCTAssertEqual(
+      mount.fileDragEntered([url]), .copy,
+      "the chat input did not accept a file drag over its own text")
     XCTAssertTrue(
-      mount.dropFileOnTheEditorText(url),
+      mount.dropFilesOnTheEditorText([url]),
       "the chat input declined a file drag released over its text")
 
     XCTAssertEqual(
@@ -38,21 +41,56 @@ final class ChatComposerDropTests: XCTestCase {
       "the dropped file's path leaked into the draft instead of staging")
   }
 
-  /// The task-sidebar chat passes no attachments binding, so its interior must keep declining
-  /// drops. The staging callback is present anyway so the gate itself is what this asserts: if the
-  /// editor's interior were wired unconditionally, this drop would stage.
-  func testTheAttachmentLessInputKeepsDecliningInteriorDrops() throws {
+  /// One drag can carry several files; the interior stages all of them, through the host's own
+  /// cap. The staged store here is the binding the composer reads, exactly as a real host's is,
+  /// so six files in one drag stop at `kMaxChatAttachments`.
+  func testAMultiFileDropOnTheInteriorStagesEveryFileUpToTheCap() throws {
+    let mount = try ChatInputMount()
+    defer { mount.tearDown() }
+
+    let urls = try (0..<6).map { _ in try Self.composerDropProbeFile() }
+    defer { urls.forEach { try? FileManager.default.removeItem(at: $0) } }
+
+    XCTAssertTrue(
+      mount.dropFilesOnTheEditorText(urls),
+      "the chat input declined a multi-file drag released over its text")
+
+    XCTAssertEqual(
+      mount.stagedURLs, Array(urls.prefix(kMaxChatAttachments)),
+      "a multi-file drop on the interior must stage every file up to the attachment cap, "
+        + "in drag order")
+    XCTAssertEqual(
+      mount.draft, "",
+      "the dropped files' paths leaked into the draft instead of staging")
+  }
+
+  /// The task-sidebar chat passes no attachments binding. Its editor must **decline** file drags —
+  /// and the decline must be explicit, because the AppKit fallback it replaces is what inserts the
+  /// dropped file's path into the draft. The staging callback is present anyway so the gate itself
+  /// is what this asserts: if the editor's interior were wired unconditionally, this drop would
+  /// stage.
+  func testTheAttachmentLessInputDeclinesFileDragsWithoutInsertingTheirPaths() throws {
     let mount = try ChatInputMount(attachmentsEnabled: false)
     defer { mount.tearDown() }
 
     let url = try Self.composerDropProbeFile()
     defer { try? FileManager.default.removeItem(at: url) }
 
-    _ = mount.dropFileOnTheEditorText(url)
+    XCTAssertEqual(
+      mount.fileDragEntered([url]), [],
+      "an input with no attachment support offered to accept a file drag — the drag badge must "
+        + "show it is declined")
+    XCTAssertFalse(
+      mount.dropFilesOnTheEditorText([url]),
+      "an input with no attachment support accepted a file drag on its interior")
 
     XCTAssertTrue(
       mount.stagedURLs.isEmpty,
       "an input with no attachment support staged a dropped file from its interior")
+    XCTAssertEqual(
+      mount.draft, "",
+      "the dropped file's path was inserted into the attachment-less draft — the editor must "
+        + "decline the drag rather than fall through to AppKit")
   }
 
   // MARK: - Wiring tripwire
@@ -75,8 +113,14 @@ final class ChatComposerDropTests: XCTestCase {
 
     let input = try composerSource("MainWindow/Components/ChatInputView.swift")
     XCTAssertTrue(
-      input.contains("onFileDragTargeted: attachmentsEnabled ? { isDropTargeted = $0 } : nil"),
+      input.contains("onFileDrop: editorFileDropHandler"),
+      "ChatInputView's editor interior no longer stages dropped files")
+    XCTAssertTrue(
+      input.contains("onFileDragTargeted: editorFileDragTargetedHandler"),
       "ChatInputView's drop stroke no longer lights over the text")
+    XCTAssertTrue(
+      input.contains("private var editorFileDragTargetedHandler: ((Bool) -> Void)?"),
+      "ChatInputView's interior highlight handler is gone")
     XCTAssertFalse(
       input.contains("onFileDragTargeted: { isDropTargeted = $0 }"),
       "ChatInputView wired its editor interior unconditionally — the task sidebar must keep "
@@ -132,16 +176,25 @@ final class ChatComposerDropTests: XCTestCase {
     var stagedURLs: [URL] { host.rootView.probe.stagedURLs }
     var draft: String { box.text }
 
+    /// A file drag crossing into the editor's own text. Returns the operation the editor offered.
+    func fileDragEntered(_ urls: [URL]) -> NSDragOperation {
+      textView.draggingEntered(Self.fileDragInfo(carrying: urls))
+    }
+
     /// A file drag released over the editor's own text — entered, performed, and settled.
-    func dropFileOnTheEditorText(_ url: URL) -> Bool {
-      let board = NSPasteboard(name: NSPasteboard.Name("omi.test.chatDrop.\(UUID().uuidString)"))
-      board.clearContents()
-      board.writeObjects([url as NSURL])
-      let info = FileDragInfo(pasteboard: board)
+    func dropFilesOnTheEditorText(_ urls: [URL]) -> Bool {
+      let info = Self.fileDragInfo(carrying: urls)
       _ = textView.draggingEntered(info)
       let accepted = textView.performDragOperation(info)
       host.layoutSubtreeIfNeeded()
       return accepted
+    }
+
+    private static func fileDragInfo(carrying urls: [URL]) -> FileDragInfo {
+      let board = NSPasteboard(name: NSPasteboard.Name("omi.test.chatDrop.\(UUID().uuidString)"))
+      board.clearContents()
+      board.writeObjects(urls as [NSURL])
+      return FileDragInfo(pasteboard: board)
     }
 
     func tearDown() {
@@ -168,8 +221,15 @@ final class ChatComposerDropTests: XCTestCase {
         isSending: false,
         mode: .constant(.act),
         inputText: Binding(get: { box.text }, set: { box.text = $0 }),
-        attachments: attachmentsEnabled ? .constant([]) : nil,
-        onAttachmentsAdded: { urls in probe.stagedURLs.append(contentsOf: urls) }
+        // The staged store the composer caps against, read through a real binding the way a live
+        // host's store is — not `.constant`, which can never tighten as files stage.
+        attachments: attachmentsEnabled
+          ? Binding(
+            get: { probe.staged }, set: { probe.staged = $0 })
+          : nil,
+        onAttachmentsAdded: { urls in
+          probe.staged.append(contentsOf: urls.compactMap(ChatAttachment.from(url:)))
+        }
       )
       .padding()
     }
@@ -182,7 +242,8 @@ final class ChatComposerDropTests: XCTestCase {
 
   @MainActor
   private final class DropProbe {
-    var stagedURLs: [URL] = []
+    var staged: [ChatAttachment] = []
+    var stagedURLs: [URL] { staged.compactMap(\.localFileURL) }
   }
 }
 
