@@ -258,6 +258,19 @@ class PrePushCiPredictionTests(unittest.TestCase):
         self.assertFalse(plan.includes("flutter-l10n"))
         self.assertEqual(github_outputs(plan)["has_flutter_generated"], "false")
 
+    def test_manifest_only_diff_does_not_wake_desktop_swift_tests(self) -> None:
+        plan = self.plan([".github/checks-manifest.yaml"])
+        self.assertFalse(plan.includes("desktop-swift-tests"))
+        self.assertEqual(github_outputs(plan)["should_run_tests"], "false")
+
+    def test_app_plus_manifest_diff_without_desktop_paths_skips_desktop_swift_tests(self) -> None:
+        plan = self.plan(
+            [".github/checks-manifest.yaml", "app/lib/models/omi_button_action.dart"],
+            {"app/lib/models/omi_button_action.dart": "class OmiButtonAction {}"},
+        )
+        self.assertFalse(plan.includes("desktop-swift-tests"))
+        self.assertEqual(github_outputs(plan)["should_run_tests"], "false")
+
     def test_mobile_workflow_change_wakes_flutter_regeneration(self) -> None:
         plan = self.plan([".github/workflows/mobile-app-checks.yml"])
 
