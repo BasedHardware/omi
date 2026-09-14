@@ -163,6 +163,20 @@ test('loadOmiFairUseStatus names resolved GET status and omits failures', async 
   });
   request.mockResolvedValueOnce({id: 'fair-use', status: 404, body: null});
   expect(await loadOmiFairUseStatus(backend)).toBeNull();
-  request.mockResolvedValueOnce({id: 'fair-use', status: 200, body: '{'});
+  request.mockResolvedValueOnce({
+    id: 'fair-use',
+    status: 500,
+    body: '{"error":"internal"}',
+  });
   expect(await loadOmiFairUseStatus(backend)).toBeNull();
+});
+
+test('loadOmiFairUseStatus names malformed GET instead of empty success', async () => {
+  const request = jest.fn(async () => ({
+    id: 'fair-use',
+    status: 200,
+    body: '{',
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(loadOmiFairUseStatus(backend)).rejects.toThrow();
 });

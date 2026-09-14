@@ -136,9 +136,5 @@ export async function loadOmiFairUseStatus(
   ) {
     return null;
   }
-  try {
-    return parseOmiFairUseStatus(response.body);
-  } catch {
-    return null;
-  }
+  return parseOmiFairUseStatus(response.body);
 }
