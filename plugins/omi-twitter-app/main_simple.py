@@ -529,7 +529,7 @@ async def auth_callback(
             <html>
                 <body style="font-family: Arial; padding: 40px; text-align: center;">
                     <h2>❌ Authentication Error</h2>
-                    <p>Failed to complete authentication: {str(e)}</p>
+                    <p>Failed to complete authentication.</p>
                     <p><a href="/auth?uid={error_uid}">Try again</a></p>
                 </body>
             </html>

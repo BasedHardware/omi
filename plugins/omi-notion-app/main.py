@@ -1112,10 +1112,8 @@ async def notion_callback(
         """)
 
     except Exception as e:
-        log(f"OAuth error: {e}")
-        import traceback
-        traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        log(f"OAuth error: {type(e).__name__}")
+        return HTMLResponse(content="Authentication error", status_code=500)
 
 
 @app.get("/setup/notion")

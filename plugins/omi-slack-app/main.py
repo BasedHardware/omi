@@ -555,7 +555,7 @@ async def auth_callback(
                     <div class="container">
                         <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
                             <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Authentication Error</h2>
-                            <p style="margin-bottom: 16px;">Failed to complete authentication: {str(e)}</p>
+                            <p style="margin-bottom: 16px;">Failed to complete authentication.</p>
                             <a href="/auth?uid={uid}" class="btn btn-primary">Try again</a>
                         </div>
                     </div>

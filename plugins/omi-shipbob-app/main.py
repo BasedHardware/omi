@@ -133,7 +133,7 @@ def refresh_token_if_needed(uid: str) -> bool:
             log(f"Token refreshed for user {uid}")
             return True
         else:
-            log(f"Token refresh failed: {response.status_code} - {response.text}")
+            log(f"Token refresh failed: {response.status_code}")
             return False
     except Exception as e:
         log(f"Token refresh error: {e}")
@@ -171,7 +171,7 @@ def make_shipbob_request(
         if response.status_code in [200, 201]:
             return response.json()
         else:
-            log(f"ShipBob API error: {response.status_code} - {response.text[:200]}")
+            log(f"ShipBob API error: {response.status_code}")
             return {"error": response.text, "status_code": response.status_code}
     except Exception as e:
         log(f"ShipBob API exception: {e}")
@@ -407,7 +407,7 @@ async def handle_shipbob_callback(
         )
 
         if response.status_code != 200:
-            log(f"Token exchange failed: {response.status_code} - {response.text}")
+            log(f"Token exchange failed: {response.status_code}")
             return templates.TemplateResponse("setup.html", {
                 "request": request,
                 "authenticated": False,

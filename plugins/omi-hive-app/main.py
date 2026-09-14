@@ -170,11 +170,11 @@ def hive_rest_request(uid: str, method: str, endpoint: str, data: Optional[Dict]
         try:
             return response.json()
         except Exception:
-            return {"data": response.text}
+            return {"errors": [{"message": f"HTTP {response.status_code}"}]}
             
     except Exception as e:
-        print(f"🐝 Hive REST Exception: {e}")
-        return {"errors": [{"message": str(e)}]}
+        print(f"🐝 Hive REST Exception: {type(e).__name__}")
+        return {"errors": [{"message": type(e).__name__}]}
 
 
 def hive_api_request(uid: str, query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:

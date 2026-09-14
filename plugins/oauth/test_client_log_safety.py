@@ -142,21 +142,34 @@ class TestPluginSourceSafety(unittest.TestCase):
     ]
 
     def test_no_log_call_emits_secrets_or_response_bodies(self):
+        import ast
         import glob
 
-        log_line = re.compile(r"(?:print|logger\.(?:info|warning|error|debug))\((.*)")
+        def is_log_call(node):
+            # print(...), log(...), logger.info/warning/error/debug/exception(...)
+            if isinstance(node.func, ast.Name):
+                return node.func.id in ("print", "log")
+            return isinstance(node.func, ast.Attribute) and node.func.attr in (
+                "info", "warning", "error", "debug", "exception", "critical",
+            )
+
         for path in sorted(glob.glob("plugins/**/*.py", recursive=True)):
             if os.path.basename(path).startswith("test_"):
                 continue
             with open(path, encoding="utf-8", errors="replace") as f:
-                for lineno, line in enumerate(f, 1):
-                    m = log_line.search(line)
-                    if not m:
-                        continue
-                    for token in self.BANNED_TOKENS:
-                        self.assertNotIn(
-                            token, m.group(1), f"{path}:{lineno} logs {token}"
-                        )
+                source = f.read()
+            try:
+                tree = ast.parse(source)
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call) or not is_log_call(node):
+                    continue
+                args_src = ast.get_source_segment(source, node) or ""
+                for token in self.BANNED_TOKENS:
+                    self.assertNotIn(
+                        token, args_src, f"{path}:{node.lineno} logs {token}"
+                    )
 
 
 if __name__ == "__main__":

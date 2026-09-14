@@ -51,7 +51,7 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
     oauth_ok = get_notion().get_access_token(code)
     if "error" in oauth_ok:
         err = oauth_ok["error"]
-        print(err)
+        print(f"Error: HTTP_{err.get('status')}")
         return response_setup_notion_crm_page(
             request, uid, f"Something went wrong. Please try again! \n (code: 400001)"
         )
@@ -69,7 +69,7 @@ async def callback_auth_notion_crm(request: Request, state: str, code: str):
     databases_ok = get_notion().get_databases_edited_time_desc(access_token)
     if "error" in databases_ok:
         err = databases_ok["error"]
-        print(err)
+        print(f"Error: HTTP_{err.get('status')}")
         return response_setup_notion_crm_page(
             request, uid, f"Something went wrong. Please try again! \n (code: 400003)"
         )

@@ -179,11 +179,10 @@ class OmiClient:
                 },
             )
         except requests.exceptions.HTTPError:
-            resp_text = f"{resp.text()}"
             err = {
                 "error": {
                     "status": resp.status_code,
-                    "message": resp_text,
+                    "message": f"HTTP_{resp.status_code}",
                 },
             }
         except requests.exceptions.Timeout:
@@ -234,11 +233,10 @@ class OmiClient:
                 },
             )
         except requests.exceptions.HTTPError:
-            resp_text = f"{resp.text()}"
             err = {
                 "error": {
                     "status": resp.status_code,
-                    "message": resp_text,
+                    "message": f"HTTP_{resp.status_code}",
                 },
             }
         except requests.exceptions.Timeout:
