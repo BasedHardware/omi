@@ -3,12 +3,14 @@ import Foundation
 /// Turns a finished turn's audio into its best available transcript.
 ///
 /// Accuracy first, then availability: the backend's pre-recorded recognizer
-/// (`/v2/voice-message/transcribe`, `velma-2` first) hears the whole utterance
-/// with the on-screen vocabulary as context, and it is what a dictation is
-/// transcribed with whenever it can be reached. The on-device Parakeet model —
-/// already loaded for language identification — is the fallback, and with no
-/// network it is the only recognizer there is. A turn never ends with nothing
-/// while either can still answer.
+/// (`/v2/voice-message/transcribe`) hears the whole utterance with the
+/// on-screen vocabulary as context, and it is what a dictation is transcribed
+/// with whenever it can be reached. Behind that one call the backend runs its
+/// own chain — cloud Parakeet, then Velma-2 if Parakeet fails recoverably — so
+/// a single cloud provider being down does not cost the dictation its accuracy.
+/// The on-device Parakeet model — already loaded for language identification —
+/// is the last tier, and with no network it is the only recognizer there is. A
+/// turn never ends with nothing while either can still answer.
 ///
 /// The recognizers are injected so the order can be exercised without a
 /// network or a model.
