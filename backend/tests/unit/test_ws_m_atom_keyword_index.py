@@ -982,6 +982,65 @@ class TestKeywordSearchAndHybrid:
         assert duplicate_short_term.memory_id not in {row["memory_id"] for row in first}
         assert first[1]["tier"] == MemoryTier.short_term.value
 
+    def test_temporal_empty_search_uses_bounded_scan_and_filters_negative_rows(self, monkeypatch):
+        now = datetime(2026, 9, 15, tzinfo=timezone.utc)
+        visible = _long_term_item(memory_id='mem-empty-visible', observed_at=now)
+        suppressed = _long_term_item(memory_id='mem-empty-suppressed', observed_at=now).model_copy(
+            update={'arguments': {'memory_use': {'suppressed': True}}}
+        )
+        negative = _long_term_item(memory_id='mem-empty-negative', observed_at=now).model_copy(
+            update={'promotion': {'user_review': False}}
+        )
+        scan_calls = []
+
+        def bounded_scan(uid, **kwargs):
+            assert uid == CANONICAL_UID
+            scan_calls.append(kwargs)
+            assert kwargs['limit'] == 60
+            return (
+                [
+                    (canonical_adapter_mod.memory_item_to_memorydb(item), (item.updated_at, item.memory_id))
+                    for item in (visible, suppressed, negative)
+                ],
+                True,
+            )
+
+        monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
+        monkeypatch.setattr(canonical_adapter_mod, 'read_canonical_scan_page', bounded_scan)
+        monkeypatch.setattr(
+            canonical_adapter_mod,
+            'fetch_authoritative_product_memory_items',
+            lambda **kwargs: pytest.fail('temporal empty search must not scan the full collection'),
+        )
+
+        results = search_canonical_memories(
+            CANONICAL_UID,
+            '',
+            limit=5,
+            db_client=_data_protection_db(),
+            view='history',
+            as_of=now,
+            item_filter=lambda item: True,
+        )
+
+        assert [row['memory_id'] for row in results] == [visible.memory_id]
+        assert results[0]['date'] == now.isoformat()
+        assert len(scan_calls) == 1
+        assert callable(scan_calls[0]['item_filter'])
+
+        # Beta keeps the bounded/suppressed-safe path even when callers omit
+        # the new view argument and receive the released default.
+        scan_calls.clear()
+        default_results = search_canonical_memories(
+            CANONICAL_UID,
+            '',
+            limit=5,
+            db_client=_data_protection_db(),
+            as_of=now,
+        )
+        assert [row['memory_id'] for row in default_results] == [visible.memory_id]
+        assert len(scan_calls) == 1
+
     def test_product_search_follows_lineage_pointers_without_full_scan(self, monkeypatch):
         survivor = _long_term_item(
             memory_id="mem-root",

@@ -964,6 +964,7 @@ def read_canonical_scan_page(
     budget: Optional[ListReadBudget] = None,
     view: str = 'released',
     as_of: Optional[datetime] = None,
+    item_filter: Optional[Callable[[MemoryItem], bool]] = None,
 ) -> Tuple[List[CanonicalScanSlot], bool]:
     """Read one bounded canonical raw scan page via Firestore keyset order.
 
@@ -1028,6 +1029,9 @@ def read_canonical_scan_page(
             # Fail closed: payload identity must match document __name__.
             slots.append((None, scan_cursor))
             continue
+        if item_filter is not None and not item_filter(item):
+            slots.append((None, scan_cursor))
+            continue
         if not _canonical_scan_item_visible(
             item,
             policy=policy,
@@ -1087,6 +1091,56 @@ def search_canonical_memories(
     if not normalized_query:
         if ledger_kinds is not None:
             return []
+        if belief_model_enabled():
+            # Empty-query retrieval is a broad model-facing list.  Keep it on
+            # the same bounded canonical scan seam as explicit history search;
+            # the old compatibility path materialized the full collection.
+            slots, _ = read_canonical_scan_page(
+                uid,
+                limit=_LEDGER_SEARCH_MAX_PROVIDER_CANDIDATES,
+                db_client=client,
+                device_scope_request=device_scope_request,
+                include_pending_processing=False,
+                include_archive=False,
+                view=temporal_view,
+                as_of=temporal_clock,
+                item_filter=item_filter,
+            )
+            memories = [row for row, _cursor in slots if row is not None]
+            visible_memories = [
+                memory
+                for memory in memories
+                if not memory.is_locked
+                and memory.user_review is not False
+                and not memory_use_suppressed(memory)
+                and temporal_view_allows_record(
+                    memory,
+                    view=temporal_view,
+                    now=temporal_clock,
+                    include_archive=False,
+                )
+            ]
+            return [
+                {
+                    "memory_id": memory.id,
+                    "content": memory.content,
+                    "tier": (
+                        memory.memory_tier.value if memory.memory_tier is not None else MemoryLayer.short_term.value
+                    ),
+                    # Temporal views expose the evidence clock when the
+                    # projection has one; processing/update time is the
+                    # compatibility fallback for older rows.
+                    "date": (
+                        memory.as_of.isoformat()
+                        if isinstance(memory.as_of, datetime)
+                        else memory.updated_at.isoformat()
+                    ),
+                    "visibility": memory.visibility,
+                    "is_locked": memory.is_locked,
+                    **public_belief_overlay_json(memory, now=temporal_clock),
+                }
+                for memory in visible_memories[:capped_limit]
+            ]
         memories = read_canonical_memories(
             uid,
             limit=capped_limit,
