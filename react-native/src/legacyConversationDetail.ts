@@ -393,7 +393,7 @@ export async function loadLegacyConversationDetail(
 ): Promise<LegacyConversationDetail> {
   if (
     !id ||
-    id.length > 256 ||
+    id.length > 1_000_000 ||
     [...id].some(character => character.charCodeAt(0) < 32)
   ) {
     throw new DetailError('invalid');

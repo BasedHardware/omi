@@ -1127,6 +1127,46 @@ test('keeps GET conversation detail when person_id, folder_id, or event_id excee
   });
 });
 
+test('keeps GET conversation detail when the conversation id exceeds 256', async () => {
+  const id = 'c'.repeat(257);
+  mockRequest.mockResolvedValue(response({...fixture, id}));
+  expect(await loadLegacyConversationDetail(backend, id)).toMatchObject({
+    id,
+    title: fixture.structured.title,
+    summary: fixture.structured.overview,
+  });
+  expect(mockRequest).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: `/v1/conversations/${encodeURIComponent(id)}`,
+  });
+});
+
+test('keeps GET conversation detail when the conversation id exceeds 10000', async () => {
+  const id = 'c'.repeat(10001);
+  mockRequest.mockResolvedValue(response({...fixture, id}));
+  expect(await loadLegacyConversationDetail(backend, id)).toMatchObject({
+    id,
+    title: fixture.structured.title,
+    summary: fixture.structured.overview,
+  });
+  expect(mockRequest).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: `/v1/conversations/${encodeURIComponent(id)}`,
+  });
+});
+
+test('fails closed when the conversation id exceeds 1000000', async () => {
+  mockRequest.mockClear();
+  await expect(
+    loadLegacyConversationDetail(backend, 'c'.repeat(1_000_001)),
+  ).rejects.toMatchObject({kind: 'invalid'});
+  expect(mockRequest).not.toHaveBeenCalled();
+});
+
 test('fails closed for malformed GET calendar_event', async () => {
   mockRequest.mockResolvedValue(
     response({
