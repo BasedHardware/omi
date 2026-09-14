@@ -13,7 +13,10 @@ import {DeviceControls} from './DeviceControls';
 import {
   accountFieldCopy,
   deviceDisplayName,
+  deviceModelNumberCopy,
+  deviceSerialNumberCopy,
   deviceSerialMatchesId,
+  deviceUnknownCopy,
   firmwareUpdateCopy,
   firmwareLatestVersionCopy,
   desktopReadErrorCopy,
@@ -423,15 +426,15 @@ export function DeviceSession({
       <Text selectable style={styles.deviceMeta}>
         Device ID
         {': '}
-        {accountFieldCopy(connected.id, 'Unavailable')}
+        {accountFieldCopy(connected.id, deviceUnknownCopy())}
       </Text>
       {(
         [
-          ['model', 'Model'],
+          ['model', deviceModelNumberCopy()],
           ['firmware', 'Firmware'],
           ['hardware', 'Hardware'],
           ['manufacturer', 'Manufacturer'],
-          ['serial', 'Serial number'],
+          ['serial', deviceSerialNumberCopy()],
         ] as const
       ).flatMap(([field, label]) => {
         if (field === 'serial') {
@@ -446,7 +449,7 @@ export function DeviceSession({
           <Text key={field} selectable style={styles.deviceMeta}>
             {label}
             {': '}
-            {accountFieldCopy(connected.information?.[field], 'Unavailable')}
+            {accountFieldCopy(connected.information?.[field], deviceUnknownCopy())}
           </Text>,
         ];
       })}

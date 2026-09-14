@@ -2,7 +2,13 @@ import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {DeviceSession, deviceHasReportedBattery, homeConnectionStatus} from './DeviceSession';
 import type {PlatformNativeSnapshot} from '../omiNative';
-import {desktopBackendServiceCopy, firmwareLatestVersionCopy} from '../desktopReadClient';
+import {
+  desktopBackendServiceCopy,
+  deviceModelNumberCopy,
+  deviceSerialNumberCopy,
+  deviceUnknownCopy,
+  firmwareLatestVersionCopy,
+} from '../desktopReadClient';
 
 jest.mock('../omiNative', () => ({
   isBluetoothScanAvailable: (state?: string) => state === 'poweredOn',
@@ -55,7 +61,7 @@ test('connected device omits serial when it duplicates Device ID', async () => {
   });
   const duplicate = JSON.stringify(renderer.toJSON());
   expect(duplicate).toContain('"Device ID",": ","AA:BB:CC:DD:EE:FF"');
-  expect(duplicate).not.toContain('"Serial number"');
+  expect(duplicate).not.toContain(`"${deviceSerialNumberCopy()}"`);
   await act(async () => {
     renderer.update(
       <DeviceSession
@@ -81,7 +87,7 @@ test('connected device omits serial when it duplicates Device ID', async () => {
     );
   });
   const distinct = JSON.stringify(renderer.toJSON());
-  expect(distinct).toContain('"Serial number",": ","SN-9911"');
+  expect(distinct).toContain(`"${deviceSerialNumberCopy()}",": ","SN-9911"`);
   await act(async () => renderer.unmount());
 });
 
@@ -117,10 +123,15 @@ test('connected device details show reported values and truthful unavailable fie
   expect(output).toContain('Omi Dev Kit');
   expect(output).toContain('1.2.3');
   expect(output).toContain('"Device ID",": ","omi-test"');
-  expect(output).toContain('"Serial number",": ","Unavailable"');
-  expect(output).toContain('"Hardware",": ","Unavailable"');
+  expect(output).toContain(`"${deviceModelNumberCopy()}",": ","Omi Dev Kit"`);
+  expect(output).toContain(
+    `"${deviceSerialNumberCopy()}",": ","${deviceUnknownCopy()}"`,
+  );
+  expect(output).toContain(`"Hardware",": ","${deviceUnknownCopy()}"`);
+  expect(output).toContain(`"Manufacturer",": ","${deviceUnknownCopy()}"`);
+  expect(output).not.toContain('"Model"');
+  expect(output).not.toContain('Serial number');
   expect(output).not.toContain(`"${firmwareLatestVersionCopy()}"`);
-  expect(output).not.toContain('Unknown');
   await act(async () => {
     renderer.update(
       <DeviceSession
@@ -216,7 +227,7 @@ test('device rows name battery only when the reported level is greater than zero
   await act(async () => renderer.unmount());
 });
 
-test('connected device details treat empty information fields as Unavailable', async () => {
+test('connected device details treat empty information fields as Flutter Unknown', async () => {
   const snapshot = {
     bluetooth: 'poweredOn',
     devices: [
@@ -250,12 +261,18 @@ test('connected device details treat empty information fields as Unavailable', a
     );
   });
   const output = JSON.stringify(renderer.toJSON());
-  expect(output).toContain('"Model",": ","Unavailable"');
-  expect(output).toContain('"Firmware",": ","Unavailable"');
-  expect(output).toContain('"Hardware",": ","Unavailable"');
+  expect(output).toContain(
+    `"${deviceModelNumberCopy()}",": ","${deviceUnknownCopy()}"`,
+  );
+  expect(output).toContain(`"Firmware",": ","${deviceUnknownCopy()}"`);
+  expect(output).toContain(`"Hardware",": ","${deviceUnknownCopy()}"`);
   expect(output).toContain('"Manufacturer",": ","Based"');
-  expect(output).toContain('"Serial number",": ","Unavailable"');
+  expect(output).toContain(
+    `"${deviceSerialNumberCopy()}",": ","${deviceUnknownCopy()}"`,
+  );
   expect(output).toContain('"Device ID",": ","omi-test"');
+  expect(output).not.toContain('"Model"');
+  expect(output).not.toContain('Serial number');
   expect(output).not.toContain(' \t\n');
   expect(output).not.toContain(`"${firmwareLatestVersionCopy()}"`);
   await act(async () => renderer.unmount());

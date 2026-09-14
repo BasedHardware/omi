@@ -149,6 +149,9 @@ import {
   peopleNameRows,
   firmwareUpdateCopy,
   firmwareLatestVersionCopy,
+  deviceModelNumberCopy,
+  deviceSerialNumberCopy,
+  deviceUnknownCopy,
   fairUseCopy,
   fairUseBudgetResetCopy,
   fairUseDailyTranscriptionCopy,
@@ -1663,6 +1666,9 @@ test('transcription preference copy names GET vocabulary without Flutter false d
 
 test('firmware update copy names GET latest without Available on current or draft', () => {
   expect(firmwareLatestVersionCopy()).toBe('Latest Version');
+  expect(deviceModelNumberCopy()).toBe('Model Number');
+  expect(deviceSerialNumberCopy()).toBe('Serial Number');
+  expect(deviceUnknownCopy()).toBe('Unknown');
   expect(
     firmwareUpdateCopy('1.2.3', {
       version: '1.3.0',

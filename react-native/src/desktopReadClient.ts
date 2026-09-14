@@ -1683,6 +1683,18 @@ export function firmwareLatestVersionCopy(): string {
   return 'Latest Version';
 }
 
+export function deviceModelNumberCopy(): string {
+  return 'Model Number';
+}
+
+export function deviceSerialNumberCopy(): string {
+  return 'Serial Number';
+}
+
+export function deviceUnknownCopy(): string {
+  return 'Unknown';
+}
+
 export function firmwareUpdateCopy(
   currentFirmware: string,
   details: {
