@@ -15,31 +15,82 @@ from unittest.mock import AsyncMock, MagicMock, patch
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def load_app_modules():
+def load_app_modules(force_stubs: bool = False):
     """Load models and main modules hermetically without contaminating sys.modules."""
     stubs = {}
 
-    try:
-        import pydantic
-    except (ImportError, ModuleNotFoundError):
+    if not force_stubs:
+        try:
+            import pydantic
+        except (ImportError, ModuleNotFoundError):
+            pydantic = None
+    else:
+        pydantic = None
+
+    if pydantic is None:
         pydantic_mod = types.ModuleType("pydantic")
+
+        class FieldInfoStub:
+            def __init__(self, default=..., **kwargs):
+                self.default = default
+                self.ge = kwargs.get("ge")
+                self.le = kwargs.get("le")
+                self.gt = kwargs.get("gt")
+                self.lt = kwargs.get("lt")
+                self.min_length = kwargs.get("min_length")
+                self.max_length = kwargs.get("max_length")
 
         class BaseModelStub:
             def __init__(self, **data):
+                annotations = getattr(self.__class__, "__annotations__", {})
+                for fname in annotations:
+                    if fname not in data and hasattr(self.__class__, fname):
+                        attr_val = getattr(self.__class__, fname)
+                        if isinstance(attr_val, FieldInfoStub):
+                            if attr_val.default is not ...:
+                                data[fname] = attr_val.default
+                            else:
+                                raise ValueError(f"Field '{fname}' is required.")
+                        else:
+                            data[fname] = attr_val
+
                 for k, v in data.items():
                     setattr(self, k, v)
+
+                # Pre-field validators
                 for attr_name in dir(self.__class__):
                     attr = getattr(self.__class__, attr_name)
                     func = getattr(attr, "__func__", attr)
                     if getattr(func, "_is_field_val", False):
                         target_field = getattr(func, "_target_field")
-                        if target_field in data:
+                        if hasattr(self, target_field):
                             try:
                                 val = attr(getattr(self, target_field))
                             except TypeError:
                                 val = func(self.__class__, getattr(self, target_field))
                             setattr(self, target_field, val)
-                    elif getattr(func, "_is_model_val", False):
+
+                # Enforce constraints
+                for fname in annotations:
+                    if hasattr(self.__class__, fname):
+                        attr_val = getattr(self.__class__, fname)
+                        if isinstance(attr_val, FieldInfoStub):
+                            val = getattr(self, fname, None)
+                            if val is not None:
+                                if attr_val.ge is not None and val < attr_val.ge:
+                                    raise ValueError(f"{fname} must be >= {attr_val.ge}")
+                                if attr_val.le is not None and val > attr_val.le:
+                                    raise ValueError(f"{fname} must be <= {attr_val.le}")
+                                if attr_val.min_length is not None and len(val) < attr_val.min_length:
+                                    raise ValueError(f"{fname} minimum length is {attr_val.min_length}")
+                                if attr_val.max_length is not None and len(val) > attr_val.max_length:
+                                    raise ValueError(f"{fname} maximum length is {attr_val.max_length}")
+
+                # Model validators
+                for attr_name in dir(self.__class__):
+                    attr = getattr(self.__class__, attr_name)
+                    func = getattr(attr, "__func__", attr)
+                    if getattr(func, "_is_model_val", False):
                         try:
                             attr(self)
                         except TypeError:
@@ -66,7 +117,7 @@ def load_app_modules():
             return decorator
 
         def field_stub(default=..., **kwargs):
-            return default
+            return FieldInfoStub(default, **kwargs)
 
         pydantic_mod.BaseModel = BaseModelStub
         pydantic_mod.Field = field_stub
@@ -74,11 +125,17 @@ def load_app_modules():
         pydantic_mod.model_validator = model_validator_stub
         stubs["pydantic"] = pydantic_mod
 
-    try:
-        import fastapi
-        import fastapi.exceptions
-        import fastapi.responses
-    except (ImportError, ModuleNotFoundError):
+    if not force_stubs:
+        try:
+            import fastapi
+            import fastapi.exceptions
+            import fastapi.responses
+        except (ImportError, ModuleNotFoundError):
+            fastapi = None
+    else:
+        fastapi = None
+
+    if fastapi is None:
         fastapi_mod = types.ModuleType("fastapi")
 
         class StateStub:
@@ -137,9 +194,15 @@ def load_app_modules():
         stubs["fastapi.exceptions"] = fastapi_exceptions
         stubs["fastapi.responses"] = fastapi_responses
 
-    try:
-        import httpx
-    except (ImportError, ModuleNotFoundError):
+    if not force_stubs:
+        try:
+            import httpx
+        except (ImportError, ModuleNotFoundError):
+            httpx = None
+    else:
+        httpx = None
+
+    if httpx is None:
         httpx_mod = types.ModuleType("httpx")
 
         class HTTPErrorStub(Exception):
@@ -444,8 +507,98 @@ class TestCoinGeckoApp(unittest.TestCase):
             self.assertIsNone(resp.error)
             self.assertIn("No cryptocurrency coins matched query", resp.result)
 
-    def test_models_normalization(self):
-        """Verify whitespace normalization and validation across Pydantic models."""
+    def test_lifespan_http_client_closed_fallback(self):
+        """Verify fallback client is spawned and used when app.state.http_client.is_closed is True."""
+        closed_client = MagicMock()
+        closed_client.is_closed = True
+        self.main.app.state.http_client = closed_client
+
+        mock_inst = AsyncMock()
+        mock_inst.is_closed = False
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"coins": []}
+        mock_inst.get.return_value = mock_resp
+
+        with patch.object(self.main.httpx, "AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__.return_value = mock_inst
+
+            req = self.models.SearchCryptoCoinsRequest(query="sol")
+            resp = asyncio.run(self.main.search_crypto_coins(req))
+
+            self.assertIsNone(resp.error)
+            self.assertIn("No cryptocurrency coins matched query", resp.result)
+            mock_cls.assert_called_once()
+            mock_inst.get.assert_called_once()
+
+    def test_get_crypto_price_empty_coin_object(self):
+        """Verify coin mapping with empty object {} is reported as not found instead of all-N/A."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "bitcoin": {},
+        }
+        self.mock_client.get.return_value = mock_resp
+
+        req = self.models.GetCryptoPriceRequest(coin_ids=["bitcoin"], vs_currency="usd")
+        resp = asyncio.run(self.main.get_crypto_price(req))
+
+        self.assertIsNone(resp.error)
+        self.assertIn("- bitcoin: Not found (try searching with search_crypto_coins)", resp.result)
+        self.assertNotIn("N/A | 24h: N/A", resp.result)
+
+    def test_malformed_entries_filtered_before_slicing(self):
+        """Verify non-dict entries in list payloads are filtered before slicing and numbering."""
+        # Search: malformed entries skipped, valid entry gets index 1
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "coins": [None, "invalid", {"name": "Ethereum", "symbol": "eth", "id": "ethereum", "market_cap_rank": 2}]
+        }
+        self.mock_client.get.return_value = mock_resp
+
+        req_search = self.models.SearchCryptoCoinsRequest(query="eth", max_results=1)
+        resp_search = asyncio.run(self.main.search_crypto_coins(req_search))
+        self.assertIsNone(resp_search.error)
+        self.assertIn("1. Ethereum (ETH) - Rank #2 | ID: ethereum", resp_search.result)
+
+        # All malformed search returns no-match message
+        mock_resp.json.return_value = {"coins": [None, 123]}
+        resp_empty_search = asyncio.run(self.main.search_crypto_coins(req_search))
+        self.assertEqual(resp_empty_search.result, "No cryptocurrency coins matched query 'eth'.")
+
+        # Trending: malformed entries skipped
+        mock_resp.json.return_value = {
+            "coins": ["malformed", {"item": "not-a-dict"}, {"item": {"name": "Solana", "symbol": "sol", "id": "solana"}}]
+        }
+        req_trending = self.models.GetTrendingCryptoRequest(limit=1)
+        resp_trending = asyncio.run(self.main.get_trending_crypto(req_trending))
+        self.assertIsNone(resp_trending.error)
+        self.assertIn("1. Solana (SOL)", resp_trending.result)
+
+        # All malformed trending returns no-data response
+        mock_resp.json.return_value = {"coins": ["bad1", "bad2"]}
+        resp_empty_trending = asyncio.run(self.main.get_trending_crypto(req_trending))
+        self.assertEqual(resp_empty_trending.result, "No trending coins available right now.")
+
+        # Market overview: malformed entries skipped
+        mock_resp.json.return_value = [
+            None,
+            "corrupt",
+            {"name": "Bitcoin", "symbol": "btc", "market_cap_rank": 1, "current_price": 65000, "price_change_percentage_24h": 2.0, "market_cap": 1e12},
+        ]
+        req_market = self.models.GetCryptoMarketOverviewRequest(limit=5, vs_currency="usd")
+        resp_market = asyncio.run(self.main.get_crypto_market_overview(req_market))
+        self.assertIsNone(resp_market.error)
+        self.assertIn("Top 1 Cryptocurrencies by Market Cap (USD):", resp_market.result)
+
+        # All malformed market overview returns no-data response
+        mock_resp.json.return_value = [None, 999]
+        resp_empty_market = asyncio.run(self.main.get_crypto_market_overview(req_market))
+        self.assertEqual(resp_empty_market.result, "No market data returned for the requested parameters.")
+
+    def test_models_normalization_and_validation(self):
+        """Verify whitespace normalization and strict rejection across Pydantic models."""
         req1 = self.models.GetCryptoPriceRequest(
             coin_ids="  bitcoin ,  ethereum, bitcoin  ",
             vs_currency="  eur  ",
@@ -453,14 +606,67 @@ class TestCoinGeckoApp(unittest.TestCase):
         self.assertEqual(req1.coin_ids, ["bitcoin", "ethereum"])
         self.assertEqual(req1.vs_currency, "eur")
 
+        # Non-string element in coin_ids list must be rejected
+        with self.assertRaises(ValueError):
+            self.models.GetCryptoPriceRequest(coin_ids=["bitcoin", 123])
+
+        # Whitespace-only element in coin_ids must be rejected
+        with self.assertRaises(ValueError):
+            self.models.GetCryptoPriceRequest(coin_ids=["bitcoin", "   "])
+
         req2 = self.models.SearchCryptoCoinsRequest(query="  solana  ")
         self.assertEqual(req2.query, "solana")
 
         with self.assertRaises(ValueError):
             self.models.SearchCryptoCoinsRequest(query="   ")
 
+        # Search constraints
+        with self.assertRaises(ValueError):
+            self.models.SearchCryptoCoinsRequest(query="sol", max_results=0)
+        with self.assertRaises(ValueError):
+            self.models.SearchCryptoCoinsRequest(query="sol", max_results=20)
+
+        # Trending constraints
+        with self.assertRaises(ValueError):
+            self.models.GetTrendingCryptoRequest(limit=0)
+        with self.assertRaises(ValueError):
+            self.models.GetTrendingCryptoRequest(limit=25)
+
+        # Market overview constraints
         req3 = self.models.GetCryptoMarketOverviewRequest(vs_currency="  gbp  ")
         self.assertEqual(req3.vs_currency, "gbp")
+
+        with self.assertRaises(ValueError):
+            self.models.GetCryptoMarketOverviewRequest(limit=0)
+        with self.assertRaises(ValueError):
+            self.models.GetCryptoMarketOverviewRequest(limit=50)
+
+    def test_hermetic_stubs_enforce_constraints(self):
+        """Verify hermetic fallback stubs enforce constraints identically when pydantic is absent."""
+        _, stub_models = load_app_modules(force_stubs=True)
+
+        # Valid instantiation
+        req = stub_models.SearchCryptoCoinsRequest(query="btc", max_results=5)
+        self.assertEqual(req.query, "btc")
+        self.assertEqual(req.max_results, 5)
+
+        # Rejection of invalid constraints
+        with self.assertRaises(ValueError):
+            stub_models.SearchCryptoCoinsRequest(query="btc", max_results=0)
+        with self.assertRaises(ValueError):
+            stub_models.SearchCryptoCoinsRequest(query="btc", max_results=20)
+        with self.assertRaises(ValueError):
+            stub_models.GetTrendingCryptoRequest(limit=0)
+        with self.assertRaises(ValueError):
+            stub_models.GetTrendingCryptoRequest(limit=25)
+        with self.assertRaises(ValueError):
+            stub_models.GetCryptoMarketOverviewRequest(limit=0)
+        with self.assertRaises(ValueError):
+            stub_models.GetCryptoMarketOverviewRequest(limit=50)
+        with self.assertRaises(ValueError):
+            stub_models.GetCryptoPriceRequest(coin_ids=["bitcoin", 123])
+        with self.assertRaises(ValueError):
+            stub_models.GetCryptoPriceRequest(coin_ids=["bitcoin", "  "])
 
 
 if __name__ == "__main__":

@@ -61,7 +61,11 @@ class GetCryptoPriceRequest(_NullMeansDefault):
         if isinstance(v, str):
             ids = [i.strip().lower() for i in v.split(",") if i.strip()]
         elif isinstance(v, (list, tuple, set)):
-            ids = [i.strip().lower() for i in v if isinstance(i, str) and i.strip()]
+            ids = []
+            for item in v:
+                if not isinstance(item, str) or not item.strip():
+                    raise ValueError("All elements in coin_ids must be non-empty strings.")
+                ids.append(item.strip().lower())
         else:
             raise ValueError("coin_ids must be a list of strings or comma-separated string.")
         if not ids:

@@ -309,7 +309,7 @@ async def get_crypto_price(req: GetCryptoPriceRequest) -> ChatToolResponse:
 
         for coin_id in req.coin_ids:
             coin_data = data.get(coin_id)
-            if not isinstance(coin_data, dict):
+            if not isinstance(coin_data, dict) or not coin_data:
                 lines.append(f"- {coin_id}: Not found (try searching with search_crypto_coins)")
                 continue
 
@@ -346,12 +346,14 @@ async def search_crypto_coins(req: SearchCryptoCoinsRequest) -> ChatToolResponse
         if not isinstance(coins, list) or not coins:
             return ChatToolResponse(result=f"No cryptocurrency coins matched query '{req.query}'.")
 
-        selected = coins[: req.max_results]
+        valid_coins = [c for c in coins if isinstance(c, dict)]
+        if not valid_coins:
+            return ChatToolResponse(result=f"No cryptocurrency coins matched query '{req.query}'.")
+
+        selected = valid_coins[: req.max_results]
         lines = [f"Cryptocurrency search results for '{req.query}':"]
 
         for idx, coin in enumerate(selected, 1):
-            if not isinstance(coin, dict):
-                continue
             name = coin.get("name", "Unknown")
             symbol = str(coin.get("symbol", "")).upper()
             coin_id = coin.get("id", "")
@@ -378,15 +380,18 @@ async def get_trending_crypto(req: GetTrendingCryptoRequest) -> ChatToolResponse
         if not isinstance(trending_items, list) or not trending_items:
             return ChatToolResponse(result="No trending coins available right now.")
 
-        selected = trending_items[: req.limit]
+        valid_items = [
+            item.get("item")
+            for item in trending_items
+            if isinstance(item, dict) and isinstance(item.get("item"), dict)
+        ]
+        if not valid_items:
+            return ChatToolResponse(result="No trending coins available right now.")
+
+        selected = valid_items[: req.limit]
         lines = ["Top Trending Cryptocurrencies on CoinGecko:"]
 
-        for idx, item_wrapper in enumerate(selected, 1):
-            if not isinstance(item_wrapper, dict):
-                continue
-            item = item_wrapper.get("item", {})
-            if not isinstance(item, dict):
-                continue
+        for idx, item in enumerate(selected, 1):
             name = item.get("name", "Unknown")
             symbol = str(item.get("symbol", "")).upper()
             coin_id = item.get("id", "")
@@ -437,15 +442,14 @@ async def get_crypto_market_overview(req: GetCryptoMarketOverviewRequest) -> Cha
                     error_msg = f"CoinGecko API error: {markets['error']}"
             return ChatToolResponse(error=error_msg)
 
-        if not markets:
+        valid_markets = [coin for coin in markets if isinstance(coin, dict)]
+        if not valid_markets:
             return ChatToolResponse(result="No market data returned for the requested parameters.")
 
         currency_symbol = _get_currency_symbol(vs)
-        lines = [f"Top {len(markets)} Cryptocurrencies by Market Cap ({vs.upper()}):"]
+        lines = [f"Top {len(valid_markets)} Cryptocurrencies by Market Cap ({vs.upper()}):"]
 
-        for coin in markets:
-            if not isinstance(coin, dict):
-                continue
+        for coin in valid_markets:
             rank = coin.get("market_cap_rank", "-")
             name = coin.get("name", "Unknown")
             symbol = str(coin.get("symbol", "")).upper()
