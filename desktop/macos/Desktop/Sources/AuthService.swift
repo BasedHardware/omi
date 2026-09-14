@@ -289,9 +289,8 @@ class AuthService {
     // The REST-backed session remains authoritative if the Firebase SDK was
     // unavailable at launch. Only clear an SDK session when one exists.
     do {
-      return try await commitSignedOutSession(
+      return try await commitLightInvalidatedSession(
         attempt: attempt,
-        phase: .needsReauth,
         beforeClearingCredentials: { [self] in
           if let auth = configuredFirebaseAuth() {
             try auth.signOut()

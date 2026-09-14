@@ -1575,18 +1575,8 @@ class ChatProvider: ObservableObject {
         }
       }
 
-    // Light session invalidation (expired creds) — stop bridge only; preserve chat draft/state.
-    sessionInvalidateObserver = NotificationCenter.default.publisher(for: .sessionDidInvalidate)
-      .sink { [weak self] _ in
-        Task { @MainActor in
-          guard let self else { return }
-          log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
-          if self.agentBridgeStarted {
-            await self.resolvedAgentClient().stop()
-            self.agentBridgeStarted = false
-          }
-        }
-      }
+    // Light invalidation stops the bridge; successful auth reloads sessions (#6648).
+    sessionInvalidateObserver = makeAuthSessionNotificationObserver()
 
     // Cmd+R: refresh messages on demand
     refreshAllObserver = NotificationCenter.default.publisher(for: .refreshAllData)

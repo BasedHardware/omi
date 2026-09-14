@@ -61,6 +61,38 @@ extension AuthService {
     return committed && sessionAttemptFence.isCurrent(attempt)
   }
 
+  /// Light invalidation: revoke credentials and signed-in UI without changing
+  /// the effective runtime owner or tearing down owner-bound storage. Preserves
+  /// `auth_userId` so Claude Code / chat sessions can rehydrate after re-auth.
+  @discardableResult
+  func commitLightInvalidatedSession(
+    attempt: AuthSessionAttempt,
+    beforeClearingCredentials: @escaping @MainActor @Sendable () throws -> Void = {}
+  ) async throws -> Bool {
+    let attemptFence = sessionAttemptFence
+    let committed = try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+      plannedNextOwner: { _, previousOwner in
+        attemptFence.isCurrent(attempt) ? previousOwner : previousOwner
+      },
+      prepareLocalStorageTransition: { _, _ in },
+      { _ in
+        try await MainActor.run {
+          try attemptFence.commitIfCurrent(attempt) {
+            let defaults = UserDefaults.standard
+            let preservedEmail = defaults.string(forKey: .authUserEmail)
+            try beforeClearingCredentials()
+            self.clearTokens()
+            AuthState.shared.userEmail = preservedEmail
+            AuthState.shared.transition(to: .needsReauth)
+            defaults.set(false, forKey: .authIsSignedIn)
+            defaults.synchronize()
+            return true
+          } ?? false
+        }
+      })
+    return committed && sessionAttemptFence.isCurrent(attempt)
+  }
+
   @discardableResult
   func saveAuthState(
     isSignedIn: Bool,

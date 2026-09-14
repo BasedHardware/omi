@@ -75,6 +75,7 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(authSource.contains("func performLightSessionInvalidation()"))
     XCTAssertTrue(authSource.contains("clearTokens()"))
     XCTAssertTrue(authSource.contains("commitSignedOutSession("))
+    XCTAssertTrue(authSource.contains("commitLightInvalidatedSession("))
 
     // Nuclear signOut still wipes onboarding — invalidate must not.
     let signOutRange = authSource.range(of: "func signOut(")
@@ -94,15 +95,28 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertFalse(invalidateSnippet.contains("onboardingStep"))
     XCTAssertFalse(invalidateSnippet.contains("userDidSignOut"))
     XCTAssertFalse(invalidateSnippet.contains("stopTranscription"))
+    XCTAssertFalse(invalidateSnippet.contains("commitSignedOutSession"))
+    XCTAssertTrue(invalidateSnippet.contains("commitLightInvalidatedSession"))
   }
 
   func testChatProviderStopsBridgeOnSessionInvalidateWithoutFullReset() throws {
-    let source = try sourceFile("Providers/ChatProvider.swift")
-    XCTAssertTrue(source.contains("sessionDidInvalidate"))
-    XCTAssertTrue(source.contains("sessionInvalidateObserver"))
-    let invalidateBlock = source.range(of: "sessionDidInvalidate — stopping agent bridge")
+    let provider = try sourceFile("Providers/ChatProvider.swift")
+    XCTAssertTrue(provider.contains("makeAuthSessionNotificationObserver"))
+    let authExtension = try sourceFile("Providers/ChatProvider+AuthSession.swift")
+    XCTAssertTrue(authExtension.contains("sessionDidInvalidate"))
+    let invalidateBlock = authExtension.range(of: "sessionDidInvalidate — stopping agent bridge")
     XCTAssertNotNil(invalidateBlock)
-    let snippet = String(source[invalidateBlock!.lowerBound...]).prefix(400)
+    let snippet = String(authExtension[invalidateBlock!.lowerBound...]).prefix(400)
+    XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
+  }
+
+  func testChatProviderReloadsSessionsAfterAuthentication() throws {
+    let authExtension = try sourceFile("Providers/ChatProvider+AuthSession.swift")
+    XCTAssertTrue(authExtension.contains("sessionDidAuthenticate"))
+    XCTAssertTrue(authExtension.contains("reloadChatSessionsAfterAuthentication"))
+    let authBlock = authExtension.range(of: "sessionDidAuthenticate — reloading chat sessions")
+    XCTAssertNotNil(authBlock)
+    let snippet = String(authExtension[authBlock!.lowerBound...]).prefix(350)
     XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
   }
 
