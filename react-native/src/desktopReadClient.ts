@@ -853,6 +853,15 @@ export function conversationTranscriptEndSeconds(
   return seconds > 0 ? seconds : null;
 }
 
+export function conversationDetailDurationCopy(item: {
+  transcriptEndSeconds?: number;
+}): string | null {
+  if (typeof item.transcriptEndSeconds !== 'number') {
+    return null;
+  }
+  return conversationTranscriptDurationCopy([{end: item.transcriptEndSeconds}]);
+}
+
 export function conversationTranscriptDurationCopy(
   segments: readonly {end: number}[] | null | undefined,
 ): string | null {

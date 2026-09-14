@@ -27,6 +27,7 @@ import {
   conversationRecapDateLabel,
   conversationListDurationCopy,
   conversationTranscriptDurationCopy,
+  conversationDetailDurationCopy,
   conversationListNewCopy,
   conversationListGroupCopy,
   conversationListTimeCopy,
@@ -993,6 +994,25 @@ test('conversation transcript duration names Flutter secondsToHumanReadable sing
   );
   expect(conversationTranscriptDurationCopy([{end: 0}])).toBeNull();
   expect(conversationTranscriptDurationCopy([])).toBeNull();
+});
+
+test('conversation detail duration names Flutter GetSummaryWidgets transcript span only', () => {
+  expect(
+    conversationDetailDurationCopy({
+      transcriptEndSeconds: 20,
+    }),
+  ).toBe('20 secs');
+  expect(
+    conversationDetailDurationCopy({
+      transcriptEndSeconds: 150,
+    }),
+  ).toBe('2 mins 30 secs');
+  expect(conversationDetailDurationCopy({})).toBeNull();
+  expect(
+    conversationDetailDurationCopy({
+      transcriptEndSeconds: 0,
+    }),
+  ).toBeNull();
 });
 
 test('discarded conversation titles use Flutter transcript excerpt and people names', () => {

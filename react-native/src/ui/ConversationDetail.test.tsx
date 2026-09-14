@@ -1314,6 +1314,46 @@ test('canonical recording details name GET transcript duration 1 sec', () => {
   expect(copy).not.toContain('< 1 min');
 });
 
+test('listen details omit wall-clock Duration when GET transcript span is missing', () => {
+  const copy = text(
+    render({
+      conversation: {
+        ...conversation,
+        id: 'listen:short-one',
+        source: 'listen',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T12:00:20.000Z',
+        status: 'completed',
+      },
+    }),
+  );
+  expect(copy).toContain('Finished ·');
+  expect(copy).not.toContain('Duration ·');
+  expect(copy).not.toContain('< 1 min');
+  expect(copy).not.toContain('Duration unavailable');
+});
+
+test('listen details name GET transcriptEndSeconds like Flutter GetSummaryWidgets', () => {
+  const copy = text(
+    render({
+      conversation: {
+        ...conversation,
+        id: 'listen:span-one',
+        source: 'listen',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T13:00:00.000Z',
+        status: 'completed',
+        transcriptEndSeconds: 150,
+      },
+    }),
+  );
+  expect(copy).toContain('Duration ·');
+  expect(copy).toContain('2 mins 30 secs');
+  expect(copy).not.toContain('1 hr');
+  expect(copy).not.toContain('< 1 min');
+  expect(copy).not.toContain('2m');
+});
+
 test('canonical recording details omit Duration when transcript span is empty', () => {
   mockRecording.mockReturnValue({
     result: {

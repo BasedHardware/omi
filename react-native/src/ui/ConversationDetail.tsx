@@ -13,13 +13,13 @@ import {
   processingConversationDetailTitleCopy,
   processingConversationDetailContentTabCopy,
   conversationTranscriptDurationCopy,
+  conversationDetailDurationCopy,
   conversationVisibilityCopy,
   conversationActionItemsTodoCopy,
   conversationActionItemsNoPendingCopy,
   conversationActionItemsCompletedCopy,
   conversationActionItemsNoCompletedCopy,
   conversationNoFolderCopy,
-  formatConversationDuration,
   legacyTranscriptCanDisplaySeconds,
   legacyTranscriptTimestampCopy,
   visibleDisplayText,
@@ -75,14 +75,10 @@ function ConversationClockFields({
   const showLocked = locked === true || conversation.locked;
   const captureCopy = conversationCaptureCopy(conversation.capturedAtMs);
   const visibilityCopy = conversationVisibilityCopy(conversation.visibility);
-  const wallDuration =
-    durationCopy === undefined && conversationHasFinishClock(conversation)
-      ? formatConversationDuration(
-          conversation.startedAt,
-          conversation.finishedAt,
-        )
-      : null;
-  const duration = durationCopy === undefined ? wallDuration : durationCopy;
+  const duration =
+    durationCopy === undefined
+      ? conversationDetailDurationCopy(conversation)
+      : durationCopy;
   return (
     <View style={styles.conversationDetailFields}>
       {captureCopy !== null ? (

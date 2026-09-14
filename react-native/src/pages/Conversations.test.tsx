@@ -753,9 +753,9 @@ test('conversation durations under a minute do not claim 0 min', () => {
       .props.onPress();
   });
   const copy = textOf(renderer);
-  expect(copy).toContain('Duration ·');
   expect(copy).toContain('20s');
-  expect(copy).toContain('< 1 min');
+  expect(copy).not.toContain('Duration ·');
+  expect(copy).not.toContain('< 1 min');
   expect(copy).not.toContain('0 min');
 });
 
@@ -810,8 +810,7 @@ test('a zero conversation start time does not invent a duration', () => {
       .props.onPress();
   });
   const copy = textOf(renderer);
-  expect(copy).toContain('Duration ·');
-  expect(copy).toContain('Duration unavailable');
+  expect(copy).not.toContain('Duration ·');
   expect(copy).not.toContain('hr');
 });
 
