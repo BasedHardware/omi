@@ -10,6 +10,7 @@ import {
   findDeviceCopy,
   ledBrightnessCopy,
   micGainCopy,
+  micGainLevelCopy,
 } from '../desktopReadClient';
 
 type Setting = 'ledBrightness' | 'microphoneGain';
@@ -233,7 +234,11 @@ export function DeviceControls({
           <View key={control.setting} style={local.row}>
             <Text style={[styles.deviceMeta, local.label]}>
               {control.label}:{' '}
-              {available ? `${value}${control.unit}` : 'Unavailable'}
+              {available
+                ? control.setting === 'microphoneGain'
+                  ? micGainLevelCopy(value)
+                  : `${value}${control.unit}`
+                : 'Unavailable'}
             </Text>
             {available && (
               <>

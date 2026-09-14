@@ -1703,6 +1703,22 @@ export function micGainCopy(): string {
   return 'Mic Gain';
 }
 
+const MIC_GAIN_LEVEL_COPY = [
+  'Mute',
+  '-20dB',
+  '-10dB',
+  '+0dB',
+  '+6dB',
+  '+10dB',
+  '+20dB',
+  '+30dB',
+  '+40dB',
+] as const;
+
+export function micGainLevelCopy(level: number): string {
+  return MIC_GAIN_LEVEL_COPY[level] ?? '';
+}
+
 export function findDeviceCopy(): string {
   return 'Find';
 }

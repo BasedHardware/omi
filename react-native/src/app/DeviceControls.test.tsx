@@ -10,6 +10,7 @@ import {
   findDeviceCopy,
   ledBrightnessCopy,
   micGainCopy,
+  micGainLevelCopy,
 } from '../desktopReadClient';
 
 jest.mock('../omiNative', () => ({
@@ -61,7 +62,8 @@ test('requires reported feature bits and valid observed values before exposing w
   });
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain(`"${ledBrightnessCopy()}",":"," ","50%"`);
-  expect(tree).toContain(`"${micGainCopy()}",":"," ","8"`);
+  expect(tree).toContain(`"${micGainCopy()}",":"," ","${micGainLevelCopy(8)}"`);
+  expect(tree).not.toContain(`"${micGainCopy()}",":"," ","8"`);
   expect(tree).not.toContain('LED brightness');
   expect(tree).not.toContain('Microphone gain');
   expect(button(`Increase ${micGainCopy().toLowerCase()}`).props.disabled).toBe(
@@ -70,6 +72,26 @@ test('requires reported feature bits and valid observed values before exposing w
   expect(button(`Decrease ${micGainCopy().toLowerCase()}`).props.disabled).toBe(
     false,
   );
+});
+
+test('connected device names Flutter DeviceSettings mic gain Mute and dB chips', async () => {
+  await render({...device, microphoneGain: 0});
+  const muted = JSON.stringify(renderer.toJSON());
+  expect(muted).toContain(`"${micGainCopy()}",":"," ","${micGainLevelCopy(0)}"`);
+  expect(muted).not.toContain(`"${micGainCopy()}",":"," ","0"`);
+  await act(async () => {
+    renderer.update(
+      <DeviceControls
+        device={{...device, microphoneGain: 3}}
+        busy={false}
+      />,
+    );
+  });
+  const neutral = JSON.stringify(renderer.toJSON());
+  expect(neutral).toContain(
+    `"${micGainCopy()}",":"," ","${micGainLevelCopy(3)}"`,
+  );
+  expect(neutral).not.toContain(`"${micGainCopy()}",":"," ","3"`);
 });
 
 test('connected device names Flutter battery section Charging or Battery Level', async () => {

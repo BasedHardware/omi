@@ -154,6 +154,7 @@ import {
   deviceUnknownCopy,
   ledBrightnessCopy,
   micGainCopy,
+  micGainLevelCopy,
   findDeviceCopy,
   chargingCopy,
   batteryLevelCopy,
@@ -1676,6 +1677,17 @@ test('firmware update copy names GET latest without Available on current or draf
   expect(deviceUnknownCopy()).toBe('Unknown');
   expect(ledBrightnessCopy()).toBe('LED Brightness');
   expect(micGainCopy()).toBe('Mic Gain');
+  expect(micGainLevelCopy(0)).toBe('Mute');
+  expect(micGainLevelCopy(1)).toBe('-20dB');
+  expect(micGainLevelCopy(2)).toBe('-10dB');
+  expect(micGainLevelCopy(3)).toBe('+0dB');
+  expect(micGainLevelCopy(4)).toBe('+6dB');
+  expect(micGainLevelCopy(5)).toBe('+10dB');
+  expect(micGainLevelCopy(6)).toBe('+20dB');
+  expect(micGainLevelCopy(7)).toBe('+30dB');
+  expect(micGainLevelCopy(8)).toBe('+40dB');
+  expect(micGainLevelCopy(-1)).toBe('');
+  expect(micGainLevelCopy(9)).toBe('');
   expect(findDeviceCopy()).toBe('Find');
   expect(chargingCopy()).toBe('Charging');
   expect(batteryLevelCopy()).toBe('Battery Level');
