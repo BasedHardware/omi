@@ -1,10 +1,25 @@
-import {goalProgressCopy, loadOmiGoals, parseOmiGoals} from './legacyOmiGoals';
+import {
+  goalProgressCopy,
+  goalTasksProgressCopy,
+  goalTasksTitleCopy,
+  loadOmiGoals,
+  parseOmiGoals,
+} from './legacyOmiGoals';
 import type {OmiBackend} from './omiNativeTypes';
 
 test('formats GET goal progress like Flutter raw current/target', () => {
   expect(goalProgressCopy(3, 10)).toBe('3/10');
   expect(goalProgressCopy(3.5, 10)).toBe('3.5/10');
   expect(goalProgressCopy(0, 0)).toBe('0/0');
+});
+
+test('formats Tasks GET goal progress like Flutter _buildGoalItem toInt', () => {
+  expect(goalTasksProgressCopy(3, 10)).toBe('(3/10)');
+  expect(goalTasksProgressCopy(3.5, 10)).toBe('(3/10)');
+  expect(goalTasksProgressCopy(0, 0)).toBe('(0/0)');
+  expect(goalTasksTitleCopy('Read 20 books', 3, 10)).toBe(
+    'Read 20 books (3/10)',
+  );
 });
 
 test('parses GET goals titles and omits empty titles', () => {

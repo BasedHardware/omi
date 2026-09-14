@@ -1476,8 +1476,8 @@ test('compact Tasks tab names GET goals without add or a write sheet', async () 
   });
   const tree = renderedText(renderer);
   expect(tree).toContain('Goals');
-  expect(tree).toContain('Read 20 books');
-  expect(tree).toContain('3/10');
+  expect(tree).toContain('Read 20 books (3/10)');
+  expect(tree).not.toContain('3.5/10');
   expect(tree).toContain('Prepare product demo');
   expect(tree).not.toContain('goal-read');
   expect(tree).not.toContain('No goals');

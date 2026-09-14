@@ -32,7 +32,7 @@ import {
 } from '../ui/TaskEditor';
 import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
-import {goalProgressCopy, loadOmiGoals, type OmiGoal} from '../legacyOmiGoals';
+import {goalTasksTitleCopy, loadOmiGoals, type OmiGoal} from '../legacyOmiGoals';
 import type {OmiBackend} from '../omiNativeTypes';
 
 const taskGroups: TaskGroup[] = [
@@ -163,11 +163,8 @@ export function TasksPage({
           <Text style={styles.projectionEmptyTitle}>Goals</Text>
           {goals.map(goal => (
             <View key={goal.id}>
-              <Text numberOfLines={1} style={styles.resultTitle}>
-                {goal.title}
-              </Text>
-              <Text style={styles.conversationRowTime}>
-                {goalProgressCopy(goal.current, goal.target)}
+              <Text numberOfLines={2} style={styles.resultTitle}>
+                {goalTasksTitleCopy(goal.title, goal.current, goal.target)}
               </Text>
             </View>
           ))}

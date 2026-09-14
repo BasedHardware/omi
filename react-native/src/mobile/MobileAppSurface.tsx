@@ -42,7 +42,7 @@ import {
   loadOmiDailySummaries,
   type OmiDailySummary,
 } from '../legacyOmiDailySummaries';
-import {goalProgressCopy, loadOmiGoals, type OmiGoal} from '../legacyOmiGoals';
+import {goalTasksTitleCopy, loadOmiGoals, type OmiGoal} from '../legacyOmiGoals';
 import type {OmiBackend} from '../omiNativeTypes';
 
 export type MobileProjectionStatus =
@@ -846,11 +846,12 @@ export function MobileAppSurface({
                         <Text style={styles.sectionTitle}>Goals</Text>
                         {goals.map(goal => (
                           <View key={goal.id}>
-                            <Text numberOfLines={1} style={styles.taskText}>
-                              {goal.title}
-                            </Text>
-                            <Text style={styles.taskDue}>
-                              {goalProgressCopy(goal.current, goal.target)}
+                            <Text numberOfLines={2} style={styles.taskText}>
+                              {goalTasksTitleCopy(
+                                goal.title,
+                                goal.current,
+                                goal.target,
+                              )}
                             </Text>
                           </View>
                         ))}

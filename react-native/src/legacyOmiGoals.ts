@@ -48,6 +48,22 @@ export function goalProgressCopy(current: number, target: number): string {
   return `${goalRawNum(current)}/${goalRawNum(target)}`;
 }
 
+export function goalTasksProgressCopy(current: number, target: number): string {
+  return `(${Math.trunc(current)}/${Math.trunc(target)})`;
+}
+
+export function goalTasksTitleCopy(
+  title: string,
+  current: number,
+  target: number,
+): string {
+  const name = visibleDisplayText(title);
+  if (name === '') {
+    return '';
+  }
+  return `${name} ${goalTasksProgressCopy(current, target)}`;
+}
+
 function goalRawNum(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
