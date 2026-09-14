@@ -22,6 +22,7 @@ vi.mock('../lib/apiClient', () => ({
 }))
 
 import { useMemories, type Memory } from './useMemories'
+import { cache as memoriesCache, resetMemoriesCache } from '../lib/memoriesCache'
 
 const memory = (id: string, content: string, visibility?: string): unknown => ({
   id,
@@ -145,6 +146,12 @@ describe('useMemories — pagination, capability header, delete', () => {
           subject_scope: 'primary_user',
           slot: 'home_city',
           body: 'wrong-kind-body',
+          currency: 0.82,
+          currency_band: 'current',
+          as_of: '2026-08-22T00:00:00Z',
+          belief_class: 'preference',
+          half_life_days: 180,
+          belief_computed_at: '2026-08-23T00:00:00Z',
           trigger_condition: { wrong: true },
           intent_backed: 'true',
           curation_weight: '3',
@@ -191,6 +198,14 @@ describe('useMemories — pagination, capability header, delete', () => {
     expect(result.current.memories[0]).not.toHaveProperty('kind')
     expect(result.current.memories[1]).toMatchObject({ kind: 'fact', status: 'active' })
     expect(result.current.memories[1]).toMatchObject({ slot: 'home_city' })
+    expect(result.current.memories[1]).toMatchObject({
+      currency: 0.82,
+      currency_band: 'current',
+      as_of: '2026-08-22T00:00:00Z',
+      belief_class: 'preference',
+      half_life_days: 180,
+      belief_computed_at: '2026-08-23T00:00:00Z'
+    })
     expect(result.current.memories[1].evidence).toEqual([
       { evidence_id: 'current-evidence', independence_group: 'current-group' }
     ])
@@ -273,5 +288,27 @@ describe('useMemories — pagination, capability header, delete', () => {
     ).rejects.toThrow('offline')
     // The failed delete is walked back — the row is still present.
     expect(result.current.memories.some((m) => m.id === 'm0')).toBe(true)
+  })
+
+  it('posts beta memory-use feedback and reuses its id when a user retries', async () => {
+    memoriesCache.beliefEnabled = true
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    omiApiPost.mockRejectedValueOnce(new Error('temporary failure')).mockResolvedValue({ data: {} })
+    await expect(result.current.setMemoryUse('m1', 'suppress')).rejects.toThrow('temporary failure')
+    await act(async () => {
+      await result.current.setMemoryUse('m1', 'suppress')
+    })
+
+    expect(omiApiPost).toHaveBeenCalledTimes(2)
+    expect(omiApiPost.mock.calls[0]).toEqual([
+      '/v3/memories/m1/use',
+      expect.objectContaining({ action: 'suppress', feedback_id: expect.any(String) })
+    ])
+    expect(omiApiPost.mock.calls[1][1].feedback_id).toBe(omiApiPost.mock.calls[0][1].feedback_id)
+    resetMemoriesCache()
   })
 })

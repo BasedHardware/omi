@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Search, Maximize2 } from 'lucide-react'
-import { useMemories, type Memory } from '../hooks/useMemories'
+import { useMemories, type Memory, type MemoryUseAction } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
 import { BrainGraph } from '../components/graph/LazyBrainGraph'
@@ -23,6 +23,7 @@ import { MemoryDetailSheet } from '../components/memories/MemoryDetailSheet'
 import { UndoDeleteToast } from '../components/memories/UndoDeleteToast'
 import { auth } from '../lib/firebase'
 import { useThrottledWindowFocus } from '../lib/focusRefetch'
+import type { MemoryReadView } from '../lib/memoriesCache'
 
 // Cap how many cards render at once so a multi-thousand list stays responsive;
 // filtering/selection still operate on the full (filtered) set, not just what's
@@ -34,17 +35,19 @@ const emptyCategorySet = (): Set<MemoryCategory> => new Set<MemoryCategory>()
 export function Memories(): React.JSX.Element {
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const [memoryView, setMemoryView] = useState<MemoryReadView>('useful_now')
   const {
     memories,
     loading,
     error,
+    beliefEnabled,
     canonicalLifecycleExposed,
     createMemory,
     editMemory,
     setMemoryVisibility,
     deleteMemory,
     refresh
-  } = useMemories()
+  } = useMemories(memoryView)
   // Pass the live memories so the brain map scopes the server KG to entities
   // that reference a memory you actually have (no account-wide bloat / phantoms),
   // drops the layer when empty, and refetches on add/delete.
@@ -169,6 +172,7 @@ export function Memories(): React.JSX.Element {
   // Detail sheet + per-memory mutation busy flags.
   const [detailMemory, setDetailMemory] = useState<Memory | null>(null)
   const [togglingVis, setTogglingVis] = useState(false)
+  const [useActionId, setUseActionId] = useState<string | null>(null)
 
   // Undo-delete: a deleted memory is hidden locally and the server DELETE is
   // held for a countdown window. Committing (timeout or explicit dismiss) fires
@@ -243,6 +247,21 @@ export function Memories(): React.JSX.Element {
     }
   }
 
+  const onUseAction = async (id: string, action: MemoryUseAction): Promise<void> => {
+    if (useActionId) return
+    setUseActionId(id)
+    try {
+      await setMemoryUse(id, action)
+      toast(action === 'suppress' ? 'Memory excluded from future use' : 'Memory use updated', {
+        tone: 'info'
+      })
+    } catch (e) {
+      toast('Could not update memory use', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setUseActionId(null)
+    }
+  }
+
   // Commit a held delete to the server. Idempotent per id (see
   // committedDeleteIds). Clears the pending slot if it still points at this
   // memory. Failures revert inside deleteMemory + surface a toast, and release
@@ -275,7 +294,7 @@ export function Memories(): React.JSX.Element {
     if (all === null) {
       setLoadingAll(true)
       try {
-        setAll(await fetchAllMemories())
+        setAll(await fetchAllMemories(beliefEnabled ? { view: 'all' } : undefined))
       } catch (e) {
         toast('Could not load all memories', { tone: 'error', body: (e as Error).message })
       } finally {
@@ -447,6 +466,9 @@ export function Memories(): React.JSX.Element {
             layerExposed={canonicalLifecycleExposed}
             layer={layer}
             onLayerChange={setLayer}
+            beliefEnabled={beliefEnabled === true}
+            view={memoryView}
+            onViewChange={setMemoryView}
           />
         </div>
       )}
@@ -656,7 +678,15 @@ export function Memories(): React.JSX.Element {
         {!manage && (
           <ul className="mx-auto grid max-w-4xl grid-cols-1 gap-3 lg:grid-cols-2">
             {rendered.map((m) => (
-              <MemoryCard key={m.id} memory={m} onOpen={setDetailMemory} />
+              <MemoryCard
+                key={m.id}
+                memory={m}
+                onOpen={setDetailMemory}
+                onUseAction={
+                  beliefEnabled === true ? (id, action) => void onUseAction(id, action) : undefined
+                }
+                useActionBusy={useActionId === m.id}
+              />
             ))}
           </ul>
         )}
@@ -726,6 +756,10 @@ export function Memories(): React.JSX.Element {
             navigate(`/conversations/${id}`)
           }}
           togglingVisibility={togglingVis}
+          onUseAction={
+            beliefEnabled === true ? (id, action) => void onUseAction(id, action) : undefined
+          }
+          useActionBusy={useActionId === detailMemory.id}
         />
       )}
 

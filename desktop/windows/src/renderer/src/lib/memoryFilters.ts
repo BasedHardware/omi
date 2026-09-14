@@ -59,6 +59,71 @@ export const LAYER_FILTER_DESC: Record<MemoryLayerFilter, string> = {
   archive: 'Explicit archive search'
 }
 
+export type MemoryCurrencyBand = 'current' | 'fading' | 'stale' | 'unknown'
+
+/**
+ * Read the server assessment only. Windows never derives a decay score or
+ * substitutes `updated_at` for an evidence date; absent/invalid projections
+ * remain unknown and stay discoverable in the useful-now view.
+ */
+export function memoryCurrencyBand(m: Memory): MemoryCurrencyBand {
+  switch (m.currency_band?.toLowerCase()) {
+    case 'current':
+      return 'current'
+    case 'fading':
+      return 'fading'
+    case 'stale':
+    case 'expired':
+      return 'stale'
+    default:
+      return 'unknown'
+  }
+}
+
+/** Useful-now keeps current, fading, and unclassified rows available. */
+export function isUsefulNowMemory(m: Memory): boolean {
+  return memoryCurrencyBand(m) !== 'stale'
+}
+
+export function currencyBandLabel(m: Memory): string {
+  switch (memoryCurrencyBand(m)) {
+    case 'current':
+      return 'Current'
+    case 'fading':
+      return 'Fading'
+    case 'stale':
+      return 'Historical'
+    default:
+      return 'Currentness unknown'
+  }
+}
+
+/** Format an evidence/assessment timestamp without inventing one locally. */
+export function formatMemoryAssessmentDate(m: Memory): string | null {
+  const value = m.as_of ?? m.belief_computed_at
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+}
+
+/** A worker-confirmed user decision is nested in the additive ledger args. */
+export function memoryUseSuppressed(m: Memory): boolean {
+  const memoryUse = m.arguments?.memory_use
+  return (
+    typeof memoryUse === 'object' &&
+    memoryUse !== null &&
+    !Array.isArray(memoryUse) &&
+    (memoryUse as { suppressed?: unknown }).suppressed === true
+  )
+}
+
 function matchesLayer(m: Memory, filter: MemoryLayerFilter): boolean {
   if (filter === 'default') return m.layer !== 'archive'
   return m.layer === filter
