@@ -14,6 +14,7 @@ import {
   conversationListNewCopy,
   conversationListStatusCopy,
   conversationListTag,
+  conversationListTimeCopy,
   conversationListUsesListenOverview,
   conversationRecapTitle,
   memoryCitationCopy,
@@ -89,7 +90,11 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
         </Text>
       )}
       <Text numberOfLines={1} style={styles.rowMeta}>
-        {[newCopy ?? timeLabel(item), item.starred ? 'Starred' : '']
+        {[
+          newCopy ??
+            conversationListTimeCopy(item.startedAt ?? item.createdAt),
+          item.starred ? 'Starred' : '',
+        ]
           .filter(part => part !== '')
           .join(' · ')}
       </Text>

@@ -4,6 +4,7 @@ import {Text} from 'react-native';
 import {
   formatTaskDue,
   clockLabel,
+  conversationListTimeCopy,
   type ConversationProjection,
   type MemoryProjection,
   type TaskProjection,
@@ -700,6 +701,41 @@ test('Home and Library rows keep GET capture time instead of started-only', () =
     );
   });
   expect(textOf(plain)).not.toContain('Captured (device time)');
+});
+
+test('Home and Library conversation rows name Flutter ConversationListItem h:mm a', () => {
+  const older = new Date(2025, 7, 10, 12, 0);
+  const time = conversationListTimeCopy(older.toISOString());
+  const dated = clockLabel(older.getTime(), Date.now());
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:older-row',
+    title: 'Product review',
+    summary: 'Talked through the release.',
+    searchableText: 'Product review\nTalked through the release.',
+    createdAt: older.toISOString(),
+    updatedAt: older.toISOString(),
+    startedAt: older.toISOString(),
+    finishedAt: older.toISOString(),
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  let library!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    home = ReactTestRenderer.create(<ReadRow item={item} />);
+    library = ReactTestRenderer.create(<ConversationRow item={item} />);
+  });
+  for (const copy of [textOf(home), textOf(library)]) {
+    expect(copy).toContain('Product review');
+    expect(copy).toContain(time);
+    expect(copy).not.toContain(dated);
+  }
 });
 
 test('Home and Library rows keep GET locked and discarded flags instead of title-only', () => {

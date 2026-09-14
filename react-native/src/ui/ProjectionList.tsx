@@ -15,6 +15,7 @@ import {
   conversationListNewCopy,
   conversationListStatusCopy,
   conversationListTag,
+  conversationListTimeCopy,
   conversationListUsesListenOverview,
   conversationRecapTitle,
   conversationHasFinishClock,
@@ -209,7 +210,12 @@ export const ProjectionRow = memo(function ProjectionRow({
       )}
       {item.kind !== 'task' ? (
         <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
-          {newCopy ?? projectionClockLabel(item, Date.now())}
+          {newCopy ??
+            (conversation !== null
+              ? conversationListTimeCopy(
+                  conversation.startedAt ?? conversation.createdAt,
+                )
+              : projectionClockLabel(item, Date.now()))}
         </Text>
       ) : null}
       {captureCopy !== null ? (

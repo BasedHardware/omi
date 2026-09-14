@@ -97,6 +97,7 @@ import {
   chatDiscoveryShowLessCopy,
   chatDaySummaryCopy,
   clockLabel,
+  conversationListTimeCopy,
   projectionClockLabel,
 } from '../desktopReadClient';
 import {tokens} from './tokens';
@@ -2811,17 +2812,18 @@ test('wide Home search rows with a zero start time say Duration unavailable', ()
   expect(tree).not.toContain('hr');
 });
 
-test('wide Home search rows keep GET conversation clock instead of title-only', () => {
+test('wide Home search rows name Flutter ConversationListItem h:mm a', () => {
+  const older = new Date(2025, 7, 10, 12, 0);
   const item = {
     kind: 'conversation' as const,
     id: 'listen:quick-home-search-clock',
     title: 'Quick note',
     summary: 'Twenty seconds.',
     searchableText: 'Quick note\nTwenty seconds.',
-    createdAt: '2026-09-07T12:00:00.000Z',
-    updatedAt: '2026-09-07T12:00:20.000Z',
-    startedAt: '2026-09-07T12:00:00.000Z',
-    finishedAt: '2026-09-07T12:00:20.000Z',
+    createdAt: older.toISOString(),
+    updatedAt: older.toISOString(),
+    startedAt: older.toISOString(),
+    finishedAt: older.toISOString(),
     starred: false,
     status: 'completed',
     source: 'listen',
@@ -2831,19 +2833,13 @@ test('wide Home search rows keep GET conversation clock instead of title-only', 
     discarded: false,
   };
   const renderer = render(<ProjectionRow item={item} />);
-  const expected = projectionClockLabel(item, Date.now());
+  const time = conversationListTimeCopy(older.toISOString());
+  const dated = projectionClockLabel(item, Date.now());
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Quick note');
-  expect(tree).toContain(expected);
+  expect(tree).toContain(time);
+  expect(tree).not.toContain(dated);
   expect(tree).not.toContain('Time unavailable');
-  expect(
-    renderer.root.findAll(
-      node =>
-        node.props.numberOfLines === 1 &&
-        typeof node.props.children === 'string' &&
-        node.props.children.includes(expected),
-    ).length,
-  ).toBe(0);
 });
 
 test('wide Home search memory rows keep GET timestamps instead of citation-only', () => {
