@@ -112,6 +112,8 @@ export default {
     oneClick: false,
     perMachine: false,
     allowToChangeInstallationDirectory: true,
+    // Relaunch after assisted (non-oneClick) updates — matches Settings → "Restart to update".
+    runAfterFinish: true,
     // No spaces in the artifact name: electron-updater downloads the installer by
     // the exact url recorded in latest.yml, and a spaced productName ("Omi for
     // Windows") url-encodes to a path that no longer matches the uploaded asset —
