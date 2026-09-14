@@ -1391,6 +1391,18 @@ function fairUseHoursCopy(hours: number, limit: number): string {
   return `${hours.toFixed(1)}h / ${limit.toFixed(0)}h`;
 }
 
+export function fairUseDailyTranscriptionCopy(): string {
+  return 'Daily Transcription';
+}
+
+export function fairUseAboutTitleCopy(): string {
+  return 'About Fair Use';
+}
+
+export function fairUseAboutBodyCopy(): string {
+  return 'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.';
+}
+
 export function fairUseBudgetResetCopy(
   resetsAtMs: number | undefined,
   now: Date = new Date(),
@@ -1463,25 +1475,29 @@ export function fairUseCopy(
   }
   if (status.stage === 'restrict' && status.dailyLimitMs > 0) {
     rows.push({
-      title: 'Daily transcription',
+      title: fairUseDailyTranscriptionCopy(),
       copy: `${Math.round(status.usedMs / 60000)}m / ${Math.round(
         status.dailyLimitMs / 60000,
       )}m`,
     });
     if (status.exhausted) {
       rows.push({
-        title: 'Daily transcription',
+        title: fairUseDailyTranscriptionCopy(),
         copy: 'Daily transcription limit reached',
       });
     }
     const reset = fairUseBudgetResetCopy(status.resetsAtMs, now);
     if (reset !== '') {
       rows.push({
-        title: 'Daily transcription',
+        title: fairUseDailyTranscriptionCopy(),
         copy: reset,
       });
     }
   }
+  rows.push({
+    title: fairUseAboutTitleCopy(),
+    copy: fairUseAboutBodyCopy(),
+  });
   return rows;
 }
 

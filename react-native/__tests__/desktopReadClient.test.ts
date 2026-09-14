@@ -128,6 +128,9 @@ import {
   firmwareUpdateCopy,
   fairUseCopy,
   fairUseBudgetResetCopy,
+  fairUseDailyTranscriptionCopy,
+  fairUseAboutTitleCopy,
+  fairUseAboutBodyCopy,
   dailySummaryDateCopy,
   dailySummaryCopy,
   dailySummaryDefaultHeadlineCopy,
@@ -1279,6 +1282,11 @@ test('people name rows keep GET names without empty entries', () => {
 });
 
 test('fair use copy names GET stage hours and restrict budget without Upgrade', () => {
+  expect(fairUseDailyTranscriptionCopy()).toBe('Daily Transcription');
+  expect(fairUseAboutTitleCopy()).toBe('About Fair Use');
+  expect(fairUseAboutBodyCopy()).toBe(
+    'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.',
+  );
   expect(
     fairUseCopy({
       stage: 'restrict',
@@ -1303,12 +1311,16 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
     {title: '3-Day Rolling', copy: '8.1h / 8h'},
     {title: 'Weekly Rolling', copy: '11.0h / 10h'},
     {title: 'Fair Use', copy: 'Usage is restricted.'},
-    {title: 'Daily transcription', copy: '30m / 30m'},
+    {title: fairUseDailyTranscriptionCopy(), copy: '30m / 30m'},
     {
-      title: 'Daily transcription',
+      title: fairUseDailyTranscriptionCopy(),
       copy: 'Daily transcription limit reached',
     },
-    {title: 'Daily transcription', copy: 'Resets 5h'},
+    {title: fairUseDailyTranscriptionCopy(), copy: 'Resets 5h'},
+    {
+      title: fairUseAboutTitleCopy(),
+      copy: fairUseAboutBodyCopy(),
+    },
   ]);
   expect(
     fairUseCopy({
@@ -1331,10 +1343,14 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
     {title: '3-Day Rolling', copy: '8.1h / 8h'},
     {title: 'Weekly Rolling', copy: '11.0h / 10h'},
     {title: 'Fair Use', copy: 'Usage is restricted.'},
-    {title: 'Daily transcription', copy: '30m / 30m'},
+    {title: fairUseDailyTranscriptionCopy(), copy: '30m / 30m'},
     {
-      title: 'Daily transcription',
+      title: fairUseDailyTranscriptionCopy(),
       copy: 'Daily transcription limit reached',
+    },
+    {
+      title: fairUseAboutTitleCopy(),
+      copy: fairUseAboutBodyCopy(),
     },
   ]);
   expect(
@@ -1357,6 +1373,10 @@ test('fair use copy names GET stage hours and restrict budget without Upgrade', 
     {title: 'Today', copy: '0.0h / 2h'},
     {title: '3-Day Rolling', copy: '0.0h / 8h'},
     {title: 'Weekly Rolling', copy: '0.0h / 10h'},
+    {
+      title: fairUseAboutTitleCopy(),
+      copy: fairUseAboutBodyCopy(),
+    },
   ]);
   expect(fairUseCopy(null)).toBeNull();
   const now = new Date('2026-09-11T00:00:00Z');

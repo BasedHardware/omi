@@ -4252,7 +4252,9 @@ test('Settings names GET fair use without Upgrade or a write sheet', async () =>
   expect(tree).toContain('FU-1');
   expect(tree).toContain('2.4h / 2h');
   expect(tree).toContain('Daily transcription limit reached');
+  expect(tree).toContain('Daily Transcription');
   expect(tree).toMatch(/Resets \d+h/);
+  expect(tree).toContain('About Fair Use');
   expect(tree).not.toContain('Upgrade');
 });
 

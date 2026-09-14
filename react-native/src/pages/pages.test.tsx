@@ -1497,10 +1497,14 @@ test('Settings names GET fair use without Upgrade or a write sheet', async () =>
   expect(tree).toContain('3-Day Rolling');
   expect(tree).toContain('Weekly Rolling');
   expect(tree).toContain('Usage is restricted.');
-  expect(tree).toContain('Daily transcription');
+  expect(tree).toContain('Daily Transcription');
   expect(tree).toContain('30m / 30m');
   expect(tree).toContain('Daily transcription limit reached');
   expect(tree).toMatch(/Resets \d+h/);
+  expect(tree).toContain('About Fair Use');
+  expect(tree).toContain(
+    'Usage is measured by real speech time detected, not connection time.',
+  );
   expect(tree).not.toContain('Upgrade');
 });
 
@@ -1518,6 +1522,7 @@ test('Settings names a failed fair use GET instead of empty success', async () =
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Restricted');
   expect(tree).not.toContain('FU-1');
+  expect(tree).not.toContain('About Fair Use');
   expect(tree).not.toContain('Upgrade');
 });
 
