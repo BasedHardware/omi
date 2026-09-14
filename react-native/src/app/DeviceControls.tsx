@@ -177,9 +177,7 @@ export function DeviceControls({
           style={styles.scanButton}>
           <Text style={styles.scanButtonText}>{findDeviceCopy()}</Text>
         </FocusPressable>
-      ) : (
-        <Text style={styles.deviceMeta}>Find device unavailable</Text>
-      )}
+      ) : null}
       {device.connected &&
       device.storageStatusSupported &&
       omiNative?.readStorageStatus ? (

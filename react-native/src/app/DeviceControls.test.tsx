@@ -272,6 +272,38 @@ test('storage read failure remains unknown and can be retried', async () => {
   expect(button('Read storage status').props.disabled).toBe(false);
 });
 
+test('connected device omits Flutter DeviceSettings unused Find-unavailable copy', async () => {
+  await render(device);
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    'Find device unavailable',
+  );
+  expect(button(findDeviceCopy())).toBeUndefined();
+  await act(async () =>
+    renderer.update(
+      <DeviceControls
+        device={{...device, findDeviceSupported: true}}
+        busy={false}
+      />,
+    ),
+  );
+  expect(JSON.stringify(renderer.toJSON())).toContain(`"${findDeviceCopy()}"`);
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    'Find device unavailable',
+  );
+  await act(async () =>
+    renderer.update(
+      <DeviceControls
+        device={{...device, connected: false, findDeviceSupported: true}}
+        busy={false}
+      />,
+    ),
+  );
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    'Find device unavailable',
+  );
+  expect(button(findDeviceCopy())).toBeUndefined();
+});
+
 test('connected device omits Flutter DeviceSettings unused Double-press copy', async () => {
   await render({...device, buttonSupported: true});
   expect(JSON.stringify(renderer.toJSON())).not.toContain(
