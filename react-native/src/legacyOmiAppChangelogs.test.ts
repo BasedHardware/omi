@@ -444,8 +444,20 @@ test('loadOmiAppChangelogs names GET rows and omits failures', async () => {
   expect(await loadOmiAppChangelogs(backend)).toEqual([]);
   request.mockResolvedValue({
     id: 'changelogs',
-    status: 200,
-    body: JSON.stringify({changes: []}),
+    status: 500,
+    body: '{"error":"internal"}',
   });
   expect(await loadOmiAppChangelogs(backend)).toEqual([]);
+});
+
+test('loadOmiAppChangelogs names malformed GET instead of empty success', async () => {
+  const request = jest.fn(async () => ({
+    id: 'changelogs',
+    status: 200,
+    body: JSON.stringify({changes: []}),
+  }));
+  const backend = {request} as unknown as OmiBackend;
+  await expect(loadOmiAppChangelogs(backend)).rejects.toThrow(
+    'Omi app changelogs are malformed',
+  );
 });

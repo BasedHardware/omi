@@ -169,9 +169,5 @@ export async function loadOmiAppChangelogs(
   ) {
     return [];
   }
-  try {
-    return parseOmiAppChangelogs(response.body);
-  } catch {
-    return [];
-  }
+  return parseOmiAppChangelogs(response.body);
 }

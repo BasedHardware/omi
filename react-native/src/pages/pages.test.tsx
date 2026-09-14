@@ -2565,6 +2565,29 @@ test('Settings names a failed app changelogs GET instead of empty success', asyn
   expect(tree).not.toContain('✨');
 });
 
+test('Settings names malformed app changelogs GET instead of empty success', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/announcements/changelogs?limit=5') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({changes: []}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain("What's New");
+  expect(tree).toContain(
+    desktopReadErrorCopy(new Error('Omi app changelogs are malformed')),
+  );
+  expect(tree).not.toContain("What's New in 1.2.0");
+  expect(tree).not.toContain('Dismiss');
+  expect(tree).not.toContain('✨');
+});
+
 test('Settings names GET usage monthly yearly all-time without Upgrade', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
