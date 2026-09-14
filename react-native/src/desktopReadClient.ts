@@ -1965,7 +1965,7 @@ export function webhooksTitleCopy(): string {
 }
 
 export function developerKeysEmptyCopy(): string {
-  return 'No API keys yet';
+  return 'No API keys yet\nCreate a key to get started';
 }
 
 export function developerKeysCopy(

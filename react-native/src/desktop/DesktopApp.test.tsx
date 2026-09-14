@@ -6715,7 +6715,9 @@ test('Settings names Flutter noApiKeys for empty GET developer and MCP keys', as
   expect(tree).toContain('MCP');
   expect(tree).not.toContain('MCP key');
   expect(tree).toContain('No API keys yet');
+  expect(tree).toContain('Create a key to get started');
   expect(tree).not.toContain(desktopBackendServiceCopy);
+  expect(tree).not.toContain('Create Key');
   expect(tree).not.toContain('Revoke');
 });
 

@@ -2009,7 +2009,7 @@ test('developer key copy names GET prefix Flutter *** mask without inventing it 
   );
 });
 
-test('developer key copy names GET empty keys Flutter No API keys yet', () => {
+test('developer key copy names GET empty keys Flutter No API keys yet plus createKeyToGetStarted', () => {
   expect(developerApiTitleCopy()).toBe('Developer API');
   expect(mcpTitleCopy()).toBe('MCP');
   expect(webhooksTitleCopy()).toBe('Webhooks');
@@ -2018,7 +2018,9 @@ test('developer key copy names GET empty keys Flutter No API keys yet', () => {
   expect(privacyPolicyTitleCopy()).toBe('Privacy Policy');
   expect(termsOfServiceTitleCopy()).toBe('Terms of Service');
   expect(permissionsTitleCopy()).toBe('Permissions');
-  expect(developerKeysEmptyCopy()).toBe('No API keys yet');
+  expect(developerKeysEmptyCopy()).toBe(
+    'No API keys yet\nCreate a key to get started',
+  );
   expect(developerKeysCopy([], developerApiTitleCopy())).toEqual([
     {title: developerApiTitleCopy(), copy: developerKeysEmptyCopy()},
   ]);
