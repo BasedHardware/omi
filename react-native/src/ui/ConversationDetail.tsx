@@ -98,9 +98,6 @@ function ConversationClockFields({
       {showLocked ? (
         <Text style={[styles.conversationDetailField, ink]}>Locked</Text>
       ) : null}
-      {conversation.discarded ? (
-        <Text style={[styles.conversationDetailField, ink]}>Discarded</Text>
-      ) : null}
       {visibilityCopy === null ? null : (
         <Text style={[styles.conversationDetailField, ink]}>
           {visibilityCopy}

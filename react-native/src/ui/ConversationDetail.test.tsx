@@ -1058,19 +1058,18 @@ test('legacy conversation details keep GET clocks from the list row', () => {
     },
     reload: jest.fn(),
   });
-  const copy = text(
-    render({
-      apiContract: 'omi',
-      conversation: {
-        ...conversation,
-        id: 'old-1',
-        startedAt: '2026-09-07T12:00:00.000Z',
-        finishedAt: '2026-09-07T12:05:00.000Z',
-        status: 'completed',
-        discarded: true,
-      },
-    }),
-  );
+  const view = render({
+    apiContract: 'omi',
+    conversation: {
+      ...conversation,
+      id: 'old-1',
+      startedAt: '2026-09-07T12:00:00.000Z',
+      finishedAt: '2026-09-07T12:05:00.000Z',
+      status: 'completed',
+      discarded: true,
+    },
+  });
+  const copy = text(view);
   expect(copy).toContain('Started ·');
   expect(copy).not.toContain('Finished ·');
   expect(copy).not.toContain('Duration ·');
@@ -1078,7 +1077,10 @@ test('legacy conversation details keep GET clocks from the list row', () => {
   expect(copy).not.toContain('Status ·');
   expect(copy).not.toContain('Completed');
   expect(copy).toContain('Locked');
-  expect(copy).toContain('Discarded');
+  expect(copy).toContain('Discarded Conversation');
+  expect(
+    view.root.findAll(node => node.props.children === 'Discarded'),
+  ).toHaveLength(0);
   expect(copy).not.toContain('in_progress');
 });
 
@@ -2159,14 +2161,15 @@ test('legacy discarded details name Discarded Conversation instead of structured
     },
     reload: jest.fn(),
   });
-  const copy = text(
-    render({
-      apiContract: 'omi',
-      conversation: {...conversation, id: 'old-1', discarded: true},
-    }),
-  );
+  const view = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1', discarded: true},
+  });
+  const copy = text(view);
   expect(copy).toContain('Discarded Conversation');
-  expect(copy).toContain('Discarded');
+  expect(
+    view.root.findAll(node => node.props.children === 'Discarded'),
+  ).toHaveLength(0);
   expect(copy).not.toContain('A real conversation');
   expect(copy).not.toContain('Summary that Flutter hides');
   expect(copy).not.toContain('Hidden notes');
@@ -2175,21 +2178,32 @@ test('legacy discarded details name Discarded Conversation instead of structured
 });
 
 test('canonical discarded details name Discarded Conversation instead of structured title', () => {
-  const copy = text(
-    render({
-      conversation: {
-        ...conversation,
-        discarded: true,
-        title: 'Planning',
-        summary: 'Summary that Flutter hides',
-      },
-    }),
-  );
+  const view = render({
+    conversation: {
+      ...conversation,
+      discarded: true,
+      title: 'Planning',
+      summary: 'Summary that Flutter hides',
+    },
+  });
+  const copy = text(view);
   expect(copy).toContain('Discarded Conversation');
-  expect(copy).toContain('Discarded');
+  expect(
+    view.root.findAll(node => node.props.children === 'Discarded'),
+  ).toHaveLength(0);
   expect(copy).not.toContain('Planning');
   expect(copy).not.toContain('Summary that Flutter hides');
   expect(copy).not.toContain('want to retry');
+});
+
+test('conversation details omit Flutter GetSummaryWidgets unused Discarded chip', () => {
+  const view = render({
+    conversation: {...conversation, discarded: true},
+  });
+  expect(text(view)).toContain('Discarded Conversation');
+  expect(
+    view.root.findAll(node => node.props.children === 'Discarded'),
+  ).toHaveLength(0);
 });
 
 test('conversation details name GET private and shared visibility', () => {
