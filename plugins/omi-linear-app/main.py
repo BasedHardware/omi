@@ -561,6 +561,21 @@ async def tool_create_issue(request: Request):
         return ChatToolResponse(error=f"Failed to create issue: {str(e)}")
 
 
+def coerce_limit(value: Any, default: int = 10, min_val: int = 1, max_val: int = 50) -> int:
+    """Coerce limit to an integer clamped between min_val and max_val."""
+    if value is None:
+        return default
+    try:
+        val = int(value)
+        if val < min_val:
+            return min_val
+        if val > max_val:
+            return max_val
+        return val
+    except (ValueError, TypeError):
+        return default
+
+
 @app.post("/tools/list_my_issues", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_list_my_issues(request: Request):
     """
@@ -570,7 +585,7 @@ async def tool_list_my_issues(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        limit = body.get("limit", 10)
+        limit = coerce_limit(body.get("limit"), default=10, min_val=1, max_val=50)
         status_filter = body.get("status")  # Optional: filter by status
         
         if not uid:
@@ -581,9 +596,9 @@ async def tool_list_my_issues(request: Request):
             return ChatToolResponse(error="Please connect your Linear account first in the app settings.")
         
         # Build filter
-        filter_clause = '{ assignee: { isMe: { eq: true } } }'
+        filter_obj: Dict[str, Any] = {"assignee": {"isMe": {"eq": True}}}
         if status_filter:
-            status_lower = status_filter.lower()
+            status_lower = str(status_filter).lower()
             state_types = {
                 "backlog": "backlog",
                 "todo": "unstarted",
@@ -593,28 +608,28 @@ async def tool_list_my_issues(request: Request):
             }
             state_type = state_types.get(status_lower)
             if state_type:
-                filter_clause = f'{{ assignee: {{ isMe: {{ eq: true }} }}, state: {{ type: {{ eq: "{state_type}" }} }} }}'
+                filter_obj["state"] = {"type": {"eq": state_type}}
         
-        query = f"""
-        query {{
-            issues(first: {limit}, filter: {filter_clause}, orderBy: updatedAt) {{
-                nodes {{
+        query = """
+        query($first: Int!, $filter: IssueFilter) {
+            issues(first: $first, filter: $filter, orderBy: updatedAt) {
+                nodes {
                     id
                     identifier
                     title
                     priority
-                    state {{
+                    state {
                         name
                         type
-                    }}
+                    }
                     url
                     updatedAt
-                }}
-            }}
-        }}
+                }
+            }
+        }
         """
         
-        result = linear_graphql_request(uid, query)
+        result = linear_graphql_request(uid, query, {"first": limit, "filter": filter_obj})
         
         if "error" in result:
             return ChatToolResponse(error=f"Failed to get issues: {result['error']}")
@@ -653,7 +668,7 @@ async def tool_list_recent_issues(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        limit = body.get("limit", 5)
+        limit = coerce_limit(body.get("limit"), default=5, min_val=1, max_val=50)
         team_key = body.get("team")  # Optional: filter by team key like "OMI", "ENG"
         
         if not uid:
@@ -664,50 +679,54 @@ async def tool_list_recent_issues(request: Request):
             return ChatToolResponse(error="Please connect your Linear account first in the app settings.")
         
         # Build query - get recent issues ordered by created date
-        if team_key:
-            query = f"""
-            query {{
-                issues(first: {limit}, orderBy: createdAt, filter: {{ team: {{ key: {{ eq: "{team_key.upper()}" }} }} }}) {{
-                    nodes {{
+        if team_key and isinstance(team_key, str) and team_key.strip():
+            clean_team = team_key.strip().upper()
+            query = """
+            query($first: Int!, $filter: IssueFilter) {
+                issues(first: $first, orderBy: createdAt, filter: $filter) {
+                    nodes {
                         id
                         identifier
                         title
                         priority
-                        state {{
+                        state {
                             name
-                        }}
-                        assignee {{
+                        }
+                        assignee {
                             name
-                        }}
+                        }
                         createdAt
                         url
-                    }}
-                }}
-            }}
+                    }
+                }
+            }
             """
+            variables = {"first": limit, "filter": {"team": {"key": {"eq": clean_team}}}}
         else:
-            query = f"""
-            query {{
-                issues(first: {limit}, orderBy: createdAt) {{
-                    nodes {{
+            clean_team = None
+            query = """
+            query($first: Int!) {
+                issues(first: $first, orderBy: createdAt) {
+                    nodes {
                         id
                         identifier
                         title
                         priority
-                        state {{
+                        state {
                             name
-                        }}
-                        assignee {{
+                        }
+                        assignee {
                             name
-                        }}
+                        }
                         createdAt
                         url
-                    }}
-                }}
-            }}
+                    }
+                }
+            }
             """
+            variables = {"first": limit}
         
-        result = linear_graphql_request(uid, query)
+        result = linear_graphql_request(uid, query, variables)
         
         if "error" in result:
             return ChatToolResponse(error=f"Failed to get issues: {result['error']}")
