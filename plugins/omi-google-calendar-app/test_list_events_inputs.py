@@ -217,6 +217,15 @@ class ListEventsInputCoercionTests(unittest.TestCase):
         self.assertEqual(params["maxResults"], 10)
         self.assertEqual(_window_days(params), 7)
 
+    def test_overflowing_json_numbers_fall_back_to_defaults(self):
+        # json.loads turns 1e309 into float('inf'); int(inf) raises OverflowError.
+        response, calls = self._run({"days": float("inf"), "max_results": float("-inf")})
+
+        self.assertIsNone(response.error, response.error)
+        _, params = calls[0]
+        self.assertEqual(params["maxResults"], 10)
+        self.assertEqual(_window_days(params), 7)
+
 
 if __name__ == "__main__":
     unittest.main()
