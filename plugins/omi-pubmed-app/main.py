@@ -34,6 +34,12 @@ def _clamp_max_results(value: Any, default: int = 5) -> int:
     return max(1, min(parsed, 10))
 
 
+def _filter_related_pmids(links: list, source_pmid: str, max_results: int) -> list[str]:
+    """Filter out the source PMID and return up to max_results related PMIDs in order."""
+    source = str(source_pmid).strip()
+    return [str(x).strip() for x in links if str(x).strip() != source][:max_results]
+
+
 def _extract_abstract_from_efetch_xml(xml_text: str) -> str:
     """Parse efetch XML and return the abstract text for the first article."""
     try:
@@ -293,7 +299,7 @@ async def get_related_pubmed(request: Request):
             if linksets:
                 dbs = linksets[0].get("linksetdbs", [])
                 if dbs:
-                    related = [str(x) for x in dbs[0].get("links", [])[:max_results]]
+                    related = _filter_related_pmids(dbs[0].get("links", []), pmid, max_results)
 
             if not related:
                 return ChatToolResponse(result=f"No related articles found for PMID {pmid}")
