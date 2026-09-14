@@ -514,6 +514,10 @@ export function memoriesLoadErrorCopy(): string {
   return "Couldn't load memories";
 }
 
+export function tasksEmptyCopy(): string {
+  return 'No Tasks Yet';
+}
+
 export function tasksSearchEmptyCopy(): string {
   return 'No results found';
 }

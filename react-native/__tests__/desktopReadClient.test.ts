@@ -9,6 +9,7 @@ import {
   memoriesEmptyCopy,
   memoriesSearchEmptyCopy,
   memoriesLoadErrorCopy,
+  tasksEmptyCopy,
   tasksSearchEmptyCopy,
   appsEmptyCopy,
   conversationDisplayTitle,
@@ -2802,6 +2803,10 @@ test('memory empty copy names Flutter noMemoriesYet and noMemoriesFound', () => 
 
 test('memory load error copy names Flutter couldNotLoadMemories', () => {
   expect(memoriesLoadErrorCopy()).toBe("Couldn't load memories");
+});
+
+test('task empty copy names Flutter noTasksYet', () => {
+  expect(tasksEmptyCopy()).toBe('No Tasks Yet');
 });
 
 test('task search empty copy names Flutter noResultsFound', () => {

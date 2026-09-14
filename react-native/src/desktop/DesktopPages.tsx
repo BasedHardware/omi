@@ -19,6 +19,7 @@ import {
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
   taskDisplayTitle,
+  tasksEmptyCopy,
   conversationRecapTitle,
   visibleDisplayText,
   type DesktopReadOutcomes,
@@ -208,7 +209,7 @@ export function TasksPage({
           outcome.value.page,
           false,
           'No tasks yet',
-          'No tasks yet',
+          tasksEmptyCopy(),
         );
   return (
     <View style={styles.page}>

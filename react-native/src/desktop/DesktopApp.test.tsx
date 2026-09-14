@@ -20,6 +20,7 @@ import {
   developerKeyCreatedCopy,
   desktopReadErrorCopy,
   appsEmptyCopy,
+  tasksEmptyCopy,
 } from '../desktopReadClient';
 
 jest.mock('../app/useReduceMotion', () => ({
@@ -1556,6 +1557,7 @@ test('failed reads on Library and Tasks never claim an empty product', () => {
   tree = renderedText(renderer);
   expect(tree).toContain('Omi cloud needs a signed-in session.');
   expect(tree).not.toContain('No tasks yet');
+  expect(tree).not.toContain(tasksEmptyCopy());
 });
 
 test('a successful empty read is the only path to the empty claims', async () => {
@@ -1609,12 +1611,20 @@ test('a successful empty read is the only path to the empty claims', async () =>
     reads: [],
     readsPhase: 'ready',
   });
-  const tree = renderedText(renderer);
+  let tree = renderedText(renderer);
   expect(tree).toContain('Nothing captured yet.');
   expect(tree).toContain('No tasks yet');
   expect(tree).not.toContain(
     'Conversations will show here when your day is loaded.',
   );
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress();
+  });
+  tree = renderedText(renderer);
+  expect(tree).toContain(tasksEmptyCopy());
+  expect(tree).not.toContain('No tasks yet.');
 });
 
 test('an incomplete empty read does not claim a complete library', async () => {
@@ -1666,6 +1676,7 @@ test('an incomplete empty read does not claim a complete library', async () => {
   tree = renderedText(renderer);
   expect(tree).toContain('Tasks are incomplete.');
   expect(tree).not.toContain('No tasks yet');
+  expect(tree).not.toContain(tasksEmptyCopy());
 });
 
 test('an incomplete empty search does not claim a complete miss', async () => {

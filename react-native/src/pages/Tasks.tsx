@@ -16,6 +16,7 @@ import {
   taskDisplayTitle,
   taskGroup,
   taskIndentPadding,
+  tasksEmptyCopy,
   tasksSearchEmptyCopy,
   visibleDisplayText,
   type DesktopReadProjection,
@@ -202,7 +203,7 @@ export function TasksPage({
               outcome?.status === 'success' ? outcome.value.page : null,
               filtering,
               tasksSearchEmptyCopy(),
-              'No tasks yet.',
+              tasksEmptyCopy(),
               taskNotice === desktopBackendUnavailableCopy,
             )}
           </Text>

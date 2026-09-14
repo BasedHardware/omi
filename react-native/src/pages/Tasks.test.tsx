@@ -7,6 +7,7 @@ import type {TaskMutationProps} from '../ui/TaskEditor';
 import {
   desktopBackendServiceCopy,
   desktopBackendUnavailableCopy,
+  tasksEmptyCopy,
   tasksSearchEmptyCopy,
   type TaskProjection,
 } from '../desktopReadClient';
@@ -462,6 +463,7 @@ test('task grant denial shows the typed error instead of an empty library', () =
     .flat()
     .join(' ');
   expect(copy).toContain('This saved data is not available for this account.');
+  expect(copy).not.toContain(tasksEmptyCopy());
   expect(copy).not.toContain('No tasks yet.');
   expect(copy).not.toContain('Saved tasks could not be loaded.');
   expect(copy).not.toContain(
@@ -507,6 +509,7 @@ test('incomplete empty tasks do not claim a complete library', () => {
     .flat()
     .join(' ');
   expect(copy).toContain('Tasks are incomplete.');
+  expect(copy).not.toContain(tasksEmptyCopy());
   expect(copy).not.toContain('No tasks yet.');
 });
 
@@ -539,7 +542,39 @@ test('an incomplete empty task search does not claim a complete miss', () => {
   expect(copy).toContain('Tasks are incomplete.');
   expect(copy).not.toContain('No loaded tasks match.');
   expect(copy).not.toContain(tasksSearchEmptyCopy());
+  expect(copy).not.toContain(tasksEmptyCopy());
   expect(copy).not.toContain('No tasks yet.');
+});
+
+test('complete empty tasks names Flutter noTasksYet', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  const copy = taskPageText(renderer);
+  expect(copy).toContain(tasksEmptyCopy());
+  expect(copy).not.toContain('No tasks yet.');
+  expect(copy).not.toContain('Tasks are incomplete.');
+  expect(copy).not.toContain('Create Action Item');
+  expect(copy).not.toContain('Ask Omi for more tasks');
+  act(() => renderer.unmount());
 });
 
 test('Tasks search empty names Flutter noResultsFound', () => {
@@ -561,8 +596,8 @@ test('Tasks search empty names Flutter noResultsFound', () => {
     'Search covers task descriptions already loaded on this device.',
   );
   expect(copy).not.toContain('No loaded tasks match.');
+  expect(copy).not.toContain(tasksEmptyCopy());
   expect(copy).not.toContain('No tasks yet.');
-  expect(copy).not.toContain('No Tasks Yet');
   expect(copy).not.toContain('Ask Omi for more tasks');
   expect(copy).not.toContain('Create Action Item');
   act(() => renderer.unmount());
@@ -953,7 +988,8 @@ test('tasks page omits GET goals on failure rather than inventing No goals', asy
     await Promise.resolve();
   });
   const tree = taskPageText(renderer);
-  expect(tree).toContain('No tasks yet.');
+  expect(tree).toContain(tasksEmptyCopy());
+  expect(tree).not.toContain('No tasks yet.');
   expect(tree).not.toContain('Goals');
   expect(tree).not.toContain('No goals');
   act(() => renderer.unmount());
