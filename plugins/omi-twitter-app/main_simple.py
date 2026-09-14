@@ -222,9 +222,11 @@ async def auth_callback(
         refresh_token = token_data.get('refresh_token')
         expires_in = token_data.get('expires_in', 7200)
         
+        access_status = 'received' if access_token else 'missing'
+        refresh_status = 'received' if refresh_token else 'missing'
         print(f"🔑 Token data received:", flush=True)
-        print(f"   Access token: {'received' if access_token else 'missing'}", flush=True)
-        print(f"   Refresh token: {'received' if refresh_token else 'missing'}", flush=True)
+        print(f"   Access token: {access_status}", flush=True)
+        print(f"   Refresh token: {refresh_status}", flush=True)
         print(f"   Expires in: {expires_in}s ({expires_in/3600:.1f}h)", flush=True)
         
         SimpleUserStorage.save_user(
@@ -640,10 +642,6 @@ async def webhook(
     
     # Log what we received for debugging
     print(f"📥 Received {len(segments) if segments else 0} segment(s) from OMI", flush=True)
-    if segments:
-        for i, seg in enumerate(segments[:3]):  # Show first 3
-            text = seg.get('text', 'NO TEXT') if isinstance(seg, dict) else str(seg)
-            print(f"   Segment {i}: {text[:100]}", flush=True)
     
     if not segments or not isinstance(segments, list):
         # Silent response for empty/invalid data
@@ -697,15 +695,13 @@ async def process_segments(
     
     session_id = session["session_id"]
     
-    print(f"🔍 Received: '{full_text}'", flush=True)
     print(f"📊 Session mode: {session['tweet_mode']}, Count: {session.get('segments_count', 0)}/3", flush=True)
-    
+
     # Check for trigger phrase
     if tweet_detector.detect_trigger(full_text):
         tweet_content = tweet_detector.extract_tweet_content(full_text)
-        
+
         print(f"🎤 TRIGGER! Starting 3-segment collection...", flush=True)
-        print(f"   Segment 1 content: '{tweet_content}'", flush=True)
         
         # Start collecting - ALWAYS wait for 2 more segments
         SimpleSessionStorage.update_session(
@@ -727,8 +723,7 @@ async def process_segments(
         accumulated += " " + full_text
         segments_count += 1
         
-        print(f"📝 Segment {segments_count}/3: '{full_text}'", flush=True)
-        print(f"📚 Full accumulated: '{accumulated[:150]}...'", flush=True)
+        print(f"📝 Segment {segments_count}/3 received", flush=True)
         
         # Always collect 3 segments
         if segments_count >= 3:

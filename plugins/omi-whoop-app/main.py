@@ -120,7 +120,7 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
         if response.status_code == 200:
             return response.json()
         else:
-            log(f"Token refresh failed: {response.status_code} - {response.text}")
+            log(f"Token refresh failed: {response.status_code}")
             return None
     except Exception as e:
         log(f"Error refreshing token: {e}")
@@ -1087,8 +1087,8 @@ async def whoop_callback(
         )
 
         if response.status_code != 200:
-            log(f"Token exchange failed: {response.text}")
-            return HTMLResponse(content=f"Token exchange failed: {response.text}", status_code=400)
+            log(f"Token exchange failed: {response.status_code}")
+            return HTMLResponse(content=f"Token exchange failed: {response.status_code}", status_code=400)
 
         token_data = response.json()
         access_token = token_data.get("access_token")

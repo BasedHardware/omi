@@ -1,12 +1,18 @@
-"""Hermetic regression test: OAuth client success paths must not print secrets.
+"""Hermetic regression test: OAuth plugin success paths must not print secrets.
 
 Stubs `requests` in sys.modules so the test runs without network access.
 The Notion token-exchange response carries the user's fresh access_token;
 printing it (or any success response body) leaks credentials to stdout logs.
+
+The last test class is a static source check, not behavioral coverage: it
+guards conversation_created.py, whose FastAPI imports are too heavy to stub
+hermetically here.
 """
 
 import contextlib
+import importlib.util
 import io
+import re
 import sys
 import types
 import unittest
@@ -23,19 +29,24 @@ class FakeResponse:
 
 
 def load_client_module():
-    """Import oauth/client.py with `requests` stubbed."""
+    """Import oauth/client.py with `requests` stubbed, then restore sys.modules."""
     for name in ("oauth.client", "client"):
         sys.modules.pop(name, None)
+    real_requests = sys.modules.get("requests")
     fake_requests = types.ModuleType("requests")
     fake_requests.Response = FakeResponse
     fake_requests.get = mock.MagicMock()
     fake_requests.post = mock.MagicMock()
     sys.modules["requests"] = fake_requests
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location("oauth.client", "plugins/oauth/client.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    try:
+        spec = importlib.util.spec_from_file_location("oauth.client", "plugins/oauth/client.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    finally:
+        if real_requests is not None:
+            sys.modules["requests"] = real_requests
+        else:
+            sys.modules.pop("requests", None)
     return module, fake_requests
 
 
@@ -80,14 +91,16 @@ class TestOAuthClientLogSafety(unittest.TestCase):
 
     def test_get_databases_does_not_print_response(self):
         module, fake_requests = load_client_module()
-        fake_requests.post.return_value = FakeResponse({"results": []})
+        fake_requests.post.return_value = FakeResponse(
+            {"results": [{"id": "db-9", "title": [{"plain_text": "Sentinel DB"}], "properties": {}}]}
+        )
         notion = module.NotionClient("cid", "csecret", "https://redir", "https://auth")
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             notion.get_databases_edited_time_desc(SECRET)
-        self.assertNotIn("results", buf.getvalue())
+        self.assertNotIn("Sentinel DB", buf.getvalue())
 
-    def test_error_path_still_logs_status(self):
+    def test_error_path_logs_status_not_body(self):
         module, fake_requests = load_client_module()
         fake_requests.post.return_value = FakeResponse(
             {"code": "unauthorized", "message": "bad token"}, status_code=401
@@ -97,7 +110,59 @@ class TestOAuthClientLogSafety(unittest.TestCase):
         with contextlib.redirect_stdout(buf):
             result = notion.get_access_token("bad-code")
         self.assertIn("error", result)
-        self.assertIn("HTTP_401", buf.getvalue())
+        out = buf.getvalue()
+        self.assertIn("HTTP_401", out)
+        self.assertNotIn("bad token", out)
+
+
+class TestPluginSourceSafety(unittest.TestCase):
+    """Static tripwire: log statements in the files this fix touched must not
+    name credential variables, provider response bodies, webhook URLs, or raw
+    transcript buffers. Static checker, not behavioral coverage (several of
+    these modules are too import-heavy to stub hermetically)."""
+
+    SCAN_FILES = [
+        "plugins/oauth/client.py",
+        "plugins/oauth/conversation_created.py",
+        "plugins/omi-clickup-app/clickup_client.py",
+        "plugins/omi-github-app/github_client.py",
+        "plugins/omi-hive-app/main.py",
+        "plugins/omi-slack-app/slack_client.py",
+        "plugins/omi-twitter-app/main_simple.py",
+        "plugins/omi-twitter-app/twitter_client.py",
+        "plugins/omi-notion-app/main.py",
+        "plugins/omi-whoop-app/main.py",
+        "plugins/omi-google-calendar-app/main.py",
+        "plugins/zapier/conversation_created.py",
+        "plugins/zapier/client.py",
+        "plugins/notifications/hey_omi.py",
+        "plugins/_multion/router.py",
+    ]
+
+    BANNED_TOKENS = [
+        "access_token",
+        "refresh_token",
+        "api_key",
+        "token_data",
+        "target_url",
+        "response.text",
+        "resp.json()",
+        "full_text",
+        "accumulated",
+    ]
+
+    def test_no_log_call_emits_secrets_or_response_bodies(self):
+        log_line = re.compile(r"(?:print|logger\.(?:info|warning|error|debug))\((.*)")
+        for path in self.SCAN_FILES:
+            with open(path) as f:
+                for lineno, line in enumerate(f, 1):
+                    m = log_line.search(line)
+                    if not m:
+                        continue
+                    for token in self.BANNED_TOKENS:
+                        self.assertNotIn(
+                            token, m.group(1), f"{path}:{lineno} logs {token}"
+                        )
 
 
 if __name__ == "__main__":

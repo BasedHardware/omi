@@ -989,9 +989,9 @@ checks:
 
   - id: plugin-oauth-client-log-safety-tests
     command: ["python3", "plugins/oauth/test_client_log_safety.py"]
-    triggers: ["plugins/oauth/client.py", "plugins/oauth/test_client_log_safety.py", ".github/checks-manifest.yaml"]
+    triggers: ["plugins/oauth/**", "plugins/omi-*/**", "plugins/zapier/**", "plugins/notifications/hey_omi.py", "plugins/_multion/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "OAuth success paths printed raw provider responses to stdout; the Notion token-exchange body includes the user's fresh access_token, so response bodies must never reach the log stream"
+    reason: "plugin stdout is broadly visible in deployment logs; OAuth token-exchange bodies, stored access tokens, API keys, webhook URLs, and transcript text were printed verbatim, so print calls must not carry secrets or provider response data"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

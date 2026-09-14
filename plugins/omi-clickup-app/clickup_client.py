@@ -44,7 +44,7 @@ class ClickUpClient:
                     "token_type": data.get("token_type", "Bearer")
                 }
             else:
-                raise Exception(f"Token exchange failed: {response.status_code} - {response.text}")
+                raise Exception(f"Token exchange failed: {response.status_code}")
                 
         except Exception as e:
             print(f"❌ Token exchange error: {e}", flush=True)

@@ -50,9 +50,9 @@ class GitHubClient:
                 if "access_token" in token_data:
                     return token_data
                 else:
-                    raise Exception(f"No access token in response: {token_data}")
+                    raise Exception("No access token in token exchange response")
             else:
-                raise Exception(f"Token exchange failed: {response.status_code} - {response.text}")
+                raise Exception(f"Token exchange failed: {response.status_code}")
                 
         except Exception as e:
             print(f"❌ Token exchange error: {e}")
