@@ -707,13 +707,19 @@ test('Memories rows name GET ledger slot, playbook body, baseline, and known dev
     const copy = textOf(view);
     expect(copy).toContain('identity.full_name');
     expect(copy).toContain('Open with the weekly recap.');
-    expect(copy).toContain('Baseline Memory');
+    expect(copy).toContain('⚑');
+    expect(copy).not.toContain('Baseline Memory');
     expect(copy).toContain('Mac');
+    expect(
+      view.root.find(
+        node => node.props.accessibilityLabel === 'Baseline memory',
+      ),
+    ).toBeTruthy();
     expect(
       view.root.findAll(
         node => node.type === Text && node.props.children === 'Baseline Memory',
       ),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
   } finally {
     act(() => view.unmount());
   }

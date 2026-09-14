@@ -3032,7 +3032,7 @@ test('Omi memory ledger chrome names GET slot, playbook body, baseline, and know
   ).toBe('Open with the weekly recap.');
   expect(memoryBaselineCopy({})).toBeNull();
   expect(memoryBaselineCopy({isBaseline: false})).toBeNull();
-  expect(memoryBaselineCopy({isBaseline: true})).toBe('Baseline Memory');
+  expect(memoryBaselineCopy({isBaseline: true})).toBe('⚑');
   expect(memoryHistoryCopy({})).toBeNull();
   expect(memoryHistoryCopy({history: false})).toBeNull();
   expect(memoryHistoryCopy({history: true})).toBe('History');

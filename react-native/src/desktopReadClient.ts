@@ -2600,7 +2600,7 @@ export function memoryLedgerPlaybookCopy(item: {
 export function memoryBaselineCopy(item: {
   isBaseline?: boolean;
 }): string | null {
-  return item.isBaseline === true ? 'Baseline Memory' : null;
+  return item.isBaseline === true ? '⚑' : null;
 }
 
 export function memoryHistoryCopy(item: {

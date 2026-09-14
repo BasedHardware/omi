@@ -165,7 +165,9 @@ export const ReadRow = memo(function ReadRow({
           <Text style={styles.rowMeta}>{captureDevice}</Text>
         ) : null}
         {baseline !== null ? (
-          <Text style={styles.rowMeta}>{baseline}</Text>
+          <Text accessibilityLabel="Baseline memory" style={styles.rowMeta}>
+            {baseline}
+          </Text>
         ) : null}
       </View>
     </View>

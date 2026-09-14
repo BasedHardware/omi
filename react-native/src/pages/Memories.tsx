@@ -178,7 +178,11 @@ export function MemoriesPage({
           <Text style={styles.memoryProvenance}>{device}</Text>
         ) : null}
         {baseline !== null ? (
-          <Text style={styles.memoryProvenance}>{baseline}</Text>
+          <Text
+            accessibilityLabel="Baseline memory"
+            style={styles.memoryProvenance}>
+            {baseline}
+          </Text>
         ) : null}
         {locked !== null ? (
           <Text

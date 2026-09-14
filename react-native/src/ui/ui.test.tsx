@@ -3050,13 +3050,15 @@ test('wide Home search and compact Home current memory rows name GET ledger chro
   const searchTree = JSON.stringify(search.toJSON());
   expect(searchTree).toContain('identity.full_name');
   expect(searchTree).toContain('Open with the weekly recap.');
-  expect(searchTree).toContain('Baseline Memory');
+  expect(searchTree).toContain('⚑');
+  expect(searchTree).not.toContain('Baseline Memory');
   expect(searchTree).toContain('Mac');
   const currents = render(<ProjectionRow home item={{...item, id: 'memory-ledger-home-current'}} />);
   const currentTree = JSON.stringify(currents.toJSON());
   expect(currentTree).toContain('identity.full_name');
   expect(currentTree).toContain('Open with the weekly recap.');
-  expect(currentTree).toContain('Baseline Memory');
+  expect(currentTree).toContain('⚑');
+  expect(currentTree).not.toContain('Baseline Memory');
   expect(currentTree).toContain('Mac');
   const omitted = render(
     <ProjectionRow
@@ -3075,6 +3077,7 @@ test('wide Home search and compact Home current memory rows name GET ledger chro
   expect(omittedTree).toContain('A walk.');
   expect(omittedTree).not.toContain('identity.full_name');
   expect(omittedTree).not.toContain('Open with the weekly recap.');
+  expect(omittedTree).not.toContain('⚑');
   expect(omittedTree).not.toContain('Baseline Memory');
   expect(omittedTree).not.toContain('Mac');
 });

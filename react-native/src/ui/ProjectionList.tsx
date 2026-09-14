@@ -230,7 +230,9 @@ export const ProjectionRow = memo(function ProjectionRow({
         </Text>
       ) : null}
       {baseline !== null ? (
-        <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+        <Text
+          accessibilityLabel="Baseline memory"
+          style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
           {baseline}
         </Text>
       ) : null}

@@ -181,12 +181,14 @@ test('Home currents name GET memory ledger chrome and omit empty fields', () => 
   const copy = textOf(named);
   expect(copy).toContain('identity.full_name');
   expect(copy).toContain('Open with the weekly recap.');
-  expect(copy).toContain('Baseline Memory');
+  expect(copy).toContain('⚑');
+  expect(copy).not.toContain('Baseline Memory');
   expect(copy).toContain('Mac');
   const omittedCopy = textOf(omitted);
   expect(omittedCopy).toContain('A walk.');
   expect(omittedCopy).not.toContain('identity.full_name');
   expect(omittedCopy).not.toContain('Open with the weekly recap.');
+  expect(omittedCopy).not.toContain('⚑');
   expect(omittedCopy).not.toContain('Baseline Memory');
   expect(omittedCopy).not.toContain('Mac');
 });
