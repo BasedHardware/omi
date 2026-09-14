@@ -1071,6 +1071,10 @@ export function usageAllTimeTitleCopy(): string {
   return 'All Time';
 }
 
+export function usageLoadErrorCopy(): string {
+  return 'Failed to load usage data. Please try again later.';
+}
+
 export function taskIntegrationsTitleCopy(): string {
   return 'Task Integrations';
 }

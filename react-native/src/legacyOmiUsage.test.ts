@@ -111,7 +111,7 @@ test('fails closed for malformed GET usage periods', () => {
   expect(() => parseOmiUsagePeriod('{', 'monthly')).toThrow();
 });
 
-test('loadOmiUsagePeriod names resolved GET periods and omits failures', async () => {
+test('loadOmiUsagePeriod names resolved GET periods and fails closed on HTTP failures', async () => {
   const request = jest.fn(async () => ({
     id: 'usage',
     status: 200,
@@ -165,13 +165,13 @@ test('loadOmiUsagePeriod names resolved GET periods and omits failures', async (
     path: '/v1/users/me/usage?period=today',
   });
   request.mockResolvedValueOnce({id: 'usage', status: 404, body: null});
-  expect(await loadOmiUsagePeriod(backend, 'yearly')).toBeNull();
+  await expect(loadOmiUsagePeriod(backend, 'yearly')).rejects.toThrow();
   request.mockResolvedValueOnce({
     id: 'usage',
     status: 500,
     body: '{"error":"internal"}',
   });
-  expect(await loadOmiUsagePeriod(backend, 'all_time')).toBeNull();
+  await expect(loadOmiUsagePeriod(backend, 'all_time')).rejects.toThrow();
 });
 
 test('loadOmiUsagePeriod names malformed GET instead of empty success', async () => {

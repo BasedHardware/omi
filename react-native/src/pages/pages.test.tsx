@@ -27,7 +27,7 @@ jest.mock('../omiNative', () => ({
 
 const {ConnectorsPage} = require('./Connectors');
 const {SettingsPage} = require('./Settings');
-const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy, permissionsTitleCopy, fairUseLoadErrorCopy} = require('../desktopReadClient');
+const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy, permissionsTitleCopy, fairUseLoadErrorCopy, usageLoadErrorCopy} = require('../desktopReadClient');
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -2873,8 +2873,9 @@ test('Settings names a failed usage period GET instead of empty success', async 
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
     if (
-      typeof request.path === 'string' &&
-      request.path.startsWith('/v1/users/me/usage?period=')
+      request.path === '/v1/users/me/usage?period=monthly' ||
+      request.path === '/v1/users/me/usage?period=yearly' ||
+      request.path === '/v1/users/me/usage?period=all_time'
     ) {
       throw Object.assign(new Error('lost'), {code: 'OMI_HTTP_TRANSPORT'});
     }
@@ -2885,11 +2886,34 @@ test('Settings names a failed usage period GET instead of empty success', async 
   expect(tree).toContain('This Month');
   expect(tree).toContain('This Year');
   expect(tree).toContain('All Time');
-  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).toContain(usageLoadErrorCopy());
+  expect(tree).not.toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('This Month · Listening');
   expect(tree).not.toContain('3 minutes');
   expect(tree).not.toContain('Upgrade');
   expect(tree).not.toContain('No Activity Yet');
+});
+
+test('Settings names HTTP 404 usage period GET Flutter usageLoadError instead of omitting', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (
+      typeof request.path === 'string' &&
+      request.path.startsWith('/v1/users/me/usage?period=')
+    ) {
+      return {id: request.id, status: 404, body: null};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('This Month');
+  expect(tree).toContain('This Year');
+  expect(tree).toContain('All Time');
+  expect(tree).toContain(usageLoadErrorCopy());
+  expect(tree).not.toContain('This Month · Listening');
+  expect(tree).not.toContain('No Activity Yet');
+  expect(tree).not.toContain('Upgrade');
 });
 
 test('Settings names malformed usage period GET instead of empty success', async () => {
@@ -2909,7 +2933,7 @@ test('Settings names malformed usage period GET instead of empty success', async
   expect(tree).toContain('This Year');
   expect(tree).toContain('All Time');
   expect(tree).toContain(
-    desktopReadErrorCopy(new Error('Omi usage is malformed')),
+    usageLoadErrorCopy(),
   );
   expect(tree).not.toContain('This Month · Listening');
   expect(tree).not.toContain('3 minutes');

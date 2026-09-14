@@ -46,6 +46,7 @@ import {
   usageThisMonthTitleCopy,
   usageThisYearTitleCopy,
   usageAllTimeTitleCopy,
+  usageLoadErrorCopy,
   subscriptionPeriodCopy,
   subscriptionTranscriptionQuotaCopy,
   primaryLanguageCopy,
@@ -527,21 +528,21 @@ export function SettingsPage({
       stats => ({stats, error: null as string | null}),
       reason => ({
         stats: null as OmiUsageStats | null,
-        error: desktopReadErrorCopy(reason),
+        error: usageLoadErrorCopy(),
       }),
     );
     const usageYearlyTask = loadOmiUsagePeriod(backend, 'yearly').then(
       stats => ({stats, error: null as string | null}),
       reason => ({
         stats: null as OmiUsageStats | null,
-        error: desktopReadErrorCopy(reason),
+        error: usageLoadErrorCopy(),
       }),
     );
     const usageAllTimeTask = loadOmiUsagePeriod(backend, 'all_time').then(
       stats => ({stats, error: null as string | null}),
       reason => ({
         stats: null as OmiUsageStats | null,
-        error: desktopReadErrorCopy(reason),
+        error: usageLoadErrorCopy(),
       }),
     );
     const fairUseTask = loadOmiFairUseStatus(backend).then(

@@ -71,7 +71,7 @@ export async function loadOmiUsagePeriod(
     response.body === null ||
     response.body.length > 1024 * 1024
   ) {
-    return null;
+    throw new UsageError();
   }
   return parseOmiUsagePeriod(response.body, period);
 }

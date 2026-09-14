@@ -129,6 +129,7 @@ import {
   usageThisMonthTitleCopy,
   usageThisYearTitleCopy,
   usageAllTimeTitleCopy,
+  usageLoadErrorCopy,
   taskIntegrationsTitleCopy,
   usageActivityEmptyCopy,
   usageListeningSubtitleCopy,
@@ -1254,6 +1255,9 @@ test('usage stats copy names GET today counts without Upgrade', () => {
   expect(usageThisMonthTitleCopy()).toBe('This Month');
   expect(usageThisYearTitleCopy()).toBe('This Year');
   expect(usageAllTimeTitleCopy()).toBe('All Time');
+  expect(usageLoadErrorCopy()).toBe(
+    'Failed to load usage data. Please try again later.',
+  );
   expect(taskIntegrationsTitleCopy()).toBe('Task Integrations');
   expect(
     usagePeriodStatsCopy(usageThisYearTitleCopy(), {
