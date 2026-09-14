@@ -34,6 +34,9 @@ import {
   mcpTitleCopy,
   webhooksTitleCopy,
   userIdTitleCopy,
+  signOutTitleCopy,
+  privacyPolicyTitleCopy,
+  termsOfServiceTitleCopy,
   accountFieldCopy,
   connectionIdentityCopy,
   subscriptionPlanCopy,
@@ -1030,10 +1033,10 @@ export function SettingsPage({
             action={() => {
               runAction('sign-out', signOut).catch(() => undefined);
             }}
-            actionLabel="Sign out"
+            actionLabel={signOutTitleCopy()}
             busy={pending === 'sign-out'}
             copy="Leave this app's cloud session. Your Omi account stays in the cloud."
-            title="Sign out"
+            title={signOutTitleCopy()}
           />
         )}
       </>
@@ -1376,7 +1379,7 @@ export function SettingsPage({
           />
         )}
         <SettingRow
-          title="Privacy policy"
+          title={privacyPolicyTitleCopy()}
           copy="How Omi handles your information."
           actionLabel="Read privacy policy"
           action={() => {
@@ -1386,7 +1389,7 @@ export function SettingsPage({
           }}
         />
         <SettingRow
-          title="Terms of service"
+          title={termsOfServiceTitleCopy()}
           copy="Terms for using Omi."
           actionLabel="Read terms of service"
           action={() => {

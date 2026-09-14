@@ -21,6 +21,7 @@ import {
   desktopReadErrorCopy,
   appsEmptyCopy,
   tasksEmptyCopy,
+  signOutTitleCopy,
 } from '../desktopReadClient';
 
 jest.mock('../app/useReduceMotion', () => ({
@@ -2734,7 +2735,7 @@ test('Settings surfaces sign-out failures without leaving the ready shell', asyn
   });
   await act(async () => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Sign out')
+      .find(node => node.props.accessibilityLabel === signOutTitleCopy())
       .props.onPress();
     await Promise.resolve();
     await Promise.resolve();

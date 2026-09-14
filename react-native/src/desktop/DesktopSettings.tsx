@@ -22,6 +22,7 @@ import {
   mcpTitleCopy,
   webhooksTitleCopy,
   userIdTitleCopy,
+  signOutTitleCopy,
   accountFieldCopy,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
@@ -887,7 +888,7 @@ export function DesktopSettings({
         }
         actionLabel={
           session === 'ready'
-            ? 'Sign out'
+            ? signOutTitleCopy()
             : signingIn
             ? 'Signing in…'
             : 'Sign in'

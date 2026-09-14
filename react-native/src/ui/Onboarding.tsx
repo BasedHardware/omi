@@ -14,6 +14,11 @@ import {desktopTokens} from '../desktop/tokens';
 import {Button} from './Button';
 import {OmiAvatar} from './OmiAvatar';
 import {tokens} from './tokens';
+import {
+  privacyPolicyTitleCopy,
+  signOutTitleCopy,
+  termsOfServiceTitleCopy,
+} from '../desktopReadClient';
 
 const DOTS_SIZE = 104;
 
@@ -121,7 +126,7 @@ export function Onboarding({
                     () => undefined,
                   );
                 }}>
-                Privacy policy
+                {privacyPolicyTitleCopy()}
               </Button>
               <Button
                 variant="ghost"
@@ -131,7 +136,7 @@ export function Onboarding({
                     'https://www.omi.me/pages/terms-of-service',
                   ).catch(() => undefined);
                 }}>
-                Terms of service
+                {termsOfServiceTitleCopy()}
               </Button>
             </View>
             {!desktop && !browser && (
@@ -160,7 +165,7 @@ export function Onboarding({
             </Button>
             {onSignOut && (
               <Button variant="ghost" onPress={onSignOut}>
-                Sign out
+                {signOutTitleCopy()}
               </Button>
             )}
           </>

@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Text, TextInput} from 'react-native';
-import {desktopBackendServiceCopy} from '../src/desktopReadClient';
+import {desktopBackendServiceCopy, signOutTitleCopy} from '../src/desktopReadClient';
 
 const mockAuth = {
   hasCloudSession: jest.fn(),
@@ -289,7 +289,7 @@ test('signed-out Mac sees only the Welcome until a real session lands', async ()
   });
   await act(async () => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Sign out')
+      .find(node => node.props.accessibilityLabel === signOutTitleCopy())
       .props.onPress();
   });
   expect(mockAuth.signOut).toHaveBeenCalledTimes(1);
@@ -624,7 +624,7 @@ test('the previous session transcript never survives a sign-out', async () => {
   });
   await act(async () => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Sign out')
+      .find(node => node.props.accessibilityLabel === signOutTitleCopy())
       .props.onPress();
   });
   expect(labelsOf(renderer)).toContain('First-run onboarding');
@@ -1838,7 +1838,7 @@ test.each(['stop', 'unmount', 'signout'])(
       });
       await act(async () => {
         renderer.root
-          .find(node => node.props.accessibilityLabel === 'Sign out')
+          .find(node => node.props.accessibilityLabel === signOutTitleCopy())
           .props.onPress();
       });
     } else await act(async () => renderer.unmount());

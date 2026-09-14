@@ -40,6 +40,9 @@ import {
   mcpTitleCopy,
   webhooksTitleCopy,
   userIdTitleCopy,
+  signOutTitleCopy,
+  privacyPolicyTitleCopy,
+  termsOfServiceTitleCopy,
   appCategoryCopy,
   appDisplaySource,
   appDisplayAttribution,
@@ -1779,6 +1782,9 @@ test('developer key copy names GET empty keys Flutter No API keys yet', () => {
   expect(mcpTitleCopy()).toBe('MCP');
   expect(webhooksTitleCopy()).toBe('Webhooks');
   expect(userIdTitleCopy()).toBe('User ID');
+  expect(signOutTitleCopy()).toBe('Sign Out');
+  expect(privacyPolicyTitleCopy()).toBe('Privacy Policy');
+  expect(termsOfServiceTitleCopy()).toBe('Terms of Service');
   expect(developerKeysEmptyCopy()).toBe('No API keys yet');
   expect(developerKeysCopy([], developerApiTitleCopy())).toEqual([
     {title: developerApiTitleCopy(), copy: developerKeysEmptyCopy()},

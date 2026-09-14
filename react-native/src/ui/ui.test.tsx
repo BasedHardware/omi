@@ -499,7 +499,7 @@ describe('signed-out Settings and first-run', () => {
       'utf8',
     );
 
-    expect(settings).toContain('actionLabel="Sign out"');
+    expect(settings).toContain('actionLabel={signOutTitleCopy()}');
     expect(settings).toContain('onSignOut');
     expect(settings).toContain('auth.signOut()');
     expect(settings).toContain('if (!result.signedOut)');

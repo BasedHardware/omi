@@ -848,6 +848,18 @@ export function userIdTitleCopy(): string {
   return 'User ID';
 }
 
+export function signOutTitleCopy(): string {
+  return 'Sign Out';
+}
+
+export function privacyPolicyTitleCopy(): string {
+  return 'Privacy Policy';
+}
+
+export function termsOfServiceTitleCopy(): string {
+  return 'Terms of Service';
+}
+
 export function accountFieldCopy(
   value: string | null | undefined,
   unset: string,
