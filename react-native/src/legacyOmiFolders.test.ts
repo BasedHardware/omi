@@ -95,6 +95,32 @@ test('keeps GET folders when a folder id exceeds 256', () => {
   ]);
 });
 
+test('keeps GET folders when a folder id exceeds 10000', () => {
+  const id = 'f'.repeat(10001);
+  expect(
+    parseOmiFolders(
+      JSON.stringify([
+        {id, name: 'Work'},
+        {id: 'folder-neighbor', name: 'Personal'},
+      ]),
+    ),
+  ).toEqual([
+    {id, name: 'Work', color: '#6B7280'},
+    {id: 'folder-neighbor', name: 'Personal', color: '#6B7280'},
+  ]);
+});
+
+test('fails closed when a folder id exceeds 1000000', () => {
+  expect(() =>
+    parseOmiFolders(
+      JSON.stringify([
+        {id: 'f'.repeat(1_000_001), name: 'Work'},
+        {id: 'folder-neighbor', name: 'Personal'},
+      ]),
+    ),
+  ).toThrow();
+});
+
 test('keeps GET folders when a name exceeds 10000', () => {
   const name = 'W'.repeat(10001);
   expect(
