@@ -1489,6 +1489,10 @@ export function fairUseAboutBodyCopy(): string {
   return 'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.';
 }
 
+export function fairUseLoadErrorCopy(): string {
+  return 'Unable to load fair use status. Please try again.';
+}
+
 export function fairUseBudgetResetCopy(
   resetsAtMs: number | undefined,
   now: Date = new Date(),

@@ -134,7 +134,7 @@ export async function loadOmiFairUseStatus(
     response.body === null ||
     response.body.length > 1024 * 1024
   ) {
-    return null;
+    throw new FairUseError();
   }
   return parseOmiFairUseStatus(response.body);
 }

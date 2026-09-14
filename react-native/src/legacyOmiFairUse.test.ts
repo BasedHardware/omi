@@ -133,7 +133,7 @@ test('keeps GET fair use resets_at with hour-only offsets Dart DateTime.tryParse
   ).toBe(Date.parse('2026-09-11T00:00:00.000Z'));
 });
 
-test('loadOmiFairUseStatus names resolved GET status and omits failures', async () => {
+test('loadOmiFairUseStatus names resolved GET status and fails closed on HTTP failures', async () => {
   const request = jest.fn(async () => ({
     id: 'fair-use',
     status: 200,
@@ -162,13 +162,13 @@ test('loadOmiFairUseStatus names resolved GET status and omits failures', async 
     path: '/v1/fair-use/status',
   });
   request.mockResolvedValueOnce({id: 'fair-use', status: 404, body: null});
-  expect(await loadOmiFairUseStatus(backend)).toBeNull();
+  await expect(loadOmiFairUseStatus(backend)).rejects.toThrow();
   request.mockResolvedValueOnce({
     id: 'fair-use',
     status: 500,
     body: '{"error":"internal"}',
   });
-  expect(await loadOmiFairUseStatus(backend)).toBeNull();
+  await expect(loadOmiFairUseStatus(backend)).rejects.toThrow();
 });
 
 test('loadOmiFairUseStatus names malformed GET instead of empty success', async () => {

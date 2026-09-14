@@ -144,6 +144,7 @@ import {
   fairUseDailyTranscriptionCopy,
   fairUseAboutTitleCopy,
   fairUseAboutBodyCopy,
+  fairUseLoadErrorCopy,
   dailySummaryDateCopy,
   dailySummaryCopy,
   dailySummaryDefaultHeadlineCopy,
@@ -1311,6 +1312,9 @@ test('people name rows keep GET names without empty entries', () => {
 test('fair use copy names GET stage hours and restrict budget without Upgrade', () => {
   expect(fairUseDailyTranscriptionCopy()).toBe('Daily Transcription');
   expect(fairUseAboutTitleCopy()).toBe('About Fair Use');
+  expect(fairUseLoadErrorCopy()).toBe(
+    'Unable to load fair use status. Please try again.',
+  );
   expect(fairUseAboutBodyCopy()).toBe(
     'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by real speech time detected, not connection time. If usage significantly exceeds normal patterns for non-personal content, adjustments may apply.',
   );

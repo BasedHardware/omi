@@ -37,6 +37,7 @@ import {
   primaryLanguageTitleCopy,
   peopleNameRows,
   fairUseCopy,
+  fairUseLoadErrorCopy,
   dailySummaryCopy,
   dailySummaryScheduleCopy,
   dailySummaryScheduleTitleCopy,
@@ -481,10 +482,13 @@ export function DesktopSettings({
         }),
       );
       const fairUseTask = loadOmiFairUseStatus(backend).then(
-        status => ({status, error: null as string | null}),
+        status => ({
+          status,
+          error: status == null ? fairUseLoadErrorCopy() : null,
+        }),
         reason => ({
           status: null,
-          error: desktopReadErrorCopy(reason),
+          error: fairUseLoadErrorCopy(),
         }),
       );
       const dailySummariesTask = loadOmiDailySummaries(backend).then(

@@ -27,7 +27,7 @@ jest.mock('../omiNative', () => ({
 
 const {ConnectorsPage} = require('./Connectors');
 const {SettingsPage} = require('./Settings');
-const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy, permissionsTitleCopy} = require('../desktopReadClient');
+const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy, permissionsTitleCopy, fairUseLoadErrorCopy} = require('../desktopReadClient');
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -1525,9 +1525,27 @@ test('Settings names a failed fair use GET instead of empty success', async () =
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
   expect(tree).toContain('Fair Use');
-  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).toContain(fairUseLoadErrorCopy());
+  expect(tree).not.toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Restricted');
   expect(tree).not.toContain('FU-1');
+  expect(tree).not.toContain('About Fair Use');
+  expect(tree).not.toContain('Upgrade');
+});
+
+test('Settings names HTTP 404 fair use GET Flutter fairUseLoadError instead of omitting', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/fair-use/status') {
+      return {id: request.id, status: 404, body: null};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Fair Use');
+  expect(tree).toContain(fairUseLoadErrorCopy());
+  expect(tree).not.toContain('Restricted');
   expect(tree).not.toContain('About Fair Use');
   expect(tree).not.toContain('Upgrade');
 });
@@ -1543,9 +1561,7 @@ test('Settings names malformed fair use GET instead of empty success', async () 
   const renderer = await renderPage(SettingsPage);
   const tree = textOf(renderer);
   expect(tree).toContain('Fair Use');
-  expect(tree).toContain(
-    desktopReadErrorCopy(new Error('Omi fair use is malformed')),
-  );
+  expect(tree).toContain(fairUseLoadErrorCopy());
   expect(tree).not.toContain('Restricted');
   expect(tree).not.toContain('FU-1');
   expect(tree).not.toContain('Upgrade');
