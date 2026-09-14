@@ -12,6 +12,10 @@ on:
       - 'mcp/**'
       - '.github/workflows/mcp-ci.yml'
 
+concurrency:
+  group: mcp-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
