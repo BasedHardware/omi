@@ -42,18 +42,38 @@ def list_conversations(
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    # Server-side page size cap (must match backend get_conversations clamp).
+    # Requests at or below this issue a single call; larger limits are
+    # transparently paginated so the caller's --offset stays consistent.
+    _SERVER_PAGE_SIZE = 500 if include_transcript else 1000
+
+    items: list[dict] = []
+    remaining = limit
+    current_offset = offset
+
     with ctx.make_client() as client:
-        items = client.get(
-            "/v1/dev/user/conversations",
-            params={
-                "limit": limit,
-                "offset": offset,
-                "start_date": start_date.isoformat() if start_date else None,
-                "end_date": end_date.isoformat() if end_date else None,
-                "categories": categories,
-                "include_transcript": include_transcript,
-            },
-        )
+        while remaining > 0:
+            page_size = min(remaining, _SERVER_PAGE_SIZE)
+            page = client.get(
+                "/v1/dev/user/conversations",
+                params={
+                    "limit": page_size,
+                    "offset": current_offset,
+                    "start_date": start_date.isoformat() if start_date else None,
+                    "end_date": end_date.isoformat() if end_date else None,
+                    "categories": categories,
+                    "include_transcript": include_transcript,
+                },
+            )
+            if not page:
+                break
+            items.extend(page)
+            fetched = len(page)
+            remaining -= fetched
+            current_offset += fetched
+            # Short page means we've reached the end
+            if fetched < page_size:
+                break
     if ctx.renderer.json_mode:
         ctx.renderer.emit(items)
         return
