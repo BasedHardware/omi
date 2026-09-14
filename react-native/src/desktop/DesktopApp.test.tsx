@@ -6689,7 +6689,9 @@ test('Settings names GET import jobs without Start import or Limitless', async (
   const tree = renderedText(renderer);
   expect(tree).toContain('Import Data');
   expect(tree).toContain('Completed · 3 conversations · 2 skipped');
-  expect(tree).toContain('Processing · 3/10');
+  expect(tree).toContain(
+    'Processing · Estimated: Less than a minute remaining · 3/10',
+  );
   expect(tree).toContain('Failed · Zip could not be read.');
   expect(tree).toContain('Pending');
   expect(tree).not.toContain('queued');
@@ -6698,7 +6700,7 @@ test('Settings names GET import jobs without Start import or Limitless', async (
   expect(tree).not.toContain('Limitless');
   expect(tree).not.toContain('Coming Soon');
   expect(tree).not.toContain('Delete Imported Data');
-  expect(tree).not.toContain('less than a minute');
+  expect(tree).not.toContain('Start import');
   expect(omiBackend.request).toHaveBeenCalledWith({
     id: expect.any(String),
     method: 'GET',

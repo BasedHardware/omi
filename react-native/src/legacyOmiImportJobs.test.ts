@@ -1,4 +1,9 @@
 import {
+  importJobEstimatedHoursCopy,
+  importJobEstimatedMinutesCopy,
+  importJobEstimatedRemainingCopy,
+  importJobEstimatedTimeRemainingCopy,
+  importJobLessThanAMinuteCopy,
   importJobPendingCopy,
   importJobRowCopy,
   importJobStatusCopy,
@@ -81,8 +86,23 @@ test('names Flutter import timestamps from local midnight', () => {
   );
 });
 
-test('names GET import job rows without inventing ETA or No imports yet', () => {
+test('names GET import job rows Flutter estimated remaining without inventing writes', () => {
   const now = new Date(2026, 8, 10, 20, 0);
+  expect(importJobLessThanAMinuteCopy()).toBe('Less than a minute');
+  expect(importJobEstimatedMinutesCopy(1)).toBe('~1 minute(s)');
+  expect(importJobEstimatedHoursCopy(1)).toBe('~1 hour(s)');
+  expect(
+    importJobEstimatedTimeRemainingCopy(importJobLessThanAMinuteCopy()),
+  ).toBe('Estimated: Less than a minute remaining');
+  expect(importJobEstimatedRemainingCopy(3, 10)).toBe(
+    'Estimated: Less than a minute remaining',
+  );
+  expect(importJobEstimatedRemainingCopy(0, 120)).toBe(
+    'Estimated: ~1 minute(s) remaining',
+  );
+  expect(importJobEstimatedRemainingCopy(0, 7200)).toBe(
+    'Estimated: ~1 hour(s) remaining',
+  );
   expect(
     importJobRowCopy(
       {
@@ -102,14 +122,30 @@ test('names GET import job rows without inventing ETA or No imports yet', () => 
       processedFiles: 3,
       totalFiles: 10,
     }),
-  ).toBe('Processing · 3/10');
+  ).toBe(
+    'Processing · Estimated: Less than a minute remaining · 3/10',
+  );
   expect(
     importJobRowCopy({
       id: 'job-2b',
       status: 'processing',
       totalFiles: 4,
     }),
-  ).toBe('Processing · 0/4');
+  ).toBe('Processing · Estimated: Less than a minute remaining · 0/4');
+  expect(
+    importJobRowCopy({
+      id: 'job-pending',
+      status: 'pending',
+      totalFiles: 4,
+    }),
+  ).toBe('Pending · Estimated: Less than a minute remaining · 0/4');
+  expect(
+    importJobRowCopy({
+      id: 'job-queued',
+      status: 'queued',
+      totalFiles: 4,
+    }),
+  ).toBe('Pending · Estimated: Less than a minute remaining · 0/4');
   expect(
     importJobRowCopy({
       id: 'job-3',
@@ -120,6 +156,14 @@ test('names GET import job rows without inventing ETA or No imports yet', () => 
   expect(importJobRowCopy({id: 'job-4', status: 'queued'})).toBe(
     importJobPendingCopy(),
   );
+  expect(
+    importJobRowCopy({
+      id: 'job-done-files',
+      status: 'completed',
+      processedFiles: 3,
+      totalFiles: 10,
+    }),
+  ).toBe('Completed');
 });
 
 test('names GET empty import jobs as Flutter No imports yet', () => {

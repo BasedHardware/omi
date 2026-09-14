@@ -126,6 +126,48 @@ export function importJobTimestampCopy(
   }/${local.getFullYear()} at ${time}`;
 }
 
+export function importJobLessThanAMinuteCopy(): string {
+  return 'Less than a minute';
+}
+
+export function importJobEstimatedMinutesCopy(count: number): string {
+  return `~${count} minute(s)`;
+}
+
+export function importJobEstimatedHoursCopy(count: number): string {
+  return `~${count} hour(s)`;
+}
+
+export function importJobEstimatedTimeRemainingCopy(time: string): string {
+  return `Estimated: ${time} remaining`;
+}
+
+export function importJobShowsFileProgress(status: string): boolean {
+  const trimmed = visibleDisplayText(status);
+  return trimmed !== 'completed' && trimmed !== 'failed';
+}
+
+export function importJobEstimatedRemainingCopy(
+  processedFiles: number,
+  totalFiles: number,
+): string {
+  const remainingFiles = totalFiles - processedFiles;
+  const estimatedSeconds = Math.ceil(remainingFiles * 0.5);
+  if (estimatedSeconds < 60) {
+    return importJobEstimatedTimeRemainingCopy(
+      importJobLessThanAMinuteCopy(),
+    );
+  }
+  if (estimatedSeconds < 3600) {
+    return importJobEstimatedTimeRemainingCopy(
+      importJobEstimatedMinutesCopy(Math.ceil(estimatedSeconds / 60)),
+    );
+  }
+  return importJobEstimatedTimeRemainingCopy(
+    importJobEstimatedHoursCopy(Math.ceil(estimatedSeconds / 3600)),
+  );
+}
+
 export function importJobRowCopy(
   job: OmiImportJob,
   now: Date = new Date(),
@@ -153,12 +195,13 @@ export function importJobRowCopy(
     parts.push(`${job.conversationsSkipped} skipped`);
   }
   if (
-    visibleDisplayText(job.status) === 'processing' &&
+    importJobShowsFileProgress(job.status) &&
     typeof job.totalFiles === 'number' &&
     job.totalFiles > 0
   ) {
     const processed =
       typeof job.processedFiles === 'number' ? job.processedFiles : 0;
+    parts.push(importJobEstimatedRemainingCopy(processed, job.totalFiles));
     parts.push(`${processed}/${job.totalFiles}`);
   }
   const error = visibleDisplayText(job.error ?? '');
