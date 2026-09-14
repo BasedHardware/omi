@@ -29,7 +29,7 @@ class ClickUpClient:
         try:
             response = requests.post(
                 "https://api.clickup.com/api/v2/oauth/token",
-                params={
+                data={
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                     "code": code
