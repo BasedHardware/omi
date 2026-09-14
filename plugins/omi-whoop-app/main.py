@@ -160,6 +160,22 @@ def whoop_api_request(uid: str, method: str, endpoint: str, params: dict = None)
 MAX_COLLECTION_PAGES = 20
 
 
+def _coerce_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    """Turn an optional tool argument into an int inside [minimum, maximum].
+
+    The Omi backend models optional parameters as Optional[int] with a None
+    default and forwards them verbatim, so None (and the occasional numeric
+    string) must fall back to the default rather than crash on comparison.
+    """
+    if value is None or isinstance(value, bool):
+        return default
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(number, maximum))
+
+
 def whoop_fetch_all_records(uid: str, endpoint: str, params: dict) -> Tuple[Optional[List[dict]], Optional[str]]:
     """Fetch every page of a Whoop collection endpoint, following next_token/nextToken.
 
@@ -657,8 +673,8 @@ async def tool_get_workouts(request: Request):
         log(f"=== GET_WORKOUTS ===")
 
         uid = body.get("uid")
-        days = min(body.get("days", 7), 30)
-        max_results = min(body.get("max_results", 10), 50)
+        days = _coerce_int(body.get("days"), default=7, minimum=1, maximum=30)
+        max_results = _coerce_int(body.get("max_results"), default=10, minimum=1, maximum=50)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
