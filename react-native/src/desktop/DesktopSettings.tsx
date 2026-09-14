@@ -22,6 +22,9 @@ import {
   subscriptionPlanCopy,
   subscriptionStatusCopy,
   usagePeriodStatsCopy,
+  usageThisMonthTitleCopy,
+  usageThisYearTitleCopy,
+  usageAllTimeTitleCopy,
   subscriptionPeriodCopy,
   subscriptionTranscriptionQuotaCopy,
   primaryLanguageCopy,
@@ -38,6 +41,7 @@ import {
   automaticTranslationTitleCopy,
   customVocabularyCopy,
   customVocabularyTitleCopy,
+  taskIntegrationsTitleCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {
@@ -956,23 +960,23 @@ export function DesktopSettings({
         ))
       )}
       {usageMonthlyError !== null ? (
-        <Row copy={usageMonthlyError} title="This month" />
+        <Row copy={usageMonthlyError} title={usageThisMonthTitleCopy()} />
       ) : (
-        usagePeriodStatsCopy('This month', usageMonthly)?.map(row => (
-          <Row copy={row.copy} key={row.title} title={row.title} />
-        ))
+        usagePeriodStatsCopy(usageThisMonthTitleCopy(), usageMonthly)?.map(
+          row => <Row copy={row.copy} key={row.title} title={row.title} />,
+        )
       )}
       {usageYearlyError !== null ? (
-        <Row copy={usageYearlyError} title="This year" />
+        <Row copy={usageYearlyError} title={usageThisYearTitleCopy()} />
       ) : (
-        usagePeriodStatsCopy('This year', usageYearly)?.map(row => (
+        usagePeriodStatsCopy(usageThisYearTitleCopy(), usageYearly)?.map(row => (
           <Row copy={row.copy} key={row.title} title={row.title} />
         ))
       )}
       {usageAllTimeError !== null ? (
-        <Row copy={usageAllTimeError} title="All time" />
+        <Row copy={usageAllTimeError} title={usageAllTimeTitleCopy()} />
       ) : (
-        usagePeriodStatsCopy('All time', usageAllTime)?.map(row => (
+        usagePeriodStatsCopy(usageAllTimeTitleCopy(), usageAllTime)?.map(row => (
           <Row copy={row.copy} key={row.title} title={row.title} />
         ))
       )}
@@ -1027,13 +1031,16 @@ export function DesktopSettings({
         ))
       )}
       {taskIntegrationsError !== null ? (
-        <Row copy={taskIntegrationsError} title="Task integrations" />
+        <Row
+          copy={taskIntegrationsError}
+          title={taskIntegrationsTitleCopy()}
+        />
       ) : (
         taskIntegrations.map(row => (
           <Row
             copy={taskIntegrationRowCopy(row)}
             key={row.key}
-            title="Task integrations"
+            title={taskIntegrationsTitleCopy()}
           />
         ))
       )}

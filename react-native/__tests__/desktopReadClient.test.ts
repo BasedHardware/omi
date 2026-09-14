@@ -117,6 +117,10 @@ import {
   subscriptionTranscriptionQuotaCopy,
   usageStatsCopy,
   usagePeriodStatsCopy,
+  usageThisMonthTitleCopy,
+  usageThisYearTitleCopy,
+  usageAllTimeTitleCopy,
+  taskIntegrationsTitleCopy,
   usageActivityEmptyCopy,
   usageListeningSubtitleCopy,
   usageUnderstandingSubtitleCopy,
@@ -1237,14 +1241,18 @@ test('usage stats copy names GET today counts without Upgrade', () => {
   ).toBeNull();
   expect(usageStatsCopy(null)).toBeNull();
   expect(usageActivityEmptyCopy()).toBe('No Activity Yet');
+  expect(usageThisMonthTitleCopy()).toBe('This Month');
+  expect(usageThisYearTitleCopy()).toBe('This Year');
+  expect(usageAllTimeTitleCopy()).toBe('All Time');
+  expect(taskIntegrationsTitleCopy()).toBe('Task Integrations');
   expect(
-    usagePeriodStatsCopy('This year', {
+    usagePeriodStatsCopy(usageThisYearTitleCopy(), {
       transcriptionSeconds: 0,
       wordsTranscribed: 0,
       insightsGained: 0,
       memoriesCreated: 0,
     }),
-  ).toEqual([{title: 'This year', copy: usageActivityEmptyCopy()}]);
+  ).toEqual([{title: usageThisYearTitleCopy(), copy: usageActivityEmptyCopy()}]);
   expect(
     usagePeriodStatsCopy('Today', {
       transcriptionSeconds: 0,
@@ -1253,7 +1261,7 @@ test('usage stats copy names GET today counts without Upgrade', () => {
       memoriesCreated: 0,
     }),
   ).toEqual([{title: 'Today', copy: usageActivityEmptyCopy()}]);
-  expect(usagePeriodStatsCopy('This year', null)).toBeNull();
+  expect(usagePeriodStatsCopy(usageThisYearTitleCopy(), null)).toBeNull();
 });
 
 test('primary language copy names Flutter notSet for empty or catalog-miss GET language', () => {

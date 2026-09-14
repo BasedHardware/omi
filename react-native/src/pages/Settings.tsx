@@ -35,6 +35,9 @@ import {
   subscriptionPlanCopy,
   subscriptionStatusCopy,
   usagePeriodStatsCopy,
+  usageThisMonthTitleCopy,
+  usageThisYearTitleCopy,
+  usageAllTimeTitleCopy,
   subscriptionPeriodCopy,
   subscriptionTranscriptionQuotaCopy,
   primaryLanguageCopy,
@@ -51,6 +54,7 @@ import {
   automaticTranslationTitleCopy,
   customVocabularyCopy,
   customVocabularyTitleCopy,
+  taskIntegrationsTitleCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
@@ -847,25 +851,40 @@ export function SettingsPage({
           ))
         )}
         {usageMonthlyError !== null ? (
-          <SettingRow copy={usageMonthlyError} title="This month" />
+          <SettingRow
+            copy={usageMonthlyError}
+            title={usageThisMonthTitleCopy()}
+          />
         ) : (
-          usagePeriodStatsCopy('This month', usageMonthly)?.map(row => (
-            <SettingRow copy={row.copy} key={row.title} title={row.title} />
-          ))
+          usagePeriodStatsCopy(usageThisMonthTitleCopy(), usageMonthly)?.map(
+            row => (
+              <SettingRow copy={row.copy} key={row.title} title={row.title} />
+            ),
+          )
         )}
         {usageYearlyError !== null ? (
-          <SettingRow copy={usageYearlyError} title="This year" />
+          <SettingRow
+            copy={usageYearlyError}
+            title={usageThisYearTitleCopy()}
+          />
         ) : (
-          usagePeriodStatsCopy('This year', usageYearly)?.map(row => (
-            <SettingRow copy={row.copy} key={row.title} title={row.title} />
-          ))
+          usagePeriodStatsCopy(usageThisYearTitleCopy(), usageYearly)?.map(
+            row => (
+              <SettingRow copy={row.copy} key={row.title} title={row.title} />
+            ),
+          )
         )}
         {usageAllTimeError !== null ? (
-          <SettingRow copy={usageAllTimeError} title="All time" />
+          <SettingRow
+            copy={usageAllTimeError}
+            title={usageAllTimeTitleCopy()}
+          />
         ) : (
-          usagePeriodStatsCopy('All time', usageAllTime)?.map(row => (
-            <SettingRow copy={row.copy} key={row.title} title={row.title} />
-          ))
+          usagePeriodStatsCopy(usageAllTimeTitleCopy(), usageAllTime)?.map(
+            row => (
+              <SettingRow copy={row.copy} key={row.title} title={row.title} />
+            ),
+          )
         )}
         {subscriptionPeriodCopy(snapshot.subscription)?.map(row => (
           <SettingRow copy={row.copy} key={row.title} title={row.title} />
@@ -921,13 +940,16 @@ export function SettingsPage({
           ))
         )}
         {taskIntegrationsError !== null ? (
-          <SettingRow copy={taskIntegrationsError} title="Task integrations" />
+          <SettingRow
+            copy={taskIntegrationsError}
+            title={taskIntegrationsTitleCopy()}
+          />
         ) : (
           taskIntegrations.map(row => (
             <SettingRow
               copy={taskIntegrationRowCopy(row)}
               key={row.key}
-              title="Task integrations"
+              title={taskIntegrationsTitleCopy()}
             />
           ))
         )}

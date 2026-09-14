@@ -1035,6 +1035,22 @@ export function usageStatsCopy(
   ];
 }
 
+export function usageThisMonthTitleCopy(): string {
+  return 'This Month';
+}
+
+export function usageThisYearTitleCopy(): string {
+  return 'This Year';
+}
+
+export function usageAllTimeTitleCopy(): string {
+  return 'All Time';
+}
+
+export function taskIntegrationsTitleCopy(): string {
+  return 'Task Integrations';
+}
+
 export function usagePeriodStatsCopy(
   periodTitle: string,
   stats:

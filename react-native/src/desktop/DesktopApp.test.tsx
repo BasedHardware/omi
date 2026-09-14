@@ -3117,14 +3117,14 @@ test('Settings names GET usage monthly yearly all-time without Upgrade', async (
       .props.onPress();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('This month · Listening');
+  expect(tree).toContain('This Month · Listening');
   expect(tree).toContain('3 minutes');
-  expect(tree).toContain('All time · Listening');
+  expect(tree).toContain('All Time · Listening');
   expect(tree).toContain('60 minutes');
   expect(tree).toContain('Total time Omi has actively listened.');
-  expect(tree).toContain('This year');
+  expect(tree).toContain('This Year');
   expect(tree).toContain('No Activity Yet');
-  expect(tree).not.toContain('This year ·');
+  expect(tree).not.toContain('This Year ·');
   expect(tree).not.toContain('99');
   expect(tree).not.toContain('Upgrade');
   expect(tree).not.toContain('Start a conversation');
@@ -3199,11 +3199,11 @@ test('Settings names a failed usage period GET instead of empty success', async 
   });
   const tree = renderedText(renderer);
   expect(tree).toContain('Ada');
-  expect(tree).toContain('This month');
-  expect(tree).toContain('This year');
-  expect(tree).toContain('All time');
+  expect(tree).toContain('This Month');
+  expect(tree).toContain('This Year');
+  expect(tree).toContain('All Time');
   expect(tree).toContain(desktopBackendServiceCopy);
-  expect(tree).not.toContain('This month · Listening');
+  expect(tree).not.toContain('This Month · Listening');
   expect(tree).not.toContain('3 minutes');
   expect(tree).not.toContain('Upgrade');
   expect(tree).not.toContain('No Activity Yet');
@@ -3272,13 +3272,13 @@ test('Settings names malformed usage period GET instead of empty success', async
   });
   const tree = renderedText(renderer);
   expect(tree).toContain('Ada');
-  expect(tree).toContain('This month');
-  expect(tree).toContain('This year');
-  expect(tree).toContain('All time');
+  expect(tree).toContain('This Month');
+  expect(tree).toContain('This Year');
+  expect(tree).toContain('All Time');
   expect(tree).toContain(
     desktopReadErrorCopy(new Error('Omi usage is malformed')),
   );
-  expect(tree).not.toContain('This month · Listening');
+  expect(tree).not.toContain('This Month · Listening');
   expect(tree).not.toContain('3 minutes');
   expect(tree).not.toContain('Upgrade');
   expect(tree).not.toContain('No Activity Yet');
@@ -3654,7 +3654,7 @@ test('Settings names GET task integrations without Connect or a write sheet', as
       .props.onPress();
   });
   const tree = renderedText(renderer);
-  expect(tree).toContain('Task integrations');
+  expect(tree).toContain('Task Integrations');
   expect(tree).toContain('Todoist · Default');
   expect(tree).toContain('ClickUp');
   expect(tree).not.toContain('Asana');
@@ -3736,7 +3736,7 @@ test('Settings names a failed task-integrations GET instead of empty success', a
   });
   const tree = renderedText(renderer);
   expect(tree).toContain('Ada');
-  expect(tree).toContain('Task integrations');
+  expect(tree).toContain('Task Integrations');
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Todoist');
   expect(tree).not.toContain('secret-todoist');
