@@ -61,7 +61,34 @@ app = FastAPI(
 # Helper Functions
 # ============================================
 
-def _coerce_int(value, default, minimum, maximum) -> int:    """Return a bounded integer for optional values supplied by chat tools.    Optional manifest fields are serialized as null when omitted. Treat null,    booleans, non-integral types, malformed strings, and non-finite values as    the documented default before applying the Notion API bounds.    """    if value is None or isinstance(value, bool):        return default    if isinstance(value, int):        number = value    elif isinstance(value, str):        value = value.strip()        if not value:            return default        try:            number = int(value, 10)        except (TypeError, ValueError, OverflowError):            return default    else:        return default    return max(minimum, min(number, maximum))def get_valid_access_token(uid: str) -> Optional[str]:
+
+def _coerce_int(value, default, minimum, maximum) -> int:
+    """Return a bounded integer for optional values supplied by chat tools.
+
+    Optional manifest fields are serialized as ``null`` when omitted.  Treat
+    null, booleans, non-integral types, malformed strings, and non-finite
+    values as the documented default before applying the Notion API bounds.
+    """
+    if value is None or isinstance(value, bool):
+        return default
+
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return default
+        try:
+            number = int(value, 10)
+        except (TypeError, ValueError, OverflowError):
+            return default
+    else:
+        return default
+
+    return max(minimum, min(number, maximum))
+
+
+def get_valid_access_token(uid: str) -> Optional[str]:
     """
     Get a valid access token for Notion.
     Notion tokens don't expire, so we just return the stored token.
