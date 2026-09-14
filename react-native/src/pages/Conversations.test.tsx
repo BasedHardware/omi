@@ -187,8 +187,11 @@ test('starred filter names Flutter noStarredConversations instead of generic mat
   expect(tree).not.toContain('No loaded conversations match.');
   expect(tree).not.toContain(conversationsEmptyCopy());
   expect(tree).not.toContain('No conversations yet.');
-  expect(tree).not.toContain(
+  expect(tree).toContain(
     'To star a conversation, open it and tap the star icon in the header.',
+  );
+  expect(tree).not.toContain(
+    'Search and filters cover conversations already loaded on this device.',
   );
 });
 

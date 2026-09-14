@@ -566,7 +566,7 @@ export function conversationDetailSummaryForStatusCopy(
 }
 
 export function conversationsStarredEmptyCopy(): string {
-  return 'No starred conversations';
+  return 'No starred conversations\nTo star a conversation, open it and tap the star icon in the header.';
 }
 
 export function conversationsEmptyCopy(): string {

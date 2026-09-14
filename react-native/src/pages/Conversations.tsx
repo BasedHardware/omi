@@ -577,7 +577,7 @@ export function ConversationsPage({
                     notice === desktopBackendUnavailableCopy,
                   )}
                 </Text>
-                {filtering && (
+                {filtering && !starredOnly && (
                   <Text style={styles.projectionEmptyCopy}>
                     Search and filters cover conversations already loaded on
                     this device.

@@ -3188,7 +3188,9 @@ test('conversation detail names Flutter noSummaryForConversation when GET has no
 });
 
 test('starred conversation filter names Flutter noStarredConversations', () => {
-  expect(conversationsStarredEmptyCopy()).toBe('No starred conversations');
+  expect(conversationsStarredEmptyCopy()).toBe(
+    'No starred conversations\nTo star a conversation, open it and tap the star icon in the header.',
+  );
 });
 
 test('conversation empty copy names Flutter noConversationsYet', () => {
