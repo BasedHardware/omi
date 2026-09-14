@@ -140,6 +140,7 @@ import {
   primaryLanguageNotSetCopy,
   peopleNameRows,
   firmwareUpdateCopy,
+  firmwareLatestVersionCopy,
   fairUseCopy,
   fairUseBudgetResetCopy,
   fairUseDailyTranscriptionCopy,
@@ -1611,6 +1612,7 @@ test('transcription preference copy names GET vocabulary without Flutter false d
 });
 
 test('firmware update copy names GET latest without Available on current or draft', () => {
+  expect(firmwareLatestVersionCopy()).toBe('Latest Version');
   expect(
     firmwareUpdateCopy('1.2.3', {
       version: '1.3.0',

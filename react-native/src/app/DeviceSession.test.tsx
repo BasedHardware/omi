@@ -2,7 +2,7 @@ import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {DeviceSession, deviceHasReportedBattery, homeConnectionStatus} from './DeviceSession';
 import type {PlatformNativeSnapshot} from '../omiNative';
-import {desktopBackendServiceCopy} from '../desktopReadClient';
+import {desktopBackendServiceCopy, firmwareLatestVersionCopy} from '../desktopReadClient';
 
 jest.mock('../omiNative', () => ({
   isBluetoothScanAvailable: (state?: string) => state === 'poweredOn',
@@ -119,7 +119,7 @@ test('connected device details show reported values and truthful unavailable fie
   expect(output).toContain('"Device ID",": ","omi-test"');
   expect(output).toContain('"Serial number",": ","Unavailable"');
   expect(output).toContain('"Hardware",": ","Unavailable"');
-  expect(output).not.toContain('"Latest"');
+  expect(output).not.toContain(`"${firmwareLatestVersionCopy()}"`);
   expect(output).not.toContain('Unknown');
   await act(async () => {
     renderer.update(
@@ -257,7 +257,7 @@ test('connected device details treat empty information fields as Unavailable', a
   expect(output).toContain('"Serial number",": ","Unavailable"');
   expect(output).toContain('"Device ID",": ","omi-test"');
   expect(output).not.toContain(' \t\n');
-  expect(output).not.toContain('"Latest"');
+  expect(output).not.toContain(`"${firmwareLatestVersionCopy()}"`);
   await act(async () => renderer.unmount());
 });
 
@@ -306,7 +306,10 @@ test('connected device names GET latest firmware without an OTA control', async 
     await Promise.resolve();
   });
   const output = JSON.stringify(renderer.toJSON());
-  expect(output).toContain('"Latest",": ","1.3.0"');
+  expect(output).toContain(
+    `"${firmwareLatestVersionCopy()}",": ","1.3.0"`,
+  );
+  expect(output).not.toContain('"Latest",": "');
   expect(output).toContain('Firmware update available');
   expect(output).toContain('Available');
   expect(output).toContain('"What\'s New",": ","Fixed BLE reconnect"');
@@ -340,7 +343,9 @@ test('connected device names GET latest firmware without an OTA control', async 
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(JSON.stringify(renderer.toJSON())).not.toContain('"Latest"');
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    `"${firmwareLatestVersionCopy()}"`,
+  );
   expect(JSON.stringify(renderer.toJSON())).not.toContain('"What\'s New"');
   await act(async () => renderer.unmount());
   omiBackend.request.mockReset();
@@ -363,7 +368,9 @@ test('connected device names GET latest firmware without an OTA control', async 
     await Promise.resolve();
     await Promise.resolve();
   });
-  expect(JSON.stringify(renderer.toJSON())).not.toContain('"Latest"');
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    `"${firmwareLatestVersionCopy()}"`,
+  );
   expect(JSON.stringify(renderer.toJSON())).not.toContain('"What\'s New"');
   await act(async () => renderer.unmount());
   omiBackend.request.mockReset();
@@ -409,7 +416,8 @@ test('connected device names a failed GET latest firmware instead of empty succe
     await Promise.resolve();
   });
   const output = JSON.stringify(renderer.toJSON());
-  expect(output).toContain('"Latest"');
+  expect(output).toContain(`"${firmwareLatestVersionCopy()}"`);
+  expect(output).not.toContain('"Latest",": "');
   expect(output).toContain(desktopBackendServiceCopy);
   expect(output).not.toContain('Install');
   expect(output).not.toContain('"What\'s New"');

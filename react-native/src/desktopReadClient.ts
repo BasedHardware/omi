@@ -1615,6 +1615,10 @@ function compareDottedVersion(left: number[], right: number[]): number {
   return 0;
 }
 
+export function firmwareLatestVersionCopy(): string {
+  return 'Latest Version';
+}
+
 export function firmwareUpdateCopy(
   currentFirmware: string,
   details: {

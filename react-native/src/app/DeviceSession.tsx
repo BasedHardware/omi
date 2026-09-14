@@ -15,6 +15,7 @@ import {
   deviceDisplayName,
   deviceSerialMatchesId,
   firmwareUpdateCopy,
+  firmwareLatestVersionCopy,
   desktopReadErrorCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
@@ -451,13 +452,13 @@ export function DeviceSession({
       })}
       {firmwareError !== null ? (
         <Text selectable style={styles.deviceMeta}>
-          Latest
+          {firmwareLatestVersionCopy()}
           {': '}
           {firmwareError}
         </Text>
       ) : firmwareCopy !== null ? (
         <Text selectable style={styles.deviceMeta}>
-          Latest
+          {firmwareLatestVersionCopy()}
           {': '}
           {firmwareCopy.latest}
         </Text>
