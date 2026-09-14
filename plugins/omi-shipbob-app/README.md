@@ -104,3 +104,15 @@ When creating the Omi app, use these URLs (replace `YOUR_DOMAIN` with your deplo
 ## License
 
 MIT
+
+## Regression tests
+
+From the repository root, run `python3 plugins/omi-shipbob-app/test_request_errors.py`.
+The stdlib-only suite imports the production module with explicit framework and
+persistence doubles, mocks HTTP responses, and exercises the shared request
+helper and cancellation handler. It verifies that empty and whitespace-only HTTP
+error bodies produce status-bearing diagnostics and never confirm cancellation,
+while meaningful error bodies and successful cancellation remain unchanged. It does not validate HTTP routing, FastAPI/Pydantic
+validation, Redis, OAuth, or live ShipBob fulfillment operations.
+
+This helper regression suite also covers create/read errors and preserves the upstream cancellation guards. Upstream `test_main.py` remains unchanged.
