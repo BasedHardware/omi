@@ -151,6 +151,7 @@ import {
   peopleNameRows,
   firmwareUpdateCopy,
   firmwareLatestVersionCopy,
+  firmwareWhatsNewCopy,
   deviceModelNumberCopy,
   deviceProductNameCopy,
   deviceSerialNumberCopy,
@@ -1675,6 +1676,7 @@ test('transcription preference copy names GET vocabulary without Flutter false d
 
 test('firmware update copy names GET latest without Available on current or draft', () => {
   expect(firmwareLatestVersionCopy()).toBe('Latest Version');
+  expect(firmwareWhatsNewCopy()).toBe("What's New");
   expect(deviceProductNameCopy()).toBe('Product Name');
   expect(deviceModelNumberCopy()).toBe('Model Number');
   expect(deviceSerialNumberCopy()).toBe('Serial Number');

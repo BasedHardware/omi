@@ -9,6 +9,7 @@ import {
   deviceSerialNumberCopy,
   deviceUnknownCopy,
   firmwareLatestVersionCopy,
+  firmwareWhatsNewCopy,
 } from '../desktopReadClient';
 
 jest.mock('../omiNative', () => ({
@@ -369,8 +370,12 @@ test('connected device names GET latest firmware without an OTA control', async 
   expect(output).not.toContain('"Latest",": "');
   expect(output).toContain('Firmware update available');
   expect(output).toContain('Available');
-  expect(output).toContain('"What\'s New",": ","Fixed BLE reconnect"');
-  expect(output).toContain('"What\'s New",": ","Battery improvements"');
+  expect(output).toContain(`"${firmwareWhatsNewCopy()}"`);
+  expect(output).not.toContain(
+    `"${firmwareWhatsNewCopy()}",": ","Fixed BLE reconnect"`,
+  );
+  expect(output).toContain('"Fixed BLE reconnect"');
+  expect(output).toContain('"Battery improvements"');
   expect(output).not.toContain('Install');
   expect(omiBackend.request).toHaveBeenCalledWith({
     id: expect.any(String),

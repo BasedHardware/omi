@@ -20,6 +20,7 @@ import {
   deviceUnknownCopy,
   firmwareUpdateCopy,
   firmwareLatestVersionCopy,
+  firmwareWhatsNewCopy,
   desktopReadErrorCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
@@ -479,10 +480,13 @@ export function DeviceSession({
           Available
         </Text>
       ) : null}
+      {(firmwareCopy?.changelog ?? []).length > 0 ? (
+        <Text selectable style={styles.deviceMeta}>
+          {firmwareWhatsNewCopy()}
+        </Text>
+      ) : null}
       {(firmwareCopy?.changelog ?? []).map((line, index) => (
         <Text key={`changelog-${index}`} selectable style={styles.deviceMeta}>
-          What's New
-          {': '}
           {line}
         </Text>
       ))}
