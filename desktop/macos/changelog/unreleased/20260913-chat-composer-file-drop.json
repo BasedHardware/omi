@@ -1,0 +1,3 @@
+{
+  "change": "Dropping a file onto the chat composer now works anywhere over the input — including the middle of the text field, not only its border — and lights the drop highlight across the whole field"
+}
