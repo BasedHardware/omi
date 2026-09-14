@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import dynamic from '@tschk/moonshine-next/dynamic';
 
-// Dynamically import LocationMap to avoid SSR issues with Leaflet
+// Code-split the journey map out of the recap panel bundle
 const LocationMap = dynamic(() => import('./sections/LocationMap'), {
   ssr: false,
   loading: () => (

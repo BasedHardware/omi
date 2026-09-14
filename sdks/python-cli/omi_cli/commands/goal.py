@@ -46,7 +46,7 @@ def list_goals(
     for g in items or []:
         rows.append(
             {
-                "id": shorten(g.get("id"), 14),
+                "id": g.get("id"),
                 "title": shorten(g.get("title"), 40),
                 "goal_type": g.get("goal_type"),
                 "current_value": g.get("current_value"),

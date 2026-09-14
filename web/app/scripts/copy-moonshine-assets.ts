@@ -41,7 +41,6 @@ export function buildPublicEnvironment(
 async function buildAssets(): Promise<void> {
   await mkdir('.moonshine/public', { recursive: true });
   await cp('public', '.moonshine/public', { recursive: true, force: true });
-  await cp('node_modules/leaflet/dist/leaflet.css', '.moonshine/public/leaflet.css');
 
   const publicEnvironment = buildPublicEnvironment(process.env);
   const clientPath = '.moonshine/public/client.js';
@@ -253,7 +252,6 @@ const renderer = {
       image ? '<meta name="twitter:image" content="' + escapeHtml(image) + '">' : '',
       '<link rel="icon" href="/favicon.png">',
       '<link rel="stylesheet" href="/styles.css">',
-      '<link rel="stylesheet" href="/leaflet.css">',
     ].join('');
     const headers = new Headers(response.headers);
     const body = injectServerContent(html, marketplace?.content);
