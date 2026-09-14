@@ -64,6 +64,7 @@ import {
   chatChartCopy,
   paintedChatContentBlock,
   chatBlockUnavailableCopy,
+  chatBlockLoadingCopy,
   chatDiscoveryShowMoreCopy,
   chatDiscoveryShowLessCopy,
   taskCardDescription,
@@ -2191,7 +2192,8 @@ test('task card chrome names loaded GET task description and omits ids', () => {
   ).toEqual({eyebrow: 'Task', title: chatBlockUnavailableCopy()});
   expect(
     paintedChatContentBlock({eyebrow: 'Task', taskId: 'missing'}),
-  ).toEqual({eyebrow: 'Task'});
+  ).toEqual({eyebrow: 'Task', title: chatBlockLoadingCopy()});
+  expect(chatBlockLoadingCopy()).toBe('Loading...');
   expect(
     paintedChatContentBlock({eyebrow: 'Task', taskId: 'missing'}, []),
   ).toEqual({eyebrow: 'Task', title: chatBlockUnavailableCopy()});

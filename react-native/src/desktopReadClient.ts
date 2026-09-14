@@ -620,6 +620,10 @@ export function chatBlockUnavailableCopy(): string {
   return 'No longer available';
 }
 
+export function chatBlockLoadingCopy(): string {
+  return 'Loading...';
+}
+
 export function chatDiscoveryShowMoreCopy(): string {
   return 'Show more';
 }
@@ -2106,14 +2110,15 @@ export function paintedChatContentBlock(
   const joined =
     block.title === undefined &&
     block.eyebrow === 'Task' &&
-    block.taskId !== undefined &&
-    tasks !== undefined
-      ? taskCardDescription(block.taskId, tasks) ??
-        (tasks.some(
-          task => task.id === block.taskId || task.taskId === block.taskId,
-        )
-          ? undefined
-          : chatBlockUnavailableCopy())
+    block.taskId !== undefined
+      ? tasks === undefined
+        ? chatBlockLoadingCopy()
+        : taskCardDescription(block.taskId, tasks) ??
+          (tasks.some(
+            task => task.id === block.taskId || task.taskId === block.taskId,
+          )
+            ? undefined
+            : chatBlockUnavailableCopy())
       : undefined;
   const title = block.title ?? joined;
   const visibleTitle = title === undefined ? '' : visibleDisplayText(title);

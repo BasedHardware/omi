@@ -92,6 +92,7 @@ import {FocusPressable} from './Pressable';
 import {ProjectionRow} from './ProjectionList';
 import {
   chatBlockUnavailableCopy,
+  chatBlockLoadingCopy,
   chatDiscoveryShowMoreCopy,
   chatDiscoveryShowLessCopy,
   chatDaySummaryCopy,
@@ -2024,9 +2025,43 @@ test('a chat message names loaded GET task_card description without leaking ids'
   expect(unmatchedCopies).not.toContain('Send the follow-up notes');
   expect(unmatchedCopies).not.toContain('task-join');
   expect(unmatchedCopies).not.toContain('Loading');
+  const unloaded = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-task-unloaded',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+        contentBlocks: [{eyebrow: 'Task', taskId: 'task-join'}],
+      }}
+      reduceMotion
+    />,
+  );
+  const unloadedCopies = unloaded.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(unloadedCopies).toContain('Task');
+  expect(unloadedCopies).toContain(chatBlockLoadingCopy());
+  expect(unloadedCopies).not.toContain(chatBlockUnavailableCopy());
+  expect(unloadedCopies).not.toContain('task-join');
   act(() => {
     renderer.unmount();
     unmatched.unmount();
+    unloaded.unmount();
   });
 });
 

@@ -4,6 +4,7 @@ import {Linking, Text} from 'react-native';
 import type {ConversationProjection} from '../desktopReadClient';
 import {
   chatBlockUnavailableCopy,
+  chatBlockLoadingCopy,
   chatDiscoveryShowMoreCopy,
   chatDiscoveryShowLessCopy,
   desktopBackendServiceCopy,
@@ -450,8 +451,8 @@ test('conversation-detail history names loaded GET task_card description without
   });
   const unloadedTree = text(unloaded);
   expect(unloadedTree).toContain('Task');
+  expect(unloadedTree).toContain(chatBlockLoadingCopy());
   expect(unloadedTree).not.toContain(chatBlockUnavailableCopy());
-  expect(unloadedTree).not.toContain('Loading');
 });
 
 test('conversation-detail history names loaded GET goal_link miss No longer available without leaking ids', () => {
