@@ -7,7 +7,6 @@ import {
   type ViewProps,
 } from 'react-native';
 import {
-  conversationCaptureCopy,
   conversationDiscardedPhotoCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
@@ -71,10 +70,6 @@ export const ProjectionRow = memo(function ProjectionRow({
   const conversation = item.kind === 'conversation' ? item : null;
   const listenOverview =
     conversation !== null && conversationListUsesListenOverview(conversation);
-  const captureCopy =
-    conversation !== null
-      ? conversationCaptureCopy(conversation.capturedAtMs)
-      : null;
   const synthesis = item.kind === 'memory' ? memorySynthesisCopy(item) : null;
   const ledgerSlot = item.kind === 'memory' ? memoryLedgerSlotCopy(item) : null;
   const ledgerPlaybook =
@@ -218,11 +213,6 @@ export const ProjectionRow = memo(function ProjectionRow({
                   conversation.startedAt ?? conversation.createdAt,
                 )
               : projectionClockLabel(item, Date.now()))}
-        </Text>
-      ) : null}
-      {captureCopy !== null ? (
-        <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
-          {captureCopy}
         </Text>
       ) : null}
       {history !== null ? (

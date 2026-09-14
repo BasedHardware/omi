@@ -860,9 +860,8 @@ test('a zero conversation start time does not invent a duration', () => {
   expect(copy).not.toContain('hr');
 });
 
-test('conversation capture time uses the same clock as Started and not 1970', () => {
+test('conversation list and detail omit Flutter ConversationListItem unused capturedAt', () => {
   const older = new Date(2025, 7, 10, 12, 0);
-  const expected = clockLabel(older.getTime(), Date.now());
   const item: ConversationProjection = {
     kind: 'conversation',
     id: 'listen:captured-one',
@@ -912,8 +911,8 @@ test('conversation capture time uses the same clock as Started and not 1970', ()
       .props.onPress();
   });
   const copy = textOf(renderer);
-  expect(copy).toContain('Captured (device time)');
-  expect(copy).toContain(expected);
+  expect(copy).toContain('Device capture');
+  expect(copy).not.toContain('Captured (device time)');
   expect(copy).not.toContain('1970');
 });
 
@@ -1142,7 +1141,7 @@ test('a zero conversation createdAt groups as Date unavailable instead of 1970',
   expect(copy).not.toContain('1970');
 });
 
-test('conversation list names GET capture time without inventing it on untimed rows', () => {
+test('conversation list omits Flutter ConversationListItem unused capturedAt', () => {
   const native = require('react-native') as typeof import('react-native');
   const dimensions = jest.spyOn(native, 'useWindowDimensions').mockReturnValue({
     width: 390,
@@ -1151,10 +1150,6 @@ test('conversation list names GET capture time without inventing it on untimed r
     fontScale: 1,
   });
   const captured = new Date(2025, 7, 10, 12, 0);
-  const expected = `Captured (device time) · ${clockLabel(
-    captured.getTime(),
-    Date.now(),
-  )}`;
   const base = {
     kind: 'conversation' as const,
     title: 'Device capture',
@@ -1208,10 +1203,10 @@ test('conversation list names GET capture time without inventing it on untimed r
       );
     });
     const copy = textOf(renderer);
-    expect(copy).toContain(expected);
+    expect(copy).toContain('Device capture');
     expect(copy).toContain('Untimed recording');
+    expect(copy).not.toContain('Captured (device time)');
     expect(copy).not.toContain('1970');
-    expect((copy.match(/Captured \(device time\)/g) ?? []).length).toBe(1);
   } finally {
     dimensions.mockRestore();
   }

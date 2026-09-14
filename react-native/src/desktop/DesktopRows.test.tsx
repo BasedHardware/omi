@@ -692,7 +692,7 @@ test('Tasks rows name GET exported platforms and omit missing exports', () => {
   expect(textOf(omitted)).not.toContain('Exported to');
 });
 
-test('Home and Library rows keep GET capture time instead of started-only', () => {
+test('Home and Library rows omit Flutter ConversationListItem unused capturedAt', () => {
   const captured = new Date(2025, 7, 10, 12, 0);
   const expected = `Captured (device time) · ${clockLabel(
     captured.getTime(),
@@ -725,7 +725,8 @@ test('Home and Library rows keep GET capture time instead of started-only', () =
   });
   for (const copy of [textOf(home), textOf(library)]) {
     expect(copy).toContain('Device capture');
-    expect(copy).toContain(expected);
+    expect(copy).not.toContain('Captured (device time)');
+    expect(copy).not.toContain(expected);
     expect(copy).not.toContain('1970');
   }
   let plain!: ReactTestRenderer.ReactTestRenderer;

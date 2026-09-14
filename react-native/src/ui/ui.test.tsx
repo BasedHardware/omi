@@ -3363,7 +3363,7 @@ test('wide Home search task rows omit invented No due date', () => {
   expect(currentsTree).not.toContain('Pending');
 });
 
-test('wide Home search rows keep GET capture time instead of started-only', () => {
+test('wide Home search rows omit Flutter ConversationListItem unused capturedAt', () => {
   const captured = new Date(2025, 7, 10, 12, 0);
   const expected = `Captured (device time) · ${clockLabel(
     captured.getTime(),
@@ -3394,7 +3394,8 @@ test('wide Home search rows keep GET capture time instead of started-only', () =
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Device capture');
-  expect(tree).toContain(expected);
+  expect(tree).not.toContain(expected);
+  expect(tree).not.toContain('Captured (device time)');
   expect(tree).not.toContain('1970');
   const compact = render(
     <ProjectionRow
@@ -3420,7 +3421,10 @@ test('wide Home search rows keep GET capture time instead of started-only', () =
       }}
     />,
   );
-  expect(JSON.stringify(compact.toJSON())).toContain(expected);
+  expect(JSON.stringify(compact.toJSON())).not.toContain(expected);
+  expect(JSON.stringify(compact.toJSON())).not.toContain(
+    'Captured (device time)',
+  );
   const plain = render(
     <ProjectionRow
       item={{

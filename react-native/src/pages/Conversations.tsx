@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
 import {
-  conversationCaptureCopy,
   conversationDiscardedPhotoCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
@@ -80,7 +79,6 @@ const ConversationRow = memo(function ConversationRow({
   showTag?: boolean;
 }) {
   const listenOverview = conversationListUsesListenOverview(item);
-  const captureCopy = conversationCaptureCopy(item.capturedAtMs);
   const emoji = conversationListEmoji(item);
   const photosCopy = showTag ? conversationDiscardedPhotoCopy(item) : null;
   const tag = conversationListTag(item);
@@ -112,9 +110,6 @@ const ConversationRow = memo(function ConversationRow({
           {newCopy ??
             conversationListTimeCopy(item.startedAt ?? item.createdAt)}
         </Text>
-        {captureCopy !== null ? (
-          <Text style={styles.conversationRowTime}>{captureCopy}</Text>
-        ) : null}
         {item.starred ? (
           <Text
             accessibilityLabel="Starred conversation"
