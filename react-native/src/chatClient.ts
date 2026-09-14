@@ -43,6 +43,7 @@ export type ChatMessage = {
     detail?: string;
     taskId?: string;
     goalId?: string;
+    memoryId?: string;
     more?: string;
   }[];
   appId?: string;

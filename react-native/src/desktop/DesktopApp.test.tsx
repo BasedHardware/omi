@@ -820,6 +820,84 @@ test('desktop chat names GET goal_link loaded-list miss No longer available', ()
   expect(hitCopy).not.toContain('Open in Goals');
 });
 
+test('desktop chat names GET memory_link loaded-list miss No longer available', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'memory-miss',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+        contentBlocks: [
+          {
+            eyebrow: 'Memory',
+            title: 'Prefers concise notes',
+            memoryId: 'mem-join',
+          },
+        ],
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Memory');
+  expect(copy).toContain(chatBlockUnavailableCopy());
+  expect(copy).not.toContain('Prefers concise notes');
+  expect(copy).not.toContain('mem-join');
+  expect(copy).not.toContain('Loading');
+  expect(copy).not.toContain('Open in Memories');
+  const hit = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      memories: {
+        status: 'success',
+        value: {
+          items: [
+            {
+              kind: 'memory',
+              id: 'mem-join',
+              title: 'Prefers concise notes',
+              summary: 'Prefers concise notes',
+              searchableText: 'prefers concise notes',
+              citations: [],
+              timestamp: null,
+              provenance: {
+                label: null,
+                synthesisVersion: null,
+                inputDigest: null,
+                outputDigest: null,
+              },
+            },
+          ],
+          page: outcomes.memories.value.page,
+        },
+      },
+    },
+    messages: [
+      {
+        id: 'memory-hit',
+        text: 'Here is what I found.',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+        contentBlocks: [
+          {
+            eyebrow: 'Memory',
+            title: 'Prefers concise notes',
+            memoryId: 'mem-join',
+          },
+        ],
+      },
+    ],
+  });
+  const hitCopy = renderedText(hit);
+  expect(hitCopy).toContain('Memory');
+  expect(hitCopy).toContain('Prefers concise notes');
+  expect(hitCopy).not.toContain(chatBlockUnavailableCopy());
+  expect(hitCopy).not.toContain('mem-join');
+  expect(hitCopy).not.toContain('Open in Memories');
+});
+
 test('desktop chat names GET discovery fullText Show more without a write', () => {
   const renderer = renderDesktop({
     messages: [

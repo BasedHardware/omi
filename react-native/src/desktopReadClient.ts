@@ -1618,6 +1618,10 @@ export type GoalLinkLookup = {
   id: string;
 };
 
+export type MemoryLinkLookup = {
+  id: string;
+};
+
 export function taskCardDescription(
   taskId: string,
   tasks: readonly TaskCardLookup[],
@@ -1639,17 +1643,27 @@ export function paintedChatContentBlock(
     detail?: string;
     taskId?: string;
     goalId?: string;
+    memoryId?: string;
     more?: string;
   },
   tasks?: readonly TaskCardLookup[],
   expanded = false,
   goals?: readonly GoalLinkLookup[],
+  memories?: readonly MemoryLinkLookup[],
 ): {eyebrow: string; title?: string; detail?: string} {
   if (
     block.eyebrow === 'Goal' &&
     block.goalId !== undefined &&
     goals !== undefined &&
     !goals.some(goal => goal.id === block.goalId)
+  ) {
+    return {eyebrow: block.eyebrow, title: chatBlockUnavailableCopy()};
+  }
+  if (
+    block.eyebrow === 'Memory' &&
+    block.memoryId !== undefined &&
+    memories !== undefined &&
+    !memories.some(memory => memory.id === block.memoryId)
   ) {
     return {eyebrow: block.eyebrow, title: chatBlockUnavailableCopy()};
   }
@@ -1716,6 +1730,7 @@ export function chatMessageDisplayText(
       detail?: string;
       taskId?: string;
       goalId?: string;
+      memoryId?: string;
       more?: string;
     }[];
   },

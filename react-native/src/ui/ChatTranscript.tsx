@@ -28,6 +28,7 @@ import {
   visibleDisplayText,
   type TaskCardLookup,
   type GoalLinkLookup,
+  type MemoryLinkLookup,
 } from '../desktopReadClient';
 import {OmiAvatar} from './OmiAvatar';
 import {FocusPressable} from './Pressable';
@@ -37,15 +38,17 @@ function ChatContentBlockRow({
   block,
   tasks,
   goals,
+  memories,
   textStyle,
 }: {
   block: NonNullable<ChatMessage['contentBlocks']>[number];
   tasks?: readonly TaskCardLookup[];
   goals?: readonly GoalLinkLookup[];
+  memories?: readonly MemoryLinkLookup[];
   textStyle: StyleProp<TextStyle>;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const painted = paintedChatContentBlock(block, tasks, expanded, goals);
+  const painted = paintedChatContentBlock(block, tasks, expanded, goals, memories);
   const more = block.more === undefined ? '' : visibleDisplayText(block.more);
   const detail =
     block.detail === undefined ? '' : visibleDisplayText(block.detail);
@@ -90,11 +93,13 @@ export function ChatContentBlockList({
   blocks,
   tasks,
   goals,
+  memories,
   textStyle,
 }: {
   blocks: NonNullable<ChatMessage['contentBlocks']>;
   tasks?: readonly TaskCardLookup[];
   goals?: readonly GoalLinkLookup[];
+  memories?: readonly MemoryLinkLookup[];
   textStyle: StyleProp<TextStyle>;
 }) {
   return (
@@ -105,6 +110,7 @@ export function ChatContentBlockList({
           block={block}
           tasks={tasks}
           goals={goals}
+          memories={memories}
           textStyle={textStyle}
         />
       ))}
@@ -178,6 +184,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
   reduceMotion,
   tasks,
   goals,
+  memories,
 }: {
   animate: boolean;
   compact: boolean;
@@ -185,6 +192,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
   reduceMotion: boolean;
   tasks?: readonly TaskCardLookup[];
   goals?: readonly GoalLinkLookup[];
+  memories?: readonly MemoryLinkLookup[];
 }) {
   const opacity = useRef(new Animated.Value(animate ? 0 : 1)).current;
   const translateY = useRef(
@@ -327,6 +335,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
             blocks={message.contentBlocks ?? []}
             tasks={tasks}
             goals={goals}
+            memories={memories}
             textStyle={styles.cancelledLabel}
           />
         ) : null}

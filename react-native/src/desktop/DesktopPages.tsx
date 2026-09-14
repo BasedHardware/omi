@@ -113,6 +113,11 @@ export function LibraryPage({
                 : undefined
             }
             goals={goals}
+            memories={
+              outcomes?.memories.status === 'success'
+                ? outcomes.memories.value.items
+                : undefined
+            }
           />
         </ScrollView>
       ) : (

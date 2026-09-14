@@ -518,6 +518,82 @@ test('conversation-detail history names loaded GET goal_link miss No longer avai
   expect(unloadedTree).not.toContain('Loading');
 });
 
+test('conversation-detail history names loaded GET memory_link miss No longer available without leaking ids', () => {
+  mockChat.mockReturnValue({
+    result: {
+      status: 'loaded',
+      messages: [
+        {
+          id: 'ai-1',
+          sender: 'ai',
+          text: 'Here is what I found.',
+          createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+          generationOutcome: 'completed',
+          contentBlocks: [
+            {
+              eyebrow: 'Memory',
+              title: 'Prefers concise notes',
+              memoryId: 'mem-join',
+            },
+          ],
+        },
+      ],
+      hasOlder: false,
+      olderCursor: null,
+    },
+    reload: jest.fn(),
+    loadingOlder: false,
+    loadOlder: jest.fn(),
+    olderNotice: null,
+    olderRetryable: true,
+  });
+  const view = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+    memories: [{id: 'mem-join'}],
+  });
+  const tree = text(view);
+  expect(tree).toContain('Memory');
+  expect(tree).toContain('Prefers concise notes');
+  expect(tree).not.toContain('mem-join');
+  expect(tree).not.toContain('Loading');
+  expect(tree).not.toContain(chatBlockUnavailableCopy());
+  expect(tree).not.toContain('Open in Memories');
+  const unmatched = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+    memories: [{id: 'other'}],
+  });
+  const unmatchedTree = text(unmatched);
+  expect(unmatchedTree).toContain('Memory');
+  expect(unmatchedTree).toContain(chatBlockUnavailableCopy());
+  expect(unmatchedTree).not.toContain('Prefers concise notes');
+  expect(unmatchedTree).not.toContain('mem-join');
+  expect(unmatchedTree).not.toContain('Loading');
+  expect(unmatchedTree).not.toContain('Open in Memories');
+  const unloaded = render({
+    conversation: {
+      ...conversation,
+      id: 'chat:chat-main',
+      source: 'chat',
+      title: 'Main chat',
+    },
+  });
+  const unloadedTree = text(unloaded);
+  expect(unloadedTree).toContain('Memory');
+  expect(unloadedTree).toContain('Prefers concise notes');
+  expect(unloadedTree).not.toContain(chatBlockUnavailableCopy());
+  expect(unloadedTree).not.toContain('Loading');
+});
+
 test('canonical listen rows do not invent a transcript producer', () => {
   const view = render({
     conversation: {...conversation, id: 'listen:one', source: 'listen'},

@@ -920,7 +920,7 @@ test('old chat history names GET content_blocks without inventing writes', () =>
       detail: 'You like a slow start.',
       more: 'Longer body stays collapsed.',
     },
-    {eyebrow: 'Memory', title: 'Prefers concise notes'},
+    {eyebrow: 'Memory', title: 'Prefers concise notes', memoryId: 'mem-1'},
     {eyebrow: 'Goal', title: 'Ship the release notes', goalId: 'goal-1'},
     {eyebrow: 'Conversation', title: 'Standup recap'},
     {eyebrow: 'Recommended next steps', title: 'Send the agenda'},

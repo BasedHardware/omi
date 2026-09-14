@@ -30,6 +30,7 @@ import {
   type DesktopReadProjection,
   type TaskCardLookup,
   type GoalLinkLookup,
+  type MemoryLinkLookup,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
@@ -118,6 +119,7 @@ function AskExchange({
   onLoadOlderChat,
   tasks,
   goals,
+  memories,
 }: {
   chatBusy: boolean;
   olderChatAvailable: boolean;
@@ -126,6 +128,7 @@ function AskExchange({
   onLoadOlderChat: () => void;
   tasks?: readonly TaskCardLookup[];
   goals?: readonly GoalLinkLookup[];
+  memories?: readonly MemoryLinkLookup[];
 }) {
   return (
     <View accessibilityLabel="Ask exchange" style={styles.exchange}>
@@ -238,6 +241,7 @@ function AskExchange({
                 blocks={item.contentBlocks ?? []}
                 tasks={tasks}
                 goals={goals}
+                memories={memories}
                 textStyle={styles.rowMeta}
               />
             ) : null}
@@ -389,6 +393,11 @@ export function DesktopHome({
                 : undefined
             }
             goals={goals}
+            memories={
+              memoriesOutcome?.status === 'success'
+                ? memoriesOutcome.value.items
+                : undefined
+            }
             onLoadOlderChat={() => {
               shouldFollowChat.current = false;
               onLoadOlderChat();

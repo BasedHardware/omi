@@ -1216,6 +1216,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                 ? readOutcomes.tasks.value.items
                 : undefined
             }
+            memories={
+              readOutcomes?.memories.status === 'success'
+                ? readOutcomes.memories.value.items
+                : undefined
+            }
           />
         }
         settingsContent={
@@ -1752,6 +1757,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                     : undefined
                                 }
                                 goals={chatGoals}
+                                memories={
+                                  readOutcomes?.memories.status === 'success'
+                                    ? readOutcomes.memories.value.items
+                                    : undefined
+                                }
                               />
                             ))}
                             {chatBusy && (
@@ -1785,6 +1795,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     tasks={
                       readOutcomes?.tasks.status === 'success'
                         ? readOutcomes.tasks.value.items
+                        : undefined
+                    }
+                    memories={
+                      readOutcomes?.memories.status === 'success'
+                        ? readOutcomes.memories.value.items
                         : undefined
                     }
                   />

@@ -2007,6 +2007,73 @@ test('goal link chrome names loaded GET miss No longer available without leaking
   ).toEqual({eyebrow: 'Memory', title: 'Prefers concise notes'});
 });
 
+test('memory link chrome names loaded GET miss No longer available without leaking ids', () => {
+  const memories = [{id: 'mem-join'}];
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Memory', title: 'Prefers concise notes', memoryId: 'mem-join'},
+      undefined,
+      false,
+      undefined,
+      memories,
+    ),
+  ).toEqual({eyebrow: 'Memory', title: 'Prefers concise notes'});
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Memory', title: 'Prefers concise notes', memoryId: 'missing'},
+      undefined,
+      false,
+      undefined,
+      memories,
+    ),
+  ).toEqual({eyebrow: 'Memory', title: chatBlockUnavailableCopy()});
+  expect(
+    paintedChatContentBlock({
+      eyebrow: 'Memory',
+      title: 'Prefers concise notes',
+      memoryId: 'missing',
+    }),
+  ).toEqual({eyebrow: 'Memory', title: 'Prefers concise notes'});
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Memory', title: 'Prefers concise notes', memoryId: 'missing'},
+      undefined,
+      false,
+      undefined,
+      [],
+    ),
+  ).toEqual({eyebrow: 'Memory', title: chatBlockUnavailableCopy()});
+  expect(
+    JSON.stringify(
+      paintedChatContentBlock(
+        {eyebrow: 'Memory', title: 'Prefers concise notes', memoryId: 'missing'},
+        undefined,
+        false,
+        undefined,
+        memories,
+      ),
+    ),
+  ).not.toContain('missing');
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Memory', title: 'Prefers concise notes', memoryId: 'mem-join'},
+      undefined,
+      false,
+      undefined,
+      memories,
+    ),
+  ).not.toHaveProperty('memoryId');
+  expect(
+    paintedChatContentBlock(
+      {eyebrow: 'Goal', title: 'Ship the recap', memoryId: 'missing'},
+      undefined,
+      false,
+      undefined,
+      memories,
+    ),
+  ).toEqual({eyebrow: 'Goal', title: 'Ship the recap'});
+});
+
 test('discovery chrome names GET fullText Show more without leaking the wire key', () => {
   const block = {
     eyebrow: 'Discovery',
