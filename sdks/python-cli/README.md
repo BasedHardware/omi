@@ -69,6 +69,8 @@ Tables without predefined columns include fields from every row, in first-seen o
 
 > 🇩🇰 På dansk: [hurtigstartguide til omi-cli](examples/quickstart.da.md).
 
+> Looking for localized guides? See the [संस्कृते आरम्भः (Sanskrit Quickstart)](examples/quickstart.sa.md).
+
 ## Auth
 
 Two auth methods, both fully wired:
