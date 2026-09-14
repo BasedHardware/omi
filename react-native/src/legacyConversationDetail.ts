@@ -4,6 +4,7 @@ import {
   conversationPhotoDataUri,
   conversationPhotoUnavailableCopy,
   conversationFirstPartySummaryCopy,
+  conversationNoFolderCopy,
   conversationUnknownAppCopy,
   desktopReadErrorCopy,
   transcriptSttProviderCopy,
@@ -628,7 +629,7 @@ export async function loadLegacyConversationDetail(
           photoRows: photos.rows,
         }),
     ...(folder === undefined
-      ? {}
+      ? {folderName: conversationNoFolderCopy()}
       : {
           folderName: folder.name,
           ...(folder.color === undefined ? {} : {folderColor: folder.color}),

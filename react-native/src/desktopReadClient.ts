@@ -478,6 +478,10 @@ export function conversationUnknownAppCopy(): string {
   return 'Unknown App';
 }
 
+export function conversationNoFolderCopy(): string {
+  return 'No Folder';
+}
+
 export function conversationFirstPartySummaryCopy(): string {
   return 'Summary';
 }

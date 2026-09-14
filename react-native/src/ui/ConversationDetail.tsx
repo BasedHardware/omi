@@ -14,6 +14,7 @@ import {
   conversationActionItemsNoPendingCopy,
   conversationActionItemsCompletedCopy,
   conversationActionItemsNoCompletedCopy,
+  conversationNoFolderCopy,
   formatConversationDuration,
   legacyTranscriptCanDisplaySeconds,
   legacyTranscriptTimestampCopy,
@@ -369,6 +370,8 @@ function LegacyConversationBody({
     detail.calendarEvent?.shareMailto ?? '',
   );
   const folderName = visibleDisplayText(detail.folderName ?? '');
+  const folderLabel =
+    folderName === '' ? conversationNoFolderCopy() : folderName;
   const folderColor = visibleDisplayText(detail.folderColor ?? '');
   const folderIcon = visibleDisplayText(detail.folderIcon ?? '');
   const externalText = visibleDisplayText(detail.externalText ?? '');
@@ -536,7 +539,7 @@ function LegacyConversationBody({
         }
         return nodes;
       })}
-      {folderName === '' ? null : (
+      {folderLabel === '' ? null : (
         <Text
           style={[
             styles.conversationDetailField,
@@ -544,7 +547,7 @@ function LegacyConversationBody({
             folderColor === '' ? null : {color: folderColor},
           ]}>
           {folderIcon === '' ? null : `${folderIcon} `}
-          {folderName}
+          {folderLabel}
         </Text>
       )}
       {conversation.discarded

@@ -82,6 +82,7 @@ import {
   conversationListTag,
   conversationVisibilityCopy,
   conversationUnknownAppCopy,
+  conversationNoFolderCopy,
   transcriptSttProviderCopy,
   transcriptSttUnknownCopy,
   conversationStructuredEmojiCopy,
@@ -2612,6 +2613,10 @@ test('conversation visibility copy names GET private, shared, and public as Flut
 
 test('conversation unknown-app copy names Flutter catalog-miss attribution', () => {
   expect(conversationUnknownAppCopy()).toBe('Unknown App');
+});
+
+test('conversation No Folder copy names Flutter l10n.noFolder', () => {
+  expect(conversationNoFolderCopy()).toBe('No Folder');
 });
 
 test('transcript STT copy names Flutter getDisplayName empty as Unknown', () => {

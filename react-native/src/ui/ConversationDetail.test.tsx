@@ -12,6 +12,7 @@ import {
   conversationActionItemsNoPendingCopy,
   conversationActionItemsCompletedCopy,
   conversationActionItemsNoCompletedCopy,
+  conversationNoFolderCopy,
   conversationUnknownAppCopy,
   conversationPhotoUnavailableCopy,
   transcriptSttUnknownCopy,
@@ -2040,7 +2041,7 @@ test('legacy conversation details name GET empty inline photo File unavailable',
   expect(copy).toContain('Stored empty');
 });
 
-test('legacy conversation details name GET folder name and omit unresolved folders', () => {
+test('legacy conversation details name GET folder name and Flutter No Folder otherwise', () => {
   mockLegacy.mockReturnValue({
     result: {
       status: 'loaded',
@@ -2095,7 +2096,7 @@ test('legacy conversation details name GET folder name and omit unresolved folde
       },
     }),
   );
-  expect(omitted).not.toContain('No folder');
+  expect(omitted).toContain(conversationNoFolderCopy());
   expect(omitted).not.toContain('folder-work');
 });
 

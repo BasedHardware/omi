@@ -5,6 +5,7 @@ import {
   conversationPhotoAnalyzingCopy,
   conversationPhotoDiscardedCopy,
   conversationPhotoUnavailableCopy,
+  conversationNoFolderCopy,
   conversationUnknownAppCopy,
   desktopBackendServiceCopy,
   transcriptSttUnknownCopy,
@@ -1017,7 +1018,8 @@ test('keeps GET conversation detail when person_id or folder_id exceeds 256', as
       ],
     },
   });
-  expect(omitted.folderName).toBeUndefined();
+  expect(omitted.folderName).toBe(conversationNoFolderCopy());
+  expect(JSON.stringify(omitted)).not.toContain('folder-work');
   expect(
     omitted.transcript.status === 'loaded' ? omitted.transcript.segments[0] : null,
   ).not.toHaveProperty('personName');
@@ -1423,7 +1425,7 @@ test('fails closed for malformed GET photos', async () => {
   ).rejects.toMatchObject({kind: 'invalid'});
 });
 
-test('names GET folder name when folders resolve and omits otherwise', async () => {
+test('names GET folder name when folders resolve and No Folder otherwise', async () => {
   mockRequest.mockImplementation(async (request: {path?: string}) => {
     if (request.path === '/v1/folders') {
       return {
@@ -1455,7 +1457,10 @@ test('names GET folder name when folders resolve and omits otherwise', async () 
   });
   expect(
     (await loadLegacyConversationDetail(backend, fixture.id)).folderName,
-  ).toBeUndefined();
+  ).toBe(conversationNoFolderCopy());
+  expect(
+    JSON.stringify(await loadLegacyConversationDetail(backend, fixture.id)),
+  ).not.toContain('folder-work');
   mockRequest.mockImplementation(async (request: {path?: string}) => {
     if (request.path === '/v1/folders') {
       return {id: 'folders', status: 500, body: '[]'};
@@ -1464,10 +1469,18 @@ test('names GET folder name when folders resolve and omits otherwise', async () 
   });
   expect(
     (await loadLegacyConversationDetail(backend, fixture.id)).folderName,
-  ).toBeUndefined();
+  ).toBe(conversationNoFolderCopy());
+  expect(
+    JSON.stringify(await loadLegacyConversationDetail(backend, fixture.id)),
+  ).not.toContain('folder-work');
   mockRequest.mockReset().mockResolvedValue(response(fixture));
-  await loadLegacyConversationDetail(backend, fixture.id);
+  expect(await loadLegacyConversationDetail(backend, fixture.id)).toEqual(
+    expect.objectContaining({
+      folderName: conversationNoFolderCopy(),
+    }),
+  );
   expect(mockRequest).toHaveBeenCalledTimes(1);
+  expect(mockRequest.mock.calls[0][0].path).not.toContain('/v1/folders');
 });
 
 test('names GET omitted folder color as Flutter #6B7280', async () => {
