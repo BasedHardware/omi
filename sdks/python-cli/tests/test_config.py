@@ -527,3 +527,58 @@ def test_active_profile_non_string_diagnostics_succeed(config_path: Path, cli_ru
 
     result_path = cli_runner.invoke(app, ["config", "path"])
     assert result_path.exit_code == 0, result_path.output
+
+
+@pytest.mark.parametrize("field,value", [("local_token", "12345"), ("api_key", "[\"x\"]")])
+def test_malformed_profile_field_types_are_load_errors(config_path: Path, cli_runner, field: str, value: str) -> None:
+    """Non-string known profile fields are load errors, not crashes (#13775)."""
+    config_path.write_text(f'[profiles.default]\n{field} = {value}\n', encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert field in (config.load_error or "")
+    result = cli_runner.invoke(app, ["config", "show"])
+    assert result.exit_code == 0, result.output
+
+
+def test_malformed_id_token_expires_at_is_load_error(config_path: Path) -> None:
+    """Non-numeric ``id_token_expires_at`` is a load error, not a crash (#13775)."""
+    config_path.write_text('[profiles.default]\nid_token_expires_at = "tomorrow"\n', encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert "id_token_expires_at" in (config.load_error or "")
+
+
+def test_payload_name_is_forward_compatible_extra(config_path: Path) -> None:
+    """A non-string payload ``name`` stays in ``extra``; table key wins (#13802)."""
+    config_path.write_text("[profiles.default]\nname = 123\n", encoding="utf-8")
+    config = cfg.load()
+    assert not config.was_load_error
+    profile = config.profiles["default"]
+    assert profile.name == "default"
+    assert profile.extra.get("name") == 123
+
+
+@pytest.mark.parametrize("toml_value", ["nan", "inf", "-inf"])
+def test_non_finite_id_token_expires_at_is_load_error(config_path: Path, toml_value: str) -> None:
+    """TOML nan/inf expiry is a load error so OAuth refresh can't stall (#13802)."""
+    config_path.write_text(f"[profiles.default]\nid_token_expires_at = {toml_value}\n", encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert "id_token_expires_at" in (config.load_error or "")
+
+
+@pytest.mark.parametrize("toml_value,expected", [("1700000000", 1700000000), ("1700000000.5", 1700000000.5)])
+def test_finite_id_token_expires_at_loads(config_path: Path, toml_value: str, expected: float) -> None:
+    """Finite int/float expiries keep loading normally (#13802)."""
+    config_path.write_text(f"[profiles.default]\nid_token_expires_at = {toml_value}\n", encoding="utf-8")
+    config = cfg.load()
+    assert not config.was_load_error
+    assert config.profiles["default"].id_token_expires_at == expected
+
+
+def test_bool_id_token_expires_at_is_load_error(config_path: Path) -> None:
+    """A bool expiry is not a valid epoch timestamp (#13802)."""
+    config_path.write_text("[profiles.default]\nid_token_expires_at = true\n", encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert "id_token_expires_at" in (config.load_error or "")
