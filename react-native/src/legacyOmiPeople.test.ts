@@ -24,6 +24,29 @@ test('keeps GET people names when a person id exceeds 256', () => {
   expect(names.get('person-neighbor')).toBe('Jordan Lee');
 });
 
+test('keeps GET people names when a person id exceeds 10000', () => {
+  const id = 'p'.repeat(10001);
+  const names = parseOmiPeopleNames(
+    JSON.stringify([
+      {id, name: 'Alex Chen'},
+      {id: 'person-neighbor', name: 'Jordan Lee'},
+    ]),
+  );
+  expect(names.get(id)).toBe('Alex Chen');
+  expect(names.get('person-neighbor')).toBe('Jordan Lee');
+});
+
+test('fails closed when a person id exceeds 1000000', () => {
+  expect(() =>
+    parseOmiPeopleNames(
+      JSON.stringify([
+        {id: 'p'.repeat(1_000_001), name: 'Alex Chen'},
+        {id: 'person-neighbor', name: 'Jordan Lee'},
+      ]),
+    ),
+  ).toThrow();
+});
+
 test('keeps GET people names when a name exceeds 10000', () => {
   const name = 'A'.repeat(10001);
   const names = parseOmiPeopleNames(

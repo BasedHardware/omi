@@ -30,7 +30,7 @@ export function parseOmiPeopleNames(body: string): Map<string, string> {
   const names = new Map<string, string>();
   for (const raw of rows) {
     const person = object(raw);
-    const id = visibleDisplayText(text(person.id, 10000));
+    const id = visibleDisplayText(text(person.id, 1_000_000));
     if (id === '') {
       throw new PeopleError();
     }
