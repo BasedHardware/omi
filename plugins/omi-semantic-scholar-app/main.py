@@ -39,7 +39,10 @@ def format_year(year: Any) -> str:
     if isinstance(year, int) and not isinstance(year, bool):
         return str(year)
     if isinstance(year, str) and year.strip().isdigit():
-        return str(int(year.strip()))
+        try:
+            return str(int(year.strip()))
+        except (ValueError, OverflowError):
+            return "Unknown"
     return "Unknown"
 
 
@@ -53,7 +56,7 @@ def normalize_identifier(raw: str) -> str:
     for prefix in ("https://arxiv.org/abs/", "http://arxiv.org/abs/", "https://arxiv.org/pdf/", "http://arxiv.org/pdf/"):
         if value.lower().startswith(prefix):
             val = value[len(prefix) :].strip()
-            if val.endswith(".pdf"):
+            if val.lower().endswith(".pdf"):
                 val = val[:-4].strip()
             return f"ARXIV:{val}"
 
@@ -61,10 +64,18 @@ def normalize_identifier(raw: str) -> str:
     if value.startswith("10.") and "/" in value:
         return f"DOI:{value}"
 
+    canonical_namespaces = {
+        "doi:": "DOI:",
+        "arxiv:": "ARXIV:",
+        "acl:": "ACL:",
+        "pmid:": "PMID:",
+        "mag:": "MAG:",
+        "corpusid:": "CorpusId:",
+    }
     lower_val = value.lower()
-    for ns in ("doi:", "arxiv:", "acl:", "pmid:", "mag:", "corpusid:"):
-        if lower_val.startswith(ns):
-            return f"{ns.upper()}{value[len(ns) :].strip()}"
+    for prefix, canonical in canonical_namespaces.items():
+        if lower_val.startswith(prefix):
+            return f"{canonical}{value[len(prefix) :].strip()}"
 
     return value
 

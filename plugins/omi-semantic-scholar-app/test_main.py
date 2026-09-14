@@ -1,17 +1,20 @@
 from pathlib import Path
+import importlib.util
 import sys
 import types
 import unittest
 from unittest.mock import AsyncMock, patch
 
-# Provide lightweight stubs for third-party runtime dependencies so test_main.py
+# Provide lightweight scoped stubs for third-party runtime dependencies so test_main.py
 # runs hermetically on any clean standard library Python environment without
-# requiring FastAPI, httpx, or Pydantic to be installed.
+# mutating the process-global sys.modules for other test suites.
+stubs = {}
+
 if "httpx" not in sys.modules:
     try:
         import httpx  # type: ignore
     except ImportError:
-        httpx = types.ModuleType("httpx")
+        _httpx = types.ModuleType("httpx")
 
         class HTTPError(Exception):
             pass
@@ -19,6 +22,7 @@ if "httpx" not in sys.modules:
         class HTTPStatusError(HTTPError):
             def __init__(self, message="", *, request=None, response=None):
                 super().__init__(message)
+                self.request = request
                 self.response = response
 
         class Response:
@@ -46,17 +50,17 @@ if "httpx" not in sys.modules:
             async def get(self, *args, **kwargs):
                 return Response()
 
-        httpx.HTTPError = HTTPError
-        httpx.HTTPStatusError = HTTPStatusError
-        httpx.Response = Response
-        httpx.AsyncClient = AsyncClient
-        sys.modules["httpx"] = httpx
+        _httpx.HTTPError = HTTPError
+        _httpx.HTTPStatusError = HTTPStatusError
+        _httpx.Response = Response
+        _httpx.AsyncClient = AsyncClient
+        stubs["httpx"] = _httpx
 
 if "fastapi" not in sys.modules:
     try:
         import fastapi  # type: ignore
     except ImportError:
-        fastapi = types.ModuleType("fastapi")
+        _fastapi = types.ModuleType("fastapi")
 
         class FastAPI:
             def __init__(self, *args, **kwargs):
@@ -68,14 +72,14 @@ if "fastapi" not in sys.modules:
             def post(self, *args, **kwargs):
                 return lambda f: f
 
-        fastapi.FastAPI = FastAPI
-        sys.modules["fastapi"] = fastapi
+        _fastapi.FastAPI = FastAPI
+        stubs["fastapi"] = _fastapi
 
 if "pydantic" not in sys.modules:
     try:
         import pydantic  # type: ignore
     except ImportError:
-        pydantic = types.ModuleType("pydantic")
+        _pydantic = types.ModuleType("pydantic")
 
         def Field(default=None, **kwargs):
             return default
@@ -92,18 +96,27 @@ if "pydantic" not in sys.modules:
                 for k, v in kwargs.items():
                     setattr(self, k, v)
 
-        pydantic.BaseModel = BaseModel
-        pydantic.Field = Field
-        pydantic.model_validator = model_validator
-        sys.modules["pydantic"] = pydantic
+        _pydantic.BaseModel = BaseModel
+        _pydantic.Field = Field
+        _pydantic.model_validator = model_validator
+        stubs["pydantic"] = _pydantic
 
-# Add plugin directory to path so main and models can be imported hermetically
 PLUGIN_DIR = Path(__file__).resolve().parent
-if str(PLUGIN_DIR) not in sys.path:
-    sys.path.insert(0, str(PLUGIN_DIR))
 
-import main
-import models
+# Load models and main hermetically within an isolated patch.dict context,
+# so process-global sys.modules is never permanently mutated.
+with patch.dict(sys.modules, stubs):
+    models_path = PLUGIN_DIR / "models.py"
+    models_spec = importlib.util.spec_from_file_location("models", models_path)
+    models = importlib.util.module_from_spec(models_spec)
+    with patch.dict(sys.modules, {"models": models}):
+        models_spec.loader.exec_module(models)
+
+    main_path = PLUGIN_DIR / "main.py"
+    main_spec = importlib.util.spec_from_file_location("main", main_path)
+    main = importlib.util.module_from_spec(main_spec)
+    with patch.dict(sys.modules, {"models": models}):
+        main_spec.loader.exec_module(main)
 
 
 class SemanticScholarHelperTests(unittest.TestCase):
@@ -137,6 +150,7 @@ class SemanticScholarHelperTests(unittest.TestCase):
         self.assertEqual(main.format_year(False), "Unknown")
         self.assertEqual(main.format_year("circa 2020"), "Unknown")
         self.assertEqual(main.format_year(""), "Unknown")
+        self.assertEqual(main.format_year("9" * 5000), "Unknown")
 
     def test_normalize_identifier(self):
         # Bare DOI gets DOI: prefix
@@ -156,13 +170,18 @@ class SemanticScholarHelperTests(unittest.TestCase):
             "DOI:10.1038/nature12373",
         )
 
-        # ArXiv URL & prefix
+        # ArXiv URL & prefix (including uppercase .PDF extension)
         self.assertEqual(main.normalize_identifier("https://arxiv.org/abs/2106.15928"), "ARXIV:2106.15928")
         self.assertEqual(main.normalize_identifier("https://arxiv.org/pdf/2106.15928.pdf"), "ARXIV:2106.15928")
+        self.assertEqual(main.normalize_identifier("https://arxiv.org/pdf/2106.15928.PDF"), "ARXIV:2106.15928")
         self.assertEqual(main.normalize_identifier("arxiv:2106.15928"), "ARXIV:2106.15928")
 
         # PMID prefix
         self.assertEqual(main.normalize_identifier("pmid:12345678"), "PMID:12345678")
+
+        # CorpusId canonical spelling preserved
+        self.assertEqual(main.normalize_identifier("CorpusId:215416146"), "CorpusId:215416146")
+        self.assertEqual(main.normalize_identifier("corpusid:215416146"), "CorpusId:215416146")
 
         # Raw Semantic Scholar hash/id untouched
         self.assertEqual(

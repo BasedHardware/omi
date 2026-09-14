@@ -33,7 +33,7 @@ checks:
     command: ["python3", "plugins/omi-semantic-scholar-app/test_main.py"]
     triggers: ["plugins/omi-semantic-scholar-app/**"]
     lanes: ["local", "ci"]
-    reason: "verify Semantic Scholar endpoint safety against null payload data, heterogeneous author paper sorting, and DOI normalization"
+    reason: "#13925: verify Semantic Scholar endpoint safety against null payload data, heterogeneous author paper sorting, and DOI normalization"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
