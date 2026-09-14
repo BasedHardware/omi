@@ -441,6 +441,11 @@ async def tool_list_issues(request: Request):
         if not uid:
             return ChatToolResponse(error="User ID is required")
 
+        if state not in ("open", "closed", "all"):
+            return ChatToolResponse(
+                error=f"Invalid state '{state}'. Supported states are: 'open', 'closed', or 'all'."
+            )
+
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
             return ChatToolResponse(

@@ -41,9 +41,16 @@ class RequestStub:
         return self._body
 
 
+_requests = types.ModuleType("requests")
+_requests.get = _requests.post = None
+_dotenv = types.ModuleType("dotenv")
+_dotenv.load_dotenv = lambda *args, **kwargs: None
+
+
 def load_main():
     stubs = {
-        "dotenv": module("dotenv", load_dotenv=lambda: None),
+        "requests": _requests,
+        "dotenv": _dotenv,
         "fastapi": module("fastapi", FastAPI=Framework, Request=object, HTTPException=Exception, Query=Mock()),
         "fastapi.responses": module("fastapi.responses", HTMLResponse=object, RedirectResponse=Mock(), JSONResponse=Mock()),
         "simple_storage": module("simple_storage", SimpleUserStorage=Mock()),
@@ -288,6 +295,17 @@ class GitHubIssueToolsTests(unittest.TestCase):
         self.assertIn("First issue", resp.result)
         self.assertIn("[bug]", resp.result)
         self.assertIn("#2", resp.result)
+
+    def test_list_issues_invalid_state_rejected(self):
+        client = Mock()
+        self.main.github_client = client
+
+        req = RequestStub({"uid": "test_uid", "repo": "owner/repo", "state": "invalid_state"})
+        resp = self.run_coro(self.main.tool_list_issues(req))
+
+        self.assertIsNotNone(resp.error)
+        self.assertIn("Invalid state", resp.error)
+        client.list_issues.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -235,52 +235,68 @@ class GitHubClient:
     ) -> Dict[str, Any]:
         """
         List issues in a repository.
+        Paginates until per_page non-PR issues are collected or all items are exhausted.
         Returns dict with success status and list of issue dicts or error message.
         """
         try:
             valid_state = state if state in ("open", "closed", "all") else "open"
-            fetch_count = min(max(per_page * 2, 30), 100)
-            response = requests.get(
-                f"{self.api_base}/repos/{repo_full_name}/issues",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/vnd.github.v3+json"
-                },
-                params={
-                    "state": valid_state,
-                    "per_page": fetch_count,
-                    "sort": "created",
-                    "direction": "desc"
-                }
-            )
+            items = []
+            page = 1
+            fetch_size = min(max(per_page * 2, 30), 100)
 
-            if response.status_code == 200:
-                issues = response.json()
-                items = [
-                    {
-                        "number": issue["number"],
-                        "title": issue["title"],
-                        "state": issue["state"],
-                        "body": issue.get("body", ""),
-                        "labels": [label["name"] for label in issue.get("labels", [])],
-                        "url": issue["html_url"],
-                        "created_at": issue["created_at"],
-                        "user": issue["user"]["login"] if issue.get("user") else None
+            while len(items) < per_page:
+                response = requests.get(
+                    f"{self.api_base}/repos/{repo_full_name}/issues",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Accept": "application/vnd.github.v3+json"
+                    },
+                    params={
+                        "state": valid_state,
+                        "per_page": fetch_size,
+                        "sort": "created",
+                        "direction": "desc",
+                        "page": page
                     }
-                    for issue in issues
-                    if "pull_request" not in issue  # Filter out PRs
-                ]
-                return {
-                    "success": True,
-                    "issues": items[:per_page]
-                }
-            else:
-                error_msg = _extract_error_message(response)
-                print(f"❌ Error listing issues: {response.status_code} - {error_msg}")
-                return {
-                    "success": False,
-                    "error": f"GitHub API error: {response.status_code} - {error_msg}"
-                }
+                )
+
+                if response.status_code != 200:
+                    error_msg = _extract_error_message(response)
+                    print(f"❌ Error listing issues: {response.status_code} - {error_msg}")
+                    return {
+                        "success": False,
+                        "error": f"GitHub API error: {response.status_code} - {error_msg}"
+                    }
+
+                page_issues = response.json()
+                if not page_issues:
+                    break
+
+                for issue in page_issues:
+                    if "pull_request" not in issue:
+                        items.append({
+                            "number": issue["number"],
+                            "title": issue["title"],
+                            "state": issue["state"],
+                            "body": issue.get("body", ""),
+                            "labels": [label["name"] for label in issue.get("labels", [])],
+                            "url": issue["html_url"],
+                            "created_at": issue["created_at"],
+                            "user": issue["user"]["login"] if issue.get("user") else None
+                        })
+                        if len(items) >= per_page:
+                            break
+
+                links = getattr(response, "links", {}) or {}
+                if "next" not in links:
+                    break
+
+                page += 1
+
+            return {
+                "success": True,
+                "issues": items[:per_page]
+            }
 
         except Exception as e:
             print(f"❌ Error listing issues: {e}")
