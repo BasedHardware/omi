@@ -3002,7 +3002,7 @@ test('Settings names a failed usage today GET instead of empty success', async (
     webhooks: null,
     webhooksError: null,
     usage: null,
-    usageError: desktopBackendServiceCopy,
+    usageError: usageLoadErrorCopy(),
     language: null,
     languageError: null,
     languageNames: null,
@@ -3026,7 +3026,8 @@ test('Settings names a failed usage today GET instead of empty success', async (
   expect(tree).toContain('Understanding');
   expect(tree).toContain('Providing');
   expect(tree).toContain('Remembering');
-  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).toContain(usageLoadErrorCopy());
+  expect(tree).not.toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('2 minutes');
   expect(tree).not.toContain('Total time Omi has actively listened.');
   expect(tree).not.toContain('Upgrade');

@@ -7,6 +7,7 @@ import {
   desktopBackendUnauthorizedCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
+  usageLoadErrorCopy,
   visibleDisplayText,
 } from './desktopReadClient';
 
@@ -715,7 +716,7 @@ export async function loadAccountSettings(
     webhooks: webhooks.value,
     webhooksError: webhooks.error,
     usage: usage.value,
-    usageError: usage.error,
+    usageError: usage.error == null ? null : usageLoadErrorCopy(),
     language: language.value,
     languageError: language.error,
     languageNames: languageNames.value,

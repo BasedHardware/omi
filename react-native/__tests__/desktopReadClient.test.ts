@@ -4830,6 +4830,8 @@ test('loadAccountSettings keeps failed slices independent', async () => {
   expect(snapshot.trainingOptedIn).toBe(false);
   expect(snapshot.privateCloudSync).toBe(false);
   expect(snapshot.webhooks).toBeNull();
+  expect(snapshot.usage).toBeNull();
+  expect(snapshot.usageError).toBe(usageLoadErrorCopy());
 });
 
 test('loadAccountSettings names GET usage today without inventing zeros', async () => {

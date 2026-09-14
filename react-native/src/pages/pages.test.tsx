@@ -1262,9 +1262,36 @@ test('Settings names a failed usage today GET instead of empty success', async (
   expect(tree).toContain('Understanding');
   expect(tree).toContain('Providing');
   expect(tree).toContain('Remembering');
-  expect(tree).toContain(desktopBackendServiceCopy);
+  expect(tree).toContain(usageLoadErrorCopy());
+  expect(tree).not.toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('2 minutes');
   expect(tree).not.toContain('Total time Omi has actively listened.');
+  expect(tree).not.toContain('Upgrade');
+});
+
+test('Settings names HTTP 404 usage today GET Flutter usageLoadError instead of account-settings chrome', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/me/usage?period=today') {
+      return {id: request.id, status: 404, body: null};
+    }
+    if (
+      typeof request.path === 'string' &&
+      request.path.startsWith('/v1/users/me/usage?period=')
+    ) {
+      return {id: request.id, status: 200, body: '{}'};
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Listening');
+  expect(tree).toContain('Understanding');
+  expect(tree).toContain('Providing');
+  expect(tree).toContain('Remembering');
+  expect(tree).toContain(usageLoadErrorCopy());
+  expect(tree).not.toContain('This Month');
+  expect(tree).not.toContain('2 minutes');
   expect(tree).not.toContain('Upgrade');
 });
 
