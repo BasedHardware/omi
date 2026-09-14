@@ -1142,6 +1142,10 @@ export function taskIntegrationsTitleCopy(): string {
   return 'Task Integrations';
 }
 
+export function taskIntegrationsFooterCopy(): string {
+  return 'Tasks can be exported to one app at a time.';
+}
+
 export function integrationsTitleCopy(): string {
   return 'Integrations';
 }

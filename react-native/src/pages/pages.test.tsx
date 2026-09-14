@@ -27,7 +27,7 @@ jest.mock('../omiNative', () => ({
 
 const {ConnectorsPage} = require('./Connectors');
 const {SettingsPage} = require('./Settings');
-const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy, permissionsTitleCopy, fairUseLoadErrorCopy, usageLoadErrorCopy, subscriptionLoadErrorCopy, primaryLanguageNotSetCopy, integrationsFooterCopy} = require('../desktopReadClient');
+const {developerKeyCreatedCopy, desktopBackendServiceCopy, desktopReadErrorCopy, dailySummaryDefaultHeadlineCopy, appsEmptyCopy, permissionsTitleCopy, fairUseLoadErrorCopy, usageLoadErrorCopy, subscriptionLoadErrorCopy, primaryLanguageNotSetCopy, taskIntegrationsFooterCopy, integrationsFooterCopy} = require('../desktopReadClient');
 const {appChangelogsLoadErrorCopy} = require('../legacyOmiAppChangelogs');
 const {styles} = require('../ui/styles');
 
@@ -2889,6 +2889,7 @@ test('Settings names GET task integrations without Connect or a write sheet', as
   expect(tree).toContain('Task Integrations');
   expect(tree).toContain('Todoist · Default');
   expect(tree).toContain('ClickUp');
+  expect(tree).toContain(taskIntegrationsFooterCopy());
   expect(tree).not.toContain('Asana');
   expect(tree).not.toContain('secret-todoist');
   expect(tree).not.toContain('Coming Soon');
@@ -2918,6 +2919,7 @@ test('Settings names a failed task-integrations GET instead of empty success', a
   expect(tree).toContain(desktopBackendServiceCopy);
   expect(tree).not.toContain('Todoist');
   expect(tree).not.toContain('secret-todoist');
+  expect(tree).not.toContain(taskIntegrationsFooterCopy());
   expect(labelsOf(renderer).includes('Connect')).toBe(false);
 });
 

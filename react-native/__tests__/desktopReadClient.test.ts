@@ -145,6 +145,7 @@ import {
   usageLoadErrorCopy,
   subscriptionLoadErrorCopy,
   taskIntegrationsTitleCopy,
+  taskIntegrationsFooterCopy,
   integrationsTitleCopy,
   integrationsFooterCopy,
   usageActivityEmptyCopy,
@@ -1333,6 +1334,9 @@ test('usage stats copy names GET today counts without Upgrade', () => {
     'Failed to load subscription data. Please try again later.',
   );
   expect(taskIntegrationsTitleCopy()).toBe('Task Integrations');
+  expect(taskIntegrationsFooterCopy()).toBe(
+    'Tasks can be exported to one app at a time.',
+  );
   expect(integrationsTitleCopy()).toBe('Integrations');
   expect(integrationsFooterCopy()).toBe(
     'Connect your apps to view data and metrics in chat.',

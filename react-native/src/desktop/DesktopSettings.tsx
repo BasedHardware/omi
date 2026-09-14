@@ -48,6 +48,7 @@ import {
   customVocabularyCopy,
   customVocabularyTitleCopy,
   taskIntegrationsTitleCopy,
+  taskIntegrationsFooterCopy,
   integrationsTitleCopy,
   integrationsFooterCopy,
 } from '../desktopReadClient';
@@ -1028,13 +1029,19 @@ export function DesktopSettings({
           title={taskIntegrationsTitleCopy()}
         />
       ) : (
-        taskIntegrations.map(row => (
+        <>
+          {taskIntegrations.map(row => (
+            <Row
+              copy={taskIntegrationRowCopy(row)}
+              key={row.key}
+              title={taskIntegrationsTitleCopy()}
+            />
+          ))}
           <Row
-            copy={taskIntegrationRowCopy(row)}
-            key={row.key}
+            copy={taskIntegrationsFooterCopy()}
             title={taskIntegrationsTitleCopy()}
           />
-        ))
+        </>
       )}
       {integrationsError !== null ? (
         <Row copy={integrationsError} title={integrationsTitleCopy()} />
