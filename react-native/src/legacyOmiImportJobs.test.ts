@@ -1,4 +1,5 @@
 import {
+  importJobPendingCopy,
   importJobRowCopy,
   importJobStatusCopy,
   importJobTimestampCopy,
@@ -54,14 +55,15 @@ test('parses GET import jobs and omits empty counts', () => {
   ]);
 });
 
-test('names GET import job status without defaulting unknown to Pending', () => {
-  expect(importJobStatusCopy('pending')).toBe('Pending');
+test('names GET import job status unknown as Flutter Pending', () => {
+  expect(importJobPendingCopy()).toBe('Pending');
+  expect(importJobStatusCopy('pending')).toBe(importJobPendingCopy());
   expect(importJobStatusCopy('processing')).toBe('Processing');
   expect(importJobStatusCopy('completed')).toBe('Completed');
   expect(importJobStatusCopy('failed')).toBe('Failed');
-  expect(importJobStatusCopy('queued')).toBe('queued');
-  expect(importJobStatusCopy('')).toBe('Status unavailable');
-  expect(importJobStatusCopy(' \t')).toBe('Status unavailable');
+  expect(importJobStatusCopy('queued')).toBe(importJobPendingCopy());
+  expect(importJobStatusCopy('')).toBe(importJobPendingCopy());
+  expect(importJobStatusCopy(' \t')).toBe(importJobPendingCopy());
 });
 
 test('names Flutter import timestamps from local midnight', () => {
@@ -113,7 +115,9 @@ test('names GET import job rows without inventing ETA or No imports yet', () => 
       error: 'Zip could not be read.',
     }),
   ).toBe('Failed · Zip could not be read.');
-  expect(importJobRowCopy({id: 'job-4', status: 'queued'})).toBe('queued');
+  expect(importJobRowCopy({id: 'job-4', status: 'queued'})).toBe(
+    importJobPendingCopy(),
+  );
 });
 
 test('does not omit a neighboring import job when stored counts are integer strings', () => {

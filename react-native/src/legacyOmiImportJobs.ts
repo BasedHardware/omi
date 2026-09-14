@@ -78,11 +78,12 @@ export type OmiImportJobRow = {
   copy: string;
 };
 
+export function importJobPendingCopy(): string {
+  return 'Pending';
+}
+
 export function importJobStatusCopy(status: string): string {
   const trimmed = visibleDisplayText(status);
-  if (trimmed === 'pending') {
-    return 'Pending';
-  }
   if (trimmed === 'processing') {
     return 'Processing';
   }
@@ -92,7 +93,7 @@ export function importJobStatusCopy(status: string): string {
   if (trimmed === 'failed') {
     return 'Failed';
   }
-  return trimmed === '' ? 'Status unavailable' : trimmed;
+  return importJobPendingCopy();
 }
 
 export function importJobTimestampCopy(

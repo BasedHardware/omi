@@ -2144,9 +2144,9 @@ test('Settings names GET import jobs without Start import or Limitless', async (
   expect(tree).toContain('Completed · 3 conversations · 2 skipped');
   expect(tree).toContain('Processing · 3/10');
   expect(tree).toContain('Failed · Zip could not be read.');
-  expect(tree).toContain('queued');
+  expect(tree).toContain('Pending');
+  expect(tree).not.toContain('queued');
   expect(tree).not.toContain('job-1');
-  expect(tree).not.toContain('Pending');
   expect(tree).not.toContain('No imports yet');
   expect(tree).not.toContain('Limitless');
   expect(tree).not.toContain('Coming Soon');
