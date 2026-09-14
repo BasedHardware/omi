@@ -11,6 +11,7 @@ import {
   ledBrightnessCopy,
   micGainCopy,
   micGainLevelCopy,
+  deviceStorageCardCopy,
 } from '../desktopReadClient';
 
 jest.mock('../omiNative', () => ({
@@ -356,6 +357,7 @@ test('storage read is capability gated and shows only acknowledged values', asyn
   expect(read).toHaveBeenCalledWith(device.id);
   expect(button('Increase led brightness').props.disabled).toBe(true);
   expect(JSON.stringify(renderer.toJSON())).not.toContain('Stored audio:');
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('Device Storage');
   await act(async () =>
     resolve({
       usedBytes: 4096,
@@ -364,8 +366,18 @@ test('storage read is capability gated and shows only acknowledged values', asyn
       clockValid: false,
     }),
   );
-  expect(JSON.stringify(renderer.toJSON())).toContain('4,096');
-  expect(JSON.stringify(renderer.toJSON())).toContain('Not set');
+  const loaded = JSON.stringify(renderer.toJSON());
+  for (const line of deviceStorageCardCopy({
+    usedBytes: 4096,
+    freeBytes: 8192,
+  })) {
+    expect(loaded).toContain(line);
+  }
+  expect(loaded).not.toContain('Stored audio');
+  expect(loaded).not.toContain('Unread packets');
+  expect(loaded).not.toContain('Last reported storage');
+  expect(loaded).not.toContain('Not set');
+  expect(loaded).not.toContain('256');
 });
 
 test('storage read failure remains unknown and can be retried', async () => {

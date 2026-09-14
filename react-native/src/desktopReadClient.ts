@@ -1833,6 +1833,51 @@ export function findDeviceCopy(): string {
   return 'Find';
 }
 
+export function deviceStorageTitleCopy(): string {
+  return 'Device Storage';
+}
+
+export function deviceStoragePercentFullCopy(percent: number): string {
+  return `${percent}% full`;
+}
+
+export function deviceStorageNearlyFullCopy(): string {
+  return 'Device nearly full — sync to free space.';
+}
+
+export function deviceStorageFormatBytesCopy(bytes: number): string {
+  if (bytes <= 0) {
+    return '0 B';
+  }
+  const suffixes = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
+  const index = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    suffixes.length - 1,
+  );
+  return `${(bytes / 1024 ** index).toFixed(0)} ${suffixes[index]}`;
+}
+
+export function deviceStorageCardCopy(status: {
+  usedBytes: number;
+  freeBytes: number;
+}): string[] {
+  const used = status.usedBytes < 0 ? 0 : status.usedBytes;
+  const free = status.freeBytes < 0 ? 0 : status.freeBytes;
+  const total = used + free;
+  const fraction = total === 0 ? 0 : Math.min(1, Math.max(0, used / total));
+  const rows = [
+    deviceStorageTitleCopy(),
+    deviceStoragePercentFullCopy(Math.round(fraction * 100)),
+    `${deviceStorageFormatBytesCopy(used)} of ${deviceStorageFormatBytesCopy(
+      total,
+    )} used  ·  ${deviceStorageFormatBytesCopy(free)} free`,
+  ];
+  if (fraction >= 0.95) {
+    rows.push(deviceStorageNearlyFullCopy());
+  }
+  return rows;
+}
+
 export function chargingCopy(): string {
   return 'Charging';
 }

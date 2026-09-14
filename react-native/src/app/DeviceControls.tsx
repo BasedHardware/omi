@@ -12,6 +12,7 @@ import {
   ledBrightnessCopy,
   micGainCopy,
   micGainLevelCopy,
+  deviceStorageCardCopy,
 } from '../desktopReadClient';
 
 type Setting = 'ledBrightness' | 'microphoneGain';
@@ -186,20 +187,12 @@ export function DeviceControls({
         </FocusPressable>
       ) : null}
       {storage !== null && device.connected && (
-        <View accessibilityLabel="Last reported storage status">
-          <Text style={styles.deviceMeta}>Last reported storage</Text>
-          <Text style={styles.deviceMeta}>
-            Stored audio: {storage.usedBytes.toLocaleString()} bytes
-          </Text>
-          <Text style={styles.deviceMeta}>
-            Unread packets: {storage.unreadPackets.toLocaleString()}
-          </Text>
-          <Text style={styles.deviceMeta}>
-            Free space: {storage.freeBytes.toLocaleString()} bytes
-          </Text>
-          <Text style={styles.deviceMeta}>
-            Device clock: {storage.clockValid ? 'Set' : 'Not set'}
-          </Text>
+        <View accessibilityLabel="Device Storage">
+          {deviceStorageCardCopy(storage).map(line => (
+            <Text key={line} style={styles.deviceMeta}>
+              {line}
+            </Text>
+          ))}
         </View>
       )}
       {controls.map(control => {

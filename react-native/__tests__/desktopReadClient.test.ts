@@ -186,6 +186,10 @@ import {
   micGainCopy,
   micGainLevelCopy,
   findDeviceCopy,
+  deviceStorageTitleCopy,
+  deviceStoragePercentFullCopy,
+  deviceStorageFormatBytesCopy,
+  deviceStorageCardCopy,
   chargingCopy,
   batteryLevelCopy,
   deviceBatteryPercentCopy,
@@ -1825,6 +1829,23 @@ test('firmware update copy names GET latest without Available on current or draf
   expect(micGainLevelCopy(-1)).toBe('');
   expect(micGainLevelCopy(9)).toBe('');
   expect(findDeviceCopy()).toBe('Find');
+  expect(deviceStorageTitleCopy()).toBe('Device Storage');
+  expect(deviceStoragePercentFullCopy(33)).toBe('33% full');
+  expect(deviceStorageFormatBytesCopy(0)).toBe('0 B');
+  expect(deviceStorageFormatBytesCopy(4096)).toBe('4 KB');
+  expect(deviceStorageFormatBytesCopy(8192)).toBe('8 KB');
+  expect(deviceStorageFormatBytesCopy(12288)).toBe('12 KB');
+  expect(deviceStorageCardCopy({usedBytes: 4096, freeBytes: 8192})).toEqual([
+    'Device Storage',
+    '33% full',
+    '4 KB of 12 KB used  ·  8 KB free',
+  ]);
+  expect(deviceStorageCardCopy({usedBytes: 95, freeBytes: 5})).toEqual([
+    'Device Storage',
+    '95% full',
+    '95 B of 100 B used  ·  5 B free',
+    'Device nearly full — sync to free space.',
+  ]);
   expect(chargingCopy()).toBe('Charging');
   expect(batteryLevelCopy()).toBe('Battery Level');
   expect(deviceBatteryPercentCopy(87)).toBe('87%');
