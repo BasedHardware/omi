@@ -277,4 +277,14 @@ For issues or feature requests, please open an issue on GitHub or contact the Om
 
 ---
 
+### Hermetic analytics regression tests
+
+Run `python3 plugins/omi-shopify-app/test_main.py` from the repository root.
+The full production handler runs with framework, storage, and API doubles; no
+Shopify credentials or network are needed. Order-page errors return an error
+instead of successful partial financial totals. Routing and serialization are
+not covered by this harness.
+
+---
+
 Made with ❤️ for Omi
