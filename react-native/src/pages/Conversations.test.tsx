@@ -1516,8 +1516,20 @@ test('conversation list names processing conversations without Status on every r
         node.props.children === 'Processing',
     ).length,
   ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Merging... conversation',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Merging... conversation' &&
+        node.props.children === 'Merging...',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(copy).toContain('Merging...');
   expect(copy).not.toContain(conversationStatusCopy('in_progress'));
-  expect(copy).not.toContain(conversationStatusCopy('merging'));
 });
 
 test('conversation list names GET emoji and omits it when discarded or empty', () => {

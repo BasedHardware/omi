@@ -3625,8 +3625,8 @@ test('wide Home search rows keep GET processing status instead of title-only', (
   );
   const mergingTree = JSON.stringify(merging.toJSON());
   expect(mergingTree).toContain('Standup recap');
-  expect(mergingTree).toContain('Processing');
-  expect(mergingTree).not.toContain('Merging');
+  expect(mergingTree).toContain('Merging...');
+  expect(mergingTree).not.toContain('Processing');
 });
 
 test('wide Home search completed tasks keep GET due dates instead of Completed-only', () => {

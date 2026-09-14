@@ -1178,7 +1178,7 @@ test('conversation status copy is not a raw wire token', () => {
 test('conversation list status copy names processing without Status on every chat', () => {
   expect(conversationListStatusCopy('failed')).toBe('Failed');
   expect(conversationListStatusCopy('processing')).toBe('Processing');
-  expect(conversationListStatusCopy('merging')).toBe('Processing');
+  expect(conversationListStatusCopy('merging')).toBe('Merging...');
   expect(conversationListStatusCopy('in_progress')).toBeNull();
   expect(conversationListStatusCopy('completed')).toBeNull();
   expect(conversationListStatusCopy('queued')).toBeNull();

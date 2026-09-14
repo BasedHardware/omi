@@ -214,8 +214,11 @@ export function conversationListStatusCopy(status: string): string | null {
   if (trimmed === 'failed') {
     return 'Failed';
   }
-  if (trimmed === 'processing' || trimmed === 'merging') {
+  if (trimmed === 'processing') {
     return 'Processing';
+  }
+  if (trimmed === 'merging') {
+    return 'Merging...';
   }
   return null;
 }

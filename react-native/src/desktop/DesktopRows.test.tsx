@@ -808,8 +808,8 @@ test('Home and Library rows keep GET processing status instead of title-only', (
   expect(textOf(home)).toContain('Morning standup');
   expect(textOf(home)).toContain('Processing');
   expect(textOf(library)).toContain('Standup recap');
-  expect(textOf(library)).toContain('Processing');
-  expect(textOf(library)).not.toContain('Merging');
+  expect(textOf(library)).toContain('Merging...');
+  expect(textOf(library)).not.toContain('Processing');
   let chat!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
     chat = ReactTestRenderer.create(
