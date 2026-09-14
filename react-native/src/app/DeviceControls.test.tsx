@@ -5,6 +5,8 @@ import type {Device} from '../omiNativeTypes';
 import {FocusPressable} from '../ui/Pressable';
 import {DeviceControls} from './DeviceControls';
 import {
+  batteryLevelCopy,
+  chargingCopy,
   findDeviceCopy,
   ledBrightnessCopy,
   micGainCopy,
@@ -50,9 +52,10 @@ test('requires reported feature bits and valid observed values before exposing w
   await render({...device, features: undefined});
   expect(renderer.root.findAllByType(FocusPressable)).toHaveLength(0);
   expect(JSON.stringify(renderer.toJSON())).toContain(
-    '"Charging:"," ","Unavailable"',
+    `"${chargingCopy()}",":"," ","Unavailable"`,
   );
   expect(JSON.stringify(renderer.toJSON())).not.toContain('Unknown');
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('Not charging');
   await act(async () => {
     renderer.update(<DeviceControls device={device} busy={false} />);
   });
@@ -67,6 +70,24 @@ test('requires reported feature bits and valid observed values before exposing w
   expect(button(`Decrease ${micGainCopy().toLowerCase()}`).props.disabled).toBe(
     false,
   );
+});
+
+test('connected device names Flutter battery section Charging or Battery Level', async () => {
+  await render({...device, charging: true});
+  const charging = JSON.stringify(renderer.toJSON());
+  expect(charging).toContain(`"${chargingCopy()}"`);
+  expect(charging).not.toContain('Not charging');
+  expect(charging).not.toContain(`"${batteryLevelCopy()}"`);
+  expect(charging).not.toContain(`${chargingCopy()}:`);
+  await act(async () => {
+    renderer.update(
+      <DeviceControls device={{...device, charging: false}} busy={false} />,
+    );
+  });
+  const idle = JSON.stringify(renderer.toJSON());
+  expect(idle).toContain(`"${batteryLevelCopy()}"`);
+  expect(idle).not.toContain('Not charging');
+  expect(idle).not.toContain(`${chargingCopy()}:`);
 });
 
 test('serializes writes and waits for matching native read-back without optimistic values', async () => {

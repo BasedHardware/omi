@@ -1707,6 +1707,14 @@ export function findDeviceCopy(): string {
   return 'Find';
 }
 
+export function chargingCopy(): string {
+  return 'Charging';
+}
+
+export function batteryLevelCopy(): string {
+  return 'Battery Level';
+}
+
 export function firmwareUpdateCopy(
   currentFirmware: string,
   details: {

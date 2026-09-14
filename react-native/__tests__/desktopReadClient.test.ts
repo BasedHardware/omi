@@ -155,6 +155,8 @@ import {
   ledBrightnessCopy,
   micGainCopy,
   findDeviceCopy,
+  chargingCopy,
+  batteryLevelCopy,
   fairUseCopy,
   fairUseBudgetResetCopy,
   fairUseDailyTranscriptionCopy,
@@ -1675,6 +1677,8 @@ test('firmware update copy names GET latest without Available on current or draf
   expect(ledBrightnessCopy()).toBe('LED Brightness');
   expect(micGainCopy()).toBe('Mic Gain');
   expect(findDeviceCopy()).toBe('Find');
+  expect(chargingCopy()).toBe('Charging');
+  expect(batteryLevelCopy()).toBe('Battery Level');
   expect(
     firmwareUpdateCopy('1.2.3', {
       version: '1.3.0',

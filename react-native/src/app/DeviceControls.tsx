@@ -5,6 +5,8 @@ import type {Device, DeviceStorageStatus} from '../omiNativeTypes';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {
+  batteryLevelCopy,
+  chargingCopy,
   findDeviceCopy,
   ledBrightnessCopy,
   micGainCopy,
@@ -157,12 +159,16 @@ export function DeviceControls({
         </Text>
       ) : null}
       <Text style={styles.deviceMeta}>
-        Charging:{' '}
-        {device.charging === undefined
-          ? 'Unavailable'
-          : device.charging
-          ? 'Charging'
-          : 'Not charging'}
+        {device.charging === undefined ? (
+          <>
+            {chargingCopy()}:{' '}
+            Unavailable
+          </>
+        ) : device.charging ? (
+          chargingCopy()
+        ) : (
+          batteryLevelCopy()
+        )}
       </Text>
       {device.connected &&
       device.findDeviceSupported &&
