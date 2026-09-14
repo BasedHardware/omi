@@ -33,6 +33,7 @@ import {
   appListDescriptionCopy,
   appRatingCopy,
   appsEmptyCopy,
+  appsCreatedByMeCopy,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
@@ -164,7 +165,7 @@ export function ConnectorsPage({
             : 'No apps owned by this account.',
         items: myApps(snapshot, snapshot.ownerUid),
         key: 'My Apps',
-        title: 'My Apps',
+        title: appsCreatedByMeCopy(),
       },
       {
         empty: 'No apps with an external service connection were returned.',

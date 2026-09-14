@@ -17,6 +17,7 @@ import {
   tasksEmptyCopy,
   tasksSearchEmptyCopy,
   appsEmptyCopy,
+  appsCreatedByMeCopy,
   conversationDisplayTitle,
   processingConversationDetailTitleCopy,
   processingConversationDetailContentTabCopy,
@@ -3228,6 +3229,10 @@ test('task search empty copy names Flutter noResultsFound', () => {
 
 test('apps empty copy names Flutter noAppsFound', () => {
   expect(appsEmptyCopy()).toBe('No apps found');
+});
+
+test('apps created-by-me copy names Flutter myApps', () => {
+  expect(appsCreatedByMeCopy()).toBe('Created by me');
 });
 
 test('groups validated UTC conversation timestamps by local calendar day', () => {

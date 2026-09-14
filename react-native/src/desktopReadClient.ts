@@ -601,6 +601,10 @@ export function appsEmptyCopy(): string {
   return 'No apps found';
 }
 
+export function appsCreatedByMeCopy(): string {
+  return 'Created by me';
+}
+
 export function conversationDetailSummaryCopy(detail: {
   summary: string;
   sections: readonly {heading: string; bodyMarkdown: string}[];

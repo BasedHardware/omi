@@ -2630,6 +2630,42 @@ test('Connectors Explore and Installed omit Flutter unused install-state and Con
   expect(labelsOf(renderer)).toContain('Install Catalog fixture app');
 });
 
+test('Connectors names Flutter FilterSheet myApps as Created by me', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-owned',
+            name: 'Owned app',
+            uid: 'user-1',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Created by me');
+  expect(sectionText(renderer, 'Created by me')).toContain('Owned app');
+  expect(tree).not.toContain('My Apps');
+  expect(tree).not.toContain('No apps owned by this account.');
+});
+
 test('Connectors Explore omits CategorySection private and Installed names AppListItem lock', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
