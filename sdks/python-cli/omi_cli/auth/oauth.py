@@ -283,24 +283,30 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
 
     The Firebase session authenticates ``/v1/dev/keys`` (backend
     ``get_current_user_id``); the returned dev key is what every other
-    ``/v1/dev/*`` endpoint requires. Re-login first deletes the CLI's own
-    prior keys — matched by our exact :func:`_cli_key_name` only, so a user's
-    other keys are never touched — then mints a fresh one.
+    ``/v1/dev/*`` endpoint requires. Re-login mints a fresh key first, and
+    only cleans up prior keys matching our exact :func:`_cli_key_name` after
+    the replacement key is successfully obtained.
     """
     base = api_base.rstrip("/")
     headers = {"Authorization": f"Bearer {id_token}"}
     key_name = _cli_key_name()
 
     with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
-        # Best-effort cleanup of our own stale keys. Non-critical: if listing
-        # or deleting fails, still try to create — a duplicate is recoverable,
-        # a failed login is not.
+        # Snapshot existing CLI keys before minting so that:
+        # 1. Stale keys are known prior to creation, and
+        # 2. Overlapping concurrent logins on the same host do not inadvertently delete
+        #    each other's freshly minted keys.
+        stale_key_ids: set[str] = set()
         try:
             listing = client.get(f"{base}{_DEV_KEYS_PATH}", headers=headers)
             if listing.status_code == 200:
-                for key in listing.json():
-                    if isinstance(key, dict) and key.get("name") == key_name and key.get("id"):
-                        client.delete(f"{base}{_DEV_KEYS_PATH}/{key['id']}", headers=headers)
+                raw_list = listing.json()
+                if isinstance(raw_list, list):
+                    for key in raw_list:
+                        if isinstance(key, dict) and key.get("name") == key_name:
+                            k_id = key.get("id")
+                            if isinstance(k_id, str) and k_id:
+                                stale_key_ids.add(k_id)
         except httpx.HTTPError:
             pass
 
@@ -310,21 +316,40 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
             json={"name": key_name, "scopes": _CLI_KEY_SCOPES},
         )
 
-    if resp.status_code not in (200, 201):
-        raise AuthError(
-            message=f"Could not create an API key for the CLI ({resp.status_code})",
-            detail=(
-                "OAuth sign-in succeeded, but minting a developer API key failed. "
-                "Try again, or use `omi auth login --api-key`."
-            ),
-        )
+        if resp.status_code not in (200, 201):
+            raise AuthError(
+                message=f"Could not create an API key for the CLI ({resp.status_code})",
+                detail=(
+                    "OAuth sign-in succeeded, but minting a developer API key failed. "
+                    "Try again, or use `omi auth login --api-key`."
+                ),
+            )
 
-    raw_key = resp.json().get("key")
-    if not raw_key:
-        raise AuthError(
-            message="Key-mint response was missing the API key",
-            detail="The /v1/dev/keys response did not include a `key` field.",
-        )
+        resp_data = resp.json()
+        raw_key = resp_data.get("key") if isinstance(resp_data, dict) else None
+        if not raw_key:
+            raise AuthError(
+                message="Key-mint response was missing the API key",
+                detail="The /v1/dev/keys response did not include a `key` field.",
+            )
+
+        new_key_id = resp_data.get("id") if isinstance(resp_data, dict) else None
+        if not isinstance(new_key_id, str) or not new_key_id:
+            # When the response omits an ID, return the minted key without risking
+            # accidental deletion of the fresh credential.
+            return str(raw_key)
+
+        # Discard the new key from stale candidates (in case the snapshot already had it)
+        stale_key_ids.discard(new_key_id)
+
+        # Best-effort cleanup of only pre-mint snapshot keys after replacement mint succeeds.
+        if stale_key_ids:
+            try:
+                for stale_id in stale_key_ids:
+                    client.delete(f"{base}{_DEV_KEYS_PATH}/{stale_id}", headers=headers)
+            except httpx.HTTPError:
+                pass
+
     return str(raw_key)
 
 
