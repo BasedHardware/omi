@@ -6810,7 +6810,7 @@ test('Settings names GET import jobs without Start import or Limitless', async (
   });
   const tree = renderedText(renderer);
   expect(tree).toContain('Import Data');
-  expect(tree).toContain('Completed · 3 conversations · 2 skipped');
+  expect(tree).toContain('Completed · 3 conversations · 2 conversations');
   expect(tree).toContain(
     'Processing · Estimated: Less than a minute remaining · 3/10',
   );

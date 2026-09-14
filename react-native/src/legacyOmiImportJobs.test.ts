@@ -114,7 +114,21 @@ test('names GET import job rows Flutter estimated remaining without inventing wr
       },
       now,
     ),
-  ).toBe('Completed · Today at 14:30 · 3 conversations · 2 skipped');
+  ).toBe('Completed · Today at 14:30 · 3 conversations · 2 conversations');
+  expect(
+    importJobRowCopy({
+      id: 'job-skipped-only',
+      status: 'completed',
+      conversationsSkipped: 2,
+    }),
+  ).toBe('Completed · 2 conversations');
+  expect(
+    importJobRowCopy({
+      id: 'job-skipped-only',
+      status: 'completed',
+      conversationsSkipped: 2,
+    }),
+  ).not.toContain('skipped');
   expect(
     importJobRowCopy({
       id: 'job-2',

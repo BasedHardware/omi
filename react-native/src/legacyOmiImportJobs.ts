@@ -192,7 +192,7 @@ export function importJobRowCopy(
     typeof job.conversationsSkipped === 'number' &&
     job.conversationsSkipped > 0
   ) {
-    parts.push(`${job.conversationsSkipped} skipped`);
+    parts.push(`${job.conversationsSkipped} conversations`);
   }
   if (
     importJobShowsFileProgress(job.status) &&
