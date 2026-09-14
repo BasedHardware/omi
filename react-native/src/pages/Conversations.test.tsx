@@ -1656,8 +1656,14 @@ test('conversation list names GET category and omits it when discarded or empty'
               },
               {
                 ...base,
-                id: 'omi-empty',
+                id: 'omi-other',
                 title: 'No category',
+                category: 'other',
+              },
+              {
+                ...base,
+                id: 'omi-empty',
+                title: 'Whitespace category',
                 category: ' \u0085 ',
               },
             ],
@@ -1674,7 +1680,9 @@ test('conversation list names GET category and omits it when discarded or empty'
     );
   });
   expect(textOf(renderer)).toContain('Work');
+  expect(textOf(renderer)).toContain('Other');
   expect(textOf(renderer)).not.toContain('work');
+  expect(textOf(renderer)).not.toContain('other');
 });
 
 test('conversation list names GET source remaps and omits ordinary sources', () => {

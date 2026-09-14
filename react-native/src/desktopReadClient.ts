@@ -460,6 +460,20 @@ export function conversationStructuredEmojiCopy(
   return token === '' ? undefined : token;
 }
 
+export function conversationStructuredCategoryDefaultCopy(): string {
+  return 'other';
+}
+
+export function conversationStructuredCategoryCopy(
+  value: string | null | undefined,
+): string | undefined {
+  if (value === undefined || value === null) {
+    return conversationStructuredCategoryDefaultCopy();
+  }
+  const token = visibleDisplayText(value);
+  return token === '' ? undefined : token;
+}
+
 export function conversationUnknownAppCopy(): string {
   return 'Unknown App';
 }

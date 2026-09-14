@@ -86,6 +86,8 @@ import {
   transcriptSttUnknownCopy,
   conversationStructuredEmojiCopy,
   conversationStructuredEmojiDefaultCopy,
+  conversationStructuredCategoryCopy,
+  conversationStructuredCategoryDefaultCopy,
   conversationFirstPartySummaryCopy,
   conversationActionItemsTodoCopy,
   conversationActionItemsNoPendingCopy,
@@ -2635,6 +2637,19 @@ test('conversation structured emoji copy names Flutter omitted GET emoji as 🧠
   expect(conversationStructuredEmojiCopy('🚀')).toBe('🚀');
   expect(conversationStructuredEmojiCopy('')).toBeUndefined();
   expect(conversationStructuredEmojiCopy(' \t\u0085 ')).toBeUndefined();
+});
+
+test('conversation structured category copy names Flutter omitted GET category as other', () => {
+  expect(conversationStructuredCategoryDefaultCopy()).toBe('other');
+  expect(conversationStructuredCategoryCopy(undefined)).toBe(
+    conversationStructuredCategoryDefaultCopy(),
+  );
+  expect(conversationStructuredCategoryCopy(null)).toBe(
+    conversationStructuredCategoryDefaultCopy(),
+  );
+  expect(conversationStructuredCategoryCopy('work')).toBe('work');
+  expect(conversationStructuredCategoryCopy('')).toBeUndefined();
+  expect(conversationStructuredCategoryCopy(' \t\u0085 ')).toBeUndefined();
 });
 
 test('conversation first-party summary copy names Flutter appId-null attribution', () => {

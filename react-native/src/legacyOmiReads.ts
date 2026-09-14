@@ -4,6 +4,7 @@ import {
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationStructuredEmojiCopy,
+  conversationStructuredCategoryCopy,
   conversationTranscriptEndSeconds,
   memoryCaptureDeviceCopy,
   taskDisplayTitle,
@@ -214,7 +215,13 @@ export async function loadOmiConversations(
         ? structured.emoji
         : text(structured.emoji),
     );
-    const category = visibleDisplayText(text(structured.category, ''));
+    const category = visibleDisplayText(
+      conversationStructuredCategoryCopy(
+        structured.category === undefined || structured.category === null
+          ? structured.category
+          : text(structured.category),
+      ) ?? '',
+    );
     return {
       row,
       structuredTitle,

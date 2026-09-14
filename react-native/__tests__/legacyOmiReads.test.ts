@@ -449,6 +449,41 @@ test('old conversations keep wire-non-empty category and omit whitespace', async
   expect(result.items[1]).not.toHaveProperty('category');
 });
 
+test('old conversations name Flutter omitted GET category as other', async () => {
+  const {api} = backend([
+    {
+      ...conversation,
+      id: 'category-omitted',
+      structured: {
+        title: 'Real title',
+        overview: 'Actual overview',
+      },
+    },
+    {
+      ...conversation,
+      id: 'category-null',
+      structured: {
+        title: 'Real title',
+        overview: 'Actual overview',
+        category: null,
+      },
+    },
+    {
+      ...conversation,
+      id: 'category-empty',
+      structured: {
+        title: 'Real title',
+        overview: 'Actual overview',
+        category: '',
+      },
+    },
+  ]);
+  const result = await loadConversations(api);
+  expect(result.items[0]).toMatchObject({category: 'other'});
+  expect(result.items[1]).toMatchObject({category: 'other'});
+  expect(result.items[2]).not.toHaveProperty('category');
+});
+
 test('old conversations name empty GET visibility as private instead of hiding neighbors', async () => {
   const {api} = backend([
     {
@@ -632,9 +667,9 @@ test('old bare conversation array preserves nullable metadata and offset paginat
     updatedAt: null,
     startedAt: null,
     emoji: conversationStructuredEmojiDefaultCopy(),
+    category: 'other',
   });
   expect(first.items[0]).not.toHaveProperty('photoCount');
-  expect(first.items[0]).not.toHaveProperty('category');
   expect(first.items[0]).not.toHaveProperty('capturedAtMs');
   expect(first.apiContract).toBe('omi');
   expect(first.page).toMatchObject({
