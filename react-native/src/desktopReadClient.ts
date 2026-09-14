@@ -2107,6 +2107,16 @@ export function appExploreRatingCopy(
   return `${rating} · ${count} ${count === 1 ? 'rating' : 'ratings'}`;
 }
 
+export function appListDescriptionCopy(
+  description: string | null | undefined,
+): string | null {
+  const visible = visibleDisplayText(description ?? '');
+  if (visible === '') {
+    return null;
+  }
+  return visible.length > 50 ? `${visible.slice(0, 50)}...` : visible;
+}
+
 export function chatAttachmentDisplayName(name: string): string {
   return accountFieldCopy(name, 'Attachment name unavailable');
 }

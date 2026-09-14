@@ -2557,6 +2557,55 @@ test('Connectors rows keep GET private instead of a public-looking catalogue', a
   expect(tree).not.toContain('Official');
 });
 
+test('Connectors Installed names Flutter AppListItem truncated GET descriptions and Explore omits them', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  const exploreDescription =
+    'Explore-only calendar notes that CategorySection must not paint.';
+  const installedDescription = `${'A'.repeat(50)}Z`;
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-explore',
+            name: 'Explore fixture app',
+            description: exploreDescription,
+          },
+          {
+            id: 'catalog-app-installed',
+            name: 'Owned app',
+            description: installedDescription,
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify(['catalog-app-installed']),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Explore fixture app');
+  expect(tree).not.toContain(exploreDescription);
+  expect(tree).toContain('Owned app');
+  expect(tree).toContain(`${'A'.repeat(50)}...`);
+  expect(tree).not.toContain(installedDescription);
+});
+
 test('Connectors Explore names Flutter CategorySection ratings and Installed keeps list (N)', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

@@ -57,6 +57,7 @@ import {
   appDisplayAttribution,
   appDisplayName,
   appExploreRatingCopy,
+  appListDescriptionCopy,
   appRatingCopy,
   appImageUrl,
   deviceDisplayName,
@@ -2215,6 +2216,18 @@ test('app explore rating copy names Flutter CategorySection GET scores', () => {
   expect(appExploreRatingCopy(undefined, undefined)).toBe(null);
   expect(appExploreRatingCopy(Number.NaN, 12)).toBe(null);
   expect(appExploreRatingCopy(4.5, -1)).toBe('4.5 · 0 ratings');
+});
+
+test('app list description copy names Flutter AppListItem truncated GET description', () => {
+  expect(appListDescriptionCopy('Calendar sync')).toBe('Calendar sync');
+  expect(appListDescriptionCopy('A'.repeat(50))).toBe('A'.repeat(50));
+  expect(appListDescriptionCopy('A'.repeat(51))).toBe(`${'A'.repeat(50)}...`);
+  expect(appListDescriptionCopy('  Calendar sync  ')).toBe('Calendar sync');
+  expect(appListDescriptionCopy(' \t')).toBeNull();
+  expect(appListDescriptionCopy('')).toBeNull();
+  expect(appListDescriptionCopy('\u0085')).toBeNull();
+  expect(appListDescriptionCopy(undefined)).toBeNull();
+  expect(appListDescriptionCopy(null)).toBeNull();
 });
 
 test('app image URLs keep GET http(s) images instead of inventing a GitHub host', () => {

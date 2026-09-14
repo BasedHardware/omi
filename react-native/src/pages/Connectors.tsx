@@ -29,6 +29,7 @@ import {
   appDisplayName,
   appExploreRatingCopy,
   appImageUrl,
+  appListDescriptionCopy,
   appRatingCopy,
   appsEmptyCopy,
   visibleDisplayText,
@@ -289,7 +290,10 @@ export function ConnectorsPage({
                     section.key === 'Explore',
                   );
                   const name = appDisplayName(app.name);
-                  const description = visibleDisplayText(app.description);
+                  const description =
+                    section.key === 'Explore'
+                      ? ''
+                      : appListDescriptionCopy(app.description) ?? '';
                   const imageUrl = appImageUrl(app.image);
                   return (
                     <View
