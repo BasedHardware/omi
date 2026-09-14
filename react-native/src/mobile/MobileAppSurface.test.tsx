@@ -947,7 +947,7 @@ test('Daily Recaps name processing conversations without Status on every card', 
   expect(renderedText(plain)).not.toContain('Processing');
 });
 
-test('Daily Recaps name GET structured.emoji and list tags without inventing defaults', () => {
+test('compact Home conversations omit Flutter ConversationListItem mobile tags', () => {
   const flagged = render({
     recaps: [
       {
@@ -960,7 +960,8 @@ test('Daily Recaps name GET structured.emoji and list tags without inventing def
     ],
   });
   expect(renderedText(flagged)).toContain('🚀');
-  expect(renderedText(flagged)).toContain('Productivity');
+  expect(renderedText(flagged)).toContain('Product review');
+  expect(renderedText(flagged)).not.toContain('Productivity');
   expect(
     flagged.root.findAll(
       node =>
@@ -982,7 +983,8 @@ test('Daily Recaps name GET structured.emoji and list tags without inventing def
     ],
   });
   expect(renderedText(discarded)).toContain('Discarded');
-  expect(renderedText(discarded)).toContain('Screenpipe');
+  expect(renderedText(discarded)).toContain('Discarded talk');
+  expect(renderedText(discarded)).not.toContain('Screenpipe');
   expect(renderedText(discarded)).not.toContain('🧠');
   expect(
     discarded.root.findAll(

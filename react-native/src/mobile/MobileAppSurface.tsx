@@ -264,9 +264,6 @@ const RecapCard = memo(function RecapCard({
           {recap.emoji}
         </Text>
       )}
-      {recap.tag != null && recap.tag !== '' ? (
-        <Text style={styles.recapStar}>{recap.tag}</Text>
-      ) : null}
       <Text numberOfLines={3} style={styles.recapTitle}>
         {recap.title}
       </Text>

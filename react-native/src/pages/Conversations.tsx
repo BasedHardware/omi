@@ -75,10 +75,12 @@ const ConversationRow = memo(function ConversationRow({
   item,
   selected,
   onPress,
+  showTag = true,
 }: {
   item: ConversationProjection;
   selected: boolean;
   onPress: () => void;
+  showTag?: boolean;
 }) {
   const listenOverview = conversationListUsesListenOverview(item);
   const captureCopy = conversationCaptureCopy(item.capturedAtMs);
@@ -152,7 +154,7 @@ const ConversationRow = memo(function ConversationRow({
           {emoji}
         </Text>
       ) : null}
-      {tag !== null ? (
+      {showTag && tag !== null ? (
         <Text style={styles.conversationRowTime}>{tag}</Text>
       ) : null}
       <Text numberOfLines={listenOverview ? 3 : 1} style={styles.resultTitle}>
@@ -643,6 +645,7 @@ export function ConversationsPage({
                           key={item.id}
                           onPress={() => setSelectedId(item.id)}
                           selected={selectedId === item.id}
+                          showTag={!compact}
                         />
                       ))}
                     </View>

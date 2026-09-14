@@ -1848,6 +1848,77 @@ test('conversation list names GET source remaps and omits ordinary sources', () 
   expect(copy).not.toContain('omi');
 });
 
+test('compact conversation list omits Flutter ConversationListItem mobile tags', () => {
+  const native = require('react-native') as typeof import('react-native');
+  const dimensions = jest.spyOn(native, 'useWindowDimensions').mockReturnValue({
+    width: 390,
+    height: 844,
+    scale: 1,
+    fontScale: 1,
+  });
+  const base = {
+    kind: 'conversation' as const,
+    title: 'Morning standup',
+    summary: 'Notes',
+    searchableText: 'Morning standup\nNotes',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  try {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <ConversationsPage
+          loading={false}
+          outcome={{
+            status: 'success',
+            value: {
+              items: [
+                {
+                  ...base,
+                  id: 'omi-screenpipe',
+                  source: 'screenpipe',
+                  category: 'work',
+                },
+                {
+                  ...base,
+                  id: 'omi-glass',
+                  title: 'Glass talk',
+                  source: 'openglass',
+                },
+              ],
+              page: {
+                ...incompletePage,
+                windowStatus: 'complete',
+                complete: true,
+                completenessStatus: 'complete',
+                reasons: [],
+              },
+            },
+          }}
+        />,
+      );
+    });
+    const copy = textOf(renderer);
+    expect(copy).toContain('Morning standup');
+    expect(copy).toContain('Glass talk');
+    expect(copy).not.toContain('Screenpipe');
+    expect(copy).not.toContain('OmiGlass');
+    expect(copy).not.toContain('Work');
+  } finally {
+    dimensions.mockRestore();
+  }
+});
+
 test('conversation list names GET photo counts', () => {
   const base = {
     kind: 'conversation' as const,
